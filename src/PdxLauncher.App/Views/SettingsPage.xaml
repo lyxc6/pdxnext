@@ -22,56 +22,94 @@
         </Style>
     </Page.Resources>
 
-    <Grid Padding="20" RowSpacing="12">
+    <Grid Padding="20" RowSpacing="12" ColumnSpacing="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="216" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0" ColumnSpacing="16">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="216" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
+        <!--
+            左侧分节导航用官方 NavigationView（与主窗口左栏同一控件、同 216 宽）：
+            选中指示条左侧按规范留的是「图标位」，条目带 SymbolIcon 后条与文字之间
+            自然隔开；改用纯文字 ListView 时文字会顶到指示条旁。
+        -->
+        <NavigationView Grid.Row="0"
+                        Grid.Column="0"
+                        x:Name="navSettingsSections"
+                        AutomationProperties.AutomationId="lstSettingsSections"
+                        AutomationProperties.Name="{x:Bind L.SettingsSectionName, Mode=OneWay}"
+                        Background="Transparent"
+                        PaneDisplayMode="Left"
+                        OpenPaneLength="216"
+                        IsPaneOpen="True"
+                        IsSettingsVisible="False"
+                        IsBackButtonVisible="Collapsed"
+                        IsPaneToggleButtonVisible="False"
+                        SelectionChanged="OnSectionChanged">
 
-            <StackPanel Grid.Column="0" Spacing="12">
-                <StackPanel Spacing="4">
+            <NavigationView.PaneHeader>
+                <StackPanel Spacing="4" Margin="0,4,0,0">
                     <TextBlock Text="{x:Bind L.SettingsTitle, Mode=OneWay}" Style="{StaticResource TitleTextBlockStyle}" />
                     <TextBlock Text="{x:Bind ViewModel.GameTitle, Mode=OneWay}"
                                Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                TextWrapping="Wrap" />
                 </StackPanel>
+            </NavigationView.PaneHeader>
 
-                <ListView x:Name="lstSettingsSections"
-                          AutomationProperties.AutomationId="lstSettingsSections"
-                          AutomationProperties.Name="{x:Bind L.SettingsSectionName, Mode=OneWay}"
-                          SelectionMode="Single"
-                          SelectedIndex="0"
-                          Background="Transparent"
-                          SelectionChanged="OnSectionChanged">
-                    <ListViewItem AutomationProperties.AutomationId="navSettingsAppearance" Padding="8,10" HorizontalContentAlignment="Stretch">
-                        <TextBlock Text="{x:Bind L.SettingsNavAppearance, Mode=OneWay}" />
-                    </ListViewItem>
-                    <ListViewItem AutomationProperties.AutomationId="navSettingsLaunch" Padding="8,10" HorizontalContentAlignment="Stretch">
-                        <TextBlock Text="{x:Bind L.SettingsNavLaunch, Mode=OneWay}" />
-                    </ListViewItem>
-                    <ListViewItem AutomationProperties.AutomationId="navSettingsPaths" Padding="8,10" HorizontalContentAlignment="Stretch">
-                        <TextBlock Text="{x:Bind L.SettingsNavPaths, Mode=OneWay}" />
-                    </ListViewItem>
-                    <ListViewItem AutomationProperties.AutomationId="navSettingsOnline" Padding="8,10" HorizontalContentAlignment="Stretch">
-                        <TextBlock Text="{x:Bind L.SettingsNavOnline, Mode=OneWay}" />
-                    </ListViewItem>
-                    <ListViewItem AutomationProperties.AutomationId="navSettingsCache" Padding="8,10" HorizontalContentAlignment="Stretch">
-                        <TextBlock Text="{x:Bind L.SettingsNavCache, Mode=OneWay}" />
-                    </ListViewItem>
-                    <ListViewItem AutomationProperties.AutomationId="navSettingsAdvanced" Padding="8,10" HorizontalContentAlignment="Stretch">
-                        <TextBlock Text="{x:Bind L.SettingsNavAdvanced, Mode=OneWay}" />
-                    </ListViewItem>
-                </ListView>
-            </StackPanel>
+            <NavigationView.MenuItems>
+                <NavigationViewItem AutomationProperties.AutomationId="navSettingsAppearance"
+                                    Tag="0"
+                                    Content="{x:Bind L.SettingsNavAppearance, Mode=OneWay}"
+                                    IsSelected="True">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Font" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.AutomationId="navSettingsLaunch"
+                                    Tag="1"
+                                    Content="{x:Bind L.SettingsNavLaunch, Mode=OneWay}">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Play" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.AutomationId="navSettingsPaths"
+                                    Tag="2"
+                                    Content="{x:Bind L.SettingsNavPaths, Mode=OneWay}">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Folder" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.AutomationId="navSettingsOnline"
+                                    Tag="3"
+                                    Content="{x:Bind L.SettingsNavOnline, Mode=OneWay}">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Globe" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.AutomationId="navSettingsCache"
+                                    Tag="4"
+                                    Content="{x:Bind L.SettingsNavCache, Mode=OneWay}">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Save" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.AutomationId="navSettingsAdvanced"
+                                    Tag="5"
+                                    Content="{x:Bind L.SettingsNavAdvanced, Mode=OneWay}">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Setting" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+        </NavigationView>
 
-            <ScrollViewer Grid.Column="1"
+        <ScrollViewer Grid.Row="0"
+                      Grid.Column="1"
                           VerticalScrollBarVisibility="Visible"
                           HorizontalScrollBarVisibility="Disabled"
                           HorizontalScrollMode="Disabled"
@@ -468,10 +506,10 @@
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>
-        </Grid>
 
         <!-- 与滚动内容共用 14 DIP 右侧通道，整页右边缘保持对齐。 -->
         <Border Grid.Row="1"
+                Grid.ColumnSpan="2"
                 Margin="0,0,14,0"
                 Background="{ThemeResource PdxCardBackgroundBrush}"
                 BorderBrush="{ThemeResource PdxCardStrokeBrush}"

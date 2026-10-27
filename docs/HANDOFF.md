@@ -34,10 +34,11 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-10-27 04:20 追加：播放集页工具条收成一行（删掉第二行「集名 / 计数 / 已激活：X」摘要，「激活播放集 / 启用全部 / 禁用全部」并入第一行，忙碌转圈移到状态栏右端），并修掉进页面 / 重载后下拉框空白；`MinimumWindowWidth` 900→1040，见 §0.14。**
 **2026-10-27 02:30 追加：整窗背景新增「背景显示方式」五档（覆盖 / 填充 / 完整模糊底 / 完整纯色边 / 居中原始像素）、Mod 缩略图三档（32 / 48 / 72 DIP），导航顺序把「当前游戏」放到最前 —— 详见 §12 与 `docs/DATA-FORMATS.md` §13。**
 **2026-10-27 14:40 追加：应用图标从零做起 —— 石墨圆角方 + 金「P」（碗里放播放三角），`tools/gen-app-icon.py` 是唯一生成源，接进 exe 资源（`<ApplicationIcon>`）与运行期窗口（`AppWindow.SetIcon`），并替换 `Assets\` 里 8 张模板占位 PNG；dist 仍 538 文件，见 §0.15 与 §14。**
+**2026-10-27 14:50 追加：设置页「内容和滚动条重叠」已修 —— 根因是 WinUI 3 的滚动条是**浮层**，贴着 `ScrollViewer` 右边缘画在卡片描边/圆角上；现给滚动内容与状态栏各留 14 DIP 右侧通道，滚动条改落在通道里。真机三态截图 + 像素测量见 §0.16。**
+**2026-10-27 15:10 追加：设置页左侧分节导航从「纯文字 ListView」换成官方 `NavigationView`（带 `SymbolIcon`）—— 选中指示条到文字的间距从 ≈8 DIP 变成 ≈41 DIP，见 §0.17。**
+**2026-10-27 15:30 追加：设置页「缓存」分类接管「数据 / Mod 缩略图」两块（联网分类只剩代理），并做了一轮设置代码去重，见 §0.18。**
 
-**2026-10-27 15:30 追加：设置页「缓存」分类接管 DLC 简介 / 官方公告 / Mod 缩略图三块（联网只剩代理），并做了一轮开关/下拉/刷新/清除/code-behind 去重；build 0/0、Checks 16 类 0 失败、UIA 六节 want 全命中，见 §0.16。**
-
-## 0.16 最新一轮（2026-10-27 15:30）：设置页缓存接管「数据 / Mod 缩略图」，并做一轮去重
+## 0.18 最新一轮（2026-10-27 15:30）：设置页缓存接管「数据 / Mod 缩略图」，并做一轮去重
 
 > 用户诉求原话（截图是设置页「联网」小节）：「联网页面的数据和缩略图应该在缓存里；重新审视下设置中的代码，降低代码重复度」。
 
@@ -58,6 +59,114 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 - 验证：`dotnet build "PdxLauncher.sln" -c Release -m:1 -nodeReuse:false -p:UseSharedCompilation=false` 0 警告 0 错误；
   Checks 16 类 0 失败；UIA 分节六类 want 全部命中（每节 missing 全空；count 会随缓存统计/进度环等状态浮动，不作为断言）；
   截图 `.scratch/rework/settings-*.png` 与 `.scratch/rework/settings-cache-bottom.png`。
+
+## 0.17 最新一轮（2026-10-27 15:10）：设置页分节导航 —— 指示条与文字太近
+
+### 0.17.1 现象（用户原话 m00398，附左栏截图）
+
+「这个选择状态的条似乎和字太近了，是不是自己写的ui，是否有官方ui库解决」——左栏「外观」被选中时，
+3 DIP 的选中指示条紧贴文字，看起来像两个元素挤在一起。
+
+### 0.17.2 结论（读代码 + 量像素，不是猜）
+
+- 指示条**不是自绘**：它是 `ListViewItemPresenter` 自带的选中指示器（3 DIP，贴在条目左缘）。
+  挤的原因是条目**只有文字**（`<ListViewItem Padding="8,10">` + 一个 `TextBlock`），文字落在 8 DIP 内边距处
+  ⇒ 条右缘到文字只有 12 px（150% DPI，≈8 DIP）。
+- WinUI 的导航规范里，指示条右侧留的是**图标位**（条 → 图标 → 文字）。官方控件就是 `NavigationView`，
+  而且主窗口左栏 `MainNavigation` 早就在用；`CommunityToolkit.WinUI.Controls.SettingsControls` 只有
+  `SettingsCard` / `SettingsExpander`，**没有导航控件**，所以那边帮不上。
+- 给 `ListViewItem` 加大 `Padding` 也能拉开，但条和字之间会留一段空白，不符合导航规范 ⇒ 换控件。
+
+### 0.17.3 改动（已落盘）
+
+- `src/PdxLauncher.App/Views/SettingsPage.xaml`：Col0 的 `ListView` 换成 `NavigationView`
+  （`AutomationId` 沿用 `lstSettingsSections`，`PaneDisplayMode=Left`、`OpenPaneLength=216`、
+  `IsPaneToggleButtonVisible=False`、`IsSettingsVisible=False`、`IsPaneOpen=True`、`Background=Transparent`）；
+  页头（标题 + 当前游戏名）移进 `NavigationView.PaneHeader`；六个 `NavigationViewItem` 用 `Tag="0".."5"`
+  携带分类序号，图标依次 `Font / Play / Folder / Globe / Save / Setting`；外层 `Grid` 补上列定义 216/\*
+  与行定义 \*/Auto，`ScrollViewer` 仍是 Row0/Col1 的**兄弟**节点（14 DIP 滚动条通道不变），
+  状态栏 `Border` 放 Row1 并 `ColumnSpan="2"`。
+- `src/PdxLauncher.App/Views/SettingsPage.xaml.cs`（已在 `1f5f23f`）：`OnSectionChanged(NavigationView,
+  NavigationViewSelectionChangedEventArgs)` + `CurrentSectionIndex()` 解析 `Tag`，`ShowSection` 逻辑未变。
+- 提醒：`PaneBackground` 在 WinUI 3 的 `NavigationView` 上**不存在**（XamlCompiler `WMC0011`），要透明只能设 `Background`。
+- `docs/SETTINGS-REWORK.md`：结构图、新增「分节导航控件」条目、切分节说明、新的量测小节。
+- 补回列间距：合并内外层 Grid 时 `ColumnSpacing="16"` 漏掉过，导航面板一度只隔着一条描边就贴住卡片；
+  现在外层 `Grid` 带 `ColumnSpacing="16"`，卡片左缘 `x=693 → 718`、宽度收窄 25 px、右缘 `1735` 不变。
+
+### 0.17.4 验证（Release，真机截图 + 像素测量 + UIA）
+
+- `cmd /c build.cmd`：0 警告 0 错误；`检查类: 16，失败: 0，断言失败总数: 0`。
+- `.scratch/rework/navgap-settings.png` + `navgap-probe2.py`（1800×1200，150% DPI，行带 y=190..246）：
+  指示条 `x=374–378`（5 px ≈ 3 DIP）→ 图标块 `x=392–415`（24 px = 16 DIP，间隔 14 px ≈ 9 DIP）
+  → 再空 24 px（16 DIP）→ 文字首列 `x=440`。**条右缘到文字 62 px（≈41 DIP）**；改前 12 px（≈8 DIP）。
+- `.scratch/rework/verify-settings2.ps1`：appearance 46 / launch 39 / paths 46 / online 39 / cache 44 /
+  advanced 38（比旧基线各 +4，来自 `NavigationView` 的 `PaneRoot` / `PaneTitleTextBlock` /
+  `PART_TitleText` / `PART_SubtitleText` 节点）。
+- 列间距复查（`scrollgutter-hover.png`）：卡片填充左缘 `x=718`、右缘 `x=1735`、滚动条 `1751–1752`
+  ⇒ 导航面板与卡片之间约 27 px，滚动条通道间隙仍 12 px；`verify-settings3.ps1` 三次读数一致
+  （本次 `1492,1130,492x60`），点按钮不跳动这条没回退。
+
+### 0.17.5 待办与盲区
+
+- `verify-settings2.ps1` 的 `online` 期望表仍是迁移前的 IA：6 个「数据 / Mod 缩略图」控件已随 `18cab88`
+  迁进「缓存」节，所以该节 `missing` 会报 6 个 id —— 是脚本过期，不是回归，需并发会话更新期望表。
+- `1f5f23f` 提交里只有 `.cs` 是 `NavigationView` 版、XAML 还是 `ListView`：单独 checkout 该提交**编译不过**，
+  本轮 XAML 提交补齐了这个缺口。
+- 键盘 / 手柄导航（Tab 进左栏、方向键切分类、Enter 激活）只做了控件层面的对齐（`NavigationView` 自带），
+  没有逐项实测。
+- 同一工作区同时有另一个会话在改 `MainWindow.xaml.cs`、`Services/{AppServices,BitmapLoader,XamlImage}.cs`、
+  `ViewModels/LibraryViewModel.cs`、`Views/HomePage.xaml.cs`、`Services/ThemeImageFlattener.cs`、
+  `GameCatalog.cs`、`tests/PdxLauncher.Checks/GamesChecks.cs`、`InstallSignatureDetector.cs` —— 不属本轮，
+  提交时按路径限定，别顺手 `git add -A`。
+
+### 0.17.6 备份
+
+- 仓库已 git 化，改前的 `ListView` 版 XAML 可从 git 历史取；本轮没有新增 backup 目录。
+
+## 0.16 最新一轮（2026-10-27 14:50）：设置页「内容与滚动条重叠」—— 浮层滚动条压在卡片描边上
+
+### 0.16.1 现象（用户原话 m00003，附右缘竖条截图）
+
+设置页外观分类右侧有一条通栏亮竖线，正好贴在卡片右边框上；截图里「联网缓存 / 上次检查 / 立即检查 /
+四个下拉 / 开关」的卡片右边缘全被这条线压着。
+
+### 0.16.2 根因（像素取证，不是猜）
+
+- WinUI 3 的 Fluent 滚动条是**浮层指示器**：它贴着 `ScrollViewer` 的右边缘绘制，**不占内容宽度**。
+  所以 `VerticalScrollBarVisibility="Visible"` 既不会给内容留白，也不能阻止重叠 —— 改版时「常显可避免宽度抖动」
+  的说法是错的（详见 `docs/SETTINGS-REWORK.md` 问题 #1 的修正）。
+- 改版初版的内容 `StackPanel` 没有任何右侧留白，卡片一路撑到 `ScrollViewer` 右边缘 ⇒ 轨道画在卡片的
+  1 px 描边与 8 px 圆角上，指针悬停 / 滚动时肉眼可见「内容与滚动条重叠」。
+- 旧截图里看不到滚动条，是因为指针不在滚动区时它会自动淡出；这也解释了为什么「看静态截图没问题、一动鼠标就出来」。
+
+### 0.16.3 改动（已落盘）
+
+- `src/PdxLauncher.App/Views/SettingsPage.xaml`：滚动内容的 `<StackPanel Spacing="12">` 加 `Margin="0,0,14,0"`，
+  页面状态栏 `Border Grid.Row="1"` 同样加 `Margin="0,0,14,0"`（保持整页右边缘对齐），两处各带说明注释。
+  14 DIP = 12 DIP 滚动条通道 + 2 DIP 余量；**只给内容留白**，给 `ScrollViewer` 加 Margin 只会把轨道跟着卡片一起往里挪。
+- `docs/SETTINGS-REWORK.md`：结构图补上通道、新增「滚动条通道」条目、修正问题 #1 的错误归因。
+
+### 0.16.4 验证（Release，真机截图 + 像素测量）
+
+- `cmd /c build.cmd`：16 个检查类、失败 0、断言失败 0；`python tools/gen-i18n.py --check`：499 个键合法。
+- `.scratch/rework/verify-scrollgutter.ps1` + `.scratch/rework/gutter-probe.py`（1800×1200，150% DPI）：
+  卡片描边 `x=1736–1737`、滚动条轨道 `x=1750–1753` ⇒ 留空 12 px；空闲 3.6 s 后同列无亮像素。
+- `.scratch/rework/verify-narrow-gutter.ps1`（1000×700）：描边 `936–937`、滚动条 `951–952`，间隙 13 px；5.2 s 后消失。
+- `.scratch/rework/verify-settings3.ps1`：被操作控件前后恒为 `1302,940,492x60`（旧基线 `1323,940,492x60` 左移 21 px）。
+- 六分类 UIA 计数：42 / 35 / 42 / 41 / 34 / 34，`missing=[]`。
+
+### 0.16.5 盲区
+
+- 只修了设置页。主页 `HomeScrollViewer`（`VerticalScrollBarVisibility="Auto"`）与其它页的 `ScrollViewer` 同样是
+  无留白浮层滚动条，但它们的内容是满宽卡片/列表，是否需要同样通道没和用户确认过，没动。
+- 触摸 / 手柄下的滚动条宽度与 hover 一致（未单独实测）。
+
+### 0.16.6 备份
+
+- 改动前的三份文件在 `.scratch\rework\backup-20261027-scrollgutter\`（`SettingsPage.xaml`、`SETTINGS-REWORK.md`、`HANDOFF.md`）。
+- 仓库已 git 化，本次代码与文档改动已提交；后续回滚走 `git restore` / `git revert`。
+
+**2026-10-27 15:30 追加：设置页「缓存」分类接管 DLC 简介 / 官方公告 / Mod 缩略图三块（联网只剩代理），并做了一轮开关/下拉/刷新/清除/code-behind 去重；build 0/0、Checks 16 类 0 失败、UIA 六节 want 全命中，见 §0.16。**
 
 ## 0.15 最新一轮（2026-10-27 14:40）：应用图标 —— 从零做一套，接进 exe / 窗口 / 任务栏
 
