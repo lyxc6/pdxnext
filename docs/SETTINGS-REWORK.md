@@ -87,3 +87,22 @@ Page
   其它下拉与开关的值保持不变；被操作控件的位置与尺寸在前后完全一致（`1323,940,492x60`），
   即不再出现整页跳动。
 - 语言切换（`.scratch/rework/verify-lang2.ps1`）：简中 ↔ English 双向切换，导航与卡片文案、状态栏提示同步更新。
+
+### 滚动条通道（2026-10-27 14:50）
+
+用户反馈「设置页面的内容和滚动条重叠了」。WinUI 3 的 Fluent 滚动条是浮层指示器，贴在
+`ScrollViewer` 右边缘绘制、不占内容宽度；改版初版内容一路撑到右边缘，悬停/滚动时轨道直接画在卡片的
+1 px 描边和 8 px 圆角上。现在给滚动内容与状态栏各留 14 DIP 右侧通道，滚动条落在通道里。
+
+- 取证脚本：`.scratch/rework/verify-scrollgutter.ps1`（启动 → 设置/外观 → 悬停 / 滚动 / 空闲三态截图），
+  测量脚本 `.scratch/rework/gutter-probe.py`。
+- 1800×1200 窗口（150% DPI）：卡片填充右缘 `x=1735`、卡片描边 `x=1736–1737`、滚动条轨道 `x=1750–1753`
+  ⇒ 描边到轨道左缘留空 **12 px（≈8 DIP）**；指针移出 3.6 s 后同一列无亮像素（自动隐藏生效）。
+- 窄窗口 `.scratch/rework/verify-narrow-gutter.ps1`（1000×700）：卡片填充右缘 `x=935`、描边 `936–937`、
+  滚动条 `951–952`，间隙 13 px；移出 5.2 s 后滚动条消失。缩放窗口不改变通道宽度（14 DIP 是常数）。
+- 布局回归（`.scratch/rework/verify-settings3.ps1`）：被操作的 `cmbBackgroundDisplayMode` 在切换「背景显示方式」、
+  开关「窗口置顶」前后位置尺寸完全一致 = `1302,940,492x60`；比改版记录的 `1323,940,492x60` 左移 21 px
+  （14 DIP × 150% DPI），宽度 492、高度 60、y=940 不变。
+- 六分类 UIA 计数复核：appearance 42 / launch 35 / paths 42 / online 41 / cache 34 / advanced 34，`missing=[]`。
+- `cmd /c build.cmd`：16 个检查类、失败 0、断言失败 0；`python tools/gen-i18n.py --check`：499 个键合法。
+
