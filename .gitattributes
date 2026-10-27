@@ -16,3 +16,6 @@
 *.exe binary
 *.pdb binary
 *.zip binary
+
+# 测试夹具按字节比对（golden MD5），禁止换行转换
+tests/fixtures/** -text
