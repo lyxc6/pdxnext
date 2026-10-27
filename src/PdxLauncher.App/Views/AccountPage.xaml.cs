@@ -1,5 +1,7 @@
 namespace PdxLauncher.App.Views;
 
+using System.ComponentModel;
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -10,6 +12,7 @@ using PdxLauncher.App.ViewModels;
 /// <summary>
 /// 账号页：Paradox 账号登录 / 退出（左栏导航里的独立页面）。
 /// 页面只负责生命周期与控件事件；会话状态与文案都在 <see cref="AccountViewModel"/> 里。
+/// 登录反馈走页内 InfoBar，不再弹 ContentDialog。
 /// </summary>
 public sealed partial class AccountPage : Page
 {
@@ -17,9 +20,6 @@ public sealed partial class AccountPage : Page
 
     /// <summary>页面生命周期令牌；NavigationCacheMode=Required 会在返回页面时重建。</summary>
     private CancellationTokenSource _lifetime = new();
-
-    /// <summary>密码框内容只在页面里存一份，交给 ViewModel 后立刻清掉。</summary>
-    private string _accountPassword = string.Empty;
 
     public AccountPage()
     {
@@ -49,12 +49,16 @@ public sealed partial class AccountPage : Page
         AppServices.Account.SessionChanged -= OnSessionChanged;
         AppServices.Account.SessionChanged += OnSessionChanged;
 
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+
         RefreshAccountPanels();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         AppServices.Account.SessionChanged -= OnSessionChanged;
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _lifetime.Cancel();
     }
 
@@ -66,36 +70,37 @@ public sealed partial class AccountPage : Page
         }
     }
 
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(AccountViewModel.StatusLevel) or nameof(AccountViewModel.StatusMessage))
+        {
+            UpdateStatusBar();
+        }
+    }
+
     // ------------------------------------------------------------ 控件事件
 
-    private void OnAccountPasswordChanged(object sender, RoutedEventArgs e)
+    /// <summary>身份卡右侧的「登录」：展开表单并把焦点交给邮箱框。</summary>
+    private void OnAccountPrimaryClick(object sender, RoutedEventArgs e)
     {
-        _accountPassword = (sender as PasswordBox)?.Password ?? string.Empty;
-        _viewModel.RaiseAccountProps();
+        expAccountSignIn.IsExpanded = true;
+        EmailBox.Focus(FocusState.Programmatic);
     }
 
     private async void OnAccountSignInClick(object sender, RoutedEventArgs e)
     {
         try
         {
-            var error = await _viewModel.SignInAsync(_accountPassword, _lifetime.Token).ConfigureAwait(true);
-            _accountPassword = string.Empty;
+            var password = PasswordBoxControl.Password;
+            var error = await _viewModel.SignInAsync(password, _lifetime.Token).ConfigureAwait(true);
 
-            if (sender is Button { Parent: StackPanel { } panel })
-            {
-                // 密码框在同一组卡片里，清掉输入框内容，避免密码留在控件上。
-                foreach (var child in panel.Children)
-                {
-                    if (child is PasswordBox box)
-                    {
-                        box.Password = string.Empty;
-                    }
-                }
-            }
+            // 无论成功失败都把密码框清空，别让明文留在控件上。
+            PasswordBoxControl.Password = string.Empty;
 
-            if (error is not null)
+            if (error is not null && !_viewModel.HasStatusMessage)
             {
-                await ShowMessageAsync(L.AccountDialogFailedTitle, error).ConfigureAwait(true);
+                // ViewModel 没写反馈（理论上不会发生）时兜底，避免用户看不到失败原因。
+                _viewModel.ShowStatus(error);
             }
 
             RefreshAccountPanels();
@@ -107,7 +112,8 @@ public sealed partial class AccountPage : Page
         catch (Exception ex)
         {
             AppServices.Logger.Error("AccountPage 登录失败", ex);
-            await ShowMessageAsync(L.AccountDialogFailedTitle, ex.Message).ConfigureAwait(true);
+            _viewModel.ShowStatus(ex.Message);
+            RefreshAccountPanels();
         }
     }
 
@@ -139,42 +145,22 @@ public sealed partial class AccountPage : Page
         }
     }
 
-    /// <summary>登录前后切换「输密码」与「登出」两组卡片。</summary>
+    // ------------------------------------------------------------ 状态刷新
+
+    /// <summary>会话可能变了：通知 ViewModel 重算派生属性，并同步 InfoBar 的级别。</summary>
     private void RefreshAccountPanels()
     {
-        var signedIn = _viewModel.IsSignedIn;
-        if (grpAccountSignIn is { } signIn)
-        {
-            signIn.Visibility = signedIn ? Visibility.Collapsed : Visibility.Visible;
-        }
-
-        if (grpAccountSignedIn is { } signedInGroup)
-        {
-            signedInGroup.Visibility = signedIn ? Visibility.Visible : Visibility.Collapsed;
-        }
-
         _viewModel.RaiseAccountProps();
+        UpdateStatusBar();
     }
 
-    // ------------------------------------------------------------ 对话框
-
-    private async Task ShowMessageAsync(string title, string message)
+    private void UpdateStatusBar()
     {
-        try
+        infoAccountStatus.Severity = _viewModel.StatusLevel switch
         {
-            var dialog = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = title,
-                Content = message,
-                CloseButtonText = L.CommonClose,
-            };
-
-            await dialog.ShowAsync();
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("AccountPage 显示对话框失败", ex);
-        }
+            AccountStatusLevel.Success => InfoBarSeverity.Success,
+            AccountStatusLevel.Error => InfoBarSeverity.Error,
+            _ => InfoBarSeverity.Informational,
+        };
     }
 }

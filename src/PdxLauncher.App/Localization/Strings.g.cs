@@ -24,11 +24,14 @@ public sealed partial class Localizer
         ["account.errorPasswordRequired"] = "请先填写密码。",
         ["account.errorSignInFailed"] = "登录失败：{0}",
         ["account.hint"] = "密码只用于本次登录请求，不会写入磁盘。Paradox 账号与 Steam 账号相互独立。",
+        ["account.notSignedInTitle"] = "未登录",
         ["account.password"] = "密码",
         ["account.passwordPlaceholder"] = "Paradox 账号密码",
+        ["account.profileTitle"] = "账户信息",
         ["account.remember"] = "保持登录",
         ["account.rememberHint"] = "勾选后保存刷新凭据（DPAPI 加密），下次启动可自动续期；不勾选则只在本次运行有效。",
         ["account.signIn"] = "登录",
+        ["account.signInHeader"] = "登录 Paradox 账号",
         ["account.signOut"] = "退出登录",
         ["account.signOutHint"] = "只清除本机的登录状态，不会注销其它设备上的会话。",
         ["account.status"] = "登录状态",
@@ -611,11 +614,14 @@ public sealed partial class Localizer
         ["account.errorPasswordRequired"] = "Enter your password first.",
         ["account.errorSignInFailed"] = "Sign-in failed: {0}",
         ["account.hint"] = "The password is used only for this sign-in request and is never written to disk. Paradox and Steam accounts are separate.",
+        ["account.notSignedInTitle"] = "Not signed in",
         ["account.password"] = "Password",
         ["account.passwordPlaceholder"] = "Paradox account password",
+        ["account.profileTitle"] = "Account information",
         ["account.remember"] = "Keep me signed in",
         ["account.rememberHint"] = "Stores a refresh token (DPAPI protected) so the session renews on the next start. Otherwise it lasts only for this run.",
         ["account.signIn"] = "Sign in",
+        ["account.signInHeader"] = "Sign in to your Paradox account",
         ["account.signOut"] = "Sign out",
         ["account.signOutHint"] = "Clears the sign-in state on this machine only; other devices stay signed in.",
         ["account.status"] = "Status",
@@ -1198,11 +1204,14 @@ public sealed partial class Localizer
         ("account.errorPasswordRequired", "AccountErrorPasswordRequired"),
         ("account.errorSignInFailed", "AccountErrorSignInFailed"),
         ("account.hint", "AccountHint"),
+        ("account.notSignedInTitle", "AccountNotSignedInTitle"),
         ("account.password", "AccountPassword"),
         ("account.passwordPlaceholder", "AccountPasswordPlaceholder"),
+        ("account.profileTitle", "AccountProfileTitle"),
         ("account.remember", "AccountRemember"),
         ("account.rememberHint", "AccountRememberHint"),
         ("account.signIn", "AccountSignIn"),
+        ("account.signInHeader", "AccountSignInHeader"),
         ("account.signOut", "AccountSignOut"),
         ("account.signOutHint", "AccountSignOutHint"),
         ("account.status", "AccountStatus"),
@@ -1783,11 +1792,14 @@ public sealed partial class Localizer
     public string AccountErrorPasswordRequired => Format("account.errorPasswordRequired");
     public string AccountErrorSignInFailed => Format("account.errorSignInFailed");
     public string AccountHint => Format("account.hint");
+    public string AccountNotSignedInTitle => Format("account.notSignedInTitle");
     public string AccountPassword => Format("account.password");
     public string AccountPasswordPlaceholder => Format("account.passwordPlaceholder");
+    public string AccountProfileTitle => Format("account.profileTitle");
     public string AccountRemember => Format("account.remember");
     public string AccountRememberHint => Format("account.rememberHint");
     public string AccountSignIn => Format("account.signIn");
+    public string AccountSignInHeader => Format("account.signInHeader");
     public string AccountSignOut => Format("account.signOut");
     public string AccountSignOutHint => Format("account.signOutHint");
     public string AccountStatus => Format("account.status");
@@ -2371,11 +2383,14 @@ internal static class Keys
     public const string AccountErrorPasswordRequired = "account.errorPasswordRequired";
     public const string AccountErrorSignInFailed = "account.errorSignInFailed";
     public const string AccountHint = "account.hint";
+    public const string AccountNotSignedInTitle = "account.notSignedInTitle";
     public const string AccountPassword = "account.password";
     public const string AccountPasswordPlaceholder = "account.passwordPlaceholder";
+    public const string AccountProfileTitle = "account.profileTitle";
     public const string AccountRemember = "account.remember";
     public const string AccountRememberHint = "account.rememberHint";
     public const string AccountSignIn = "account.signIn";
+    public const string AccountSignInHeader = "account.signInHeader";
     public const string AccountSignOut = "account.signOut";
     public const string AccountSignOutHint = "account.signOutHint";
     public const string AccountStatus = "account.status";

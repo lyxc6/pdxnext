@@ -5,6 +5,19 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 
+/// <summary>登录反馈的严重级别，页面据此选 InfoBar 的 Severity。</summary>
+public enum AccountStatusLevel
+{
+    /// <summary>普通提示。</summary>
+    Info,
+
+    /// <summary>操作成功。</summary>
+    Success,
+
+    /// <summary>操作失败。</summary>
+    Error
+}
+
 /// <summary>
 /// 「账号」页的视图模型：邮箱 / 密码登录、退出、状态文案。
 /// <para>
@@ -31,6 +44,8 @@ public sealed partial class AccountViewModel : LocalizedObservableObject
     private string? _statusKey;
 
     private object?[] _statusArgs = [];
+
+    private AccountStatusLevel _statusLevel = AccountStatusLevel.Info;
 
     public AccountViewModel()
     {
@@ -73,7 +88,50 @@ public sealed partial class AccountViewModel : LocalizedObservableObject
 
             return account.IsBusy
                 ? T(Keys.AccountStatusSigningIn)
-                : T(Keys.AccountStatusSignedOut);
+                : T(Keys.AccountStatusHint);
+        }
+    }
+
+    /// <summary>有没有要展示的登录反馈；有就打开页内 InfoBar。</summary>
+    public bool HasStatusMessage => !string.IsNullOrEmpty(StatusMessage);
+
+    /// <summary>反馈级别。</summary>
+    public AccountStatusLevel StatusLevel => _statusLevel;
+
+    /// <summary>
+    /// 头像首字母：已登录取显示名首字，否则取邮箱首字，都没有就用占位的 P。
+    /// </summary>
+    public string Initials
+    {
+        get
+        {
+            if (!AppServices.IsInitialized)
+            {
+                return "P";
+            }
+
+            var account = AppServices.Account;
+            var name = account.IsSignedIn ? account.Session?.DisplayName : Email;
+            var trimmed = (name ?? string.Empty).Trim();
+            return trimmed.Length == 0
+                ? "P"
+                : char.ToUpperInvariant(trimmed[0]).ToString();
+        }
+    }
+
+    /// <summary>身份卡上的名字：已登录用显示名，未登录用「未登录」。</summary>
+    public string ProfileName
+    {
+        get
+        {
+            if (AppServices.IsInitialized
+                && AppServices.Account.Session is { } session
+                && !string.IsNullOrWhiteSpace(session.DisplayName))
+            {
+                return session.DisplayName;
+            }
+
+            return T(Keys.AccountNotSignedInTitle);
         }
     }
 
@@ -108,10 +166,12 @@ public sealed partial class AccountViewModel : LocalizedObservableObject
 
             if (!result.IsSuccess)
             {
-                return T(Keys.AccountErrorSignInFailed, DescribeAccountError(result.ErrorMessage));
+                var reason = DescribeAccountError(result.ErrorMessage);
+                SetStatus(Keys.AccountErrorSignInFailed, AccountStatusLevel.Error, reason);
+                return T(Keys.AccountErrorSignInFailed, reason);
             }
 
-            SetStatus(Keys.AccountStatusSignInOk);
+            SetStatus(Keys.AccountStatusSignInOk, AccountStatusLevel.Success);
             return null;
         }
         finally
@@ -130,18 +190,32 @@ public sealed partial class AccountViewModel : LocalizedObservableObject
 
         AppServices.Account.SignOut();
         RaiseAccountProps();
-        SetStatus(Keys.AccountStatusSignOutOk);
+        SetStatus(Keys.AccountStatusSignOutOk, AccountStatusLevel.Success);
+    }
+
+    /// <summary>直接显示一句错误（页面兜底用，不走翻译键）。</summary>
+    public void ShowStatus(string message)
+    {
+        _statusKey = null;
+        _statusArgs = [];
+        _statusLevel = AccountStatusLevel.Error;
+        StatusMessage = message;
+        OnPropertyChanged(nameof(StatusLevel));
+        OnPropertyChanged(nameof(HasStatusMessage));
     }
 
     /// <summary>会话状态可能变了（启动恢复完成 / 别的页面登录）：通知所有派生属性。</summary>
-    public void RaiseAccountProps()
-    {
+    public void RaiseAccountProps()    {
         OnPropertyChanged(nameof(IsBusy));
         OnPropertyChanged(nameof(IsSignedIn));
         OnPropertyChanged(nameof(CanSignIn));
         OnPropertyChanged(nameof(ShowSignInPanel));
         OnPropertyChanged(nameof(ShowSignedInPanel));
         OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(StatusLevel));
+        OnPropertyChanged(nameof(HasStatusMessage));
+        OnPropertyChanged(nameof(Initials));
+        OnPropertyChanged(nameof(ProfileName));
     }
 
     /// <summary>把 Core 的错误码翻成给用户看的那一句（错误码本身进日志）。</summary>
@@ -169,15 +243,24 @@ public sealed partial class AccountViewModel : LocalizedObservableObject
         return code;
     }
 
-    /// <summary>记下状态键与参数，切语言后能按新语言重建同一句。</summary>
-    private void SetStatus(string key, params object?[] args)
+    /// <summary>记下状态键、参数与级别，切语言后能按新语言重建同一句。</summary>
+    private void SetStatus(string key, AccountStatusLevel level = AccountStatusLevel.Info, params object?[] args)
     {
         _statusKey = key;
         _statusArgs = args;
+        _statusLevel = level;
         StatusMessage = T(key, args);
+        OnPropertyChanged(nameof(StatusLevel));
+        OnPropertyChanged(nameof(HasStatusMessage));
     }
 
-    partial void OnEmailChanged(string value) => OnPropertyChanged(nameof(CanSignIn));
+    partial void OnEmailChanged(string value)
+    {
+        OnPropertyChanged(nameof(CanSignIn));
+        OnPropertyChanged(nameof(Initials));
+    }
+
+    partial void OnStatusMessageChanged(string value) => OnPropertyChanged(nameof(HasStatusMessage));
 
     partial void OnRememberChanged(bool value)
     {
