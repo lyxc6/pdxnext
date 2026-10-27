@@ -42,9 +42,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     private PlaySetPageDisplayModeOption _selectedPlaySetDisplayMode =
         PlaySetPageDisplayModeCatalog.Resolve(AppServices.Settings.PlaySetPageDisplayMode);
     private RetentionDaysOption _selectedModThumbnailRetention =
-        ModThumbnailRetentionCatalog.Resolve(AppServices.Settings.ModThumbnailCacheDays);
+        RetentionDaysCatalog.ModThumbnails.Resolve(AppServices.Settings.ModThumbnailCacheDays);
     private RetentionDaysOption _selectedDlcDescriptionRetention =
-        DlcDescriptionRetentionCatalog.Resolve(AppServices.Settings.DlcDescriptionCacheDays);
+        RetentionDaysCatalog.DlcDescriptions.Resolve(AppServices.Settings.DlcDescriptionCacheDays);
     private BackgroundDisplayModeOption _selectedBackgroundDisplayMode =
         BackgroundDisplayModeCatalog.Resolve(AppServices.Settings.BackgroundDisplayMode);
     private ModThumbnailSizeOption _selectedModThumbnailSize =
@@ -494,7 +494,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     /// <summary>DLC 简介缓存保留天数（1 / 3 / 7 / 14 / 30）。</summary>
     public IReadOnlyList<RetentionDaysOption> DlcDescriptionRetentions =>
-        DlcDescriptionRetentionCatalog.All;
+        RetentionDaysCatalog.DlcDescriptions.All;
 
     /// <summary>DLC 简介缓存天数；改动立即落盘，下一次查询按新值判断过期。</summary>
     public RetentionDaysOption SelectedDlcDescriptionRetention
@@ -941,7 +941,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     /// <summary>可选的 Mod 缩略图保留天数。</summary>
     public IReadOnlyList<RetentionDaysOption> ModThumbnailRetentions =>
-        ModThumbnailRetentionCatalog.All;
+        RetentionDaysCatalog.ModThumbnails.All;
 
     /// <summary>Mod 缩略图缓存保留天数；改动立即落盘，下次加载 Mod 库时按新值清理。</summary>
     public RetentionDaysOption SelectedModThumbnailRetention
@@ -1140,9 +1140,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         _selectedModThumbnailSize =
             ModThumbnailSizeCatalog.Resolve(AppServices.Settings.ModThumbnailSize);
         _selectedModThumbnailRetention =
-            ModThumbnailRetentionCatalog.Resolve(AppServices.Settings.ModThumbnailCacheDays);
+            RetentionDaysCatalog.ModThumbnails.Resolve(AppServices.Settings.ModThumbnailCacheDays);
         _selectedDlcDescriptionRetention =
-            DlcDescriptionRetentionCatalog.Resolve(AppServices.Settings.DlcDescriptionCacheDays);
+            RetentionDaysCatalog.DlcDescriptions.Resolve(AppServices.Settings.DlcDescriptionCacheDays);
         _selectedUiLanguage = UiLanguageCatalog.Resolve(AppServices.Settings.UiLanguage);
 
         OnPropertyChanged(nameof(PlaySetDisplayModes));
