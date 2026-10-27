@@ -839,9 +839,25 @@ public static class PlaysetChecks
             return;
         }
 
-        CheckRealCk3(fs, logger, clock, installations);
-        CheckRealVictoria3(fs, logger, clock, installations);
-        CheckRealStellaris(fs, logger, clock, installations);
+        RunRealMachineSection("CK3", () => CheckRealCk3(fs, logger, clock, installations));
+        RunRealMachineSection("Victoria 3", () => CheckRealVictoria3(fs, logger, clock, installations));
+        RunRealMachineSection("Stellaris", () => CheckRealStellaris(fs, logger, clock, installations));
+    }
+
+    /// <summary>
+    /// 真机段落的外层兜底：官方启动器或游戏本体正开着时，launcher-v2.sqlite 会被独占，
+    /// 这类读取失败不该把离线自检判成红，按 skip 处理（不记为失败）。
+    /// </summary>
+    private static void RunRealMachineSection(string name, Action section)
+    {
+        try
+        {
+            section();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Console.WriteLine("  skip 真机 " + name + " 数据库被占用或读不到，跳过（不记为失败）：" + exception.Message);
+        }
     }
 
     private static void CheckRealCk3(

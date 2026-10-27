@@ -20,6 +20,9 @@ public enum ErrorKind
 
     /// <summary>不支持的操作或格式。</summary>
     Unsupported,
+
+    /// <summary>需要登录，或登录态已失效（凭据错误、token 过期、无权限）。</summary>
+    Unauthorized,
 }
 
 /// <summary>

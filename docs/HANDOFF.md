@@ -11,7 +11,7 @@
 ## 0. 一句话现状
 
 启动器外壳与主页已从「照官方 Paradox 启动器截图逐像素自绘」**改成 WinUI 3 标准控件 UI**（用户明确要求），
-Release **0 警告 0 错误**，自检 **16 个检查类 / 0 失败**（2026-10-27 14:40 实测；本轮新增 `IconChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
+Release **0 警告 0 错误**，自检 **20 个检查类 / 0 失败**（2026-10-27 18:40 实测；本轮新增 `DiscoveryCacheChecks` / `CatalogCacheChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
 **2026-10-26 已完成：窗口置顶开关（§0.2）+ 整窗背景「方案 B」（§0.3）**——游戏主题背景图现在连标题栏条和左侧
 NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统一纱 + 卡片/列表玻璃底衬），主页那条 260 高、被裁掉一半的
 主题横幅已删除。剩下的活：Light / HighContrast 真机切主题跑一遍（§0.3 唯一视觉盲区）、真机复验 settings.json 与置顶持久化、
@@ -41,9 +41,131 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 
 **2026-10-27 16:50 追加：EU5 从「只被发现」做到「能管」—— 自带 1920×1080 背景 + 卡片封面、`playsets.json` 播放集读写、EU5 自己的 `.dlc.json` 与英文本地化名字；同一轮在真机上挖出三个数据格式坑（metadata.json 带 BOM、库搬家后的陈旧路径、DLC 描述文件不是 v3 结构），见 §0.19。**
 
+**2026-10-27 17:50 追加：新增纯托管 DDS 解码库 `src/PdxLauncher.Imaging`（BC1/BC2/BC3/BC4/BC5/BC7 + 未压缩 BGRA8，零 NuGet、可在离线自检里跑），EU5 的 `thumbnail.dds` 现在能转成 PNG 显示 —— DLC 三张封面与带图 mod 全部真实成像；设置页缓存卡片相应增加到五行（新增 `images`），见 §0.20。**
+
+**2026-10-27 18:40 追加：切换游戏慢已定位并修好 —— 不是线程死锁（全仓 `.Result` / `.Wait()` 零命中），而是「UI 线程被同步 IO 与串行重清扫占着」：DLC / mod 扫描零缓存（一次切换同一游戏被扫 2–3 次）、纱层摊平的解码 / 逐像素 / 重编码全在 UI 线程且跨进程重做 7 次、`continue_game.json` 在 UI 线程同步读、整窗背景解码没有 per-request 取消。真机实测切游戏背景落地从 **39.6 秒空白 / 52.9 秒间隔**降到 **165–195 ms**，见 §0.21。**
+
 **2026-10-27 19:30 追加：五个 P0 数据完整性 / 可观测性批次已全部落地并逐批提交（分支 `fix/data-integrity`，`26a926d` → `1984a62`）—— 写路径失败不再静默当成功、设置落盘失败有返回值、未处理异常不再静默退出、域名白名单移进网络出口。见 §0.22。**
 
-## 0.22 最新一轮（2026-10-27 17:15–19:30）：五个 P0 批次 —— 数据静默丢失、崩溃不可观测、白名单靠自觉
+**2026-10-27 20:20 追加：CS2（天际线 2）从「管不到」做到「能管 + 能逛工坊」——① 「外部操控工坊」那个工具查明是 **Skyve CS-II**，而它调用的 PDX Mods 平台确实有 HTTP API（无公开文档，协议是从官方 `app.asar` 逆向 + 现网实测拿的）；② 播放集/启用/排序接管 CS2 的 `playset_config.json`；③ 新增 Paradox 账号登录（设置页新节）；④ Mod 库页多了「在线（PDX Mods）」视图（搜索/排序/翻页/详情/封面）。顺手修掉「本地 CS2 缩略图全空」的真 bug，见 §0.23。**
+
+## 0.23 最新一轮（2026-10-27 19:30–20:20）：CS2 mod 管理 + Paradox 账号 + PDX Mods 在线视图
+
+### 0.23.1 用户两问
+
+- User said (m00001)：「我记得天际线2下了一个外部操控游戏内的p社创意工坊，你找找，或者找下这个社工坊是否存在api可以调用。目前的mod管理是无法管理到天际线2的」
+- User said (m02676)：「新的需求：1.实现p社账号登录；2.实现访问p社mod平台」
+
+### 0.23.2 先回答第一问：「那个外部工具」和「有没有 API」
+
+**工具 = Skyve CS-II**，本机已装 `D:\app\Skyve CS-II\`（`Skyve.exe` / `Skyve.Service.exe` / `PDX.SDK.dll` / `Skyve.Domain.CS2.dll` / `Skyve.Systems.CS2.dll` / `Skyve.Api.Domain.dll`，均为 2025-05-11）。它**不自写 REST**，而是直接引官方 `PDX.SDK.dll`；`Skyve.Service` 服务本机未安装。所以「照它抄接口」这条路走不通 —— 网络层是闭源 SDK 里的。
+
+**PDX Mods 平台确实有 HTTP API**（`https://api.paradox-interactive.com`），无公开文档，是从官方启动器 `app.asar` 里逐字抠出来再拿 curl 实测确认的（见 §0.23.5 与 `docs/DATA-FORMATS.md` §17）。关键点：**搜索/详情匿名可用**，只有「订阅 / 我发布的 mod / 已安装列表」需要 Paradox 会话令牌。
+
+### 0.23.3 批次 A：CS2 播放集真正接管（`LoadFileFormat.PlaysetConfigV1`）
+
+CS2 以前「管不到」的根因是加载文件写错了地方：CS2 的 `launcher-settings.json` 写的是 `formatVersion=1.1`，与 V3 的 `ContentLoadV1_1` 同值，于是启动器按 V3 的路子写 `content_load.json` —— 而 **CS2 根本不读它**，CS2 读 `.cache\Mods\playset_config.json`。
+
+改动（全部已落盘、未提交）：
+
+| 文件 | 作用 |
+| --- | --- |
+| `src/PdxLauncher.Core/Contracts/LoadFileFormat.cs` | 新增 `PlaysetConfigV1 = 3`；注释写明它**不能从 formatVersion 推**（CS2 也是 1.1），只能靠 `modsCompatibilityStandardConfig` 或 gameId 识别 |
+| `src/PdxLauncher.Core/Playsets/PlaysetConfig/PlaysetConfigPaths.cs` | 路径常量：`playset_config.json` / `playset_config_lock.json` / `playset_sync.json` / `pdx_mods_cache.json` / `mod_directory.json` / `pdx_mods` 目录 |
+| `…/PlaysetConfigDocument.cs` | 317 行，`JsonNode` 解析与序列化，**只改已知节点、未知键原样保留**；播放集自带真 GUID；mod 项只有 `source + sourceId + sourceVersion + isEnabled`，**数组下标就是加载顺序**；`activePlaysetId` 为空时整键删除（官方不写 null） |
+| `…/PdxModsCache.cs` | 解析 `pdx_mods_cache.json`（`items[]`：id/version/displayName/thumbnailPath/requiredGameVersion/size/rating/installedDate/state…） |
+| `…/PdxModsDirectory.cs` | `ScanVersions` / `Compose` / `ComposeLibrary`：把缓存 + 磁盘 `pdx_mods\<id>_<version>\` 目录合成 `PlaySetMod`；数字 id 排序键 `CompareIds` 保证 `74238` 排在 `7415` 之后 |
+| `…/PlaysetConfigLock.cs` | 对 `playset_config_lock.json` 加锁，避免与游戏本体同时写 |
+| `…/PlaysetConfigRepository.cs` | 658 行，实现 `IPlaySetRepository` 全部读写；`MaxBackups = 20`；写前备份、原子替换 |
+| `…/PdxModsCatalog.cs` | 实现 `IModCatalog`，把 `pdx_mods` 目录当 mod 来源 |
+| `src/PdxLauncher.App/Services/ModCatalogRouter.cs` | 按 `game.Format` 把 `IModCatalog` 路由到 CS2 或 Clausewitz 实现（与 `PlaySetRepositoryRouter` 同一思路，格式判定只发生在一处） |
+
+结果：播放集页的启用/禁用/拖拽排序对 CS2 生效，写的就是游戏真正读的那份文件。
+
+### 0.23.4 批次 B：Paradox 账号登录（设置页新节）
+
+| 文件 | 作用 |
+| --- | --- |
+| `src/PdxLauncher.Core/Abstractions/IPdxHttpTransport.cs` | `GetAsync` / `PostJsonAsync` / `PutJsonAsync`，**出口自带域名白名单** |
+| `src/PdxLauncher.Core/Abstractions/ISecretProtector.cs` | 凭据保护抽象 |
+| `src/PdxLauncher.Core/Online/PdxHttpTransport.cs` | 走 `HttpFetcher`，与主题/公告同一条代理链路，代理变更时一起重建 |
+| `src/PdxLauncher.Core/Accounts/PdxAccountClient.cs` | `SessionEndpoint` = `PUT https://api.paradox-interactive.com/accounts/sessions/launcher-v2`；`AccountDetailsEndpoint` = `/accountdetails`；`SignInAsync` / `RefreshAsync` / `GetDisplayNameAsync` / `SessionHeader` |
+| `src/PdxLauncher.Core/Accounts/PdxPassword.cs` / `PdxSession.cs` / `PdxSessionStore.cs` | 密码规范化、会话模型、落盘 |
+| `src/PdxLauncher.App/Services/DpapiSecretProtector.cs` | Windows DPAPI（当前用户作用域）加密「记住我」 |
+| `src/PdxLauncher.App/Services/AccountService.cs` | `Session` / `IsSignedIn` / `IsBusy` / `SessionChanged` / `SignInAsync` / `RestoreAsync` / `ReplaceClient` |
+| `src/PdxLauncher.App/Views/SettingsPage.xaml` + `.xaml.cs` | 左栏第 7 项 `navSettingsAccount`（Tag=6）与 `secAccount` 节 |
+
+装配：`NetworkComposition.NetworkServices` 增加 `PdxHttp`（`PdxHttpTransport`）与 `Account`（`PdxAccountClient`）、`PdxMods`（`PdxModsClient`）；`AppServices.Initialize` / `ReplaceNetwork` / `TryRebuildNetworkServices` 三处同步。
+
+### 0.23.5 批次 C：Mod 库页「在线（PDX Mods）」视图
+
+`src/PdxLauncher.Core/Mods/`（新目录，334 + 85 + 56 行）：
+
+- `PdxModsClient.SearchAsync(string gameId, PdxModsQuery, PdxSession?, ct)` → `POST /mods`，body `{gameNames:[gameId], orderBy, sortBy, pageSize, page, states:["published"]}`，关键词非空时加 `searchQuery`。CS2 现网共 **27,364** 个已发布 mod。
+- `PdxModsClient.GetDetailAsync(string modId, PdxSession?, ct)` → `GET /mods?modId=…&os=windows&arch=x64`。**`os`/`arch` 必填**，缺了返回 400 `Mod is corrupted or chosen operating system is not supported`。
+- `PdxModsQuery` 的排序枚举**故意不含 ActivationOrder**（非 `onlyInstalled` 场景传它必 400）。
+- 鉴权头是 `{"session":{"token":"…"}}` 的 JSON 串，不是 `Bearer`。
+
+`src/PdxLauncher.App/ViewModels/OnlineModsViewModel.cs`（419 行）+ `OnlineModRowViewModel.cs`（94 行）+ `Views/ModLibraryPage.xaml`（重写，488 行）：
+
+- 页头左上两个按钮切「本地 / 在线（PDX Mods）」（`btnModSourceLocal` / `btnModSourceOnline`），两套列表各占一格、同一时刻只可见一个。
+- 在线侧：搜索框 `txtOnlineModSearch`、排序 `cmbOnlineModSort`、翻页 `btnOnlineModPrevPage` / `txtOnlineModPage` / `btnOnlineModNextPage`、刷新 `btnRefreshOnlineMods`、列表 `lstOnlineMods`、状态 `txtOnlineModStatus`。
+- 点行弹 `ContentDialog` 看详情（长描述、更新日志、截图、外链、体积），`MaxHeight = 560`。
+- 封面走 `AssetDownloader` 下载到 `data\online-mod-covers\` 后按本地路径绑 `XamlImage.FromPath`（`XamlImage` 只吃本地路径，不吃 http）。
+- i18n：`tools/i18n/{zh-CN,en-US}/modlib.json` 新增 31 个键（`modlib.onlineTitle` 等），已重跑 `tools/gen-i18n.py`。
+
+### 0.23.6 顺手修掉的真 bug：本地 CS2 缩略图全空
+
+回归本地视图时发现 53 行 mod 的封面格全是空框（连占位图标都不显示）。根因在 `PlaysetConfigRepository`：
+
+```csharp
+// 修前：第一个参数是「本地文件路径」字段，第二个是「URL」字段，同一个值两处都塞
+ThumbnailPath: mod.ThumbnailPath,          // mod.ThumbnailPath 其实是 https://modscontent… 的 URL
+ThumbnailUrl:  mod.ThumbnailPath
+```
+
+`pdx_mods` 目录里只有 `.cok` 文件、没有本地缩略图，`mod.ThumbnailPath` 从 `pdx_mods_cache.json` 拿到的是 **CDN URL**。塞进本地路径字段后有两个后果：
+
+1. `XamlImage.FromPath(url)` 走 `FileSystem.FileExists` 判 false → 返回 `null`，图片是空的；
+2. `HasThumbnail` 按「ThumbnailPath 非空」算，于是占位图标也被隐藏 → 显示成一个纯空框。
+
+同时 `ModLibraryViewModel.FillThumbnailsAsync` 的过滤条件是「本地无图 **且** 有 URL」，而 `ThumbnailPath` 被塞了 URL 就不为空，`pending` 恒为 0 → 联网补全**一次都没跑过**（日志里没有任何「mod 缩略图联网补全」记录，正好对上）。
+
+修法（`PlaysetConfigRepository.cs:227-243`）：`ThumbnailPath` 一律留 `null`，URL 只交给 `ThumbnailUrl`。
+
+```csharp
+// ThumbnailPath 必须留 null（UI 只按本地路径渲染），地址交给 ThumbnailUrl 走联网补全 + 缓存。
+ThumbnailPath: null,
+ThumbnailUrl:  mod.ThumbnailPath
+```
+
+修后实测：日志 `mod 缩略图联网补全：尝试 53 个，成功 53 个，失败 0 个，缓存命中 0 个`，53 张封面全部真实显示。
+
+### 0.23.7 收尾修掉的第二个真 bug：订阅数恒为 0
+
+写文档时按文档字段名回头核对代码，发现 `PdxModsClient.ParseSummary` 读的是 `subscriptions`，而**列表接口的报文字段叫 `installedCount`**（详情接口才叫 `subscriptions`）。于是在线列表里每条 mod 的订阅数都是 0。
+
+修法：新增 `FirstNonZeroLong(item, "installedCount", "subscriptions")`，两个键都试、取第一个非零值，兼容两个接口与将来的改名。
+
+真机验证（`.scratch/online-subscriptions.png`）：列表副标题从「作者 ockidj · 5 分（1194 人评分） · 更新于 2026/10/27」变成「作者 ockidj · 5 分（1194 人评分） · **46,600 订阅** · 更新于 2026/10/27」，前 6 行订阅数 46,600 / 60,168 / 8,206 / 5,772 / 20,458 / 18,449，与接口原始值逐条一致。
+
+### 0.23.8 验证
+
+- `dotnet build PdxLauncher.sln -c Release -m:1` → **0 警告 0 错误**。
+- `PdxLauncher.Checks.exe` → **检查类 21，失败 0，断言失败总数 0**（新增 `ModsApiChecks`，61 条断言，覆盖请求体形状 / 解析 / 字段回退 / 状态码映射 / os+arch 必填 / 鉴权头形态 / 坏 JSON / 网络故障）。
+- 真机截图（`Release`）：`.scratch/rework/online-mods.png`（在线列表）、`online-detail.png`（详情弹窗）、`online-search.png`、`online-sort.png`、`local-regression-late.png`（本地 53 张封面）、`.scratch/online-subscriptions.png`（订阅数修复后）。
+- **构建踩坑 1**：`PdxLauncher.App` 进程开着时解决方案级构建会在复制 `PdxLauncher.Core.dll` 到输出目录时被文件锁挡住（`MSB3027` / `MSB3021`）。先 `Stop-Process PdxLauncher.App` 再构建。
+- **构建踩坑 2（更阴）**：`PdxLauncher.App.csproj` 里 `<Platforms>x64</Platforms>`，但 `bash tools/build-app.sh` 不带 `-p:Platform=x64` 时产物落在 **`bin\Release\...\win-x64\`**，而 `bin\x64\Release\...\win-x64\` 是更早一次的旧产物（本次差 20 分钟）。UI 自动化脚本若指向后者，会「跑通了但看不到改动」。改代码后先比对两个路径下 `PdxLauncher.Core.dll` 的时间戳。
+
+### 0.23.9 遗留
+
+1. **订阅 / 安装还没做**（目标 D）：需要 Paradox 会话令牌 + 写 `pdx_mods` 目录 + 更新 `pdx_mods_cache.json`，是有写入副作用的操作，没在有登录态的真机上验证过。
+2. CS2 的本地 mod 详情弹窗里「已订阅/评分」等字段仍来自 `pdx_mods_cache.json`，离线时是旧值。
+3. 在线视图没有「只看已安装 / 只看已订阅」筛选，也没有分页跳转输入校验的边界用例。
+4. `docs/DATA-FORMATS.md` 已补 §17（PDX Mods API / 账号 API / CS2 playset_config）。
+5. `ModsApiChecks` 的报文是**手抄的真实响应子集**，服务端改字段名时它不会自动发现；只有真机打开在线视图才能发现（这次 `installedCount` 就是这么漏的）。
+
+## 0.22 上一轮（2026-10-27 17:15–19:30）：五个 P0 批次 —— 数据静默丢失、崩溃不可观测、白名单靠自觉
 
 ### 0.22.1 起因
 
@@ -172,6 +294,175 @@ JSON 仓储（EU5）同步改造：`RequirePlaySet` 的 `throw InvalidOperationE
 `LoadFileFormat` 收敛为策略类、`.editorconfig` + `TreatWarningsAsErrors`、把 `PlaySetEditor` 下沉 Core）
 **都还没做**，其中「下沉 Core」现在已经被批次 1 解锁（`PlaySetEditor` 不再依赖 `Localizer`）。
 
+## 0.21 最新一轮（2026-10-27 18:40）：切换游戏 / 主页内容切换很慢 —— 五段根因、八段修法
+
+### 0.21.1 用户诉求
+
+User said (m00003)：「游戏切换，主页内容切换很慢，是不是有什么线程卡住了」，附官方 Stellaris 启动器主页截图（`image.png`，1366×1062）。
+
+### 0.21.2 先排除「线程卡住」
+
+`grep -rn "\.Result\|\.Wait()\|GetAwaiter().GetResult()" src/` **零命中**；`Thread.Sleep` 全仓只有 `AssetDownloader.cs:91` 一处正经的退避 `await Task.Delay`。所以不是 sync-over-async 死锁，也不是线程池饿死。真正的问题是 **UI 线程被一串同步 / 串行的重活长期独占**，以及**同一次切换把同样的扫描重复做了好几遍**。
+
+日志给出的直接证据（`data\logs\pdxnext.log`，旧版本）：
+
+```
+15:45:38.545 mod 扫描完成：cities_skylines_2
+15:45:38.954 mod 扫描完成：cities_skylines_2   ← 同一游戏同一毫秒级窗口被扫两次
+15:45:39.385 DLC 扫描完成：cities_skylines_2   ← 第三次
+15:46:05.835 官方公告：联网获取到 2 张卡片（hoi4）
+15:46:45.453 背景显示方式: cover               ← 中间 39.6 秒日志全空白
+```
+
+39.6 秒里没有任何一行日志在推进，说明 UI 线程被单一长任务占住（全分辨率解码 + 摊平 + 重编码），连日志都插不进去。
+
+### 0.21.3 五段根因
+
+| # | 位置 | 问题 |
+| --- | --- | --- |
+| 1 | `src/PdxLauncher.App/ViewModels/HomeViewModel.cs` 的 `LoadPlaySetAsync` | 末尾串行读 mod 列表 + 全盘递归扫 DLC，只为填 `DlcCount` / `ModCount` / `EnabledModCount`，而这三个属性在 `HomePage.xaml` **零绑定**（`CountsText` 的唯一消费者是 `DlcPage.xaml:38` 的 DlcViewModel 自己的同名属性）。纯装饰计算，白扫一遍盘。 |
+| 2 | `src/PdxLauncher.Core/Dlc/DlcCatalog.cs` / `src/PdxLauncher.Core/Playsets/ModCatalog.cs` | `DiscoverAsync` / `DiscoverAllAsync` **零缓存**。主页、DLC 页、播放集页、mod 库页各扫一遍，同一次切换同一款游戏触发 2–3 次全量目录遍历；Cities Skylines II 还会因为 `V1/V1_1 未解析到任何 .dlc.json` 去「先枚举 .dlc.json（0 命中）→ 再枚举 .dlc」双重遍历，全日志出现 55 次。 |
+| 3 | `src/PdxLauncher.App/Services/ThemeImageFlattener.cs` | 摊平全程 `.ConfigureAwait(true)` 回 UI 线程：`DecodePixelsAsync` 拉全分辨率 BGRA（2560×1340 ≈ 13.7 MB）+ `for (var i = 3; i < pixels.Length; i += 4) pixels[i] = 255;` 逐像素改 + `EncodePngAsync` 重编码 —— 三件重活都在渲染线程上。 |
+| 4 | 同上，`_resolved` 缓存 | 只在内存里记「原图 → 摊平图」，**已落盘的 `flat\*.png` 从不读回**。于是每次冷启动、甚至同进程内多次调用都重新解码重编码。日志里同一张 `eu4-background-a2ae4e81.png`（5.7 MB）被摊平 **7 次**（14:46:59 / 15:02:43 / 15:10:33 / 15:11:13 / 15:15:17 / 15:29:47 / 15:34:50），产物路径每次都是同一个 `flat\eu4-background-a2ae4e81-7bef8c95.png`。 |
+| 5 | `src/PdxLauncher.Core/Launching/ContinueGameReader.cs` | `ReadAsync` 内部全是同步 IO（`FileExists` / `ReadAllText` / `JsonDocument.Parse`），只有 `return Task.FromResult(...)`，**没有 `Task.Run`** ⇒ 直接在调用线程（= UI 线程）读盘。 |
+
+另外两条放大因素：
+
+- `src/PdxLauncher.App/MainWindow.xaml.cs` 的 `UpdateBackdropAsync`：取消令牌是整窗生命周期的 `_backdropLifetime`，`_backdropVersion` 只丢弃结果、**不取消工作** ⇒ 连点 N 款游戏 = N 次 2560 宽全图解码排队，后面的背景要等前面的解码完。实测两次背景之间隔了 **52.9 秒**（15:46:05.835 → 15:46:45.453）。
+- `src/PdxLauncher.App/Services/ThemeUpdateService.cs:134`：后台联网刷新每换一款素材就 `AppServices.SetGames(updated)`，而 `ThemePatch.Apply` / 重排序会产生新的 `GameInstallation` 实例、`ReferenceEquals` 判不出「其实是同一款」⇒ **没有用户操作也会触发六页面全量重载**。
+- 五个页面的 `private bool _isReloading` 是「**丢弃**新请求」而不是「取消旧请求」，快速连点只有第一次生效，界面会停在第 1 次点的游戏上。
+
+### 0.21.4 八段修法
+
+**① 新增 `src/PdxLauncher.Core/Infrastructure/DiscoveryCache.cs`（通用 TTL 缓存）**
+
+`public sealed class DiscoveryCache<T> where T : class`：
+
+- `public static readonly TimeSpan DefaultTtl = TimeSpan.FromSeconds(60);` —— 够挡住「切一次游戏被多处重扫」，又不会让用户装完 mod 后等太久看不到。
+- `public DiscoveryCache(IClock clock, TimeSpan? ttl = null)`；内部 `Dictionary<string, Entry> _entries` + `Dictionary<string, Task<T>> _inFlight`（都 `OrdinalIgnoreCase`）+ `Lock _gate`，`Entry` 是 `record struct (T Value, DateTimeOffset StoredAt)`。
+- `public async Task<T> GetOrCreateAsync(string key, Func<Task<T>> factory, CancellationToken cancellationToken)`：命中未过期直接返回；否则复用 in-flight 任务，或 `Task.Run(() => RunAsync(key, factory))` 新起一个。返回 `await work.WaitAsync(cancellationToken)` —— **单个调用方取消只影响自己的等待，不中断共享扫描**。
+- `public bool Invalidate(string key)` / `public void Clear()` / `public int Count`。
+
+**② `DlcCatalog` / `ModCatalog` 接缓存（构造签名只加可选参数，14 处测试构造点不用改）**
+
+- `src/PdxLauncher.Core/Dlc/DlcCatalog.cs`：`public sealed class DlcCatalog : IDlcCatalog, IScanCacheInvalidator`；构造 `DlcCatalog(IFileSystem, IAppLogger, IClock? clock = null)`；`DiscoverAsync` 改为
+  `_cache.GetOrCreateAsync(CacheKeyFor(game), () => Task.Run(() => Discover(game, cancellationToken), cancellationToken), cancellationToken)`，key = `game.GameId + "|" + game.DlcPath + "|" + game.Format`。
+- `src/PdxLauncher.Core/Playsets/ModCatalog.cs`：同上，`ModCatalog(IFileSystem, IAppLogger, ModThumbnailResolver? thumbnails = null, IClock? clock = null)`，key = `game.GameId + "|" + game.GameDataDir`。
+- `Discover` / `DiscoverAll` 的扫描体一行未动（保留并发会话新加的 `PlaysetsJsonV1` 分支与 `GetEffectiveDlcId` / `CanBeDisabledInContentLoad` 两个 public static）。
+
+**③ 新增 `src/PdxLauncher.Core/Abstractions/IScanCacheInvalidator.cs`**
+
+`public interface IScanCacheInvalidator { void InvalidateCache(GameInstallation game); void ClearCache(); }`。
+
+单独拆接口的理由：缓存细节不该塞进 `IModCatalog` / `IDlcCatalog` 这两个只读扫描接口。实现者：`DlcCatalog`、`ModCatalog`、`src/PdxLauncher.App/Services/ModCatalogRouter.cs`（后者 `InvalidateCache` 路由到 `For(game)` 再转发，`ClearCache` 两份都清）。
+`src/PdxLauncher.App/Views/ModLibraryPage.xaml.cs` 的 `OnRefreshClick` 在 `await _viewModel.RefreshAsync()` 前插入 `if (AppServices.Mods is IScanCacheInvalidator invalidatable && AppServices.CurrentGame is { } game) invalidatable.InvalidateCache(game);` —— 手动刷新绕过 TTL，用户刚在 Steam 装的 mod 点刷新就能看到。
+
+**④ `ThemeImageFlattener` 改成三道缓存 + 全程线程池**
+
+`src/PdxLauncher.App/Services/ThemeImageFlattener.cs`：
+
+- `PolicyVersion` 保持 1（注释写明：只加缓存层、产物内容没变，不该 +1 白重算一次）。
+- 三道缓存：内存 `_resolved` → 磁盘 `flat\*.png`（正面产物）→ 磁盘 `flat\*.noflat`（否定标记，`NegativeMarkerSuffix = ".noflat"`，记录「这张不是纱层，别再解码一遍」）。
+- `Resolve(string? path)`：内存未命中时**探一次磁盘**（先探 flat 产物、再探 .noflat），命中写回内存；这样即使本进程还没调过 `PrepareAsync`（卡片直接重建），同步绑定也能立刻拿到上次留下的成品。
+- `PrepareAsync` 改为 `Task.Run(() => ResolveOrFlattenAsync(path, ct))` + `await work.ConfigureAwait(false)`（原为 `true`）；新增 `ResolveOrFlattenAsync` 做「探产物 → 探否定标记 → 才真摊平」。
+- `FlattenCoreAsync(string path, string flatPath, CancellationToken)` 的 `flatPath` 改成传入（不再自己算）；所有 `ConfigureAwait(true)` → `ConfigureAwait(false)`；判定不是纱层就写 `.noflat` 并返回原路径；成功落盘后删 `.noflat`。
+
+**⑤ `MainWindow.UpdateBackdropAsync` 加 per-request 取消**
+
+新增字段 `private CancellationTokenSource? _backdropRequest;`。方法开头：
+
+```csharp
+var previousRequest = _backdropRequest;
+var request = CancellationTokenSource.CreateLinkedTokenSource(_backdropLifetime.Token);
+_backdropRequest = request;
+previousRequest?.Cancel();
+previousRequest?.Dispose();
+var token = request.Token;
+```
+
+后续两次 `LoadAsync(...)` 都传 `token`；`finally` 里 `if (ReferenceEquals(_backdropRequest, request)) { _backdropRequest = null; request.Dispose(); }`；`OnWindowClosed` 里在 `_backdropLifetime?.Cancel()` 之前先取消 `_backdropRequest`。**新请求进来直接掐掉旧解码**，而不是让旧解码跑完再丢结果。
+
+**⑥ `ContinueGameReader` 移到线程池**
+
+`src/PdxLauncher.Core/Launching/ContinueGameReader.cs`：`ReadAsync` 改为
+
+```csharp
+ArgumentNullException.ThrowIfNull(game);
+cancellationToken.ThrowIfCancellationRequested();
+return Task.Run(() => ReadCore(game, cancellationToken), cancellationToken);
+```
+
+原函数体整体下沉为 `private ContinueGameInfo? ReadCore(GameInstallation game, CancellationToken cancellationToken)`，四类 catch（`JsonException` / `IOException` / `UnauthorizedAccessException` / `ArgumentException`）与「永不抛」语义完全保留。调用方 `HomeViewModel.LoadContinueGameAsync` 不用改。
+
+**⑦ 五个页面用 `ReloadCoordinator` 取代 `_isReloading`**
+
+新增 `src/PdxLauncher.App/Services/ReloadCoordinator.cs`：`public sealed class ReloadCoordinator`，`RunAsync(Func<CancellationToken, Task> work, CancellationToken lifetime, Action<Exception> onError)` —— 新请求进来先 `Cancel()` 旧的再跑新的（语义从「丢弃新请求」变成「**取消旧的、跑最新的**」），`OperationCanceledException` 静默，其它异常交给 `onError`。`IsReloading` 属性供 code-behind 判断。
+
+`HomePage` / `DlcPage` / `ModsPage` / `ModLibraryPage` / `SettingsPage` 五个 `.xaml.cs` 全部把 `private bool _isReloading` 换成 `private readonly ReloadCoordinator _reload = new();`，`ReloadAsync` 改成一行 `_reload.RunAsync(...)`。
+
+**⑧ `SetGames` 去重 + 卡片封面并发**
+
+- `src/PdxLauncher.App/Services/AppServices.cs` 的 `SetGames`：先算 `next = ReconcileCurrentGame(games)`，若 `current` / `next` 的 `GameId` 与 `InstallRoot` 相同且 `current.Theme == next.Theme`，只 `CurrentGame = next;` 静默换引用、**不广播** `CurrentGameChanged`。这样后台主题刷新换实例不再触发六页全量重载。
+- `PrepareCardCoversAsync` 从串行 `foreach + await` 改成 `private const int CardCoverConcurrency = 4;` + `SemaphoreSlim` + `Task.WhenAll`。理由：卡片封面 1–6 MB，串行时首屏等最慢那张；摊平已经全在线程池，并发度只受磁盘顺序读限制，4 张 2560×1340 解码内存约 55 MB。
+
+### 0.21.5 真机验证（2026-10-27 18:34–18:37）
+
+启动 `src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe`，用 UIA 脚本（`.scratch/rework/switchbench.ps1`、`rapidtest.ps1`）逐款点卡片：
+
+| 切换目标 | 背景落地耗时 | 静默总耗时 |
+| --- | --- | --- |
+| Crusader Kings III | 195 ms | 1.77 s |
+| Hearts of Iron IV | 166 ms | 1.72 s |
+| Stellaris | 166 ms | 1.72 s |
+| Victoria 3 | 165 ms | 1.72 s |
+| Europa Universalis IV | 166 ms | 3.01 s |
+| Cities: Skylines II | 166 ms | 1.75 s |
+
+对比修复前：39.6 秒日志全空白、两次背景间隔 52.9 秒。
+
+其它实测结论：
+
+- **扫描去重生效**：18:34:20 之后的日志里 `DLC 扫描完成` **0 次**、`mod 扫描完成` **0 次**（切换 6 款游戏），旧版本同样动作会产生十几条。
+- **摊平缓存生效**：`已摊平为不透明图` 本轮 **0 次**；`data\theme-cache\flat\` 里 13 个 `.noflat` 否定标记（1 字节）在 18:34–18:35 一次性写出，`eu4-background-a2ae4e81-7bef8c95.png` 直接复用 17:45 的旧产物、没有重编。
+- **快速连点正确收敛**：600 ms 内连点 CK3 → HOI4 → Stellaris → Victoria 3，8 秒后标题栏与主页都停在 **Victoria 3**（最后一次点击），不再是「停在第 1 次点的那款」。
+- 六个页面都能正常进入（`navHome` 41 个元素 / `navDlc` 39 / `navModLibrary` 611 / `navPlaySets` 519 / `navSettings` 71 / `navLibrary` 83）。
+
+### 0.21.6 新增自检
+
+- `tests/PdxLauncher.Checks/DiscoveryCacheChecks.cs`：命中与 TTL / 失效与清空 / in-flight 去重 / 调用方取消隔离 / 默认 TTL / 入参校验，六组。
+- `tests/PdxLauncher.Checks/CatalogCacheChecks.cs`：`DlcCatalog` 缓存行为（首次扫 1 次 → 第二次 `ReferenceEquals` 且日志仍 1 次 → TTL 内看不到新装 DLC → `InvalidateCache` 后重扫 → 60 秒后自动重扫 → `ClearCache` → 缺失目录的空结果也被缓存只 Warn 1 次）+ `ContinueGameReader` 读盘线程 ≠ 调用线程（实测「调用线程 2，读盘线程 6」）。
+
+`dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"` → **`检查类: 20，失败: 0，断言失败总数: 0`**（本轮从 18 类增到 20 类）。
+
+## 0.20 最新一轮（2026-10-27 17:50）：DDS 解码库 + DLC / mod 图片真正显示
+
+### 0.20.1 用户诉求
+User said (m02230)：「1.实现一个dds解析的通用调用库；2.然后完成DLC 和 mod 图片的显示」。计划经 exit_plan_mode 批准后实施。
+
+### 0.20.2 为什么要自己写解码器
+WinUI `BitmapImage` 解不了 DDS；EU5 三个 DLC 的 `thumbnail.dds` 是 **500×500 未压缩 BGRA8**，而安装目录里还有 BC1/BC3，抽样 400 个里另见 2 个 BC7（dxgiFormat 98）。WIC(COM) 探针在本机编译不通过，且离线自检无法覆盖；改为纯托管解码器，零 NuGet，能在 `PdxLauncher.Checks` 里直接跑。
+
+### 0.20.3 改动（已落盘、已构建、已自检、已真机截图）
+- 新项目 `src/PdxLauncher.Imaging`（`net10.0`）：`Dds/DdsHeader.cs`、`Dds/DdsFormat.cs`、`Dds/DdsDecoder.cs`、`Dds/Bc7Decoder.cs`、`Dds/Bc7Tables.cs`（表与算法移植自 Richard Geldreich `bc7enc_rdo`，MIT/公有领域，文件头已注明）、`Png/PngEncoder.cs`（BCL `ZLibStream`）、`DdsImage.cs`。
+  - 能力：BC1/BC2/BC3/BC4/BC5/BC7(mode 0..7) + 未压缩 32/24bpp；ASTC/BC6H/浮点/数组/立方体/3D/截断 → 返回中文 `Error`，从不抛。
+- Core：`DlcCatalog` 缩略图改候选序列（png → jpg → jpeg → webp → bmp → dds），`TryCollectEu5` 不再丢缩略图；`ModThumbnailResolver.ImageExtensions` 加 `.dds`。
+- App：新增 `Services/ImageArtCache.cs`（DDS → PNG 落 `data\image-cache`，键 = SHA-256(路径小写+长度+mtime+PolicyVersion)，并发 2，≤1024 边长）；`XamlImage.FromPath` 遇 `.dds` 换缓存 PNG；`DlcViewModel` / `ModLibraryViewModel` / `ModsViewModel` 在建行**之前** `PrewarmAsync`（缩略图列是 `OneTime` 绑定）；设置页缓存卡片新增第五行 `images`（`data\image-cache`，可清空重建）；`settings.cache.hint` 从「四类」改「五类」。
+- 自检：新增 `tests/PdxLauncher.Checks/DdsChecks.cs`（头解析 / 未压缩 32+24bpp / BC1 / BC3 / BC7 mode1+mode6 / 拒绝路径 / 真机 500×500 文件）、`PlaysetJsonChecks` 加「png 优先于 dds」「只有 dds 时选中 dds」。
+- 文档：`docs/DATA-FORMATS.md` 新增第 16 节「DDS 图像」并更新第 3 节缩略图候选与第 15 节缓存表。
+
+### 0.20.4 顺手修掉的既有 bug
+`IPlaySetRepository` 的写方法已全部返回 `AppResult`，但 `PlaysetsJsonRepository` 与 App 调用点还停在旧签名（构建 CS0738/CS1061）——本轮一并对齐，语义上「写失败」现在会带着错误码走到 UI，而不是静默成功。
+
+### 0.20.5 验证
+- Release 构建 **0 警告 0 错误**；`PdxLauncher.Checks.exe` → **检查类: 18，失败: 0，断言失败总数: 0**。
+- 真机（EU5）：DLC 页三张 .dds 缩略图显示真实美术（凤凰盾 / 古迹 / 圣地）；`data\image-cache` 3 个 PNG 共 967.6 KB；日志只有 3 行「DDS 缩略图已转 PNG」，重启后再进 DLC 页**仍是 3 行**（证明缓存命中、不重复转码）；Mod 库 22 个 mod 中带 `thumbnail.png` 的正常显示，其余仍为占位图标（文件本身不存在）。
+- 设置页「缓存 → DDS 转码图」显示 `967.6 KB，3 个文件`，「清空」按钮生效。
+- EU4 / CK3 等 png 缩略图不受影响。
+
+### 0.20.6 已知缺口
+- 只解 mip0；DDS 里的 ASTC / BC6H / 浮点纹理明确失败（P 社 UI 资产里未见到）。
+- 没有缩略图文件的 mod（EU5 22 个里有 16 个）只能显示占位图标——那是数据缺失，不是解码问题；后续可考虑从工坊页抓首图。
+- BC7 只覆盖 mode 0..7 的完整解码路径，未做性能优化（单张 500×500 约毫秒级，列表场景已够用）。
 ## 0.19 最新一轮（2026-10-27 16:50）：EU5 美术 + 播放集/DLC 接入
 
 ### 0.19.1 用户诉求
@@ -1831,6 +2122,8 @@ uia*.ps1 UIA dump、an*.py 颜色网格分析）。可复用：verify2.ps1、cap
 | D18 | 官方主题里还有 `localizedImages`（play/resume/getStarted 三态整图按钮）、`buttonDisabled` / `buttonText` 素材、`height`、`effect3dDisabled`、`hoverAnimationDisabled` 未实现 —— 实测 4 个已装游戏都没用，但只要哪款游戏开始用，按钮就会退回纯文字版 | 本地 4 个 `theme-settings.json` 全量扫描（CK3 / V3 / Stellaris / PA 均无这些字段）；官方 schema 见 `docs/DATA-FORMATS.md` §6 |
 | D19 | ~~全部软件数据写在 `%LOCALAPPDATA%\PdxNext`（D1 的直接诱因）~~ **已解决（2026-10-27）**：新增 `PdxDataRoot`（候选 `<exe>\data-root.txt` → `<exe>\data` → `<exe>\..\PdxNext-data`，**绝不回退 C 盘**）+ `DataRootMigrator`（旧目录只读复制、幂等 marker、不搬 logs、永不删源）；`AppServices.DataRoot` / `AppSettingsStore.DefaultPath` / `ThemeResolver.DefaultCacheRoot` / `NewsCacheRoot` / 新增 `ModThumbnailCacheRoot` 全部改到程序目录；设置页新增「程序数据目录」卡片（显示路径 + 打开目录 + 清理旧 C 盘数据）；`publish.cmd` 覆盖 `dist\PdxNext` 与暂存目录前把 `data` 搬到 `.__data__`、发布后搬回 | 自检 `检查类: 12，失败: 0`；新增 `DataRootChecks`（候选顺序 / data 被文件占位回退 / 迁移幂等 / 不搬 logs / 不删源）；`publish.cmd` 语义用同构 cmd 脚本在临时目录验证（DATA_OK / OLD_CLEAN / 备份目录不残留）；GUI 实测（2026-10-27 02:1x）：设置页「程序数据目录」「Mod 缩略图」两张卡片渲染正确，数据目录显示在程序目录下、旧 C 盘目录与清理按钮均可用（`.scratch\rework\shot-settings-bottom.png`） |
 | D20 | Mod 缩略图**联网补图 + 长缓存**：本地解析不到的 42 行里 22 行只有 `thumbnailUrl`（`images.steamusercontent.com`）| 新增 `ModThumbnailCache`（索引 `mod-cache\mod-thumbnails.json`、文件 `mod-cache\mod-thumbnails\<modId N>.<ext>`、失败 6 小时退避、`Prune` 清过期与孤儿、URL 变名删旧）+ `ModThumbnailService`（`allowOnline=false` 零请求、串行、连续 2 次失败放弃本批）+ 设置页「联网图片」卡片（开关 + 保留天数 7/30/90/365，默认 30，`AppSettings.ModThumbnailCacheDays` 钳 1..3650）；Mod 库行改成 `ObservableObject` + `OneWay` 绑定，后台补图就地刷新。自检新增 `ModThumbnailCacheChecks`（roundtrip / 退避 / Prune / 索引乱码 / 零请求）；GUI 实测：Stellaris Mod 库 313 行缩略图全部正常渲染（修复前全灰），联网补图日志 `mod 缩略图联网补全：尝试 7 个，成功 5 个，失败 2 个`，`data\mod-cache\mod-thumbnails\` 落盘 5 个文件 + 索引（`.scratch\rework\shot-modlib-stellaris.png`）；CK3 382 行未回归（`shot-modlib-ck3.png`） |
+| D21 | ~~切换游戏 / 主页内容切换很慢（39.6 秒日志空白、两次背景间隔 52.9 秒）~~ **已解决（§0.21）**：五段根因（`LoadPlaySetAsync` 的纯装饰 DLC/mod 计数、DLC/mod 扫描零缓存、纱层摊平在 UI 线程、`flat\` 产物跨进程从不读回、`continue_game.json` 同步读盘）+ 两条放大因素（整窗背景无 per-request 取消、`SetGames` 因实例换引用反复广播）。真机实测背景落地 **165–195 ms**，切换 6 款游戏期间 `DLC 扫描完成` / `mod 扫描完成` / `已摊平为不透明图` 全部 **0 次** | `data\logs\pdxnext.log` 旧版 15:45–15:47 时间线；新版 18:34–18:37 实测（§0.21.5）；`检查类: 20，失败: 0` |
+| D22 | `Frame.Navigate 返回 false (home)` 偶发：从游戏库点卡片后跳主页时，`NavigationService.Navigate` 返回 false，连着打印 `导航失败：Frame.Navigate 返回 false (home)` + `导航失败: home`。功能上不致命（后续 `背景显示方式` 仍会刷新、标题栏也换了），但左侧导航选中态与页面内容可能短暂不同步 | 全日志出现 3 次：`17:49:05.991`、`18:35:08.958`、`18:36:40.854`（同一模式）。推测是 `Frame.Navigate` 在同一帧内被连点触发，或上一帧导航尚未完成。**未定位，留给下轮**；`NavigationService.Navigate` 目前只对 `CurrentTag` 相等做短路，没做「导航进行中」互斥 |
 
 ---
 
@@ -1905,18 +2198,64 @@ uia*.ps1 UIA dump、an*.py 颜色网格分析）。可复用：verify2.ps1、cap
   src/PdxLauncher.Core/Online/AssetKeys.cs、src/PdxLauncher.Core/Models/ThemeSpec.cs（按实际路径）、
   src/PdxLauncher.App/Services/ThemeUpdateService.cs、tests/PdxLauncher.Checks/OnlineChecks.cs
 
+### T10 · 切换游戏慢：扫描缓存 + 去掉无消费者的重活 —— **已完成（§0.21）**
+
+- **目标**：① 新增 `DiscoveryCache<T>`（TTL 60 秒 + in-flight 去重 + 调用方取消隔离）；
+  ② `DlcCatalog` / `ModCatalog` 接缓存（构造只加 `IClock?` 可选参数）；③ 新增 `IScanCacheInvalidator`
+  并让三个扫描器实现，Mod 库「刷新」按钮接 `InvalidateCache`；④ 删掉 `HomeViewModel.LoadPlaySetAsync`
+  末尾无 XAML 消费者的 mod 列表读取与 `Dlcs.DiscoverAsync`；⑤ `ContinueGameReader.ReadAsync` 整体包 `Task.Run`。
+- **验收**：`dotnet build -c Release -m:1` 0 警告 0 错误；`PdxLauncher.Checks.dll` 全过；
+  真机连续切换 6 款游戏期间 `DLC 扫描完成` / `mod 扫描完成` 日志 0 次。
+- **write scopes**：src/PdxLauncher.Core/Infrastructure/DiscoveryCache.cs、
+  src/PdxLauncher.Core/Abstractions/IScanCacheInvalidator.cs、src/PdxLauncher.Core/Dlc/DlcCatalog.cs、
+  src/PdxLauncher.Core/Playsets/ModCatalog.cs、src/PdxLauncher.Core/Launching/ContinueGameReader.cs、
+  src/PdxLauncher.App/Services/ModCatalogRouter.cs、src/PdxLauncher.App/ViewModels/HomeViewModel.cs、
+  src/PdxLauncher.App/Views/ModLibraryPage.xaml.cs、tests/PdxLauncher.Checks/{DiscoveryCacheChecks,CatalogCacheChecks}.cs
+- **blocked_by**：无
+
+### T11 · 切换游戏慢：摊平 / 背景解码离开 UI 线程 + 跨进程复用产物 —— **已完成（§0.21）**
+
+- **目标**：① `ThemeImageFlattener` 全程 `ConfigureAwait(false)` + `Task.Run`，新增磁盘正面产物与 `.noflat`
+  否定标记两道跨进程缓存；② `MainWindow.UpdateBackdropAsync` 加 per-request `CancellationTokenSource`，
+  新请求进来直接取消旧解码；③ `AppServices.SetGames` 在同一 gameId + InstallRoot + `Theme ==` 时只换引用不广播；
+  ④ `PrepareCardCoversAsync` 串行改 4 路并发。
+- **验收**：真机逐款切游戏，`背景显示方式` 落地的间隔 ≤ 500 ms；日志 `已摊平为不透明图` 在第二轮起 0 次。
+- **write scopes**：src/PdxLauncher.App/Services/ThemeImageFlattener.cs、src/PdxLauncher.App/MainWindow.xaml.cs、
+  src/PdxLauncher.App/Services/AppServices.cs
+- **blocked_by**：无
+
+### T12 · 页面重载改「取消旧的、跑最新的」—— **已完成（§0.21）**
+
+- **目标**：新增 `ReloadCoordinator`，五个页面的 `private bool _isReloading`（语义是**丢弃**新请求，
+  快速连点只有第一次生效）全部替换。
+- **验收**：600 ms 内连点 4 款游戏，8 秒后标题栏与主页都停在**最后一次**点击的那款。
+- **write scopes**：src/PdxLauncher.App/Services/ReloadCoordinator.cs、
+  src/PdxLauncher.App/Views/{HomePage,DlcPage,ModsPage,ModLibraryPage,SettingsPage}.xaml.cs
+- **blocked_by**：无
+
+### T13 · 修 `Frame.Navigate 返回 false` 与导航互斥 —— 待做（D22）
+
+- **目标**：`NavigationService.Navigate` 目前只对 `CurrentTag == tag` 短路，没有「导航进行中」互斥。
+  从游戏库点卡片后跳主页时偶发返回 false（全日志 2–3 次），左侧选中态与页面内容可能短暂不同步。
+  加一个 `bool _navigating` 或直接对 `Frame.Navigate` 的 false 做一次重试（下一个 UI 帧再试）。
+- **验收**：连续快速切 10 次游戏，日志里 `Frame.Navigate 返回 false` 出现 0 次；六个页面 AutomationId 不变。
+- **write scopes**：src/PdxLauncher.App/Services/NavigationService.cs、src/PdxLauncher.App/MainWindow.xaml.cs
+- **blocked_by**：无
+
 ---
 
 ## 9. 下轮开场建议（给下一个对话的第一条 prompt）
 
-> 读 docs/HANDOFF.md，重点看 §0.3（最新、优先级最高）。
-> 当前进度：①「窗口置顶」已完成并通过运行时验证（§0.2 / §3.4），只差真机复验持久化；②「整窗背景（方案 B）」已完成并通过
-> 六页真机截图验证（§0.3）；③ 五页视觉统一随之完成，主页横幅已删除；④ 构建 0 警告 0 错误、Checks 9 类 / 0 失败。
-> 建议顺序：T4（真机复验 settings.json + 置顶恢复，受沙箱限制只能真机做）→ T3（Light / HighContrast 真机切主题跑一遍，
-> 这是 §0.3 唯一没实测的视觉盲区）→ T6（启动 / 继续 / 播放集切换交互回归）→ T7 清理。
+> 读 docs/HANDOFF.md，重点看 §0.21（最新、切换游戏慢已修）与 §7 的 D22（导航偶发返回 false，未定位）。
+> 当前进度：构建 0 警告 0 错误、自检 **20 个检查类 / 0 失败**；切换游戏实测背景落地 165–195 ms（修复前 39.6 秒空白）。
+> 建议顺序：T13（修 `Frame.Navigate 返回 false`，D22）→ T4（真机复验 settings.json + 置顶恢复）→ T3（Light / HighContrast
+> 真机切主题跑一遍，这是唯一没实测的视觉盲区）→ T6（启动 / 继续 / 播放集切换交互回归）→ T7 清理。
+> **注意**：工作树里还有一个并发会话在做「账号登录 / DDS 图片 / 播放集 JSON 存储」的未提交改动，
+> 提交时**不要 `git add -A`**，只能精确 `git add` 自己改的文件。
 > 构建：`dotnet build PdxLauncher.sln -c Release -m:1`，构建前先 `Get-Process PdxLauncher.App | Stop-Process -Force`
-> （进程在跑会 MSB3026 / PRI210: 0x800704c8 失败）。启动与截图方式见 §4.12 与 §3.3（cmd start 启动，
-> 强制 HWND_TOPMOST 后 CopyFromScreen，且启动与截图必须在同一次 pwsh 调用里）。
+> （进程在跑会 MSB3026 / PRI210: 0x800704c8 失败）。构建前另建议先等并发写入静默：
+> `find . -newermt '-60 seconds' -type f \( -name '*.cs' -o -name '*.xaml' \) -not -path './*/obj/*' -not -path './*/bin/*' | wc -l` 为 0。
+> 启动与截图方式见 §4.12 与 §3.3（cmd start 启动，强制 HWND_TOPMOST 后 CopyFromScreen，且启动与截图必须在同一次 pwsh 调用里）。
 
 ---
 
@@ -1934,6 +2273,9 @@ uia*.ps1 UIA dump、an*.py 颜色网格分析）。可复用：verify2.ps1、cap
 | -m:1 必需 | 是（见 §4.4） |
 | 整窗背景解码宽度 | `MainWindow.xaml.cs` 的 `private const int BackdropDecodeWidth = 2560`（2560×1423 ≈ 14.6 MB 位图） |
 | 主页字标解码宽度 | `HomePage.xaml.cs` 的 `private const int LogoDecodeWidth = 480` |
+| 扫描结果缓存 TTL | `src/PdxLauncher.Core/Infrastructure/DiscoveryCache.cs` 的 `public static readonly TimeSpan DefaultTtl = TimeSpan.FromSeconds(60)` |
+| 卡片封面并发度 | `src/PdxLauncher.App/Services/AppServices.cs` 的 `private const int CardCoverConcurrency = 4` |
+| 纱层摊平否定标记 | `src/PdxLauncher.App/Services/ThemeImageFlattener.cs` 的 `private const string NegativeMarkerSuffix = ".noflat"`（产物在 `data\theme-cache\flat\`） |
 | 截图 / 启动脚本 | `.scratch/rework/flow.ps1`（杀进程 → cmd start 启动 → 六页截图）、`cap3.ps1 -ProcId <pid> -Tag <名> [-Nav <AutomationId>]`、`cardshot.ps1`（点卡片切游戏）、`paneshot.ps1`（折叠 / 小窗） |
 
 ---

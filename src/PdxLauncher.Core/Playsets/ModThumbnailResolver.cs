@@ -30,8 +30,11 @@ public sealed class ModThumbnailResolver
     /// <summary>steamapps 之后至少要跟这么多段（workshop / content / appid）才当作工坊目录结构。</summary>
     private const int MinimumWorkshopTailSegments = 3;
 
-    /// <summary>能被 BitmapImage 直接渲染的扩展名；其它（.pdn / .psd / .xcf）一律跳过。</summary>
-    private static readonly string[] ImageExtensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp" };
+    /// <summary>
+    /// 能被渲染的图片扩展名；其它（.pdn / .psd / .xcf）一律跳过。
+    /// <c>.dds</c> 也在这里：WinUI 不能直接解 DDS，但 App 侧会先转成 PNG 再用。
+    /// </summary>
+    private static readonly string[] ImageExtensions = new[] { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".dds" };
 
     private readonly IFileSystem _fileSystem;
     private readonly IAppLogger _logger;
@@ -249,7 +252,9 @@ public sealed class ModThumbnailResolver
     /// 必须枚举而不是硬拼文件名：真机存在 thumbnail.jpg / Thumbnail.png / thumbnail_new.png / thumbanail.png，
     /// 也有 "empty thumbnail.png" 这种同目录干扰项，以及 thumbnail.pdn 之类不能渲染的文件。
     /// </summary>
-    private string? PickThumbnailFile(string directory)
+    /// <param name="directory">mod 目录（不存在或不可读时返回 null）。</param>
+    /// <returns>挑中的图片绝对路径；没有可渲染图片时返回 null。</returns>
+    public string? PickThumbnailFile(string directory)
     {
         var files = _fileSystem.EnumerateFiles(directory, ThumbnailPattern, recursive: false)
             .Where(IsImageFile)

@@ -52,6 +52,12 @@ public sealed partial class MainWindow : Window
     /// <summary>背景图请求序号：快速切换游戏时只应用最后一次加载结果。</summary>
     private int _backdropVersion;
 
+    /// <summary>
+    /// 当前这次背景加载请求自己的取消源：新请求进来时先取消旧的，让旧解码真正停下来，
+    /// 而不是解码完再丢弃结果（只丢结果 = 白烧一次 2560px 全图解码，后面的请求排队等着）。
+    /// </summary>
+    private CancellationTokenSource? _backdropRequest;
+
     /// <summary>当前背景图的完整路径：切到「完整（模糊底）」档要用它补加载低分辨率铺底。</summary>
     private string? _backdropPath;
 
@@ -283,6 +289,10 @@ public sealed partial class MainWindow : Window
                 AppTitleBar.SizeChanged -= OnTitleBarSizeChangedForCaptionPadding;
             }
 
+            _backdropRequest?.Cancel();
+            _backdropRequest?.Dispose();
+            _backdropRequest = null;
+
             _backdropLifetime?.Cancel();
             _backdropLifetime?.Dispose();
             _backdropLifetime = null;
@@ -478,6 +488,11 @@ public sealed partial class MainWindow : Window
     /// 无游戏 / 主题无背景图 / 解码失败时清空图片并隐藏遮罩，窗口退回 PdxWindowBackgroundBrush 纯色底，
     /// 视觉与没有整窗背景的版本一致。
     /// </summary>
+    /// <remarks>
+    /// 并发语义：每次进入都先取消上一次请求（<see cref="_backdropRequest"/>），再订阅整窗生命周期。
+    /// 只靠 <see cref="_backdropVersion"/> 丢结果是「解码完再扔」，连点五款游戏就是五次 2560px 全图
+    /// 解码排队在 UI 线程，实测能把后一次背景拖到 50 秒后才显示 —— 必须真正取消旧工作。
+    /// </remarks>
     private async Task UpdateBackdropAsync()
     {
         if (_bitmapLoader is null || _backdropLifetime is null)
@@ -487,6 +502,15 @@ public sealed partial class MainWindow : Window
 
         var version = ++_backdropVersion;
 
+        // 取消上一次请求：旧解码会尽快抛 OperationCanceledException 退出，不再占用线程。
+        var previousRequest = _backdropRequest;
+        var request = CancellationTokenSource.CreateLinkedTokenSource(_backdropLifetime.Token);
+        _backdropRequest = request;
+        previousRequest?.Cancel();
+        previousRequest?.Dispose();
+
+        var token = request.Token;
+
         ImageSource? background;
         ImageSource? blurred = null;
         try
@@ -495,7 +519,7 @@ public sealed partial class MainWindow : Window
             var spec = theme ?? ThemeApplier.CreatePlaceholderSpec();
 
             background = await _bitmapLoader
-                .LoadAsync(spec.Background, BackdropDecodeWidth, _backdropLifetime.Token)
+                .LoadAsync(spec.Background, BackdropDecodeWidth, token)
                 .ConfigureAwait(true);
             _backdropPath = spec.Background;
 
@@ -504,7 +528,7 @@ public sealed partial class MainWindow : Window
                 && BackgroundDisplayModeCatalog.UsesBlurredBackdrop(CurrentBackgroundDisplayMode()))
             {
                 blurred = await _bitmapLoader
-                    .LoadAsync(spec.Background, BackdropBlurDecodeWidth, _backdropLifetime.Token)
+                    .LoadAsync(spec.Background, BackdropBlurDecodeWidth, token)
                     .ConfigureAwait(true);
             }
         }
@@ -521,6 +545,15 @@ public sealed partial class MainWindow : Window
 
             background = null;
             _backdropPath = null;
+        }
+        finally
+        {
+            // 只有自己仍是「最新请求」时才清字段，避免把后来者的源误删。
+            if (ReferenceEquals(_backdropRequest, request))
+            {
+                _backdropRequest = null;
+                request.Dispose();
+            }
         }
 
         // 快速连续切换游戏时，旧请求的结果直接丢弃。

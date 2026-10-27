@@ -21,8 +21,17 @@ public static class OnlineHosts
     /// <summary>Steam 用户内容 CDN（mods.thumbnailUrl 指向的 mod 缩略图）。</summary>
     public const string SteamUserContentHost = "images.steamusercontent.com";
 
+    /// <summary>PDX Mods 内容 CDN（mod 封面、repository 文件与安装包都从这里取）。</summary>
+    public const string ModsContentHost = "modscontent.paradox-interactive.com";
+
+    /// <summary>PDX Mods 网页端（mod 详情页跳转用）。</summary>
+    public const string ModsWebHost = "mods.paradoxplaza.com";
+
     /// <summary>GetMetadata 的 GraphQL 端点（实测匿名可用）。</summary>
     public static Uri MetadataEndpoint { get; } = new("https://api.paradox-interactive.com/metadata/graphql");
+
+    /// <summary>PDX Mods 列表/搜索端点（<c>POST /mods</c>，匿名可读）。</summary>
+    public static Uri ModsSearchEndpoint { get; } = new("https://api.paradox-interactive.com/mods");
 
     /// <summary>主机名是否在白名单内（大小写不敏感，只允许精确匹配，不允许子域）。</summary>
     public static bool IsAllowedHost(string? host) =>
@@ -30,7 +39,9 @@ public static class OnlineHosts
         || string.Equals(host, ApiHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamStoreHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, BrazeImagesHost, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(host, SteamUserContentHost, StringComparison.OrdinalIgnoreCase);
+        || string.Equals(host, SteamUserContentHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, ModsContentHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, ModsWebHost, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>绝对 URI 是否可请求：必须是 http/https 且主机在白名单内。</summary>
     public static bool IsAllowed(Uri? uri)

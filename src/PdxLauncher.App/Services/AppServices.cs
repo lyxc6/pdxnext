@@ -1,8 +1,10 @@
 namespace PdxLauncher.App.Services;
 
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Accounts;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.Online;
 /// <summary>
 /// 应用级服务定位器。WinUI 的 Frame.Navigate 只支持无参构造，所以页面统一从这里取依赖。
@@ -10,6 +12,9 @@ using PdxLauncher.Core.Online;
 /// </summary>
 public static class AppServices
 {
+    /// <summary>卡片封面预摊平的并发上限（见 <see cref="PrepareCardCoversAsync"/>）。</summary>
+    private const int CardCoverConcurrency = 4;
+
     public static IFileSystem FileSystem { get; private set; } = null!;
 
     public static IAppLogger Logger { get; private set; } = null!;
@@ -46,6 +51,12 @@ public static class AppServices
 
     /// <summary>mod 缩略图补全（磁盘缓存 + 可选联网）。</summary>
     public static IModThumbnailService ModThumbnails { get; private set; } = null!;
+
+    /// <summary>Paradox 账号会话（登录 / 续期 / 登出）。</summary>
+    public static AccountService Account { get; private set; } = null!;
+
+    /// <summary>PDX Mods 平台客户端（搜索 / 详情，匿名可读）。</summary>
+    public static PdxModsClient PdxMods { get; private set; } = null!;
 
     public static AppSettingsStore SettingsStore { get; private set; } = null!;
 
@@ -104,6 +115,8 @@ public static class AppServices
         IMetadataClient metadata,
         IAssetDownloader assets,
         IModThumbnailService modThumbnails,
+        AccountService account,
+        PdxModsClient pdxMods,
         AppSettingsStore settingsStore,
         IReadOnlyList<GameInstallation> games,
         IDisposable? networkLifetime = null)
@@ -125,6 +138,8 @@ public static class AppServices
         ArgumentNullException.ThrowIfNull(metadata);
         ArgumentNullException.ThrowIfNull(assets);
         ArgumentNullException.ThrowIfNull(modThumbnails);
+        ArgumentNullException.ThrowIfNull(account);
+        ArgumentNullException.ThrowIfNull(pdxMods);
         ArgumentNullException.ThrowIfNull(settingsStore);
         ArgumentNullException.ThrowIfNull(games);
 
@@ -145,6 +160,8 @@ public static class AppServices
         Metadata = metadata;
         Assets = assets;
         ModThumbnails = modThumbnails;
+        Account = account;
+        PdxMods = pdxMods;
         SettingsStore = settingsStore;
         _networkLifetime = networkLifetime;
         Settings = settingsStore.Load();
@@ -154,11 +171,31 @@ public static class AppServices
     }
 
     /// <summary>游戏发现完成后回填目录（冷启动先显示窗口，再异步发现；刷新也走这里）。</summary>
+    /// <remarks>
+    /// 只有「当前游戏真的换了」才广播 <see cref="CurrentGameChanged"/>。
+    /// 后台主题刷新每换一款素材都会调一次本方法，而 <c>ThemePatch.Apply</c> / 重排序会产生新的
+    /// <see cref="GameInstallation"/> 实例 —— 之前这里无条件走 <see cref="SelectGame"/>，
+    /// <c>ReferenceEquals</c> 判不出「其实是同一款」，于是没有用户操作也会触发六个页面全量重载。
+    /// </remarks>
     public static void SetGames(IReadOnlyList<GameInstallation> games)
     {
         ArgumentNullException.ThrowIfNull(games);
         Games = games;
-        SelectGame(ReconcileCurrentGame(games));
+
+        var next = ReconcileCurrentGame(games);
+        var current = CurrentGame;
+        if (current is not null
+            && next is not null
+            && string.Equals(current.GameId, next.GameId, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(current.InstallRoot, next.InstallRoot, StringComparison.OrdinalIgnoreCase)
+            && current.Theme == next.Theme)
+        {
+            // 同一款游戏、主题也没变：只是列表换了实例或顺序，静默换引用即可。
+            CurrentGame = next;
+            return;
+        }
+
+        SelectGame(next);
     }
 
     /// <summary>
@@ -222,6 +259,8 @@ public static class AppServices
         IThemeResolver themeResolver,
         IDlcDescriptionService dlcDescriptions,
         INewsFeedService newsFeed,
+        PdxAccountClient accountClient,
+        PdxModsClient pdxMods,
         IDisposable? lifetime)
     {
         ArgumentNullException.ThrowIfNull(metadata);
@@ -230,6 +269,8 @@ public static class AppServices
         ArgumentNullException.ThrowIfNull(themeResolver);
         ArgumentNullException.ThrowIfNull(dlcDescriptions);
         ArgumentNullException.ThrowIfNull(newsFeed);
+        ArgumentNullException.ThrowIfNull(accountClient);
+        ArgumentNullException.ThrowIfNull(pdxMods);
 
         Metadata = metadata;
         Assets = assets;
@@ -237,6 +278,10 @@ public static class AppServices
         ThemeResolver = themeResolver;
         DlcDescriptions = dlcDescriptions;
         NewsFeed = newsFeed;
+        PdxMods = pdxMods;
+
+        // 会话保留在 AccountService 里，只换掉底层 HTTP 客户端（新代理）。
+        Account.ReplaceClient(accountClient);
 
         var previous = Interlocked.Exchange(ref _networkLifetime, lifetime);
         previous?.Dispose();
@@ -264,7 +309,9 @@ public static class AppServices
                 services.Themes,
                 services.Descriptions,
                 services.NewsFeed,
-                services.Http);
+                services.Account,
+                services.PdxMods,
+                new DisposableGroup(services.Http, services.PdxHttp));
             Logger.Info("已按新代理设置重建联网服务");
             return NetworkRebuildResult.Ok;
         }
@@ -292,6 +339,16 @@ public static class AppServices
     /// <summary>mod 缩略图缓存目录（mod-thumbnails.json 与 mod-thumbnails/）。</summary>
     public static string ModThumbnailCacheRoot => Path.Combine(DataRoot, "mod-cache");
 
+    /// <summary>DDS 缩略图转好的 PNG 缓存目录（image-cache/）。</summary>
+    public static string ImageCacheRoot => Path.Combine(DataRoot, "image-cache");
+
+    /// <summary>
+    /// PDX Mods 在线搜索结果的封面缓存目录（online-mod-covers/）。
+    /// 与本地 mod 缩略图缓存分开：那边的键是 <see cref="System.Guid"/>（mods.id），
+    /// 在线结果是 PDX Mods 的数字 id，两套 id 空间不能混在一个目录里。
+    /// </summary>
+    public static string OnlineModCoverRoot => Path.Combine(DataRoot, "online-mod-covers");
+
     /// <summary>本启动器自己的日志路径。</summary>
     public static string LogPath => Path.Combine(DataRoot, "logs", "pdxnext.log");
 
@@ -306,10 +363,26 @@ public static class AppServices
         Logger,
         Path.Combine(ThemeCacheRoot, "flat"));
 
+    private static ImageArtCache? _imageArt;
+
+    /// <summary>
+    /// DDS 缩略图显示缓存：把 <c>thumbnail.dds</c> 转成 PNG 存进 <c>image-cache\</c>，
+    /// 因为 WinUI 的 BitmapImage 解不了 DDS。首次访问时按当前数据根创建。
+    /// </summary>
+    public static ImageArtCache ImageArt => _imageArt ??= new ImageArtCache(
+        FileSystem,
+        Logger,
+        ImageCacheRoot);
+
     /// <summary>
     /// 卡片封面预摊平：卡片封面是 OneTime 绑定，所以必须在重建卡片**之前**把这些背景准备好。
-    /// 只处理纱层图；其它图立刻返回，光速过一遍 7 个游戏也不会卡。
+    /// 只处理纱层图；其它图走磁盘否定标记，光速过一遍 9 个游戏也不会卡。
     /// </summary>
+    /// <remarks>
+    /// 并发摊平（上限 <see cref="CardCoverConcurrency"/>）：这些图从 1 MB 到 6 MB 不等，
+    /// 串行时首屏要等最慢的那张；而摊平本身已经全在线程池上跑（见 <see cref="ThemeImageFlattener"/>），
+    /// 并发度只受磁盘顺序读限制。解码内存峰值 = 并发数 × 单图 RGBA，4 张 2560×1340 约 55 MB，可接受。
+    /// </remarks>
     public static async Task PrepareCardCoversAsync(
         IReadOnlyList<GameInstallation> games,
         CancellationToken cancellationToken)
@@ -320,15 +393,43 @@ public static class AppServices
         }
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var backgrounds = new List<string>();
         foreach (var game in games)
         {
             var background = game.Theme.Background;
-            if (string.IsNullOrWhiteSpace(background) || !seen.Add(background))
+            if (!string.IsNullOrWhiteSpace(background) && seen.Add(background))
             {
-                continue;
+                backgrounds.Add(background);
             }
+        }
 
-            await ThemeImages.PrepareAsync(background, cancellationToken).ConfigureAwait(true);
+        if (backgrounds.Count == 0)
+        {
+            return;
+        }
+
+        using var gate = new SemaphoreSlim(CardCoverConcurrency, CardCoverConcurrency);
+        var work = new Task[backgrounds.Count];
+        for (var i = 0; i < backgrounds.Count; i++)
+        {
+            var background = backgrounds[i];
+            work[i] = PrepareOneAsync(background);
+        }
+
+        await Task.WhenAll(work).ConfigureAwait(true);
+        return;
+
+        async Task PrepareOneAsync(string background)
+        {
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await ThemeImages.PrepareAsync(background, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                gate.Release();
+            }
         }
     }
 }

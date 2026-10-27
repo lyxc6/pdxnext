@@ -103,7 +103,7 @@ EU5（appid 3450310）**未安装**：只有 Documents 残留（dlc_signature + 
 {"id":{"steam":"2071470","paradox":"dlc001_preorder"},"displayName":{"en":"..."},"category":{"en":"DLC"},"description":{"en":"..."},"thumbnailPath":"thumbnail.png","thirdPartyContent":false}
 ⇒ id.paradox **必填**，displayName.en **必填**，thumbnailPath 相对该 .dlc.json 自身目录。
 
-DLC 对象字段：FilePathRelativeToDlcPath = 相对 dlcPath 的 POSIX 路径（如 dlc001_preorder/dlc001.dlc）；ThumbnailPath = 同目录 thumbnail.png（280×160）；PopsId 来自 pops_id / id.paradox。
+DLC 对象字段：FilePathRelativeToDlcPath = 相对 dlcPath 的 POSIX 路径（如 dlc001_preorder/dlc001.dlc）；ThumbnailPath = 同目录的缩略图文件，按 `thumbnail.png → .jpg → .jpeg → .webp → .bmp → .dds` 顺序取第一个存在的（CK3/V3/Stellaris/EU4 是 png，EU5 是 `thumbnail.dds`，见第 16 节）；PopsId 来自 pops_id / id.paradox。
 
 DLC 列表**不来自 sqlite**（CK3 的 dlc 表 0 行）——必须扫盘。
 
@@ -390,7 +390,7 @@ Mod 缩略图：`ModThumbnailSizes.Pixels()` 返回 DIP（32 / 48 / 72），XAML
 
 ## 15. 缓存管理与可清理范围
 
-设置页「缓存」卡片列出四行，每行显示 `<占用字节>，<文件数>`、路径与「清空」按钮；标题栏汇总给出总占用，并提供「刷新统计」与「清空全部缓存」。占用是**每次进入设置页/点刷新时现算**（`CacheStorage.Measure` 遍历目录累加 `GetFileSize`），不做后台跟踪。
+设置页「缓存」卡片列出五行，每行显示 `<占用字节>，<文件数>`、路径与「清空」按钮；标题栏汇总给出总占用，并提供「刷新统计」与「清空全部缓存」。占用是**每次进入设置页/点刷新时现算**（`CacheStorage.Measure` 遍历目录累加 `GetFileSize`），不做后台跟踪。
 
 | key | 路径 | 清空动作 |
 | --- | --- | --- |
@@ -398,8 +398,156 @@ Mod 缩略图：`ModThumbnailSizes.Pixels()` 返回 DIP（32 / 48 / 72），XAML
 | `news` | `data\news-cache`（Braze 公告 JSON + 公告图） | 删缓存文件与公告图目录，并丢弃内存副本 |
 | `modThumbnails` | `data\mod-cache`（索引 + 缩略图文件） | 清索引表后删索引与图片目录 |
 | `dlcDescriptions` | `data\dlc-descriptions.json`（见 7.2） | 删缓存文件；内存里的负缓存随之失效 |
+| `images` | `data\image-cache`（DDS 转好的 PNG，见第 16 节） | 删整个目录并丢掉内存索引；下次打开 DLC / Mod 页自动重建 |
 
 - 清理是**尽力而为**：文件被占用/无权限时只写 Warn 日志，界面提示「清理失败」，不会抛到 UI。
 - 清理后立即重算该行与总计；状态栏给出「已清空 <行名>，释放 <大小>」。
-- 「清空全部缓存」需要二次确认（ContentDialog），只删上表四个位置，**不动** `settings.json`、`logs`、游戏安装目录与存档。
-- 这四行与「Mod 缩略图缓存天数」「DLC 简介缓存天数」相互独立：清空不会改设置，改设置也不会立刻删已有缓存（过期判定在读取时进行）。
+- 「清空全部缓存」需要二次确认（ContentDialog），只删上表五个位置，**不动** `settings.json`、`logs`、游戏安装目录与存档。
+- 这五行与「Mod 缩略图缓存天数」「DLC 简介缓存天数」相互独立：清空不会改设置，改设置也不会立刻删已有缓存（过期判定在读取时进行）。
+
+## 16. DDS 图像（EU5 的 DLC / mod 缩略图）
+
+WinUI 的 `BitmapImage` **解不了 DDS**，而 EU5 的 DLC 缩略图全是 `thumbnail.dds`：
+
+| 位置 | 真机实测 |
+| --- | --- |
+| `<install>\game\dlc\<pack>\thumbnail.dds` | 3 个已装 DLC，均为 **500×500、未压缩 BGRA8**（`pfFlags=0x41`，掩码 `R=0x00FF0000 G=0x0000FF00 B=0x000000FF A=0xFF000000`），`D000_shared` 为 128×128，数据从偏移 **128** 开始 |
+| `<install>` 抽样 400 个 `.dds` | DXT5(BC3) 327、DXT1(BC1) 51、`DX10/dxgiFormat=98`(BC7) 2、未压缩 20 |
+| mod | 22 个 EU5 工坊 mod 里只有 6 个带 `thumbnail.png`，其余目录没有任何缩略图文件；`.metadata/metadata.json` 可选键 `picture` |
+
+DDS 头偏移（小端）：`0` magic(`DDS `) / `4` size=124 / `8` flags / `12` height / `16` width / `28` mipCount / `76` pfSize=32 / `80` pfFlags / `84` fourCC / `88` rgbBitCount / `92..104` RGBA 掩码；`fourCC == "DX10"` 时另有 20 字节扩展头（`128` dxgiFormat）。
+
+### 16.1 解码库 `src/PdxLauncher.Imaging`
+
+纯托管、零 NuGet（PNG 编码用 BCL `System.IO.Compression.ZLibStream`），可在离线自检里跑：
+
+```csharp
+bool ok = DdsImage.TryReadInfo(bytes, out DdsImageInfo info);      // 只读头：宽高 / 格式 / mip / 数据偏移与长度
+DdsDecodeResult r = DdsImage.Decode(bytes, maxDimension: 512);     // 只解 mip0，默认不抽稀
+DdsDecodeResult f = DdsImage.DecodeFile(path);
+byte[] png = DdsImage.EncodePng(r.Pixels);                          // PixelBuffer(Width, Height, Rgba32)
+```
+
+支持：BC1/BC2/BC3（DXT1/3/5）、BC4/BC5、BC7（mode 0..7，表与算法移植自 Richard Geldreich `bc7enc_rdo`，MIT/公有领域）、未压缩 32bpp（BGRA8/RGBA8/BGRX8）与 24bpp。**明确失败**（返回中文 `Error`，从不抛）：ASTC、BC6H、浮点格式、数组/立方体/3D 纹理、mip 不连续、数据截断。
+
+### 16.2 显示链路
+
+1. `DlcCatalog` 的同目录缩略图候选顺序含 `.dds`；`ModThumbnailResolver` 的图片扩展名也含 `.dds`。
+2. `src/PdxLauncher.App/Services/ImageArtCache.cs`：把 DDS 用上文的库解成 RGBA，再编码 PNG 落到 `data\image-cache\<hash>.png`（`hash = SHA-256(路径小写 + 长度 + mtime + PolicyVersion)`），内存里记住「源路径 → PNG 路径」。解码上限 1024 边长、源文件上限 64 MB、并发 2。
+3. 列表页在**建行之前** `PrewarmAsync(...)`：`DlcViewModel` / `ModLibraryViewModel` / `ModsViewModel`。因为缩略图列是 `x:Bind ... Mode=OneTime`，行创建后再转 PNG 不会刷新。
+4. `XamlImage.FromPath` 遇到 `.dds` 就换成缓存 PNG；还没转好时返回 `null`，`FallbackImage` 显示占位图标（不会闪错图）。
+
+### 16.3 自检与清理
+
+- `tests/PdxLauncher.Checks/DdsChecks.cs`：头解析、未压缩 BGRA8/24bpp、BC1/BC3、BC7 mode1/mode6、各类拒绝路径，外加一张真机 `thumbnail.dds`（500×500）。`PlaysetJsonChecks` 另有「png 优先于 dds / 只有 dds 时选中 dds」两条。
+- 缓存清理见第 15 节的 `images` 行：删 `data\image-cache` 并丢弃内存索引，下次打开 DLC / Mod 页重建。
+
+## 17. PDX Mods 平台 API 与 CS2 的 `playset_config.json`
+
+这套协议**没有公开文档**，来源只有两处：官方 Electron 启动器 `app.asar` 里 `modsApi` / `accountApi` 的逐字核对，以及本机 curl 实测（2026-10-27）。官方桌面端自带的 `PDX.SDK.dll`（Skyve CS-II 用的就是它）是闭源二进制，调用方照样能跑协议 —— 说明协议本身不是机密，只是没写出来。
+
+### 17.1 端点与鉴权
+
+| 用途 | 方法与 URL | 是否需登录 |
+| --- | --- | --- |
+| 搜索 / 浏览 | `POST https://api.paradox-interactive.com/mods` | 否 |
+| 详情 | `GET https://api.paradox-interactive.com/mods?modId=<id>&os=windows&arch=x64` | 否 |
+| 登录 | `PUT https://api.paradox-interactive.com/accounts/sessions/launcher-v2` | 否 |
+| 续期 | 同上，body 换成 `{"renewal":{"token":"…"}}` | 携带 refresh token |
+| 账号资料 | `GET https://api.paradox-interactive.com/accountdetails` | 是 |
+
+- 鉴权头**不是** `Bearer`，而是把整段 JSON 塞进 `Authorization`：`{"session":{"token":"<SessionToken>"}}`。
+- 登录头同样是 JSON：`{"hawk":{"email":"…","sha256(password+salt)":"…","rememberMe":true}}`。那个键名**就是** `sha256(password+salt)` 这 20 个字符，写错服务端判为缺字段。
+- 密码哈希：`lower(hex(sha256(password + "64DC4DC6508F4A9D823179D4D99DB4EE")))`。盐是协议的一部分，不是机密。
+- 401/403 一律当作凭据错误，**不区分**「邮箱不存在」与「密码错」（避免账号枚举）。
+
+### 17.2 搜索请求体
+
+```json
+{
+  "gameNames": ["cities_skylines_2"],
+  "orderBy": "desc",
+  "sortBy": "best",
+  "pageSize": 24,
+  "page": 0,
+  "states": ["published"],
+  "searchQuery": "可选，仅关键词非空时发"
+}
+```
+
+- `sortBy` 白名单（400 报文里逐字列出）：`activationOrder` / `created` / `displayName` / `popularity` / `rating` / `updated` / `best`。
+- **`activationOrder` 只在 `onlyInstalled` 场景可用**，普通搜索传它必 400 → 界面的排序枚举故意不含它。
+- `pageSize` 实测 200 仍可用；客户端防御性 clamp 到 `[1, 200]`。
+- `searchQuery` 官方启动器**不发**，但服务端支持（实测 `Traffic` → 994 条）。这是本启动器比官方桌面端强的一处。
+- CS2 全量已发布 mod：**27,364**（`totalCount`，2026-10-27 实测）。
+
+### 17.3 响应结构
+
+搜索：顶层 `{ totalCount, mods: [...] }`（**不是数组**）。每个 mod 的关键字段：
+
+| 响应字段 | 映射到 `PdxModsSummary` | 备注 |
+| --- | --- | --- |
+| `modId` | `ModId` | 数字字符串，如 `"163638"` |
+| `displayName` | `DisplayName` | 缺失时回落 `name` |
+| `author` | `Author` | |
+| `shortDescription` | `ShortDescription` | |
+| `requiredVersion` | `GameVersion` | 形如 `1.6.*` |
+| `userModVersion` | `UserModVersion` | |
+| `modVersion` / `latestVersion` | `Version` | |
+| `rating` / `ratingsTotal` | `Rating` / `RatingsTotal` | |
+| `installedCount` | `Subscriptions` | 注意字段名是 installedCount，不是 subscriptions |
+| `updated` / `latestUpdate` | `UpdatedOn` | ISO 8601 带 Z |
+| `creationDate` | `CreatedOn` | |
+| `displayImagePath` | `CoverUrl` | 全 URL，指向 `modscontent.paradox-interactive.com` |
+| `tags` | `Tags` | 字符串数组 |
+
+详情：顶层 `{ result, modDetail: {...} }`。`modDetail` 里额外有 `longDescription`、`changelog`、`screenshots[].image`、`externalLinks[].{url,type,displayName}`、`metadata.size_in_memory`（字符串形式的字节数）、`enabled`（是否已装）。
+
+**`os` / `arch` 是必填的**：缺了返回 400，报文 `Mod is corrupted or chosen operating system is not supported`。
+
+### 17.4 错误映射
+
+客户端一律转成 `AppResult` + `ErrorKind`，不把英文串抛给界面：HTTP 0 → `Io`，401/403 → `Unauthorized`，404 → `NotFound`，400 → `Invalid`，其余 → `Io`；JSON 解析失败 → `bad-json`。
+
+### 17.5 CS2 的 mod 状态文件（`{gameDataDir}\.cache\Mods\`）
+
+本机实测路径：`%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\.cache\Mods`。
+
+| 文件 | 内容 |
+| --- | --- |
+| `playset_config.json` | 播放集与 mod 启用状态，**游戏本体直接读**，是权威来源 |
+| `playset_config_lock.json` | 官方启动器的写锁；存在且未过期时我们不许写 |
+| `playset_sync.json` | 本地播放集 id ↔ 后端数字播放集 id 的映射 |
+| `pdx_mods_cache.json` | 已安装 mod 的元数据缓存（显示名、版本、封面 URL、依赖） |
+| `mod_directory.json` | mod 根目录登记（`pdx_mods` / `local`） |
+| `pdx_mods\<modId>_<version>\` | 已落地的 mod 本体 |
+
+`playset_config.json` 结构：
+
+```json
+{
+  "playsets": [{
+    "id": "c6b32019-...",
+    "isOffdisk": false, "isImmutable": false, "isAutoSorted": false,
+    "createdAt": "...", "modifiedAt": "...", "modifiedWith": "Cities: Skylines II",
+    "presentation": { "name": "20250512", "thumbnailUrl": null },
+    "mods": [{ "source": "pdx_mods", "sourceId": "74238", "sourceVersion": "37", "isEnabled": true }]
+  }],
+  "activePlaysetId": "c6b32019-...",
+  "configVersion": 1
+}
+```
+
+与 Clausewitz 系（sqlite 播放集）的三个本质差异，全部由 `PlaysetConfigDocument` 吸收：
+
+1. 播放集自带真 GUID（`id`），不需要像 EU5 那样从名字哈希。
+2. mod 项只有 `source + sourceId`，**没有位置字段 —— 数组下标就是加载顺序**。
+3. `activePlaysetId` 为空时官方**整键删除**，不写 `null`。
+
+写入规则：只改已知节点、未知键原样保留（`JsonNode` 就地改），紧凑 JSON（与 C# 侧 PDX.SDK 一致；官方 Electron 是 2 空格缩进，两种格式彼此都能读）。写前备份，`MaxBackups = 20`，原子替换；写时对 `playset_config_lock.json` 加锁。
+
+### 17.6 一个易踩的坑：`formatVersion=1.1` 不等于 V3
+
+CS2 的 `launcher-settings.json` 写的也是 `formatVersion=1.1`，与 V3 的 `ContentLoadV1_1` **同值**。若按 `formatVersion` 推断加载文件格式，就会给 CS2 写 `content_load.json` —— 而 CS2 根本不读它，于是「mod 管理管不到天际线 2」。
+
+判定必须走别的信号：`modsCompatibilityStandardConfig` 存在，或 gameId 是 `cities_skylines_2`。实现在 `LoadFileFormat.cs` 与 `ModCatalogRouter` / `PlaySetRepositoryRouter`，判定只发生在这两处。

@@ -140,7 +140,8 @@ public sealed class LauncherSettingsReader
                 _fileSystem,
                 settingsDirectory,
                 GetString(root, "dlcPath") ?? "./");
-            var modDir = ResolveModDir(root, gameDataDir);
+            var modDir = ResolveModDir(root, gameDataDir, settingsDirectory);
+            var format = MapFormat(formatVersion, gameId, root);
 
             var displayName = GetString(root, "displayName");
             if (string.IsNullOrWhiteSpace(displayName))
@@ -161,7 +162,7 @@ public sealed class LauncherSettingsReader
                 version,
                 rawVersion,
                 formatVersion,
-                MapFormat(formatVersion),
+                format,
                 gameDataDir,
                 dlcPath,
                 modDir,
@@ -189,6 +190,35 @@ public sealed class LauncherSettingsReader
         >= 0.5 => LoadFileFormat.ContentLoadV1,
         _ => LoadFileFormat.DlcLoadV0,
     };
+
+    /// <summary>
+    /// 带游戏识别的格式判定：<see cref="LoadFileFormat.PlaysetConfigV1"/>（CS2）无法从 formatVersion 推出
+    /// （CS2 写 1.1，与 ContentLoadV1_1 撞车），只能靠 launcher-settings.json 的特征识别。
+    /// 判定依据两条（命中任一即可）：
+    /// <list type="number">
+    /// <item>存在 <c>modsCompatibilityStandardConfig</c> 节点 —— 目前只有 CS2 的 launcher-settings.json 有这个键。</item>
+    /// <item><c>gameId</c> 忽略大小写等于 <c>cities_skylines_2</c>。</item>
+    /// </list>
+    /// 其余情况完全沿用 <see cref="MapFormat(double)"/>，行为不变。
+    /// </summary>
+    public static LoadFileFormat MapFormat(double formatVersion, string? gameId, JsonElement root) =>
+        IsPlaysetConfigGame(gameId, root)
+            ? LoadFileFormat.PlaysetConfigV1
+            : MapFormat(formatVersion);
+
+    /// <summary>是否是「播放集与 mod 全在 playset_config.json」的游戏（CS2）。</summary>
+    public static bool IsPlaysetConfigGame(string? gameId, JsonElement root)
+    {
+        if (!string.IsNullOrWhiteSpace(gameId)
+            && string.Equals(gameId, "cities_skylines_2", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("modsCompatibilityStandardConfig", out var compat)
+            && compat.ValueKind == JsonValueKind.Object;
+    }
 
     /// <summary>展开 %USER_DOCUMENTS% / %USERPROFILE% / %LOCALAPPDATA% 之类的环境变量。</summary>
     public static string ExpandEnvironmentVariables(string path)
@@ -236,8 +266,17 @@ public sealed class LauncherSettingsReader
         return TrimTrailingSeparators(_fileSystem.GetFullPath(_fileSystem.Combine(installRoot, expanded)));
     }
 
-    private string ResolveModDir(JsonElement root, string gameDataDir)
+    private string ResolveModDir(JsonElement root, string gameDataDir, string settingsDirectory)
     {
+        // CS2 没有 modPath，mod 的根目录来自 modsCompatibilityStandardConfig.path
+        // （本机为 %USERPROFILE%/AppData/LocalLow/Colossal Order/Cities Skylines II/.cache/mods）。
+        // 不读它就会回落到 <gameDataDir>\mod —— 那个目录对 CS2 根本不存在。
+        var standardPath = GetCompatibilityModPath(root);
+        if (!string.IsNullOrWhiteSpace(standardPath))
+        {
+            return ResolveRelative(_fileSystem, settingsDirectory, standardPath);
+        }
+
         var raw = GetString(root, "modPath");
         if (string.IsNullOrWhiteSpace(raw))
         {
@@ -247,6 +286,33 @@ public sealed class LauncherSettingsReader
         var expanded = ExpandEnvironmentVariables(raw);
         var combined = _fileSystem.Combine(gameDataDir, expanded);
         return TrimTrailingSeparators(_fileSystem.GetFullPath(combined));
+    }
+
+    /// <summary>
+    /// 读 <c>modsCompatibilityStandardConfig.path</c>（CS2 的 mod 根目录）；缺失或未启用返回 null。
+    /// </summary>
+    private static string? GetCompatibilityModPath(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty("modsCompatibilityStandardConfig", out var compat)
+            || compat.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        if (compat.TryGetProperty("enabled", out var enabled)
+            && enabled.ValueKind == JsonValueKind.False)
+        {
+            return null;
+        }
+
+        if (!compat.TryGetProperty("path", out var path) || path.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        var raw = path.GetString();
+        return string.IsNullOrWhiteSpace(raw) ? null : raw;
     }
 
     private static string ResolveRelative(IFileSystem fileSystem, string baseDirectory, string path)

@@ -73,6 +73,9 @@ public sealed partial class HomePage : Page
 
     private CancellationTokenSource _lifetime = new();
 
+    /// <summary>重载协调器：连点游戏时取消旧重载、只应用最新那次的结果。</summary>
+    private readonly ReloadCoordinator _reload = new();
+
     /// <summary>两个主题按钮的皮肤对象：悬停提亮 / 按下缩放 / 禁用置灰都要记住主题色。</summary>
     private readonly Dictionary<Button, ThemedButtonSkin> _themedSkins = new();
 
@@ -195,10 +198,12 @@ public sealed partial class HomePage : Page
         }
     }
 
-    /// <summary>重新加载主页数据并应用主题；内部吞掉异常，可安全脱离 await 使用。</summary>
-    private async Task ReloadAsync()
-    {
-        try
+    /// <summary>
+    /// 重新加载主页数据并应用主题。可安全脱离 await 使用。
+    /// <para>连点游戏时由 <see cref="ReloadCoordinator"/> 取消旧重载，只有最后一次的结果会落到界面上。</para>
+    /// </summary>
+    private Task ReloadAsync() => _reload.RunAsync(
+        async token =>
         {
             if (!AppServices.IsInitialized)
             {
@@ -206,22 +211,18 @@ public sealed partial class HomePage : Page
             }
 
             var game = AppServices.CurrentGame;
-            await _viewModel.LoadAsync(game, _lifetime.Token).ConfigureAwait(true);
-            await ApplyThemeAsync(game, _lifetime.Token).ConfigureAwait(true);
+            await _viewModel.LoadAsync(game, token).ConfigureAwait(true);
+            await ApplyThemeAsync(game, token).ConfigureAwait(true);
             SyncPlaySetSelection();
-        }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
-        {
-            // 页面已关闭导致的取消，忽略。
-        }
-        catch (Exception ex)
+        },
+        _lifetime.Token,
+        ex =>
         {
             if (AppServices.IsInitialized)
             {
                 AppServices.Logger.Error("HomePage 加载失败", ex);
             }
-        }
-    }
+        });
 
     /// <summary>
     /// 加载主题素材：先落地按钮字体（保证文字可读），再异步解码字标。

@@ -128,6 +128,22 @@ public sealed class DlcViewModel : LocalizedObservableObject
 
             var stateById = states.ToDictionary(static s => s.DlcId, static s => s.Enabled, StringComparer.OrdinalIgnoreCase);
 
+            // 缩略图是 OneTime 绑定，DDS 必须先转好 PNG 再建行，否则会一直停在占位图。
+            await AppServices.ImageArt
+                .PrewarmAsync(catalog.Select(static d => d.ThumbnailPath), cancellationToken)
+                .ConfigureAwait(true);
+
+            // CS2 没有 DLC 描述文件（DlcCatalog 对它已提前返回空），这里给出"不提供 DLC 开关"
+            // 的明确说明，而不是笼统的"共 0 个 DLC"，免得用户以为自己的 DLC 丢了。
+            if (catalog.Count == 0 && game.Format == LoadFileFormat.PlaysetConfigV1)
+            {
+                Dlcs.Clear();
+                IsLoaded = true;
+                SetStatus(Keys.DlcEmptyNoManifest);
+                RaiseCounts();
+                return;
+            }
+
             // V0 的 disabled_dlcs 写的是 .dlc 相对 dlcPath 的 POSIX 路径，任何 DLC 都能禁用；
             // V1/V1_1 的 disabledDLC 只能写 pops_id，pops_id 为空的 DLC 无法表达 ⇒ 开关置灰。
             var contentLoadFormat = game.Format is LoadFileFormat.ContentLoadV1 or LoadFileFormat.ContentLoadV1_1;

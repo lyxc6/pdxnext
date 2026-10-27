@@ -96,4 +96,10 @@ public sealed class AppSettings
     /// 改完后 Mod 库与播放集页面在下次加载时应用。
     /// </summary>
     public string? ModThumbnailSize { get; set; }
+
+    /// <summary>
+    /// Paradox 账号是否「保持登录」（默认关）：勾了才向服务端要 refresh token 并落盘，
+    /// 不勾时只留 session token，过期后必须重新输密码。与官方启动器的行为一致。
+    /// </summary>
+    public bool PdxRememberMe { get; set; }
 }

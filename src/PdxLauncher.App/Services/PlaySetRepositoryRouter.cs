@@ -6,7 +6,9 @@ namespace PdxLauncher.App.Services;
 
 /// <summary>
 /// 按游戏的存档格式把 <see cref="IPlaySetRepository"/> 路由到具体实现：
-/// <see cref="LoadFileFormat.PlaysetsJsonV1"/>（EU5）走 playsets.json，其余仍走 launcher-v2.sqlite。
+/// <see cref="LoadFileFormat.PlaysetsJsonV1"/>（EU5）走 playsets.json，
+/// <see cref="LoadFileFormat.PlaysetConfigV1"/>（CS2）走 playset_config.json，
+/// 其余仍走 launcher-v2.sqlite。
 /// <para>
 /// 这样上层（ModLibraryService / PlaySetEditor / ModsViewModel）一行都不用判格式，
 /// 判定只发生在这里一处；新增格式时只需要在这里加一个分支。
@@ -16,26 +18,38 @@ public sealed class PlaySetRepositoryRouter : IPlaySetRepository
 {
     private readonly IPlaySetRepository _sqlite;
     private readonly IPlaySetRepository _playsetsJson;
+    private readonly IPlaySetRepository _playsetConfig;
 
     /// <summary>
     /// 创建路由。
     /// </summary>
     /// <param name="sqlite">launcher-v2.sqlite 实现（EU4/CK3/Vic3 等）。</param>
     /// <param name="playsetsJson">playsets.json 实现（EU5）。</param>
-    public PlaySetRepositoryRouter(IPlaySetRepository sqlite, IPlaySetRepository playsetsJson)
+    /// <param name="playsetConfig">playset_config.json 实现（CS2）。</param>
+    public PlaySetRepositoryRouter(
+        IPlaySetRepository sqlite,
+        IPlaySetRepository playsetsJson,
+        IPlaySetRepository playsetConfig)
     {
         ArgumentNullException.ThrowIfNull(sqlite);
         ArgumentNullException.ThrowIfNull(playsetsJson);
+        ArgumentNullException.ThrowIfNull(playsetConfig);
 
         _sqlite = sqlite;
         _playsetsJson = playsetsJson;
+        _playsetConfig = playsetConfig;
     }
 
     /// <summary>按格式挑实现。</summary>
     public IPlaySetRepository For(GameInstallation game)
     {
         ArgumentNullException.ThrowIfNull(game);
-        return game.Format == LoadFileFormat.PlaysetsJsonV1 ? _playsetsJson : _sqlite;
+        return game.Format switch
+        {
+            LoadFileFormat.PlaysetsJsonV1 => _playsetsJson,
+            LoadFileFormat.PlaysetConfigV1 => _playsetConfig,
+            _ => _sqlite,
+        };
     }
 
     /// <inheritdoc />

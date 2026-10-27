@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\PdxLauncher.Core\PdxLauncher.Core.csproj" />
+    <ProjectReference Include="..\..\src\PdxLauncher.Imaging\PdxLauncher.Imaging.csproj" />
   </ItemGroup>
 </Project>

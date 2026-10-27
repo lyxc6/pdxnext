@@ -25,5 +25,6 @@
   "dlc.saveFailed": "保存失败：{0}",
   "dlc.saveFailedShort": "保存失败",
   "dlc.toggleToolTip": "启用或禁用该 DLC",
-  "dlc.toggleToolTipLocked": "该 DLC 无法通过 content_load.json 禁用（pops_id 为空，官方启动器同样会丢弃它）"
+  "dlc.toggleToolTipLocked": "该 DLC 无法通过 content_load.json 禁用（pops_id 为空，官方启动器同样会丢弃它）",
+  "dlc.empty.noManifest": "该游戏没有 DLC 描述文件，无法列出 DLC（DLC 归属由 Steam 授权决定）"
 }

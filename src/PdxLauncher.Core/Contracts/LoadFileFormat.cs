@@ -17,4 +17,15 @@ public enum LoadFileFormat
     /// 启动器要做的就是维护这个文件，因此 <see cref="GameInstallation.WritesLoadFile"/> 为 false。
     /// </summary>
     PlaysetsJsonV1 = 2,
+
+    /// <summary>
+    /// CS2（ Cities: Skylines II）：没有加载文件。播放集、mod 顺序与启用状态全部存在
+    /// <c>{gameDataDir}\.cache\Mods\playset_config.json</c> 里，游戏本体与官方启动器都读写这个文件，
+    /// 因此 <see cref="GameInstallation.WritesLoadFile"/> 为 false。
+    /// <para>
+    /// 这个格式不会从 <c>formatVersion</c> 推出来（CS2 的 launcher-settings.json 写的是 1.1，
+    /// 与 ContentLoadV1_1 相同），只能靠 <c>modsCompatibilityStandardConfig</c> 或 gameId 识别。
+    /// </para>
+    /// </summary>
+    PlaysetConfigV1 = 3,
 }

@@ -39,9 +39,25 @@ public sealed class ContinueGameReader : IContinueGameReader
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// <para>
+    /// 整个读取体在 <see cref="Task.Run(Func{ContinueGameInfo?}, CancellationToken)"/> 里执行：
+    /// 内部全是同步文件 API（<c>FileExists</c> / <c>ReadAllText</c> / <c>JsonDocument.Parse</c>）。
+    /// 直接在调用方线程跑会把磁盘 IO 压在 UI 线程上 —— 游戏装在机械盘或网络盘时，
+    /// 每次切换游戏都会卡住整窗（这是 2026-10-27 「主页切换很慢」的直接原因之一）。
+    /// </para>
+    /// <para>异常语义不变：四类异常仍然在这里兜掉并返回 null，调用方不需要 try/catch。</para>
+    /// </remarks>
     public Task<ContinueGameInfo?> ReadAsync(GameInstallation game, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(game);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return Task.Run(() => ReadCore(game, cancellationToken), cancellationToken);
+    }
+
+    private ContinueGameInfo? ReadCore(GameInstallation game, CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
 
         var path = GetFilePath(game);
@@ -50,14 +66,14 @@ public sealed class ContinueGameReader : IContinueGameReader
             if (!_fileSystem.FileExists(path))
             {
                 _logger.Info("continue_game.json 不存在，视为无可继续存档：" + path);
-                return Task.FromResult<ContinueGameInfo?>(null);
+                return null;
             }
 
             var text = _fileSystem.ReadAllText(path);
             if (string.IsNullOrWhiteSpace(text))
             {
                 _logger.Warn("continue_game.json 为空，视为无可继续存档：" + path);
-                return Task.FromResult<ContinueGameInfo?>(null);
+                return null;
             }
 
             using var document = JsonDocument.Parse(text);
@@ -65,7 +81,7 @@ public sealed class ContinueGameReader : IContinueGameReader
             if (root.ValueKind != JsonValueKind.Object)
             {
                 _logger.Warn("continue_game.json 根节点不是对象，视为无可继续存档：" + path);
-                return Task.FromResult<ContinueGameInfo?>(null);
+                return null;
             }
 
             var title = ReadString(root, KeyTitle);
@@ -76,30 +92,30 @@ public sealed class ContinueGameReader : IContinueGameReader
             if (string.IsNullOrWhiteSpace(title))
             {
                 _logger.Warn("continue_game.json 缺少 title，视为无可继续存档：" + path);
-                return Task.FromResult<ContinueGameInfo?>(null);
+                return null;
             }
 
-            return Task.FromResult<ContinueGameInfo?>(new ContinueGameInfo(title, description, date, rawGameVersion));
+            return new ContinueGameInfo(title, description, date, rawGameVersion);
         }
         catch (JsonException exception)
         {
             _logger.Warn("continue_game.json 解析失败，视为无可继续存档：" + path + "：" + exception.Message);
-            return Task.FromResult<ContinueGameInfo?>(null);
+            return null;
         }
         catch (IOException exception)
         {
             _logger.Warn("continue_game.json 读取失败，视为无可继续存档：" + path + "：" + exception.Message);
-            return Task.FromResult<ContinueGameInfo?>(null);
+            return null;
         }
         catch (UnauthorizedAccessException exception)
         {
             _logger.Warn("continue_game.json 无读取权限，视为无可继续存档：" + path + "：" + exception.Message);
-            return Task.FromResult<ContinueGameInfo?>(null);
+            return null;
         }
         catch (ArgumentException exception)
         {
             _logger.Warn("continue_game.json 路径非法，视为无可继续存档：" + path + "：" + exception.Message);
-            return Task.FromResult<ContinueGameInfo?>(null);
+            return null;
         }
     }
 

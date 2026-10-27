@@ -34,6 +34,10 @@ public sealed record GameInstallation(
     /// EU5 为 false：它没有加载文件，播放集、mod 顺序、DLC 开关全部存在 <c>playsets.json</c> 里，
     /// 由游戏本体直接读取。
     /// </para>
+    /// <para>
+    /// CS2 也为 false：状态在 <c>.cache\Mods\playset_config.json</c>，同样由游戏本体直接读取。
+    /// </para>
     /// </summary>
-    public bool WritesLoadFile => Format != LoadFileFormat.PlaysetsJsonV1;
+    public bool WritesLoadFile =>
+        Format is not (LoadFileFormat.PlaysetsJsonV1 or LoadFileFormat.PlaysetConfigV1);
 }

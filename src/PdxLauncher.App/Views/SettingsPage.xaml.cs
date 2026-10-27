@@ -22,7 +22,8 @@ public sealed partial class SettingsPage : Page
     /// <summary>页面生命周期令牌；NavigationCacheMode=Required 会在返回页面时重建。</summary>
     private CancellationTokenSource _lifetime = new();
 
-    private bool _isReloading;
+    /// <summary>重载协调器：连点游戏时取消旧重载，只应用最新那次的结果。</summary>
+    private readonly ReloadCoordinator _reload = new();
 
     public SettingsPage()
     {
@@ -69,6 +70,10 @@ public sealed partial class SettingsPage : Page
 
             // 缓存占用只看文件属性，独立于设置加载，失败不该影响整页。
             await _viewModel.RefreshCacheStatsAsync(_lifetime.Token).ConfigureAwait(true);
+
+            // 账号会话：读回上次登录并尽力续期。放最后，绝不挡住设置页本身的显示。
+            await _viewModel.RestoreAccountAsync(_lifetime.Token).ConfigureAwait(true);
+            RefreshAccountPanels();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -131,8 +136,11 @@ public sealed partial class SettingsPage : Page
 
     // ------------------------------------------------------------ 分节导航
 
-    /// <summary>「缓存」在左侧六分类里的序号，与 XAML 里 secCache 的顺序一致。</summary>
-    private const int CacheSectionIndex = 4;
+    /// <summary>「缓存」在左侧七分类里的序号，与 XAML 里 secCache 的顺序一致。</summary>
+    private const int CacheSectionIndex = 5;
+
+    /// <summary>「账号」在左侧七分类里的序号，与 XAML 里 secAccount 的顺序一致。</summary>
+    private const int AccountSectionIndex = 4;
 
     /// <summary>切换左侧分类：只显示选中的那一节，其余折叠（同一时刻只排版一类设置）。</summary>
     private void OnSectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs e)
@@ -156,7 +164,7 @@ public sealed partial class SettingsPage : Page
     {
         var sections = new FrameworkElement?[]
         {
-            secAppearance, secLaunch, secPaths, secOnline, secCache, secAdvanced,
+            secAppearance, secLaunch, secPaths, secOnline, secAccount, secCache, secAdvanced,
         };
 
         for (var i = 0; i < sections.Length; i++)
@@ -170,6 +178,11 @@ public sealed partial class SettingsPage : Page
         if (refreshCache && index == CacheSectionIndex && AppServices.IsInitialized)
         {
             RefreshCacheStatsInBackground();
+        }
+
+        if (index == AccountSectionIndex)
+        {
+            RefreshAccountPanels();
         }
     }
 
@@ -190,31 +203,10 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private async Task ReloadAsync()
-    {
-        if (_isReloading)
-        {
-            return;
-        }
-
-        _isReloading = true;
-        try
-        {
-            await _viewModel.LoadAsync(AppServices.CurrentGame, _lifetime.Token).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
-        {
-            // 忽略：切换页面导致的取消。
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("SettingsPage 加载失败", ex);
-        }
-        finally
-        {
-            _isReloading = false;
-        }
-    }
+    private Task ReloadAsync() => _reload.RunAsync(
+        token => _viewModel.LoadAsync(AppServices.CurrentGame, token),
+        _lifetime.Token,
+        ex => AppServices.Logger.Error("SettingsPage 加载失败", ex));
 
     // ------------------------------------------------------------ 主题区
 
@@ -528,6 +520,99 @@ public sealed partial class SettingsPage : Page
             AppServices.Logger.Error("SettingsPage 重新生成 dlc_signature 失败", ex);
             await ShowMessageAsync(T(Keys.SettingsDangerDialogFailedTitle), ex.Message).ConfigureAwait(true);
         }
+    }
+
+    // ------------------------------------------------------------ 账号
+
+    /// <summary>密码框内容只在页面里存一份，交给 ViewModel 后立刻清掉。</summary>
+    private string _accountPassword = string.Empty;
+
+    private void OnAccountPasswordChanged(object sender, RoutedEventArgs e)
+    {
+        _accountPassword = (sender as PasswordBox)?.Password ?? string.Empty;
+        _viewModel.RaiseAccountProps();
+    }
+
+    private async void OnAccountSignInClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var error = await _viewModel.SignInAsync(_accountPassword, _lifetime.Token).ConfigureAwait(true);
+            _accountPassword = string.Empty;
+
+            if (sender is Button { Parent: StackPanel { } panel })
+            {
+                // 密码框在同一组卡片里，清掉输入框内容，避免密码留在控件上。
+                foreach (var child in panel.Children)
+                {
+                    if (child is PasswordBox box)
+                    {
+                        box.Password = string.Empty;
+                    }
+                }
+            }
+
+            if (error is not null)
+            {
+                await ShowMessageAsync(T(Keys.SettingsAccountDialogFailedTitle), error).ConfigureAwait(true);
+            }
+
+            RefreshAccountPanels();
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("SettingsPage 登录失败", ex);
+            await ShowMessageAsync(T(Keys.SettingsAccountDialogFailedTitle), ex.Message).ConfigureAwait(true);
+        }
+    }
+
+    private async void OnAccountSignOutClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = T(Keys.SettingsAccountDialogSignOutTitle),
+                Content = T(Keys.SettingsAccountDialogSignOutBody),
+                PrimaryButtonText = T(Keys.SettingsAccountSignOut),
+                CloseButtonText = T(Keys.CommonCancel),
+                DefaultButton = ContentDialogButton.Close,
+            };
+
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            _viewModel.SignOut();
+            RefreshAccountPanels();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("SettingsPage 登出失败", ex);
+        }
+    }
+
+    /// <summary>登录前后切换「输密码」与「登出」两组卡片。</summary>
+    private void RefreshAccountPanels()
+    {
+        var signedIn = _viewModel.IsSignedIn;
+        if (grpAccountSignIn is { } signIn)
+        {
+            signIn.Visibility = signedIn ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        if (grpAccountSignedIn is { } signedInGroup)
+        {
+            signedInGroup.Visibility = signedIn ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        _viewModel.RaiseAccountProps();
     }
 
     // ------------------------------------------------------------ 对话框

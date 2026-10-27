@@ -37,6 +37,18 @@ public static class XamlImage
                 path = resolved;
             }
 
+            // DDS（EU5 的 DLC/mod 缩略图）WinUI 解不了：换成转好的 PNG；还没转好就返回 null 显示占位。
+            if (path.EndsWith(".dds", StringComparison.OrdinalIgnoreCase))
+            {
+                var png = AppServices.ImageArt.Resolve(path);
+                if (string.IsNullOrWhiteSpace(png) || !AppServices.FileSystem.FileExists(png))
+                {
+                    return null;
+                }
+
+                path = png;
+            }
+
             return new BitmapImage { UriSource = new Uri(path) };
         }
         catch (UriFormatException ex)

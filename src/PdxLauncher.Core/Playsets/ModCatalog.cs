@@ -15,7 +15,7 @@ using PdxLauncher.Core.Parsing;
 /// 以及 &lt;gameDataDir&gt;\mod\*\\.metadata\\metadata.json（本地 mod）。</para>
 /// <para>合并键：gameRegistryId（如 mod/ugc_2218867072.mod）→ dirPath（绝对化后大小写不敏感）→ steamId。</para>
 /// </summary>
-public sealed class ModCatalog : IModCatalog
+public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
 {
     private const string ModDescriptorPattern = "*.mod";
     private const string MetadataFileName = "metadata.json";
@@ -26,26 +26,56 @@ public sealed class ModCatalog : IModCatalog
     private readonly IFileSystem _fileSystem;
     private readonly IAppLogger _logger;
     private readonly ModThumbnailResolver _thumbnails;
+    private readonly DiscoveryCache<IReadOnlyList<PlaySetMod>> _cache;
 
     /// <summary>创建 mod 目录。</summary>
     /// <param name="fileSystem">文件系统抽象。</param>
     /// <param name="logger">日志。</param>
     /// <param name="thumbnails">缩略图解析器；为 null 时自行创建（Steam 库列表延迟读取）。</param>
-    public ModCatalog(IFileSystem fileSystem, IAppLogger logger, ModThumbnailResolver? thumbnails = null)
+    /// <param name="clock">时钟，用于扫描结果缓存的 TTL；为 null 时用系统时钟。</param>
+    public ModCatalog(
+        IFileSystem fileSystem,
+        IAppLogger logger,
+        ModThumbnailResolver? thumbnails = null,
+        IClock? clock = null)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(logger);
         _fileSystem = fileSystem;
         _logger = logger;
         _thumbnails = thumbnails ?? new ModThumbnailResolver(fileSystem, logger);
+        _cache = new DiscoveryCache<IReadOnlyList<PlaySetMod>>(clock ?? new SystemClock());
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// 结果按「gameId + gameDataDir」缓存 60 秒：切一次游戏时 <c>ModsViewModel</c> 与
+    /// <c>ModLibraryService</c> 会各扫一遍，不缓存就等于把 mod 目录遍历两次。
+    /// 用户显式刷新走 <see cref="InvalidateCache"/>。
+    /// </remarks>
     public Task<IReadOnlyList<PlaySetMod>> DiscoverAllAsync(GameInstallation game, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(game);
-        return Task.Run(() => Discover(game, cancellationToken), cancellationToken);
+        var key = CacheKeyFor(game);
+        return _cache.GetOrCreateAsync(
+            key,
+            () => Task.Run(() => Discover(game, cancellationToken), cancellationToken),
+            cancellationToken);
     }
+
+    /// <summary>让某款游戏的 mod 扫描缓存失效（用户点刷新、或刚装/删了 mod 时调用）。</summary>
+    /// <param name="game">游戏安装信息。</param>
+    public void InvalidateCache(GameInstallation game)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        _cache.Invalidate(CacheKeyFor(game));
+    }
+
+    /// <summary>清空全部 mod 扫描缓存（设置页「清缓存」用）。</summary>
+    public void ClearCache() => _cache.Clear();
+
+    private static string CacheKeyFor(GameInstallation game) =>
+        game.GameId + "|" + (game.GameDataDir ?? string.Empty);
 
     private IReadOnlyList<PlaySetMod> Discover(GameInstallation game, CancellationToken cancellationToken)
     {

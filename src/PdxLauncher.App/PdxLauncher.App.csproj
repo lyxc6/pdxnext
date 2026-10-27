@@ -24,6 +24,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\PdxLauncher.Core\PdxLauncher.Core.csproj" />
+    <ProjectReference Include="..\PdxLauncher.Imaging\PdxLauncher.Imaging.csproj" />
   </ItemGroup>
   <!-- 手工构建路径（tools/manual-build.py）：Core 已由 csc 预编译，这里改成直接引用 dll，
        避免 MSBuild 去构建 Core 项目（其 Csc 任务在本机会被沙箱拒绝）。 -->

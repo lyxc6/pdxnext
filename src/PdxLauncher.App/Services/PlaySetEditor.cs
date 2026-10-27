@@ -319,6 +319,12 @@ public sealed class PlaySetEditor
 
                 break;
 
+            // CS2 没有加载文件（播放集与启停全在 playset_config.json，由仓储自己写）。
+            // 正常路径不会走到这里（SaveAsync 用 game.WritesLoadFile 提前跳过），
+            // 但显式列出，避免以后有人误以为 default 分支是"支持"。
+            case LoadFileFormat.PlaysetConfigV1:
+                break;
+
             default:
                 break;
         }
@@ -359,6 +365,10 @@ public sealed class PlaySetEditor
                 AddSequenceDiff(diffs, "disabledDLC", expected.DisabledDlcPopsIds, actual.DisabledDlcPopsIds);
                 AddSequenceDiff(diffs, "enabledMods(dir)", expected.EnabledModDirPaths, actual.EnabledModDirPaths);
                 AddSequenceDiff(diffs, "enabledMods(archive)", expected.EnabledModArchivePaths, actual.EnabledModArchivePaths);
+                break;
+
+            // CS2 无加载文件，没有可比较的内容（SaveAsync 不会走到这里）。
+            case LoadFileFormat.PlaysetConfigV1:
                 break;
 
             default:

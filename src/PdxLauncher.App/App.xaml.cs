@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Accounts;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Dlc;
@@ -14,6 +15,7 @@ using PdxLauncher.Core.LoadFiles;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Playsets;
 using PdxLauncher.Core.Playsets.Json;
+using PdxLauncher.Core.Playsets.PlaysetConfig;
 using PdxLauncher.Core.Signatures;
 
 /// <summary>
@@ -90,19 +92,30 @@ public partial class App : Application
         // 缩略图解析器共享给两个仓储：Steam 库列表只在首次需要时探测一次；
         // 同时挂上网盘缓存，本地目录全 miss 时直接读已下载的图片（不需要再发请求）。
         var modThumbnails = new ModThumbnailResolver(fileSystem, logger, steamLibraries: null, cache: network.ModThumbnails.Cache);
-        var mods = new ModCatalog(fileSystem, logger, modThumbnails);
+        var clausewitzMods = new ModCatalog(fileSystem, logger, modThumbnails);
+        var pdxMods = new PdxModsCatalog(fileSystem, logger);
+
+        // CS2 的 mod 不在 *.mod / .metadata 体系里，而在 .cache\Mods\pdx_mods\<id>_<ver>\；
+        // 路由与播放集仓储同一套思路，上层（ModLibraryService）不需要判格式。
+        var mods = new ModCatalogRouter(clausewitzMods, pdxMods);
         var dlcs = new DlcCatalog(fileSystem, logger);
 
-        // EU5 不写 launcher-v2.sqlite，只认文档目录下的 playsets.json；其余游戏仍用 sqlite。
-        // 判定收敛在路由里（GameInstallation.Format），上层服务不需要知道格式差异。
+        // EU5 不写 launcher-v2.sqlite，只认文档目录下的 playsets.json；CS2 则是 .cache\Mods\playset_config.json；
+        // 其余游戏仍用 sqlite。判定收敛在路由里（GameInstallation.Format），上层服务不需要知道格式差异。
         var sqlitePlaySets = new PlaySetRepository(fileSystem, logger, clock, modThumbnails);
-        var jsonPlaySets = new PlaysetsJsonRepository(fileSystem, logger, mods, dlcs);
-        var playSets = new PlaySetRepositoryRouter(sqlitePlaySets, jsonPlaySets);
+        var jsonPlaySets = new PlaysetsJsonRepository(fileSystem, logger, clausewitzMods, dlcs);
+        var playsetConfig = new PlaysetConfigRepository(fileSystem, logger, clock);
+        var playSets = new PlaySetRepositoryRouter(sqlitePlaySets, jsonPlaySets, playsetConfig);
         var loadFiles = new LoadFileWriter(fileSystem, logger);
         var processLauncher = new ProcessLauncher(logger);
         var launcher = new GameLauncher(processLauncher, fileSystem, logger);
         var continueGame = new ContinueGameReader(fileSystem, logger);
         var dlcSignatures = new DlcSignatureService(fileSystem, logger);
+
+        // Paradox 账号：会话落盘（DPAPI 保护）与登录客户端分开，代理重建时只换客户端。
+        var secretProtector = new DpapiSecretProtector(logger);
+        var sessionStore = new PdxSessionStore(fileSystem, logger, secretProtector);
+        var account = new AccountService(logger, sessionStore, clock, network.Account);
 
         // 最后一个参数先给空列表：窗口先出来，游戏发现由 GameDiscovery 在 UI 就绪后补。
         AppServices.Initialize(
@@ -123,9 +136,11 @@ public partial class App : Application
             network.Metadata,
             network.Assets,
             network.ModThumbnails,
+            account,
+            network.PdxMods,
             settingsStore,
             Array.Empty<GameInstallation>(),
-            network.Http);
+            new DisposableGroup(network.Http, network.PdxHttp));
 
         logger.Info("服务装配完成");
     }

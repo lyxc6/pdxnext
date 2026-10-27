@@ -137,6 +137,12 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         try
         {
             _snapshot = await _service.LoadAsync(game, cancellationToken).ConfigureAwait(true);
+
+            // DDS 缩略图先转成 PNG，行里才是真实封面而不是占位图。
+            await AppServices.ImageArt
+                .PrewarmAsync(_snapshot.Mods.Select(static m => m.ThumbnailPath), cancellationToken)
+                .ConfigureAwait(true);
+
             RebuildRows();
             IsLoaded = true;
 

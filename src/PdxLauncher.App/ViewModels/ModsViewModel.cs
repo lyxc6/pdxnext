@@ -332,6 +332,12 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
             _allMods = PlaySetEditor.Renumber(
                 saved.OrderBy(static m => m.Position).ToList());
+
+            // DDS 缩略图先转成 PNG，行里才是真实封面而不是占位图。
+            await AppServices.ImageArt
+                .PrewarmAsync(_allMods.Select(static m => m.ThumbnailPath), cancellationToken)
+                .ConfigureAwait(true);
+
             RebuildVisibleMods();
 
             // mod 库只用于补全大小与「添加模组」候选；读失败不影响已保存的播放集内容。

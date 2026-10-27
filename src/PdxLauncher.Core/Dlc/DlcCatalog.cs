@@ -14,22 +14,40 @@ using PdxLauncher.Core.Playsets;
 /// <para>V1/V1_1（V3）：递归扫 &lt;DlcPath&gt;/**/*.dlc.json，用 JSON 解析；找不到 .dlc.json 时回退扫 .dlc。</para>
 /// <para>容错：坏文件、缺必填键一律跳过并记 Warn，绝不抛异常。</para>
 /// </summary>
-public sealed class DlcCatalog : IDlcCatalog
+public sealed class DlcCatalog : IDlcCatalog, IScanCacheInvalidator
 {
     private const string ClausewitzPattern = "*.dlc";
     private const string JsonPattern = "*.dlc.json";
-    private const string ThumbnailFileName = "thumbnail.png";
+    /// <summary>
+    /// 同目录缩略图的候选文件名（按优先级）。
+    /// 旧游戏的 DLC 都是 <c>thumbnail.png</c>；EU5 的 DLC 只有 <c>thumbnail.dds</c>，
+    /// 由 App 侧转成 PNG 后再交给 WinUI 渲染。
+    /// </summary>
+    private static readonly string[] ThumbnailFileNames =
+    [
+        "thumbnail.png",
+        "thumbnail.jpg",
+        "thumbnail.jpeg",
+        "thumbnail.webp",
+        "thumbnail.bmp",
+        "thumbnail.dds",
+    ];
 
     private readonly IFileSystem _fileSystem;
     private readonly IAppLogger _logger;
+    private readonly DiscoveryCache<IReadOnlyList<DlcInfo>> _cache;
 
     /// <summary>创建 DLC 目录。</summary>
-    public DlcCatalog(IFileSystem fileSystem, IAppLogger logger)
+    /// <param name="fileSystem">文件系统抽象。</param>
+    /// <param name="logger">日志。</param>
+    /// <param name="clock">时钟，用于扫描结果缓存的 TTL；为 null 时用系统时钟。</param>
+    public DlcCatalog(IFileSystem fileSystem, IAppLogger logger, IClock? clock = null)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(logger);
         _fileSystem = fileSystem;
         _logger = logger;
+        _cache = new DiscoveryCache<IReadOnlyList<DlcInfo>>(clock ?? new SystemClock());
     }
 
     /// <summary>
@@ -60,13 +78,34 @@ public sealed class DlcCatalog : IDlcCatalog
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// 结果按「gameId + 扫描目录 + 格式」缓存 60 秒：一次切换游戏时主页、DLC 页、mod 页会各调一遍，
+    /// 不缓存就会把同一棵目录树遍历 2-3 次（日志里同一次切换出现多条「DLC 扫描完成」）。
+    /// 用户显式刷新走 <see cref="InvalidateCache"/>。
+    /// </remarks>
     public Task<IReadOnlyList<DlcInfo>> DiscoverAsync(GameInstallation game, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(game);
-        return Task.Run(
-            () => Discover(game, cancellationToken),
+        var key = CacheKeyFor(game);
+        return _cache.GetOrCreateAsync(
+            key,
+            () => Task.Run(() => Discover(game, cancellationToken), cancellationToken),
             cancellationToken);
     }
+
+    /// <summary>让某款游戏的 DLC 扫描缓存失效（用户点刷新、或刚装/删了 DLC 时调用）。</summary>
+    /// <param name="game">游戏安装信息。</param>
+    public void InvalidateCache(GameInstallation game)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        _cache.Invalidate(CacheKeyFor(game));
+    }
+
+    /// <summary>清空全部 DLC 扫描缓存（设置页「清缓存」用）。</summary>
+    public void ClearCache() => _cache.Clear();
+
+    private static string CacheKeyFor(GameInstallation game) =>
+        game.GameId + "|" + (game.DlcPath ?? string.Empty) + "|" + game.Format;
 
     private IReadOnlyList<DlcInfo> Discover(GameInstallation game, CancellationToken cancellationToken)
     {
@@ -82,6 +121,15 @@ public sealed class DlcCatalog : IDlcCatalog
             or LoadFileFormat.ContentLoadV1_1
             or LoadFileFormat.PlaysetsJsonV1;
         var result = new List<DlcInfo>();
+
+        // CS2（PlaysetConfigV1）没有 DLC 清单：安装根没有 .dlc / .dlc.json（.packages\ 为空），
+        // playset_config.json 里也没有 dlcs 字段，DLC 归属完全在 Steam 授权侧。
+        // 直接返回空，不去遍历安装根（否则白扫几万个文件），也绝不伪造数据。
+        if (game.Format == LoadFileFormat.PlaysetConfigV1)
+        {
+            _logger.Info("CS2 没有 DLC 描述文件，DLC 清单为空（归属由 Steam 授权决定）：" + game.GameId);
+            return Array.Empty<DlcInfo>();
+        }
 
         if (useJson)
         {
@@ -223,7 +271,7 @@ public sealed class DlcCatalog : IDlcCatalog
     /// EU5 的 DLC 描述文件：<c>&lt;DlcPath&gt;\D0xx_name\D0xx_name.dlc.json</c>，平铺字段
     /// <c>name</c> / <c>localizable_name</c> / <c>pops_id</c> / <c>steam_id</c> / <c>hidden</c>。
     /// 显示名优先取英文本地化，取不到时把 <c>d017_sacred_sites_pack</c> 这类内部名美化成 "Sacred Sites Pack"。
-    /// 缩略图是 <c>thumbnail.dds</c>（WinUI 解不了），一律留空。
+    /// 缩略图是 <c>thumbnail.dds</c>，由 App 侧转码后渲染。
     /// </summary>
     /// <returns>识别成功并已加入 <paramref name="result"/> 时 true；不是 EU5 结构时 false。</returns>
     private bool TryCollectEu5(
@@ -266,7 +314,7 @@ public sealed class DlcCatalog : IDlcCatalog
             popsId,
             steamId,
             PathHelper.ToPosixRelative(dlcPath, file),
-            string.Empty,
+            ResolveThumbnail(dlcPath, file),
             string.Empty,
             rawBytes));
         return true;
@@ -299,7 +347,7 @@ public sealed class DlcCatalog : IDlcCatalog
             : string.Empty;
 
     /// <summary>
-    /// 缩略图：与 .dlc/.dlc.json 同目录的 thumbnail.png（存在才算）。
+    /// 缩略图：与 .dlc/.dlc.json 同目录的 <c>thumbnail.*</c>（存在且格式可渲染才算）。
     /// Stellaris 的 .dlc 里另有 thumbnail 键，但真机实测同目录都存在 thumbnail.png，统一按同目录处理。
     /// </summary>
     private string ResolveThumbnail(string dlcPath, string descriptorPath)
@@ -310,8 +358,16 @@ public sealed class DlcCatalog : IDlcCatalog
             return string.Empty;
         }
 
-        var candidate = Path.Combine(directory, ThumbnailFileName);
-        return _fileSystem.FileExists(candidate) ? candidate : string.Empty;
+        foreach (var name in ThumbnailFileNames)
+        {
+            var candidate = Path.Combine(directory, name);
+            if (_fileSystem.FileExists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return string.Empty;
     }
 
     private IEnumerable<string> EnumerateFilesSafe(string directory, string pattern)

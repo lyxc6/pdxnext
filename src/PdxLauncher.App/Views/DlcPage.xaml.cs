@@ -16,7 +16,8 @@ public sealed partial class DlcPage : Page
     /// <summary>页面生命周期令牌；NavigationCacheMode=Required 会在返回页面时重建。</summary>
     private CancellationTokenSource _lifetime = new();
 
-    private bool _isReloading;
+    /// <summary>重载协调器：连点游戏时取消旧重载，只应用最新那次的结果。</summary>
+    private readonly ReloadCoordinator _reload = new();
 
     public DlcPage()
     {
@@ -83,31 +84,10 @@ public sealed partial class DlcPage : Page
         }
     }
 
-    private async Task ReloadAsync()
-    {
-        if (_isReloading)
-        {
-            return;
-        }
-
-        _isReloading = true;
-        try
-        {
-            await _viewModel.LoadAsync(AppServices.CurrentGame, _lifetime.Token).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
-        {
-            // 忽略：切换页面导致的取消。
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("DlcPage 加载失败", ex);
-        }
-        finally
-        {
-            _isReloading = false;
-        }
-    }
+    private Task ReloadAsync() => _reload.RunAsync(
+        token => _viewModel.LoadAsync(AppServices.CurrentGame, token),
+        _lifetime.Token,
+        ex => AppServices.Logger.Error("DlcPage 加载失败", ex));
 
     // ------------------------------------------------------------ 交互
 

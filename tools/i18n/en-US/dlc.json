@@ -25,5 +25,6 @@
   "dlc.saveFailed": "Save failed: {0}",
   "dlc.saveFailedShort": "Save failed",
   "dlc.toggleToolTip": "Enable or disable this DLC",
-  "dlc.toggleToolTipLocked": "This DLC cannot be disabled through content_load.json (empty pops_id; the official launcher drops it too)"
+  "dlc.toggleToolTipLocked": "This DLC cannot be disabled through content_load.json (empty pops_id; the official launcher drops it too)",
+  "dlc.empty.noManifest": "This game has no DLC manifest, so DLC cannot be listed (ownership is decided by Steam)"
 }

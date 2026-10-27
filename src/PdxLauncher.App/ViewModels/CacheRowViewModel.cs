@@ -21,6 +21,9 @@ public sealed class CacheRowViewModel : LocalizedObservableObject
     /// <summary>DLC 简介缓存（dlc-descriptions.json）。</summary>
     public const string DlcDescriptionsKey = "dlcDescriptions";
 
+    /// <summary>DDS 缩略图转码缓存（image-cache 目录）。</summary>
+    public const string ImagesKey = "images";
+
     private readonly string _titleKey;
     private readonly string _descriptionKey;
     private CacheUsage _usage = CacheUsage.Empty;

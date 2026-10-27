@@ -167,7 +167,16 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
             ? T(Keys.HomeManagedByGame)
             : T(Keys.HomeCounts, EnabledModCount, ModCount, DlcCount);
 
-    /// <summary>加载当前游戏的全部主页数据（继续游戏 + 播放集 + 计数）。</summary>
+    /// <summary>加载当前游戏的全部主页数据（继续游戏 + 播放集）。</summary>
+    /// <remarks>
+    /// <para>
+    /// 只做「主页真正绑定的东西」：继续游戏卡片、播放集下拉。原先这里还会串行读 mod 列表与
+    /// 全盘扫 DLC 目录去算 <c>ModCount</c> / <c>EnabledModCount</c> / <c>DlcCount</c>，
+    /// 但那三个计数在 HomePage.xaml 里没有任何绑定 —— 纯装饰计算，却要在切换游戏时
+    /// 递归遍历整棵 DLC 目录树、再读一遍 sqlite，是切换慢的主要来源之一。
+    /// </para>
+    /// <para>需要计数的页面（DLC 页、mod 页）自己读，各页各自有扫描缓存。</para>
+    /// </remarks>
     public async Task LoadAsync(GameInstallation? game, CancellationToken cancellationToken)
     {
         Game = game;
@@ -315,6 +324,15 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
         }
     }
 
+    /// <summary>
+    /// 读激活播放集与播放集列表，填主页的下拉。
+    /// <para>
+    /// 刻意不读 mod 列表、不扫 DLC 目录：主页 XAML 不显示任何计数，
+    /// <c>ModCount</c> / <c>EnabledModCount</c> / <c>DlcCount</c> 只在
+    /// <c>CountsText</c> 里被拼进一句从未绑定到界面的文案。
+    /// 切换游戏时少一次 sqlite 读 + 少一次全盘递归扫描，主页立刻能画出来。
+    /// </para>
+    /// </summary>
     private async Task LoadPlaySetAsync(GameInstallation game, CancellationToken cancellationToken)
     {
         if (!game.SupportsContentManagement)
@@ -356,24 +374,10 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
             OnPropertyChanged(nameof(HasPlaySets));
             OnPropertyChanged(nameof(HasNoPlaySets));
 
-            if (active is null)
-            {
-                ModCount = 0;
-                EnabledModCount = 0;
-            }
-            else
-            {
-                var mods = await AppServices.PlaySets
-                    .GetPlaySetModsAsync(game, active.Id, cancellationToken)
-                    .ConfigureAwait(true);
-                ModCount = mods.Count;
-                EnabledModCount = mods.Count(static m => m.Enabled);
-            }
-
-            var dlcs = await AppServices.Dlcs
-                .DiscoverAsync(game, cancellationToken)
-                .ConfigureAwait(true);
-            DlcCount = dlcs.Count;
+            // 计数保持清零：主页不显示它们，需要时由 DLC 页 / mod 页自己算。
+            ModCount = 0;
+            EnabledModCount = 0;
+            DlcCount = 0;
         }
         catch (OperationCanceledException)
         {
@@ -382,7 +386,7 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
         catch (Exception ex)
         {
             // 计数属于装饰信息，失败不影响启动主流程。
-            AppServices.Logger.Warn("读取播放集/DLC 统计失败: " + ex.Message);
+            AppServices.Logger.Warn("读取播放集失败: " + ex.Message);
             PlaySetName = string.Empty;
             ModCount = 0;
             EnabledModCount = 0;
