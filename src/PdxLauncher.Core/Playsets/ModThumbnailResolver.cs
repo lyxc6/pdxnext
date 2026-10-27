@@ -18,11 +18,23 @@ using PdxLauncher.Core.Steam;
 /// → 联网缓存 <c>mod-cache</c> → sqlite 缓存路径。
 /// 任何情况下都不抛异常：调用方 <c>PlaySetRepository.ReadAsync</c> 会把异常吞成整页空列表。
 /// </para>
+/// <para>
+/// 单个候选目录内的查找顺序：<c>&lt;dir&gt;\&lt;picture&gt;</c> → <c>&lt;dir&gt;\&lt;picture 文件名&gt;</c>
+/// → <c>&lt;dir&gt;\.metadata\&lt;picture&gt;</c> → <c>&lt;dir&gt;\.metadata\&lt;picture 文件名&gt;</c>
+/// → <c>&lt;dir&gt;\thumbnail*</c> → <c>&lt;dir&gt;\.metadata\thumbnail*</c>。
+/// 最后一级是 EU5 / PDX Mods 布局必需的：真机 22/22 个 EU5 工坊 mod 的封面都在
+/// <c>&lt;mod&gt;\.metadata\thumbnail.png</c>，只有 6 个在 mod 根目录另有副本；
+/// metadata.json 的 <c>picture</c> 键也相对这个 <c>.metadata</c> 目录。
+/// 老游戏（CK3 / Stellaris / EU4）的工坊目录里没有任何 <c>.metadata</c>，这一级不产生额外枚举。
+/// </para>
 /// </summary>
 public sealed class ModThumbnailResolver
 {
     private const string ThumbnailPattern = "thumbnail*";
     private const string PreferredThumbnailFileName = "thumbnail.png";
+
+    /// <summary>PDX Mods 布局（EU5 等）把封面与 metadata.json 一起放在 mod 目录下的这个子目录里。</summary>
+    private const string MetadataDirectoryName = ".metadata";
     private const string SteamAppsSegment = "steamapps";
     private const string WorkshopSegment = "workshop";
     private const string ContentSegment = "content";
@@ -219,6 +231,8 @@ public sealed class ModThumbnailResolver
 
     private string? ResolveInDirectory(string directory, string? picture)
     {
+        var metadataDirectory = Path.Combine(directory, MetadataDirectoryName);
+
         // 描述文件里显式声明的图片名优先：它可能是任意名字（含中文、空格、单引号、子目录、.png.png 双扩展名）。
         if (!string.IsNullOrWhiteSpace(picture))
         {
@@ -226,33 +240,58 @@ public sealed class ModThumbnailResolver
                 .Replace('/', Path.DirectorySeparatorChar)
                 .Replace('\\', Path.DirectorySeparatorChar);
 
-            var declared = Path.Combine(directory, normalized);
-            if (IsImageFile(declared) && _fileSystem.FileExists(declared))
+            // picture 里带子目录但实际文件平铺在同一层时，退化到只用文件名再试一次。
+            var fileName = Path.GetFileName(normalized);
+            var hasSubdirectory = !string.IsNullOrWhiteSpace(fileName)
+                && !string.Equals(fileName, normalized, StringComparison.Ordinal);
+
+            // 1) 按 mod 根目录解释：.mod 的 picture 就是这个语义。
+            if (TryExistingImage(directory, normalized) is { } declared)
             {
                 return declared;
             }
 
-            // picture 里带子目录但实际文件平铺在 mod 根目录时，退化到只用文件名再试一次。
-            var fileName = Path.GetFileName(normalized);
-            if (!string.IsNullOrWhiteSpace(fileName) && !string.Equals(fileName, normalized, StringComparison.Ordinal))
+            if (hasSubdirectory && TryExistingImage(directory, fileName) is { } flattened)
             {
-                var flattened = Path.Combine(directory, fileName);
-                if (IsImageFile(flattened) && _fileSystem.FileExists(flattened))
-                {
-                    return flattened;
-                }
+                return flattened;
+            }
+
+            // 2) 按 .metadata 解释：EU5 的 metadata.json 里 picture 相对 .metadata（封面与它同住这里）。
+            if (TryExistingImage(metadataDirectory, normalized) is { } declaredInMetadata)
+            {
+                return declaredInMetadata;
+            }
+
+            if (hasSubdirectory && TryExistingImage(metadataDirectory, fileName) is { } flattenedInMetadata)
+            {
+                return flattenedInMetadata;
             }
         }
 
-        return PickThumbnailFile(directory);
+        return PickThumbnailFile(directory) ?? PickMetadataThumbnailFile(directory);
     }
+
+    /// <summary>把相对路径拼到目录下，只接受真实存在且扩展名可渲染的图片；否则返回 null。</summary>
+    private string? TryExistingImage(string directory, string relativePath)
+    {
+        var candidate = Path.Combine(directory, relativePath);
+        return IsImageFile(candidate) && _fileSystem.FileExists(candidate) ? candidate : null;
+    }
+
+    /// <summary>
+    /// 在 <c>&lt;directory&gt;\.metadata</c> 里挑 <c>thumbnail*</c> 图片（EU5 / PDX Mods 布局）。
+    /// 目录不存在时 <see cref="IFileSystem.EnumerateFiles"/> 直接返回空集合，所以老游戏不会多出任何 IO。
+    /// </summary>
+    private string? PickMetadataThumbnailFile(string directory)
+        => PickThumbnailFile(Path.Combine(directory, MetadataDirectoryName));
 
     /// <summary>
     /// 在目录里挑 thumbnail* 图片：精确 thumbnail.png 最优先，其余按扩展名优先级、最后按文件名。
     /// 必须枚举而不是硬拼文件名：真机存在 thumbnail.jpg / Thumbnail.png / thumbnail_new.png / thumbanail.png，
     /// 也有 "empty thumbnail.png" 这种同目录干扰项，以及 thumbnail.pdn 之类不能渲染的文件。
     /// </summary>
-    /// <param name="directory">mod 目录（不存在或不可读时返回 null）。</param>
+    /// <param name="directory">mod 目录（不存在或不可读时返回 null）。只扫这一层，不看子目录；
+    /// EU5 的 <c>.metadata</c> 回退由 <see cref="ResolveInDirectory"/> 负责。</param>
     /// <returns>挑中的图片绝对路径；没有可渲染图片时返回 null。</returns>
     public string? PickThumbnailFile(string directory)
     {

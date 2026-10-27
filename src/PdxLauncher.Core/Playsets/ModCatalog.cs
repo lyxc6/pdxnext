@@ -252,7 +252,12 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
                 RequiredVersion: ReadJsonProperty(root, "supported_game_version"),
                 ThumbnailPath: null,
                 Status: null,
-                Picture: ReadJsonProperty(root, "thumbnail")?.Trim()));
+                // 真机实测：EU5 的 metadata.json 用的是 "picture"（13/22 个有，9 个没有）；
+                // "thumbnail" 只是历史写法，保留作兼容。封面路径相对 .metadata 目录。
+                Picture: FirstNonEmptyOrNull(
+                    ReadJsonProperty(root, "picture"),
+                    ReadJsonProperty(root, "thumbnail"),
+                    null)?.Trim()));
         }
         catch (JsonException exception)
         {
