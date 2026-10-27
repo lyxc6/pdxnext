@@ -480,6 +480,7 @@ public sealed partial class Localizer
         ["settings.theme.source.builtIn"] = "内置占位",
         ["settings.theme.source.installDir"] = "安装目录",
         ["settings.theme.source.online"] = "联网缓存",
+        ["settings.theme.source.steam"] = "Steam 封面",
         ["settings.theme.statusDone"] = "主题检查完成：来源={0}，下次检查 {1}",
         ["settings.theme.statusFailed"] = "主题检查失败：{0}",
         ["settings.theme.statusOff"] = "已关闭联网主题检查：只使用安装目录与内置占位主题",
@@ -493,7 +494,6 @@ public sealed partial class Localizer
         ["shell.alwaysOnTop.notReady"] = "启动器服务尚未初始化，无法切换窗口置顶",
         ["shell.alwaysOnTop.saveFailed"] = "保存窗口置顶设置失败：{0}",
         ["shell.alwaysOnTop.unsupported"] = "当前窗口不是 Overlapped 呈现方式，无法切换置顶",
-        ["shell.nav.contentManagedHint"] = "该游戏的模组与 DLC 由游戏本体管理（游戏内 MOD 菜单 / Steam 创意工坊）",
         ["shell.nav.home"] = "当前游戏",
         ["shell.nav.library"] = "游戏库",
         ["shell.nav.modLibrary"] = "Mod 库",
@@ -983,6 +983,7 @@ public sealed partial class Localizer
         ["settings.theme.source.builtIn"] = "Built-in placeholder",
         ["settings.theme.source.installDir"] = "Game folder",
         ["settings.theme.source.online"] = "Online cache",
+        ["settings.theme.source.steam"] = "Steam cover",
         ["settings.theme.statusDone"] = "Theme check finished: source={0}, next check {1}",
         ["settings.theme.statusFailed"] = "Theme check failed: {0}",
         ["settings.theme.statusOff"] = "Theme check off: only the game folder and the built-in placeholder are used",
@@ -996,7 +997,6 @@ public sealed partial class Localizer
         ["shell.alwaysOnTop.notReady"] = "The launcher service is not initialized yet; cannot change always-on-top",
         ["shell.alwaysOnTop.saveFailed"] = "Could not save the always-on-top setting: {0}",
         ["shell.alwaysOnTop.unsupported"] = "This window is not using the Overlapped presenter; always-on-top is unavailable",
-        ["shell.nav.contentManagedHint"] = "This game manages its own mods and DLC (in-game MOD menu / Steam Workshop)",
         ["shell.nav.home"] = "Current Game",
         ["shell.nav.library"] = "Game Library",
         ["shell.nav.modLibrary"] = "Mod Library",
@@ -1486,6 +1486,7 @@ public sealed partial class Localizer
         ("settings.theme.source.builtIn", "SettingsThemeSourceBuiltIn"),
         ("settings.theme.source.installDir", "SettingsThemeSourceInstallDir"),
         ("settings.theme.source.online", "SettingsThemeSourceOnline"),
+        ("settings.theme.source.steam", "SettingsThemeSourceSteam"),
         ("settings.theme.statusDone", "SettingsThemeStatusDone"),
         ("settings.theme.statusFailed", "SettingsThemeStatusFailed"),
         ("settings.theme.statusOff", "SettingsThemeStatusOff"),
@@ -1499,7 +1500,6 @@ public sealed partial class Localizer
         ("shell.alwaysOnTop.notReady", "ShellAlwaysOnTopNotReady"),
         ("shell.alwaysOnTop.saveFailed", "ShellAlwaysOnTopSaveFailed"),
         ("shell.alwaysOnTop.unsupported", "ShellAlwaysOnTopUnsupported"),
-        ("shell.nav.contentManagedHint", "ShellNavContentManagedHint"),
         ("shell.nav.home", "ShellNavHome"),
         ("shell.nav.library", "ShellNavLibrary"),
         ("shell.nav.modLibrary", "ShellNavModLibrary"),
@@ -1987,6 +1987,7 @@ public sealed partial class Localizer
     public string SettingsThemeSourceBuiltIn => Format("settings.theme.source.builtIn");
     public string SettingsThemeSourceInstallDir => Format("settings.theme.source.installDir");
     public string SettingsThemeSourceOnline => Format("settings.theme.source.online");
+    public string SettingsThemeSourceSteam => Format("settings.theme.source.steam");
     public string SettingsThemeStatusDone => Format("settings.theme.statusDone");
     public string SettingsThemeStatusFailed => Format("settings.theme.statusFailed");
     public string SettingsThemeStatusOff => Format("settings.theme.statusOff");
@@ -2000,7 +2001,6 @@ public sealed partial class Localizer
     public string ShellAlwaysOnTopNotReady => Format("shell.alwaysOnTop.notReady");
     public string ShellAlwaysOnTopSaveFailed => Format("shell.alwaysOnTop.saveFailed");
     public string ShellAlwaysOnTopUnsupported => Format("shell.alwaysOnTop.unsupported");
-    public string ShellNavContentManagedHint => Format("shell.nav.contentManagedHint");
     public string ShellNavHome => Format("shell.nav.home");
     public string ShellNavLibrary => Format("shell.nav.library");
     public string ShellNavModLibrary => Format("shell.nav.modLibrary");
@@ -2491,6 +2491,7 @@ internal static class Keys
     public const string SettingsThemeSourceBuiltIn = "settings.theme.source.builtIn";
     public const string SettingsThemeSourceInstallDir = "settings.theme.source.installDir";
     public const string SettingsThemeSourceOnline = "settings.theme.source.online";
+    public const string SettingsThemeSourceSteam = "settings.theme.source.steam";
     public const string SettingsThemeStatusDone = "settings.theme.statusDone";
     public const string SettingsThemeStatusFailed = "settings.theme.statusFailed";
     public const string SettingsThemeStatusOff = "settings.theme.statusOff";
@@ -2504,7 +2505,6 @@ internal static class Keys
     public const string ShellAlwaysOnTopNotReady = "shell.alwaysOnTop.notReady";
     public const string ShellAlwaysOnTopSaveFailed = "shell.alwaysOnTop.saveFailed";
     public const string ShellAlwaysOnTopUnsupported = "shell.alwaysOnTop.unsupported";
-    public const string ShellNavContentManagedHint = "shell.nav.contentManagedHint";
     public const string ShellNavHome = "shell.nav.home";
     public const string ShellNavLibrary = "shell.nav.library";
     public const string ShellNavModLibrary = "shell.nav.modLibrary";

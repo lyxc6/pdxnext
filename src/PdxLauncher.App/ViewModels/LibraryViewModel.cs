@@ -62,6 +62,8 @@ public sealed partial class LibraryViewModel : LocalizedObservableObject
             var games = force
                 ? await GameDiscovery.RefreshAsync(cancellationToken).ConfigureAwait(true)
                 : await GameDiscovery.EnsureAsync(cancellationToken).ConfigureAwait(true);
+            // 卡片封面是 OneTime 绑定，纱层背景（EU4 的 20% alpha 油画）必须先摊平再绑定。
+            await AppServices.PrepareCardCoversAsync(games, cancellationToken).ConfigureAwait(true);
             RebuildCards(games);
             IsLoaded = true;
             if (Cards.Count == 0)
@@ -89,7 +91,22 @@ public sealed partial class LibraryViewModel : LocalizedObservableObject
             return;
         }
 
-        RebuildCards(AppServices.Games);
+        _ = ReloadFromCurrentGamesAsync();
+    }
+
+    private async Task ReloadFromCurrentGamesAsync()
+    {
+        var games = AppServices.Games;
+        try
+        {
+            await AppServices.PrepareCardCoversAsync(games, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("卡片封面预摊平失败: " + ex.Message);
+        }
+
+        RebuildCards(games);
     }
 
     partial void OnIsBusyChanged(bool oldValue, bool newValue) => OnPropertyChanged(nameof(IsRefreshEnabled));

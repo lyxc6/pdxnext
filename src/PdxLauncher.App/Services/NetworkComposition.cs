@@ -37,7 +37,16 @@ internal static class NetworkComposition
         var http = new HttpFetcher(logger, proxy);
         var metadata = new MetadataClient(http, logger);
         var assets = new AssetDownloader(http, logger, fileSystem);
-        var themes = new ThemeResolver(fileSystem, clock, logger, metadata, assets, AppServices.ThemeCacheRoot);
+        var steamCovers = new SteamCoverUrlResolver(http, logger);
+        var themes = new ThemeResolver(
+            fileSystem,
+            clock,
+            logger,
+            metadata,
+            assets,
+            AppServices.ThemeCacheRoot,
+            steamCovers,
+            new BundledThemes());
         var descriptions = new DlcDescriptionService(fileSystem, http, clock, logger, AppServices.DataRoot);
         var newsFeed = new NewsFeedService(fileSystem, http, assets, clock, logger, AppServices.NewsCacheRoot);
         var modThumbnails = new ModThumbnailService(fileSystem, assets, clock, logger, AppServices.ModThumbnailCacheRoot);

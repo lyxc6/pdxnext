@@ -16,14 +16,16 @@ public sealed class BitmapLoader
 
     private readonly IFileSystem _fileSystem;
     private readonly IAppLogger _logger;
+    private readonly ThemeImageFlattener? _flattener;
     private readonly Dictionary<string, ImageSource> _cache = new(StringComparer.OrdinalIgnoreCase);
 
-    public BitmapLoader(IFileSystem fileSystem, IAppLogger logger)
+    public BitmapLoader(IFileSystem fileSystem, IAppLogger logger, ThemeImageFlattener? flattener = null)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(logger);
         _fileSystem = fileSystem;
         _logger = logger;
+        _flattener = flattener;
     }
 
     /// <summary>加载图片；路径为空/文件缺失/解码失败时返回 null。不抛异常。</summary>
@@ -43,6 +45,18 @@ public sealed class BitmapLoader
             {
                 _logger.Warn("图片不存在: " + path);
                 return null;
+            }
+
+            // 纱层主题图先摊平成不透明副本（EU4 背景整幅 alpha=20%，直接画就是一片灰）。
+            if (_flattener is not null)
+            {
+                var flattened = await _flattener.PrepareAsync(path, cancellationToken).ConfigureAwait(true);
+                if (!string.IsNullOrWhiteSpace(flattened)
+                    && !string.Equals(flattened, path, StringComparison.OrdinalIgnoreCase)
+                    && _fileSystem.FileExists(flattened))
+                {
+                    path = flattened;
+                }
             }
 
             var cacheKey = path + "|" + decodePixelWidth;

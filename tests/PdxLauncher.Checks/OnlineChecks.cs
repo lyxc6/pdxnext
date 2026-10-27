@@ -31,6 +31,7 @@ public static class OnlineChecks
             CheckThemeResolver(fs, tempRoot);
             CheckThemeRefreshRetry(fs, tempRoot);
             CheckWashLayerPolicy();
+            CheckSteamCoverUrlResolver();
         }
         finally
         {
@@ -785,6 +786,95 @@ public static class OnlineChecks
 
         ChecksContext.Check("缓冲区长度不是 4 的倍数要报错", threw);
         ChecksContext.Equal("摊平后的 alpha 为全满", 255, WashLayerPolicy.FlattenedAlpha);
+    }
+
+    /// <summary>
+    /// Steam 头图地址：静态路径已迁移成带内容 hash 的 store_item_assets，
+    /// 新游戏（EU5 3450310）用老路径必 404，所以改问 appdetails 接口。
+    /// </summary>
+    private static void CheckSteamCoverUrlResolver()
+    {
+        const string Real = """
+            {
+              "3450310": {
+                "success": true,
+                "data": {
+                  "type": "game",
+                  "name": "Europa Universalis V",
+                  "header_image": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3450310/9944/header.jpg?t=1",
+                  "capsule_image": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3450310/b38d/capsule_231x87.jpg?t=1"
+                }
+              }
+            }
+            """;
+
+        ChecksContext.Equal(
+            "appdetails: 取 header_image",
+            "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3450310/9944/header.jpg?t=1",
+            SteamCoverUrlResolver.ParseHeaderImage(Real, 3450310));
+
+        ChecksContext.Check(
+            "appdetails: AppId 不匹配返回 null",
+            SteamCoverUrlResolver.ParseHeaderImage(Real, 9999) is null);
+
+        ChecksContext.Check(
+            "appdetails: success=false 时无 data，返回 null",
+            SteamCoverUrlResolver.ParseHeaderImage("""{"1":{"success":false}}""", 1) is null);
+
+        ChecksContext.Check(
+            "appdetails: data 里没有 header_image 返回 null",
+            SteamCoverUrlResolver.ParseHeaderImage("""{"1":{"success":true,"data":{"name":"x"}}}""", 1) is null);
+
+        ChecksContext.Check(
+            "appdetails: 畸形 JSON 返回 null 不抛",
+            SteamCoverUrlResolver.ParseHeaderImage("not json at all", 1) is null);
+
+        ChecksContext.Check(
+            "appdetails: 空 header_image 字符串返回 null",
+            SteamCoverUrlResolver.ParseHeaderImage(
+                """{"1":{"success":true,"data":{"header_image":"  "}}}""",
+                1) is null);
+
+        // 解析器本身：成功路径 + 失败后不重复问（每进程每 AppId 只问一次）。
+        var okFetcher = new FakeHttpFetcher(
+            streamFactory: _ => new MemoryStream(System.Text.Encoding.UTF8.GetBytes(Real)));
+        var okLogger = new RecordingLogger();
+        var resolver = new SteamCoverUrlResolver(okFetcher, okLogger);
+        var okUrl = resolver.ResolveHeaderImageUrlAsync(3450310, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Check("解析器: 联网拿到真实头图地址", okUrl is not null && okUrl.Contains("3450310", StringComparison.Ordinal));
+        _ = resolver.ResolveHeaderImageUrlAsync(3450310, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("解析器: 同一 AppId 只请求一次", 1, okFetcher.GetCallCount);
+
+        // 网络失败：返回 null、记 warn、不再重问。
+        var failFetcher = new FakeHttpFetcher();
+        var failLogger = new RecordingLogger();
+        var failing = new SteamCoverUrlResolver(failFetcher, failLogger);
+        var nullUrl = failing.ResolveHeaderImageUrlAsync(1, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("解析器: 请求失败返回 null 而不是抛异常", nullUrl is null);
+        ChecksContext.Check("解析器: 失败记 warn", failLogger.Warnings.Count >= 1, string.Join(" | ", failLogger.Warnings));
+        _ = failing.ResolveHeaderImageUrlAsync(1, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("解析器: 失败结果也被记住", 1, failFetcher.GetCallCount);
+
+        ChecksContext.Check(
+            "解析器: 非法 AppId 直接 null",
+            failing.ResolveHeaderImageUrlAsync(0, CancellationToken.None).GetAwaiter().GetResult() is null);
+        ChecksContext.Check(
+            "静态兜底地址仍保留（旧游戏可用）",
+            ThemeResolver.SteamCapsuleUrlTemplate.Contains("header.jpg", StringComparison.Ordinal));
+
+        // 封面兜底必须有独立的短预算：商店接口实测会「连上但不回包」，
+        // 沿用 180 秒总超时会让 EU5 空卡片（没有主题素材的游戏全靠这张图）。
+        ChecksContext.Equal(
+            "封面兜底：12 秒硬超时",
+            12_000,
+            ThemeResolver.SteamCapsuleTimeoutMilliseconds);
+        ChecksContext.Check(
+            "封面兜底：超时预算必须远小于默认总超时",
+            ThemeResolver.SteamCapsuleTimeoutMilliseconds < HttpFetcher.DefaultTotalTimeout.TotalMilliseconds,
+            "兜底 " + ThemeResolver.SteamCapsuleTimeoutMilliseconds + "ms vs 总超时 "
+            + (int)HttpFetcher.DefaultTotalTimeout.TotalMilliseconds + "ms");
     }
 
     /// <summary>

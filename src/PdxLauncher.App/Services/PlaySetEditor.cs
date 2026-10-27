@@ -413,7 +413,10 @@ public sealed class PlaySetEditor
         ArgumentNullException.ThrowIfNull(dlcs);
         ArgumentNullException.ThrowIfNull(dlcCatalog);
 
-        var expected = writeLoadFile ? BuildLoadFileContent(game, mods, dlcs, dlcCatalog) : null;
+        // EU5 没有加载文件（播放集/DLC 全在 playsets.json 里），所以即使调用方要求写，也要跳过。
+        // 这里统一收口，避免每个调用点各判一次还漏判。
+        var writesLoadFile = writeLoadFile && game.WritesLoadFile;
+        var expected = writesLoadFile ? BuildLoadFileContent(game, mods, dlcs, dlcCatalog) : null;
 
         try
         {

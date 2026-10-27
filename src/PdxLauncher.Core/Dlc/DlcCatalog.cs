@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text.Json;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Infrastructure;
 using PdxLauncher.Core.Parsing;
 using PdxLauncher.Core.Playsets;
 
@@ -76,12 +77,18 @@ public sealed class DlcCatalog : IDlcCatalog
             return Array.Empty<DlcInfo>();
         }
 
-        var useJson = game.Format is LoadFileFormat.ContentLoadV1 or LoadFileFormat.ContentLoadV1_1;
+        var useJson = game.Format
+            is LoadFileFormat.ContentLoadV1
+            or LoadFileFormat.ContentLoadV1_1
+            or LoadFileFormat.PlaysetsJsonV1;
         var result = new List<DlcInfo>();
 
         if (useJson)
         {
-            CollectJson(game, dlcPath, result, cancellationToken);
+            var localization = game.Format == LoadFileFormat.PlaysetsJsonV1
+                ? DlcLocalization.Load(_fileSystem, dlcPath, _logger)
+                : new Dictionary<string, string>();
+            CollectJson(game, dlcPath, localization, result, cancellationToken);
             if (result.Count == 0)
             {
                 // V3 的 dlc 目录里其实同时存在 .dlc 与 .dlc.json；若 JSON 全坏，用 .dlc 兜底。
@@ -148,6 +155,7 @@ public sealed class DlcCatalog : IDlcCatalog
     private void CollectJson(
         GameInstallation game,
         string dlcPath,
+        IReadOnlyDictionary<string, string> localization,
         List<DlcInfo> result,
         CancellationToken cancellationToken)
     {
@@ -157,7 +165,7 @@ public sealed class DlcCatalog : IDlcCatalog
             try
             {
                 var rawBytes = _fileSystem.ReadAllBytes(file);
-                using var document = JsonDocument.Parse(rawBytes);
+                using var document = JsonDocument.Parse(JsonBytes.WithoutBom(rawBytes));
                 var root = document.RootElement;
                 if (root.ValueKind != JsonValueKind.Object)
                 {
@@ -168,7 +176,13 @@ public sealed class DlcCatalog : IDlcCatalog
                 var popsId = ReadNestedString(root, "id", "paradox");
                 if (string.IsNullOrEmpty(popsId))
                 {
-                    _logger.Warn("DLC JSON 缺少 id.paradox（必填），已跳过：" + file);
+                    // EU5 的 <Name>.dlc.json 是平铺结构：没有 id.paradox / displayName，
+                    // 只有 name、localizable_name、pops_id、steam_id。
+                    if (!TryCollectEu5(file, dlcPath, root, localization, rawBytes, result))
+                    {
+                        _logger.Warn("DLC JSON 缺少 id.paradox 且不是 EU5 结构，已跳过：" + file);
+                    }
+
                     continue;
                 }
 
@@ -204,6 +218,85 @@ public sealed class DlcCatalog : IDlcCatalog
             }
         }
     }
+
+    /// <summary>
+    /// EU5 的 DLC 描述文件：<c>&lt;DlcPath&gt;\D0xx_name\D0xx_name.dlc.json</c>，平铺字段
+    /// <c>name</c> / <c>localizable_name</c> / <c>pops_id</c> / <c>steam_id</c> / <c>hidden</c>。
+    /// 显示名优先取英文本地化，取不到时把 <c>d017_sacred_sites_pack</c> 这类内部名美化成 "Sacred Sites Pack"。
+    /// 缩略图是 <c>thumbnail.dds</c>（WinUI 解不了），一律留空。
+    /// </summary>
+    /// <returns>识别成功并已加入 <paramref name="result"/> 时 true；不是 EU5 结构时 false。</returns>
+    private bool TryCollectEu5(
+        string file,
+        string dlcPath,
+        JsonElement root,
+        IReadOnlyDictionary<string, string> localization,
+        byte[] rawBytes,
+        List<DlcInfo> result)
+    {
+        var name = ReadStringProperty(root, "name");
+        if (string.IsNullOrEmpty(name))
+        {
+            return false;
+        }
+
+        if (root.TryGetProperty("hidden", out var hidden) && hidden.ValueKind == JsonValueKind.True)
+        {
+            // D000_shared 这类共享内容包是 hidden 的，官方启动器也不列出。
+            return true;
+        }
+
+        var popsId = ReadStringProperty(root, "pops_id");
+        if (string.IsNullOrEmpty(popsId))
+        {
+            popsId = name;
+        }
+
+        var localizableKey = ReadStringProperty(root, "localizable_name");
+        var displayName = !string.IsNullOrEmpty(localizableKey) && localization.TryGetValue(localizableKey, out var localized)
+            ? localized
+            : HumanizeEu5Name(name);
+
+        var steamId = root.TryGetProperty("steam_id", out var steamElement) && steamElement.TryGetInt64(out var steamNumber) && steamNumber > 0
+            ? steamNumber.ToString(CultureInfo.InvariantCulture)
+            : string.Empty;
+
+        result.Add(new DlcInfo(
+            displayName,
+            popsId,
+            steamId,
+            PathHelper.ToPosixRelative(dlcPath, file),
+            string.Empty,
+            string.Empty,
+            rawBytes));
+        return true;
+    }
+
+    /// <summary><c>d017_sacred_sites_pack</c> → <c>Sacred Sites Pack</c>（去掉 D 编号前缀后按词首字母大写）。</summary>
+    internal static string HumanizeEu5Name(string name)
+    {
+        var trimmed = name.Trim();
+        if (trimmed.Length > 3 && (trimmed[0] is 'd' or 'D') && char.IsAsciiDigit(trimmed[1]))
+        {
+            var index = trimmed.IndexOf('_');
+            if (index > 0 && index < trimmed.Length - 1)
+            {
+                trimmed = trimmed[(index + 1)..];
+            }
+        }
+
+        var words = trimmed.Split('_', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return string.Join(
+            ' ',
+            words.Select(static word => word.Length == 0
+                ? word
+                : char.ToUpperInvariant(word[0]) + word[1..]));
+    }
+
+    private static string ReadStringProperty(JsonElement root, string key)
+        => root.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()?.Trim() ?? string.Empty
+            : string.Empty;
 
     /// <summary>
     /// 缩略图：与 .dlc/.dlc.json 同目录的 thumbnail.png（存在才算）。

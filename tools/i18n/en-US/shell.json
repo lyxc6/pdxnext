@@ -4,7 +4,6 @@
   "shell.nav.modLibrary": "Mod Library",
   "shell.nav.library": "Game Library",
   "shell.nav.settings": "Settings",
-  "shell.nav.contentManagedHint": "This game manages its own mods and DLC (in-game MOD menu / Steam Workshop)",
   "shell.alwaysOnTop.enable": "Always on Top",
   "shell.alwaysOnTop.disable": "Stop Always on Top",
   "shell.alwaysOnTop.enableTooltip": "Always on Top (Ctrl+Shift+T)",

@@ -37,6 +37,150 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-10-27 14:50 追加：设置页「内容和滚动条重叠」已修 —— 根因是 WinUI 3 的滚动条是**浮层**，贴着 `ScrollViewer` 右边缘画在卡片描边/圆角上；现给滚动内容与状态栏各留 14 DIP 右侧通道，滚动条改落在通道里。真机三态截图 + 像素测量见 §0.16。**
 **2026-10-27 15:10 追加：设置页左侧分节导航从「纯文字 ListView」换成官方 `NavigationView`（带 `SymbolIcon`）—— 选中指示条到文字的间距从 ≈8 DIP 变成 ≈41 DIP，见 §0.17。**
 
+**2026-10-27 15:40 追加：EU4 卡片「发灰」与 EU5「不出现」两问全部落地 —— 前者是「20% alpha 纱层图被 WinUI 直接铺在黑底上」+「下载全超时仍写 lastCheckedUtc 锁死 5 天」两个根因，已用 `WashLayerPolicy` / `ThemeImageFlattener` 摊平 + 刷新失败不推进 TTL 修掉；后者是 EU5 安装目录压根没有 `launcher-settings.json`，已加 `InstallSignatureDetector` 按 `binaries/eu5.exe` 特征识别，见 §0.18。**
+
+**2026-10-27 16:50 追加：EU5 从「只被发现」做到「能管」—— 自带 1920×1080 背景 + 卡片封面、`playsets.json` 播放集读写、EU5 自己的 `.dlc.json` 与英文本地化名字；同一轮在真机上挖出三个数据格式坑（metadata.json 带 BOM、库搬家后的陈旧路径、DLC 描述文件不是 v3 结构），见 §0.19。**
+
+## 0.19 最新一轮（2026-10-27 16:50）：EU5 美术 + 播放集/DLC 接入
+
+### 0.19.1 用户诉求
+
+User said (m01362)：「1.完成eu5的封面美术和背景图片；2.完成eu5的播放集/DLC的控制接入，先告诉我eu5的播放集/DLC和之前的p社游戏有什么变化」。
+随后追加（m01399）要求顺手把主界面左栏那两行说明文字去掉。
+
+### 0.19.2 EU5 与其它 P 社游戏的数据格式差异（先讲变化的结论）
+
+| 维度 | CK3 / V3 / Stellaris / HOI4 / EU4 | EU5 |
+| --- | --- | --- |
+| 安装描述 | 安装目录有 `launcher-settings.json`（版本、主题、exe 路径都在里面） | **没有**，靠 `binaries/eu5.exe` 特征识别（§0.18） |
+| 播放集存储 | `Documents\Paradox Interactive\<游戏>\launcher-v2.sqlite`（mods / playsets / playsets_mods 表） | `Documents\Paradox Interactive\Europa Universalis V\playsets.json`（`file_version: "1.0.0"`） |
+| 播放集内容 | sqlite 行，mod 按 id 关联 | json 里 `playsets[].orderedListMods[].path` 直接写**工坊目录的绝对路径** + `isEnabled`；没有 id、没有名称 |
+| DLC 开关 | sqlite `playsets_dlcs` + 加载文件 `disabledDLC[].paradoxAppId` | 同一个 `playsets.json` 的 `DLC[].paradoxAppId`（值是 `d017_...` 这种 pops id，同时混有 "Sacred Sites" 这类显示名别名） |
+| DLC 描述文件 | `*.dlc`（Clausewitz）或 v3 的 `*.dlc.json`（`id.paradox` + `displayName.en`） | `<DlcPath>\D0xx\D0xx.dlc.json`，平铺 `name` / `localizable_name` / `pops_id` / `steam_id` / `hidden`；**显示名在** `main_menu\localization\english\*_l_english.yml` 且带 `#italic ...#!` 标记 |
+| mod 元数据 | `*.mod`（Clausewitz）或 sqlite 行 | 工坊目录下 `.metadata/metadata.json`（**全部带 UTF-8 BOM**） |
+| 加载文件 | `dlc_load.json` / `content_load.json` | 无（游戏自己读 `playsets.json`） |
+
+### 0.19.3 改动（已落盘）
+
+- **美术**：`src/PdxLauncher.App/Assets/themes/eu5/hero-1920x1080.jpg`（1920×1080）与 `cover-300x450.jpg`，
+  源图是 Steam 商店 CDN 的 `library_hero_2x.jpg`（实测唯一能拿到的大图）；生成脚本留在 `.scratch/`。
+  主题走 `InstallSignatureDetector` → `GameContentLayout` → `ThemeResolver` 的层 2（安装目录）之外的
+  **内置资产层**：`src/PdxLauncher.Core/Online/ThemeResolver.cs` 里 `BuiltInThemeAssets` 按 gameId 取。
+- **播放集/DLC 仓储**：新增 `src/PdxLauncher.Core/Playsets/Json/PlaysetsJsonDocument.cs`（读写保真、未知键原样保留）、
+  `PlaysetsJsonRepository.cs`（完整实现 `IPlaySetRepository`，13 个方法）、`LoadFileFormat.PlaysetsJsonV1` 分支。
+- **DLC**：`DlcCatalog` 增加 EU5 分支（`TryCollectEu5`，hidden 的 `D000_shared` 不列出），
+  名字来自新增的 `src/PdxLauncher.Core/Dlc/DlcLocalization.cs`（解析英文 yml 并剥 `#italic`/`#!`）。
+- **写入路径**：`ResolveModPath` 落盘时一律改写为磁盘上真实存在的绝对路径。
+- **自检**：`tests/PdxLauncher.Checks/PlaysetJsonChecks.cs` 新增 4 组用例（BOM、陈旧路径、EU5 DLC、写回保真）。
+
+### 0.19.4 真机挖出的三个坑（都不是「猜」，是日志 / 文件实证）
+
+1. **EU5 工坊 mod 的 `.metadata/metadata.json` 全带 UTF-8 BOM** ⇒ `JsonDocument.Parse(byte[])` 直接抛
+   `'0xEF' is an invalid start of a value`，19 个 mod 全被跳过、列表只剩工坊 id。修法：解析前统一走
+   `JsonBytes.WithoutBom`（`src/PdxLauncher.Core/Infrastructure/JsonBytes.cs`），修后日志
+   `mod 扫描完成：eu5，磁盘描述文件 2 个` → **22 个**。
+2. **`playsets.json` 里留着库搬家前的绝对路径**（写 `E:/SteamLibrary/...`，mod 实际在 F: 库）⇒ 只按路径查
+   会把整个播放集判成 missing。修法：查不到就按**目录名（工坊 id）**兜底，并把 `DirPath` 换成真实路径；
+   写回时也写成真实路径（真机验证：`"E:/SteamLibrary/..."` → `"F:/SteamLibrary/..."`）。
+3. **EU5 的 DLC 描述文件不是 v3 结构** ⇒ 原 `CollectJson` 要求 `id.paradox` + `displayName.en`，EU5 全部
+   被判「缺少 id.paradox 已跳过」，DLC 页显示 0 个。修法见 0.19.3。
+
+### 0.19.5 验证
+
+- `dotnet build PdxLauncher.sln -c Release` → 0 警告 0 错误；自检 **17 个检查类、0 失败、0 条断言失败**。
+- 真机（2400×1600 截图 `.scratch/eu5-verify/final-*.png`）：
+  - 当前游戏页：EU5 有背景大图（油画骑士）+ 两个按钮 + 公告卡；
+  - 播放集页：`初始播放集` 列出 22 个 mod 的真实名称（Community Flavor Pack / 陪都 Multiple Capital …），
+    开关可用，改动写回 `playsets.json` 且路径被修正为 F: 盘；
+  - DLC 页：3 个（Fate of the Phoenix / Monumental Bonus / Sacred Sites），中文简介来自在线元数据，
+    开关状态与 `playsets.json` 一致，保存后 `d008/d015/d017/d000` 的 `isEnabled` 正确落盘。
+- 收尾时把测试期间改动的用户状态**全部恢复原样**（d008=false、d017=false、mod 启用状态不变）。
+
+### 0.19.6 已知缺口
+
+1. EU5 没有安装目录里的版本号来源（`launcher-settings.json` 不存在、`eu5.exe` 只有 `FileVersion 1.0`），
+   卡片版本行显示「版本未知」；可考虑读最近存档 `continue_game.json` 的 `rawGameVersion`，但那不是安装版本，
+   语义上会误导，本轮**故意不做**。
+2. DLC / 部分 mod 缩略图是 `.dds`，WinUI 解不了，暂时显示占位图。
+3. EU5 播放集的「自动排序」（`isAutomaticallySorted`）目前只透传、不改行为。
+
+## 0.18 最新一轮（2026-10-27 15:40）：EU4 卡片发灰 + EU5 不出现 —— 两个根因、四段修法
+
+### 0.18.1 用户两问（m00005 原文 + m00087 澄清）
+
+「1.eu4的背景图片处理是不是有问题；2.怎么没看到eu5，是不是没有适配」，随后澄清「eu4的问题是看起来发灰」。
+对照物：官方启动器里 EU4 卡片是明亮油画，PdxNext 里同一张图变成一片灰；而 Steam 里 EU5 明明装着（附商店海报）。
+
+### 0.18.2 EU4 发灰的两个根因（像素取证 + 日志取证，不是猜）
+
+1. **纱层图**：`F:\SteamLibrary\steamapps\common\Europa Universalis IV\launcher\assets\app-background.png`
+   是 1920×1080 RGBA，**alpha 全幅恒为 51/255（20%）**，RGB 却是一张完整油画（均值 ≈98、最大 255）。
+   官方启动器把它当「压在画面底纹上的纱」，PdxNext 却直接按 alpha 合成到卡片底色 `#27272C` 上 —— 结果就是没有层次的灰。
+   实测该图单独铺出来的合成像素与用户截图吻合（不是主题没生效，是合成语义错了）。
+2. **刷新失败被锁 5 天**：`data\logs\pdxnext.log` 里 EU4 六项素材全部 `素材下载超时: The operation was canceled.`
+   （metadata-assets 的 TLS/连接超时），但 `ThemeResolver.RefreshAsync` 在循环后**无条件**写 `lastCheckedUtc`，
+   于是 5 天内不再重试，主题永远停在安装目录那张纱层图上。ck3 / hoi4 / stellaris 同一批全中。
+
+### 0.18.3 EU5 为什么不出现（文件系统取证）
+
+EU5（1.0 起）安装目录只有 `binaries\`、`game\`、`clausewitz\`、`jomini\`、`platform_specific_game_data\`，
+**没有 `launcher-settings.json`、也没有 `theme-settings.json`**（depth 4 全盘搜过），gameId 只存在于官方云端配置里。
+而 `GameCatalog` 的收录门槛恰恰是「目录里能解析出 launcher-settings.json」——
+所以 EU5 连库都进不来，不是「没适配 UI」，是「没被发现」。Steam 侧数据是齐的：`appmanifest_3450310.acf` → SteamAppId 3450310，
+文档数据在 `Documents\Paradox Interactive\Europa Universalis V\playsets.json`（新格式，与 v2 的 `launcher-v2.sqlite` 完全不同）。
+
+### 0.18.4 本轮改动（已落盘、已构建、已自检、已真机截图）
+
+**A. 主题刷新不再被失败锁死** —— `src/PdxLauncher.Core/Online/ThemeResolver.cs`
+- `RefreshAsync`：只有**全部成功**才写 `lastCheckedUtc`；部分/全部失败写 `RetryAfterUtc = now + RefreshRetryDelayMilliseconds`（10 分钟）。
+- `IsCacheStale`：`RetryAfterUtc` 未到期时直接判「不刷新」，避免每帧重试。
+- 关键常量：`CacheTtlMilliseconds = 432_000_000`（5 天，成功路径不变）、`RefreshRetryDelayMilliseconds = 600_000`。
+
+**B. 纱层图摊平** —— 新增 `src/PdxLauncher.Core/Online/WashLayerPolicy.cs` + `src/PdxLauncher.App/Services/ThemeImageFlattener.cs`
+- 判定：alpha 峰值 ≤ `MaximumPeakAlpha = 96`（38%）**且** alpha ≥ 240 的像素占比 ≤ `MaximumOpaqueFraction = 0.01` → 是纱层。
+- 处理：解码像素 → alpha 置满 → 重新编码 PNG，落 `data\theme-cache\flat\`，缓存键 = 原图路径 + 文件大小 + `PolicyVersion`。
+- 接入：封面（`LibraryViewModel` → `GameCardItem.CoverImagePath`）与整窗背景（`MainWindow` / `HomePage`）都改走摊平后的副本；
+  非位图（svg）、缺失、解码失败一律返回原路径并记 warn，绝不抛异常。
+- 改判定阈值时**必须**把 `ThemeImageFlattener.PolicyVersion` +1，否则旧缓存不失效。
+
+**C. EU5 发现** —— 新增 `src/PdxLauncher.Core/Games/InstallSignatureDetector.cs`
+- 有序规则表（不猜）：`("eu5", "Europa Universalis V", "binaries/eu5.exe", GameSupport.LaunchOnly)`。
+- `GameCatalog` 在「launcher-settings.json 缺失」时再跑一次特征识别，命中就按 LaunchOnly 收录，Steam 扫到的 appmanifest 补上 `SteamAppId`。
+- 卡片侧：`GameCardItem.HasNoCover` 显示占位标题，「仅启动」用徽标标出（`未适配`/`仅启动` 同一套徽标样式）。
+
+**D. 没封面时的兜底（尽力而为）** —— `src/PdxLauncher.Core/Online/SteamCoverUrlResolver.cs` + `ThemeResolver.WithSteamCapsuleAsync`
+- 商店 `appdetails?filters=basic` 取 `header_image`（新游戏的静态 `header.jpg` 路径已 404，只能走接口）。
+- 新增 `SteamCapsuleTimeoutMilliseconds = 12_000` 硬超时（接口实测会「连上不回包」，沿用 180 秒总超时卡片会空很久）；
+  失败写 `data\theme-cache\steam-<appId>.miss`，`SteamCapsuleRetryMilliseconds = 600_000` 退避 10 分钟。
+- 新增 `ThemeAssetSource.SteamCapsule = 3`，设置页素材来源可显示「Steam 胶囊图」。
+
+### 0.18.5 验证（Release，Release 构建 + 自检 + 真机）
+
+- `dotnet build "PdxLauncher.sln" -c Release -m:1 -p:UseSharedCompilation=false -nodeReuse:false` → **0 警告 0 错误**。
+- `tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.exe` → **检查类 16，失败 0，断言失败总数 0**。
+  本轮新增断言：部分下载失败不得推进 5 天 TTL、`RefreshRetryDelayMilliseconds == 600_000`、
+  纱层判定（均匀 20% alpha 直方图 → true；全不透明 / 4% 不透明像素的真半透明美术 / 峰值 200 → false）、
+  `SteamCoverUrlResolver.ParseHeaderImage` 四种畸形响应、`SteamCapsuleTimeoutMilliseconds == 12_000` 且必须远小于默认总超时。
+- 真机（1800×1200）：游戏库 **9 个游戏**（新增 EU5），EU4 卡片封面回到明亮油画、不再有那层灰纱
+  （日志 `主题背景是纱层，已摊平为不透明图: ...\eu4-background-a2ae4e81.png → ...\theme-cache\flat\...`）；
+  EU5 卡片显示「仅启动」徽标 + 占位标题，启动按钮指向 `binaries\eu5.exe`（**未实跑游戏本体**，避免占机器）。
+- 日志证据：`主题缓存层已应用: 6 个游戏使用了联网缓存素材`；EU5 `按安装特征识别（目录内无 launcher-settings.json）: eu5 @ F:\...\Europa Universalis V`。
+
+### 0.18.6 已知盲区 / 下一轮可选
+
+1. **EU5 没有真实封面美术**：本机对 `store.steampowered.com/api/appdetails` 的请求在 App 进程内 12 秒内失败
+   （PowerShell 里同一请求 625ms 成功，说明是进程级网络差异，未查明），所以 EU5 卡片目前是占位标题 + 「仅启动」徽标。
+   想要真封面可选：① 用 `tools/` 里的脚本离线把官方启动器缓存里的图抠出来随包分发；② 解析 EU5 安装目录的 `.dds`
+   （`game\main_menu\gfx\interface\logos\eu5_logo.dds` 等，需自写 DDS 解码）；③ 允许用户手动指定封面。
+2. **EU5 播放集 / DLC 未适配**：EU5 用 `Documents\...\Europa Universalis V\playsets.json`（`file_version 1.0.0`、
+   `playsets[].orderedListMods[].path/isEnabled`、`DLC[].paradoxAppId/isEnabled`），与 v2 的 sqlite 完全不同，
+   现在只能「启动游戏」，播放集页对 EU5 是空的。
+3. **Light / HighContrast 主题**下摊平图与新卡片的观感未复验（沿用 §0.3 的旧盲区）。
+
+### 0.18.7 备份
+
+本轮没有新增 backup 副本；改动全部在 git 工作树里，`git diff` 可逐处对照（见 §2.1 清单）。
+
 ## 0.17 最新一轮（2026-10-27 15:10）：设置页分节导航 —— 指示条与文字太近
 
 ### 0.17.1 现象（用户原话 m00398，附左栏截图）
@@ -1339,7 +1483,7 @@ navLibrary / navPlaySets / navModLibrary / navDlc / navSettings / navHome 全部
 | 文件 | 尺寸 | 字节 | 说明 |
 | --- | --- | --- | --- |
 | docs/screenshot-home.png | 1782x1191 | 1,631,131 | 当前游戏（CK3，整窗背景） |
-| docs/screenshot-library.png | 1782x1191 | 1,777,449 | 游戏库（四张游戏卡） |
+| docs/screenshot-library.png | 1800x1200 | 3,413,005 | 游戏库（九张游戏卡，含 EU5「仅启动」；2026-10-27 15:40 重截，@1.5 DPI，EU4 封面已去灰纱） |
 | docs/screenshot-playsets.png | 1800x1200 | 855,223 | 播放集（2026-10-27 04:19 换成 §0.14 单行工具条版，@1.5 DPI 与其余五张 @1.33 不同） |
 | docs/screenshot-mod-library.png | 1782x1191 | 930,138 | Mod 库（387 个 mod） |
 | docs/screenshot-dlc.png | 1782x1191 | 1,376,316 | DLC |

@@ -219,6 +219,7 @@
   "settings.theme.source.builtIn": "内置占位",
   "settings.theme.source.installDir": "安装目录",
   "settings.theme.source.online": "联网缓存",
+  "settings.theme.source.steam": "Steam 封面",
   "settings.theme.statusDone": "主题检查完成：来源={0}，下次检查 {1}",
   "settings.theme.statusFailed": "主题检查失败：{0}",
   "settings.theme.statusOff": "已关闭联网主题检查：只使用安装目录与内置占位主题",

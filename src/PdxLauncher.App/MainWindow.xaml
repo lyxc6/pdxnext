@@ -210,23 +210,10 @@
             </NavigationView.FooterMenuItems>
 
             <!--
-                仅启动 / 未适配的游戏下，内容管理三项是禁用的；禁用的 NavigationViewItem 收不到指针事件，
-                ToolTip 不会弹出，所以说明文字固定在左栏底部，选中这类游戏时可见。
-                窗口置顶入口已移到标题栏右上角（见上面 TitleBar.RightHeader），这里只有说明文字。
+                仅启动 / 未适配的游戏下，内容管理三项（播放集 / Mod 库 / DLC）直接隐藏：
+                这类游戏的内容由游戏本体管理，留着置灰的入口只会让人以为坏了，
+                左栏底部那行解释文字也一并去掉（窄列里折行很难看）。
             -->
-            <NavigationView.PaneFooter>
-                <StackPanel x:Name="PinFooterPanel" Margin="8,4,8,8">
-                    <TextBlock
-                        x:Name="NavContentHint"
-                        AutomationProperties.AutomationId="txtNavContentHint"
-                        Margin="8,4,8,4"
-                        FontSize="12"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="{x:Bind L.ShellNavContentManagedHint, Mode=OneWay}"
-                        TextWrapping="Wrap"
-                        Visibility="Collapsed" />
-                </StackPanel>
-            </NavigationView.PaneFooter>
 
             <NavigationView.Content>
                 <Frame x:Name="ContentFrame" AutomationProperties.AutomationId="frameContent" />

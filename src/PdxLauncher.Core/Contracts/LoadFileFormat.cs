@@ -11,4 +11,10 @@ public enum LoadFileFormat
 
     /// <summary>formatVersion 1.1：content_load.json，enabledMods 按 dir/archive 分组。</summary>
     ContentLoadV1_1 = 11,
+
+    /// <summary>
+    /// EU5（1.0 起）：没有加载文件。游戏本体直接读文档目录的 <c>playsets.json</c>，
+    /// 启动器要做的就是维护这个文件，因此 <see cref="GameInstallation.WritesLoadFile"/> 为 false。
+    /// </summary>
+    PlaysetsJsonV1 = 2,
 }

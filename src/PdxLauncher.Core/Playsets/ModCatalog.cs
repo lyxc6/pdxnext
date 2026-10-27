@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Infrastructure;
 using PdxLauncher.Core.Parsing;
 
 /// <summary>
@@ -190,7 +191,7 @@ public sealed class ModCatalog : IModCatalog
         try
         {
             var rawBytes = _fileSystem.ReadAllBytes(metadataPath);
-            using var document = JsonDocument.Parse(rawBytes);
+            using var document = JsonDocument.Parse(JsonBytes.WithoutBom(rawBytes));
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object)
             {

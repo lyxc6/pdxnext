@@ -27,6 +27,7 @@ public static class GamesChecks
         CheckThemeReader(fs, logger);
         CheckColors();
         CheckSyntheticLibrary(fs, logger);
+        CheckSignatureDetection(fs, logger);
         CheckStandaloneLibrary(fs, logger);
         CheckLauncherLibraryPaths(fs, logger);
         CheckSupportTiers();
@@ -670,6 +671,135 @@ public static class GamesChecks
         }
     }
 
+    // ------------------------------------------- 无 launcher-settings.json 的安装（EU5）
+
+    private static void CheckSignatureDetection(IFileSystem fs, IAppLogger logger)
+    {
+        Console.WriteLine("[GamesChecks] 特征识别（EU5 无 launcher-settings.json）");
+        var tempRoot = Path.Combine(Path.GetTempPath(), "pdxnext-signature-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var steamApps = Path.Combine(tempRoot, "steamapps");
+            var common = Path.Combine(steamApps, "common");
+            fs.EnsureDirectory(common);
+
+            // EU5 真实布局：只有 binaries/game/clausewitz/jomini，没有任何元数据文件。
+            var eu5Root = Path.Combine(common, "Europa Universalis V");
+            fs.EnsureDirectory(Path.Combine(eu5Root, "binaries"));
+            fs.EnsureDirectory(Path.Combine(eu5Root, "game"));
+            fs.EnsureDirectory(Path.Combine(eu5Root, "clausewitz"));
+            fs.EnsureDirectory(Path.Combine(eu5Root, "jomini"));
+            fs.WriteAllBytesAtomic(
+                Path.Combine(eu5Root, "binaries", "eu5.exe"),
+                new byte[] { 0x4D, 0x5A });
+
+            // 干扰项：别的厂商的游戏（有自己的 exe，但不是已知 Paradox 布局）必须仍然被跳过。
+            var otherRoot = Path.Combine(common, "Some Other Game");
+            fs.EnsureDirectory(Path.Combine(otherRoot, "bin"));
+            fs.WriteAllBytesAtomic(
+                Path.Combine(otherRoot, "bin", "game.exe"),
+                new byte[] { 0x4D, 0x5A });
+
+            var nl = Environment.NewLine;
+            fs.WriteAllTextAtomic(
+                Path.Combine(steamApps, "appmanifest_3450310.acf"),
+                string.Join(nl, new[]
+                {
+                    "\"AppState\"",
+                    "{",
+                    "\t\"appid\"\t\t\"3450310\"",
+                    "\t\"name\"\t\t\"Europa Universalis V\"",
+                    "\t\"StateFlags\"\t\t\"4\"",
+                    "\t\"installdir\"\t\t\"Europa Universalis V\"",
+                    "}",
+                }));
+
+            var catalog = new GameCatalog(
+                fs,
+                logger,
+                new AppManifestReader(fs, logger),
+                new LauncherSettingsReader(fs, logger),
+                new ThemeReader(fs, logger),
+                new[] { tempRoot });
+
+            var games = catalog.Discover(CancellationToken.None);
+            ChecksContext.Equal("特征识别: 只收录 EU5（干扰项被跳过）", 1, games.Count);
+            ChecksContext.Equal(
+                "特征识别: gameId",
+                "eu5",
+                string.Join(",", games.Select(static g => g.GameId)));
+
+            var eu5 = games.FirstOrDefault(static g => g.GameId == "eu5");
+            ChecksContext.Check("特征识别: 找到 eu5", eu5 is not null);
+            if (eu5 is not null)
+            {
+                ChecksContext.Equal("特征识别: DisplayName", "Europa Universalis V", eu5.DisplayName);
+                ChecksContext.Equal("特征识别: Support", GameSupport.Full, eu5.Support);
+                ChecksContext.Equal("特征识别: IsSupported", true, eu5.IsSupported);
+                ChecksContext.Equal("特征识别: 支持内容管理", true, eu5.SupportsContentManagement);
+                ChecksContext.Equal("特征识别: ExePath", "binaries/eu5.exe", eu5.ExePath);
+                ChecksContext.Equal("特征识别: SteamAppId", (int?)3450310, eu5.SteamAppId);
+                ChecksContext.Equal("特征识别: 版本未知（空串）", string.Empty, eu5.Version);
+                ChecksContext.Equal(
+                    "特征识别: DLC 路径推导为 game/dlc",
+                    Norm(Path.Combine(eu5Root, "game", "dlc")),
+                    Norm(eu5.DlcPath));
+                ChecksContext.Check(
+                    "特征识别: mod 目录推导到文档目录",
+                    Norm(eu5.ModDir).EndsWith(
+                        "Paradox Interactive/Europa Universalis V/mod",
+                        StringComparison.OrdinalIgnoreCase),
+                    eu5.ModDir);
+                ChecksContext.Equal("特征识别: 无 launcher-settings 路径", string.Empty, eu5.LauncherSettingsPath);
+                ChecksContext.Equal("特征识别: 存档格式为 playsets.json", LoadFileFormat.PlaysetsJsonV1, eu5.Format);
+                ChecksContext.Equal("特征识别: 不写加载文件", false, eu5.WritesLoadFile);
+                ChecksContext.Check(
+                    "特征识别: InstallRoot",
+                    string.Equals(Norm(eu5.InstallRoot), Norm(eu5Root), StringComparison.OrdinalIgnoreCase),
+                    eu5.InstallRoot);
+
+                // 启动链路：相对 exe 必须能拼成绝对路径，否则点「启动」会报找不到可执行文件。
+                var launcher = new PdxLauncher.Core.Launching.GameLauncher(
+                    new NullProcessLauncher(),
+                    fs,
+                    logger);
+                ChecksContext.Check(
+                    "特征识别: 可执行文件路径可解析",
+                    string.Equals(
+                        Norm(launcher.ResolveExecutablePath(eu5, request: null)),
+                        Norm(Path.Combine(eu5Root, "binaries", "eu5.exe")),
+                        StringComparison.OrdinalIgnoreCase),
+                    launcher.ResolveExecutablePath(eu5, request: null));
+                ChecksContext.Equal("特征识别: 默认无启动参数", 0, launcher.BuildArguments(eu5, request: null).Count);
+            }
+        }
+        finally
+        {
+            try
+            {
+                if (fs.DirectoryExists(tempRoot))
+                {
+                    fs.Delete(tempRoot);
+                }
+            }
+            catch (IOException)
+            {
+                // 清理失败不影响断言结果
+            }
+        }
+    }
+
+    /// <summary>只用于拼装启动命令的替身：真正启动由 LoadFileChecks 的 RecordingProcessLauncher 覆盖。</summary>
+    private sealed class NullProcessLauncher : IProcessLauncher
+    {
+        public Task<ProcessStartResult> StartDetachedAsync(
+            string exePath,
+            IReadOnlyList<string> args,
+            string workingDirectory,
+            CancellationToken cancellationToken)
+            => Task.FromResult(ProcessStartResult.Failure("自检不真正启动进程"));
+    }
+
     // ------------------------------------------- 官方启动器独立库（无 Steam）
 
     private static void CheckStandaloneLibrary(IFileSystem fs, IAppLogger logger)
@@ -969,10 +1099,31 @@ public static class GamesChecks
             "真机: 必需 gameId 都在",
             missing.Length == 0,
             string.Join(",", ids) + " / 缺少 " + string.Join(",", missing));
-        ChecksContext.Check("真机: EU5 不得出现", !ids.Contains("eu5"), string.Join(",", ids));
+        // EU5 不写 launcher-settings.json，靠「已知布局 + 主程序名」特征识别（Level 2）。
+        ChecksContext.Check("真机: 已识别 EU5（无 launcher-settings.json）", ids.Contains("eu5"), string.Join(",", ids));
+        var eu5 = games.FirstOrDefault(g => g.GameId == "eu5");
+        ChecksContext.Check("真机: 找到 eu5", eu5 is not null);
+        if (eu5 is not null)
+        {
+            ChecksContext.Equal("真机: eu5 Support", GameSupport.Full, eu5.Support);
+            ChecksContext.Equal("真机: eu5 支持内容管理", true, eu5.SupportsContentManagement);
+            ChecksContext.Equal("真机: eu5 存档格式为 playsets.json", LoadFileFormat.PlaysetsJsonV1, eu5.Format);
+            ChecksContext.Equal("真机: eu5 不写加载文件", false, eu5.WritesLoadFile);
+            ChecksContext.Equal("真机: eu5 无 launcher-settings", string.Empty, eu5.LauncherSettingsPath);
+            ChecksContext.Check(
+                "真机: eu5 exePath 以 binaries/eu5.exe 结尾",
+                Norm(eu5.ExePath).EndsWith("binaries/eu5.exe", StringComparison.OrdinalIgnoreCase),
+                eu5.ExePath);
+            ChecksContext.Equal("真机: eu5 SteamAppId", (int?)3450310, eu5.SteamAppId);
+        }
 
         foreach (var game in games)
         {
+            if (string.Equals(game.GameId, "eu5", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             ChecksContext.Check(
                 "真机: " + game.GameId + " 的 launcher-settings.json 存在",
                 !string.IsNullOrWhiteSpace(game.LauncherSettingsPath) && fs.FileExists(game.LauncherSettingsPath),

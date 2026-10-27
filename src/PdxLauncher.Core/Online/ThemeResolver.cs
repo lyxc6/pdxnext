@@ -1,5 +1,6 @@
 namespace PdxLauncher.Core.Online;
 
+using System.Globalization;
 using System.Security.Cryptography;
 
 using PdxLauncher.Core.Abstractions;
@@ -25,6 +26,27 @@ public sealed class ThemeResolver : IThemeResolver
     /// </summary>
     public const long RefreshRetryDelayMilliseconds = 600_000;
 
+    /// <summary>
+    /// Steam 胶囊图兜底失败后的重试间隔：10 分钟。
+    /// 与主题刷新同一个理由——断网/被墙时别每次解析都去撞一遍 CDN。
+    /// </summary>
+    public const long SteamCapsuleRetryMilliseconds = 600_000;
+
+    /// <summary>
+    /// 封面兜底（商店接口 + 图片下载）的整体超时。
+    /// 实测该接口偶尔会「连上但不回包」，若沿用默认 180 秒总超时，卡片会空很久才回落到占位图；
+    /// 这里卡死 12 秒，超时按一次失败处理并进入退避。
+    /// </summary>
+    public const int SteamCapsuleTimeoutMilliseconds = 12_000;
+
+    /// <summary>
+    /// Steam 官方商店头图的旧式静态地址（460×215，无鉴权、无防盗链）。
+    /// 仅作为 <see cref="ISteamCoverUrlResolver"/> 缺席或解析失败时的兜底：
+    /// Steam 已迁移到带内容 hash 的 store_item_assets 路径，新游戏（EU5 3450310）用这个地址会 404。
+    /// </summary>
+    public const string SteamCapsuleUrlTemplate =
+        "https://cdn.cloudflare.steamstatic.com/steam/apps/{0}/header.jpg";
+
     /// <summary>可被联网缓存覆盖的素材键（ThemeSpec 能表达的 6 个）。</summary>
     public static readonly string[] OverridableKeys =
     {
@@ -42,6 +64,8 @@ public sealed class ThemeResolver : IThemeResolver
     private readonly IMetadataClient _metadata;
     private readonly IAssetDownloader _assets;
     private readonly string _cacheRoot;
+    private readonly ISteamCoverUrlResolver? _steamCovers;
+    private readonly IBundledThemeSource? _bundled;
 
     public ThemeResolver(
         IFileSystem fs,
@@ -49,7 +73,9 @@ public sealed class ThemeResolver : IThemeResolver
         IAppLogger logger,
         IMetadataClient metadata,
         IAssetDownloader assets,
-        string? cacheRoot = null)
+        string? cacheRoot = null,
+        ISteamCoverUrlResolver? steamCovers = null,
+        IBundledThemeSource? bundled = null)
     {
         ArgumentNullException.ThrowIfNull(fs);
         ArgumentNullException.ThrowIfNull(clock);
@@ -62,6 +88,8 @@ public sealed class ThemeResolver : IThemeResolver
         _metadata = metadata;
         _assets = assets;
         _cacheRoot = string.IsNullOrWhiteSpace(cacheRoot) ? DefaultCacheRoot : cacheRoot;
+        _steamCovers = steamCovers;
+        _bundled = bundled;
     }
 
     /// <summary>默认缓存根目录：程序目录\data\theme-cache（绝不写 P 社目录，也不写 C 盘）。</summary>
@@ -76,18 +104,19 @@ public sealed class ThemeResolver : IThemeResolver
     {
         ArgumentNullException.ThrowIfNull(game);
 
-        var layer2 = game.Theme ?? DefaultThemeSpec();
+        var layer2 = ResolveLayer2(game);
         var cache = ReadCache(game.GameId);
 
         // 关键：不联网时必须在此提前返回，绝不触碰 IMetadataClient / IAssetDownloader。
         if (!allowOnlineRefresh)
         {
-            return Merge(layer2, cache);
+            return WithSteamCapsule(game, Merge(layer2, cache));
         }
 
         if (!IsCacheStale(game.GameId))
         {
-            return Merge(layer2, cache);
+            return await WithSteamCapsuleAsync(game, Merge(layer2, cache), cancellationToken)
+                .ConfigureAwait(false);
         }
 
         try
@@ -104,7 +133,181 @@ public sealed class ThemeResolver : IThemeResolver
             _logger.Warn("主题联网刷新失败，保留本地素材: " + ex.Message);
         }
 
-        return Merge(layer2, ReadCache(game.GameId));
+        return await WithSteamCapsuleAsync(game, Merge(layer2, ReadCache(game.GameId)), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 离线快路径：只有本地已经缓存的 Steam 胶囊图才可用，绝不发请求。
+    /// 只在层1/层2 都给不出背景时生效——有主题素材的游戏永远优先用官方图。
+    /// </summary>
+    private ThemeSpec WithSteamCapsule(GameInstallation game, ThemeSpec spec)
+    {
+        if (!NeedsSteamCapsule(spec))
+        {
+            return spec;
+        }
+
+        var cached = FindSteamCapsule(game.SteamAppId);
+        return cached is null
+            ? spec
+            : spec with { Background = cached, Source = ThemeAssetSource.SteamCapsule };
+    }
+
+    /// <summary>联网路径：本地没有缓存时才尝试下「一次」，失败按 10 分钟退避。</summary>
+    private async Task<ThemeSpec> WithSteamCapsuleAsync(
+        GameInstallation game,
+        ThemeSpec spec,
+        CancellationToken cancellationToken)
+    {
+        var local = WithSteamCapsule(game, spec);
+        if (!NeedsSteamCapsule(local))
+        {
+            return local;
+        }
+
+        if (game.SteamAppId is not int appId || appId <= 0)
+        {
+            _logger.Info("没有 Steam AppId 可查封面，跳过封面兜底: " + game.GameId);
+            return local;
+        }
+
+        if (IsSteamCapsuleBackoff(appId))
+        {
+            return local;
+        }
+
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(SteamCapsuleTimeoutMilliseconds);
+            var token = timeout.Token;
+
+            var url = await ResolveCapsuleUrlAsync(appId, token).ConfigureAwait(false);
+            if (url is null)
+            {
+                _logger.Warn("Steam 封面地址不可用: " + game.GameId + "，10 分钟后重试");
+                MarkSteamCapsuleMiss(appId);
+                return local;
+            }
+
+            var downloaded = await _assets
+                .DownloadAsync(url, _fs.Combine(_cacheRoot, "steam-" + appId + "-header"), token)
+                .ConfigureAwait(false);
+
+            if (downloaded is null || !_fs.FileExists(downloaded))
+            {
+                _logger.Warn("Steam 封面下载失败: " + game.GameId + "，10 分钟后重试");
+                MarkSteamCapsuleMiss(appId);
+                return local;
+            }
+
+            _logger.Info("Steam 封面已缓存: " + game.GameId + " → " + downloaded);
+            return local with { Background = downloaded, Source = ThemeAssetSource.SteamCapsule };
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            // 只有兜底自己的 12 秒预算到期：按失败退避，绝不把占位图卡住。
+            _logger.Warn("Steam 封面超时: " + game.GameId + "，10 分钟后重试");
+            MarkSteamCapsuleMiss(appId);
+            return local;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("Steam 封面下载失败: " + game.GameId + "，10 分钟后重试: " + ex.Message);
+            MarkSteamCapsuleMiss(appId);
+            return local;
+        }
+    }
+
+    /// <summary>
+    /// 先问商店接口要带 hash 的真实头图地址；没有解析器或解析失败时退回旧式静态地址
+    /// （老游戏仍可用，新游戏会 404 → 由调用方记一次退避）。
+    /// </summary>
+    private async Task<string?> ResolveCapsuleUrlAsync(int appId, CancellationToken cancellationToken)
+    {
+        if (_steamCovers is not null)
+        {
+            var resolved = await _steamCovers
+                .ResolveHeaderImageUrlAsync(appId, cancellationToken)
+                .ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(resolved))
+            {
+                return resolved;
+            }
+        }
+
+        return string.Format(CultureInfo.InvariantCulture, SteamCapsuleUrlTemplate, appId);
+    }
+
+    /// <summary>背景与 logo 都空才算「没有官方主题素材」。</summary>
+    private static bool NeedsSteamCapsule(ThemeSpec spec) =>
+        string.IsNullOrWhiteSpace(spec.Background) && string.IsNullOrWhiteSpace(spec.Logo);
+
+    /// <summary>缓存目录里已有的胶囊图（扩展名由下载器按 magic bytes 决定）。</summary>
+    private string? FindSteamCapsule(int? steamAppId)
+    {
+        if (steamAppId is not int appId || appId <= 0)
+        {
+            return null;
+        }
+
+        foreach (var path in _fs.EnumerateFiles(_cacheRoot, "steam-" + appId + "-header.*", false))
+        {
+            if (_fs.FileExists(path))
+            {
+                return path;
+            }
+        }
+
+        return null;
+    }
+
+    private string SteamCapsuleMissPath(int appId) =>
+        _fs.Combine(_cacheRoot, "steam-" + appId + ".miss");
+
+    private bool IsSteamCapsuleBackoff(int appId)
+    {
+        var path = SteamCapsuleMissPath(appId);
+        if (!_fs.FileExists(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            var text = _fs.ReadAllText(path).Trim();
+            if (!long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var ticks))
+            {
+                return false;
+            }
+
+            var missedAt = new DateTimeOffset(ticks, TimeSpan.Zero);
+            return _clock.UtcNow - missedAt < TimeSpan.FromMilliseconds(SteamCapsuleRetryMilliseconds);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private void MarkSteamCapsuleMiss(int appId)
+    {
+        try
+        {
+            _fs.EnsureDirectory(_cacheRoot);
+            _fs.WriteAllTextAtomic(
+                SteamCapsuleMissPath(appId),
+                _clock.UtcNow.UtcTicks.ToString(CultureInfo.InvariantCulture));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.Warn("Steam 封面退避标记写入失败: " + ex.Message);
+        }
     }
 
     /// <summary>只读层1：从索引里挑出真实存在的缓存文件，得到 键 → 绝对路径。</summary>
@@ -154,6 +357,25 @@ public sealed class ThemeResolver : IThemeResolver
         return index.LastCheckedUtc;
     }
 
+    /// <summary>
+    /// 层 2：安装目录主题；安装目录没有主题素材时用自带美术（层 2.5）补上，最后才是内置占位图。
+    /// <para>
+    /// 只替换「没有主题」的情况：安装目录里有 theme-settings.json 素材的游戏（EU4/CK3/…）
+    /// 永远不会被自带美术覆盖。
+    /// </para>
+    /// </summary>
+    private ThemeSpec ResolveLayer2(GameInstallation game)
+    {
+        var installed = game.Theme;
+        if (installed is not null && HasAnyPath(installed))
+        {
+            return installed;
+        }
+
+        var bundled = _bundled?.TryResolve(game);
+        return bundled ?? installed ?? DefaultThemeSpec();
+    }
+
     private static ThemeSpec Merge(ThemeSpec layer2, Dictionary<string, string> cache)
     {
         var background = cache.TryGetValue(AssetKeys.Background, out var bg) ? bg : layer2.Background;
@@ -165,9 +387,11 @@ public sealed class ThemeResolver : IThemeResolver
 
         var source = cache.Count > 0
             ? ThemeAssetSource.OnlineCache
-            : HasAnyPath(layer2)
-                ? ThemeAssetSource.InstallDir
-                : ThemeAssetSource.BuiltInPlaceholder;
+            : layer2.Source == ThemeAssetSource.Bundled
+                ? ThemeAssetSource.Bundled
+                : HasAnyPath(layer2)
+                    ? ThemeAssetSource.InstallDir
+                    : ThemeAssetSource.BuiltInPlaceholder;
 
         return new ThemeSpec(
             background,

@@ -105,7 +105,7 @@ public sealed partial class HomePage : Page
             ? new ThemeApplier(AppServices.FileSystem, AppServices.Logger)
             : null;
         _bitmapLoader = AppServices.IsInitialized
-            ? new BitmapLoader(AppServices.FileSystem, AppServices.Logger)
+            ? new BitmapLoader(AppServices.FileSystem, AppServices.Logger, AppServices.ThemeImages)
             : null;
 
         Loaded += OnLoaded;

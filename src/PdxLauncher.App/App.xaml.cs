@@ -13,6 +13,7 @@ using PdxLauncher.Core.Launching;
 using PdxLauncher.Core.LoadFiles;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Playsets;
+using PdxLauncher.Core.Playsets.Json;
 using PdxLauncher.Core.Signatures;
 
 /// <summary>
@@ -74,9 +75,14 @@ public partial class App : Application
         // 缩略图解析器共享给两个仓储：Steam 库列表只在首次需要时探测一次；
         // 同时挂上网盘缓存，本地目录全 miss 时直接读已下载的图片（不需要再发请求）。
         var modThumbnails = new ModThumbnailResolver(fileSystem, logger, steamLibraries: null, cache: network.ModThumbnails.Cache);
-        var playSets = new PlaySetRepository(fileSystem, logger, clock, modThumbnails);
         var mods = new ModCatalog(fileSystem, logger, modThumbnails);
         var dlcs = new DlcCatalog(fileSystem, logger);
+
+        // EU5 不写 launcher-v2.sqlite，只认文档目录下的 playsets.json；其余游戏仍用 sqlite。
+        // 判定收敛在路由里（GameInstallation.Format），上层服务不需要知道格式差异。
+        var sqlitePlaySets = new PlaySetRepository(fileSystem, logger, clock, modThumbnails);
+        var jsonPlaySets = new PlaysetsJsonRepository(fileSystem, logger, mods, dlcs);
+        var playSets = new PlaySetRepositoryRouter(sqlitePlaySets, jsonPlaySets);
         var loadFiles = new LoadFileWriter(fileSystem, logger);
         var processLauncher = new ProcessLauncher(logger);
         var launcher = new GameLauncher(processLauncher, fileSystem, logger);

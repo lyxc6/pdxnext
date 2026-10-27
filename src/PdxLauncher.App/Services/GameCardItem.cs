@@ -35,6 +35,18 @@ public sealed record GameCardItem(
     /// <summary>能识别并展示（不代表能管理内容）。</summary>
     public bool IsSupported => Support != GameSupport.Unsupported;
 
+    /// <summary>
+    /// 没有封面图时在图片位压一层游戏名（EU5 这类没有 launcher-settings.json、
+    /// 也还没缓存到 Steam 封面的游戏，否则卡片顶部会是一块纯黑）。
+    /// </summary>
+    public bool HasCover => !string.IsNullOrEmpty(CoverImagePath);
+
+    /// <summary>没有封面图时显示占位文字（x:Bind 里不能写 !HasCover，所以单独给一个属性）。</summary>
+    public bool HasNoCover => !HasCover;
+
+    /// <summary>没有封面图时显示的占位文字。</summary>
+    public string CoverFallbackText => DisplayName;
+
     /// <summary>卡片封面图的 AutomationId；按游戏 id 保证同一页内唯一。</summary>
     public string CoverAutomationId => "imgCover_" + Game.GameId;
 

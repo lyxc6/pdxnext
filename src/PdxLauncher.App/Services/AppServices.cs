@@ -4,7 +4,6 @@ using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Online;
-
 /// <summary>
 /// 应用级服务定位器。WinUI 的 Frame.Navigate 只支持无参构造，所以页面统一从这里取依赖。
 /// 由 App.xaml.cs 在启动时 <see cref="Initialize"/> 一次性装配；之后只读。
@@ -288,4 +287,41 @@ public static class AppServices
 
     /// <summary>本启动器自己的日志路径。</summary>
     public static string LogPath => Path.Combine(DataRoot, "logs", "pdxnext.log");
+
+    private static ThemeImageFlattener? _themeImages;
+
+    /// <summary>
+    /// 主题背景摊平服务：把「整幅 alpha 恒定的纱层」图（EU4 的 app-background.png 是 20% 不透明）
+    /// 摊平成不透明副本，缓存到 <c>theme-cache\flat\</c>。首次访问时按当前数据根创建。
+    /// </summary>
+    public static ThemeImageFlattener ThemeImages => _themeImages ??= new ThemeImageFlattener(
+        FileSystem,
+        Logger,
+        Path.Combine(ThemeCacheRoot, "flat"));
+
+    /// <summary>
+    /// 卡片封面预摊平：卡片封面是 OneTime 绑定，所以必须在重建卡片**之前**把这些背景准备好。
+    /// 只处理纱层图；其它图立刻返回，光速过一遍 7 个游戏也不会卡。
+    /// </summary>
+    public static async Task PrepareCardCoversAsync(
+        IReadOnlyList<GameInstallation> games,
+        CancellationToken cancellationToken)
+    {
+        if (!IsInitialized || games.Count == 0)
+        {
+            return;
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var game in games)
+        {
+            var background = game.Theme.Background;
+            if (string.IsNullOrWhiteSpace(background) || !seen.Add(background))
+            {
+                continue;
+            }
+
+            await ThemeImages.PrepareAsync(background, cancellationToken).ConfigureAwait(true);
+        }
+    }
 }

@@ -93,7 +93,7 @@ public sealed partial class MainWindow : Window
 
         if (AppServices.IsInitialized)
         {
-            _bitmapLoader = new BitmapLoader(AppServices.FileSystem, AppServices.Logger);
+            _bitmapLoader = new BitmapLoader(AppServices.FileSystem, AppServices.Logger, AppServices.ThemeImages);
             _backdropLifetime = new CancellationTokenSource();
         }
 
@@ -315,8 +315,8 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 内容管理导航项（播放集 / Mod 库 / DLC）只在当前游戏能管理内容时可用；
-    /// 仅启动的游戏（如 Prison Architect）下置灰、左栏底部显示说明，并把停在这些页上的用户送回主页。
+    /// 内容管理导航项（播放集 / Mod 库 / DLC）只在当前游戏能管理内容时才出现；
+    /// 仅启动的游戏（如 Prison Architect）下直接隐藏，并把停在这些页上的用户送回主页。
     /// </summary>
     private void UpdateContentNavState()
     {
@@ -325,10 +325,12 @@ public sealed partial class MainWindow : Window
             var game = AppServices.IsInitialized ? AppServices.CurrentGame : null;
             var manageable = game is null || game.SupportsContentManagement;
 
-            NavPlaySets.IsEnabled = manageable;
-            NavModLibrary.IsEnabled = manageable;
-            NavDlc.IsEnabled = manageable;
-            NavContentHint.Visibility = manageable ? Visibility.Collapsed : Visibility.Visible;
+            // 隐藏而不是置灰：置灰的三项看起来像坏了，而且禁用的 NavigationViewItem 不弹 ToolTip，
+            // 只能在左栏底部塞一段解释文字（窄列折行更难看）。干脆不显示。
+            var contentVisibility = manageable ? Visibility.Visible : Visibility.Collapsed;
+            NavPlaySets.Visibility = contentVisibility;
+            NavModLibrary.Visibility = contentVisibility;
+            NavDlc.Visibility = contentVisibility;
 
             if (manageable)
             {

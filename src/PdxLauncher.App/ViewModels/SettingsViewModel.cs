@@ -132,6 +132,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             {
                 ThemeAssetSource.OnlineCache => T(Keys.SettingsThemeSourceOnline),
                 ThemeAssetSource.InstallDir => T(Keys.SettingsThemeSourceInstallDir),
+                ThemeAssetSource.SteamCapsule => T(Keys.SettingsThemeSourceSteam),
                 _ => T(Keys.SettingsThemeSourceBuiltIn),
             };
         }
@@ -744,6 +745,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             {
                 ThemeAssetSource.OnlineCache => Keys.SettingsThemeSourceOnline,
                 ThemeAssetSource.InstallDir => Keys.SettingsThemeSourceInstallDir,
+                ThemeAssetSource.SteamCapsule => Keys.SettingsThemeSourceSteam,
                 _ => Keys.SettingsThemeSourceBuiltIn,
             };
             SetStatus(Keys.SettingsThemeStatusDone, T(sourceKey), NextCheckText);

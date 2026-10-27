@@ -25,6 +25,7 @@ public sealed class GameCatalog : IGameCatalog
     private readonly LauncherSettingsReader _settingsReader;
     private readonly AppManifestReader _manifestReader;
     private readonly ThemeReader _themeReader;
+    private readonly InstallSignatureDetector _signatureDetector;
     private readonly Func<IReadOnlyList<string>> _libraryProvider;
     private readonly Func<IReadOnlyList<string>> _standaloneRootProvider;
 
@@ -49,7 +50,8 @@ public sealed class GameCatalog : IGameCatalog
         AppManifestReader manifestReader,
         LauncherSettingsReader settingsReader,
         ThemeReader themeReader,
-        ParadoxLauncherLibraryLocator standaloneLibraryLocator)
+        ParadoxLauncherLibraryLocator standaloneLibraryLocator,
+        InstallSignatureDetector? signatureDetector = null)
     {
         _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -58,6 +60,7 @@ public sealed class GameCatalog : IGameCatalog
         _settingsReader = settingsReader ?? throw new ArgumentNullException(nameof(settingsReader));
         _themeReader = themeReader ?? throw new ArgumentNullException(nameof(themeReader));
         ArgumentNullException.ThrowIfNull(standaloneLibraryLocator);
+        _signatureDetector = signatureDetector ?? new InstallSignatureDetector(fileSystem);
         _libraryProvider = _libraryLocator.FindLibraries;
         _standaloneRootProvider = standaloneLibraryLocator.FindLibraries;
     }
@@ -70,7 +73,8 @@ public sealed class GameCatalog : IGameCatalog
         LauncherSettingsReader settingsReader,
         ThemeReader themeReader,
         IReadOnlyList<string> libraries,
-        IReadOnlyList<string>? standaloneRoots = null)
+        IReadOnlyList<string>? standaloneRoots = null,
+        InstallSignatureDetector? signatureDetector = null)
     {
         _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -79,6 +83,7 @@ public sealed class GameCatalog : IGameCatalog
         _themeReader = themeReader ?? throw new ArgumentNullException(nameof(themeReader));
         ArgumentNullException.ThrowIfNull(libraries);
         _libraryLocator = new SteamLibraryLocator(fileSystem, logger);
+        _signatureDetector = signatureDetector ?? new InstallSignatureDetector(fileSystem);
         var frozenLibraries = libraries.ToArray();
         var frozenStandaloneRoots = standaloneRoots?.ToArray() ?? Array.Empty<string>();
         _libraryProvider = () => frozenLibraries;
@@ -148,15 +153,18 @@ public sealed class GameCatalog : IGameCatalog
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            var installDirName = _fileSystem.GetFileName(installRoot);
+            manifestsByInstallDir.TryGetValue(installDirName, out var manifest);
+
             var settings = ReadSettings(installRoot);
             if (settings is null)
             {
-                // 绝大多数非 PDX 游戏都在这里被自然跳过（包括残留的坏副本）
+                // EU5 这类官方安装（1.0 起）不带 launcher-settings.json，走特征识别兜底；
+                // 其余非 PDX 游戏在这里被自然跳过（包括残留的坏副本）。
+                TryAddDetectedInstallation(installRoot, manifest, results, seenGameIds);
                 continue;
             }
 
-            var installDirName = _fileSystem.GetFileName(installRoot);
-            manifestsByInstallDir.TryGetValue(installDirName, out var manifest);
             TryAddInstallation(settings, installRoot, manifest, results, seenGameIds);
         }
     }
@@ -198,6 +206,8 @@ public sealed class GameCatalog : IGameCatalog
         var settings = ReadSettings(installRoot);
         if (settings is null)
         {
+            // 独立库同样可能是「无 launcher-settings.json」的新game（EU5 装成独立版时）。
+            TryAddDetectedInstallation(installRoot, manifest: null, results, seenGameIds);
             return;
         }
 
@@ -232,8 +242,86 @@ public sealed class GameCatalog : IGameCatalog
         results.Add(BuildInstallation(settings, installRoot, manifest));
     }
 
-    private Dictionary<string, AppManifest> BuildManifestIndex(string library)
+    /// <summary>
+    /// 目录里没有 launcher-settings.json 时，尝试按安装特征识别（见 <see cref="InstallSignatureDetector"/>）。
+    /// 识别不到就安静跳过：<c>steamapps\common</c> 下绝大多数目录属于其它厂商。
+    /// </summary>
+    private void TryAddDetectedInstallation(
+        string installRoot,
+        AppManifest? manifest,
+        List<GameInstallation> results,
+        HashSet<string> seenGameIds)
     {
+        var detected = _signatureDetector.Detect(installRoot);
+        if (detected is null)
+        {
+            return;
+        }
+
+        if (!seenGameIds.Add(detected.GameId))
+        {
+            _logger.Info("重复的 gameId 安装，保留先发现的: " + detected.GameId + " @ " + installRoot);
+            return;
+        }
+
+        _logger.Info(
+            "按安装特征识别（目录内无 launcher-settings.json）: " + detected.GameId + " @ " + installRoot);
+        results.Add(BuildDetectedInstallation(detected, installRoot, manifest));
+    }
+
+    /// <summary>
+    /// 特征识别出来的安装：有内容布局时（EU5）补齐文档目录 / DLC 目录 / 内容格式，
+    /// 没有时只提供启动必需的信息（版本留空、无 DLC/mod 路径、主题走安装目录兜底）。
+    /// </summary>
+    private GameInstallation BuildDetectedInstallation(
+        DetectedInstall detected,
+        string installRoot,
+        AppManifest? manifest)
+    {
+        var support = detected.Support;
+        var theme = _themeReader.Read(installRoot);
+        var content = detected.Content;
+
+        var gameDataDir = installRoot;
+        var dlcPath = string.Empty;
+        var modDir = string.Empty;
+        var format = LoadFileFormat.DlcLoadV0;
+
+        if (content is not null)
+        {
+            // 文档目录模板可能带 %USER_DOCUMENTS%：与 launcher-settings.json 的 gameDataPath 用同一套展开规则。
+            var expanded = LauncherSettingsReader.ExpandEnvironmentVariables(content.GameDataDirTemplate);
+            var trimmed = expanded.Replace('/', '\\').TrimEnd('\\');
+            gameDataDir = Path.IsPathRooted(trimmed)
+                ? trimmed
+                : _fileSystem.GetFullPath(_fileSystem.Combine(installRoot, trimmed));
+
+            dlcPath = _fileSystem.Combine(installRoot, content.DlcPathRelativeToInstallRoot.Replace('/', '\\'));
+            modDir = _fileSystem.Combine(gameDataDir, "mod");
+            format = content.Format;
+        }
+
+        return new GameInstallation(
+            detected.GameId,
+            detected.DisplayName,
+            Version: string.Empty,
+            installRoot,
+            LauncherSettingsPath: string.Empty,
+            Format: format,
+            GameDataDir: gameDataDir,
+            DlcPath: dlcPath,
+            ModDir: modDir,
+            ExePath: detected.ExePath,
+            ExeArgs: Array.Empty<string>(),
+            Alternatives: Array.Empty<AlternativeExecutable>(),
+            theme,
+            BrowserDlcUrl: null,
+            BrowserModUrl: null,
+            manifest?.AppId,
+            support);
+    }
+
+    private Dictionary<string, AppManifest> BuildManifestIndex(string library)    {
         var index = new Dictionary<string, AppManifest>(StringComparer.OrdinalIgnoreCase);
         foreach (var manifest in _manifestReader.ReadAll(library))
         {

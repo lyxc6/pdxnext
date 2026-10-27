@@ -219,6 +219,7 @@
   "settings.theme.source.builtIn": "Built-in placeholder",
   "settings.theme.source.installDir": "Game folder",
   "settings.theme.source.online": "Online cache",
+  "settings.theme.source.steam": "Steam cover",
   "settings.theme.statusDone": "Theme check finished: source={0}, next check {1}",
   "settings.theme.statusFailed": "Theme check failed: {0}",
   "settings.theme.statusOff": "Theme check off: only the game folder and the built-in placeholder are used",

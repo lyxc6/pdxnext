@@ -61,12 +61,21 @@ public sealed class LoadFileWriter : ILoadFileWriter
         _logger = logger;
     }
 
-    /// <summary>格式对应的加载文件名。</summary>
+    /// <summary>
+    /// 格式对应的加载文件名。
+    /// <para>
+    /// <see cref="LoadFileFormat.PlaysetsJsonV1"/>（EU5）没有加载文件：这里直接抛异常，
+    /// 免得哪天调用方漏判 <see cref="GameInstallation.WritesLoadFile"/> 就默默写出一个游戏不读的
+    /// content_load.json，把「以为保存成功」的假象留给用户。
+    /// </para>
+    /// </summary>
     public static string GetFileName(LoadFileFormat format) => format switch
     {
         LoadFileFormat.DlcLoadV0 => DlcLoadFileName,
         LoadFileFormat.ContentLoadV1 => ContentLoadFileName,
         LoadFileFormat.ContentLoadV1_1 => ContentLoadFileName,
+        LoadFileFormat.PlaysetsJsonV1 => throw new InvalidOperationException(
+            "该游戏没有加载文件（EU5 直接读 playsets.json），调用前必须先判断 GameInstallation.WritesLoadFile。"),
         _ => ContentLoadFileName,
     };
 

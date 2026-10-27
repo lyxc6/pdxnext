@@ -4,7 +4,6 @@
   "shell.nav.modLibrary": "Mod 库",
   "shell.nav.library": "游戏库",
   "shell.nav.settings": "设置",
-  "shell.nav.contentManagedHint": "该游戏的模组与 DLC 由游戏本体管理（游戏内 MOD 菜单 / Steam 创意工坊）",
   "shell.alwaysOnTop.enable": "窗口置顶",
   "shell.alwaysOnTop.disable": "取消窗口置顶",
   "shell.alwaysOnTop.enableTooltip": "窗口置顶（Ctrl+Shift+T）",
