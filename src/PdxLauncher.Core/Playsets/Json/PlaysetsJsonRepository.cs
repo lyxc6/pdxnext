@@ -37,6 +37,8 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
 
     private static readonly char[] PathSeparators = ['/', '\\'];
 
+    private static readonly AppResult<bool> OkBool = AppResult<bool>.Ok(true);
+
     private readonly IFileSystem _fileSystem;
     private readonly IAppLogger _logger;
     private readonly IModCatalog _mods;
@@ -303,7 +305,7 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
     }
 
     /// <inheritdoc />
-    public Task SavePlaySetModsAsync(
+    public async Task<AppResult<bool>> SavePlaySetModsAsync(
         GameInstallation game,
         Guid playSetId,
         IReadOnlyList<PlaySetMod> mods,
@@ -311,13 +313,18 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
     {
         ArgumentNullException.ThrowIfNull(game);
         ArgumentNullException.ThrowIfNull(mods);
-        cancellationToken.ThrowIfCancellationRequested();
 
-        return Task.Run(
+        return await WriteAsync(
+            "保存播放集 mod",
+            game,
             () =>
             {
                 var document = LoadDocument(game);
-                var playSet = RequirePlaySet(document, game, playSetId);
+                var playSet = FindPlaySet(document, game, playSetId);
+                if (playSet is null)
+                {
+                    return AppResult<bool>.Fail(ErrorKind.NotFound, NotFoundCode(playSetId));
+                }
 
                 var array = new JsonArray();
                 foreach (var mod in mods.OrderBy(static m => m.Position))
@@ -337,12 +344,13 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
 
                 playSet[KeyOrderedListMods] = array;
                 SaveDocument(game, document);
+                return OkBool;
             },
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public async Task SavePlaySetDlcsAsync(
+    public async Task<AppResult<bool>> SavePlaySetDlcsAsync(
         GameInstallation game,
         Guid playSetId,
         IReadOnlyList<PlaySetDlc> dlcs,
@@ -353,186 +361,225 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
 
         var catalog = await _dlcs.DiscoverAsync(game, cancellationToken).ConfigureAwait(false);
 
-        var document = LoadDocument(game);
-        var playSet = RequirePlaySet(document, game, playSetId);
-
-        // pops_id → 启用状态
-        var states = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
-        foreach (var dlc in dlcs)
-        {
-            if (!string.IsNullOrWhiteSpace(dlc.DlcId))
-            {
-                states[dlc.DlcId] = dlc.Enabled;
-            }
-        }
-
-        // 官方启动器历史上还会写「显示名」条目（如 "Sacred Sites"），它们与 pops_id 条目是同一个 DLC。
-        // 这里按 DLC 目录里的 localizable_name 建立别名，写回时同步成同一状态，避免 UI 关掉 DLC 后游戏仍认为它是开的。
-        var aliasToPopsId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var dlc in catalog)
-        {
-            if (string.IsNullOrWhiteSpace(dlc.PopsId) || string.IsNullOrWhiteSpace(dlc.DisplayName))
-            {
-                continue;
-            }
-
-            if (!aliasToPopsId.ContainsKey(dlc.DisplayName))
-            {
-                aliasToPopsId[dlc.DisplayName] = dlc.PopsId;
-            }
-        }
-
-        var known = new HashSet<string>(states.Keys, StringComparer.OrdinalIgnoreCase);
-        var existing = PlaysetsJsonDocument.EnsureArray(playSet, KeyDlc);
-
-        // 保留「我们这次没有覆盖到」的条目（例如 "Shared DLC Data" 这类游戏自己的条目），状态原样带过去。
-        var extra = new List<(string Id, bool Enabled)>();
-        foreach (var node in existing)
-        {
-            if (node is not JsonObject entry)
-            {
-                continue;
-            }
-
-            var id = PlaysetsJsonDocument.GetString(entry, KeyParadoxAppId);
-            if (id.Length == 0 || known.Contains(id))
-            {
-                continue;
-            }
-
-            var enabled = PlaysetsJsonDocument.GetBool(entry, KeyIsEnabled, fallback: true);
-            if (aliasToPopsId.TryGetValue(id, out var popsId) && states.TryGetValue(popsId, out var aliasState))
-            {
-                enabled = aliasState;
-            }
-
-            extra.Add((id, enabled));
-        }
-
-        var array = new JsonArray();
-        foreach (var (id, enabled) in states.OrderBy(static pair => pair.Key, StringComparer.OrdinalIgnoreCase))
-        {
-            array.Add(new JsonObject
-            {
-                [KeyParadoxAppId] = id,
-                [KeyIsEnabled] = enabled,
-            });
-        }
-
-        foreach (var (id, enabled) in extra)
-        {
-            array.Add(new JsonObject
-            {
-                [KeyParadoxAppId] = id,
-                [KeyIsEnabled] = enabled,
-            });
-        }
-
-        playSet[KeyDlc] = array;
-        SaveDocument(game, document);
-    }
-
-    /// <inheritdoc />
-    public Task<Guid> CreatePlaySetAsync(GameInstallation game, string name, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(game);
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        return Task.Run(
-            () =>
-            {
-                var document = LoadDocument(game);
-                if (document.FindPlaySet(name) is not null)
-                {
-                    throw new InvalidOperationException("播放集已存在：" + name);
-                }
-
-                document.AddPlaySet(name, isActive: false);
-                SaveDocument(game, document);
-                return GetPlaySetId(game.GameId, name);
-            },
-            cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public Task SetActivePlaySetAsync(GameInstallation game, Guid playSetId, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(game);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        return Task.Run(
-            () =>
-            {
-                var document = LoadDocument(game);
-                var target = RequirePlaySet(document, game, playSetId);
-                foreach (var playSet in document.PlaySets)
-                {
-                    playSet[KeyIsActive] = ReferenceEquals(playSet, target);
-                }
-
-                SaveDocument(game, document);
-            },
-            cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public Task<bool> RenamePlaySetAsync(
-        GameInstallation game,
-        Guid playSetId,
-        string newName,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(game);
-        ArgumentException.ThrowIfNullOrWhiteSpace(newName);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        return Task.Run(
-            () =>
-            {
-                var document = LoadDocument(game);
-                var playSet = FindPlaySet(document, game, playSetId);
-                if (playSet is null || document.FindPlaySet(newName) is not null)
-                {
-                    return false;
-                }
-
-                playSet[KeyName] = newName;
-                SaveDocument(game, document);
-                return true;
-            },
-            cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public Task<bool> DeletePlaySetAsync(GameInstallation game, Guid playSetId, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(game);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        return Task.Run(
+        return await WriteAsync(
+            "保存播放集 DLC",
+            game,
             () =>
             {
                 var document = LoadDocument(game);
                 var playSet = FindPlaySet(document, game, playSetId);
                 if (playSet is null)
                 {
-                    return false;
+                    return AppResult<bool>.Fail(ErrorKind.NotFound, NotFoundCode(playSetId));
+                }
+
+                // pops_id → 启用状态
+                var states = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+                foreach (var dlc in dlcs)
+                {
+                    if (!string.IsNullOrWhiteSpace(dlc.DlcId))
+                    {
+                        states[dlc.DlcId] = dlc.Enabled;
+                    }
+                }
+
+                // 官方启动器历史上还会写「显示名」条目（如 "Sacred Sites"），它们与 pops_id 条目是同一个 DLC。
+                // 这里按 DLC 目录里的 localizable_name 建立别名，写回时同步成同一状态，避免 UI 关掉 DLC 后游戏仍认为它是开的。
+                var aliasToPopsId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var dlc in catalog)
+                {
+                    if (string.IsNullOrWhiteSpace(dlc.PopsId) || string.IsNullOrWhiteSpace(dlc.DisplayName))
+                    {
+                        continue;
+                    }
+
+                    aliasToPopsId.TryAdd(dlc.DisplayName, dlc.PopsId);
+                }
+
+                var known = new HashSet<string>(states.Keys, StringComparer.OrdinalIgnoreCase);
+                var existing = PlaysetsJsonDocument.EnsureArray(playSet, KeyDlc);
+
+                // 保留「我们这次没有覆盖到」的条目（例如 "Shared DLC Data" 这类游戏自己的条目），状态原样带过去。
+                var extra = new List<(string Id, bool Enabled)>();
+                foreach (var node in existing)
+                {
+                    if (node is not JsonObject entry)
+                    {
+                        continue;
+                    }
+
+                    var id = PlaysetsJsonDocument.GetString(entry, KeyParadoxAppId);
+                    if (id.Length == 0 || known.Contains(id))
+                    {
+                        continue;
+                    }
+
+                    var enabled = PlaysetsJsonDocument.GetBool(entry, KeyIsEnabled, fallback: true);
+                    if (aliasToPopsId.TryGetValue(id, out var popsId) && states.TryGetValue(popsId, out var aliasState))
+                    {
+                        enabled = aliasState;
+                    }
+
+                    extra.Add((id, enabled));
+                }
+
+                var array = new JsonArray();
+                foreach (var (id, enabled) in states.OrderBy(static pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    array.Add(new JsonObject
+                    {
+                        [KeyParadoxAppId] = id,
+                        [KeyIsEnabled] = enabled,
+                    });
+                }
+
+                foreach (var (id, enabled) in extra)
+                {
+                    array.Add(new JsonObject
+                    {
+                        [KeyParadoxAppId] = id,
+                        [KeyIsEnabled] = enabled,
+                    });
+                }
+
+                playSet[KeyDlc] = array;
+                SaveDocument(game, document);
+                return OkBool;
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public Task<AppResult<Guid>> CreatePlaySetAsync(
+        GameInstallation game,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return Task.FromResult(AppResult<Guid>.Fail(ErrorKind.Invalid, "playSet-name-empty"));
+        }
+
+        var playSetName = name.Trim();
+        return WriteAsync(
+            "创建播放集",
+            game,
+            () =>
+            {
+                var document = LoadDocument(game);
+                if (document.FindPlaySet(playSetName) is not null)
+                {
+                    return AppResult<Guid>.Fail(ErrorKind.Conflict, "playSet-name-exists:" + playSetName);
+                }
+
+                document.AddPlaySet(playSetName, isActive: false);
+                SaveDocument(game, document);
+                return AppResult<Guid>.Ok(GetPlaySetId(game.GameId, playSetName));
+            },
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<AppResult<bool>> SetActivePlaySetAsync(
+        GameInstallation game,
+        Guid playSetId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        return WriteAsync(
+            "设置激活播放集",
+            game,
+            () =>
+            {
+                var document = LoadDocument(game);
+                var target = FindPlaySet(document, game, playSetId);
+                if (target is null)
+                {
+                    return AppResult<bool>.Fail(ErrorKind.NotFound, NotFoundCode(playSetId));
+                }
+
+                foreach (var playSet in document.PlaySets)
+                {
+                    playSet[KeyIsActive] = ReferenceEquals(playSet, target);
+                }
+
+                SaveDocument(game, document);
+                return OkBool;
+            },
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<AppResult<bool>> RenamePlaySetAsync(
+        GameInstallation game,
+        Guid playSetId,
+        string newName,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            return Task.FromResult(AppResult<bool>.Fail(ErrorKind.Invalid, "playSet-name-empty"));
+        }
+
+        var name = newName.Trim();
+        return WriteAsync(
+            "重命名播放集",
+            game,
+            () =>
+            {
+                var document = LoadDocument(game);
+                var playSet = FindPlaySet(document, game, playSetId);
+                if (playSet is null)
+                {
+                    return AppResult<bool>.Fail(ErrorKind.NotFound, NotFoundCode(playSetId));
+                }
+
+                if (document.FindPlaySet(name) is not null)
+                {
+                    return AppResult<bool>.Fail(ErrorKind.Conflict, "playSet-name-exists:" + name);
+                }
+
+                playSet[KeyName] = name;
+                SaveDocument(game, document);
+                return OkBool;
+            },
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<AppResult<bool>> DeletePlaySetAsync(
+        GameInstallation game,
+        Guid playSetId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        return WriteAsync(
+            "删除播放集",
+            game,
+            () =>
+            {
+                var document = LoadDocument(game);
+                var playSet = FindPlaySet(document, game, playSetId);
+                if (playSet is null)
+                {
+                    return AppResult<bool>.Fail(ErrorKind.NotFound, NotFoundCode(playSetId));
                 }
 
                 // 活动播放集不允许删除：游戏启动时必须有一个活动播放集。
                 if (PlaysetsJsonDocument.GetBool(playSet, KeyIsActive, fallback: false))
                 {
-                    return false;
+                    return AppResult<bool>.Fail(ErrorKind.Conflict, "playSet-is-active:" + playSetId.ToString("D"));
                 }
 
                 if (!document.RemovePlaySet(playSet))
                 {
-                    return false;
+                    return AppResult<bool>.Fail(ErrorKind.NotFound, NotFoundCode(playSetId));
                 }
 
                 SaveDocument(game, document);
-                return true;
+                return OkBool;
             },
             cancellationToken);
     }
@@ -720,7 +767,27 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
         return null;
     }
 
-    private static JsonObject RequirePlaySet(PlaysetsJsonDocument document, GameInstallation game, Guid playSetId) =>
-        FindPlaySet(document, game, playSetId)
-        ?? throw new InvalidOperationException("播放集不存在：" + playSetId);
+    /// <summary>写失败的统一收敛：不把异常抛给 UI，只把错误码交给调用方。</summary>
+    private async Task<AppResult<T>> WriteAsync<T>(
+        string action,
+        GameInstallation game,
+        Func<AppResult<T>> write,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await Task.Run(write, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException)
+        {
+            _logger.Error("播放集写入失败（" + action + "，" + game.GameId + "）: " + ex.Message, ex);
+            return AppResult<T>.Fail(ErrorKind.Io, action + ":" + ex.Message);
+        }
+    }
+
+    private static string NotFoundCode(Guid playSetId) => "playSet-not-found:" + playSetId.ToString("D");
 }

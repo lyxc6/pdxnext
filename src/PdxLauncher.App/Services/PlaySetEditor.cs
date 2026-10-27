@@ -1,6 +1,5 @@
 namespace PdxLauncher.App.Services;
 
-using PdxLauncher.App.Localization;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Dlc;
@@ -363,7 +362,7 @@ public sealed class PlaySetEditor
                 break;
 
             default:
-                diffs.Add(Localizer.Instance.T(Keys.ShellPlaySetUnknownFormat));
+                diffs.Add("unknown-format:" + game.Format);
                 break;
         }
 
@@ -378,7 +377,7 @@ public sealed class PlaySetEditor
     {
         if (expected.Count != actual.Count)
         {
-            diffs.Add(Localizer.Instance.T(Keys.ShellPlaySetCountDiff, name, expected.Count, actual.Count));
+            diffs.Add("count:" + name + ":" + expected.Count + "!=" + actual.Count);
             return;
         }
 
@@ -420,10 +419,26 @@ public sealed class PlaySetEditor
 
         try
         {
-            await _playSets.SavePlaySetModsAsync(game, playSetId, Renumber(mods), cancellationToken)
+            var modsResult = await _playSets.SavePlaySetModsAsync(game, playSetId, Renumber(mods), cancellationToken)
                 .ConfigureAwait(false);
-            await _playSets.SavePlaySetDlcsAsync(game, playSetId, dlcs, cancellationToken)
+            if (!modsResult.IsSuccess)
+            {
+                _logger.Error("保存播放集失败（gameId=" + game.GameId + "）：写 mods 失败 —— " + modsResult.ErrorMessage);
+                return AppResult<LoadFileContent?>.Fail(
+                    modsResult.Kind,
+                    "step=mods;" + modsResult.ErrorMessage);
+            }
+
+            var dlcsResult = await _playSets.SavePlaySetDlcsAsync(game, playSetId, dlcs, cancellationToken)
                 .ConfigureAwait(false);
+            if (!dlcsResult.IsSuccess)
+            {
+                _logger.Error("保存播放集失败（gameId=" + game.GameId + "）：写 dlcs 失败 —— " + dlcsResult.ErrorMessage);
+                return AppResult<LoadFileContent?>.Fail(
+                    dlcsResult.Kind,
+                    "step=dlcs;" + dlcsResult.ErrorMessage);
+            }
+
             if (expected is not null)
             {
                 await _loadFiles.WriteAsync(game, expected, cancellationToken).ConfigureAwait(false);
@@ -436,7 +451,7 @@ public sealed class PlaySetEditor
         catch (Exception ex)
         {
             _logger.Error("保存播放集失败（gameId=" + game.GameId + "）", ex);
-            return AppResult<LoadFileContent?>.Fail(Localizer.Instance.T(Keys.ShellPlaySetSaveFailed, ex.Message));
+            return AppResult<LoadFileContent?>.Fail(ErrorKind.Io, "step=loadfile;" + ex.Message);
         }
 
         if (expected is null)
@@ -456,15 +471,15 @@ public sealed class PlaySetEditor
         catch (Exception ex)
         {
             _logger.Error("保存后回读加载文件失败（gameId=" + game.GameId + "）", ex);
-            return AppResult<LoadFileContent?>.Fail(Localizer.Instance.T(Keys.ShellPlaySetReadBackFailed, ex.Message));
+            return AppResult<LoadFileContent?>.Fail(ErrorKind.Io, "step=readback;" + ex.Message);
         }
 
         var diffs = CompareContent(game, expected, actual);
         if (diffs.Count > 0)
         {
-            var message = Localizer.Instance.T(Keys.ShellPlaySetMismatch, string.Join(", ", diffs));
+            var message = "step=verify;" + string.Join(", ", diffs);
             _logger.Warn(message);
-            return AppResult<LoadFileContent?>.Fail(message);
+            return AppResult<LoadFileContent?>.Fail(ErrorKind.Io, message);
         }
 
         return AppResult<LoadFileContent?>.Ok(actual);
@@ -487,10 +502,12 @@ public sealed class PlaySetEditor
             var renamed = await _playSets
                 .RenamePlaySetAsync(game, playSetId, newName.Trim(), cancellationToken)
                 .ConfigureAwait(false);
-            if (!renamed)
+            if (!renamed.IsSuccess || !renamed.Value)
             {
-                _logger.Warn("重命名播放集失败（id=" + playSetId.ToString("N") + "，name=" + newName.Trim() + "）");
-                return AppResult<bool>.Fail(Localizer.Instance.T(Keys.ShellPlaySetRenameMissing));
+                var code = renamed.IsSuccess ? "playSet-not-found:" + playSetId.ToString("D") : renamed.ErrorMessage;
+                var kind = renamed.IsSuccess ? ErrorKind.NotFound : renamed.Kind;
+                _logger.Warn("重命名播放集失败（id=" + playSetId.ToString("N") + "，name=" + newName.Trim() + "）：" + code);
+                return AppResult<bool>.Fail(kind!, code!);
             }
 
             _logger.Info("已重命名播放集（id=" + playSetId.ToString("N") + "）为「" + newName.Trim() + "」");
@@ -503,7 +520,7 @@ public sealed class PlaySetEditor
         catch (Exception ex)
         {
             _logger.Error("重命名播放集失败（id=" + playSetId.ToString("N") + "）", ex);
-            return AppResult<bool>.Fail(Localizer.Instance.T(Keys.ShellPlaySetRenameFailed, ex.Message));
+            return AppResult<bool>.Fail(ErrorKind.Io, "rename:" + ex.Message);
         }
     }
 
@@ -523,10 +540,12 @@ public sealed class PlaySetEditor
             var deleted = await _playSets
                 .DeletePlaySetAsync(game, playSetId, cancellationToken)
                 .ConfigureAwait(false);
-            if (!deleted)
+            if (!deleted.IsSuccess || !deleted.Value)
             {
-                _logger.Warn("删除播放集失败（id=" + playSetId.ToString("N") + "）：目标不存在、是活动播放集或写入失败");
-                return AppResult<bool>.Fail(Localizer.Instance.T(Keys.ShellPlaySetDeleteBusy));
+                var code = deleted.IsSuccess ? "playSet-not-found:" + playSetId.ToString("D") : deleted.ErrorMessage;
+                var kind = deleted.IsSuccess ? ErrorKind.NotFound : deleted.Kind;
+                _logger.Warn("删除播放集失败（id=" + playSetId.ToString("N") + "）：" + code);
+                return AppResult<bool>.Fail(kind!, code!);
             }
 
             _logger.Info("已删除播放集（id=" + playSetId.ToString("N") + "）");
@@ -539,7 +558,7 @@ public sealed class PlaySetEditor
         catch (Exception ex)
         {
             _logger.Error("删除播放集失败（id=" + playSetId.ToString("N") + "）", ex);
-            return AppResult<bool>.Fail(Localizer.Instance.T(Keys.ShellPlaySetDeleteFailed, ex.Message));
+            return AppResult<bool>.Fail(ErrorKind.Io, "delete:" + ex.Message);
         }
     }
 }

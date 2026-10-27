@@ -67,7 +67,7 @@ public sealed class PlaySetRepositoryRouter : IPlaySetRepository
         For(game).GetPlaySetDlcsAsync(game, playSetId, cancellationToken);
 
     /// <inheritdoc />
-    public Task SavePlaySetModsAsync(
+    public Task<AppResult<bool>> SavePlaySetModsAsync(
         GameInstallation game,
         Guid playSetId,
         IReadOnlyList<PlaySetMod> mods,
@@ -75,7 +75,7 @@ public sealed class PlaySetRepositoryRouter : IPlaySetRepository
         For(game).SavePlaySetModsAsync(game, playSetId, mods, cancellationToken);
 
     /// <inheritdoc />
-    public Task SavePlaySetDlcsAsync(
+    public Task<AppResult<bool>> SavePlaySetDlcsAsync(
         GameInstallation game,
         Guid playSetId,
         IReadOnlyList<PlaySetDlc> dlcs,
@@ -83,15 +83,15 @@ public sealed class PlaySetRepositoryRouter : IPlaySetRepository
         For(game).SavePlaySetDlcsAsync(game, playSetId, dlcs, cancellationToken);
 
     /// <inheritdoc />
-    public Task<Guid> CreatePlaySetAsync(GameInstallation game, string name, CancellationToken cancellationToken) =>
+    public Task<AppResult<Guid>> CreatePlaySetAsync(GameInstallation game, string name, CancellationToken cancellationToken) =>
         For(game).CreatePlaySetAsync(game, name, cancellationToken);
 
     /// <inheritdoc />
-    public Task SetActivePlaySetAsync(GameInstallation game, Guid playSetId, CancellationToken cancellationToken) =>
+    public Task<AppResult<bool>> SetActivePlaySetAsync(GameInstallation game, Guid playSetId, CancellationToken cancellationToken) =>
         For(game).SetActivePlaySetAsync(game, playSetId, cancellationToken);
 
     /// <inheritdoc />
-    public Task<bool> RenamePlaySetAsync(
+    public Task<AppResult<bool>> RenamePlaySetAsync(
         GameInstallation game,
         Guid playSetId,
         string newName,
@@ -99,6 +99,6 @@ public sealed class PlaySetRepositoryRouter : IPlaySetRepository
         For(game).RenamePlaySetAsync(game, playSetId, newName, cancellationToken);
 
     /// <inheritdoc />
-    public Task<bool> DeletePlaySetAsync(GameInstallation game, Guid playSetId, CancellationToken cancellationToken) =>
+    public Task<AppResult<bool>> DeletePlaySetAsync(GameInstallation game, Guid playSetId, CancellationToken cancellationToken) =>
         For(game).DeletePlaySetAsync(game, playSetId, cancellationToken);
 }

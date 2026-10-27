@@ -21,6 +21,9 @@ public sealed class PlaySetRepository : IPlaySetRepository
     private static readonly Dictionary<string, SemaphoreSlim> WriteGates = new(StringComparer.OrdinalIgnoreCase);
     private static readonly object GateLock = new();
 
+    /// <summary>写成功的公共结果，避免每次分配。</summary>
+    private static readonly AppResult<bool> OkBool = AppResult<bool>.Ok(true);
+
     private readonly IFileSystem _fileSystem;
     private readonly IAppLogger _logger;
     private readonly IClock _clock;
@@ -272,7 +275,7 @@ public sealed class PlaySetRepository : IPlaySetRepository
     }
 
     /// <inheritdoc />
-    public Task SavePlaySetModsAsync(
+    public Task<AppResult<bool>> SavePlaySetModsAsync(
         GameInstallation game,
         Guid playSetId,
         IReadOnlyList<PlaySetMod> mods,
@@ -300,12 +303,14 @@ public sealed class PlaySetRepository : IPlaySetRepository
                         mod.Position >= 0 ? mod.Position : position);
                     position++;
                 }
+
+                return OkBool;
             },
             cancellationToken);
     }
 
     /// <inheritdoc />
-    public Task SavePlaySetDlcsAsync(
+    public Task<AppResult<bool>> SavePlaySetDlcsAsync(
         GameInstallation game,
         Guid playSetId,
         IReadOnlyList<PlaySetDlc> dlcs,
@@ -323,7 +328,7 @@ public sealed class PlaySetRepository : IPlaySetRepository
                 {
                     // 该游戏（Stellaris）官方就没有 DLC 开关表，静默跳过是正确行为。
                     _logger.Warn("游戏 " + game.GameId + " 的 launcher-v2.sqlite 没有 playsets_dlcs 表，已跳过 DLC 保存。");
-                    return;
+                    return OkBool;
                 }
 
                 connection.Execute("DELETE FROM playsets_dlcs WHERE playsetId = ?", playSetId.ToString("D"));
@@ -342,12 +347,17 @@ public sealed class PlaySetRepository : IPlaySetRepository
                         dlc.DlcId,
                         dlc.Enabled ? 1 : 0);
                 }
+
+                return OkBool;
             },
             cancellationToken);
     }
 
     /// <inheritdoc />
-    public Task<Guid> CreatePlaySetAsync(GameInstallation game, string name, CancellationToken cancellationToken)
+    public Task<AppResult<Guid>> CreatePlaySetAsync(
+        GameInstallation game,
+        string name,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(game);
         var playSetName = string.IsNullOrWhiteSpace(name) ? "New Playset" : name.Trim();
@@ -364,16 +374,19 @@ public sealed class PlaySetRepository : IPlaySetRepository
                     id.ToString("D"),
                     playSetName,
                     createdOn);
-                return id;
+                return AppResult<Guid>.Ok(id);
             },
-            cancellationToken,
-            id);
+            cancellationToken);
     }
 
     /// <inheritdoc />
-    public Task SetActivePlaySetAsync(GameInstallation game, Guid playSetId, CancellationToken cancellationToken)
+    public Task<AppResult<bool>> SetActivePlaySetAsync(
+        GameInstallation game,
+        Guid playSetId,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(game);
+        var id = playSetId.ToString("D");
         return WriteAsync(
             game,
             "设置激活播放集",
@@ -381,19 +394,16 @@ public sealed class PlaySetRepository : IPlaySetRepository
             {
                 ct.ThrowIfCancellationRequested();
                 connection.Execute("UPDATE playsets SET isActive = 0 WHERE isActive = 1");
-                var changed = connection.Execute(
-                    "UPDATE playsets SET isActive = 1 WHERE id = ?",
-                    playSetId.ToString("D"));
-                if (changed == 0)
-                {
-                    throw new SqliteException(0, "找不到要激活的播放集：" + playSetId.ToString("D"));
-                }
+                var changed = connection.Execute("UPDATE playsets SET isActive = 1 WHERE id = ?", id);
+                return changed == 0
+                    ? AppResult<bool>.Fail(ErrorKind.NotFound, "playSet-not-found:" + id)
+                    : OkBool;
             },
             cancellationToken);
     }
 
     /// <inheritdoc />
-    public Task<bool> RenamePlaySetAsync(
+    public Task<AppResult<bool>> RenamePlaySetAsync(
         GameInstallation game,
         Guid playSetId,
         string newName,
@@ -402,11 +412,12 @@ public sealed class PlaySetRepository : IPlaySetRepository
         ArgumentNullException.ThrowIfNull(game);
         if (string.IsNullOrWhiteSpace(newName))
         {
-            return Task.FromResult(false);
+            return Task.FromResult(AppResult<bool>.Fail(ErrorKind.Invalid, "playSet-name-empty"));
         }
 
         var trimmed = newName.Trim();
         var updatedOn = _clock.UtcNow.ToUnixTimeMilliseconds();
+        var id = playSetId.ToString("D");
         return WriteAsync(
             game,
             "重命名播放集",
@@ -417,35 +428,40 @@ public sealed class PlaySetRepository : IPlaySetRepository
                     "UPDATE playsets SET name = ?, updatedOn = ? WHERE id = ?",
                     trimmed,
                     updatedOn,
-                    playSetId.ToString("D"));
-                return changed > 0;
+                    id);
+                return changed == 0
+                    ? AppResult<bool>.Fail(ErrorKind.NotFound, "playSet-not-found:" + id)
+                    : OkBool;
             },
             cancellationToken);
     }
 
     /// <inheritdoc />
-    public Task<bool> DeletePlaySetAsync(GameInstallation game, Guid playSetId, CancellationToken cancellationToken)
+    public Task<AppResult<bool>> DeletePlaySetAsync(
+        GameInstallation game,
+        Guid playSetId,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(game);
+        var id = playSetId.ToString("D");
         return WriteAsync(
             game,
             "删除播放集",
             (connection, ct) =>
             {
                 ct.ThrowIfCancellationRequested();
-                var id = playSetId.ToString("D");
 
                 // 活动播放集不允许删除。
                 var active = connection.ExecuteScalar("SELECT isActive FROM playsets WHERE id = ?", id);
                 if (active is null)
                 {
-                    return false;
+                    return AppResult<bool>.Fail(ErrorKind.NotFound, "playSet-not-found:" + id);
                 }
 
                 if (ToBoolean(active))
                 {
                     _logger.Warn("播放集 " + id + " 处于激活状态，拒绝删除。");
-                    return false;
+                    return AppResult<bool>.Fail(ErrorKind.Conflict, "playSet-is-active:" + id);
                 }
 
                 connection.Execute("DELETE FROM playsets_mods WHERE playsetId = ?", id);
@@ -454,7 +470,9 @@ public sealed class PlaySetRepository : IPlaySetRepository
                     connection.Execute("DELETE FROM playsets_dlcs WHERE playsetId = ?", id);
                 }
 
-                return connection.Execute("DELETE FROM playsets WHERE id = ?", id) > 0;
+                return connection.Execute("DELETE FROM playsets WHERE id = ?", id) > 0
+                    ? OkBool
+                    : AppResult<bool>.Fail(ErrorKind.NotFound, "playSet-not-found:" + id);
             },
             cancellationToken);
     }
@@ -504,7 +522,8 @@ public sealed class PlaySetRepository : IPlaySetRepository
             cancellationToken);
     }
 
-    private Task WriteAsync(
+    /// <summary>无返回值的写操作：成功后统一返回 <c>Ok(true)</c>。</summary>
+    private Task<AppResult<bool>> WriteAsync(
         GameInstallation game,
         string action,
         Action<SqliteConnection, CancellationToken> body,
@@ -515,16 +534,19 @@ public sealed class PlaySetRepository : IPlaySetRepository
             (connection, ct) =>
             {
                 body(connection, ct);
-                return true;
+                return OkBool;
             },
             cancellationToken);
 
-    private async Task<T> WriteAsync<T>(
+    /// <summary>
+    /// 写库统一入口。<b>不再有 fallback</b>：数据库缺失、备份失败、SQLite 异常一律返回失败结果，
+    /// 绝不把「没写成功」伪装成成功值（这是旧版 P0-1 数据静默丢失的根因）。
+    /// </summary>
+    private async Task<AppResult<T>> WriteAsync<T>(
         GameInstallation game,
         string action,
-        Func<SqliteConnection, CancellationToken, T> body,
-        CancellationToken cancellationToken,
-        T fallback = default!)
+        Func<SqliteConnection, CancellationToken, AppResult<T>> body,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(body);
         var databasePath = GetDatabasePath(game);
@@ -540,10 +562,15 @@ public sealed class PlaySetRepository : IPlaySetRepository
                     if (!_fileSystem.FileExists(databasePath))
                     {
                         _logger.Warn(action + "：数据库不存在：" + databasePath);
-                        return fallback;
+                        return AppResult<T>.Fail(ErrorKind.NotFound, "database-not-found:" + databasePath);
                     }
 
-                    BackupDatabase(databasePath, action);
+                    var backup = BackupDatabase(databasePath, action);
+                    if (!backup.IsSuccess)
+                    {
+                        // 备份失败就中止：备份的意义是能回退，备份不成就没有回退点。
+                        return AppResult<T>.Fail(ErrorKind.Io, backup.ErrorMessage!);
+                    }
 
                     try
                     {
@@ -552,6 +579,12 @@ public sealed class PlaySetRepository : IPlaySetRepository
                         try
                         {
                             var result = body(connection, cancellationToken);
+                            if (!result.IsSuccess)
+                            {
+                                connection.Rollback();
+                                return result;
+                            }
+
                             connection.Commit();
                             return result;
                         }
@@ -564,7 +597,17 @@ public sealed class PlaySetRepository : IPlaySetRepository
                     catch (SqliteException exception)
                     {
                         _logger.Error(action + " 失败（" + databasePath + "）", exception);
-                        return fallback;
+                        return AppResult<T>.Fail(ErrorKind.Io, action + ":" + exception.Message);
+                    }
+                    catch (IOException exception)
+                    {
+                        _logger.Error(action + " 失败（" + databasePath + "）", exception);
+                        return AppResult<T>.Fail(ErrorKind.Io, action + ":" + exception.Message);
+                    }
+                    catch (UnauthorizedAccessException exception)
+                    {
+                        _logger.Error(action + " 无权限（" + databasePath + "）", exception);
+                        return AppResult<T>.Fail(ErrorKind.Io, action + ":" + exception.Message);
                     }
                 },
                 cancellationToken).ConfigureAwait(false);
@@ -575,22 +618,25 @@ public sealed class PlaySetRepository : IPlaySetRepository
         }
     }
 
-    private void BackupDatabase(string databasePath, string action)
+    /// <summary>写前备份。<b>失败即中止写入</b>（P0-2）：返回失败结果，调用方不再继续。</summary>
+    private AppResult<bool> BackupDatabase(string databasePath, string action)
     {
         try
         {
             var backupPath = GetBackupPath(databasePath);
             _fileSystem.Copy(databasePath, backupPath, overwrite: true);
             _logger.Info(action + "：已备份数据库到 " + backupPath);
+            return OkBool;
         }
         catch (IOException exception)
         {
-            // 备份失败不阻断写入，但必须留下记录。
-            _logger.Warn(action + "：备份数据库失败（" + databasePath + "）：" + exception.Message);
+            _logger.Error(action + "：备份数据库失败，已中止写入（" + databasePath + "）", exception);
+            return AppResult<bool>.Fail(ErrorKind.Io, "backup:" + exception.Message);
         }
         catch (UnauthorizedAccessException exception)
         {
-            _logger.Warn(action + "：备份数据库无权限（" + databasePath + "）：" + exception.Message);
+            _logger.Error(action + "：备份数据库无权限，已中止写入（" + databasePath + "）", exception);
+            return AppResult<bool>.Fail(ErrorKind.Io, "backup:" + exception.Message);
         }
     }
 

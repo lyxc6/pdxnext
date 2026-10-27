@@ -628,9 +628,17 @@ public sealed class ModsViewModel : LocalizedObservableObject
         try
         {
             IsBusy = true;
-            id = await AppServices.PlaySets
+            var createdResult = await AppServices.PlaySets
                 .CreatePlaySetAsync(Game, trimmed, cancellationToken)
                 .ConfigureAwait(true);
+            if (!createdResult.IsSuccess)
+            {
+                _logger.Warn("新建播放集被拒绝：" + createdResult.ErrorMessage);
+                StatusMessage = T(Keys.ModsStatusCreateFailed, createdResult.ErrorMessage ?? string.Empty);
+                return;
+            }
+
+            id = createdResult.Value;
             _logger.Info("已新建播放集「" + trimmed + "」（id=" + id.ToString("N") + "）");
             await LoadAsync(Game, cancellationToken).ConfigureAwait(true);
         }

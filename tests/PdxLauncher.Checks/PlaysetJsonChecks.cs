@@ -246,38 +246,32 @@ public static class PlaysetJsonChecks
             new FakeDlcCatalog([]),
             Path.Combine(tempRoot, "backup-lifecycle"));
 
-        var created = repository.CreatePlaySetAsync(game, "新配置", CancellationToken.None).GetAwaiter().GetResult();
+        var createdResult = repository.CreatePlaySetAsync(game, "新配置", CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("播放集: 新建成功", createdResult.IsSuccess, createdResult.ErrorMessage);
+        var created = createdResult.Value;
         ChecksContext.Equal("播放集: 新建返回派生 id", PlaysetsJsonRepository.GetPlaySetId("eu5", "新配置"), created);
 
         var actual = repository.GetPlaySetsAsync(game, CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Equal("播放集: 新建后数量", 3, actual.Count);
         ChecksContext.Equal("播放集: 新建的非活动", false, actual[2].IsActive);
 
-        var duplicateRejected = false;
-        try
-        {
-            repository.CreatePlaySetAsync(game, "我的配置", CancellationToken.None).GetAwaiter().GetResult();
-        }
-        catch (InvalidOperationException)
-        {
-            duplicateRejected = true;
-        }
-
-        ChecksContext.Check("播放集: 重名新建被拒绝", duplicateRejected);
+        var duplicateRejected = repository.CreatePlaySetAsync(game, "我的配置", CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check(
+            "播放集: 重名新建被拒绝",
+            !duplicateRejected.IsSuccess && duplicateRejected.Kind == ErrorKind.Conflict,
+            duplicateRejected.ErrorMessage);
 
         repository.SetActivePlaySetAsync(game, created, CancellationToken.None).GetAwaiter().GetResult();
         var afterActive = repository.GetPlaySetsAsync(game, CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Equal("播放集: 设活动后只有一个活动", 1, afterActive.Count(static p => p.IsActive));
         ChecksContext.Equal("播放集: 活动播放集是新配置", "新配置", afterActive.First(static p => p.IsActive).Name);
 
-        ChecksContext.Equal(
+        ChecksContext.Check(
             "播放集: 改名成功",
-            true,
-            repository.RenamePlaySetAsync(game, created, "改名后", CancellationToken.None).GetAwaiter().GetResult());
-        ChecksContext.Equal(
+            repository.RenamePlaySetAsync(game, created, "改名后", CancellationToken.None).GetAwaiter().GetResult().IsSuccess);
+        ChecksContext.Check(
             "播放集: 改名撞名被拒绝",
-            false,
-            repository.RenamePlaySetAsync(game, created, "我的配置", CancellationToken.None).GetAwaiter().GetResult());
+            !repository.RenamePlaySetAsync(game, created, "我的配置", CancellationToken.None).GetAwaiter().GetResult().IsSuccess);
 
         var renamed = repository.GetPlaySetsAsync(game, CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Check(
@@ -287,17 +281,14 @@ public static class PlaysetJsonChecks
 
         // 活动播放集不允许删除（游戏启动时必须有活动播放集）。
         var activeId = renamed.First(static p => p.IsActive).Id;
-        ChecksContext.Equal(
+        ChecksContext.Check(
             "播放集: 活动播放集不可删",
-            false,
-            repository.DeletePlaySetAsync(game, activeId, CancellationToken.None).GetAwaiter().GetResult());
+            !repository.DeletePlaySetAsync(game, activeId, CancellationToken.None).GetAwaiter().GetResult().IsSuccess);
 
         var inactiveId = renamed.First(static p => !p.IsActive).Id;
-        ChecksContext.Equal(
+        ChecksContext.Check(
             "播放集: 非活动播放集可删",
-            true,
-            repository.DeletePlaySetAsync(game, inactiveId, CancellationToken.None).GetAwaiter().GetResult());
-
+            repository.DeletePlaySetAsync(game, inactiveId, CancellationToken.None).GetAwaiter().GetResult().IsSuccess);
         var afterDelete = repository.GetPlaySetsAsync(game, CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Equal("播放集: 删除后数量", 2, afterDelete.Count);
         ChecksContext.Check("播放集: 写盘后 json 仍可解析", JsonNode.Parse(fs.ReadAllText(path)) is JsonObject);

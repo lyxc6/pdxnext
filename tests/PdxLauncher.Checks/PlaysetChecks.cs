@@ -334,7 +334,9 @@ public static class PlaysetChecks
             ChecksContext.Equal("DLC 按 dlcId 升序第 2 行", "dlc_y", afterDlcSave[1].DlcId);
 
             // --- 创建 / 激活 / 重命名 / 删除 ---
-            var createdId = repository.CreatePlaySetAsync(game, "  新建播放集  ", CancellationToken.None).GetAwaiter().GetResult();
+            var createdResult = repository.CreatePlaySetAsync(game, "  新建播放集  ", CancellationToken.None).GetAwaiter().GetResult();
+            ChecksContext.Check("CreatePlaySetAsync 成功", createdResult.IsSuccess, createdResult.ErrorMessage);
+            var createdId = createdResult.Value;
             ChecksContext.Check("CreatePlaySetAsync 返回非空 Guid", createdId != Guid.Empty);
             var afterCreate = repository.GetPlaySetsAsync(game, CancellationToken.None).GetAwaiter().GetResult();
             ChecksContext.Equal("创建后播放集数量", 3, afterCreate.Count);
@@ -348,27 +350,27 @@ public static class PlaysetChecks
             ChecksContext.Equal("切换激活后只有一个 isActive=1", 1, allAfterSwitch.Count(item => item.IsActive));
 
             var renamed = repository.RenamePlaySetAsync(game, createdId, "  重命名后  ", CancellationToken.None).GetAwaiter().GetResult();
-            ChecksContext.Check("RenamePlaySetAsync 命中返回 true", renamed);
+            ChecksContext.Check("RenamePlaySetAsync 命中成功", renamed.IsSuccess && renamed.Value, renamed.ErrorMessage);
             var afterRename = repository.GetPlaySetsAsync(game, CancellationToken.None).GetAwaiter().GetResult();
             ChecksContext.Equal("重命名结果已 Trim", "重命名后", afterRename.Single(item => item.Id == createdId).Name);
 
             var renameEmpty = repository.RenamePlaySetAsync(game, createdId, "   ", CancellationToken.None).GetAwaiter().GetResult();
-            ChecksContext.Check("RenamePlaySetAsync 空名返回 false（不抛）", !renameEmpty);
+            ChecksContext.Check("RenamePlaySetAsync 空名返回 Invalid（不抛）", !renameEmpty.IsSuccess && renameEmpty.Kind == ErrorKind.Invalid, renameEmpty.ErrorMessage);
             var renameMissing = repository.RenamePlaySetAsync(game, Guid.NewGuid(), "x", CancellationToken.None).GetAwaiter().GetResult();
-            ChecksContext.Check("RenamePlaySetAsync 不存在的 Id 返回 false", !renameMissing);
+            ChecksContext.Check("RenamePlaySetAsync 不存在的 Id 返回 NotFound", !renameMissing.IsSuccess && renameMissing.Kind == ErrorKind.NotFound, renameMissing.ErrorMessage);
 
             var deleteActive = repository.DeletePlaySetAsync(game, createdId, CancellationToken.None).GetAwaiter().GetResult();
-            ChecksContext.Check("DeletePlaySetAsync 拒绝删除激活播放集", !deleteActive);
+            ChecksContext.Check("DeletePlaySetAsync 拒绝删除激活播放集", !deleteActive.IsSuccess && deleteActive.Kind == ErrorKind.Conflict, deleteActive.ErrorMessage);
 
             repository.SetActivePlaySetAsync(game, olderId, CancellationToken.None).GetAwaiter().GetResult();
             var deleteInactive = repository.DeletePlaySetAsync(game, createdId, CancellationToken.None).GetAwaiter().GetResult();
-            ChecksContext.Check("DeletePlaySetAsync 删除非激活播放集返回 true", deleteInactive);
+            ChecksContext.Check("DeletePlaySetAsync 删除非激活播放集成功", deleteInactive.IsSuccess && deleteInactive.Value, deleteInactive.ErrorMessage);
             var afterDelete = repository.GetPlaySetsAsync(game, CancellationToken.None).GetAwaiter().GetResult();
             ChecksContext.Equal("删除后播放集数量", 2, afterDelete.Count);
             ChecksContext.Check("删除后 Id 不存在", afterDelete.All(item => item.Id != createdId));
 
             var deleteMissing = repository.DeletePlaySetAsync(game, Guid.NewGuid(), CancellationToken.None).GetAwaiter().GetResult();
-            ChecksContext.Check("DeletePlaySetAsync 不存在的 Id 返回 false", !deleteMissing);
+            ChecksContext.Check("DeletePlaySetAsync 不存在的 Id 返回 NotFound", !deleteMissing.IsSuccess && deleteMissing.Kind == ErrorKind.NotFound, deleteMissing.ErrorMessage);
 
             // --- 没有 playsets_dlcs 表（Stellaris 形态）---
             var stellarisDataDir = Path.Combine(tempRoot, "data-stellaris");
