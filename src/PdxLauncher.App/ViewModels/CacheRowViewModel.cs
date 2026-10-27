@@ -5,7 +5,7 @@ using PdxLauncher.Core.Storage;
 
 /// <summary>
 /// 设置页「缓存」卡片里的一行：标题、说明、落盘路径、当前占用与清理进度。
-/// 只描述一类缓存，真正怎么清由 <see cref="SettingsViewModel"/> 按 <see cref="Key"/> 分派。
+/// 只描述一类缓存；清除动作在构造时注入，使用方不再按 <see cref="Key"/> 分派。
 /// </summary>
 public sealed class CacheRowViewModel : LocalizedObservableObject
 {
@@ -23,15 +23,22 @@ public sealed class CacheRowViewModel : LocalizedObservableObject
 
     private readonly string _titleKey;
     private readonly string _descriptionKey;
+    private readonly Action _clear;
     private CacheUsage _usage = CacheUsage.Empty;
     private bool _isBusy;
 
-    public CacheRowViewModel(string key, string titleKey, string descriptionKey, string path)
+    public CacheRowViewModel(
+        string key,
+        string titleKey,
+        string descriptionKey,
+        string path,
+        Action clear)
     {
         Key = key;
         _titleKey = titleKey;
         _descriptionKey = descriptionKey;
         Path = path;
+        _clear = clear;
     }
 
     /// <summary>缓存类别标识，见本类的 *Key 常量。</summary>
@@ -80,4 +87,7 @@ public sealed class CacheRowViewModel : LocalizedObservableObject
 
     /// <summary>清理开始 / 结束时切换忙碌状态。</summary>
     public void SetBusy(bool busy) => IsBusy = busy;
+
+    /// <summary>执行本行缓存的清除（清什么由构造时注入的委托决定）。</summary>
+    public void Clear() => _clear();
 }

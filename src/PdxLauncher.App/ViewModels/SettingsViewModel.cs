@@ -60,22 +60,26 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 CacheRowViewModel.ThemeKey,
                 Keys.SettingsCacheRowThemeTitle,
                 Keys.SettingsCacheRowThemeDesc,
-                AppServices.ThemeCacheRoot),
+                AppServices.ThemeCacheRoot,
+                () => CacheStorage.Clear(AppServices.FileSystem, AppServices.ThemeCacheRoot)),
             new(
                 CacheRowViewModel.NewsKey,
                 Keys.SettingsCacheRowNewsTitle,
                 Keys.SettingsCacheRowNewsDesc,
-                AppServices.NewsCacheRoot),
+                AppServices.NewsCacheRoot,
+                AppServices.NewsFeed.ClearCache),
             new(
                 CacheRowViewModel.ModThumbnailsKey,
                 Keys.SettingsCacheRowModThumbnailsTitle,
                 Keys.SettingsCacheRowModThumbnailsDesc,
-                AppServices.ModThumbnailCacheRoot),
+                AppServices.ModThumbnailCacheRoot,
+                () => AppServices.ModThumbnails.Cache.Clear()),
             new(
                 CacheRowViewModel.DlcDescriptionsKey,
                 Keys.SettingsCacheRowDlcDescriptionsTitle,
                 Keys.SettingsCacheRowDlcDescriptionsDesc,
-                AppServices.DlcDescriptions.CachePath),
+                AppServices.DlcDescriptions.CachePath,
+                AppServices.DlcDescriptions.ClearCache),
         };
     }
 
@@ -807,7 +811,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         row.SetBusy(true);
         try
         {
-            await Task.Run(() => ClearCacheCore(row), cancellationToken).ConfigureAwait(true);
+            await Task.Run(row.Clear, cancellationToken).ConfigureAwait(true);
             await RefreshCacheStatsAsync(cancellationToken).ConfigureAwait(true);
             SetStatus(Keys.SettingsCacheStatusCleared, row.Title, SizeFormatter.Format(before.Bytes));
         }
@@ -837,7 +841,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 {
                     foreach (var row in CacheRows.ToArray())
                     {
-                        ClearCacheCore(row);
+                        row.Clear();
                     }
                 },
                 cancellationToken).ConfigureAwait(true);
@@ -1122,29 +1126,6 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             : Alternatives.FirstOrDefault(item =>
                     string.Equals(item.ExePath, selectedPath, StringComparison.OrdinalIgnoreCase))
                 ?? Alternatives[0];
-    }
-
-    private void ClearCacheCore(CacheRowViewModel row)
-    {
-        var fileSystem = AppServices.FileSystem;
-        switch (row.Key)
-        {
-            case CacheRowViewModel.ThemeKey:
-                CacheStorage.Clear(fileSystem, AppServices.ThemeCacheRoot);
-                break;
-            case CacheRowViewModel.NewsKey:
-                AppServices.NewsFeed.ClearCache();
-                break;
-            case CacheRowViewModel.ModThumbnailsKey:
-                AppServices.ModThumbnails.Cache.Clear();
-                break;
-            case CacheRowViewModel.DlcDescriptionsKey:
-                AppServices.DlcDescriptions.ClearCache();
-                break;
-            default:
-                CacheStorage.Clear(fileSystem, row.Path);
-                break;
-        }
     }
 
     /// <summary>
