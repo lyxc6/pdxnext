@@ -41,15 +41,12 @@ public static class AlwaysOnTopService
             return false;
         }
 
-        try
+        AppServices.Settings.AlwaysOnTop = alwaysOnTop;
+        var saved = AppServices.SaveSettings();
+        if (!saved.IsSuccess)
         {
-            AppServices.Settings.AlwaysOnTop = alwaysOnTop;
-            AppServices.SaveSettings();
-        }
-        catch (Exception ex)
-        {
-            error = Localizer.Instance.T(Keys.ShellAlwaysOnTopSaveFailed, ex.Message);
-            AppServices.Logger.Error("保存窗口置顶设置失败", ex);
+            error = Localizer.Instance.T(Keys.ShellAlwaysOnTopSaveFailed, saved.ErrorMessage ?? string.Empty);
+            AppServices.Logger.Error("保存窗口置顶设置失败: " + saved.ErrorMessage);
             return false;
         }
 

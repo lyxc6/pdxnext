@@ -303,7 +303,15 @@ public sealed partial class MainWindow : Window
             var size = AppWindow.Size;
             AppServices.Settings.WindowWidth = size.Width / scale;
             AppServices.Settings.WindowHeight = size.Height / scale;
-            AppServices.SaveSettings();
+
+            // 关闭窗口是最后一次落盘机会：先把设置页攒着的延迟写合并进来，
+            // 再用立即写把窗口尺寸一起写下去，否则最近 300ms 内的改动会丢。
+            AppServices.FlushSettings();
+            var saved = AppServices.SaveSettings();
+            if (!saved.IsSuccess)
+            {
+                AppServices.Logger.Warn("保存窗口尺寸失败: " + saved.ErrorMessage);
+            }
         }
         catch (Exception ex)
         {

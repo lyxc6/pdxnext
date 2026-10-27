@@ -202,7 +202,14 @@ public static class AppServices
         CurrentGameChanged?.Invoke(null, game);
     }
 
-    public static void SaveSettings() => SettingsStore.Save(Settings);
+    /// <summary>立即把设置写盘；失败返回 <see cref="AppResult{T}"/>，调用方据此提示，不再静默当成功。</summary>
+    public static AppResult<bool> SaveSettings() => SettingsStore.Save(Settings);
+
+    /// <summary>登记一次延迟写（设置页连续改动时合并成一次落盘），失败只能在延迟到期后记日志。</summary>
+    public static void SaveSettingsDeferred() => SettingsStore.SaveDeferred(Settings);
+
+    /// <summary>把尚未执行的延迟写立刻落盘；关闭窗口 / 退出前必须调用，否则最后一次改动会丢。</summary>
+    public static AppResult<bool> FlushSettings() => SettingsStore.Flush();
 
     /// <summary>
     /// 用新构造的联网服务替换旧的（设置页改了代理地址后调用）。

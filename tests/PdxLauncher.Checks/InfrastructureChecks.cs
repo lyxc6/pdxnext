@@ -2,6 +2,7 @@ namespace PdxLauncher.Checks;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Configuration;
+using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Infrastructure;
 
 /// <summary>Lead 拥有的基础设施层自检（IFileSystem 原子写 / 日志 / 设置持久化）。</summary>
@@ -149,6 +150,52 @@ public static class InfrastructureChecks
             var logText = fs.FileExists(logPath) ? fs.ReadAllText(logPath) : string.Empty;
             ChecksContext.Check("日志含 INFO 行", logText.Contains("[INFO] hello 中文", StringComparison.Ordinal), logText.Length + " B");
             ChecksContext.Check("日志含异常堆栈", logText.Contains("InvalidOperationException", StringComparison.Ordinal));
+
+            // --- 延迟写：登记后不立刻落盘，Flush 才写；连续登记只保留最后一次
+            var deferredPath = Path.Combine(tempRoot, "deferred.json");
+            using (var deferredStore = new AppSettingsStore(fs, new NullLogger(), deferredPath))
+            {
+                var deferred = new AppSettings { ProxyUrl = "http://127.0.0.1:1111" };
+                deferredStore.SaveDeferred(deferred);
+                ChecksContext.Check("延迟写登记后有 pending", deferredStore.HasPendingWrite);
+                ChecksContext.Check("延迟写未到期时不落盘", !fs.FileExists(deferredPath));
+
+                deferred.ProxyUrl = "http://127.0.0.1:2222";
+                deferredStore.SaveDeferred(deferred);
+                ChecksContext.Check("连续登记仍只有一份 pending", deferredStore.HasPendingWrite);
+
+                var flushed = deferredStore.Flush();
+                ChecksContext.Check("Flush 返回成功", flushed.IsSuccess, flushed.ErrorMessage);
+                ChecksContext.Check("Flush 后没有 pending", !deferredStore.HasPendingWrite);
+                ChecksContext.Check("Flush 后文件已落盘", fs.FileExists(deferredPath));
+                ChecksContext.Equal(
+                    "Flush 落的是最后一次登记的值",
+                    "http://127.0.0.1:2222",
+                    fs.FileExists(deferredPath) ? deferredStore.Load().ProxyUrl : string.Empty);
+
+                // --- 立即写会取消尚未到期的延迟写，且返回成功
+                deferredStore.SaveDeferred(deferred);
+                ChecksContext.Check("立即写前仍有 pending", deferredStore.HasPendingWrite);
+                var immediate = deferredStore.Save(new AppSettings { ProxyUrl = "http://127.0.0.1:3333" });
+                ChecksContext.Check("立即写返回成功", immediate.IsSuccess, immediate.ErrorMessage);
+                ChecksContext.Check("立即写取消掉延迟写", !deferredStore.HasPendingWrite);
+                ChecksContext.Equal("立即写的内容已落盘", "http://127.0.0.1:3333", deferredStore.Load().ProxyUrl);
+            }
+
+            // --- 写失败必须返回失败而不是静默当成功（目录被同名文件占住）
+            var blockedRoot = Path.Combine(tempRoot, "blocked");
+            fs.WriteAllTextAtomic(blockedRoot, "not a directory");
+            var blockedStore = new AppSettingsStore(fs, new NullLogger(), Path.Combine(blockedRoot, "settings.json"));
+            var blockedResult = blockedStore.Save(new AppSettings());
+            ChecksContext.Check(
+                "写失败返回 ErrorKind.Io 而不是抛异常",
+                !blockedResult.IsSuccess && blockedResult.Kind == ErrorKind.Io,
+                blockedResult.ErrorMessage ?? "(no message)");
+            ChecksContext.Check(
+                "写失败也取消掉 pending",
+                !blockedStore.HasPendingWrite);
+            blockedStore.Dispose();
+
         }
         finally
         {

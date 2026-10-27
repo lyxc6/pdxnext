@@ -160,7 +160,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>联网刷新开关；写入 AppSettings.OnlineThemeRefreshEnabled 并立即落盘。</summary>
+    /// <summary>联网刷新开关；写入 AppSettings.OnlineThemeRefreshEnabled 并登记延迟落盘。</summary>
     public bool OnlineRefreshEnabled
     {
         get => AppServices.Settings.OnlineThemeRefreshEnabled;
@@ -178,7 +178,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>DLC 简介联网开关；写入 AppSettings.OnlineDlcDescriptionEnabled 并立即落盘。</summary>
+    /// <summary>DLC 简介联网开关；写入 AppSettings.OnlineDlcDescriptionEnabled 并登记延迟落盘。</summary>
     public bool DlcDescriptionOnlineEnabled
     {
         get => AppServices.Settings.OnlineDlcDescriptionEnabled;
@@ -203,7 +203,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>官方公告联网开关；写入 AppSettings.NewsFeedOnlineEnabled 并立即落盘。</summary>
+    /// <summary>官方公告联网开关；写入 AppSettings.NewsFeedOnlineEnabled 并登记延迟落盘。</summary>
     public bool NewsFeedOnlineEnabled
     {
         get => AppServices.Settings.NewsFeedOnlineEnabled;
@@ -277,14 +277,10 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// <summary>把内存中的 AppSettings 落盘（页面失焦 / 卸载时调用）。</summary>
     public void PersistSettings()
     {
-        try
+        var result = AppServices.SaveSettings();
+        if (!result.IsSuccess)
         {
-            AppServices.SaveSettings();
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("保存设置失败", ex);
-            SetStatus(Keys.SettingsStatusSaveFailed, ex.Message);
+            SetStatus(Keys.SettingsStatusSaveFailed, result.ErrorMessage ?? string.Empty);
         }
     }
 
@@ -349,7 +345,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         BackgroundDisplayModeCatalog.All;
 
     /// <summary>
-    /// 整窗背景显示方式；改动立即落盘并通知主窗口重画（只是换 Stretch / 对齐，不重新解码大图）。
+    /// 整窗背景显示方式；改动登记延迟落盘并通知主窗口重画（只是换 Stretch / 对齐，不重新解码大图）。
     /// </summary>
     public BackgroundDisplayModeOption SelectedBackgroundDisplayMode
     {
@@ -374,7 +370,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public IReadOnlyList<ModThumbnailSizeOption> ModThumbnailSizeOptions => ModThumbnailSizeCatalog.All;
 
     /// <summary>
-    /// Mod 缩略图尺寸；改动立即落盘。缩略图尺寸在行视图模型构造时定下，
+    /// Mod 缩略图尺寸；改动登记延迟落盘。缩略图尺寸在行视图模型构造时定下，
     /// 所以要等 Mod 库 / 播放集页面重新加载才看得出变化。
     /// </summary>
     public ModThumbnailSizeOption SelectedModThumbnailSize
@@ -538,7 +534,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public IReadOnlyList<RetentionDaysOption> DlcDescriptionRetentions =>
         DlcDescriptionRetentionCatalog.All;
 
-    /// <summary>DLC 简介缓存天数；改动立即落盘，下一次查询按新值判断过期。</summary>
+    /// <summary>DLC 简介缓存天数；改动登记延迟落盘，下一次查询按新值判断过期。</summary>
     public RetentionDaysOption SelectedDlcDescriptionRetention
     {
         get => _selectedDlcDescriptionRetention;
@@ -945,14 +941,10 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public bool ApplyProxySettings()
     {
         AppServices.Settings.ProxyMode = _selectedProxyMode.Key;
-        try
+        var saved = AppServices.SaveSettings();
+        if (!saved.IsSuccess)
         {
-            AppServices.SaveSettings();
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("保存代理设置失败", ex);
-            SetStatus(Keys.SettingsStatusSaveFailed, ex.Message);
+            SetStatus(Keys.SettingsStatusSaveFailed, saved.ErrorMessage ?? string.Empty);
             return false;
         }
 
@@ -987,7 +979,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// <summary>旧版本的 C 盘数据目录；迁移完成后可以手动清理。</summary>
     public string LegacyDataDirectoryPath => DataRootMigrator.LegacyRoot;
 
-    /// <summary>联网补全 Mod 缩略图开关；写入 AppSettings.OnlineModThumbnailEnabled 并立即落盘。</summary>
+    /// <summary>联网补全 Mod 缩略图开关；写入 AppSettings.OnlineModThumbnailEnabled 并登记延迟落盘。</summary>
     public bool ModThumbnailOnlineEnabled
     {
         get => AppServices.Settings.OnlineModThumbnailEnabled;
@@ -1011,7 +1003,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public IReadOnlyList<RetentionDaysOption> ModThumbnailRetentions =>
         ModThumbnailRetentionCatalog.All;
 
-    /// <summary>Mod 缩略图缓存保留天数；改动立即落盘，下次加载 Mod 库时按新值清理。</summary>
+    /// <summary>Mod 缩略图缓存保留天数；改动登记延迟落盘，下次加载 Mod 库时按新值清理。</summary>
     public RetentionDaysOption SelectedModThumbnailRetention
     {
         get => _selectedModThumbnailRetention;
@@ -1057,17 +1049,13 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     private static string FormatLocal(DateTimeOffset utc) =>
         utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// 设置页各属性的落盘入口：只登记一次延迟写，300ms 内的连续改动合并成一次落盘。
+    /// 立刻要确定生效的场合（改代理、关窗口）不走这里，直接调 <see cref="PersistSettings"/>。
+    /// </summary>
     private void SaveSettings()
     {
-        try
-        {
-            AppServices.SaveSettings();
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("保存设置失败", ex);
-            SetStatus(Keys.SettingsStatusSaveFailed, ex.Message);
-        }
+        AppServices.SaveSettingsDeferred();
     }
 
     /// <summary>把「当前实际用了哪个代理」算出来显示；解析本身不联网。</summary>
