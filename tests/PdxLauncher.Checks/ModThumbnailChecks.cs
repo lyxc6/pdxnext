@@ -37,6 +37,7 @@ public static class ModThumbnailChecks
             CheckPicturePriority(fs, resolver, game, tempRoot);
             CheckPictureSubdirectory(fs, resolver, game, tempRoot);
             CheckFileNameVariants(fs, resolver, game, tempRoot);
+            CheckMetadataDirectory(fs, resolver, game, tempRoot);
             CheckArchiveDirectory(fs, resolver, game, tempRoot);
             CheckCachedPath(fs, resolver, game, tempRoot);
             CheckMissingAndInvalidInput(fs, resolver, game, tempRoot);
@@ -214,6 +215,68 @@ public static class ModThumbnailChecks
         ChecksContext.Check(
             "注入空库列表后不做任何 Steam 库探测",
             resolver.Resolve(game, dirPath: stalePath, steamId: "444") is null);
+    }
+
+    /// <summary>
+    /// EU5 / PDX Mods 真机布局：封面在 <c>&lt;mod&gt;\.metadata\thumbnail.png</c>，mod 根目录没有。
+    /// 真机 22/22 个 EU5 工坊 mod 都是这样，只有 6 个在根目录另有副本——所以这里既验新回退，
+    /// 也验「根目录优先」不被破坏。
+    /// </summary>
+    private static void CheckMetadataDirectory(IFileSystem fs, ModThumbnailResolver resolver, GameInstallation game, string tempRoot)
+    {
+        Console.WriteLine("[ModThumbnailChecks] .metadata 封面（EU5 布局）");
+
+        var onlyMetadata = Path.Combine(tempRoot, "mods", "eu5-metadata");
+        var expected = Path.Combine(onlyMetadata, ".metadata", "thumbnail.png");
+        WriteImage(fs, expected);
+        var actual = resolver.Resolve(game, dirPath: onlyMetadata);
+        ChecksContext.Equal(".metadata 里的封面能命中", expected, actual ?? "<null>");
+
+        var both = Path.Combine(tempRoot, "mods", "eu5-both");
+        var rootImage = Path.Combine(both, "thumbnail.png");
+        WriteImage(fs, rootImage);
+        WriteImage(fs, Path.Combine(both, ".metadata", "thumbnail.png"));
+        var actualBoth = resolver.Resolve(game, dirPath: both);
+        ChecksContext.Equal("根目录 thumbnail.png 仍优先于 .metadata 副本", rootImage, actualBoth ?? "<null>");
+
+        var jpeg = Path.Combine(tempRoot, "mods", "eu5-metadata-jpeg");
+        var jpegImage = Path.Combine(jpeg, ".metadata", "thumbnail.jpg");
+        WriteImage(fs, jpegImage);
+        var actualJpeg = resolver.Resolve(game, dirPath: jpeg);
+        ChecksContext.Equal(".metadata 里只有 thumbnail.jpg 也能命中", jpegImage, actualJpeg ?? "<null>");
+
+        // metadata.json 的 picture 相对 .metadata 解释（EU5 13/22 个 mod 带这个键）。
+        var declared = Path.Combine(tempRoot, "mods", "eu5-picture");
+        var declaredImage = Path.Combine(declared, ".metadata", "cover art.png");
+        WriteImage(fs, declaredImage);
+        var actualDeclared = resolver.Resolve(game, dirPath: declared, picture: "cover art.png");
+        ChecksContext.Equal("picture 相对 .metadata 命中", declaredImage, actualDeclared ?? "<null>");
+
+        var flat = Path.Combine(tempRoot, "mods", "eu5-picture-flat");
+        var flatImage = Path.Combine(flat, ".metadata", "cover.png");
+        WriteImage(fs, flatImage);
+        var actualFlat = resolver.Resolve(game, dirPath: flat, picture: "gfx/cover.png");
+        ChecksContext.Equal("picture 带子目录时退化到 .metadata 平铺", flatImage, actualFlat ?? "<null>");
+
+        var noImage = Path.Combine(tempRoot, "mods", "eu5-no-image");
+        fs.EnsureDirectory(Path.Combine(noImage, ".metadata"));
+        fs.WriteAllTextAtomic(Path.Combine(noImage, ".metadata", "metadata.json"), "{}");
+        ChecksContext.Check("只有 metadata.json 时返回 null", resolver.Resolve(game, dirPath: noImage) is null);
+
+        var pdnOnly = Path.Combine(tempRoot, "mods", "eu5-metadata-pdn");
+        fs.WriteAllBytesAtomic(Path.Combine(pdnOnly, ".metadata", "thumbnail.pdn"), new byte[] { 1, 2, 3 });
+        ChecksContext.Check(".metadata 里只有 thumbnail.pdn 时返回 null", resolver.Resolve(game, dirPath: pdnOnly) is null);
+
+        // 库搬家 + .metadata 组合：数据库里的旧盘 dirPath 已失效，真图在新库的工坊目录里。
+        var stalePath = Path.Combine(
+            "E:", "SteamLibrary", "steamapps", "workshop", "content",
+            StellarisAppId.ToString(System.Globalization.CultureInfo.InvariantCulture), "555");
+        var relocated = Path.Combine(
+            tempRoot, "SteamLib", "steamapps", "workshop", "content",
+            StellarisAppId.ToString(System.Globalization.CultureInfo.InvariantCulture), "555", ".metadata", "thumbnail.png");
+        WriteImage(fs, relocated);
+        var actualRelocated = resolver.Resolve(game, dirPath: stalePath);
+        ChecksContext.Equal("陈旧 dirPath 重定位后仍取 .metadata 封面", relocated, actualRelocated ?? "<null>");
     }
 
     private static void WriteImage(IFileSystem fs, string path)

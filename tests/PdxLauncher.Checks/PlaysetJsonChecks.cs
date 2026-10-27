@@ -28,6 +28,7 @@ public static class PlaysetJsonChecks
             CheckCorruptDocument(fs, tempRoot);
             CheckIds(fs);
             CheckBomMetadata(fs, tempRoot);
+            CheckMetadataPictureThumbnail(fs, tempRoot);
             CheckStalePathResolution(fs, tempRoot);
             CheckEu5DlcDiscovery(fs, tempRoot);
         }
@@ -372,7 +373,68 @@ public static class PlaysetJsonChecks
         var metadataPath = Path.Combine(workshopMod, ".metadata", "metadata.json");
         fs.WriteAllBytesAtomic(metadataPath, [.. bom, .. System.Text.Encoding.UTF8.GetBytes(MetadataJson)]);
 
-        var game = new GameInstallation(
+        var game = CreateEu5Game(install, documents);
+
+        var logger = new RecordingLogger();
+        var catalog = new ModCatalog(fs, logger);
+        var mods = catalog.DiscoverAllAsync(game, CancellationToken.None).GetAwaiter().GetResult();
+
+        ChecksContext.Equal("BOM: 扫到 1 个 mod", 1, mods.Count);
+        ChecksContext.Equal("BOM: 名字取自 metadata.json（不是工坊 id）", "圣地在望", mods[0].Name);
+        ChecksContext.Equal("BOM: 工坊 id 取自 metadata.json", "3601117514", mods[0].SteamId);
+        ChecksContext.Check(
+            "BOM: 没有「metadata.json 解析失败」告警",
+            logger.Warnings.All(warning => !warning.Contains("解析失败", StringComparison.Ordinal)),
+            string.Join(" | ", logger.Warnings));
+    }
+
+    /// <summary>
+    /// 真机回归：EU5 工坊 mod 的封面在 <c>&lt;mod&gt;\.metadata\</c> 下，metadata.json 用真键 <c>picture</c>
+    /// 指向它（本机 13/22 个 mod 带该键）。以前既读错了键（读成 "thumbnail"），解析器也不看 .metadata，
+    /// 于是 22 个 mod 里只有根目录另有 thumbnail.png 的 6 个能显示封面。这里端到端复原两种形状。
+    /// </summary>
+    private static void CheckMetadataPictureThumbnail(IFileSystem fs, string tempRoot)
+    {
+        Console.WriteLine("[PlaysetJsonChecks] .metadata 封面与 metadata.json picture 键");
+
+        var library = Path.Combine(tempRoot, "metadata-thumb", "steamapps");
+        var install = Path.Combine(library, "common", "Europa Universalis V");
+        var documents = Path.Combine(tempRoot, "metadata-thumb", "documents");
+        var declaredMod = Path.Combine(library, "workshop", "content", "3450310", "3601117514");
+        var plainMod = Path.Combine(library, "workshop", "content", "3450310", "3601234567");
+        fs.EnsureDirectory(install);
+        fs.EnsureDirectory(Path.Combine(documents, "mod"));
+
+        // A：封面不叫 thumbnail*，只能靠 picture 键找到（覆盖「键读错」这个独立缺陷）。
+        var declaredCover = Path.Combine(declaredMod, ".metadata", "cover art.png");
+        fs.WriteAllBytesAtomic(declaredCover, new byte[] { 0x89, 0x50, 0x4E, 0x47 });
+        fs.WriteAllTextAtomic(
+            Path.Combine(declaredMod, ".metadata", "metadata.json"),
+            """{"name":"带 picture 键","id":"3601117514","picture":"cover art.png"}""");
+
+        // B：没有 picture 键，靠 .metadata\thumbnail* 扫描命中。
+        var scannedCover = Path.Combine(plainMod, ".metadata", "thumbnail.png");
+        fs.WriteAllBytesAtomic(scannedCover, new byte[] { 0x89, 0x50, 0x4E, 0x47 });
+        fs.WriteAllTextAtomic(
+            Path.Combine(plainMod, ".metadata", "metadata.json"),
+            """{"name":"只有 .metadata 封面","id":"3601234567"}""");
+
+        var game = CreateEu5Game(install, documents);
+        var catalog = new ModCatalog(fs, new RecordingLogger());
+        var mods = catalog.DiscoverAllAsync(game, CancellationToken.None).GetAwaiter().GetResult();
+
+        ChecksContext.Equal(".metadata: 扫到 2 个 mod", 2, mods.Count);
+        var declared = mods.Single(mod => mod.SteamId == "3601117514");
+        var plain = mods.Single(mod => mod.SteamId == "3601234567");
+        ChecksContext.Equal(".metadata: picture 键声明的封面被采用", declaredCover, declared.ThumbnailPath ?? "<null>");
+        ChecksContext.Equal(
+            ".metadata: 无 picture 键时扫描 .metadata\\thumbnail.png",
+            scannedCover,
+            plain.ThumbnailPath ?? "<null>");
+    }
+
+    private static GameInstallation CreateEu5Game(string install, string documents)
+        => new(
             "eu5",
             "Europa Universalis V",
             "1.0.10",
@@ -402,19 +464,6 @@ public static class PlaysetJsonChecks
             null,
             3450310,
             GameSupport.Full);
-
-        var logger = new RecordingLogger();
-        var catalog = new ModCatalog(fs, logger);
-        var mods = catalog.DiscoverAllAsync(game, CancellationToken.None).GetAwaiter().GetResult();
-
-        ChecksContext.Equal("BOM: 扫到 1 个 mod", 1, mods.Count);
-        ChecksContext.Equal("BOM: 名字取自 metadata.json（不是工坊 id）", "圣地在望", mods[0].Name);
-        ChecksContext.Equal("BOM: 工坊 id 取自 metadata.json", "3601117514", mods[0].SteamId);
-        ChecksContext.Check(
-            "BOM: 没有「metadata.json 解析失败」告警",
-            logger.Warnings.All(warning => !warning.Contains("解析失败", StringComparison.Ordinal)),
-            string.Join(" | ", logger.Warnings));
-    }
 
     /// <summary>
     /// 真机回归：EU5 的 playsets.json 里留着库搬家前的绝对路径（写在 <c>E:/</c>，mod 实际在 F: 库）。
