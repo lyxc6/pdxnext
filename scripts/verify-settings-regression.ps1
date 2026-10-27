@@ -14,7 +14,13 @@ New-Item -ItemType Directory -Force -Path $shotDir | Out-Null
 if (-not (Test-Path $exe)) { "NO_EXE $exe"; exit 1 }
 Get-Process PdxLauncher.App -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 800
-$p = Start-Process -FilePath $exe -PassThru
+# 注意：必须用 UseShellExecute=$false 启动。worktree 里的未签名 exe 走 ShellExecute
+# 会触发「打开文件 - 安全警告」（取消 = Win32 1223），Start-Process 会报「操作已被用户取消」。
+$psi = New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName = $exe
+$psi.UseShellExecute = $false
+$psi.WorkingDirectory = Split-Path $exe
+$p = [System.Diagnostics.Process]::Start($psi)
 Start-Sleep -Seconds 10
 if ($p.HasExited) { "EXITED code=$($p.ExitCode)"; exit 1 }
 
@@ -92,11 +98,24 @@ public class W4 {
   $g.Dispose(); $bmp.Dispose()
 }
 
-$nav = ById 'navSettings'
+# 首页可能还在加载，等导航项出现
+$nav = $null
+for ($i = 0; $i -lt 40; $i++) {
+  $nav = ById 'navSettings'
+  if ($nav) { break }
+  Start-Sleep -Milliseconds 500
+}
+if (-not $nav) { 'NO_NAV_SETTINGS'; exit 1 }
 $s = $null
 if ($nav.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$s)) { $s.Select() }
 Start-Sleep -Seconds 3
-$sec = ById 'navSettingsAppearance'
+$sec = $null
+for ($i = 0; $i -lt 20; $i++) {
+  $sec = ById 'navSettingsAppearance'
+  if ($sec) { break }
+  Start-Sleep -Milliseconds 500
+}
+if (-not $sec) { 'NO_APPEARANCE_NAV'; exit 1 }
 $si = $null
 if ($sec.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$si)) { $si.Select() }
 Start-Sleep -Milliseconds 1200
@@ -139,4 +158,5 @@ if ($afterChange.Split('|')[3] -ne $before.Split('|')[3]) { $failed += 'thumbnai
 if ($afterChange.Split('|')[5] -ne $before.Split('|')[5]) { $failed += 'themeRefresh-reset' }
 if ($afterChange.Split('|')[2] -eq $before.Split('|')[2]) { $failed += 'bgMode-not-changed' }
 if ($rectAfter -ne $rectBefore) { $failed += 'combo-rect-changed' }
+Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
 if ($failed.Count -gt 0) { "FAILED=[$($failed -join ',')]"; 'DONE_WITH_FAILURES' } else { 'DONE' }

@@ -1,4 +1,4 @@
-﻿# 设置页分节自检：逐节切换左侧分类，检查该节应有的 AutomationId 是否都在。
+# 设置页分节自检：逐节切换左侧分类，检查该节应有的 AutomationId 是否都在。
 # 用法：pwsh -File scripts/verify-settings-sections.ps1
 # 依赖：Windows UI Automation（Windows PowerShell 5.1 / PowerShell 7 均可），未用 Playwright。
 $ErrorActionPreference = 'Continue'
@@ -14,7 +14,13 @@ New-Item -ItemType Directory -Force -Path $shotDir | Out-Null
 if (-not (Test-Path $exe)) { "NO_EXE $exe"; exit 1 }
 Get-Process PdxLauncher.App -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Milliseconds 700
-$p = Start-Process -FilePath $exe -PassThru
+# 注意：必须用 UseShellExecute=$false 启动。worktree 里的未签名 exe 走 ShellExecute
+# 会触发「打开文件 - 安全警告」（取消 = Win32 1223），Start-Process 会报「操作已被用户取消」。
+$psi = New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName = $exe
+$psi.UseShellExecute = $false
+$psi.WorkingDirectory = Split-Path $exe
+$p = [System.Diagnostics.Process]::Start($psi)
 Start-Sleep -Seconds 10
 $p.Refresh()
 if ($p.HasExited) { "EXITED code=$($p.ExitCode)"; exit 1 }
@@ -42,8 +48,13 @@ function ById([string]$id) {
   return $win.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $c)
 }
 
-# 进入设置页
-$nav = ById 'navSettings'
+# 进入设置页：首页可能还在加载，等导航项出现
+$nav = $null
+for ($i = 0; $i -lt 40; $i++) {
+  $nav = ById 'navSettings'
+  if ($nav) { break }
+  Start-Sleep -Milliseconds 500
+}
 if (-not $nav) { 'NO_NAV_SETTINGS'; exit 1 }
 $sel = $null
 if ($nav.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$sel)) { $sel.Select() }
@@ -72,6 +83,35 @@ public class W3 {
 }
 '@
 
+function Shot([string]$name) {
+  [W3]::SetForegroundWindow($hwnd) | Out-Null
+  Start-Sleep -Milliseconds 500
+  $r = New-Object W3+RECT
+  [W3]::GetWindowRect($hwnd, [ref]$r) | Out-Null
+  $w = $r.Right - $r.Left; $hh = $r.Bottom - $r.Top
+  $bmp = New-Object System.Drawing.Bitmap $w, $hh
+  $g = [System.Drawing.Graphics]::FromImage($bmp)
+  $g.CopyFromScreen($r.Left, $r.Top, 0, 0, (New-Object System.Drawing.Size $w, $hh))
+  $bmp.Save((Join-Path $shotDir "$name.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+  $g.Dispose(); $bmp.Dispose()
+}
+
+function ScrollToBottom {
+  $c = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ClassNameProperty, 'ScrollViewer')
+  $all = $win.FindAll([System.Windows.Automation.TreeScope]::Descendants, $c)
+  foreach ($e in $all) {
+    $sp = $null
+    if ($e.TryGetCurrentPattern([System.Windows.Automation.ScrollPattern]::Pattern, [ref]$sp)) {
+      if ($sp.Current.VerticallyScrollable) {
+        $sp.SetScrollPercent(-1, 100)
+        Start-Sleep -Milliseconds 700
+        return $true
+      }
+    }
+  }
+  return $false
+}
+
 $failed = 0
 foreach ($s in $sections) {
   $el = ById $s.id
@@ -90,17 +130,13 @@ foreach ($s in $sections) {
   if ($missing.Count -gt 0) { $failed++ }
   "$($s.name): count=$($ids.Count) missing=[$($missing -join ',')]"
 
-  [W3]::SetForegroundWindow($hwnd) | Out-Null
-  Start-Sleep -Milliseconds 500
-  $r = New-Object W3+RECT
-  [W3]::GetWindowRect($hwnd, [ref]$r) | Out-Null
-  $w = $r.Right - $r.Left; $hh = $r.Bottom - $r.Top
-  $bmp = New-Object System.Drawing.Bitmap $w, $hh
-  $g = [System.Drawing.Graphics]::FromImage($bmp)
-  $g.CopyFromScreen($r.Left, $r.Top, 0, 0, (New-Object System.Drawing.Size $w, $hh))
-  $bmp.Save((Join-Path $shotDir "settings-$($s.name).png"), [System.Drawing.Imaging.ImageFormat]::Png)
-  $g.Dispose(); $bmp.Dispose()
+  Shot "settings-$($s.name)"
+
+  if ($s.name -eq 'cache' -and (ScrollToBottom)) {
+    Shot 'settings-cache-bottom'
+  }
 }
 
+Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
 "FAILED_SECTIONS=$failed"
 if ($failed -eq 0) { 'DONE' } else { 'DONE_WITH_MISSING' }
