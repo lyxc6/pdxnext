@@ -35,6 +35,65 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-10-27 02:30 追加：整窗背景新增「背景显示方式」五档（覆盖 / 填充 / 完整模糊底 / 完整纯色边 / 居中原始像素）、Mod 缩略图三档（32 / 48 / 72 DIP），导航顺序把「当前游戏」放到最前 —— 详见 §12 与 `docs/DATA-FORMATS.md` §13。**
 **2026-10-27 14:40 追加：应用图标从零做起 —— 石墨圆角方 + 金「P」（碗里放播放三角），`tools/gen-app-icon.py` 是唯一生成源，接进 exe 资源（`<ApplicationIcon>`）与运行期窗口（`AppWindow.SetIcon`），并替换 `Assets\` 里 8 张模板占位 PNG；dist 仍 538 文件，见 §0.15 与 §14。**
 **2026-10-27 14:50 追加：设置页「内容和滚动条重叠」已修 —— 根因是 WinUI 3 的滚动条是**浮层**，贴着 `ScrollViewer` 右边缘画在卡片描边/圆角上；现给滚动内容与状态栏各留 14 DIP 右侧通道，滚动条改落在通道里。真机三态截图 + 像素测量见 §0.16。**
+**2026-10-27 15:10 追加：设置页左侧分节导航从「纯文字 ListView」换成官方 `NavigationView`（带 `SymbolIcon`）—— 选中指示条到文字的间距从 ≈8 DIP 变成 ≈41 DIP，见 §0.17。**
+
+## 0.17 最新一轮（2026-10-27 15:10）：设置页分节导航 —— 指示条与文字太近
+
+### 0.17.1 现象（用户原话 m00398，附左栏截图）
+
+「这个选择状态的条似乎和字太近了，是不是自己写的ui，是否有官方ui库解决」——左栏「外观」被选中时，
+3 DIP 的选中指示条紧贴文字，看起来像两个元素挤在一起。
+
+### 0.17.2 结论（读代码 + 量像素，不是猜）
+
+- 指示条**不是自绘**：它是 `ListViewItemPresenter` 自带的选中指示器（3 DIP，贴在条目左缘）。
+  挤的原因是条目**只有文字**（`<ListViewItem Padding="8,10">` + 一个 `TextBlock`），文字落在 8 DIP 内边距处
+  ⇒ 条右缘到文字只有 12 px（150% DPI，≈8 DIP）。
+- WinUI 的导航规范里，指示条右侧留的是**图标位**（条 → 图标 → 文字）。官方控件就是 `NavigationView`，
+  而且主窗口左栏 `MainNavigation` 早就在用；`CommunityToolkit.WinUI.Controls.SettingsControls` 只有
+  `SettingsCard` / `SettingsExpander`，**没有导航控件**，所以那边帮不上。
+- 给 `ListViewItem` 加大 `Padding` 也能拉开，但条和字之间会留一段空白，不符合导航规范 ⇒ 换控件。
+
+### 0.17.3 改动（已落盘）
+
+- `src/PdxLauncher.App/Views/SettingsPage.xaml`：Col0 的 `ListView` 换成 `NavigationView`
+  （`AutomationId` 沿用 `lstSettingsSections`，`PaneDisplayMode=Left`、`OpenPaneLength=216`、
+  `IsPaneToggleButtonVisible=False`、`IsSettingsVisible=False`、`IsPaneOpen=True`、`Background=Transparent`）；
+  页头（标题 + 当前游戏名）移进 `NavigationView.PaneHeader`；六个 `NavigationViewItem` 用 `Tag="0".."5"`
+  携带分类序号，图标依次 `Font / Play / Folder / Globe / Save / Setting`；外层 `Grid` 补上列定义 216/\*
+  与行定义 \*/Auto，`ScrollViewer` 仍是 Row0/Col1 的**兄弟**节点（14 DIP 滚动条通道不变），
+  状态栏 `Border` 放 Row1 并 `ColumnSpan="2"`。
+- `src/PdxLauncher.App/Views/SettingsPage.xaml.cs`（已在 `1f5f23f`）：`OnSectionChanged(NavigationView,
+  NavigationViewSelectionChangedEventArgs)` + `CurrentSectionIndex()` 解析 `Tag`，`ShowSection` 逻辑未变。
+- 提醒：`PaneBackground` 在 WinUI 3 的 `NavigationView` 上**不存在**（XamlCompiler `WMC0011`），要透明只能设 `Background`。
+- `docs/SETTINGS-REWORK.md`：结构图、新增「分节导航控件」条目、切分节说明、新的量测小节。
+
+### 0.17.4 验证（Release，真机截图 + 像素测量 + UIA）
+
+- `cmd /c build.cmd`：0 警告 0 错误；`检查类: 16，失败: 0，断言失败总数: 0`。
+- `.scratch/rework/navgap-settings.png` + `navgap-probe2.py`（1800×1200，150% DPI，行带 y=190..246）：
+  指示条 `x=374–378`（5 px ≈ 3 DIP）→ 图标块 `x=392–415`（24 px = 16 DIP，间隔 14 px ≈ 9 DIP）
+  → 再空 24 px（16 DIP）→ 文字首列 `x=440`。**条右缘到文字 62 px（≈41 DIP）**；改前 12 px（≈8 DIP）。
+- `.scratch/rework/verify-settings2.ps1`：appearance 46 / launch 39 / paths 46 / online 39 / cache 44 /
+  advanced 38（比旧基线各 +4，来自 `NavigationView` 的 `PaneRoot` / `PaneTitleTextBlock` /
+  `PART_TitleText` / `PART_SubtitleText` 节点）。
+
+### 0.17.5 待办与盲区
+
+- `verify-settings2.ps1` 的 `online` 期望表仍是迁移前的 IA：6 个「数据 / Mod 缩略图」控件已随 `18cab88`
+  迁进「缓存」节，所以该节 `missing` 会报 6 个 id —— 是脚本过期，不是回归，需并发会话更新期望表。
+- `1f5f23f` 提交里只有 `.cs` 是 `NavigationView` 版、XAML 还是 `ListView`：单独 checkout 该提交**编译不过**，
+  本轮 XAML 提交补齐了这个缺口。
+- 键盘 / 手柄导航（Tab 进左栏、方向键切分类、Enter 激活）只做了控件层面的对齐（`NavigationView` 自带），
+  没有逐项实测。
+- 同一工作区同时有另一个会话在改 `MainWindow.xaml.cs`、`Services/{AppServices,BitmapLoader,XamlImage}.cs`、
+  `ViewModels/LibraryViewModel.cs`、`Views/HomePage.xaml.cs`、`Services/ThemeImageFlattener.cs`、
+  `GameCatalog.cs`、`tests/PdxLauncher.Checks/GamesChecks.cs`、`InstallSignatureDetector.cs` —— 不属本轮，
+  提交时按路径限定，别顺手 `git add -A`。
+
+### 0.17.6 备份
+
+- 仓库已 git 化，改前的 `ListView` 版 XAML 可从 git 历史取；本轮没有新增 backup 目录。
 
 ## 0.16 最新一轮（2026-10-27 14:50）：设置页「内容与滚动条重叠」—— 浮层滚动条压在卡片描边上
 

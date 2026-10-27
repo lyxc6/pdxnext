@@ -15,8 +15,12 @@
 Page
 └─ Grid Padding=20 RowSpacing=12（两行，* / Auto）
    ├─ Row0 Grid ColumnSpacing=16（216 / *）
-   │  ├─ Col0 StackPanel：页头 + ListView x:Name=lstSettingsSections
-   │  │   SelectionChanged=OnSectionChanged，六项 AutomationId 见下
+   │  ├─ Col0 NavigationView x:Name=navSettingsSections（AutomationId=lstSettingsSections，
+   │  │   PaneDisplayMode=Left、OpenPaneLength=216、IsPaneToggleButtonVisible=False、
+   │  │   IsSettingsVisible=False、Background=Transparent）
+   │  │   ├─ PaneHeader：页头（标题 + 当前游戏名）
+   │  │   └─ MenuItems：六个 NavigationViewItem（Tag=0..5，各带 SymbolIcon），
+   │  │       SelectionChanged=OnSectionChanged，AutomationId 见下
    │  └─ Col1 ScrollViewer（VerticalScrollBarVisibility=Visible 常显、
    │        HorizontalScrollBarVisibility=Disabled、HorizontalContentAlignment=Stretch）
    │     └─ StackPanel Spacing=12 Margin=0,0,14,0（右侧 14 DIP 是滚动条通道）
@@ -37,9 +41,17 @@ Page
   （悬停/滚动时表现为「内容和滚动条重叠」）。修法是滚动内容与状态栏各留 14 DIP 右侧通道
   （12 DIP 滚动条通道 + 2 DIP 余量），滚动条改画在通道里。注意只能给**内容**留白：
   给 `ScrollViewer` 本身加 Margin 只会把轨道跟着卡片一起往里挪，问题不变。
-- 分节切换在 `SettingsPage.xaml.cs`：`OnSectionChanged` → `ShowSection(index, refreshCache)`；
+- **分节导航控件**：左侧六分类用官方 `NavigationView`（与主窗口左栏同一控件、同 216 宽），
+  不是自绘。选中指示条（3 DIP）左侧按 WinUI 规范留的是**图标位**：条目带 `SymbolIcon`
+  后依次是「条 → 图标 → 文字」。初版用纯文字 `ListView`，文字直接落在条目内边距 8 DIP 处，
+  紧贴指示条（视觉上「条和字太近」），换控件 + 加图标后条右缘到文字 ≈ 41 DIP。
+  用 `ListView` 也能通过加大 `Padding` 拉开，但那样条与字之间仍是空的，不符合导航规范。
+- 分节切换在 `SettingsPage.xaml.cs`：
+  `OnSectionChanged(NavigationView, NavigationViewSelectionChangedEventArgs)` →
+  `CurrentSectionIndex()`（解析 `NavigationViewItem.Tag`，"0"–"5"）→ `ShowSection(index, refreshCache)`；
   切到缓存节时后台刷新缓存体积（`CacheSectionIndex = 4`）。
-- 新增 AutomationId：`lstSettingsSections`、`navSettingsAppearance`、`navSettingsLaunch`、
+- 新增 AutomationId：`lstSettingsSections`（沿用旧名，挂在 `NavigationView` 上，未改成 navSettingsSections）、
+  `navSettingsAppearance`、`navSettingsLaunch`、
   `navSettingsPaths`、`navSettingsOnline`、`navSettingsCache`、`navSettingsAdvanced`。
   原有 39 个 AutomationId 全部保留原值。
 
@@ -105,4 +117,31 @@ Page
   （14 DIP × 150% DPI），宽度 492、高度 60、y=940 不变。
 - 六分类 UIA 计数复核：appearance 42 / launch 35 / paths 42 / online 41 / cache 34 / advanced 34，`missing=[]`。
 - `cmd /c build.cmd`：16 个检查类、失败 0、断言失败 0；`python tools/gen-i18n.py --check`：499 个键合法。
+
+### 分节导航改用 NavigationView（2026-10-27 15:10）
+
+用户反馈「选择状态的条和字太近」，并问是不是自绘 UI、有没有官方控件可用。
+
+- 结论：条是 WinUI `ListViewItemPresenter` 自带的选中指示器（3 DIP），不是自绘；显得挤是因为
+  条目是**纯文字**（`Padding="8,10"`），文字落在条目内边距 8 DIP 处，而 WinUI 规范里指示条左侧
+  留的是图标位。官方做法就是带图标的导航条目。
+- 改动：`src/PdxLauncher.App/Views/SettingsPage.xaml` 里 Col0 的 `ListView` 换成 `NavigationView`
+  （`PaneDisplayMode=Left`、`OpenPaneLength=216`、`IsPaneToggleButtonVisible=False`、
+  `IsSettingsVisible=False`、`Background=Transparent`，`AutomationId` 沿用 `lstSettingsSections`）；
+  页头移进 `NavigationView.PaneHeader`；六个 `NavigationViewItem` 用 `Tag="0".."5"` 携带序号，
+  图标依次 `Font / Play / Folder / Globe / Save / Setting`。
+  code-behind 的 `OnSectionChanged` 签名改为 `(NavigationView, NavigationViewSelectionChangedEventArgs)`，
+  新增 `CurrentSectionIndex()` 解析 `Tag`。
+- 量测（1800×1200，150% DPI，`.scratch/rework/navgap-settings.png` / `navgap-probe2.py`）：
+  指示条 `x=374–378`（5 px ≈ 3 DIP）→ 图标块 `x=392–415`（24 px = 16 DIP，间隔 14 px ≈ 9 DIP）
+  → 再空 24 px（16 DIP）→ 文字首列 `x=440`。**条右缘到文字 62 px（≈41 DIP）**；
+  改前（用户截图 358×474）条 `x=25–30`、文字 `x=43`，仅 12 px（≈8 DIP）。
+- UIA 计数（`pwsh .scratch/rework/verify-settings2.ps1`）：appearance 46 / launch 39 / paths 46 /
+  online 39 / cache 44 / advanced 38。比 §「验证记录」的旧基线各 +4，来自 `NavigationView` 新增的
+  `PaneRoot` / `PaneTitleTextBlock` / `PART_TitleText` / `PART_SubtitleText` 节点；
+  `online` 的期望表仍是迁移前的 IA（6 个「数据 / Mod 缩略图」控件已随 `18cab88` 迁入「缓存」节），
+  脚本期望表需要并发会话同步。
+- `cmd /c build.cmd`：0 警告 0 错误、16 个检查类、失败 0、断言失败 0。
+- 备注：`1f5f23f` 提交的 `SettingsPage.xaml.cs` 已经是 `NavigationView` 版，而当时的 XAML 还是 `ListView`，
+  两者不配对（HEAD 编译不过）；本次 XAML 提交补齐了这个缺口。
 
