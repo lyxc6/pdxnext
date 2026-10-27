@@ -115,4 +115,19 @@ public sealed class AppSettings
     /// 与 <see cref="LastGameId"/> 一起命中才算精确恢复。
     /// </summary>
     public string? LastGameInstallRoot { get; set; }
+
+    /// <summary>
+    /// 设置页上次停留的分节（0 起，对应左栏 6 项）；null 或越界时落到第一节。
+    /// 页面重开（含冷启动）会回到这一节。
+    /// </summary>
+    public int? LastSettingsSection { get; set; }
+
+    /// <summary>
+    /// 主窗口上次的位置（物理像素）。-1 表示还没记过，按系统默认居中。
+    /// 与 <see cref="WindowWidth"/>/<see cref="WindowHeight"/> 一起在关闭时写入。
+    /// </summary>
+    public int WindowX { get; set; } = -1;
+
+    /// <summary>主窗口上次的位置（物理像素）。-1 表示还没记过。</summary>
+    public int WindowY { get; set; } = -1;
 }

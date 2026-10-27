@@ -337,6 +337,11 @@ public sealed partial class MainWindow : Window
             AppServices.Settings.WindowWidth = size.Width / scale;
             AppServices.Settings.WindowHeight = size.Height / scale;
 
+            // 位置按物理像素存：恢复时直接交给 AppWindow.Move，省一次坐标换算。
+            var position = AppWindow.Position;
+            AppServices.Settings.WindowX = position.X;
+            AppServices.Settings.WindowY = position.Y;
+
             // 关闭窗口是最后一次落盘机会：先把设置页攒着的延迟写合并进来，
             // 再用立即写把窗口尺寸一起写下去，否则最近 300ms 内的改动会丢。
             AppServices.FlushSettings();
@@ -697,6 +702,7 @@ public sealed partial class MainWindow : Window
             var width = (int)Math.Round(Math.Max(widthDip, MinimumWindowWidth) * scale);
             var height = (int)Math.Round(Math.Max(heightDip, MinimumWindowHeight) * scale);
             AppWindow.Resize(new Windows.Graphics.SizeInt32(width, height));
+            ApplyWindowPosition(width, height);
         }
         catch (Exception ex)
         {
@@ -704,6 +710,42 @@ public sealed partial class MainWindow : Window
             {
                 AppServices.Logger.Warn("设置窗口尺寸失败: " + ex.Message);
             }
+        }
+    }
+
+    /// <summary>
+    /// 恢复上次的窗口位置：只有整个窗口都落在某块显示器的工作区内才用；
+    /// 拔掉副屏或改过分辨率时保持系统默认位置，避免窗口跑到看不见的地方。
+    /// </summary>
+    private void ApplyWindowPosition(int width, int height)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return;
+        }
+
+        var x = AppServices.Settings.WindowX;
+        var y = AppServices.Settings.WindowY;
+        if (x < 0 || y < 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var area = Microsoft.UI.Windowing.DisplayArea
+                .GetFromWindowId(AppWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Nearest)
+                .WorkArea;
+            if (x < area.X || y < area.Y || x + width > area.X + area.Width || y + height > area.Y + area.Height)
+            {
+                return;
+            }
+
+            AppWindow.Move(new Windows.Graphics.PointInt32(x, y));
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("恢复窗口位置失败: " + ex.Message);
         }
     }
 

@@ -1055,12 +1055,21 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// 设置页各属性的落盘入口：只登记一次延迟写，300ms 内的连续改动合并成一次落盘。
-    /// 立刻要确定生效的场合（改代理、关窗口）不走这里，直接调 <see cref="PersistSettings"/>。
+    /// 设置页各属性的落盘入口：直接写盘而不是登记 300ms 合并写。
+    /// <para>
+    /// 这里曾经走 <c>SaveSettingsDeferred</c>，好处是连续改动只写一次，但代价是
+    /// 「改完设置立刻关窗口 / 进程被结束」时最后 300ms 的改动会丢——用户已经碰到过。
+    /// 设置文件只有几百字节，逐次写盘的代价可以忽略，换来确定性。
+    /// </para>
+    /// 需要在输入框失焦 / 关闭串口一类的时机强制落盘时，仍然走 <see cref="PersistSettings"/>。
     /// </summary>
     private void SaveSettings()
     {
-        AppServices.SaveSettingsDeferred();
+        var saved = AppServices.SaveSettings();
+        if (!saved.IsSuccess)
+        {
+            AppServices.Logger.Warn("保存设置失败: " + saved.ErrorMessage);
+        }
     }
 
     /// <summary>把「当前实际用了哪个代理」算出来显示；解析本身不联网。</summary>

@@ -64,9 +64,9 @@ public sealed partial class SettingsPage : Page
 
             await ReloadAsync().ConfigureAwait(true);
 
-            // 分节导航的初始选中项在 XAML 里给的是第 0 项，这里兜底同步一次可见性；
+            // 回到上次停留的分节（冷启动也生效），并把左栏高亮一起同步；
             // 缓存统计紧接着单独跑一次，所以这里不再重复触发。
-            ShowSection(CurrentSectionIndex(), refreshCache: false);
+            RestoreSection();
 
             // 缓存占用只看文件属性，独立于设置加载，失败不该影响整页。
             await _viewModel.RefreshCacheStatsAsync(_lifetime.Token).ConfigureAwait(true);
@@ -168,11 +168,43 @@ public sealed partial class SettingsPage : Page
             }
         }
 
+        // 记住停在哪一节：下次进设置页（含冷启动）直接回到这里。
+        if (AppServices.IsInitialized)
+        {
+            AppServices.Settings.LastSettingsSection = index;
+            var saved = AppServices.SaveSettings();
+            if (!saved.IsSuccess)
+            {
+                AppServices.Logger.Warn("保存设置页分节失败: " + saved.ErrorMessage);
+            }
+        }
+
         if (refreshCache && index == CacheSectionIndex && AppServices.IsInitialized)
         {
             RefreshCacheStatsInBackground();
         }
+    }
 
+    /// <summary>
+    /// 恢复上次停留的分节：越界或从没记过时落到第一节，并把左栏选中项同步过去，
+    /// 避免「内容在缓存节、高亮在外观节」。
+    /// </summary>
+    private void RestoreSection()
+    {
+        var items = navSettingsSections.MenuItems.OfType<NavigationViewItem>().ToList();
+        var index = AppServices.IsInitialized ? AppServices.Settings.LastSettingsSection ?? 0 : 0;
+        if (index < 0 || index >= items.Count)
+        {
+            index = 0;
+        }
+
+        if (index < items.Count)
+        {
+            navSettingsSections.SelectedItem = items[index];
+        }
+
+        AppServices.Logger.Info($"设置页恢复到分节 index={index}（共 {items.Count} 项）");
+        ShowSection(index, refreshCache: false);
     }
 
     /// <summary>进入「缓存」分区时重新统计占用；失败只记日志，不打断浏览。</summary>

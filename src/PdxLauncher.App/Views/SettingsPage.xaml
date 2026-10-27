@@ -51,8 +51,7 @@
             <NavigationView.MenuItems>
                 <NavigationViewItem AutomationProperties.AutomationId="navSettingsAppearance"
                                     Tag="0"
-                                    Content="{x:Bind L.SettingsNavAppearance, Mode=OneWay}"
-                                    IsSelected="True">
+                                    Content="{x:Bind L.SettingsNavAppearance, Mode=OneWay}">
                     <NavigationViewItem.Icon>
                         <SymbolIcon Symbol="Font" />
                     </NavigationViewItem.Icon>
