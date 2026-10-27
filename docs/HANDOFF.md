@@ -2,7 +2,9 @@
 
 > 本文件由上一轮会话在用户要求「停止，留下文档给下个对话使用，需要任务拆分」时写入。
 > 状态时间：2026-10-25 22:30（本机时区 Asia/Hong_Kong）。
-> 工作区：G:\Work\paradox启动器 —— **不是 git 仓库**，没有任何回滚手段，改前先备份到 .scratch\rework\backup*。
+> 工作区：G:\Work\paradox启动器 —— **已是 git 仓库**（2026-10-27 初始化）。改代码前先 `git switch -c <分支>`，
+> 每完成一步就 `git commit`；回滚用 `git restore` / `git revert`，不要再复制 backup 目录。
+> 历史备份（.scratch\rework\backup*）只作为改造前后的存档，不再新增。
 
 ---
 
@@ -1399,7 +1401,12 @@ PdxLauncher.App.pri / Assets\，双击进程立刻消失）。
 
 ---
 
-## 6. 备份（唯一的回滚手段）
+## 6. 版本控制与历史备份
+
+**回滚手段从 2026-10-27 起改为 git**（仓库就在工作区根，基线提交 `chore: 初始化 Git 仓库`）。
+日常流程：改动前建分支、每步 `build` 通过就 `commit`、验证完再合回 `main`；看历史用 `git log -p`，
+回滚用 `git restore <文件>`（未提交）或 `git revert <提交>`（已提交）。下面的 .scratch 备份是 git 之前的存档，
+保留作对照，但**不再新增**。
 
 | 目录 | 内容 |
 | --- | --- |

@@ -30,6 +30,7 @@ public static class OnlineChecks
             CheckProxyResolver();
             CheckThemeResolver(fs, tempRoot);
             CheckThemeRefreshRetry(fs, tempRoot);
+            CheckWashLayerPolicy();
         }
         finally
         {
@@ -730,6 +731,60 @@ public static class OnlineChecks
             "theme-cache");
         ChecksContext.Equal("默认缓存目录", expectedRoot, ThemeResolver.DefaultCacheRoot);
         ChecksContext.Equal("显式缓存目录生效", cacheRoot, resolver.CacheRoot);
+    }
+
+    /// <summary>
+    /// 纱层判定（EU4 发灰的直接成因）：整幅图 alpha 恒为 51/255、RGB 却是一张完整油画时，
+    /// 必须识别成「纱层」并摊平，否则卡片就是一片灰。反过来，真正的半透明美术不能被误摊平。
+    /// </summary>
+    private static void CheckWashLayerPolicy()
+    {
+        // 20% 均匀不透明度（EU4 实测口径）：1920×1080 全是 alpha=51。
+        var uniform20 = new int[WashLayerPolicy.AlphaBucketCount];
+        uniform20[51] = 2_073_600;
+        ChecksContext.Check("均匀 20% alpha 判为纱层", WashLayerPolicy.IsWashLayer(uniform20, 2_073_600));
+
+        var opaque = new int[WashLayerPolicy.AlphaBucketCount];
+        opaque[255] = 2_073_600;
+        ChecksContext.Check("完全不透明不是纱层", !WashLayerPolicy.IsWashLayer(opaque, 2_073_600));
+
+        var semiArt = new int[WashLayerPolicy.AlphaBucketCount];
+        semiArt[40] = 960_000;
+        semiArt[255] = 40_000;
+        ChecksContext.Check("4% 不透明像素的真半透明美术不是纱层", !WashLayerPolicy.IsWashLayer(semiArt, 1_000_000));
+
+        var highPeak = new int[WashLayerPolicy.AlphaBucketCount];
+        highPeak[200] = 1_000_000;
+        ChecksContext.Check("峰值 200/255 超过上限，不算纱层", !WashLayerPolicy.IsWashLayer(highPeak, 1_000_000));
+
+        var transparent = new int[WashLayerPolicy.AlphaBucketCount];
+        transparent[0] = 1_000_000;
+        ChecksContext.Check("全透明图不算纱层", !WashLayerPolicy.IsWashLayer(transparent, 1_000_000));
+
+        ChecksContext.Check("像素数为 0 不算纱层", !WashLayerPolicy.IsWashLayer(uniform20, 0));
+        ChecksContext.Check("直方图长度不对不算纱层", !WashLayerPolicy.IsWashLayer(new int[10], 100));
+
+        // 采样：BGRA 里 alpha 在第 4 字节。
+        var pixels = new byte[] { 10, 20, 30, 51, 40, 50, 60, 51, 70, 80, 90, 255 };
+        var histogram = WashLayerPolicy.BuildAlphaHistogram(pixels);
+        ChecksContext.Equal("直方图按第 4 字节统计", 2, histogram[51]);
+        ChecksContext.Equal("直方图记录不透明像素", 1, histogram[255]);
+
+        var sampled = WashLayerPolicy.BuildAlphaHistogram(pixels, stride: 2);
+        ChecksContext.Equal("采样步长 2 只统计隔一个像素", 1, sampled[51]);
+
+        var threw = false;
+        try
+        {
+            WashLayerPolicy.BuildAlphaHistogram(new byte[7]);
+        }
+        catch (ArgumentException)
+        {
+            threw = true;
+        }
+
+        ChecksContext.Check("缓冲区长度不是 4 的倍数要报错", threw);
+        ChecksContext.Equal("摊平后的 alpha 为全满", 255, WashLayerPolicy.FlattenedAlpha);
     }
 
     /// <summary>
