@@ -63,7 +63,12 @@
                           HorizontalScrollBarVisibility="Disabled"
                           HorizontalScrollMode="Disabled"
                           HorizontalContentAlignment="Stretch">
-                <StackPanel Spacing="12">
+                <!--
+                    右侧 14 DIP 是滚动条通道：WinUI 3 的 Fluent 滚动条是浮层，
+                    贴在 ScrollViewer 右边缘绘制、不占内容宽度。内容若一路撑到边缘，
+                    轨道和滑块就会压在卡片的 1 px 描边与 8 px 圆角上（详见 docs/SETTINGS-REWORK.md）。
+                -->
+                <StackPanel Spacing="12" Margin="0,0,14,0">
 
                     <StackPanel x:Name="secAppearance" Spacing="8">
                         <TextBlock Text="{x:Bind L.SettingsSectionTheme, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
@@ -528,7 +533,9 @@
             </ScrollViewer>
         </Grid>
 
+        <!-- 与滚动内容共用 14 DIP 右侧通道，整页右边缘保持对齐。 -->
         <Border Grid.Row="1"
+                Margin="0,0,14,0"
                 Background="{ThemeResource PdxCardBackgroundBrush}"
                 BorderBrush="{ThemeResource PdxCardStrokeBrush}"
                 BorderThickness="1"

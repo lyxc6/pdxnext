@@ -9,7 +9,7 @@
 ## 0. 一句话现状
 
 启动器外壳与主页已从「照官方 Paradox 启动器截图逐像素自绘」**改成 WinUI 3 标准控件 UI**（用户明确要求），
-Release **0 警告 0 错误**，自检 **15 个检查类 / 0 失败**（13 类时由并发会话加入 `SteamWorkshopChecks`，中途一度 1 条失败、对方补齐后复绿；之后并发会话又继续加类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
+Release **0 警告 0 错误**，自检 **16 个检查类 / 0 失败**（2026-10-27 14:40 实测；本轮新增 `IconChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
 **2026-10-26 已完成：窗口置顶开关（§0.2）+ 整窗背景「方案 B」（§0.3）**——游戏主题背景图现在连标题栏条和左侧
 NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统一纱 + 卡片/列表玻璃底衬），主页那条 260 高、被裁掉一半的
 主题横幅已删除。剩下的活：Light / HighContrast 真机切主题跑一遍（§0.3 唯一视觉盲区）、真机复验 settings.json 与置顶持久化、
@@ -31,6 +31,58 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-10-27 04:10 追加：播放集按钮与下拉弹层做了视觉收边 —— 按钮去系统外框、圆角 4，弹层圆角 8 / 去 1px 硬边、列表内缩 4 DIP 并关掉选中项的系统焦点白框（`UseSystemFocusVisuals=False`），解决了「边框是直角、像没美化」的问题，见 §0.13.7。**
 **2026-10-27 04:20 追加：播放集页工具条收成一行（删掉第二行「集名 / 计数 / 已激活：X」摘要，「激活播放集 / 启用全部 / 禁用全部」并入第一行，忙碌转圈移到状态栏右端），并修掉进页面 / 重载后下拉框空白；`MinimumWindowWidth` 900→1040，见 §0.14。**
 **2026-10-27 02:30 追加：整窗背景新增「背景显示方式」五档（覆盖 / 填充 / 完整模糊底 / 完整纯色边 / 居中原始像素）、Mod 缩略图三档（32 / 48 / 72 DIP），导航顺序把「当前游戏」放到最前 —— 详见 §12 与 `docs/DATA-FORMATS.md` §13。**
+**2026-10-27 14:40 追加：应用图标从零做起 —— 石墨圆角方 + 金「P」（碗里放播放三角），`tools/gen-app-icon.py` 是唯一生成源，接进 exe 资源（`<ApplicationIcon>`）与运行期窗口（`AppWindow.SetIcon`），并替换 `Assets\` 里 8 张模板占位 PNG；dist 仍 538 文件，见 §0.15 与 §14。**
+
+## 0.15 最新一轮（2026-10-27 14:40）：应用图标 —— 从零做一套，接进 exe / 窗口 / 任务栏
+
+> 本节压过「图标以后再说」的旧结论。图标细节速查另见 §14；README 的「界面 / 应用图标」小节是给使用者的版本。
+
+### 0.15.1 起点：整个软件其实没有图标
+
+开工前实测（不是猜）：
+
+- `src/PdxLauncher.App/Assets/AppIcon.ico` 是 **WinUI 模板占位图**（灰圆角方框 + 圆圈 + X，370,070 B，内含 16/32/48/64/128/256 六帧），MD5 `c2838761752b2161371390e41154ed92`。
+- 同目录 8 张模板 PNG 也是同一张占位图（88 / 300 / 50 / 48 / 24 / 48 / 1240×600 / 620×300）。这些是 MSIX 模板遗留物，未打包应用运行时不读它们，只是被 csproj 的 `Assets\**\*.*` 顺手 publish 进产物。
+- csproj **没有 `<ApplicationIcon>`**，源码里 **没有任何 `AppWindow.SetIcon` / `Window.Icon`**；从 `dist\PdxNext\PdxLauncher.App.exe` 用 `ExtractAssociatedIcon` 取出来的是 .NET 默认通用图标（灰窗口 + 蓝方块）⇒ 任务栏、Alt-Tab、文件管理器里全是「无图标」。
+- `ThemeSpec` / `ThemeSettingsDto` 早就有 `AppIcon` / `AppTaskbarIcon`（官方主题的 `app-icon.png`，Victoria 3 是 512×512），`ThemeApplier` 也把它装进 `ThemeVisuals.AppIcon`，但**全仓无人消费**（死字段）。
+
+环境限制：机器上没有任何 SVG 栅格化工具（无 cairosvg / skia / svglib / wand、无 magick / inkscape / rsvg-convert），所以没有 SVG 母版，图标直接用 Pillow + numpy 画。
+
+### 0.15.2 设计（一句话：深色任务栏上要认得出，16px 也要）
+
+- **石墨炭圆角方底 + 金色「P」，P 的碗（计白）里放一枚同色系金色播放三角**：P = Pdx，播放三角 = 启动器 / Next。
+- 底色 `#2E2E36 → #1B1B1F → #0E0E12` 纵向渐变 + 轻微暗角；金色字标 `#FFE3A3 → #F2C14E → #C08A2B`。
+- ≥32px 画 1px 白 13% 描边（浅色任务栏上也有边界），≥48px 加柔和投影；16/20/24px 光学加粗（`_weight` 1.08 / 1.04）且不画投影。
+- 不用 Paradox 的任何商标或官方图标，避免和官方启动器混淆。
+- 走过的弯路（别再走）：第一版是「只把播放三角从 P 上挖掉」——碗是实心金块，整体读不出 P；三角的圆角还因为按 `d = r / sin(θ/2)` 沿角平分线内缩而长出孤立圆洞。最终做法是 `mark - counter` 得到真正的 P 环、再把金色三角放进计白；圆角三角改成**精确圆弧采样**（`_rounded_polygon`，内缩顶点即圆心，取切点之间的短弧）。
+
+### 0.15.3 落盘内容
+
+| 文件 | 内容 |
+| --- | --- |
+| `tools/gen-app-icon.py` **（新）** | 唯一生成源（约 517 行）。`UNIT=1024` 设计坐标 → 超采样（≤32px 用 S=16，其余 S=8）+ LANCZOS；numpy 做底色/字标两处渐变与暗角；`_rounded` / `_ellipse` / `_rounded_polygon` / `_rounded_triangle_mask` 造蒙版；手写 ICO 容器（`_bmp_frame` / `_png_frame` / `ico_bytes`）。`--preview` 只写 `.tmp\icon-preview\`，`--variant play|plain` 选「P 里带三角」还是「纯 P」 |
+| `src/PdxLauncher.App/Assets/AppIcon.ico` | 替换。**73,005 B**，9 帧 16/20/24/32/40/48/64/128/256、全 32bpp；`<128` 是 32 位 BMP 帧（带 AND mask，老 shell 也认）、`>=128` 是 PNG 帧；首帧偏移 150、末帧正好收在文件末尾。新 MD5 `d94e4946cc7c9da1e8194f8ce038befa` |
+| 同目录 8 张 PNG | 替换（文件名与尺寸都不动）：`Square44x44Logo.scale-200.png` 88²、`Square150x150Logo.scale-200.png` 300²、`StoreLogo.png` 50²、`LockScreenLogo.scale-200.png` 48²、`Square44x44Logo.targetsize-24_altform-unplated.png` 24²、`Square44x44Logo.targetsize-48_altform-lightunplated.png` 48²、`SplashScreen.scale-200.png` 1240×600、`Wide310x150Logo.scale-200.png` 620×300 |
+| `docs/app-icon.png` **（新）** | 95,329 B 接触表：深底 / 浅底两行，16→256 各一列 |
+| `src/PdxLauncher.App/PdxLauncher.App.csproj` | `<ApplicationManifest>` 之后加 `<ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>`（现第 17 行）—— 这一行才是 exe 真带图标的原因 |
+| `src/PdxLauncher.App/MainWindow.xaml.cs` | 构造里 `ApplyWindowSize();` 之后加 `ApplyWindowIcon();`；新增 `private void ApplyWindowIcon()`（现 109-133 行）：取 `AppContext.BaseDirectory\Assets\AppIcon.ico`，文件不在就 `Warn("窗口图标缺失: " + path)` 直接返回，`AppWindow.SetIcon(path)` 包 try/catch 记 `Warn("设置窗口图标失败: " + ex.Message)`（缺图标不许把启动搞挂） |
+| `tests/PdxLauncher.Checks/IconChecks.cs` **（新）** | 约 380 行、16 个检查类里的第 16 个。断言：ICO 保留区/类型/帧数 9/MD5 不等于占位图/尺寸集合/全 32 位/偏移不越界不重叠且末帧收尾/`<128` BMP 且 `>=128` PNG/32px 帧金色占比 ∈ (8%,60%)（实测 13.6%）/32px 四角 alpha=0 且中心不透明；8 张 PNG 存在 + PNG 魔数 + IHDR 尺寸；csproj 含 `<ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>`；MainWindow 含 `AppWindow.SetIcon(` 与 `"AppIcon.ico"`；publish.cmd 仍校验 `Assets\AppIcon.ico` |
+| `README.md` / `docs/HANDOFF.md` | README 新增「### 应用图标」小节 + 目录树两条 + 自检覆盖与计数（16 类 / 183 个 .cs + 9 个 .xaml）；本文 §0.15 / §14 与 §2.3 计数 |
+
+### 0.15.4 验证（每条都跑过）
+
+- `cmd /c build.cmd`（先 `taskkill /IM PdxLauncher.App.exe /F`，`-m:1`）：**0 警告 0 错误**；自检 **检查类 16，失败 0，断言失败总数 0**。
+- **exe 资源**：`PrivateExtractIconsW` 从构建产物与 `dist` 的 exe 各提 16/24/32/48/256，与 ICO 对应帧逐像素比对 **平均像素差 0.00**（脚本 `.tmp\verify\compare-icons.py`）。⚠️ 踩坑：`PrivateExtractIcons` 的 `nIconIndex` 必须给 **0**，给 -1 会返回 0 个图标（看起来像「资源没进去」）。
+- **运行期窗口图标**：启动 exe 后 `SendMessage(hwnd, WM_GETICON, ICON_BIG/ICON_SMALL)` 都返回 48×48 的本图标（中心 `#3A3324`）；`GCLP_HICON` 为 0（WinUI 窗口类不挂图标，任务栏走窗口图标，正常）。
+- **任务栏**：本机任务栏是**竖排、贴右边缘**（`Shell_TrayWnd` 3768,0-3840,2160），截图里 PdxNext 按钮是「深底 + 金 P」方块 + 运行中蓝条（`.tmp\verify\runtime\taskbar-button-big.png`）。
+- **publish**：`cmd /c publish.cmd` 全程通过（含 4 个关键文件兜底校验），`dist\PdxNext` 仍 **538 文件（顶层 438 = 349 文件 + 89 本地化子目录）/ 231.3 MB**，`Assets\AppIcon.ico` MD5 与源一致，dist 的 exe 图标与构建产物一致。
+
+### 0.15.5 没做 / 以后可选
+
+- **标题栏不画小图标**：标题栏是自定义的纯文字栏（`PdxNext · 游戏名 · 版本`），加小图标要改 `TitleBar` 布局，本轮不做。
+- **不随游戏切任务栏图标**：官方主题有 `app-icon` / `app-taskbar-icon`，`ThemeSpec.AppIcon` / `AppTaskbarIcon` 与 `ThemeVisuals.AppIcon` 已经在仓里但没人消费。想接的话：MainWindow 收到主题变更后用 `AppWindow.SetIcon(theme.AppIcon)` 覆盖，缺省再回落 `AppIcon.ico`；注意这是「进程级窗口图标」，多游戏切换会互相影响。
+- **没有 SVG 母版**：机器上没栅格化工具。以后若要矢量版，得先装 cairosvg 或 inkscape，再让生成器读 SVG 栅格化。
+- 未验证：Windows 浅色 / 高对比度任务栏下的实际观感（只看了接触表的浅底行）、Explorer 里「大图标」视图（128/256 PNG 帧）的实拍。
 
 ## 0.14 最新一轮（2026-10-27 04:20）：播放集页工具条收成一行（删摘要行 / 三按钮上移 / 下拉框空白）
 
@@ -1123,20 +1175,23 @@ dotnet tests/PdxLauncher.Checks/bin/Release/net10.0/PdxLauncher.Checks.dll → �
 
 | 项目 | .cs | .xaml |
 | --- | --- | --- |
-| src/PdxLauncher.Core | 91 | 0 |
-| src/PdxLauncher.App | 38 | 8 |
-| tests/PdxLauncher.Checks | 11 | 0 |
+| src/PdxLauncher.Core | 111 | 0 |
+| src/PdxLauncher.App | 53 | 9 |
+| tests/PdxLauncher.Checks | 19 | 0 |
 
-合计 **166 个 .cs + 8 个 .xaml**（2026-10-27 01:59 实测：Core 107 / App 43+8 / Checks 16，排除 bin/obj；Checks 的 16 个 .cs 里是 13 个检查类 + Program + ChecksContext + GlobalUsings —— 并发会话还在往里加检查类，实际数量以运行时打印的 `检查类: N` 为准）。
+合计 **183 个 .cs + 9 个 .xaml**（2026-10-27 14:40 实测：Core 111 / App 53+9 / Checks 19，排除 bin/obj；Checks 的 19 个 .cs 里是 **16 个检查类** + Program + ChecksContext + GlobalUsings，本轮新增 IconChecks）。
 
 > §0.6 的增量：Core +3（NewsFeed.cs / INewsFeedService.cs / NewsFeedService.cs）、App +1（NewsCardItem.cs）、
 > Checks +1（NewsFeedChecks.cs）。
 
-App 层 46 个 .cs/.xaml：App.xaml / App.xaml.cs / GlobalUsings.cs / MainWindow.xaml(190 行) / MainWindow.xaml.cs(511 行)；
-Services/ 17 个（AppServices、AlwaysOnTopService、BitmapLoader、FontLoader、GameCardItem、GameDiscovery、ModLibraryService、
+App 层 62 个 .cs/.xaml（2026-10-27 14:40 实测）：根目录 3 个 .cs（App.xaml.cs / GlobalUsings.cs / MainWindow.xaml.cs）+ 2 个 .xaml（App / MainWindow）；
+Services/ 27 个（AppServices、AlwaysOnTopService、BitmapLoader、FontLoader、GameCardItem、GameDiscovery、ModLibraryService、
 NavigationService、NetworkComposition、NewsCardItem、PlaySetEditor、PlaySetPageDisplayModeCatalog、SupportMessages、
-ThemeApplier、ThemeVisuals、XamlImage、XamlVisibility）；
-ViewModels/ 11 个（ModsViewModel 最大、SettingsViewModel、HomeViewModel…）；Views/ 6 页 12 个文件。
+ThemeApplier、ThemeUpdateService、ThemeVisuals、TitleBarTheme、BackgroundDisplayModeCatalog、ModThumbnailSizeCatalog、
+ModThumbnailRetentionCatalog、DlcDescriptionRetentionCatalog、ProxyModeCatalog、RetentionDaysCatalog、UiLanguageCatalog、
+NetworkRebuildResult、XamlImage、XamlVisibility）；
+ViewModels/ 12 个 .cs（11 个 VM + ModSizeText 格式化助手；ModsViewModel 最大、SettingsViewModel、HomeViewModel…）；
+Views/ 6 页 12 个文件；Localization/ 4 个 .cs；Controls/ 1 个 .cs + 1 个 .xaml（SettingsCard）。
 
 ---
 
@@ -1675,3 +1730,53 @@ build.cmd
 > 2. 多个并行会话同时写 `tools/i18n/*` 时，半成品键集会让生成器报「两语言键集不一致」→ **先补齐对侧再继续**，别等对方。
 > 3. 裸 `AutomationId=` 在 `Border` 等非 FrameworkElement 上没有该属性，必须写 `AutomationProperties.AutomationId=`（本轮批量修了 39 处）。
 > 4. WinUI 窗口截图只能靠 `CopyFromScreen`；UIA 点击要 `SelectionItemPattern.Select()`，`mouse_event` 对 WinUI 无效。
+
+---
+
+## 14. 应用图标（2026-10-27 14:40）
+
+> 本节是速查 + 复现步骤；改动背景与验证过程见 §0.15。设计：石墨炭圆角方底 + 金色「P」，P 的碗（计白）里放一枚金色播放三角。
+
+### 14.1 一眼速查
+
+| 项 | 值 |
+| --- | --- |
+| 唯一生成源 | `tools/gen-app-icon.py`（Pillow + numpy 自绘；机器上无 SVG 栅格化工具，**没有 SVG 母版**） |
+| 生成产物 | `src/PdxLauncher.App/Assets/AppIcon.ico`（9 帧 / 73,005 B / MD5 `d94e4946cc7c9da1e8194f8ce038befa`）+ 同目录 8 张模板同名 PNG + `docs/app-icon.png`（接触表） |
+| exe 图标 | csproj `<ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>`（现第 17 行） |
+| 窗口 / 任务栏图标 | `MainWindow.ApplyWindowIcon()`（`MainWindow.xaml.cs:109-133`）→ `AppWindow.SetIcon(<exe 目录>\Assets\AppIcon.ico)`，在构造里紧跟 `ApplyWindowSize()` 调用 |
+| 帧策略 | 16/20/24/32/40/48/64/128/256 全 32bpp；`<128` 用 BMP 帧（带 AND mask）、`>=128` 用 PNG 帧；首帧偏移 150、末帧正好收在文件末尾 |
+| 设计坐标 | `UNIT=1024`、`TILE_INSET=40`、`TILE_RADIUS=210`、字标 `CAP_TOP/BOTTOM=232/792`、`STEM_X0=258`、`STEM_WIDTH=122`、`BOWL_RIGHT=766`、`BOWL_RING=82`、`PLAY_TRI=((410,352),(410,492),(600,422))`、`PLAY_CORNER=20`、小尺寸光学加粗 `_weight()` 16-24px=1.08 / 32-40px=1.04 |
+| 配色 | 底 `#2E2E36 → #1B1B1F → #0E0E12`（纵向渐变 + 暗角）；金 `#FFE3A3 → #F2C14E → #C08A2B`；描边白 13%（≥32px）、投影（≥48px） |
+| 自检 | `tests/PdxLauncher.Checks/IconChecks.cs`（ICO 容器/帧集合/偏移/BMP-PNG 策略/金色占比/圆角透明/8 张 PNG/三处接入点） |
+| 未做 | 标题栏小图标；随游戏切任务栏图标（`ThemeSpec.AppIcon` / `AppTaskbarIcon` → `ThemeVisuals.AppIcon` 仍是死字段）；SVG 母版 |
+
+### 14.2 重新生成 / 先看效果
+
+```bat
+python tools\gen-app-icon.py --preview        :: 只写 .tmp\icon-preview\（接触表 .tmp\icon-preview\app-icon-play.png）
+python tools\gen-app-icon.py                  :: 正式写 Assets 里 9 个文件 + docs\app-icon.png
+python tools\gen-app-icon.py --variant plain  :: 纯 P 环、不放播放三角
+```
+
+改形状 / 配色就改生成器顶部的常量，别手改 PNG 与 ICO。跑完必须 `build.cmd`（`IconChecks` 会拦住手误：帧数、尺寸集合、偏移收尾、BMP/PNG 分界、金色占比、8 张 PNG 的 IHDR 尺寸、三处接入点字符串）。
+
+### 14.3 怎么确认 exe / 窗口真的带上了图标
+
+```powershell
+# exe 资源（nIconIndex 必须给 0，给 -1 会返回 0 个图标）
+$h = New-Object IntPtr[] 1; $ids = New-Object uint32[] 1
+[Native.Icons]::PrivateExtractIcons($exe, 0, 48, 48, $h, $ids, 1, 0)
+
+# 运行中的窗口
+[Native.Win]::SendMessage($hwnd, 0x007F, [IntPtr]1, [IntPtr]::Zero)   # WM_GETICON / ICON_BIG
+```
+
+- 现成脚本：`.tmp\verify\exe-icons.ps1`（提 16/24/32/48/256 并存 PNG）、`.tmp\verify\compare-icons.py`（与 ICO 帧逐像素比对，现测得 **0.00**）、`.tmp\verify\window-icon.ps1`（启动 → `WM_GETICON` / `GCLP_HICON` → 截图 → 关掉进程）、`.tmp\verify\taskbar-icon.ps1`（任务栏截图；本机任务栏是**竖排贴右边缘**，别照底部任务栏的老经验找）。
+- 这些脚本在 `.tmp\` 下，属于临时产物，随时可删；要重看图标效果，直接跑生成器的 `--preview` 更省事。
+
+### 14.4 已知边界
+
+- Windows 浅色 / 高对比度任务栏下的实际观感只核过接触表的浅底行，没在真机浅色任务栏上截图。
+- Explorer 的「大图标 / 超大图标」视图会用 128 / 256 的 PNG 帧，没实拍。
+- 图标是进程级窗口图标：以后若接入官方主题的 `app-icon`，切游戏会整体换掉任务栏图标，需要做成「主题有就用、没有回落 AppIcon.ico」。

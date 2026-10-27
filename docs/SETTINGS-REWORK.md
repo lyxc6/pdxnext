@@ -19,19 +19,24 @@ Page
    │  │   SelectionChanged=OnSectionChanged，六项 AutomationId 见下
    │  └─ Col1 ScrollViewer（VerticalScrollBarVisibility=Visible 常显、
    │        HorizontalScrollBarVisibility=Disabled、HorizontalContentAlignment=Stretch）
-   │     └─ StackPanel Spacing=12
+   │     └─ StackPanel Spacing=12 Margin=0,0,14,0（右侧 14 DIP 是滚动条通道）
    │        ├─ StackPanel x:Name=secAppearance
    │        ├─ StackPanel x:Name=secLaunch   Visibility=Collapsed
    │        ├─ StackPanel x:Name=secPaths    Visibility=Collapsed
    │        ├─ StackPanel x:Name=secOnline   Visibility=Collapsed
    │        ├─ StackPanel x:Name=secCache    Visibility=Collapsed
    │        └─ StackPanel x:Name=secAdvanced Visibility=Collapsed
-   └─ Row1 Border（状态栏，txtSettingsStatus）
+   └─ Row1 Border（状态栏，txtSettingsStatus，同样 14 DIP 右侧通道以对齐右缘）
 ```
 
 - 自绘控件：`src/PdxLauncher.App/Controls/SettingsCard.xaml(.cs)`，三个依赖属性
   `Header`（string）、`Description`（string，空则隐藏）、`ActionContent`（object，右侧控件）。
   边框用 `PdxCardBackgroundBrush` / `PdxCardStrokeBrush`，与主题（浅色/深色/高对比）联动。
+- **滚动条通道**：WinUI 3 的 Fluent 滚动条是浮层指示器，贴在 `ScrollViewer` 右边缘绘制、
+  不占内容宽度。初版内容一路撑到右边缘，轨道和滑块就压在卡片的 1 px 描边与 8 px 圆角上
+  （悬停/滚动时表现为「内容和滚动条重叠」）。修法是滚动内容与状态栏各留 14 DIP 右侧通道
+  （12 DIP 滚动条通道 + 2 DIP 余量），滚动条改画在通道里。注意只能给**内容**留白：
+  给 `ScrollViewer` 本身加 Margin 只会把轨道跟着卡片一起往里挪，问题不变。
 - 分节切换在 `SettingsPage.xaml.cs`：`OnSectionChanged` → `ShowSection(index, refreshCache)`；
   切到缓存节时后台刷新缓存体积（`CacheSectionIndex = 4`）。
 - 新增 AutomationId：`lstSettingsSections`、`navSettingsAppearance`、`navSettingsLaunch`、
@@ -41,7 +46,9 @@ Page
 ## 三个「设置一变就跳」的问题及修法
 
 1. **改完选项整页跳一下 / 滚动条闪现**
-   - 滚动条改为常显（`VerticalScrollBarVisibility="Visible"`），内容宽度不再随高度抖动。
+   - 滚动条改为常显（`VerticalScrollBarVisibility="Visible"`）：浮层滚动条本身不占布局宽度，
+     这条并不能消除宽度抖动，只是不让滚动条随内容高度闪现；真正起作用的是下面两条。
+     顺带：常显也意味着必须给它留通道，否则会压住卡片（见上文「滚动条通道」）。
    - 状态栏从滚动区挪到页面底部固定行。
    - 代理地址输入框不再随「手动代理」折叠，改为 `IsEnabled` 绑定（行高恒定）。
    - 数值型长文本统一 `TextTrimming="CharacterEllipsis"` + `TextWrapping="NoWrap"` + tooltip 看全文。

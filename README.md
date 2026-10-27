@@ -231,6 +231,28 @@ CK3 是深炭纹理 + 米色字、Victoria 3 是紫红大理石 + 金珠边框 +
 在游戏库里点另一张卡片即换图（例如 CK3 深红肖像 ↔ Victoria 3 亮色插图）。没有选中游戏时退回纯色底，
 视觉与普通 WinUI 应用一致。
 
+### 应用图标
+石墨炭圆角方底 + 金色「P」，P 的碗（计白）里放一枚同色系金色播放三角 —— P 是 Pdx，播放三角是「启动器 / Next」。
+底色 `#2E2E36 → #1B1B1F → #0E0E12` 纵向渐变 + 轻微暗角，金色字标 `#FFE3A3 → #F2C14E → #C08A2B`；
+≥32px 加 1px 白 13% 描边（浅色任务栏上也有边界）、≥48px 加柔和投影，16/20/24px 光学加粗且不画投影，保证 16px 仍读得出「P + 三角」。
+
+图标由 `tools/gen-app-icon.py` **唯一生成**（Pillow + numpy 自绘，机器上没有 SVG 栅格化工具，所以没有 SVG 母版）：
+`AppIcon.ico` 是 9 帧 16/20/24/32/40/48/64/128/256（<128 用 32 位 BMP 帧带 AND mask、≥128 用 PNG 帧），
+`Assets\` 里 8 张 Microsoft 模板同名 PNG（88 / 300 / 50 / 48 / 24 / 48 / 1240×600 / 620×300）一并替换，文件名与尺寸都不变。
+
+接到哪里：exe 资源走 csproj 的 `<ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>`（双击 exe 后的任务栏 / 文件管理器 / Alt-Tab 图标），
+运行中的窗口图标由 `MainWindow.ApplyWindowIcon()` 调 `AppWindow.SetIcon(…\Assets\AppIcon.ico)` 设上（任务栏、Alt-Tab、Win+Tab；标题栏是自定义的纯文字标题栏，不画小图标）。
+
+改图标只改生成器里的常量，然后
+
+```bat
+python tools\gen-app-icon.py          :: 重写 Assets 里 9 个文件 + docs\app-icon.png 接触表
+python tools\gen-app-icon.py --preview :: 只写 .tmp\icon-preview\，用来先看效果
+```
+
+`docs\app-icon.png` 是深浅两种底色下的接触表（16→256）。自检 `IconChecks` 会校验 ICO 容器结构、帧尺寸集合、
+BMP/PNG 帧策略、32px 帧的金色占比与圆角透明、8 张 PNG 的魔数与 IHDR 尺寸、以及 csproj / MainWindow / publish.cmd 三处接入点。
+
 ### 网络代理
 设置页有独立的「网络代理」卡片，三选一（存 `data\settings.json` 的 `proxyMode`），改完**立刻重建整条联网链路**，不用重启：
 
@@ -259,7 +281,7 @@ scripts/
 Directory.Build.props          :: 统一可空/语言版本/告警策略
 NuGet.config                   :: <clear/>，全离线
 src/
-  PdxLauncher.Core/            :: 107 个 .cs，无任何 WinUI 依赖，可单测
+  PdxLauncher.Core/            :: 111 个 .cs，无任何 WinUI 依赖，可单测
     Abstractions/              :: 18 个接口（IGameCatalog / IPlaySetRepository / IGameLauncher / INewsFeedService ...）
     Contracts/                 :: 不可变 record 数据模型
     Games/                     :: Steam 库探测、launcher-settings 解析、游戏目录展开
@@ -271,16 +293,18 @@ src/
     Themes/                    :: 主题 JSON 解析 + HSL/RGB 颜色
     Online/                    :: GraphQL 元数据、素材下载、代理（三模式解析 / 系统代理 / 环境变量）、DLC 简介、官方公告
     Parsing/                   :: Clausewitz 与 Valve KeyValues 解析器
-  PdxLauncher.App/             :: 43 个 .cs + 8 个 .xaml，WinUI 3 层
+  PdxLauncher.App/             :: 53 个 .cs + 9 个 .xaml，WinUI 3 层
+    Assets/                    :: AppIcon.ico（9 帧 16→256）+ 8 张模板同名 PNG，全部由 tools/gen-app-icon.py 生成
     Views/                     :: GameLibraryPage / HomePage / ModsPage（播放集） / ModLibraryPage（Mod库） / DlcPage / SettingsPage
     ViewModels/                :: 11 个 VM（全部不含 Microsoft.UI.Xaml 类型）
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
 tests/
-  PdxLauncher.Checks/          :: 13 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 16 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
   DATA-FORMATS.md              :: 所有数据格式的真机实测记录（262 行）
+  app-icon.png                 :: 应用图标接触表（深/浅底，16→256，由生成器写出）
   screenshot-home.png          :: 当前游戏（整窗主题背景）
   screenshot-library.png       :: 游戏库
   screenshot-playsets.png      :: 播放集
@@ -290,6 +314,7 @@ docs/
 tools/
   manual-build.py              :: 完全绕过 MSBuild 的 Roslyn + XamlCompiler 手工构建链
   package-app.py               :: 打包脚本
+  gen-app-icon.py              :: 应用图标唯一生成源（Pillow + numpy 自绘 → ico / 8 张 PNG / 接触表）
 ```
 
 > **顶层 `.cmd` 必须保持纯 ASCII**。中文提示一律写在 `scripts\messages.txt`，由
@@ -297,7 +322,7 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**166 个 .cs + 8 个 .xaml**，0 编译告警（2026-10-27 01:59 实测：Core 107 / App 43+8 / Checks 16 —— Checks 的 16 个 .cs 里是 13 个检查类 + Program + ChecksContext + GlobalUsings）。
+**183 个 .cs + 9 个 .xaml**，0 编译告警（2026-10-27 14:40 实测：Core 111 / App 53+9 / Checks 19 —— Checks 的 19 个 .cs 里是 16 个检查类 + Program + ChecksContext + GlobalUsings）。
 
 ---
 
@@ -307,14 +332,17 @@ tools/
 dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 13，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
+输出 `检查类: 16，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
 launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取
 （mods 全量、size / subscribedDate 解析、播放集归属、requiredVersion 兼容判断）、创意工坊 id 解析、启动参数拼装、路径大小写不敏感处理；
 以及联网子系统：域名白名单与 magic bytes 判型（含 GIF）、素材下载与原子改名、主题补丁合并、
 DLC 简介的 TTL / 负缓存 / 失败退避、官方公告的 JSON 解析（时间窗与 weight）、404 负缓存、离线不联网、6 小时 TTL、30 分钟失败退避、图片落盘与复用、缓存往返；
 以及网络代理：三模式归一化与旧配置迁移、手动地址补 scheme / 去引号 / 拒绝 SOCKS 与非 http、
 「跟随系统」的 ProxyEnable 关闭回落环境变量、`http=a;https=b` 分号写法、PAC 不执行且不回退、
-`ProxyOverride` → 正则 → `WebProxy.IsBypassed`、带账号密码时解析成 `NetworkCredential`。
+`ProxyOverride` → 正则 → `WebProxy.IsBypassed`、带账号密码时解析成 `NetworkCredential`；
+以及应用图标：ICO 容器（保留区 / 类型 / 9 帧 / 偏移不重叠且末帧正好收尾）、帧尺寸集合与 32 位色深、
+<128 走 BMP 且 ≥128 走 PNG、32px 帧的金色占比与圆角透明、8 张模板同名 PNG 的魔数与 IHDR 尺寸、
+csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cmd 的 `Assets\AppIcon.ico` 校验三处接入点。
 
 ---
 
