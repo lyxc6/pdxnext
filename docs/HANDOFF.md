@@ -53,7 +53,73 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 
 **2026-10-28 01:25 追加：位次输入的「大于总数＝报错」改成「大于总数＝置底」。反例来自用户截图——4 行的播放集输入 5，得到「位次无效：请输入 1–4 之间的整数」，而用户想要的是「放最后」。现在向上越界一律钳到末位（`0` 与负数仍判无效），并新增 `PositionInput` 纯解析类 + `PositionInputChecks`（检查类 23 个 / 0 失败），见 §0.25。**
 
-## 0.25 最新一轮（2026-10-28 01:10–01:30）：位次输入向上越界改为「置底」
+**2026-10-28 03:10 追加：Mod 库的「在线（PDX Mods）」视图按用户要求整体回退，功能搬进左栏独立「创意工坊」页 —— 它按当前游戏单一来源渲染（CS2 → Paradox Mods，CK3/V3 等有 Steam 工坊的 → Steam 创意工坊），不做页签切换；Paradox 登录同时从设置页分节搬成左栏独立「账号」页，并且启动时就恢复会话（原来只有进设置页才恢复）；顺手补上「记忆上次选中的游戏」（`settings.json` 新增 `lastGameId` / `lastGameInstallRoot`），见 §0.26。**
+
+## 0.26 最新一轮（2026-10-28 02:10–03:10）：独立「创意工坊」页 + 独立「账号」页 + 记忆上次游戏
+
+### 0.26.1 用户需求（两条，后一条否决了前一轮的设计）
+
+- User said (m00163)：「登录仍是左栏登录（一个新的页面）；创意工坊页面也是在左栏添加新页面。还有是不是没有记录最后选择哪个游戏」
+- User said (m00196)：「创意工坊」页不是两个页签，是哪个游戏就显示哪个，比如CS2显示PMOD，ck3vic3这些显示steam创意工坊。
+
+⇒ 三件事：① 「账号」必须是左栏真正独立页面（前一轮计划的「从导航深链到设置页账号分节」作废）；②「创意工坊」也是左栏独立页面，且**按当前游戏单一来源**渲染，不做 Steam/PDX 页签；③ 查证并补上「上次选中的游戏」。
+
+第三条查证结论：**确实没记录** —— `AppSettings` 里没有任何游戏选择字段，`AppServices.SelectDefaultGame` 每次启动都按「第一款可管理内容的游戏」重新挑。已修（见 0.26.5）。
+
+### 0.26.2 创意工坊的来源判定（单一来源、Steam 优先）
+
+| 情形 | 显示 | 依据 |
+| --- | --- | --- |
+| `SteamAppId == null`（独立版：EU4/CS1/PA） | Paradox Mods | 没有 Steam 工坊可查 |
+| `hasWorkshop == true`（CK3、V3、Stellaris、HOI4、CS1、EU5） | Steam 创意工坊 | `store.steampowered.com/api/appdetails?filters=categories` 的分类里有 `Steam Workshop` |
+| `hasWorkshop == false`（**CS2**：有 appId 但无工坊分类） | Paradox Mods | CS2 的 `workshop/browse/?appid=949230` 会 302 回 `/workshop` |
+| 探测请求失败 | Paradox Mods + 状态条提示「探测失败，已改用 Paradox Mods」 | 网络异常不该让页面空着 |
+
+判定缓存按 appId 记在 `SteamWorkshopClient` 里（`ConcurrentDictionary<int,bool>`），一次进程只查一次。纯函数抽在 `src/PdxLauncher.Core/Online/WorkshopSourceChooser.cs`（`Resolve(int? steamAppId, bool? hasWorkshop)`），自检直接覆盖。
+
+两平台共用同一套三档排序：Steam `mostpopular/mostrecent/toprated`（有搜索词时强制 `browsesort=textsearch` + `searchtext=`），PDX `popularity/updated/rating`。页大小 30 / 24，翻页、搜索、刷新复用同一个 VM。
+
+### 0.26.3 批次与文件
+
+| 批次 | 内容 |
+| --- | --- |
+| 回退 | `git checkout 5da2773 -- src/PdxLauncher.App/Views/ModLibraryPage.xaml(.cs)`；删 `OnlineModsViewModel.cs`（419 行）/`OnlineModRowViewModel.cs`（94 行）；删 `modlib.json` 里 29 个 `modlib.mode*`/`modlib.online*` 键。**保留** `ModLibraryViewModel` 的 DDS 预热（`AppServices.ImageArt.PrewarmAsync`）与 §0.23.6 的缩略图修复 |
+| Core | `OnlineHosts` 加 `steamcommunity.com` / `api.steampowered.com` 白名单与三个端点常量；`IHttpFetcher.PostFormAsync`（原来只有 JSON POST，Steam 的 `GetPublishedFileDetails` 只吃表单）；新 `SteamWorkshopModels.cs` / `SteamWorkshopHtmlParser.cs` / `SteamWorkshopClient.cs` |
+| 创意工坊页 | 新 `WorkshopViewModel.cs` / `WorkshopRowViewModel.cs` / `Views/WorkshopPage.xaml(.cs)`；`AppServices.WorkshopCoverRoot` = `data\workshop-covers\`，封面按 `steam\{id}` / `pdx\{id}` 落盘 |
+| 账号页 | 新 `AccountViewModel.cs` / `Views/AccountPage.xaml(.cs)`，把设置页「Paradox 账号」分节整块搬出来（AutomationId 沿用 `txtAccountStatus`/`txtAccountEmail`/`txtAccountPassword`/`swAccountRemember`/`btnAccountSignIn`/`btnAccountSignOut`），设置页 7→6 分节 |
+| 记忆游戏 | `AppSettings` 加 `lastGameId` / `lastGameInstallRoot`；新纯函数 `src/PdxLauncher.Core/Configuration/GameSelection.cs`；`SelectGame` 切游戏时落盘 |
+| 启动恢复 | `App.xaml.cs` 在服务装配完成后 `_ = RestoreAccountSessionAsync()` —— 原来只有进设置页才会恢复 Paradox 会话，冷启动后「已登录」状态根本不存在 |
+| i18n | 新 area `account.json`(27 键) / `workshop.json`(42 键)，`shell.json` 加两个导航键，`settings.json` 删 28 个账号键；`Strings.g.cs` 共 583 键 |
+
+### 0.26.4 两个真机才暴露的坑
+
+1. **Steam 工坊列表页的 SSR JSON 有两套嵌套**。官方 `/workshop/browse` 把 `renderContext` 放在**顶层**（`data["renderContext"]["queryData"]`），而离线样本是 `props.pageProps.renderContext`。结果是真机一直「解析到的条目数为 0」、页面显示「正在加载……」。现在两种都试（先 `props.pageProps.renderContext`，再顶层）。另外 `queries` 数组里排在前面的是 `AOWarningCookie` 之类的 `data=null` 项，必须按 `queryKey[0] == "workshop_browse"` 跳过空项。
+2. **Steam 的 `star_rating` 用 -1 表示「没人评分」**。不判 `> 0` 就会在行副标题印出「-1 分」。另外 `file_size` 是字符串形式的字节数。
+
+### 0.26.5 记忆上次游戏
+
+- `GameSelection.Select(games, lastGameId, lastInstallRoot)` 优先级：gameId + installRoot 双命中 → 仅 gameId 命中（游戏搬库了也能认回）→ 仅 installRoot 命中（gameId 改过名）→ 第一款「可管理内容」的 → 第一款「可支持」的 → 列表第一项 → 空列表 `null`。
+- `AppServices.SelectGame` 在 `IsInitialized` 之后才落盘（初始化前 `SettingsStore` 还是 `null!`），切游戏后 `settings.json` 里立刻出现 `lastGameId: "ck3"` 与 `lastGameInstallRoot`。真机验证：切到 CK3 → 重启 → 标题栏仍是「PdxNext · Crusader Kings III」。
+- 卸载游戏不会卡住启动：记忆项找不到就退回默认规则。
+
+### 0.26.6 验证
+
+- `dotnet build "PdxLauncher.sln" -c Release` → 0 警告 0 错误。
+- `tests/PdxLauncher.Checks` → **25 个检查类，失败 0，断言失败 0**（新增 `SteamWorkshopApiChecks` 与 `GameSelectionChecks`）。
+- 真机（`ui-test-artifacts/workshop/workshop-shot.ps1`，winapp UIA）：
+  - CS2：创意工坊页来源徽标「Paradox Mods」，`已加载 27378 个结果`，第 1/1141 页，未登录提示条正确显示（`02-workshop-pdx.png`）。
+  - CK3：来源徽标「Steam 创意工坊」，`已加载 17717 个结果`，第 1/591 页，封面/评分/订阅/更新/体积齐全（`02-workshop-steam.png`）。
+  - 账号页：左栏底部独立「账号」项，登录状态「未登录」，邮箱/密码/保持登录/登录按钮齐全（`03-account.png`）。
+  - 设置页：左栏只剩 6 个分节（外观/启动/路径/联网/缓存/高级），账号分节已移出（`04-settings.png`）。
+
+### 0.26.7 未做 / 已知边界
+
+- 订阅、安装、收藏仍需要 Paradox 会话与写权限，这一轮只做「浏览」。
+- Steam 工坊详情走 keyless `ISteamRemoteStorage/GetPublishedFileDetails/v1`（表单 POST），只回标题/描述/体积/预览图，没有截图列表与标签明细。
+- PDX 详情用线上接口现取（`os=windows&arch=x64` 必填），离线时退回列表字段的旧值。
+- 有 Steam 工坊的游戏（CK3/V3）**不再展示 PDX 列表** —— 这是用户指定行为，不是遗漏；要看 PDX 版可切到 CS2 之类的游戏。
+
+## 0.25 上一轮（2026-10-28 01:10–01:30）：位次输入向上越界改为「置底」
 
 ### 0.25.1 用户需求
 
@@ -208,6 +274,8 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 `winapp ui` 能否自动化 ContentDialog 与条目标签尚未验证；undo 不存在。
 
 ## 0.23 上一轮（2026-10-27 19:30–20:20）：CS2 mod 管理 + Paradox 账号 + PDX Mods 在线视图
+
+> **2026-10-28 03:10 已部分回退**：§0.23.5 的「Mod 库页内『在线（PDX Mods）』视图」已整体移除（页头来源切换按钮、`OnlineModsViewModel` / `OnlineModRowViewModel`、`AppServices.OnlineModCoverRoot`、`modlib.online*` 29 个文案键一并删除），原因见 §0.26.1 用户原话；功能迁到左栏独立「创意工坊」页（§0.26）。**保留**的是 §0.23.3/§0.23.4 的 CS2 播放集接管、§0.23.6 的本地缩略图修复、以及 Paradox 账号能力本身（只是入口从设置页搬到独立「账号」页）。
 
 ### 0.23.1 用户两问
 

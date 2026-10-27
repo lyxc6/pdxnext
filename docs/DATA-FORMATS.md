@@ -323,7 +323,9 @@ normalizedMachineId = MachineGuid（HKLM\SOFTWARE\Microsoft\Cryptography\Machine
   `<exe 目录>\data-root.txt`（文件里写一行绝对路径，逃生口）→ `<exe 目录>\data` →
   `<exe 目录>\..\PdxNext-data`（程序目录不可写时）；全不可写仍返回 `<exe 目录>\data`，
   由上层降级（日志退化成 Debug.WriteLine），**绝不回退 C 盘**。
-- 布局：`data\settings.json`、`data\logs\pdxnext.log`、`data\theme-cache\`、`data\news-cache\`、`data\mod-cache\`、`data\dlc-descriptions.json`。
+- 布局：`data\settings.json`、`data\logs\pdxnext.log`、`data\theme-cache\`、`data\news-cache\`、`data\mod-cache\`、`data\image-cache\`、`data\workshop-covers\`、`data\dlc-descriptions.json`。
+- `data\workshop-covers\` 是「创意工坊」页的封面缓存：`steam\{publishedfileid}.{png|jpg}` 与 `pdx\{modId}.{png|jpg}` 两棵子树，由 `AppServices.WorkshopCoverRoot` 给出根目录；页面只认本地路径（`XamlImage.FromPath`），下载失败就留占位图标。
+- `settings.json` 里与游戏选择有关的两项（2026-10-28 新增，向后兼容，缺省即走默认规则）：`lastGameId`（如 `"ck3"`）、`lastGameInstallRoot`（安装根绝对路径，游戏搬库后仍能认回）。写入时机只有「用户切游戏」，由 `AppServices.SelectGame` 调 `SaveSettingsDeferred()`；启动时 `GameSelection.Select(games, lastGameId, lastGameInstallRoot)` 按「双命中 → 仅 gameId → 仅安装路径 → 可管理内容 → 可支持 → 第一项」的顺序挑。
 - 迁移：首次启动若目标 `data` 里既没有 `settings.json` 也没有 `.migrated-from-localappdata`，
   就把旧 `%LOCALAPPDATA%\PdxNext` 的 settings / dlc-descriptions / theme-cache / news-cache / mod-cache
   **复制**过来（不搬 logs、永不删源、已存在的文件跳过）。设置页「数据目录」卡片显示绝对路径、
@@ -551,3 +553,49 @@ byte[] png = DdsImage.EncodePng(r.Pixels);                          // PixelBuff
 CS2 的 `launcher-settings.json` 写的也是 `formatVersion=1.1`，与 V3 的 `ContentLoadV1_1` **同值**。若按 `formatVersion` 推断加载文件格式，就会给 CS2 写 `content_load.json` —— 而 CS2 根本不读它，于是「mod 管理管不到天际线 2」。
 
 判定必须走别的信号：`modsCompatibilityStandardConfig` 存在，或 gameId 是 `cities_skylines_2`。实现在 `LoadFileFormat.cs` 与 `ModCatalogRouter` / `PlaySetRepositoryRouter`，判定只发生在这两处。
+
+## 18. Steam 创意工坊（列表 / 详情 / 可用性探测）
+
+2026-10-28 实测，全部**匿名可用、无需 key**。实现：`src/PdxLauncher.Core/Online/SteamWorkshopClient.cs` + `SteamWorkshopHtmlParser.cs`。
+
+### 18.1 列表（HTML + 内嵌 SSR JSON）
+
+```
+GET https://steamcommunity.com/workshop/browse/?appid=<appId>&section=readytouseitems
+    &browsesort=<mostpopular|trend|mostrecent|toprated|mostsubscribed|textsearch>
+    &num_per_page=<n>&p=<1-based>&searchtext=<关键词>
+```
+
+- `User-Agent: ParadoxLauncher/1.0` 实测可用；必须跟随重定向（`/workshop/browse` 会 302）。
+- 数据在 `<script type="application/json" id="valve-ssr-data">` 里。`parse` 两条路径都要试：
+  - `data["props"]["pageProps"]["renderContext"]["queryData"]`（旧样本）
+  - `data["renderContext"]["queryData"]`（**现网真实页面**）
+- `queryData` 本身是**字符串**，要再 `JsonNode.Parse` 一次；里面是 `{"queries":[{"queryKey":["workshop_browse",...],"state":{"data":{"total_count":N,"total_pages":M,"results":[...]}}}]}`。
+- `queries` 里前面可能混着 `AOWarningCookie` 等 `data=null` 的项，取第一个带 `results` 的。
+- 条目字段：`publishedfileid`（字符串）、`title`、`short_description`、`preview_url`、`creator`（SteamID64 字符串）、`consumer_appid`、`subscriptions`、`favorited`、`lifetime_subscriptions`、`views`、`time_created` / `time_updated`（Unix 秒）、`file_size`（**字符串**）、`tags[{tag,display_name}]`、`star_rating`（**`-1` 表示无人评分**）、`total_votes`。
+- `num_per_page` 上限 50（>50 静默回落 30）；`p` 从 1 开始。
+
+### 18.2 详情（keyless 表单 POST）
+
+```
+POST https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/
+Content-Type: application/x-www-form-urlencoded
+
+itemcount=1&publishedfileids[0]=<publishedfileid>
+```
+
+- **GET 会 405，JSON body 会 400**，必须表单编码 —— 这就是 `IHttpFetcher` 新增 `PostFormAsync` 的原因（原有接口只有 JSON POST）。
+- 响应：`{"response":{"publishedfiledetails":[{"title","description","file_size","preview_url","time_created","time_updated","filename",...}]}}`；失败时该数组为空或含 `result: 9`。
+- 详情页 `sharedfiles/filedetails/?id=` **没有** SSR JSON，别去刮 HTML。
+
+### 18.3 「这个游戏有没有 Steam 工坊」
+
+```
+GET https://store.steampowered.com/api/appdetails?appids=<appId>&filters=categories&cc=us&l=english
+```
+
+判定：`{"<appId>":{"success":true,"data":{"categories":[{"id":30,"description":"Steam Workshop"},...]}}}` —— 分类里出现 `Steam Workshop` 才算有工坊。实测：CK3(1158310)/V3(529340)/Stellaris(281990)/HOI4(394360)/CS1(255710)/EU5(3450310) 有；**CS2(949230) 没有**（它的 `workshop/browse` 也会 302 回 `/workshop`）。
+
+### 18.4 白名单
+
+`OnlineHosts` 里新增两个精确主机（禁子域）：`steamcommunity.com`、`api.steampowered.com`。`images.steamusercontent.com`（封面图 CDN）与 `store.steampowered.com` 原本就在。`XamlImage` 只认本地文件，封面仍要先经 `AssetDownloader` 落到 `data\workshop-covers\`。

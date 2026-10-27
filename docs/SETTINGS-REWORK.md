@@ -1,5 +1,7 @@
 # 设置页改版说明（2025-10-27）
 
+> **2026-10-28 追加**：Paradox 账号分节（曾经的 `navSettingsAccount`，`Tag=4`）已从设置页移出，改成左栏底部独立「账号」页（`src/PdxLauncher.App/Views/AccountPage.xaml`）。设置页回到本文描述的 **6 个分节**（`Tag="0".."5"`），`CacheSectionIndex` 回到 `4`；文案键 `settings.nav.account` / `settings.section.account` / 全部 `settings.account.*` 已删，迁到 `tools/i18n/*/account.json`（`account.*`）。详见 `docs/HANDOFF.md` §0.26。
+
 ## 目标与结果
 
 把原来「一整列 10 张卡片、每张卡里 160/`*` 左标签右控件」的设置页，改成 Windows 11 设置风格：
