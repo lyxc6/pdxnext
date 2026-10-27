@@ -2773,3 +2773,45 @@ $h = New-Object IntPtr[] 1; $ids = New-Object uint32[] 1
 - Windows 浅色 / 高对比度任务栏下的实际观感只核过接触表的浅底行，没在真机浅色任务栏上截图。
 - Explorer 的「大图标 / 超大图标」视图会用 128 / 256 的 PNG 帧，没实拍。
 - 图标是进程级窗口图标：以后若接入官方主题的 `app-icon`，切游戏会整体换掉任务栏图标，需要做成「主题有就用、没有回落 AppIcon.ico」。
+---
+
+## 15. 账号页重做 + 创意工坊来源判定修正 + 设置持久化（2026-10-28）
+
+本节是速查；改动背景见用户三条反馈（EU4/CS1/PA 的工坊不见了、设置没保存、账号页不像 WinUI）。
+
+### 15.1 创意工坊来源：判定修正（问题与修法）
+
+- **症状**：EU4、Cities: Skylines、监狱建筑师都**有** Steam 创意工坊，但创意工坊页显示 Paradox Mods。
+- **根因**：独立启动器下的游戏读不到 Steam `appmanifest` → `GameInstallation.SteamAppId == null` → `WorkshopSourceChooser.Resolve` 直接判 PDX。
+- **修法**：
+  - `src/PdxLauncher.Core/Online/GameSteamAppIds.cs`：内置 9 款游戏 appId 映射（`ck3 1158310`、`stellaris 281990`、`hoi4 394360`、`eu4 236850`、`victoria3 529340`、`cities_skylines_2 949230`、`cities_skylines 255710`、`eu5 3450310`、`prison_architect_pc_console 233450`），`TryGet(gameId, out appId)` 大小写不敏感。
+  - `WorkshopSourceChooser.ResolveAppId(int? steamAppId, string? gameId)`：先安装信息（>0）、再映射表，都没有才 null（→ PDX）。
+  - `SteamWorkshopClient.HasWorkshopAsync` 改**双路探测**：appdetails 失败时不再直接 Fail，而是抓 `workshop/browse` 落地页用 `SteamWorkshopHtmlParser.Parse` 判定（CS2 会 302 回 `/workshop`，无 SSR 数据 → false）；两路都 HTTP 失败才 `steam-workshop-probe-http`。结果按 appId 缓存。
+  - 「内容由游戏本体管理」的判定收窄为 `ResolveAppId(...) is null && !SupportsContentManagement`：启动支持的游戏只要解析出 appId 也照常显示工坊。
+- **自检**：`tests/PdxLauncher.Checks/GameSteamAppIdsChecks.cs`（9 条映射 + 大小写 + 未知/空 + `ResolveAppId` 优先序 5 条）、`SteamWorkshopApiChecks.CheckHasWorkshopFallback`（appdetails 挂+页面有数据 → true；落地页无 SSR → false；两路都挂 → Fail 且错误码含 `steam-workshop-probe`）。
+
+### 15.2 账号页重做（照 Windows 11「账户」页）
+
+- `Views/AccountPage.xaml`：`ScrollViewer` → `StackPanel MaxWidth=880 Spacing=16`：页头 → **身份卡**（`PersonPicture` 64 + `Initials`、`txtAccountProfileName`、`txtAccountStatus`、右侧主操作 `btnAccountPrimary`/`btnAccountSignOut`）→ **InfoBar**（`infoAccountStatus`，`IsOpen` 绑 `HasStatusMessage`，内容 `txtAccountStatusBar`）→ **登录表单**放进 `Expander`（`expAccountSignIn`，默认展开，Header 是新键 `account.signInHeader`）→ 已登录时一张「保持登录」卡（`swAccountRememberSignedIn`，避免与表单里的 `swAccountRemember` 撞车）。
+- `ViewModels/AccountViewModel.cs`：新增 `enum AccountStatusLevel {Info,Success,Error}`、`Initials`、`ProfileName`、`HasStatusMessage`、`StatusLevel`、`ShowStatus(string)`；`SetStatus(key, level, args)` 记级别；`StatusText` 未登录时改显示 `account.statusHint`（不再与名字「未登录」重复）；登录失败也写 InfoBar（不再弹 ContentDialog）。
+- 交互控件的 AutomationId 全部沿用旧设置页分节（`txtAccountEmail`/`txtAccountPassword`/`swAccountRemember`/`btnAccountSignIn`/`btnAccountSignOut`/`txtAccountStatus`），UI 自动化脚本无需改写；新增 `imgAccountAvatar`、`txtAccountProfileName`、`btnAccountPrimary`、`infoAccountStatus`、`txtAccountStatusBar`。
+- i18n：`tools/i18n/*/account.json` 27→30 键（`profileTitle`/`notSignedInTitle`/`signInHeader`）。
+
+### 15.3 设置持久化（分节 + 窗口位置 + 立即落盘）
+
+- `AppSettings` 新增 `int? LastSettingsSection`、`int WindowX = -1`、`int WindowY = -1`（物理像素，-1 = 从没记过）。
+- `SettingsPage.RestoreSection()`：读 `LastSettingsSection`（越界归 0）→ `navSettingsSections.SelectedItem = items[index]` 同步高亮 → `ShowSection(index, refreshCache:false)`；`ShowSection` 末尾把当前节写回设置。
+- **踩坑（值得记住）**：XAML 里 `navSettingsAppearance` 曾写死 `IsSelected="True"`，NavigationView 会在 `OnLoaded` 之前触发 `SelectionChanged` → `ShowSection(0)` 把刚恢复的值覆盖成 0，表现为「永远停在外观节」。删掉 `IsSelected` 后修复。
+- `MainWindow`：`OnClosed` 存 `AppWindow.Position`；`ApplyWindowPosition`（`ApplyWindowSize` 之后调用）按 `DisplayArea.GetFromWindowId(...).WorkArea` 校验窗口完整落在工作区内才 `AppWindow.Move`。实测：关一次后 `windowX/windowY = 380/380`，再启动 `GetWindowRect` = `left=380 top=380 right=2180 bottom=1580`。
+- `SettingsViewModel.SaveSettings()` 从 `SaveSettingsDeferred()` 改成立即 `SaveSettings()`（几百字节文件，换确定性）。
+- 自检：`tests/PdxLauncher.Checks/SettingsChecks.cs`（round-trip 含新增字段、缺文件默认、坏 JSON 回退、延迟写 `Flush`）。
+
+### 15.4 验收
+
+- `dotnet build "PdxLauncher.sln" -c Release` → 0 警告 0 错误；`python tools/gen-i18n.py` → 586 键；`PdxLauncher.Checks.exe` → **检查类 27 / 失败 0**。
+- 真机（`pwsh ui-test-artifacts/workshop/workshop-shot.ps1`，用 `settings.json` 预置 `lastGameId` 逐款启动）：
+  - CS2 → `source=Paradox Mods`，`已加载 27379 个结果`（`02-workshop-pdx.png`）
+  - CK3 → `source=Steam 创意工坊`，17,717 个结果（`03-workshop-steam.png`）
+  - EU4 → `source=Steam 创意工坊`（`04-workshop-steam-eu4.png`）——修正前这里是 Paradox Mods
+  - 账号页新版式（`05-account.png`）、设置页停在「缓存」且左栏高亮同步（`06-settings.png`）
+- `settings.json` 实测落盘：`lastGameId=eu4`、`lastGameInstallRoot=F:\SteamLibrary\steamapps\common\Europa Universalis IV`、`lastSettingsSection=4`、`windowX/Y=380`。

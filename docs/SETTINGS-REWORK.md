@@ -153,3 +153,21 @@ Page
   导航面板右缘到卡片左缘约 27 px（≈18 DIP）。`verify-settings3.ps1` 三次读数仍然完全一致
   （本次窗口位置下 `1492,1130,492x60`），说明「点按钮不跳动」这条没有回退。
 
+
+### 分节 / 窗口位置持久化（2026-10-28）
+
+用户反馈「设置状态没保存」：每次进设置页都落回「外观」，窗口位置也不记。
+
+- `AppSettings` 新增 `lastSettingsSection`（0 起，null/越界 → 0）、`windowX` / `windowY`（物理像素，-1 = 从没记过）。
+- `SettingsPage.RestoreSection()` 恢复上次停留的分节，并把 `navSettingsSections.SelectedItem` 同步过去
+  （避免「内容在缓存节、高亮在外观节」）；`ShowSection()` 末尾把当前节写回。
+  **坑**：XAML 里 `navSettingsAppearance` 曾写死 `IsSelected="True"`，会在 `OnLoaded` 之前触发一次
+  `SelectionChanged → ShowSection(0)`，把刚恢复的分节覆盖成 0（表现为永远停在外观节）。已删除。
+- `MainWindow` 关闭时记录 `AppWindow.Position`；`ApplyWindowPosition()` 在 `ApplyWindowSize()` 之后按
+  `DisplayArea.GetFromWindowId(...).WorkArea` 校验「窗口矩形完整落在工作区内」才 `Move`，否则保持默认居中。
+  实测关一次后 `windowX/Y=380`，重启 `GetWindowRect` 回到 `380,380`。
+- `SettingsViewModel.SaveSettings()` 由延迟写（300ms）改为立即写：设置文件只有几百字节，
+  换确定性，避免强杀进程丢掉最后 300ms 的改动。
+- 自检 `SettingsChecks`（round-trip 含新增字段、缺文件默认、坏 JSON 回退、延迟写 `Flush`）已加入，
+  当前 27 个检查类 / 失败 0。
+- 注意：`NavigationView` 当前是 6 个分类（账号已迁到左栏独立页），`CacheSectionIndex = 4`。

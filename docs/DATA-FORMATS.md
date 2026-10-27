@@ -594,7 +594,11 @@ itemcount=1&publishedfileids[0]=<publishedfileid>
 GET https://store.steampowered.com/api/appdetails?appids=<appId>&filters=categories&cc=us&l=english
 ```
 
-判定：`{"<appId>":{"success":true,"data":{"categories":[{"id":30,"description":"Steam Workshop"},...]}}}` —— 分类里出现 `Steam Workshop` 才算有工坊。实测：CK3(1158310)/V3(529340)/Stellaris(281990)/HOI4(394360)/CS1(255710)/EU5(3450310) 有；**CS2(949230) 没有**（它的 `workshop/browse` 也会 302 回 `/workshop`）。
+判定：`{"<appId>":{"success":true,"data":{"categories":[{"id":30,"description":"Steam Workshop"},...]}}}` —— 分类里出现 `Steam Workshop` 才算有工坊。实测：CK3(1158310)/V3(529340)/Stellaris(281990)/HOI4(394360)/CS1(255710)/EU5(3450310)/EU4(236850)/PA(233450) 有；**CS2(949230) 没有**（它的 `workshop/browse` 也会 302 回 `/workshop`）。
+
+**appId 从哪来**：优先用安装信息里的 `GameInstallation.SteamAppId`（读 Steam `appmanifest` 才有）；独立启动器/独立版读不到时，退回内置映射表 `src/PdxLauncher.Core/Online/GameSteamAppIds.cs`（ck3 / stellaris / hoi4 / eu4 / victoria3 / cities_skylines_2 / cities_skylines / eu5 / prison_architect_pc_console）。解析入口：`WorkshopSourceChooser.ResolveAppId(int? steamAppId, string? gameId)`。
+
+**双路兜底**：`appdetails` 网络失败或 JSON 坏掉时，不判「没有工坊」，改为抓 `workshop/browse` 落地页并用 `SteamWorkshopHtmlParser.Parse` 判定（有 SSR 列表 → 有工坊；CS2 那种 302 到 `/workshop` 的空落地页 → 没有）。两路都失败才返回 `steam-workshop-probe-http`，页面按「Paradox Mods + 探测失败」降级。结果按 appId 内存缓存。
 
 ### 18.4 白名单
 
