@@ -417,9 +417,13 @@ public sealed class PlaySetEditor
         var writesLoadFile = writeLoadFile && game.WritesLoadFile;
         var expected = writesLoadFile ? BuildLoadFileContent(game, mods, dlcs, dlcCatalog) : null;
 
+        // 期望写进 playsets_mods 的行就是这里重排后的顺序（position = 0..n-1），
+        // 回读校验必须用同一份列表，否则会把「重排」误判成差异。
+        var orderedMods = Renumber(mods);
+
         try
         {
-            var modsResult = await _playSets.SavePlaySetModsAsync(game, playSetId, Renumber(mods), cancellationToken)
+            var modsResult = await _playSets.SavePlaySetModsAsync(game, playSetId, orderedMods, cancellationToken)
                 .ConfigureAwait(false);
             if (!modsResult.IsSuccess)
             {
@@ -454,6 +458,23 @@ public sealed class PlaySetEditor
             return AppResult<LoadFileContent?>.Fail(ErrorKind.Io, "step=loadfile;" + ex.Message);
         }
 
+        // 回读校验只针对 sqlite 仓储：它用「DELETE 全表 + 逐行 INSERT」改写播放集，
+        // 一旦中途失败或提交语义与预期不符，行数/顺序就可能和写进去的不一致，
+        // 而这正是加载文件校验兜不住的部分（加载文件写成功 ≠ 仓储写成功）。
+        // EU5 playsets.json / CS2 playset_config.json 走整份文档原子替换，没有这个风险；
+        // 且它们的 ModId 由路径或 sourceId 派生，比身份会产生假差异，所以不在这一步校验。
+        if (game.WritesLoadFile)
+        {
+            var storeDiffs = await VerifySqliteStoreAsync(game, playSetId, orderedMods, dlcs, cancellationToken)
+                .ConfigureAwait(false);
+            if (storeDiffs.Count > 0)
+            {
+                var message = "step=verify-store;" + string.Join(", ", storeDiffs);
+                _logger.Warn(message);
+                return AppResult<LoadFileContent?>.Fail(ErrorKind.Io, message);
+            }
+        }
+
         if (expected is null)
         {
             return AppResult<LoadFileContent?>.Ok(null);
@@ -484,6 +505,103 @@ public sealed class PlaySetEditor
 
         return AppResult<LoadFileContent?>.Ok(actual);
     }
+
+    /// <summary>
+    /// 保存后回读 sqlite 仓储，比对「写进去的」与「读出来的」是否一致。
+    /// 只比能稳定复现的字段：mod 的 id / 启用态 / 顺序，DLC 的 id / 启用态。
+    /// 名称、缩略图等来自 mods 表或磁盘扫描的派生字段不比，避免把环境差异当成保存失败。
+    /// </summary>
+    private async Task<IReadOnlyList<string>> VerifySqliteStoreAsync(
+        GameInstallation game,
+        Guid playSetId,
+        IReadOnlyList<PlaySetMod> expectedMods,
+        IReadOnlyList<PlaySetDlc> expectedDlcs,
+        CancellationToken cancellationToken)
+    {
+        var diffs = new List<string>();
+
+        IReadOnlyList<PlaySetMod> actualMods;
+        try
+        {
+            actualMods = await _playSets.GetPlaySetModsAsync(game, playSetId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("保存后回读播放集 mod 行失败（gameId=" + game.GameId + "）", ex);
+            diffs.Add("store-readback-mods:" + ex.Message);
+            return diffs;
+        }
+
+        // sqlite 仓储的 playsets_mods 行总是「每个传入的 mod 一行」，没有跳过条件，
+        // 所以期望值就是传入的列表本身（已按 position 重排）。
+        var expectedModKeys = new List<string>(expectedMods.Count);
+        foreach (var mod in expectedMods)
+        {
+            expectedModKeys.Add(FormatModKey(mod));
+        }
+
+        var actualModKeys = new List<string>(actualMods.Count);
+        foreach (var mod in actualMods)
+        {
+            actualModKeys.Add(FormatModKey(mod));
+        }
+
+        AddSequenceDiff(diffs, "store-mods", expectedModKeys, actualModKeys);
+
+        IReadOnlyList<PlaySetDlc> actualDlcs;
+        try
+        {
+            actualDlcs = await _playSets.GetPlaySetDlcsAsync(game, playSetId, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("保存后回读播放集 DLC 行失败（gameId=" + game.GameId + "）", ex);
+            diffs.Add("store-readback-dlcs:" + ex.Message);
+            return diffs;
+        }
+
+        // 与 SavePlaySetDlcsAsync 的跳过条件保持一致：DlcId 为空的条目不落盘。
+        var expectedDlcKeys = new List<string>(expectedDlcs.Count);
+        foreach (var dlc in expectedDlcs)
+        {
+            if (!string.IsNullOrEmpty(dlc.DlcId))
+            {
+                expectedDlcKeys.Add(FormatDlcKey(dlc));
+            }
+        }
+
+        var actualDlcKeys = new List<string>(actualDlcs.Count);
+        foreach (var dlc in actualDlcs)
+        {
+            actualDlcKeys.Add(FormatDlcKey(dlc));
+        }
+
+        // 回读为空但期望非空时无法判定：可能是该库根本没有 playsets_dlcs 表（Stellaris），
+        // 此时 SavePlaySetDlcsAsync 会 Warn 后合法跳过，不应当成保存失败。
+        // 反过来「期望为空、回读非空」一定是差异，照常报。
+        if (actualDlcKeys.Count > 0 || expectedDlcKeys.Count == 0)
+        {
+            AddSequenceDiff(diffs, "store-dlcs", expectedDlcKeys, actualDlcKeys);
+        }
+        else
+        {
+            _logger.Warn("保存后回读播放集 DLC 行为空（gameId=" + game.GameId + "），跳过 DLC 比对。");
+        }
+
+        return diffs;
+    }
+
+    private static string FormatModKey(PlaySetMod mod) => mod.ModId.ToString("D") + ":" + (mod.Enabled ? 1 : 0);
+
+    private static string FormatDlcKey(PlaySetDlc dlc) => dlc.DlcId + ":" + (dlc.Enabled ? 1 : 0);
 
     /// <summary>
     /// 重命名播放集。IPlaySetRepository.RenamePlaySetAsync 返回 false 表示目标不存在或写入失败。
