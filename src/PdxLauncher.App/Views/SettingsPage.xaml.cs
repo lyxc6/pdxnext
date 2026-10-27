@@ -165,21 +165,10 @@ public sealed partial class SettingsPage : Page
     }
 
     /// <summary>进入「缓存」分区时重新统计占用；失败只记日志，不打断浏览。</summary>
-    private async void RefreshCacheStatsInBackground()
-    {
-        try
-        {
-            await _viewModel.RefreshCacheStatsAsync(_lifetime.Token).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
-        {
-            // 页面关闭导致的取消，忽略。
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("SettingsPage 统计缓存占用失败", ex);
-        }
-    }
+    private async void RefreshCacheStatsInBackground() =>
+        await RunGuardedAsync(
+            "SettingsPage 统计缓存占用失败",
+            () => _viewModel.RefreshCacheStatsAsync(_lifetime.Token));
 
     private async Task ReloadAsync()
     {
@@ -209,22 +198,11 @@ public sealed partial class SettingsPage : Page
 
     // ------------------------------------------------------------ 主题区
 
-    private async void OnCheckThemeClick(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            await _viewModel.RefreshThemeAsync(_lifetime.Token).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
-        {
-            // 页面关闭导致的取消，忽略。
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("SettingsPage 立即检查主题失败", ex);
-            await ShowMessageAsync(T(Keys.SettingsThemeDialogFailedTitle), ex.Message).ConfigureAwait(true);
-        }
-    }
+    private async void OnCheckThemeClick(object sender, RoutedEventArgs e) =>
+        await RunGuardedAsync(
+            "SettingsPage 立即检查主题失败",
+            () => _viewModel.RefreshThemeAsync(_lifetime.Token),
+            ex => ShowMessageAsync(T(Keys.SettingsThemeDialogFailedTitle), ex.Message));
 
     private void OnProxyUrlChanged(object sender, TextChangedEventArgs e)
     {
@@ -292,54 +270,46 @@ public sealed partial class SettingsPage : Page
             return;
         }
 
-        OpenExplorer(path, T(Keys.SettingsDataDirLabel), Keys.SettingsStatusOpenedDataDir);
+        OpenPath(path, T(Keys.SettingsDataDirLabel), Keys.SettingsStatusOpenedDataDir);
     }
 
     // ------------------------------------------------------------ 程序数据目录
 
     private void OnOpenAppDataDirectoryClick(object sender, RoutedEventArgs e) =>
-        OpenDirectory(AppServices.DataRoot, T(Keys.SettingsAppDataCurrent));
+        OpenPath(AppServices.DataRoot, T(Keys.SettingsAppDataCurrent));
 
-    private async void OnClearLegacyDataClick(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var legacyPath = DataRootMigrator.LegacyRoot;
-            if (!AppServices.FileSystem.DirectoryExists(legacyPath))
+    private async void OnClearLegacyDataClick(object sender, RoutedEventArgs e) =>
+        await RunGuardedAsync(
+            "SettingsPage 清理旧 C 盘数据失败",
+            async () =>
             {
-                _viewModel.SetStatus(Keys.SettingsAppDataStatusMissing, legacyPath);
-                return;
-            }
+                var legacyPath = DataRootMigrator.LegacyRoot;
+                if (!AppServices.FileSystem.DirectoryExists(legacyPath))
+                {
+                    _viewModel.SetStatus(Keys.SettingsAppDataStatusMissing, legacyPath);
+                    return;
+                }
 
-            var confirm = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = T(Keys.SettingsAppDataDialogClearTitle),
-                Content = T(Keys.SettingsAppDataDialogClearContent, legacyPath),
-                PrimaryButtonText = T(Keys.CommonDelete),
-                CloseButtonText = T(Keys.CommonCancel),
-                DefaultButton = ContentDialogButton.Close,
-            };
+                if (!await ConfirmAsync(
+                        T(Keys.SettingsAppDataDialogClearTitle),
+                        T(Keys.SettingsAppDataDialogClearContent, legacyPath),
+                        T(Keys.CommonDelete)).ConfigureAwait(true))
+                {
+                    return;
+                }
 
-            var result = await confirm.ShowAsync();
-            if (result != ContentDialogResult.Primary)
-            {
-                return;
-            }
+                AppServices.FileSystem.Delete(legacyPath);
+                AppServices.Logger.Info("已清理旧 C 盘数据目录：" + legacyPath);
+                _viewModel.SetStatus(Keys.SettingsAppDataStatusCleared, legacyPath);
+            },
+            ex => ShowMessageAsync(T(Keys.SettingsAppDataDialogClearFailedTitle), ex.Message));
 
-            AppServices.FileSystem.Delete(legacyPath);
-            AppServices.Logger.Info("已清理旧 C 盘数据目录：" + legacyPath);
-            _viewModel.SetStatus(Keys.SettingsAppDataStatusCleared, legacyPath);
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("SettingsPage 清理旧 C 盘数据失败", ex);
-            await ShowMessageAsync(T(Keys.SettingsAppDataDialogClearFailedTitle), ex.Message).ConfigureAwait(true);
-        }
-    }
-
-    /// <summary>用资源管理器打开一个目录；失败时写状态栏并记日志。</summary>
-    private void OpenDirectory(string path, string label)
+    /// <summary>
+    /// 用资源管理器打开一个目录；失败时写状态栏并记日志。
+    /// <paramref name="openedKey"/> 为空时用通用文案拼 label + path，
+    /// 否则用指定的「已打开…」状态键（数据目录的文案固定为一句，不经过 label 拼接）。
+    /// </summary>
+    private void OpenPath(string path, string label, string? openedKey = null)
     {
         try
         {
@@ -355,33 +325,14 @@ public sealed partial class SettingsPage : Page
                 return;
             }
 
-            _viewModel.SetStatus(Keys.SettingsStatusOpened, label, path);
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("SettingsPage 打开目录失败：" + path, ex);
-            _viewModel.SetStatus(Keys.SettingsStatusOpenFailed, ex.Message);
-        }
-    }
-
-    /// <summary>数据目录的文案固定为「已打开数据目录」这一句，不经过 label 拼接。</summary>
-    private void OpenExplorer(string path, string label, string openedKey)
-    {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(path) || !AppServices.FileSystem.DirectoryExists(path))
+            if (openedKey is null)
             {
-                _viewModel.SetStatus(Keys.SettingsStatusDirMissing, label, path);
-                return;
+                _viewModel.SetStatus(Keys.SettingsStatusOpened, label, path);
             }
-
-            if (!StartExplorer(path))
+            else
             {
-                _viewModel.SetStatus(Keys.SettingsStatusOpenFailed, path);
-                return;
+                _viewModel.SetStatus(openedKey, path);
             }
-
-            _viewModel.SetStatus(openedKey, path);
         }
         catch (Exception ex)
         {
@@ -412,103 +363,87 @@ public sealed partial class SettingsPage : Page
 
     // ------------------------------------------------------------ 缓存
 
-    private async void OnRefreshCacheClick(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            await _viewModel.RefreshCacheStatsAsync(_lifetime.Token).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
-        {
-            // 页面关闭导致的取消，忽略。
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("SettingsPage 统计缓存占用失败", ex);
-        }
-    }
+    private async void OnRefreshCacheClick(object sender, RoutedEventArgs e) =>
+        await RunGuardedAsync(
+            "SettingsPage 统计缓存占用失败",
+            () => _viewModel.RefreshCacheStatsAsync(_lifetime.Token));
 
-    private async void OnClearCacheRowClick(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            if (sender is not FrameworkElement { DataContext: CacheRowViewModel row })
+    private async void OnClearCacheRowClick(object sender, RoutedEventArgs e) =>
+        await RunGuardedAsync(
+            "SettingsPage 清除缓存失败",
+            () => sender is FrameworkElement { DataContext: CacheRowViewModel row }
+                ? _viewModel.ClearCacheAsync(row, _lifetime.Token)
+                : Task.CompletedTask);
+
+    private async void OnClearAllCachesClick(object sender, RoutedEventArgs e) =>
+        await RunGuardedAsync(
+            "SettingsPage 清除全部缓存失败",
+            async () =>
             {
-                return;
-            }
+                if (!await ConfirmAsync(
+                        T(Keys.SettingsCacheDialogClearAllTitle),
+                        T(Keys.SettingsCacheDialogClearAllContent),
+                        T(Keys.CommonClear)).ConfigureAwait(true))
+                {
+                    return;
+                }
 
-            await _viewModel.ClearCacheAsync(row, _lifetime.Token).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
-        {
-            // 页面关闭导致的取消，忽略。
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("SettingsPage 清除缓存失败", ex);
-        }
-    }
-
-    private async void OnClearAllCachesClick(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var confirm = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = T(Keys.SettingsCacheDialogClearAllTitle),
-                Content = T(Keys.SettingsCacheDialogClearAllContent),
-                PrimaryButtonText = T(Keys.CommonClear),
-                CloseButtonText = T(Keys.CommonCancel),
-                DefaultButton = ContentDialogButton.Close,
-            };
-
-            var result = await confirm.ShowAsync();
-            if (result != ContentDialogResult.Primary)
-            {
-                return;
-            }
-
-            await _viewModel.ClearAllCachesAsync(_lifetime.Token).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
-        {
-            // 页面关闭导致的取消，忽略。
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("SettingsPage 清除全部缓存失败", ex);
-        }
-    }
+                await _viewModel.ClearAllCachesAsync(_lifetime.Token).ConfigureAwait(true);
+            });
 
     // ------------------------------------------------------------ 危险区
 
-    private async void OnRegenerateSignatureClick(object sender, RoutedEventArgs e)
+    private async void OnRegenerateSignatureClick(object sender, RoutedEventArgs e) =>
+        await RunGuardedAsync(
+            "SettingsPage 重新生成 dlc_signature 失败",
+            async () =>
+            {
+                if (_viewModel.Game is null)
+                {
+                    return;
+                }
+
+                if (!await ConfirmAsync(
+                        T(Keys.SettingsDangerDialogTitle),
+                        T(Keys.SettingsDangerDialogContent),
+                        T(Keys.SettingsDangerDialogConfirm)).ConfigureAwait(true))
+                {
+                    return;
+                }
+
+                await _viewModel.RegenerateDlcSignatureAsync(_lifetime.Token).ConfigureAwait(true);
+            },
+            ex => ShowMessageAsync(T(Keys.SettingsDangerDialogFailedTitle), ex.Message));
+
+    // ------------------------------------------------------------ 对话框 / 护栏
+
+    /// <summary>统一的两键确认框：主按钮确认、关闭按钮取消，默认焦点落在取消上。</summary>
+    private async Task<bool> ConfirmAsync(string title, string content, string primaryText)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = title,
+            Content = content,
+            PrimaryButtonText = primaryText,
+            CloseButtonText = T(Keys.CommonCancel),
+            DefaultButton = ContentDialogButton.Close,
+        };
+
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
+
+    /// <summary>
+    /// 事件处理器的统一护栏：页面关闭导致的取消静默忽略，其它异常记日志并按需弹错误框。
+    /// </summary>
+    private async Task RunGuardedAsync(
+        string logMessage,
+        Func<Task> action,
+        Func<Exception, Task>? onError = null)
     {
         try
         {
-            if (_viewModel.Game is null)
-            {
-                return;
-            }
-
-            var confirm = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = T(Keys.SettingsDangerDialogTitle),
-                Content = T(Keys.SettingsDangerDialogContent),
-                PrimaryButtonText = T(Keys.SettingsDangerDialogConfirm),
-                CloseButtonText = T(Keys.CommonCancel),
-                DefaultButton = ContentDialogButton.Close,
-            };
-
-            var result = await confirm.ShowAsync();
-            if (result != ContentDialogResult.Primary)
-            {
-                return;
-            }
-
-            await _viewModel.RegenerateDlcSignatureAsync(_lifetime.Token).ConfigureAwait(true);
+            await action().ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -516,12 +451,13 @@ public sealed partial class SettingsPage : Page
         }
         catch (Exception ex)
         {
-            AppServices.Logger.Error("SettingsPage 重新生成 dlc_signature 失败", ex);
-            await ShowMessageAsync(T(Keys.SettingsDangerDialogFailedTitle), ex.Message).ConfigureAwait(true);
+            AppServices.Logger.Error(logMessage, ex);
+            if (onError is not null)
+            {
+                await onError(ex).ConfigureAwait(true);
+            }
         }
     }
-
-    // ------------------------------------------------------------ 对话框
 
     private async Task ShowMessageAsync(string title, string message)
     {
