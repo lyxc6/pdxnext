@@ -46,6 +46,8 @@ public sealed partial class MainWindow : Window
     private readonly NavigationService _navigation;
     private readonly ShellViewModel _viewModel;
     private GameLibraryPage? _libraryPage;
+
+    private WorkshopPage? _workshopPage;
     private BitmapLoader? _bitmapLoader;
     private CancellationTokenSource? _backdropLifetime;
 
@@ -235,12 +237,27 @@ public sealed partial class MainWindow : Window
             _libraryPage = null;
         }
 
+        if (_workshopPage is not null)
+        {
+            _workshopPage.AccountRequested -= OnWorkshopAccountRequested;
+            _workshopPage = null;
+        }
+
         if (content is GameLibraryPage libraryPage)
         {
             _libraryPage = libraryPage;
             libraryPage.NavigationRequested += OnPageNavigationRequested;
         }
+
+        if (content is WorkshopPage workshopPage)
+        {
+            _workshopPage = workshopPage;
+            workshopPage.AccountRequested += OnWorkshopAccountRequested;
+        }
     }
+
+    private void OnWorkshopAccountRequested(object? sender, EventArgs e) =>
+        NavigateTo(NavigationService.AccountTag);
 
     private void OnPageNavigationRequested(object? sender, string tag) => NavigateTo(tag);
 
@@ -304,6 +321,12 @@ public sealed partial class MainWindow : Window
                 _libraryPage = null;
             }
 
+            if (_workshopPage is not null)
+            {
+                _workshopPage.AccountRequested -= OnWorkshopAccountRequested;
+                _workshopPage = null;
+            }
+
             if (!AppServices.IsInitialized)
             {
                 return;
@@ -348,6 +371,7 @@ public sealed partial class MainWindow : Window
             var contentVisibility = manageable ? Visibility.Visible : Visibility.Collapsed;
             NavPlaySets.Visibility = contentVisibility;
             NavModLibrary.Visibility = contentVisibility;
+            NavWorkshop.Visibility = contentVisibility;
             NavDlc.Visibility = contentVisibility;
 
             if (manageable)
@@ -358,6 +382,7 @@ public sealed partial class MainWindow : Window
             if (_navigation.CurrentTag is string tag
                 && (string.Equals(tag, NavigationService.PlaySetsTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.ModLibraryTag, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(tag, NavigationService.WorkshopTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.DlcTag, StringComparison.OrdinalIgnoreCase)))
             {
                 NavigateTo(NavigationService.HomeTag);

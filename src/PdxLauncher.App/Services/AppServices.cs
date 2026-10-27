@@ -58,6 +58,9 @@ public static class AppServices
     /// <summary>PDX Mods 平台客户端（搜索 / 详情，匿名可读）。</summary>
     public static PdxModsClient PdxMods { get; private set; } = null!;
 
+    /// <summary>Steam 创意工坊客户端（列表 / 详情 / 能力探测，匿名 keyless）。</summary>
+    public static SteamWorkshopClient SteamWorkshop { get; private set; } = null!;
+
     public static AppSettingsStore SettingsStore { get; private set; } = null!;
 
     /// <summary>用户设置的内存副本；改动后调用 <see cref="SaveSettings"/> 落盘。</summary>
@@ -117,6 +120,7 @@ public static class AppServices
         IModThumbnailService modThumbnails,
         AccountService account,
         PdxModsClient pdxMods,
+        SteamWorkshopClient steamWorkshop,
         AppSettingsStore settingsStore,
         IReadOnlyList<GameInstallation> games,
         IDisposable? networkLifetime = null)
@@ -140,6 +144,7 @@ public static class AppServices
         ArgumentNullException.ThrowIfNull(modThumbnails);
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(pdxMods);
+        ArgumentNullException.ThrowIfNull(steamWorkshop);
         ArgumentNullException.ThrowIfNull(settingsStore);
         ArgumentNullException.ThrowIfNull(games);
 
@@ -162,6 +167,7 @@ public static class AppServices
         ModThumbnails = modThumbnails;
         Account = account;
         PdxMods = pdxMods;
+        SteamWorkshop = steamWorkshop;
         SettingsStore = settingsStore;
         _networkLifetime = networkLifetime;
         Settings = settingsStore.Load();
@@ -221,12 +227,12 @@ public static class AppServices
     }
 
     /// <summary>
-    /// 默认选中的游戏：优先完整适配（能管理内容），其次任何能识别的游戏（仅启动也能启动），
-    /// 都没有则 null。这样库里有 CK3 时 Prison Architect 不会抢占默认项。
+    /// 默认选中的游戏：优先「上次选中的那款」，认不出来才退回
+    /// 「能管理内容的优先 → 能识别的 → 第一个」，都没有则 null。
+    /// 这样库里有 CK3 时 Prison Architect 不会抢占默认项，重启也能回到用户上次的选择。
     /// </summary>
     private static GameInstallation? SelectDefaultGame(IReadOnlyList<GameInstallation> games) =>
-        games.FirstOrDefault(static g => g.SupportsContentManagement)
-        ?? games.FirstOrDefault(static g => g.IsSupported);
+        GameSelection.Select(games, Settings.LastGameId, Settings.LastGameInstallRoot);
 
     public static void SelectGame(GameInstallation? game)
     {
@@ -236,6 +242,16 @@ public static class AppServices
         }
 
         CurrentGame = game;
+
+        // 记住用户的选择：Initialize 之前 SettingsStore 还是 null!，此时不能写盘。
+        // game 为 null（库被清空）时保留旧记忆，别把用户的偏好抹掉。
+        if (game is not null && IsInitialized)
+        {
+            Settings.LastGameId = game.GameId;
+            Settings.LastGameInstallRoot = game.InstallRoot;
+            SaveSettingsDeferred();
+        }
+
         CurrentGameChanged?.Invoke(null, game);
     }
 
@@ -261,6 +277,7 @@ public static class AppServices
         INewsFeedService newsFeed,
         PdxAccountClient accountClient,
         PdxModsClient pdxMods,
+        SteamWorkshopClient steamWorkshop,
         IDisposable? lifetime)
     {
         ArgumentNullException.ThrowIfNull(metadata);
@@ -271,6 +288,7 @@ public static class AppServices
         ArgumentNullException.ThrowIfNull(newsFeed);
         ArgumentNullException.ThrowIfNull(accountClient);
         ArgumentNullException.ThrowIfNull(pdxMods);
+        ArgumentNullException.ThrowIfNull(steamWorkshop);
 
         Metadata = metadata;
         Assets = assets;
@@ -279,6 +297,7 @@ public static class AppServices
         DlcDescriptions = dlcDescriptions;
         NewsFeed = newsFeed;
         PdxMods = pdxMods;
+        SteamWorkshop = steamWorkshop;
 
         // 会话保留在 AccountService 里，只换掉底层 HTTP 客户端（新代理）。
         Account.ReplaceClient(accountClient);
@@ -311,6 +330,7 @@ public static class AppServices
                 services.NewsFeed,
                 services.Account,
                 services.PdxMods,
+                services.SteamWorkshop,
                 new DisposableGroup(services.Http, services.PdxHttp));
             Logger.Info("已按新代理设置重建联网服务");
             return NetworkRebuildResult.Ok;
@@ -343,11 +363,11 @@ public static class AppServices
     public static string ImageCacheRoot => Path.Combine(DataRoot, "image-cache");
 
     /// <summary>
-    /// PDX Mods 在线搜索结果的封面缓存目录（online-mod-covers/）。
+    /// 创意工坊结果的封面缓存目录（workshop-covers/{steam|pdx}/{id}）。
     /// 与本地 mod 缩略图缓存分开：那边的键是 <see cref="System.Guid"/>（mods.id），
-    /// 在线结果是 PDX Mods 的数字 id，两套 id 空间不能混在一个目录里。
+    /// 创意工坊结果用的是 Steam publishedfileid / PDX Mods 的数字 id，两套 id 空间不能混在一个目录里。
     /// </summary>
-    public static string OnlineModCoverRoot => Path.Combine(DataRoot, "online-mod-covers");
+    public static string WorkshopCoverRoot => Path.Combine(DataRoot, "workshop-covers");
 
     /// <summary>本启动器自己的日志路径。</summary>
     public static string LogPath => Path.Combine(DataRoot, "logs", "pdxnext.log");

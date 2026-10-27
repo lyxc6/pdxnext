@@ -78,22 +78,15 @@
                         <SymbolIcon Symbol="Globe" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem AutomationProperties.AutomationId="navSettingsAccount"
-                                    Tag="4"
-                                    Content="{x:Bind L.SettingsNavAccount, Mode=OneWay}">
-                    <NavigationViewItem.Icon>
-                        <SymbolIcon Symbol="Contact" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
                 <NavigationViewItem AutomationProperties.AutomationId="navSettingsCache"
-                                    Tag="5"
+                                    Tag="4"
                                     Content="{x:Bind L.SettingsNavCache, Mode=OneWay}">
                     <NavigationViewItem.Icon>
                         <SymbolIcon Symbol="Save" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem AutomationProperties.AutomationId="navSettingsAdvanced"
-                                    Tag="6"
+                                    Tag="5"
                                     Content="{x:Bind L.SettingsNavAdvanced, Mode=OneWay}">
                     <NavigationViewItem.Icon>
                         <SymbolIcon Symbol="Setting" />
@@ -415,83 +408,6 @@
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap" Margin="4,0,4,8" />
 
-                    </StackPanel>
-
-                    <StackPanel x:Name="secAccount" Spacing="8" Visibility="Collapsed">
-                        <TextBlock Text="{x:Bind L.SettingsSectionAccount, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
-
-                        <controls:SettingsCard Header="{x:Bind L.SettingsAccountStatus, Mode=OneWay}"
-                                               Description="{x:Bind L.SettingsAccountStatusHint, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <TextBlock AutomationProperties.AutomationId="txtAccountStatus"
-                                           AutomationProperties.Name="{x:Bind L.SettingsAccountStatus, Mode=OneWay}"
-                                           Text="{x:Bind ViewModel.AccountStatusText, Mode=OneWay}"
-                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                           ToolTipService.ToolTip="{x:Bind ViewModel.AccountStatusText, Mode=OneWay}" />
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
-
-                        <StackPanel x:Name="grpAccountSignIn" Spacing="8">
-                            <controls:SettingsCard Header="{x:Bind L.SettingsAccountEmail, Mode=OneWay}">
-                                <controls:SettingsCard.ActionContent>
-                                    <TextBox AutomationProperties.AutomationId="txtAccountEmail"
-                                             AutomationProperties.Name="{x:Bind L.SettingsAccountEmail, Mode=OneWay}"
-                                             Width="320"
-                                             PlaceholderText="{x:Bind L.SettingsAccountEmailPlaceholder, Mode=OneWay}"
-                                             Text="{x:Bind ViewModel.AccountEmail, Mode=TwoWay}"
-                                             IsEnabled="{x:Bind ViewModel.CanSignIn, Mode=OneWay}" />
-                                </controls:SettingsCard.ActionContent>
-                            </controls:SettingsCard>
-
-                            <controls:SettingsCard Header="{x:Bind L.SettingsAccountPassword, Mode=OneWay}">
-                                <controls:SettingsCard.ActionContent>
-                                    <PasswordBox AutomationProperties.AutomationId="txtAccountPassword"
-                                                 AutomationProperties.Name="{x:Bind L.SettingsAccountPassword, Mode=OneWay}"
-                                                 Width="320"
-                                                 PlaceholderText="{x:Bind L.SettingsAccountPasswordPlaceholder, Mode=OneWay}"
-                                                 PasswordChanged="OnAccountPasswordChanged"
-                                                 IsEnabled="{x:Bind ViewModel.CanSignIn, Mode=OneWay}" />
-                                </controls:SettingsCard.ActionContent>
-                            </controls:SettingsCard>
-
-                            <controls:SettingsCard Header="{x:Bind L.SettingsAccountRemember, Mode=OneWay}"
-                                                   Description="{x:Bind L.SettingsAccountRememberHint, Mode=OneWay}">
-                                <controls:SettingsCard.ActionContent>
-                                    <ToggleSwitch AutomationProperties.AutomationId="swAccountRemember"
-                                                  AutomationProperties.Name="{x:Bind L.SettingsAccountRemember, Mode=OneWay}"
-                                                  OnContent="{x:Bind L.CommonOn, Mode=OneWay}"
-                                                  OffContent="{x:Bind L.CommonOff, Mode=OneWay}"
-                                                  IsOn="{x:Bind ViewModel.AccountRemember, Mode=TwoWay}"
-                                                  IsEnabled="{x:Bind ViewModel.CanSignIn, Mode=OneWay}" />
-                                </controls:SettingsCard.ActionContent>
-                            </controls:SettingsCard>
-
-                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                                <ProgressRing Width="20" Height="20" IsActive="{x:Bind ViewModel.IsAccountBusy, Mode=OneWay}" />
-                                <Button AutomationProperties.AutomationId="btnAccountSignIn"
-                                        Content="{x:Bind L.SettingsAccountSignIn, Mode=OneWay}"
-                                        Style="{StaticResource AccentButtonStyle}"
-                                        IsEnabled="{x:Bind ViewModel.CanSignIn, Mode=OneWay}"
-                                        Click="OnAccountSignInClick" />
-                            </StackPanel>
-                        </StackPanel>
-
-                        <StackPanel x:Name="grpAccountSignedIn" Spacing="8" Visibility="Collapsed">
-                            <controls:SettingsCard Header="{x:Bind L.SettingsAccountSignOut, Mode=OneWay}"
-                                                   Description="{x:Bind L.SettingsAccountSignOutHint, Mode=OneWay}">
-                                <controls:SettingsCard.ActionContent>
-                                    <Button AutomationProperties.AutomationId="btnAccountSignOut"
-                                            Content="{x:Bind L.SettingsAccountSignOut, Mode=OneWay}"
-                                            IsEnabled="{x:Bind ViewModel.IsSignedIn, Mode=OneWay}"
-                                            Click="OnAccountSignOutClick" />
-                                </controls:SettingsCard.ActionContent>
-                            </controls:SettingsCard>
-                        </StackPanel>
-
-                        <TextBlock Text="{x:Bind L.SettingsAccountHint, Mode=OneWay}"
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap" Margin="4,0,4,8" />
                     </StackPanel>
 
                     <StackPanel x:Name="secCache" Spacing="8" Visibility="Collapsed">

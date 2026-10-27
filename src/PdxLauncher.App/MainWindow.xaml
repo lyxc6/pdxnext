@@ -180,6 +180,15 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
+                    x:Name="NavWorkshop"
+                    AutomationProperties.AutomationId="navWorkshop"
+                    Content="{x:Bind L.ShellNavWorkshop, Mode=OneWay}"
+                    Tag="workshop">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Globe" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
                     x:Name="NavDlc"
                     AutomationProperties.AutomationId="navDlc"
                     Content="DLC"
@@ -199,6 +208,14 @@
             </NavigationView.MenuItems>
 
             <NavigationView.FooterMenuItems>
+                <NavigationViewItem
+                    AutomationProperties.AutomationId="navAccount"
+                    Content="{x:Bind L.ShellNavAccount, Mode=OneWay}"
+                    Tag="account">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Contact" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem
                     AutomationProperties.AutomationId="navSettings"
                     Content="{x:Bind L.ShellNavSettings, Mode=OneWay}"

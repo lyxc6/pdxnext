@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="PdxLauncher.App.Views.AccountPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:PdxLauncher.App.Controls"
+    xmlns:svc="using:PdxLauncher.App.Services"
+    NavigationCacheMode="Required"
+    Background="{ThemeResource PdxPageVeilBrush}">
+
+    <!--
+        账号页：Paradox 账号的独立页面（左栏导航「账号」）。
+        登录态、邮箱、密码、保持登录、退出都在这里；会话恢复在启动阶段完成。
+        所有交互控件保留原设置页分节的 AutomationId，UI 自动化脚本无需改写。
+    -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Padding="24" Spacing="12" MaxWidth="960" HorizontalAlignment="Left">
+            <TextBlock Text="{x:Bind L.AccountTitle, Mode=OneWay}"
+                       Style="{StaticResource TitleTextBlockStyle}" />
+
+            <TextBlock Text="{x:Bind L.AccountHint, Mode=OneWay}"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,4" />
+
+            <controls:SettingsCard Header="{x:Bind L.AccountStatus, Mode=OneWay}"
+                                   Description="{x:Bind L.AccountStatusHint, Mode=OneWay}">
+                <controls:SettingsCard.ActionContent>
+                    <TextBlock AutomationProperties.AutomationId="txtAccountStatus"
+                               AutomationProperties.Name="{x:Bind L.AccountStatus, Mode=OneWay}"
+                               Text="{x:Bind ViewModel.StatusText, Mode=OneWay}"
+                               MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                               ToolTipService.ToolTip="{x:Bind ViewModel.StatusText, Mode=OneWay}" />
+                </controls:SettingsCard.ActionContent>
+            </controls:SettingsCard>
+
+            <StackPanel x:Name="grpAccountSignIn"
+                        Spacing="8"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSignInPanel), Mode=OneWay}">
+                <controls:SettingsCard Header="{x:Bind L.AccountEmail, Mode=OneWay}">
+                    <controls:SettingsCard.ActionContent>
+                        <TextBox AutomationProperties.AutomationId="txtAccountEmail"
+                                 AutomationProperties.Name="{x:Bind L.AccountEmail, Mode=OneWay}"
+                                 Width="320"
+                                 PlaceholderText="{x:Bind L.AccountEmailPlaceholder, Mode=OneWay}"
+                                 Text="{x:Bind ViewModel.Email, Mode=TwoWay}"
+                                 IsEnabled="{x:Bind ViewModel.CanSignIn, Mode=OneWay}" />
+                    </controls:SettingsCard.ActionContent>
+                </controls:SettingsCard>
+
+                <controls:SettingsCard Header="{x:Bind L.AccountPassword, Mode=OneWay}">
+                    <controls:SettingsCard.ActionContent>
+                        <PasswordBox AutomationProperties.AutomationId="txtAccountPassword"
+                                     AutomationProperties.Name="{x:Bind L.AccountPassword, Mode=OneWay}"
+                                     Width="320"
+                                     PlaceholderText="{x:Bind L.AccountPasswordPlaceholder, Mode=OneWay}"
+                                     PasswordChanged="OnAccountPasswordChanged"
+                                     IsEnabled="{x:Bind ViewModel.CanSignIn, Mode=OneWay}" />
+                    </controls:SettingsCard.ActionContent>
+                </controls:SettingsCard>
+
+                <controls:SettingsCard Header="{x:Bind L.AccountRemember, Mode=OneWay}"
+                                       Description="{x:Bind L.AccountRememberHint, Mode=OneWay}">
+                    <controls:SettingsCard.ActionContent>
+                        <ToggleSwitch AutomationProperties.AutomationId="swAccountRemember"
+                                      AutomationProperties.Name="{x:Bind L.AccountRemember, Mode=OneWay}"
+                                      OnContent="{x:Bind L.CommonOn, Mode=OneWay}"
+                                      OffContent="{x:Bind L.CommonOff, Mode=OneWay}"
+                                      IsOn="{x:Bind ViewModel.Remember, Mode=TwoWay}"
+                                      IsEnabled="{x:Bind ViewModel.CanSignIn, Mode=OneWay}" />
+                    </controls:SettingsCard.ActionContent>
+                </controls:SettingsCard>
+
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <ProgressRing Width="20" Height="20" IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
+                    <Button AutomationProperties.AutomationId="btnAccountSignIn"
+                            Content="{x:Bind L.AccountSignIn, Mode=OneWay}"
+                            Style="{StaticResource AccentButtonStyle}"
+                            IsEnabled="{x:Bind ViewModel.CanSignIn, Mode=OneWay}"
+                            Click="OnAccountSignInClick" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel x:Name="grpAccountSignedIn"
+                        Spacing="8"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSignedInPanel), Mode=OneWay}">
+                <controls:SettingsCard Header="{x:Bind L.AccountSignOut, Mode=OneWay}"
+                                       Description="{x:Bind L.AccountSignOutHint, Mode=OneWay}">
+                    <controls:SettingsCard.ActionContent>
+                        <Button AutomationProperties.AutomationId="btnAccountSignOut"
+                                Content="{x:Bind L.AccountSignOut, Mode=OneWay}"
+                                IsEnabled="{x:Bind ViewModel.IsSignedIn, Mode=OneWay}"
+                                Click="OnAccountSignOutClick" />
+                    </controls:SettingsCard.ActionContent>
+                </controls:SettingsCard>
+            </StackPanel>
+
+            <Border Padding="10,6"
+                    CornerRadius="6"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    Visibility="{x:Bind svc:XamlVisibility.FromString(ViewModel.StatusMessage), Mode=OneWay}">
+                <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           TextWrapping="Wrap"
+                           AutomationProperties.AutomationId="txtAccountStatusBar" />
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</Page>

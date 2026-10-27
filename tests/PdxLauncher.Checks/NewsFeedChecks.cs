@@ -671,6 +671,9 @@ public static class NewsFeedChecks
 
         public Task<string> PostJsonAsync(Uri uri, string jsonBody, CancellationToken cancellationToken) =>
             Task.FromResult("{}");
+
+        public Task<string> PostFormAsync(Uri uri, string formBody, CancellationToken cancellationToken) =>
+            throw new NotSupportedException("未使用表单 POST");
     }
 
     private sealed class FakeAssetDownloader : IAssetDownloader

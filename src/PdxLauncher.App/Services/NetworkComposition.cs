@@ -11,11 +11,13 @@ using PdxLauncher.Core.Online;
 /// <param name="PdxHttp">PDX 平台专用传输（PUT/DELETE + JSON 认证头），与 <paramref name="Http"/> 同时重建。</param>
 /// <param name="Account">Paradox 账号客户端（登录/续期/账号资料）。</param>
 /// <param name="PdxMods">PDX Mods 平台客户端（搜索 / 详情）；与 <paramref name="PdxHttp"/> 同源。</param>
+/// <param name="SteamWorkshop">Steam 创意工坊客户端（列表 / 详情 / 能力探测）；匿名 keyless。</param>
 internal sealed record NetworkServices(
     HttpFetcher Http,
     PdxHttpTransport PdxHttp,
     PdxAccountClient Account,
     PdxModsClient PdxMods,
+    SteamWorkshopClient SteamWorkshop,
     MetadataClient Metadata,
     AssetDownloader Assets,
     ThemeResolver Themes,
@@ -53,6 +55,9 @@ internal static class NetworkComposition
         // 同一份白名单，代理改了自然也一起换。
         var pdxMods = new PdxModsClient(pdxHttp, logger);
 
+        // Steam 创意工坊走普通 IHttpFetcher：匿名公开页 + keyless 接口，不需要认证头。
+        var steamWorkshop = new SteamWorkshopClient(http, logger);
+
         var metadata = new MetadataClient(http, logger);
         var assets = new AssetDownloader(http, logger, fileSystem);
         var steamCovers = new SteamCoverUrlResolver(http, logger);
@@ -73,6 +78,7 @@ internal static class NetworkComposition
             pdxHttp,
             account,
             pdxMods,
+            steamWorkshop,
             metadata,
             assets,
             themes,

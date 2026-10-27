@@ -1130,6 +1130,9 @@ public static class OnlineChecks
 
         public Task<string> PostJsonAsync(Uri uri, string jsonBody, CancellationToken cancellationToken) =>
             Task.FromResult("{}");
+
+        public Task<string> PostFormAsync(Uri uri, string formBody, CancellationToken cancellationToken) =>
+            throw new NotSupportedException("未使用表单 POST");
     }
 
     private sealed class FakeHttpFetcher : IHttpFetcher
@@ -1166,6 +1169,9 @@ public static class OnlineChecks
             LastPostBody = jsonBody;
             return Task.FromResult(_postResponse ?? "{}");
         }
+
+        public Task<string> PostFormAsync(Uri uri, string formBody, CancellationToken cancellationToken) =>
+            throw new NotSupportedException("未使用表单 POST");
     }
 
     /// <summary>合成字节流：先吐 head，再无限/定量重复填充；用于测试下载大小与 magic 判定。</summary>

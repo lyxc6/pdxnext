@@ -13,6 +13,33 @@ public sealed partial class Localizer
 {
     private static readonly Dictionary<string, string> TableZhCN = new(StringComparer.Ordinal)
     {
+        ["account.dialogFailedTitle"] = "登录失败",
+        ["account.dialogSignOutBody"] = "退出后需要重新输入邮箱和密码才能访问 PDX Mods 平台。是否继续？",
+        ["account.dialogSignOutTitle"] = "退出 Paradox 账号",
+        ["account.email"] = "邮箱",
+        ["account.emailPlaceholder"] = "Paradox 账号邮箱",
+        ["account.errorBadCredentials"] = "邮箱或密码不正确。",
+        ["account.errorEmailRequired"] = "请先填写邮箱。",
+        ["account.errorNetwork"] = "无法连接 Paradox 服务器，请检查网络或代理设置。",
+        ["account.errorPasswordRequired"] = "请先填写密码。",
+        ["account.errorSignInFailed"] = "登录失败：{0}",
+        ["account.hint"] = "密码只用于本次登录请求，不会写入磁盘。Paradox 账号与 Steam 账号相互独立。",
+        ["account.password"] = "密码",
+        ["account.passwordPlaceholder"] = "Paradox 账号密码",
+        ["account.remember"] = "保持登录",
+        ["account.rememberHint"] = "勾选后保存刷新凭据（DPAPI 加密），下次启动可自动续期；不勾选则只在本次运行有效。",
+        ["account.signIn"] = "登录",
+        ["account.signOut"] = "退出登录",
+        ["account.signOutHint"] = "只清除本机的登录状态，不会注销其它设备上的会话。",
+        ["account.status"] = "登录状态",
+        ["account.statusHint"] = "登录后可以浏览 PDX Mods 平台、查看订阅与收藏的 mod。",
+        ["account.statusNotReady"] = "启动器尚未完成初始化",
+        ["account.statusSignInOk"] = "Paradox 账号登录成功",
+        ["account.statusSignOutOk"] = "已退出 Paradox 账号",
+        ["account.statusSignedIn"] = "已登录：{0}（{1}）",
+        ["account.statusSignedOut"] = "未登录",
+        ["account.statusSigningIn"] = "正在登录…",
+        ["account.title"] = "Paradox 账号",
         ["app.name"] = "PdxNext",
         ["common.apply"] = "应用",
         ["common.browse"] = "浏览…",
@@ -129,40 +156,11 @@ public sealed partial class Localizer
         ["modlib.countText"] = "{0} 个 mod",
         ["modlib.listName"] = "Mod 库列表",
         ["modlib.loadFailed"] = "加载失败：{0}",
-        ["modlib.modeLocal"] = "本地",
-        ["modlib.modeName"] = "Mod 来源",
-        ["modlib.modeOnline"] = "在线（PDX Mods）",
         ["modlib.noGameHint"] = "请先在游戏库里选择一款游戏",
         ["modlib.noGameName"] = "未选择游戏提示",
         ["modlib.noGameTitle"] = "（未选择游戏）",
         ["modlib.noModsHint"] = "该游戏还没有任何 mod",
         ["modlib.noModsName"] = "没有 mod 提示",
-        ["modlib.onlineAuthor"] = "作者 {0}",
-        ["modlib.onlineDetailClose"] = "关闭",
-        ["modlib.onlineDetailFailed"] = "读取详情失败：{0}",
-        ["modlib.onlineDetailLoading"] = "正在读取详情…",
-        ["modlib.onlineDetailOpenBrowser"] = "在浏览器中打开",
-        ["modlib.onlineDetailSize"] = "体积 {0}",
-        ["modlib.onlineListName"] = "PDX Mods 列表",
-        ["modlib.onlineNext"] = "下一页",
-        ["modlib.onlineNoGameHint"] = "没有可查询的游戏，请先在游戏库里选择游戏",
-        ["modlib.onlinePage"] = "第 {0} / {1} 页",
-        ["modlib.onlinePrev"] = "上一页",
-        ["modlib.onlineRating"] = "{0} 分（{1} 人评分）",
-        ["modlib.onlineScreenshots"] = "截图 {0} 张",
-        ["modlib.onlineSearchPlaceholder"] = "在 PDX Mods 中搜索 mod",
-        ["modlib.onlineSortBest"] = "推荐",
-        ["modlib.onlineSortCreated"] = "最新发布",
-        ["modlib.onlineSortName"] = "名称 A-Z",
-        ["modlib.onlineSortPopularity"] = "订阅数（多到少）",
-        ["modlib.onlineSortRating"] = "评分（高到低）",
-        ["modlib.onlineSortUpdated"] = "最近更新",
-        ["modlib.onlineStatusEmpty"] = "没有匹配「{0}」的 mod",
-        ["modlib.onlineStatusFailed"] = "加载 PDX Mods 失败：{0}",
-        ["modlib.onlineStatusLoaded"] = "PDX Mods 共 {0} 个结果",
-        ["modlib.onlineStatusNeedSignIn"] = "未登录 Paradox 账号，当前只显示公开 mod",
-        ["modlib.onlineSubscriptions"] = "{0} 订阅",
-        ["modlib.onlineUpdated"] = "更新于 {0}",
         ["modlib.openBrowser"] = "在浏览器中打开",
         ["modlib.openFolder"] = "打开本地文件夹",
         ["modlib.openSteam"] = "在 Steam 中打开",
@@ -294,32 +292,6 @@ public sealed partial class Localizer
         ["mods.toolbar.rename"] = "重命名",
         ["mods.toolbar.renameName"] = "重命名播放集",
         ["mods.toolbar.searchPlaceholder"] = "搜索播放集内的 mod",
-        ["settings.account.dialogFailedTitle"] = "登录失败",
-        ["settings.account.dialogSignOutBody"] = "退出后需要重新输入邮箱和密码才能访问 PDX Mods 平台。是否继续？",
-        ["settings.account.dialogSignOutTitle"] = "退出 Paradox 账号",
-        ["settings.account.email"] = "邮箱",
-        ["settings.account.emailPlaceholder"] = "Paradox 账号邮箱",
-        ["settings.account.errorBadCredentials"] = "邮箱或密码不正确。",
-        ["settings.account.errorEmailRequired"] = "请先填写邮箱。",
-        ["settings.account.errorNetwork"] = "连接不上 Paradox 服务器，请检查网络或代理设置。",
-        ["settings.account.errorPasswordRequired"] = "请先填写密码。",
-        ["settings.account.errorSignInFailed"] = "登录失败：{0}",
-        ["settings.account.hint"] = "密码只用于本次登录请求，不会写入磁盘。Paradox 账号与 Steam 账号相互独立。",
-        ["settings.account.password"] = "密码",
-        ["settings.account.passwordPlaceholder"] = "Paradox 账号密码",
-        ["settings.account.remember"] = "保持登录",
-        ["settings.account.rememberHint"] = "勾选后保存续期凭据（DPAPI 加密），下次启动自动续期；不勾则只在本次运行有效。",
-        ["settings.account.signIn"] = "登录",
-        ["settings.account.signOut"] = "退出登录",
-        ["settings.account.signOutHint"] = "只清除本机的登录状态，不会注销其它设备上的会话。",
-        ["settings.account.status"] = "登录状态",
-        ["settings.account.statusHint"] = "登录后可浏览 PDX Mods 平台、查看订阅与在库 Mod。",
-        ["settings.account.statusNotReady"] = "启动器尚未完成初始化",
-        ["settings.account.statusSignInOk"] = "Paradox 账号登录成功",
-        ["settings.account.statusSignOutOk"] = "已退出 Paradox 账号",
-        ["settings.account.statusSignedIn"] = "已登录：{0}（{1}）",
-        ["settings.account.statusSignedOut"] = "未登录",
-        ["settings.account.statusSigningIn"] = "正在登录…",
         ["settings.appData.clearLegacy"] = "清理旧 C 盘数据",
         ["settings.appData.clearLegacyName"] = "清理旧 C 盘数据",
         ["settings.appData.current"] = "当前数据目录",
@@ -481,7 +453,6 @@ public sealed partial class Localizer
         ["settings.modThumbnails.statusOnlineOff"] = "已关闭联网补全 Mod 缩略图：只显示本地图片与已有缓存",
         ["settings.modThumbnails.statusOnlineOn"] = "已开启联网补全 Mod 缩略图（下载后缓存在数据目录）",
         ["settings.modThumbnails.statusRetention"] = "Mod 缩略图保留天数已改为 {0} 天，下次加载 Mod 库时清理过期图片",
-        ["settings.nav.account"] = "账号",
         ["settings.nav.advanced"] = "高级",
         ["settings.nav.appearance"] = "外观",
         ["settings.nav.cache"] = "缓存",
@@ -511,7 +482,6 @@ public sealed partial class Localizer
         ["settings.proxy.status.rebuildFailed"] = "联网链路重建失败，继续沿用旧代理：{0}",
         ["settings.proxy.status.resolved"] = "{0}：{1}",
         ["settings.proxy.status.resolvedWithWarning"] = "{0}：{1}（{2}）",
-        ["settings.section.account"] = "Paradox 账号",
         ["settings.section.appData"] = "程序数据目录",
         ["settings.section.cache"] = "缓存",
         ["settings.section.danger"] = "危险操作",
@@ -564,11 +534,13 @@ public sealed partial class Localizer
         ["shell.crash.message"] = "错误：{0}",
         ["shell.crash.path"] = "崩溃记录已写入：{0}",
         ["shell.crash.title"] = "启动器遇到未处理的错误",
+        ["shell.nav.account"] = "账号",
         ["shell.nav.home"] = "当前游戏",
         ["shell.nav.library"] = "游戏库",
         ["shell.nav.modLibrary"] = "Mod 库",
         ["shell.nav.playSets"] = "播放集",
         ["shell.nav.settings"] = "设置",
+        ["shell.nav.workshop"] = "创意工坊",
         ["shell.playSet.countDiff"] = "{0} 数量 {1} != {2}",
         ["shell.playSet.deleteBusy"] = "删除播放集失败：目标不存在、当前是活动播放集，或写入失败",
         ["shell.playSet.deleteFailed"] = "删除播放集失败：{0}",
@@ -582,10 +554,79 @@ public sealed partial class Localizer
         ["shell.status.noGames"] = "未发现已安装的游戏，请检查 Steam 库路径",
         ["shell.support.managedByGame"] = "该游戏的模组与 DLC 由游戏本体管理（游戏内 MOD 菜单 / Steam 创意工坊），本启动器不接管",
         ["shell.version"] = "版本 {0}",
+        ["workshop.author"] = "作者 {0}",
+        ["workshop.countText"] = "{0} 个结果",
+        ["workshop.detailClose"] = "关闭",
+        ["workshop.detailFailed"] = "读取详情失败：{0}",
+        ["workshop.detailLoading"] = "正在读取详情…",
+        ["workshop.detailScreenshots"] = "截图 {0} 张",
+        ["workshop.emptyHint"] = "这个游戏还没有创意工坊内容",
+        ["workshop.emptyName"] = "空列表提示",
+        ["workshop.listName"] = "创意工坊列表",
+        ["workshop.next"] = "下一页",
+        ["workshop.noGameHint"] = "请先在游戏库里选择一款游戏",
+        ["workshop.noGameName"] = "未选择游戏提示",
+        ["workshop.openBrowser"] = "在浏览器中打开",
+        ["workshop.openBrowserName"] = "在浏览器中打开创意工坊页面",
+        ["workshop.openSteam"] = "在 Steam 中打开",
+        ["workshop.openSteamName"] = "在 Steam 中打开创意工坊页面",
+        ["workshop.page"] = "第 {0} / {1} 页",
+        ["workshop.prev"] = "上一页",
+        ["workshop.probeFailed"] = "Steam 创意工坊探测失败，已改用 Paradox Mods",
+        ["workshop.rating"] = "{0} 分（{1} 人评分）",
+        ["workshop.refreshName"] = "刷新创意工坊",
+        ["workshop.searchName"] = "搜索创意工坊",
+        ["workshop.searchPlaceholder"] = "搜索创意工坊内容",
+        ["workshop.signInAction"] = "去登录",
+        ["workshop.signInHint"] = "未登录 Paradox 账号，只显示公开内容",
+        ["workshop.size"] = "体积 {0}",
+        ["workshop.sortName"] = "排序方式",
+        ["workshop.sortPopular"] = "最热门",
+        ["workshop.sortRating"] = "评分最高",
+        ["workshop.sortRecent"] = "最近更新",
+        ["workshop.sourceDetecting"] = "正在判断该游戏有没有 Steam 创意工坊…",
+        ["workshop.sourcePdx"] = "Paradox Mods",
+        ["workshop.sourceSteam"] = "Steam 创意工坊",
+        ["workshop.statusEmpty"] = "没有匹配「{0}」的内容",
+        ["workshop.statusFailed"] = "加载失败：{0}",
+        ["workshop.statusLoaded"] = "已加载 {0} 个结果",
+        ["workshop.statusLoading"] = "正在加载创意工坊…",
+        ["workshop.statusName"] = "状态",
+        ["workshop.statusParseFailed"] = "Steam 页面结构解析失败，暂时无法显示列表",
+        ["workshop.subscriptions"] = "{0} 订阅",
+        ["workshop.title"] = "创意工坊",
+        ["workshop.updated"] = "更新于 {0}",
     };
 
     private static readonly Dictionary<string, string> TableEnUS = new(StringComparer.Ordinal)
     {
+        ["account.dialogFailedTitle"] = "Sign-in failed",
+        ["account.dialogSignOutBody"] = "You will need to enter your email and password again to use PDX Mods. Continue?",
+        ["account.dialogSignOutTitle"] = "Sign out of Paradox",
+        ["account.email"] = "Email",
+        ["account.emailPlaceholder"] = "Paradox account email",
+        ["account.errorBadCredentials"] = "Incorrect email or password.",
+        ["account.errorEmailRequired"] = "Enter your email first.",
+        ["account.errorNetwork"] = "Cannot reach the Paradox servers. Check your network or proxy settings.",
+        ["account.errorPasswordRequired"] = "Enter your password first.",
+        ["account.errorSignInFailed"] = "Sign-in failed: {0}",
+        ["account.hint"] = "The password is used only for this sign-in request and is never written to disk. Paradox and Steam accounts are separate.",
+        ["account.password"] = "Password",
+        ["account.passwordPlaceholder"] = "Paradox account password",
+        ["account.remember"] = "Keep me signed in",
+        ["account.rememberHint"] = "Stores a refresh token (DPAPI protected) so the session renews on the next start. Otherwise it lasts only for this run.",
+        ["account.signIn"] = "Sign in",
+        ["account.signOut"] = "Sign out",
+        ["account.signOutHint"] = "Clears the sign-in state on this machine only; other devices stay signed in.",
+        ["account.status"] = "Status",
+        ["account.statusHint"] = "Signing in lets you browse PDX Mods, your subscriptions and your library.",
+        ["account.statusNotReady"] = "Launcher is not initialized yet",
+        ["account.statusSignInOk"] = "Signed in to your Paradox account",
+        ["account.statusSignOutOk"] = "Signed out of your Paradox account",
+        ["account.statusSignedIn"] = "Signed in as {0} ({1})",
+        ["account.statusSignedOut"] = "Not signed in",
+        ["account.statusSigningIn"] = "Signing in…",
+        ["account.title"] = "Paradox account",
         ["app.name"] = "PdxNext",
         ["common.apply"] = "Apply",
         ["common.browse"] = "Browse…",
@@ -702,40 +743,11 @@ public sealed partial class Localizer
         ["modlib.countText"] = "{0} mods",
         ["modlib.listName"] = "Mod library list",
         ["modlib.loadFailed"] = "Failed to load: {0}",
-        ["modlib.modeLocal"] = "Local",
-        ["modlib.modeName"] = "Mod source",
-        ["modlib.modeOnline"] = "Online (PDX Mods)",
         ["modlib.noGameHint"] = "Select a game in your library first",
         ["modlib.noGameName"] = "No game selected hint",
         ["modlib.noGameTitle"] = "(No game selected)",
         ["modlib.noModsHint"] = "This game has no mods yet",
         ["modlib.noModsName"] = "No mods hint",
-        ["modlib.onlineAuthor"] = "By {0}",
-        ["modlib.onlineDetailClose"] = "Close",
-        ["modlib.onlineDetailFailed"] = "Failed to load details: {0}",
-        ["modlib.onlineDetailLoading"] = "Loading details…",
-        ["modlib.onlineDetailOpenBrowser"] = "Open in browser",
-        ["modlib.onlineDetailSize"] = "Size {0}",
-        ["modlib.onlineListName"] = "PDX Mods list",
-        ["modlib.onlineNext"] = "Next page",
-        ["modlib.onlineNoGameHint"] = "No game to query, select a game in your library first",
-        ["modlib.onlinePage"] = "Page {0} of {1}",
-        ["modlib.onlinePrev"] = "Previous page",
-        ["modlib.onlineRating"] = "{0} rating ({1} ratings)",
-        ["modlib.onlineScreenshots"] = "{0} screenshots",
-        ["modlib.onlineSearchPlaceholder"] = "Search mods on PDX Mods",
-        ["modlib.onlineSortBest"] = "Recommended",
-        ["modlib.onlineSortCreated"] = "Newest",
-        ["modlib.onlineSortName"] = "Name A-Z",
-        ["modlib.onlineSortPopularity"] = "Subscriptions (most first)",
-        ["modlib.onlineSortRating"] = "Rating (highest first)",
-        ["modlib.onlineSortUpdated"] = "Recently updated",
-        ["modlib.onlineStatusEmpty"] = "No mods match \"{0}\"",
-        ["modlib.onlineStatusFailed"] = "Failed to load PDX Mods: {0}",
-        ["modlib.onlineStatusLoaded"] = "{0} results from PDX Mods",
-        ["modlib.onlineStatusNeedSignIn"] = "Not signed in to Paradox, showing public mods only",
-        ["modlib.onlineSubscriptions"] = "{0} subscribers",
-        ["modlib.onlineUpdated"] = "Updated {0}",
         ["modlib.openBrowser"] = "Open in browser",
         ["modlib.openFolder"] = "Open local folder",
         ["modlib.openSteam"] = "Open in Steam",
@@ -867,32 +879,6 @@ public sealed partial class Localizer
         ["mods.toolbar.rename"] = "Rename",
         ["mods.toolbar.renameName"] = "Rename Play Set",
         ["mods.toolbar.searchPlaceholder"] = "Search mods in this play set",
-        ["settings.account.dialogFailedTitle"] = "Sign-in failed",
-        ["settings.account.dialogSignOutBody"] = "You will need to enter your email and password again to use PDX Mods. Continue?",
-        ["settings.account.dialogSignOutTitle"] = "Sign out of Paradox",
-        ["settings.account.email"] = "Email",
-        ["settings.account.emailPlaceholder"] = "Paradox account email",
-        ["settings.account.errorBadCredentials"] = "Incorrect email or password.",
-        ["settings.account.errorEmailRequired"] = "Enter your email first.",
-        ["settings.account.errorNetwork"] = "Cannot reach the Paradox servers. Check your network or proxy settings.",
-        ["settings.account.errorPasswordRequired"] = "Enter your password first.",
-        ["settings.account.errorSignInFailed"] = "Sign-in failed: {0}",
-        ["settings.account.hint"] = "The password is used only for this sign-in request and is never written to disk. Paradox and Steam accounts are separate.",
-        ["settings.account.password"] = "Password",
-        ["settings.account.passwordPlaceholder"] = "Paradox account password",
-        ["settings.account.remember"] = "Keep me signed in",
-        ["settings.account.rememberHint"] = "Stores a refresh token (DPAPI protected) so the session renews on the next start. Otherwise it lasts only for this run.",
-        ["settings.account.signIn"] = "Sign in",
-        ["settings.account.signOut"] = "Sign out",
-        ["settings.account.signOutHint"] = "Clears the sign-in state on this machine only; other devices stay signed in.",
-        ["settings.account.status"] = "Status",
-        ["settings.account.statusHint"] = "Signing in lets you browse PDX Mods, your subscriptions and your library.",
-        ["settings.account.statusNotReady"] = "Launcher is not initialized yet",
-        ["settings.account.statusSignInOk"] = "Signed in to your Paradox account",
-        ["settings.account.statusSignOutOk"] = "Signed out of your Paradox account",
-        ["settings.account.statusSignedIn"] = "Signed in as {0} ({1})",
-        ["settings.account.statusSignedOut"] = "Not signed in",
-        ["settings.account.statusSigningIn"] = "Signing in…",
         ["settings.appData.clearLegacy"] = "Delete old C: data",
         ["settings.appData.clearLegacyName"] = "Delete old C: data",
         ["settings.appData.current"] = "Current data folder",
@@ -1054,7 +1040,6 @@ public sealed partial class Localizer
         ["settings.modThumbnails.statusOnlineOff"] = "Mod thumbnail download off: local images and existing cache only",
         ["settings.modThumbnails.statusOnlineOn"] = "Mod thumbnail download on (cached in the data folder)",
         ["settings.modThumbnails.statusRetention"] = "Mod thumbnail retention set to {0} days; expired images are pruned the next time the library loads",
-        ["settings.nav.account"] = "Account",
         ["settings.nav.advanced"] = "Advanced",
         ["settings.nav.appearance"] = "Appearance",
         ["settings.nav.cache"] = "Cache",
@@ -1084,7 +1069,6 @@ public sealed partial class Localizer
         ["settings.proxy.status.rebuildFailed"] = "Could not rebuild the network stack, keeping the previous proxy: {0}",
         ["settings.proxy.status.resolved"] = "{0}: {1}",
         ["settings.proxy.status.resolvedWithWarning"] = "{0}: {1} ({2})",
-        ["settings.section.account"] = "Paradox account",
         ["settings.section.appData"] = "App data folder",
         ["settings.section.cache"] = "Cache",
         ["settings.section.danger"] = "Risky actions",
@@ -1137,11 +1121,13 @@ public sealed partial class Localizer
         ["shell.crash.message"] = "Error: {0}",
         ["shell.crash.path"] = "Crash record written to: {0}",
         ["shell.crash.title"] = "The launcher hit an unhandled error",
+        ["shell.nav.account"] = "Account",
         ["shell.nav.home"] = "Current Game",
         ["shell.nav.library"] = "Game Library",
         ["shell.nav.modLibrary"] = "Mod Library",
         ["shell.nav.playSets"] = "Playsets",
         ["shell.nav.settings"] = "Settings",
+        ["shell.nav.workshop"] = "Workshop",
         ["shell.playSet.countDiff"] = "{0} count {1} != {2}",
         ["shell.playSet.deleteBusy"] = "Delete failed: the target does not exist, is the active playset, or could not be written",
         ["shell.playSet.deleteFailed"] = "Delete failed: {0}",
@@ -1155,10 +1141,79 @@ public sealed partial class Localizer
         ["shell.status.noGames"] = "No installed games found. Check your Steam library paths",
         ["shell.support.managedByGame"] = "This game manages its own mods and DLC (in-game MOD menu / Steam Workshop); this launcher does not",
         ["shell.version"] = "Version {0}",
+        ["workshop.author"] = "by {0}",
+        ["workshop.countText"] = "{0} results",
+        ["workshop.detailClose"] = "Close",
+        ["workshop.detailFailed"] = "Failed to load details: {0}",
+        ["workshop.detailLoading"] = "Loading details…",
+        ["workshop.detailScreenshots"] = "{0} screenshots",
+        ["workshop.emptyHint"] = "This game has no workshop content yet",
+        ["workshop.emptyName"] = "Empty list hint",
+        ["workshop.listName"] = "Workshop list",
+        ["workshop.next"] = "Next",
+        ["workshop.noGameHint"] = "Pick a game in the library first",
+        ["workshop.noGameName"] = "No game selected hint",
+        ["workshop.openBrowser"] = "Open in browser",
+        ["workshop.openBrowserName"] = "Open the workshop page in a browser",
+        ["workshop.openSteam"] = "Open in Steam",
+        ["workshop.openSteamName"] = "Open the workshop page in Steam",
+        ["workshop.page"] = "Page {0} / {1}",
+        ["workshop.prev"] = "Previous",
+        ["workshop.probeFailed"] = "Steam Workshop probe failed; using Paradox Mods instead",
+        ["workshop.rating"] = "{0} ({1} ratings)",
+        ["workshop.refreshName"] = "Refresh workshop",
+        ["workshop.searchName"] = "Search workshop",
+        ["workshop.searchPlaceholder"] = "Search workshop items",
+        ["workshop.signInAction"] = "Sign in",
+        ["workshop.signInHint"] = "Not signed in to Paradox; only public items are shown",
+        ["workshop.size"] = "Size {0}",
+        ["workshop.sortName"] = "Sort by",
+        ["workshop.sortPopular"] = "Most popular",
+        ["workshop.sortRating"] = "Highest rated",
+        ["workshop.sortRecent"] = "Recently updated",
+        ["workshop.sourceDetecting"] = "Checking whether this game has a Steam Workshop…",
+        ["workshop.sourcePdx"] = "Paradox Mods",
+        ["workshop.sourceSteam"] = "Steam Workshop",
+        ["workshop.statusEmpty"] = "No items match \"{0}\"",
+        ["workshop.statusFailed"] = "Load failed: {0}",
+        ["workshop.statusLoaded"] = "Loaded {0} results",
+        ["workshop.statusLoading"] = "Loading workshop…",
+        ["workshop.statusName"] = "Status",
+        ["workshop.statusParseFailed"] = "Steam page structure could not be parsed; the list is unavailable",
+        ["workshop.subscriptions"] = "{0} subscriptions",
+        ["workshop.title"] = "Workshop",
+        ["workshop.updated"] = "Updated {0}",
     };
 
     private static readonly (string Key, string Identifier)[] AllKeys =
     [
+        ("account.dialogFailedTitle", "AccountDialogFailedTitle"),
+        ("account.dialogSignOutBody", "AccountDialogSignOutBody"),
+        ("account.dialogSignOutTitle", "AccountDialogSignOutTitle"),
+        ("account.email", "AccountEmail"),
+        ("account.emailPlaceholder", "AccountEmailPlaceholder"),
+        ("account.errorBadCredentials", "AccountErrorBadCredentials"),
+        ("account.errorEmailRequired", "AccountErrorEmailRequired"),
+        ("account.errorNetwork", "AccountErrorNetwork"),
+        ("account.errorPasswordRequired", "AccountErrorPasswordRequired"),
+        ("account.errorSignInFailed", "AccountErrorSignInFailed"),
+        ("account.hint", "AccountHint"),
+        ("account.password", "AccountPassword"),
+        ("account.passwordPlaceholder", "AccountPasswordPlaceholder"),
+        ("account.remember", "AccountRemember"),
+        ("account.rememberHint", "AccountRememberHint"),
+        ("account.signIn", "AccountSignIn"),
+        ("account.signOut", "AccountSignOut"),
+        ("account.signOutHint", "AccountSignOutHint"),
+        ("account.status", "AccountStatus"),
+        ("account.statusHint", "AccountStatusHint"),
+        ("account.statusNotReady", "AccountStatusNotReady"),
+        ("account.statusSignInOk", "AccountStatusSignInOk"),
+        ("account.statusSignOutOk", "AccountStatusSignOutOk"),
+        ("account.statusSignedIn", "AccountStatusSignedIn"),
+        ("account.statusSignedOut", "AccountStatusSignedOut"),
+        ("account.statusSigningIn", "AccountStatusSigningIn"),
+        ("account.title", "AccountTitle"),
         ("app.name", "AppName"),
         ("common.apply", "CommonApply"),
         ("common.browse", "CommonBrowse"),
@@ -1275,40 +1330,11 @@ public sealed partial class Localizer
         ("modlib.countText", "ModlibCountText"),
         ("modlib.listName", "ModlibListName"),
         ("modlib.loadFailed", "ModlibLoadFailed"),
-        ("modlib.modeLocal", "ModlibModeLocal"),
-        ("modlib.modeName", "ModlibModeName"),
-        ("modlib.modeOnline", "ModlibModeOnline"),
         ("modlib.noGameHint", "ModlibNoGameHint"),
         ("modlib.noGameName", "ModlibNoGameName"),
         ("modlib.noGameTitle", "ModlibNoGameTitle"),
         ("modlib.noModsHint", "ModlibNoModsHint"),
         ("modlib.noModsName", "ModlibNoModsName"),
-        ("modlib.onlineAuthor", "ModlibOnlineAuthor"),
-        ("modlib.onlineDetailClose", "ModlibOnlineDetailClose"),
-        ("modlib.onlineDetailFailed", "ModlibOnlineDetailFailed"),
-        ("modlib.onlineDetailLoading", "ModlibOnlineDetailLoading"),
-        ("modlib.onlineDetailOpenBrowser", "ModlibOnlineDetailOpenBrowser"),
-        ("modlib.onlineDetailSize", "ModlibOnlineDetailSize"),
-        ("modlib.onlineListName", "ModlibOnlineListName"),
-        ("modlib.onlineNext", "ModlibOnlineNext"),
-        ("modlib.onlineNoGameHint", "ModlibOnlineNoGameHint"),
-        ("modlib.onlinePage", "ModlibOnlinePage"),
-        ("modlib.onlinePrev", "ModlibOnlinePrev"),
-        ("modlib.onlineRating", "ModlibOnlineRating"),
-        ("modlib.onlineScreenshots", "ModlibOnlineScreenshots"),
-        ("modlib.onlineSearchPlaceholder", "ModlibOnlineSearchPlaceholder"),
-        ("modlib.onlineSortBest", "ModlibOnlineSortBest"),
-        ("modlib.onlineSortCreated", "ModlibOnlineSortCreated"),
-        ("modlib.onlineSortName", "ModlibOnlineSortName"),
-        ("modlib.onlineSortPopularity", "ModlibOnlineSortPopularity"),
-        ("modlib.onlineSortRating", "ModlibOnlineSortRating"),
-        ("modlib.onlineSortUpdated", "ModlibOnlineSortUpdated"),
-        ("modlib.onlineStatusEmpty", "ModlibOnlineStatusEmpty"),
-        ("modlib.onlineStatusFailed", "ModlibOnlineStatusFailed"),
-        ("modlib.onlineStatusLoaded", "ModlibOnlineStatusLoaded"),
-        ("modlib.onlineStatusNeedSignIn", "ModlibOnlineStatusNeedSignIn"),
-        ("modlib.onlineSubscriptions", "ModlibOnlineSubscriptions"),
-        ("modlib.onlineUpdated", "ModlibOnlineUpdated"),
         ("modlib.openBrowser", "ModlibOpenBrowser"),
         ("modlib.openFolder", "ModlibOpenFolder"),
         ("modlib.openSteam", "ModlibOpenSteam"),
@@ -1440,32 +1466,6 @@ public sealed partial class Localizer
         ("mods.toolbar.rename", "ModsToolbarRename"),
         ("mods.toolbar.renameName", "ModsToolbarRenameName"),
         ("mods.toolbar.searchPlaceholder", "ModsToolbarSearchPlaceholder"),
-        ("settings.account.dialogFailedTitle", "SettingsAccountDialogFailedTitle"),
-        ("settings.account.dialogSignOutBody", "SettingsAccountDialogSignOutBody"),
-        ("settings.account.dialogSignOutTitle", "SettingsAccountDialogSignOutTitle"),
-        ("settings.account.email", "SettingsAccountEmail"),
-        ("settings.account.emailPlaceholder", "SettingsAccountEmailPlaceholder"),
-        ("settings.account.errorBadCredentials", "SettingsAccountErrorBadCredentials"),
-        ("settings.account.errorEmailRequired", "SettingsAccountErrorEmailRequired"),
-        ("settings.account.errorNetwork", "SettingsAccountErrorNetwork"),
-        ("settings.account.errorPasswordRequired", "SettingsAccountErrorPasswordRequired"),
-        ("settings.account.errorSignInFailed", "SettingsAccountErrorSignInFailed"),
-        ("settings.account.hint", "SettingsAccountHint"),
-        ("settings.account.password", "SettingsAccountPassword"),
-        ("settings.account.passwordPlaceholder", "SettingsAccountPasswordPlaceholder"),
-        ("settings.account.remember", "SettingsAccountRemember"),
-        ("settings.account.rememberHint", "SettingsAccountRememberHint"),
-        ("settings.account.signIn", "SettingsAccountSignIn"),
-        ("settings.account.signOut", "SettingsAccountSignOut"),
-        ("settings.account.signOutHint", "SettingsAccountSignOutHint"),
-        ("settings.account.status", "SettingsAccountStatus"),
-        ("settings.account.statusHint", "SettingsAccountStatusHint"),
-        ("settings.account.statusNotReady", "SettingsAccountStatusNotReady"),
-        ("settings.account.statusSignInOk", "SettingsAccountStatusSignInOk"),
-        ("settings.account.statusSignOutOk", "SettingsAccountStatusSignOutOk"),
-        ("settings.account.statusSignedIn", "SettingsAccountStatusSignedIn"),
-        ("settings.account.statusSignedOut", "SettingsAccountStatusSignedOut"),
-        ("settings.account.statusSigningIn", "SettingsAccountStatusSigningIn"),
         ("settings.appData.clearLegacy", "SettingsAppDataClearLegacy"),
         ("settings.appData.clearLegacyName", "SettingsAppDataClearLegacyName"),
         ("settings.appData.current", "SettingsAppDataCurrent"),
@@ -1627,7 +1627,6 @@ public sealed partial class Localizer
         ("settings.modThumbnails.statusOnlineOff", "SettingsModThumbnailsStatusOnlineOff"),
         ("settings.modThumbnails.statusOnlineOn", "SettingsModThumbnailsStatusOnlineOn"),
         ("settings.modThumbnails.statusRetention", "SettingsModThumbnailsStatusRetention"),
-        ("settings.nav.account", "SettingsNavAccount"),
         ("settings.nav.advanced", "SettingsNavAdvanced"),
         ("settings.nav.appearance", "SettingsNavAppearance"),
         ("settings.nav.cache", "SettingsNavCache"),
@@ -1657,7 +1656,6 @@ public sealed partial class Localizer
         ("settings.proxy.status.rebuildFailed", "SettingsProxyStatusRebuildFailed"),
         ("settings.proxy.status.resolved", "SettingsProxyStatusResolved"),
         ("settings.proxy.status.resolvedWithWarning", "SettingsProxyStatusResolvedWithWarning"),
-        ("settings.section.account", "SettingsSectionAccount"),
         ("settings.section.appData", "SettingsSectionAppData"),
         ("settings.section.cache", "SettingsSectionCache"),
         ("settings.section.danger", "SettingsSectionDanger"),
@@ -1710,11 +1708,13 @@ public sealed partial class Localizer
         ("shell.crash.message", "ShellCrashMessage"),
         ("shell.crash.path", "ShellCrashPath"),
         ("shell.crash.title", "ShellCrashTitle"),
+        ("shell.nav.account", "ShellNavAccount"),
         ("shell.nav.home", "ShellNavHome"),
         ("shell.nav.library", "ShellNavLibrary"),
         ("shell.nav.modLibrary", "ShellNavModLibrary"),
         ("shell.nav.playSets", "ShellNavPlaySets"),
         ("shell.nav.settings", "ShellNavSettings"),
+        ("shell.nav.workshop", "ShellNavWorkshop"),
         ("shell.playSet.countDiff", "ShellPlaySetCountDiff"),
         ("shell.playSet.deleteBusy", "ShellPlaySetDeleteBusy"),
         ("shell.playSet.deleteFailed", "ShellPlaySetDeleteFailed"),
@@ -1728,8 +1728,77 @@ public sealed partial class Localizer
         ("shell.status.noGames", "ShellStatusNoGames"),
         ("shell.support.managedByGame", "ShellSupportManagedByGame"),
         ("shell.version", "ShellVersion"),
+        ("workshop.author", "WorkshopAuthor"),
+        ("workshop.countText", "WorkshopCountText"),
+        ("workshop.detailClose", "WorkshopDetailClose"),
+        ("workshop.detailFailed", "WorkshopDetailFailed"),
+        ("workshop.detailLoading", "WorkshopDetailLoading"),
+        ("workshop.detailScreenshots", "WorkshopDetailScreenshots"),
+        ("workshop.emptyHint", "WorkshopEmptyHint"),
+        ("workshop.emptyName", "WorkshopEmptyName"),
+        ("workshop.listName", "WorkshopListName"),
+        ("workshop.next", "WorkshopNext"),
+        ("workshop.noGameHint", "WorkshopNoGameHint"),
+        ("workshop.noGameName", "WorkshopNoGameName"),
+        ("workshop.openBrowser", "WorkshopOpenBrowser"),
+        ("workshop.openBrowserName", "WorkshopOpenBrowserName"),
+        ("workshop.openSteam", "WorkshopOpenSteam"),
+        ("workshop.openSteamName", "WorkshopOpenSteamName"),
+        ("workshop.page", "WorkshopPage"),
+        ("workshop.prev", "WorkshopPrev"),
+        ("workshop.probeFailed", "WorkshopProbeFailed"),
+        ("workshop.rating", "WorkshopRating"),
+        ("workshop.refreshName", "WorkshopRefreshName"),
+        ("workshop.searchName", "WorkshopSearchName"),
+        ("workshop.searchPlaceholder", "WorkshopSearchPlaceholder"),
+        ("workshop.signInAction", "WorkshopSignInAction"),
+        ("workshop.signInHint", "WorkshopSignInHint"),
+        ("workshop.size", "WorkshopSize"),
+        ("workshop.sortName", "WorkshopSortName"),
+        ("workshop.sortPopular", "WorkshopSortPopular"),
+        ("workshop.sortRating", "WorkshopSortRating"),
+        ("workshop.sortRecent", "WorkshopSortRecent"),
+        ("workshop.sourceDetecting", "WorkshopSourceDetecting"),
+        ("workshop.sourcePdx", "WorkshopSourcePdx"),
+        ("workshop.sourceSteam", "WorkshopSourceSteam"),
+        ("workshop.statusEmpty", "WorkshopStatusEmpty"),
+        ("workshop.statusFailed", "WorkshopStatusFailed"),
+        ("workshop.statusLoaded", "WorkshopStatusLoaded"),
+        ("workshop.statusLoading", "WorkshopStatusLoading"),
+        ("workshop.statusName", "WorkshopStatusName"),
+        ("workshop.statusParseFailed", "WorkshopStatusParseFailed"),
+        ("workshop.subscriptions", "WorkshopSubscriptions"),
+        ("workshop.title", "WorkshopTitle"),
+        ("workshop.updated", "WorkshopUpdated"),
     ];
 
+    public string AccountDialogFailedTitle => Format("account.dialogFailedTitle");
+    public string AccountDialogSignOutBody => Format("account.dialogSignOutBody");
+    public string AccountDialogSignOutTitle => Format("account.dialogSignOutTitle");
+    public string AccountEmail => Format("account.email");
+    public string AccountEmailPlaceholder => Format("account.emailPlaceholder");
+    public string AccountErrorBadCredentials => Format("account.errorBadCredentials");
+    public string AccountErrorEmailRequired => Format("account.errorEmailRequired");
+    public string AccountErrorNetwork => Format("account.errorNetwork");
+    public string AccountErrorPasswordRequired => Format("account.errorPasswordRequired");
+    public string AccountErrorSignInFailed => Format("account.errorSignInFailed");
+    public string AccountHint => Format("account.hint");
+    public string AccountPassword => Format("account.password");
+    public string AccountPasswordPlaceholder => Format("account.passwordPlaceholder");
+    public string AccountRemember => Format("account.remember");
+    public string AccountRememberHint => Format("account.rememberHint");
+    public string AccountSignIn => Format("account.signIn");
+    public string AccountSignOut => Format("account.signOut");
+    public string AccountSignOutHint => Format("account.signOutHint");
+    public string AccountStatus => Format("account.status");
+    public string AccountStatusHint => Format("account.statusHint");
+    public string AccountStatusNotReady => Format("account.statusNotReady");
+    public string AccountStatusSignInOk => Format("account.statusSignInOk");
+    public string AccountStatusSignOutOk => Format("account.statusSignOutOk");
+    public string AccountStatusSignedIn => Format("account.statusSignedIn");
+    public string AccountStatusSignedOut => Format("account.statusSignedOut");
+    public string AccountStatusSigningIn => Format("account.statusSigningIn");
+    public string AccountTitle => Format("account.title");
     public string AppName => Format("app.name");
     public string CommonApply => Format("common.apply");
     public string CommonBrowse => Format("common.browse");
@@ -1846,40 +1915,11 @@ public sealed partial class Localizer
     public string ModlibCountText => Format("modlib.countText");
     public string ModlibListName => Format("modlib.listName");
     public string ModlibLoadFailed => Format("modlib.loadFailed");
-    public string ModlibModeLocal => Format("modlib.modeLocal");
-    public string ModlibModeName => Format("modlib.modeName");
-    public string ModlibModeOnline => Format("modlib.modeOnline");
     public string ModlibNoGameHint => Format("modlib.noGameHint");
     public string ModlibNoGameName => Format("modlib.noGameName");
     public string ModlibNoGameTitle => Format("modlib.noGameTitle");
     public string ModlibNoModsHint => Format("modlib.noModsHint");
     public string ModlibNoModsName => Format("modlib.noModsName");
-    public string ModlibOnlineAuthor => Format("modlib.onlineAuthor");
-    public string ModlibOnlineDetailClose => Format("modlib.onlineDetailClose");
-    public string ModlibOnlineDetailFailed => Format("modlib.onlineDetailFailed");
-    public string ModlibOnlineDetailLoading => Format("modlib.onlineDetailLoading");
-    public string ModlibOnlineDetailOpenBrowser => Format("modlib.onlineDetailOpenBrowser");
-    public string ModlibOnlineDetailSize => Format("modlib.onlineDetailSize");
-    public string ModlibOnlineListName => Format("modlib.onlineListName");
-    public string ModlibOnlineNext => Format("modlib.onlineNext");
-    public string ModlibOnlineNoGameHint => Format("modlib.onlineNoGameHint");
-    public string ModlibOnlinePage => Format("modlib.onlinePage");
-    public string ModlibOnlinePrev => Format("modlib.onlinePrev");
-    public string ModlibOnlineRating => Format("modlib.onlineRating");
-    public string ModlibOnlineScreenshots => Format("modlib.onlineScreenshots");
-    public string ModlibOnlineSearchPlaceholder => Format("modlib.onlineSearchPlaceholder");
-    public string ModlibOnlineSortBest => Format("modlib.onlineSortBest");
-    public string ModlibOnlineSortCreated => Format("modlib.onlineSortCreated");
-    public string ModlibOnlineSortName => Format("modlib.onlineSortName");
-    public string ModlibOnlineSortPopularity => Format("modlib.onlineSortPopularity");
-    public string ModlibOnlineSortRating => Format("modlib.onlineSortRating");
-    public string ModlibOnlineSortUpdated => Format("modlib.onlineSortUpdated");
-    public string ModlibOnlineStatusEmpty => Format("modlib.onlineStatusEmpty");
-    public string ModlibOnlineStatusFailed => Format("modlib.onlineStatusFailed");
-    public string ModlibOnlineStatusLoaded => Format("modlib.onlineStatusLoaded");
-    public string ModlibOnlineStatusNeedSignIn => Format("modlib.onlineStatusNeedSignIn");
-    public string ModlibOnlineSubscriptions => Format("modlib.onlineSubscriptions");
-    public string ModlibOnlineUpdated => Format("modlib.onlineUpdated");
     public string ModlibOpenBrowser => Format("modlib.openBrowser");
     public string ModlibOpenFolder => Format("modlib.openFolder");
     public string ModlibOpenSteam => Format("modlib.openSteam");
@@ -2011,32 +2051,6 @@ public sealed partial class Localizer
     public string ModsToolbarRename => Format("mods.toolbar.rename");
     public string ModsToolbarRenameName => Format("mods.toolbar.renameName");
     public string ModsToolbarSearchPlaceholder => Format("mods.toolbar.searchPlaceholder");
-    public string SettingsAccountDialogFailedTitle => Format("settings.account.dialogFailedTitle");
-    public string SettingsAccountDialogSignOutBody => Format("settings.account.dialogSignOutBody");
-    public string SettingsAccountDialogSignOutTitle => Format("settings.account.dialogSignOutTitle");
-    public string SettingsAccountEmail => Format("settings.account.email");
-    public string SettingsAccountEmailPlaceholder => Format("settings.account.emailPlaceholder");
-    public string SettingsAccountErrorBadCredentials => Format("settings.account.errorBadCredentials");
-    public string SettingsAccountErrorEmailRequired => Format("settings.account.errorEmailRequired");
-    public string SettingsAccountErrorNetwork => Format("settings.account.errorNetwork");
-    public string SettingsAccountErrorPasswordRequired => Format("settings.account.errorPasswordRequired");
-    public string SettingsAccountErrorSignInFailed => Format("settings.account.errorSignInFailed");
-    public string SettingsAccountHint => Format("settings.account.hint");
-    public string SettingsAccountPassword => Format("settings.account.password");
-    public string SettingsAccountPasswordPlaceholder => Format("settings.account.passwordPlaceholder");
-    public string SettingsAccountRemember => Format("settings.account.remember");
-    public string SettingsAccountRememberHint => Format("settings.account.rememberHint");
-    public string SettingsAccountSignIn => Format("settings.account.signIn");
-    public string SettingsAccountSignOut => Format("settings.account.signOut");
-    public string SettingsAccountSignOutHint => Format("settings.account.signOutHint");
-    public string SettingsAccountStatus => Format("settings.account.status");
-    public string SettingsAccountStatusHint => Format("settings.account.statusHint");
-    public string SettingsAccountStatusNotReady => Format("settings.account.statusNotReady");
-    public string SettingsAccountStatusSignInOk => Format("settings.account.statusSignInOk");
-    public string SettingsAccountStatusSignOutOk => Format("settings.account.statusSignOutOk");
-    public string SettingsAccountStatusSignedIn => Format("settings.account.statusSignedIn");
-    public string SettingsAccountStatusSignedOut => Format("settings.account.statusSignedOut");
-    public string SettingsAccountStatusSigningIn => Format("settings.account.statusSigningIn");
     public string SettingsAppDataClearLegacy => Format("settings.appData.clearLegacy");
     public string SettingsAppDataClearLegacyName => Format("settings.appData.clearLegacyName");
     public string SettingsAppDataCurrent => Format("settings.appData.current");
@@ -2198,7 +2212,6 @@ public sealed partial class Localizer
     public string SettingsModThumbnailsStatusOnlineOff => Format("settings.modThumbnails.statusOnlineOff");
     public string SettingsModThumbnailsStatusOnlineOn => Format("settings.modThumbnails.statusOnlineOn");
     public string SettingsModThumbnailsStatusRetention => Format("settings.modThumbnails.statusRetention");
-    public string SettingsNavAccount => Format("settings.nav.account");
     public string SettingsNavAdvanced => Format("settings.nav.advanced");
     public string SettingsNavAppearance => Format("settings.nav.appearance");
     public string SettingsNavCache => Format("settings.nav.cache");
@@ -2228,7 +2241,6 @@ public sealed partial class Localizer
     public string SettingsProxyStatusRebuildFailed => Format("settings.proxy.status.rebuildFailed");
     public string SettingsProxyStatusResolved => Format("settings.proxy.status.resolved");
     public string SettingsProxyStatusResolvedWithWarning => Format("settings.proxy.status.resolvedWithWarning");
-    public string SettingsSectionAccount => Format("settings.section.account");
     public string SettingsSectionAppData => Format("settings.section.appData");
     public string SettingsSectionCache => Format("settings.section.cache");
     public string SettingsSectionDanger => Format("settings.section.danger");
@@ -2281,11 +2293,13 @@ public sealed partial class Localizer
     public string ShellCrashMessage => Format("shell.crash.message");
     public string ShellCrashPath => Format("shell.crash.path");
     public string ShellCrashTitle => Format("shell.crash.title");
+    public string ShellNavAccount => Format("shell.nav.account");
     public string ShellNavHome => Format("shell.nav.home");
     public string ShellNavLibrary => Format("shell.nav.library");
     public string ShellNavModLibrary => Format("shell.nav.modLibrary");
     public string ShellNavPlaySets => Format("shell.nav.playSets");
     public string ShellNavSettings => Format("shell.nav.settings");
+    public string ShellNavWorkshop => Format("shell.nav.workshop");
     public string ShellPlaySetCountDiff => Format("shell.playSet.countDiff");
     public string ShellPlaySetDeleteBusy => Format("shell.playSet.deleteBusy");
     public string ShellPlaySetDeleteFailed => Format("shell.playSet.deleteFailed");
@@ -2299,11 +2313,80 @@ public sealed partial class Localizer
     public string ShellStatusNoGames => Format("shell.status.noGames");
     public string ShellSupportManagedByGame => Format("shell.support.managedByGame");
     public string ShellVersion => Format("shell.version");
+    public string WorkshopAuthor => Format("workshop.author");
+    public string WorkshopCountText => Format("workshop.countText");
+    public string WorkshopDetailClose => Format("workshop.detailClose");
+    public string WorkshopDetailFailed => Format("workshop.detailFailed");
+    public string WorkshopDetailLoading => Format("workshop.detailLoading");
+    public string WorkshopDetailScreenshots => Format("workshop.detailScreenshots");
+    public string WorkshopEmptyHint => Format("workshop.emptyHint");
+    public string WorkshopEmptyName => Format("workshop.emptyName");
+    public string WorkshopListName => Format("workshop.listName");
+    public string WorkshopNext => Format("workshop.next");
+    public string WorkshopNoGameHint => Format("workshop.noGameHint");
+    public string WorkshopNoGameName => Format("workshop.noGameName");
+    public string WorkshopOpenBrowser => Format("workshop.openBrowser");
+    public string WorkshopOpenBrowserName => Format("workshop.openBrowserName");
+    public string WorkshopOpenSteam => Format("workshop.openSteam");
+    public string WorkshopOpenSteamName => Format("workshop.openSteamName");
+    public string WorkshopPage => Format("workshop.page");
+    public string WorkshopPrev => Format("workshop.prev");
+    public string WorkshopProbeFailed => Format("workshop.probeFailed");
+    public string WorkshopRating => Format("workshop.rating");
+    public string WorkshopRefreshName => Format("workshop.refreshName");
+    public string WorkshopSearchName => Format("workshop.searchName");
+    public string WorkshopSearchPlaceholder => Format("workshop.searchPlaceholder");
+    public string WorkshopSignInAction => Format("workshop.signInAction");
+    public string WorkshopSignInHint => Format("workshop.signInHint");
+    public string WorkshopSize => Format("workshop.size");
+    public string WorkshopSortName => Format("workshop.sortName");
+    public string WorkshopSortPopular => Format("workshop.sortPopular");
+    public string WorkshopSortRating => Format("workshop.sortRating");
+    public string WorkshopSortRecent => Format("workshop.sortRecent");
+    public string WorkshopSourceDetecting => Format("workshop.sourceDetecting");
+    public string WorkshopSourcePdx => Format("workshop.sourcePdx");
+    public string WorkshopSourceSteam => Format("workshop.sourceSteam");
+    public string WorkshopStatusEmpty => Format("workshop.statusEmpty");
+    public string WorkshopStatusFailed => Format("workshop.statusFailed");
+    public string WorkshopStatusLoaded => Format("workshop.statusLoaded");
+    public string WorkshopStatusLoading => Format("workshop.statusLoading");
+    public string WorkshopStatusName => Format("workshop.statusName");
+    public string WorkshopStatusParseFailed => Format("workshop.statusParseFailed");
+    public string WorkshopSubscriptions => Format("workshop.subscriptions");
+    public string WorkshopTitle => Format("workshop.title");
+    public string WorkshopUpdated => Format("workshop.updated");
 }
 
 /// <summary>文案键常量：code-behind / ViewModel 里传键用这里，避免手写字面量。</summary>
 internal static class Keys
 {
+    public const string AccountDialogFailedTitle = "account.dialogFailedTitle";
+    public const string AccountDialogSignOutBody = "account.dialogSignOutBody";
+    public const string AccountDialogSignOutTitle = "account.dialogSignOutTitle";
+    public const string AccountEmail = "account.email";
+    public const string AccountEmailPlaceholder = "account.emailPlaceholder";
+    public const string AccountErrorBadCredentials = "account.errorBadCredentials";
+    public const string AccountErrorEmailRequired = "account.errorEmailRequired";
+    public const string AccountErrorNetwork = "account.errorNetwork";
+    public const string AccountErrorPasswordRequired = "account.errorPasswordRequired";
+    public const string AccountErrorSignInFailed = "account.errorSignInFailed";
+    public const string AccountHint = "account.hint";
+    public const string AccountPassword = "account.password";
+    public const string AccountPasswordPlaceholder = "account.passwordPlaceholder";
+    public const string AccountRemember = "account.remember";
+    public const string AccountRememberHint = "account.rememberHint";
+    public const string AccountSignIn = "account.signIn";
+    public const string AccountSignOut = "account.signOut";
+    public const string AccountSignOutHint = "account.signOutHint";
+    public const string AccountStatus = "account.status";
+    public const string AccountStatusHint = "account.statusHint";
+    public const string AccountStatusNotReady = "account.statusNotReady";
+    public const string AccountStatusSignInOk = "account.statusSignInOk";
+    public const string AccountStatusSignOutOk = "account.statusSignOutOk";
+    public const string AccountStatusSignedIn = "account.statusSignedIn";
+    public const string AccountStatusSignedOut = "account.statusSignedOut";
+    public const string AccountStatusSigningIn = "account.statusSigningIn";
+    public const string AccountTitle = "account.title";
     public const string AppName = "app.name";
     public const string CommonApply = "common.apply";
     public const string CommonBrowse = "common.browse";
@@ -2420,40 +2503,11 @@ internal static class Keys
     public const string ModlibCountText = "modlib.countText";
     public const string ModlibListName = "modlib.listName";
     public const string ModlibLoadFailed = "modlib.loadFailed";
-    public const string ModlibModeLocal = "modlib.modeLocal";
-    public const string ModlibModeName = "modlib.modeName";
-    public const string ModlibModeOnline = "modlib.modeOnline";
     public const string ModlibNoGameHint = "modlib.noGameHint";
     public const string ModlibNoGameName = "modlib.noGameName";
     public const string ModlibNoGameTitle = "modlib.noGameTitle";
     public const string ModlibNoModsHint = "modlib.noModsHint";
     public const string ModlibNoModsName = "modlib.noModsName";
-    public const string ModlibOnlineAuthor = "modlib.onlineAuthor";
-    public const string ModlibOnlineDetailClose = "modlib.onlineDetailClose";
-    public const string ModlibOnlineDetailFailed = "modlib.onlineDetailFailed";
-    public const string ModlibOnlineDetailLoading = "modlib.onlineDetailLoading";
-    public const string ModlibOnlineDetailOpenBrowser = "modlib.onlineDetailOpenBrowser";
-    public const string ModlibOnlineDetailSize = "modlib.onlineDetailSize";
-    public const string ModlibOnlineListName = "modlib.onlineListName";
-    public const string ModlibOnlineNext = "modlib.onlineNext";
-    public const string ModlibOnlineNoGameHint = "modlib.onlineNoGameHint";
-    public const string ModlibOnlinePage = "modlib.onlinePage";
-    public const string ModlibOnlinePrev = "modlib.onlinePrev";
-    public const string ModlibOnlineRating = "modlib.onlineRating";
-    public const string ModlibOnlineScreenshots = "modlib.onlineScreenshots";
-    public const string ModlibOnlineSearchPlaceholder = "modlib.onlineSearchPlaceholder";
-    public const string ModlibOnlineSortBest = "modlib.onlineSortBest";
-    public const string ModlibOnlineSortCreated = "modlib.onlineSortCreated";
-    public const string ModlibOnlineSortName = "modlib.onlineSortName";
-    public const string ModlibOnlineSortPopularity = "modlib.onlineSortPopularity";
-    public const string ModlibOnlineSortRating = "modlib.onlineSortRating";
-    public const string ModlibOnlineSortUpdated = "modlib.onlineSortUpdated";
-    public const string ModlibOnlineStatusEmpty = "modlib.onlineStatusEmpty";
-    public const string ModlibOnlineStatusFailed = "modlib.onlineStatusFailed";
-    public const string ModlibOnlineStatusLoaded = "modlib.onlineStatusLoaded";
-    public const string ModlibOnlineStatusNeedSignIn = "modlib.onlineStatusNeedSignIn";
-    public const string ModlibOnlineSubscriptions = "modlib.onlineSubscriptions";
-    public const string ModlibOnlineUpdated = "modlib.onlineUpdated";
     public const string ModlibOpenBrowser = "modlib.openBrowser";
     public const string ModlibOpenFolder = "modlib.openFolder";
     public const string ModlibOpenSteam = "modlib.openSteam";
@@ -2585,32 +2639,6 @@ internal static class Keys
     public const string ModsToolbarRename = "mods.toolbar.rename";
     public const string ModsToolbarRenameName = "mods.toolbar.renameName";
     public const string ModsToolbarSearchPlaceholder = "mods.toolbar.searchPlaceholder";
-    public const string SettingsAccountDialogFailedTitle = "settings.account.dialogFailedTitle";
-    public const string SettingsAccountDialogSignOutBody = "settings.account.dialogSignOutBody";
-    public const string SettingsAccountDialogSignOutTitle = "settings.account.dialogSignOutTitle";
-    public const string SettingsAccountEmail = "settings.account.email";
-    public const string SettingsAccountEmailPlaceholder = "settings.account.emailPlaceholder";
-    public const string SettingsAccountErrorBadCredentials = "settings.account.errorBadCredentials";
-    public const string SettingsAccountErrorEmailRequired = "settings.account.errorEmailRequired";
-    public const string SettingsAccountErrorNetwork = "settings.account.errorNetwork";
-    public const string SettingsAccountErrorPasswordRequired = "settings.account.errorPasswordRequired";
-    public const string SettingsAccountErrorSignInFailed = "settings.account.errorSignInFailed";
-    public const string SettingsAccountHint = "settings.account.hint";
-    public const string SettingsAccountPassword = "settings.account.password";
-    public const string SettingsAccountPasswordPlaceholder = "settings.account.passwordPlaceholder";
-    public const string SettingsAccountRemember = "settings.account.remember";
-    public const string SettingsAccountRememberHint = "settings.account.rememberHint";
-    public const string SettingsAccountSignIn = "settings.account.signIn";
-    public const string SettingsAccountSignOut = "settings.account.signOut";
-    public const string SettingsAccountSignOutHint = "settings.account.signOutHint";
-    public const string SettingsAccountStatus = "settings.account.status";
-    public const string SettingsAccountStatusHint = "settings.account.statusHint";
-    public const string SettingsAccountStatusNotReady = "settings.account.statusNotReady";
-    public const string SettingsAccountStatusSignInOk = "settings.account.statusSignInOk";
-    public const string SettingsAccountStatusSignOutOk = "settings.account.statusSignOutOk";
-    public const string SettingsAccountStatusSignedIn = "settings.account.statusSignedIn";
-    public const string SettingsAccountStatusSignedOut = "settings.account.statusSignedOut";
-    public const string SettingsAccountStatusSigningIn = "settings.account.statusSigningIn";
     public const string SettingsAppDataClearLegacy = "settings.appData.clearLegacy";
     public const string SettingsAppDataClearLegacyName = "settings.appData.clearLegacyName";
     public const string SettingsAppDataCurrent = "settings.appData.current";
@@ -2772,7 +2800,6 @@ internal static class Keys
     public const string SettingsModThumbnailsStatusOnlineOff = "settings.modThumbnails.statusOnlineOff";
     public const string SettingsModThumbnailsStatusOnlineOn = "settings.modThumbnails.statusOnlineOn";
     public const string SettingsModThumbnailsStatusRetention = "settings.modThumbnails.statusRetention";
-    public const string SettingsNavAccount = "settings.nav.account";
     public const string SettingsNavAdvanced = "settings.nav.advanced";
     public const string SettingsNavAppearance = "settings.nav.appearance";
     public const string SettingsNavCache = "settings.nav.cache";
@@ -2802,7 +2829,6 @@ internal static class Keys
     public const string SettingsProxyStatusRebuildFailed = "settings.proxy.status.rebuildFailed";
     public const string SettingsProxyStatusResolved = "settings.proxy.status.resolved";
     public const string SettingsProxyStatusResolvedWithWarning = "settings.proxy.status.resolvedWithWarning";
-    public const string SettingsSectionAccount = "settings.section.account";
     public const string SettingsSectionAppData = "settings.section.appData";
     public const string SettingsSectionCache = "settings.section.cache";
     public const string SettingsSectionDanger = "settings.section.danger";
@@ -2855,11 +2881,13 @@ internal static class Keys
     public const string ShellCrashMessage = "shell.crash.message";
     public const string ShellCrashPath = "shell.crash.path";
     public const string ShellCrashTitle = "shell.crash.title";
+    public const string ShellNavAccount = "shell.nav.account";
     public const string ShellNavHome = "shell.nav.home";
     public const string ShellNavLibrary = "shell.nav.library";
     public const string ShellNavModLibrary = "shell.nav.modLibrary";
     public const string ShellNavPlaySets = "shell.nav.playSets";
     public const string ShellNavSettings = "shell.nav.settings";
+    public const string ShellNavWorkshop = "shell.nav.workshop";
     public const string ShellPlaySetCountDiff = "shell.playSet.countDiff";
     public const string ShellPlaySetDeleteBusy = "shell.playSet.deleteBusy";
     public const string ShellPlaySetDeleteFailed = "shell.playSet.deleteFailed";
@@ -2873,4 +2901,46 @@ internal static class Keys
     public const string ShellStatusNoGames = "shell.status.noGames";
     public const string ShellSupportManagedByGame = "shell.support.managedByGame";
     public const string ShellVersion = "shell.version";
+    public const string WorkshopAuthor = "workshop.author";
+    public const string WorkshopCountText = "workshop.countText";
+    public const string WorkshopDetailClose = "workshop.detailClose";
+    public const string WorkshopDetailFailed = "workshop.detailFailed";
+    public const string WorkshopDetailLoading = "workshop.detailLoading";
+    public const string WorkshopDetailScreenshots = "workshop.detailScreenshots";
+    public const string WorkshopEmptyHint = "workshop.emptyHint";
+    public const string WorkshopEmptyName = "workshop.emptyName";
+    public const string WorkshopListName = "workshop.listName";
+    public const string WorkshopNext = "workshop.next";
+    public const string WorkshopNoGameHint = "workshop.noGameHint";
+    public const string WorkshopNoGameName = "workshop.noGameName";
+    public const string WorkshopOpenBrowser = "workshop.openBrowser";
+    public const string WorkshopOpenBrowserName = "workshop.openBrowserName";
+    public const string WorkshopOpenSteam = "workshop.openSteam";
+    public const string WorkshopOpenSteamName = "workshop.openSteamName";
+    public const string WorkshopPage = "workshop.page";
+    public const string WorkshopPrev = "workshop.prev";
+    public const string WorkshopProbeFailed = "workshop.probeFailed";
+    public const string WorkshopRating = "workshop.rating";
+    public const string WorkshopRefreshName = "workshop.refreshName";
+    public const string WorkshopSearchName = "workshop.searchName";
+    public const string WorkshopSearchPlaceholder = "workshop.searchPlaceholder";
+    public const string WorkshopSignInAction = "workshop.signInAction";
+    public const string WorkshopSignInHint = "workshop.signInHint";
+    public const string WorkshopSize = "workshop.size";
+    public const string WorkshopSortName = "workshop.sortName";
+    public const string WorkshopSortPopular = "workshop.sortPopular";
+    public const string WorkshopSortRating = "workshop.sortRating";
+    public const string WorkshopSortRecent = "workshop.sortRecent";
+    public const string WorkshopSourceDetecting = "workshop.sourceDetecting";
+    public const string WorkshopSourcePdx = "workshop.sourcePdx";
+    public const string WorkshopSourceSteam = "workshop.sourceSteam";
+    public const string WorkshopStatusEmpty = "workshop.statusEmpty";
+    public const string WorkshopStatusFailed = "workshop.statusFailed";
+    public const string WorkshopStatusLoaded = "workshop.statusLoaded";
+    public const string WorkshopStatusLoading = "workshop.statusLoading";
+    public const string WorkshopStatusName = "workshop.statusName";
+    public const string WorkshopStatusParseFailed = "workshop.statusParseFailed";
+    public const string WorkshopSubscriptions = "workshop.subscriptions";
+    public const string WorkshopTitle = "workshop.title";
+    public const string WorkshopUpdated = "workshop.updated";
 }

@@ -50,8 +50,6 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         ModThumbnailSizeCatalog.Resolve(AppServices.Settings.ModThumbnailSize);
     private UiLanguageOption _selectedUiLanguage =
         UiLanguageCatalog.Resolve(AppServices.Settings.UiLanguage);
-    private string _accountEmail = string.Empty;
-    private bool _accountRemember = AppServices.Settings.PdxRememberMe;
 
     public SettingsViewModel()
     {
@@ -1036,181 +1034,6 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public string ModThumbnailCacheSummary =>
         T(Keys.SettingsModThumbnailsCount, AppServices.ModThumbnails.Cache.Count);
 
-    // ------------------------------------------------------------ Paradox 账号
-
-    /// <summary>邮箱输入框的内容（只在内存里，未落盘）。</summary>
-    public string AccountEmail
-    {
-        get => _accountEmail;
-        set
-        {
-            if (SetProperty(ref _accountEmail, value))
-            {
-                OnPropertyChanged(nameof(CanSignIn));
-            }
-        }
-    }
-
-    /// <summary>是否保持登录（勾了就向服务端要 refresh token 并落盘）。</summary>
-    public bool AccountRemember
-    {
-        get => _accountRemember;
-        set
-        {
-            if (SetProperty(ref _accountRemember, value))
-            {
-                AppServices.Settings.PdxRememberMe = value;
-                SaveSettings();
-            }
-        }
-    }
-
-    /// <summary>正在登录 / 登出，界面据此禁用输入。</summary>
-    public bool IsAccountBusy => AppServices.IsInitialized && AppServices.Account.IsBusy;
-
-    /// <summary>已登录。</summary>
-    public bool IsSignedIn => AppServices.IsInitialized && AppServices.Account.IsSignedIn;
-
-    /// <summary>能否提交登录：未在忙、未登录、邮箱非空。</summary>
-    public bool CanSignIn =>
-        !IsAccountBusy && !IsSignedIn && !string.IsNullOrWhiteSpace(AccountEmail);
-
-    /// <summary>账号状态文案：未登录 / 正在登录 / 已登录（含显示名与邮箱）。</summary>
-    public string AccountStatusText
-    {
-        get
-        {
-            if (!AppServices.IsInitialized)
-            {
-                return T(Keys.SettingsAccountStatusNotReady);
-            }
-
-            var account = AppServices.Account;
-            if (account.IsSignedIn && account.Session is { } session)
-            {
-                return T(Keys.SettingsAccountStatusSignedIn, session.DisplayName, session.Email);
-            }
-
-            return account.IsBusy
-                ? T(Keys.SettingsAccountStatusSigningIn)
-                : T(Keys.SettingsAccountStatusSignedOut);
-        }
-    }
-
-    /// <summary>登录。成功返回 null，失败返回可直接显示的错误文案。</summary>
-    /// <param name="password">密码框里的明文（不保留）。</param>
-    /// <param name="cancellationToken">取消令牌。</param>
-    public async Task<string?> SignInAsync(string password, CancellationToken cancellationToken)
-    {
-        if (!AppServices.IsInitialized)
-        {
-            return T(Keys.SettingsAccountStatusNotReady);
-        }
-
-        if (string.IsNullOrWhiteSpace(AccountEmail))
-        {
-            return T(Keys.SettingsAccountErrorEmailRequired);
-        }
-
-        if (string.IsNullOrEmpty(password))
-        {
-            return T(Keys.SettingsAccountErrorPasswordRequired);
-        }
-
-        RaiseAccountProps();
-        try
-        {
-            var result = await AppServices.Account
-                .SignInAsync(AccountEmail.Trim(), password, AccountRemember, cancellationToken)
-                .ConfigureAwait(true);
-
-            if (!result.IsSuccess)
-            {
-                return T(Keys.SettingsAccountErrorSignInFailed, DescribeAccountError(result.ErrorMessage));
-            }
-
-            SetStatus(Keys.SettingsAccountStatusSignInOk);
-            return null;
-        }
-        finally
-        {
-            RaiseAccountProps();
-        }
-    }
-
-    /// <summary>登出（本地清空，不影响服务端会话）。</summary>
-    public void SignOut()
-    {
-        if (!AppServices.IsInitialized)
-        {
-            return;
-        }
-
-        AppServices.Account.SignOut();
-        RaiseAccountProps();
-        SetStatus(Keys.SettingsAccountStatusSignOutOk);
-    }
-
-    /// <summary>启动时读回上次会话；失败静默（离线启动不该弹错误）。</summary>
-    public async Task RestoreAccountAsync(CancellationToken cancellationToken)
-    {
-        if (!AppServices.IsInitialized)
-        {
-            return;
-        }
-
-        try
-        {
-            await AppServices.Account.RestoreAsync(cancellationToken).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Warn("恢复 Paradox 会话失败：" + ex.Message);
-        }
-        finally
-        {
-            RaiseAccountProps();
-        }
-    }
-
-    /// <summary>账号状态可能变了（登录 / 登出 / 代理重建），通知所有派生属性。</summary>
-    public void RaiseAccountProps()
-    {
-        OnPropertyChanged(nameof(IsAccountBusy));
-        OnPropertyChanged(nameof(IsSignedIn));
-        OnPropertyChanged(nameof(CanSignIn));
-        OnPropertyChanged(nameof(AccountStatusText));
-    }
-
-    /// <summary>把 Core 的错误码翻成给用户看的那一句（错误码本身进日志）。</summary>
-    private string DescribeAccountError(string? errorMessage)
-    {
-        var code = errorMessage ?? string.Empty;
-        if (AppServices.IsInitialized)
-        {
-            AppServices.Logger.Warn("Paradox 账号操作失败：" + code);
-        }
-
-        if (code.Contains("pdx-unauthorized", StringComparison.Ordinal)
-            || code.Contains("401", StringComparison.Ordinal)
-            || code.Contains("403", StringComparison.Ordinal))
-        {
-            return T(Keys.SettingsAccountErrorBadCredentials);
-        }
-
-        if (code.Contains("timeout", StringComparison.OrdinalIgnoreCase)
-            || code.Contains("pdx-network", StringComparison.OrdinalIgnoreCase))
-        {
-            return T(Keys.SettingsAccountErrorNetwork);
-        }
-
-        return code;
-    }
-
     // ------------------------------------------------------------ 内部
 
     /// <summary>语言切换后要把拼好的句子按新语言重建。</summary>
@@ -1219,7 +1042,6 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         RefreshProxyStatus();
         OnPropertyChanged(nameof(CacheTotalText));
         RefreshAlternativeLabels();
-        OnPropertyChanged(nameof(AccountStatusText));
         if (_statusKey is not null)
         {
             StatusMessage = T(_statusKey, _statusArgs);

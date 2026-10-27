@@ -21,8 +21,14 @@ public sealed class NavigationService
     /// <summary>Mod 库页的导航 Tag。</summary>
     public const string ModLibraryTag = "modlibrary";
 
+    /// <summary>创意工坊页的导航 Tag。</summary>
+    public const string WorkshopTag = "workshop";
+
     /// <summary>DLC 页的导航 Tag。</summary>
     public const string DlcTag = "dlc";
+
+    /// <summary>账号页的导航 Tag。</summary>
+    public const string AccountTag = "account";
 
     /// <summary>设置页的导航 Tag。</summary>
     public const string SettingsTag = "settings";
@@ -33,7 +39,9 @@ public sealed class NavigationService
         [HomeTag] = "PdxLauncher.App.Views.HomePage",
         [PlaySetsTag] = "PdxLauncher.App.Views.ModsPage",
         [ModLibraryTag] = "PdxLauncher.App.Views.ModLibraryPage",
+        [WorkshopTag] = "PdxLauncher.App.Views.WorkshopPage",
         [DlcTag] = "PdxLauncher.App.Views.DlcPage",
+        [AccountTag] = "PdxLauncher.App.Views.AccountPage",
         [SettingsTag] = "PdxLauncher.App.Views.SettingsPage",
     };
 

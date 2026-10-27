@@ -104,6 +104,23 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
         return text;
     }
 
+    public async Task<string> PostFormAsync(Uri uri, string formBody, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
+        ArgumentNullException.ThrowIfNull(formBody);
+        EnsureAllowed(uri);
+
+        using var content = new StringContent(formBody, Encoding.UTF8, "application/x-www-form-urlencoded");
+        using var response = await _client.PostAsync(uri, content, cancellationToken).ConfigureAwait(false);
+        var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException("HTTP " + (int)response.StatusCode + " " + uri);
+        }
+
+        return text;
+    }
+
     /// <summary>
     /// 出口强制白名单。这里而不是调用方做校验，是因为「调用方自觉」这个约定已经在实测中失效：
     /// 出站调用点里有若干处根本没调 <see cref="OnlineHosts.IsAllowed"/>，加了新集成也不会有人记得补。

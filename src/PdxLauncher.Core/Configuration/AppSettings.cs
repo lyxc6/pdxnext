@@ -102,4 +102,17 @@ public sealed class AppSettings
     /// 不勾时只留 session token，过期后必须重新输密码。与官方启动器的行为一致。
     /// </summary>
     public bool PdxRememberMe { get; set; }
+
+    /// <summary>
+    /// 上次选中的游戏 id（如 <c>crusader_kings_3</c>）。下次启动优先恢复它；
+    /// 游戏已经不在了就回退到默认规则（见 <see cref="GameSelection"/>）。
+    /// null 表示从没选过（旧版设置文件）。
+    /// </summary>
+    public string? LastGameId { get; set; }
+
+    /// <summary>
+    /// 上次选中游戏的安装根目录。同一个游戏装了多份时用它消歧；
+    /// 与 <see cref="LastGameId"/> 一起命中才算精确恢复。
+    /// </summary>
+    public string? LastGameInstallRoot { get; set; }
 }

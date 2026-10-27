@@ -27,11 +27,27 @@ public static class OnlineHosts
     /// <summary>PDX Mods 网页端（mod 详情页跳转用）。</summary>
     public const string ModsWebHost = "mods.paradoxplaza.com";
 
+    /// <summary>Steam 创意工坊网页端（列表页解析 SSR 数据）。</summary>
+    public const string SteamCommunityHost = "steamcommunity.com";
+
+    /// <summary>Steam Web API（keyless 的 published file 详情接口）。</summary>
+    public const string SteamApiHost = "api.steampowered.com";
+
     /// <summary>GetMetadata 的 GraphQL 端点（实测匿名可用）。</summary>
     public static Uri MetadataEndpoint { get; } = new("https://api.paradox-interactive.com/metadata/graphql");
 
     /// <summary>PDX Mods 列表/搜索端点（<c>POST /mods</c>，匿名可读）。</summary>
     public static Uri ModsSearchEndpoint { get; } = new("https://api.paradox-interactive.com/mods");
+
+    /// <summary>Steam 创意工坊列表页（HTML + <c>valve-ssr-data</c>）。</summary>
+    public static Uri SteamWorkshopBrowseEndpoint { get; } = new("https://steamcommunity.com/workshop/browse/");
+
+    /// <summary>Steam 商店 appdetails（<c>filters=categories</c> 用来判定有没有创意工坊）。</summary>
+    public static Uri SteamAppDetailsEndpoint { get; } = new("https://store.steampowered.com/api/appdetails");
+
+    /// <summary>Steam keyless 的已发布文件详情（只吃 form-urlencoded）。</summary>
+    public static Uri SteamPublishedFileDetailsEndpoint { get; } =
+        new("https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/");
 
     /// <summary>主机名是否在白名单内（大小写不敏感，只允许精确匹配，不允许子域）。</summary>
     public static bool IsAllowedHost(string? host) =>
@@ -41,7 +57,9 @@ public static class OnlineHosts
         || string.Equals(host, BrazeImagesHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamUserContentHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, ModsContentHost, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(host, ModsWebHost, StringComparison.OrdinalIgnoreCase);
+        || string.Equals(host, ModsWebHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, SteamCommunityHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, SteamApiHost, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>绝对 URI 是否可请求：必须是 http/https 且主机在白名单内。</summary>
     public static bool IsAllowed(Uri? uri)

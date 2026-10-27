@@ -138,11 +138,35 @@ public partial class App : Application
             network.ModThumbnails,
             account,
             network.PdxMods,
+            network.SteamWorkshop,
             settingsStore,
             Array.Empty<GameInstallation>(),
             new DisposableGroup(network.Http, network.PdxHttp));
 
         logger.Info("服务装配完成");
+
+        // 会话恢复必须在启动阶段跑：账号页与创意工坊提示条都依赖 Account.IsSignedIn，
+        // 而旧实现只在进设置页时才续期，冷启动会误报未登录。
+        _ = RestoreAccountSessionAsync();
+    }
+
+    /// <summary>
+    /// 冷启动恢复 Paradox 会话（记住我时用 refresh token 续期）。
+    /// 失败只记日志：启动流程不能因为账号服务不可用而中断。
+    /// </summary>
+    private static async Task RestoreAccountSessionAsync()
+    {
+        try
+        {
+            await AppServices.Account.RestoreAsync(CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppServices.Logger.Warn("启动时恢复 Paradox 会话失败: " + ex.Message);
+        }
     }
 
     /// <summary>

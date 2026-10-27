@@ -1,0 +1,316 @@
+namespace PdxLauncher.Core.Online;
+
+using System.Collections.Concurrent;
+using System.Globalization;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Contracts;
+
+/// <summary>
+/// Steam 创意工坊只读客户端（匿名、keyless）。
+/// <para>
+/// 三条端点的实测结论（2026-10）：
+/// </para>
+/// <list type="bullet">
+/// <item>列表：<c>GET /workshop/browse/?appid=…&amp;section=readytouseitems&amp;browsesort=…&amp;p=…</c>，
+/// 数据在 <c>valve-ssr-data</c> 里，解析见 <see cref="SteamWorkshopHtmlParser"/>。</item>
+/// <item>详情：列表里的 SSR 数据够用，但完整描述只能走
+/// <c>POST /ISteamRemoteStorage/GetPublishedFileDetails/v1/</c> —— <b>只吃 form-urlencoded</b>
+/// （GET→405、JSON body→400），所以走 <see cref="IHttpFetcher.PostFormAsync"/>。</item>
+/// <item>能力探测：<c>store.steampowered.com/api/appdetails?appids=…&amp;filters=categories</c>，
+/// 分类里有 <see cref="WorkshopCategory"/> 才算有创意工坊（CS2 没有，CK3 有）。结果按 appId 缓存。</item>
+/// </list>
+/// </summary>
+public sealed class SteamWorkshopClient
+{
+    /// <summary>默认每页条数（服务端 <c>num_per_page</c> 上限 50，超过会回落到 30）。</summary>
+    public const int DefaultPageSize = 30;
+
+    /// <summary><c>num_per_page</c> 的安全上限。</summary>
+    public const int MaxPageSize = 50;
+
+    /// <summary>appdetails 里代表创意工坊的分类名。</summary>
+    public const string WorkshopCategory = "Steam Workshop";
+
+    private readonly IHttpFetcher _http;
+    private readonly IAppLogger _logger;
+
+    /// <summary>appId → 有没有创意工坊。Steam 分类几乎不变，进程内缓存足够。</summary>
+    private readonly ConcurrentDictionary<int, bool> _workshopProbes = new();
+
+    /// <summary>创建客户端。</summary>
+    /// <param name="http">HTTP 抽象（与其它联网服务共用同一个 HttpFetcher，代理重建时一起换）。</param>
+    /// <param name="logger">日志。</param>
+    public SteamWorkshopClient(IHttpFetcher http, IAppLogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+        ArgumentNullException.ThrowIfNull(logger);
+        _http = http;
+        _logger = logger;
+    }
+
+    /// <summary>拼列表页 URI（纯函数，自检直接覆盖）。页码对外从 0 开始，对 Steam 从 1 开始。</summary>
+    /// <param name="appId">Steam appid。</param>
+    /// <param name="query">查询条件。</param>
+    public static Uri BuildBrowseUri(int appId, SteamWorkshopQuery query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var pageSize = Math.Clamp(query.PageSize, 1, MaxPageSize);
+        var page = Math.Max(query.Page, 0) + 1;
+        var keyword = query.SearchText?.Trim();
+        var sort = string.IsNullOrEmpty(keyword) ? SortValue(query.Sort) : "textsearch";
+
+        var builder = new StringBuilder(OnlineHosts.SteamWorkshopBrowseEndpoint.AbsoluteUri);
+        builder.Append("?appid=").Append(appId.ToString(CultureInfo.InvariantCulture));
+        builder.Append("&section=readytouseitems&browsesort=").Append(sort);
+        builder.Append("&num_per_page=").Append(pageSize.ToString(CultureInfo.InvariantCulture));
+        builder.Append("&p=").Append(page.ToString(CultureInfo.InvariantCulture));
+        if (!string.IsNullOrEmpty(keyword))
+        {
+            // 参数名是 searchtext（没有下划线），配 browsesort=textsearch 才生效。
+            builder.Append("&searchtext=").Append(Uri.EscapeDataString(keyword));
+        }
+
+        return new Uri(builder.ToString());
+    }
+
+    /// <summary>浏览一页创意工坊。</summary>
+    /// <param name="appId">Steam appid。</param>
+    /// <param name="query">查询条件。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<AppResult<SteamWorkshopPage>> BrowseAsync(
+        int appId,
+        SteamWorkshopQuery query,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var page = Math.Max(query.Page, 0);
+        var pageSize = Math.Clamp(query.PageSize, 1, MaxPageSize);
+
+        try
+        {
+            await using var stream = await _http
+                .GetAsync(BuildBrowseUri(appId, query), cancellationToken)
+                .ConfigureAwait(false);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            var html = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+
+            var parsed = SteamWorkshopHtmlParser.Parse(html, page, pageSize);
+            if (parsed is null)
+            {
+                _logger.Warn("Steam 创意工坊页面结构无法解析: appid=" + appId.ToString(CultureInfo.InvariantCulture));
+                return AppResult<SteamWorkshopPage>.Fail(ErrorKind.Unsupported, "steam-workshop-parse");
+            }
+
+            return AppResult<SteamWorkshopPage>.Ok(parsed);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.Warn("Steam 创意工坊请求失败: appid=" + appId.ToString(CultureInfo.InvariantCulture) + " " + ex.Message);
+            return AppResult<SteamWorkshopPage>.Fail(ErrorKind.Unknown, "steam-workshop-http");
+        }
+    }
+
+    /// <summary>取单个条目的完整描述。</summary>
+    /// <param name="publishedFileId">Steam 已发布文件 id。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<AppResult<SteamWorkshopItemDetail>> GetDetailAsync(
+        string publishedFileId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(publishedFileId);
+
+        var body = "itemcount=1&publishedfileids[0]=" + Uri.EscapeDataString(publishedFileId);
+
+        try
+        {
+            var text = await _http
+                .PostFormAsync(OnlineHosts.SteamPublishedFileDetailsEndpoint, body, cancellationToken)
+                .ConfigureAwait(false);
+
+            var detail = ParseDetail(text);
+            if (detail is null)
+            {
+                return AppResult<SteamWorkshopItemDetail>.Fail(ErrorKind.NotFound, "steam-workshop-detail:not-found");
+            }
+
+            return AppResult<SteamWorkshopItemDetail>.Ok(detail);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.Warn("Steam 创意工坊详情请求失败: " + ex.Message);
+            return AppResult<SteamWorkshopItemDetail>.Fail(ErrorKind.Unknown, "steam-workshop-detail-http");
+        }
+        catch (JsonException ex)
+        {
+            _logger.Warn("Steam 创意工坊详情解析失败: " + ex.Message);
+            return AppResult<SteamWorkshopItemDetail>.Fail(ErrorKind.Io, "steam-workshop-detail-bad-json");
+        }
+    }
+
+    /// <summary>探测某款游戏有没有 Steam 创意工坊（结果按 appId 缓存）。</summary>
+    /// <param name="appId">Steam appid。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<AppResult<bool>> HasWorkshopAsync(int appId, CancellationToken cancellationToken)
+    {
+        if (_workshopProbes.TryGetValue(appId, out var cached))
+        {
+            return AppResult<bool>.Ok(cached);
+        }
+
+        var uri = new Uri(
+            OnlineHosts.SteamAppDetailsEndpoint.AbsoluteUri +
+            "?appids=" + appId.ToString(CultureInfo.InvariantCulture) +
+            "&filters=categories&cc=us&l=english");
+
+        try
+        {
+            await using var stream = await _http.GetAsync(uri, cancellationToken).ConfigureAwait(false);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            var json = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+
+            var hasWorkshop = ParseHasWorkshop(json, appId);
+            _workshopProbes[appId] = hasWorkshop;
+            return AppResult<bool>.Ok(hasWorkshop);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.Warn("Steam appdetails 探测失败: appid=" +
+                appId.ToString(CultureInfo.InvariantCulture) + " " + ex.Message);
+            return AppResult<bool>.Fail(ErrorKind.Unknown, "steam-appdetails-http");
+        }
+        catch (JsonException ex)
+        {
+            _logger.Warn("Steam appdetails 解析失败: " + ex.Message);
+            return AppResult<bool>.Fail(ErrorKind.Io, "steam-appdetails-bad-json");
+        }
+    }
+
+    /// <summary>从 appdetails 响应判定有没有创意工坊（纯函数，自检覆盖）。</summary>
+    /// <param name="json">响应正文。</param>
+    /// <param name="appId">appid（响应以它为键）。</param>
+    public static bool ParseHasWorkshop(string? json, int appId)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        try
+        {
+            var root = JsonNode.Parse(json)?[appId.ToString(CultureInfo.InvariantCulture)];
+            if (root?["success"] is not JsonValue success
+                || !success.TryGetValue<bool>(out var ok)
+                || !ok)
+            {
+                return false;
+            }
+
+            if (root["data"]?["categories"] is not JsonArray categories)
+            {
+                return false;
+            }
+
+            foreach (var entry in categories)
+            {
+                if (entry?["description"] is JsonValue description
+                    && description.TryGetValue<string>(out var text)
+                    && string.Equals(text, WorkshopCategory, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>解析 GetPublishedFileDetails 响应（纯函数，自检覆盖）。</summary>
+    /// <param name="json">响应正文。</param>
+    public static SteamWorkshopItemDetail? ParseDetail(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            if (JsonNode.Parse(json)?["response"]?["publishedfiledetails"] is not JsonArray array
+                || array.Count == 0
+                || array[0] is not JsonObject item)
+            {
+                return null;
+            }
+
+            return new SteamWorkshopItemDetail(
+                PublishedFileId: StringOf(item, "publishedfileid") ?? string.Empty,
+                Title: StringOf(item, "title") ?? string.Empty,
+                Description: StringOf(item, "description") ?? StringOf(item, "file_description") ?? string.Empty,
+                PreviewUrl: StringOf(item, "preview_url"),
+                FileSizeBytes: LongOf(item, "file_size"),
+                CreatedUtc: FromUnixSeconds(LongOf(item, "time_created")),
+                UpdatedUtc: FromUnixSeconds(LongOf(item, "time_updated")),
+                Filename: StringOf(item, "filename"));
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string SortValue(SteamWorkshopSort sort) => sort switch
+    {
+        SteamWorkshopSort.MostRecent => "mostrecent",
+        SteamWorkshopSort.TopRated => "toprated",
+        SteamWorkshopSort.TextSearch => "textsearch",
+        _ => "mostpopular",
+    };
+
+    private static DateTimeOffset FromUnixSeconds(long seconds)
+    {
+        if (seconds <= 0)
+        {
+            return DateTimeOffset.UnixEpoch;
+        }
+
+        try
+        {
+            return DateTimeOffset.FromUnixTimeSeconds(seconds);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return DateTimeOffset.UnixEpoch;
+        }
+    }
+
+    private static string? StringOf(JsonObject node, string name)
+    {
+        if (node[name] is not JsonValue value)
+        {
+            return null;
+        }
+
+        if (value.TryGetValue<string>(out var text))
+        {
+            return text;
+        }
+
+        return value.ToJsonString().Trim('"');
+    }
+
+    private static long LongOf(JsonObject node, string name)
+    {
+        var text = StringOf(node, name);
+        return long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) ? value : 0;
+    }
+}
