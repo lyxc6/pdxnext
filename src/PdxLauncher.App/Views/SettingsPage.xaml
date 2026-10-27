@@ -370,6 +370,50 @@
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap" Margin="4,0,4,8" />
 
+                    </StackPanel>
+
+                    <StackPanel x:Name="secCache" Spacing="8" Visibility="Collapsed">
+                        <TextBlock Text="{x:Bind L.SettingsSectionCache, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
+
+                        <controls:SettingsCard Header="{x:Bind ViewModel.CacheTotalText, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button AutomationProperties.AutomationId="btnRefreshCache"
+                                            AutomationProperties.Name="{x:Bind L.SettingsCacheRefreshName, Mode=OneWay}"
+                                            Content="{x:Bind L.SettingsCacheRefresh, Mode=OneWay}"
+                                            Click="OnRefreshCacheClick" />
+                                    <Button AutomationProperties.AutomationId="btnClearAllCaches"
+                                            AutomationProperties.Name="{x:Bind L.SettingsCacheClearAllName, Mode=OneWay}"
+                                            Content="{x:Bind L.SettingsCacheClearAll, Mode=OneWay}"
+                                            Click="OnClearAllCachesClick" />
+                                </StackPanel>
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.CacheRows, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:CacheRowViewModel">
+                                    <controls:SettingsCard Margin="0,0,0,8"
+                                                           Header="{x:Bind Title, Mode=OneWay}"
+                                                           Description="{x:Bind Description, Mode=OneWay}"
+                                                           ToolTipService.ToolTip="{x:Bind Path, Mode=OneWay}">
+                                        <controls:SettingsCard.ActionContent>
+                                            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                                <ProgressRing Width="16" Height="16"
+                                                              IsActive="{x:Bind IsBusy, Mode=OneWay}"
+                                                              Visibility="{x:Bind svc:XamlVisibility.FromBool(IsBusy), Mode=OneWay}" />
+                                                <TextBlock Text="{x:Bind SizeText, Mode=OneWay}"
+                                                           MinWidth="96" TextAlignment="Right" VerticalAlignment="Center" />
+                                                <Button Content="{x:Bind L.CommonClear, Mode=OneWay}"
+                                                        IsEnabled="{x:Bind CanClear, Mode=OneWay}"
+                                                        Click="OnClearCacheRowClick" />
+                                            </StackPanel>
+                                        </controls:SettingsCard.ActionContent>
+                                    </controls:SettingsCard>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
                         <TextBlock Text="{x:Bind L.SettingsSectionData, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsDataDlcOnlineOn, Mode=OneWay}">
@@ -440,49 +484,6 @@
                                    Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap" Margin="4,0,4,8" />
-                    </StackPanel>
-
-                    <StackPanel x:Name="secCache" Spacing="8" Visibility="Collapsed">
-                        <TextBlock Text="{x:Bind L.SettingsSectionCache, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
-
-                        <controls:SettingsCard Header="{x:Bind ViewModel.CacheTotalText, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <Button AutomationProperties.AutomationId="btnRefreshCache"
-                                            AutomationProperties.Name="{x:Bind L.SettingsCacheRefreshName, Mode=OneWay}"
-                                            Content="{x:Bind L.SettingsCacheRefresh, Mode=OneWay}"
-                                            Click="OnRefreshCacheClick" />
-                                    <Button AutomationProperties.AutomationId="btnClearAllCaches"
-                                            AutomationProperties.Name="{x:Bind L.SettingsCacheClearAllName, Mode=OneWay}"
-                                            Content="{x:Bind L.SettingsCacheClearAll, Mode=OneWay}"
-                                            Click="OnClearAllCachesClick" />
-                                </StackPanel>
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
-
-                        <ItemsControl ItemsSource="{x:Bind ViewModel.CacheRows, Mode=OneWay}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:CacheRowViewModel">
-                                    <controls:SettingsCard Margin="0,0,0,8"
-                                                           Header="{x:Bind Title, Mode=OneWay}"
-                                                           Description="{x:Bind Description, Mode=OneWay}"
-                                                           ToolTipService.ToolTip="{x:Bind Path, Mode=OneWay}">
-                                        <controls:SettingsCard.ActionContent>
-                                            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                                                <ProgressRing Width="16" Height="16"
-                                                              IsActive="{x:Bind IsBusy, Mode=OneWay}"
-                                                              Visibility="{x:Bind svc:XamlVisibility.FromBool(IsBusy), Mode=OneWay}" />
-                                                <TextBlock Text="{x:Bind SizeText, Mode=OneWay}"
-                                                           MinWidth="96" TextAlignment="Right" VerticalAlignment="Center" />
-                                                <Button Content="{x:Bind L.CommonClear, Mode=OneWay}"
-                                                        IsEnabled="{x:Bind CanClear, Mode=OneWay}"
-                                                        Click="OnClearCacheRowClick" />
-                                            </StackPanel>
-                                        </controls:SettingsCard.ActionContent>
-                                    </controls:SettingsCard>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
 
                         <TextBlock Text="{x:Bind L.SettingsCacheHint, Mode=OneWay}"
                                    Style="{StaticResource CaptionTextBlockStyle}"
