@@ -65,7 +65,7 @@ public sealed partial class SettingsPage : Page
 
             // 分节导航的初始选中项在 XAML 里给的是第 0 项，这里兜底同步一次可见性；
             // 缓存统计紧接着单独跑一次，所以这里不再重复触发。
-            ShowSection(lstSettingsSections.SelectedIndex < 0 ? 0 : lstSettingsSections.SelectedIndex, refreshCache: false);
+            ShowSection(CurrentSectionIndex(), refreshCache: false);
 
             // 缓存占用只看文件属性，独立于设置加载，失败不该影响整页。
             await _viewModel.RefreshCacheStatsAsync(_lifetime.Token).ConfigureAwait(true);
@@ -135,12 +135,21 @@ public sealed partial class SettingsPage : Page
     private const int CacheSectionIndex = 4;
 
     /// <summary>切换左侧分类：只显示选中的那一节，其余折叠（同一时刻只排版一类设置）。</summary>
-    private void OnSectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OnSectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs e)
     {
-        if (sender is ListView { SelectedIndex: >= 0 } list)
+        ShowSection(CurrentSectionIndex());
+    }
+
+    /// <summary>左侧分类用 NavigationViewItem.Tag 携带序号（"0"–"5"），与 XAML 顺序一致。</summary>
+    private int CurrentSectionIndex()
+    {
+        if (navSettingsSections.SelectedItem is NavigationViewItem item
+            && int.TryParse(item.Tag?.ToString(), out var index))
         {
-            ShowSection(list.SelectedIndex);
+            return index;
         }
+
+        return 0;
     }
 
     private void ShowSection(int index, bool refreshCache = true)
