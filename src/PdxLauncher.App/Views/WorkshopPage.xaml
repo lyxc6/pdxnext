@@ -58,8 +58,9 @@
                 <Button x:Name="btnWorkshopOpenWeb"
                         Click="OnOpenWebClick"
                         AutomationProperties.AutomationId="btnWorkshopOpenWeb"
-                        AutomationProperties.Name="{x:Bind L.WorkshopOpenBrowserName, Mode=OneWay}">
-                    <FontIcon Glyph="&#xE774;" FontSize="16" />
+                        AutomationProperties.Name="{x:Bind L.WorkshopOpenBrowserName, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind L.WorkshopOpenBrowserName, Mode=OneWay}">
+                    <FontIcon Glyph="&#xE8A7;" FontSize="16" />
                 </Button>
             </StackPanel>
         </Grid>
@@ -203,8 +204,9 @@
                                         Click="OnOpenSteamClick"
                                         Visibility="{x:Bind svc:XamlVisibility.FromBool(CanOpenSteam), Mode=OneWay}"
                                         AutomationProperties.AutomationId="{x:Bind OpenSteamAutomationId, Mode=OneTime}"
-                                        AutomationProperties.Name="{x:Bind L.WorkshopOpenSteamName, Mode=OneWay}">
-                                    <FontIcon Glyph="&#xE8D6;" FontSize="16" />
+                                        AutomationProperties.Name="{x:Bind L.WorkshopOpenSteamName, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind L.WorkshopOpenSteamName, Mode=OneWay}">
+                                    <FontIcon Glyph="&#xE7FC;" FontSize="16" />
                                 </Button>
                                 <Button Width="32"
                                         Height="32"
@@ -213,8 +215,9 @@
                                         BorderThickness="0"
                                         Click="OnOpenBrowserClick"
                                         AutomationProperties.AutomationId="{x:Bind OpenBrowserAutomationId, Mode=OneTime}"
-                                        AutomationProperties.Name="{x:Bind L.WorkshopOpenBrowserName, Mode=OneWay}">
-                                    <FontIcon Glyph="&#xE774;" FontSize="16" />
+                                        AutomationProperties.Name="{x:Bind L.WorkshopOpenBrowserName, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind L.WorkshopOpenBrowserName, Mode=OneWay}">
+                                    <FontIcon Glyph="&#xE8A7;" FontSize="16" />
                                 </Button>
                             </StackPanel>
                         </Grid>
