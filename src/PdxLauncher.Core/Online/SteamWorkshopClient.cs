@@ -163,6 +163,26 @@ public sealed class SteamWorkshopClient
             return AppResult<bool>.Ok(cached);
         }
 
+        var hasWorkshop = await ProbeAppDetailsAsync(appId, cancellationToken).ConfigureAwait(false);
+        if (hasWorkshop is null)
+        {
+            // appdetails 偶尔会被限流或返回坏 JSON。退一步直接抓工坊列表页：
+            // 有工坊的游戏一定带 valve-ssr-data，没有的（CS2 那个 302 到 /workshop 的落地页）不带。
+            hasWorkshop = await ProbeWorkshopPageAsync(appId, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (hasWorkshop is null)
+        {
+            return AppResult<bool>.Fail(ErrorKind.Unknown, "steam-workshop-probe-http");
+        }
+
+        _workshopProbes[appId] = hasWorkshop.Value;
+        return AppResult<bool>.Ok(hasWorkshop.Value);
+    }
+
+    /// <summary>用 appdetails 判定有没有创意工坊；网络或 JSON 出错返回 null，交给兜底探测。</summary>
+    private async Task<bool?> ProbeAppDetailsAsync(int appId, CancellationToken cancellationToken)
+    {
         var uri = new Uri(
             OnlineHosts.SteamAppDetailsEndpoint.AbsoluteUri +
             "?appids=" + appId.ToString(CultureInfo.InvariantCulture) +
@@ -174,20 +194,41 @@ public sealed class SteamWorkshopClient
             using var reader = new StreamReader(stream, Encoding.UTF8);
             var json = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
 
-            var hasWorkshop = ParseHasWorkshop(json, appId);
-            _workshopProbes[appId] = hasWorkshop;
-            return AppResult<bool>.Ok(hasWorkshop);
+            return ParseHasWorkshop(json, appId);
         }
         catch (HttpRequestException ex)
         {
             _logger.Warn("Steam appdetails 探测失败: appid=" +
                 appId.ToString(CultureInfo.InvariantCulture) + " " + ex.Message);
-            return AppResult<bool>.Fail(ErrorKind.Unknown, "steam-appdetails-http");
+            return null;
         }
         catch (JsonException ex)
         {
             _logger.Warn("Steam appdetails 解析失败: " + ex.Message);
-            return AppResult<bool>.Fail(ErrorKind.Io, "steam-appdetails-bad-json");
+            return null;
+        }
+    }
+
+    /// <summary>兜底探测：工坊列表页里能解析出 SSR 数据就算有创意工坊。</summary>
+    private async Task<bool?> ProbeWorkshopPageAsync(int appId, CancellationToken cancellationToken)
+    {
+        var query = new SteamWorkshopQuery(SearchText: null, Sort: SteamWorkshopSort.MostPopular, Page: 0, PageSize: DefaultPageSize);
+
+        try
+        {
+            await using var stream = await _http
+                .GetAsync(BuildBrowseUri(appId, query), cancellationToken)
+                .ConfigureAwait(false);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            var html = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+
+            return SteamWorkshopHtmlParser.Parse(html, 0, DefaultPageSize) is not null;
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.Warn("Steam 创意工坊兜底探测失败: appid=" +
+                appId.ToString(CultureInfo.InvariantCulture) + " " + ex.Message);
+            return null;
         }
     }
 

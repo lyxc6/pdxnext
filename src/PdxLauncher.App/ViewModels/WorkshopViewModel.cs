@@ -166,7 +166,10 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     {
         Game = game;
         _gameId = game?.GameId;
-        _steamAppId = game?.SteamAppId;
+
+        // 独立安装读不到 appmanifest 时 SteamAppId 是 null，这里用映射表兜底，
+        // 否则 EU4 / CS1 / 监狱建筑师这些明明有 Steam 工坊的游戏会被误判成没有。
+        _steamAppId = WorkshopSourceChooser.ResolveAppId(game?.SteamAppId, game?.GameId);
         _page = 0;
         _totalCount = 0;
         _totalPages = 0;
@@ -181,7 +184,9 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             return;
         }
 
-        if (!game.SupportsContentManagement)
+        // 「仅启动」支持的游戏（例如监狱建筑师）也有 Steam 工坊：只要能解析出 appId 就继续查；
+        // 既没有 appId 又不支持内容管理时，才提示「内容由游戏本体管理」。
+        if (_steamAppId is null && !game.SupportsContentManagement)
         {
             IsLoaded = true;
             StatusMessage = SupportMessages.ManagedByGame;
@@ -196,7 +201,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
         try
         {
-            Source = await ResolveSourceAsync(game, cancellationToken).ConfigureAwait(true);
+            Source = await ResolveSourceAsync(cancellationToken).ConfigureAwait(true);
             RaiseDerived();
             await QueryAsync(cancellationToken).ConfigureAwait(true);
         }
@@ -261,13 +266,10 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// 判定来源：没有 Steam appId（独立版）直接 PDX；否则探测该游戏有没有 Steam 工坊。
     /// 探测请求失败时退回 PDX，并把原因写进状态栏。
     /// </summary>
-    /// <param name="game">当前游戏。</param>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    private async Task<WorkshopSource> ResolveSourceAsync(
-        GameInstallation game,
-        CancellationToken cancellationToken)
+    private async Task<WorkshopSource> ResolveSourceAsync(CancellationToken cancellationToken)
     {
-        if (game.SteamAppId is not { } appId)
+        if (_steamAppId is not { } appId)
         {
             return WorkshopSource.Pdx;
         }

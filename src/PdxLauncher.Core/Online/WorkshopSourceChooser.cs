@@ -20,6 +20,26 @@ public enum WorkshopSource
 public static class WorkshopSourceChooser
 {
     /// <summary>
+    /// 解析某款游戏该用哪个 Steam appId 去探测工坊。
+    /// <para>
+    /// 优先用安装信息里的 appId；独立安装时那里是 null，回退到 <see cref="GameSteamAppIds"/> 的
+    /// 映射表，避免「拿不到 appmanifest 就当没有 Steam 工坊」。
+    /// </para>
+    /// </summary>
+    /// <param name="steamAppId">安装信息里的 Steam appId，可能为 null。</param>
+    /// <param name="gameId">启动器内部的游戏 id。</param>
+    /// <returns>可用的 appId；确实没有对应 Steam 版本时为 null。</returns>
+    public static int? ResolveAppId(int? steamAppId, string? gameId)
+    {
+        if (steamAppId is > 0)
+        {
+            return steamAppId;
+        }
+
+        return GameSteamAppIds.TryGet(gameId, out var mapped) ? mapped : null;
+    }
+
+    /// <summary>
     /// <paramref name="steamAppId"/> 为 null（独立版）→ PDX；
     /// 探测结果为 true → Steam；false → PDX；还没探测（null）→ PDX。
     /// </summary>

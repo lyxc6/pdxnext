@@ -30,6 +30,7 @@ public static class SteamWorkshopApiChecks
         CheckDetailParsing();
         CheckDetailRequest();
         CheckHasWorkshopCache();
+        CheckHasWorkshopFallback();
         CheckOutboundWhitelist();
 
         return ChecksContext.Failures == before ? 0 : 1;
@@ -286,6 +287,45 @@ public static class SteamWorkshopApiChecks
         ChecksContext.Check(
             "浏览：结构变化的错误码",
             (parseFail.ErrorMessage ?? string.Empty).Contains("steam-workshop-parse", StringComparison.Ordinal));
+    }
+
+    // ------------------------------------------------------------ 探测兜底
+
+    private static void CheckHasWorkshopFallback()
+    {
+        // appdetails 抽风（这里用没配 stub 的 fake 模拟请求失败）时，退一步抓工坊列表页。
+        var fallback = new CapturingHttpFetcher();
+        fallback.Responses["steamcommunity.com/workshop/browse/"] = BuildBrowseHtml(1);
+        var fallbackProbe = new SteamWorkshopClient(fallback, new NullLogger())
+            .HasWorkshopAsync(Ck3AppId, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        ChecksContext.Check("探测兜底：appdetails 失败仍能判定有工坊", fallbackProbe.IsSuccess && fallbackProbe.Value);
+        ChecksContext.Equal("探测兜底：先 appdetails 再工坊页", 2, fallback.GetCalls);
+
+        // 列表页也没有 SSR 数据（CS2 那个 302 落地页）→ 没有工坊。
+        var landing = new CapturingHttpFetcher();
+        landing.Responses["steamcommunity.com/workshop/browse/"] = "<html><body>no data</body></html>";
+        var landingProbe = new SteamWorkshopClient(landing, new NullLogger())
+            .HasWorkshopAsync(Cs2AppId, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        ChecksContext.Check("探测兜底：落地页没有 SSR 数据判为没有工坊", landingProbe.IsSuccess && !landingProbe.Value);
+
+        // 两条路都挂 → 失败，交给视图模型退回 PDX 并提示。
+        var dead = new CapturingHttpFetcher();
+        var deadProbe = new SteamWorkshopClient(dead, new NullLogger())
+            .HasWorkshopAsync(Ck3AppId, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        ChecksContext.Check("探测兜底：两条路都失败时返回错误", !deadProbe.IsSuccess);
+        ChecksContext.Check(
+            "探测兜底：错误码",
+            (deadProbe.ErrorMessage ?? string.Empty).Contains("steam-workshop-probe", StringComparison.Ordinal),
+            deadProbe.ErrorMessage);
     }
 
     // ------------------------------------------------------------ 白名单
