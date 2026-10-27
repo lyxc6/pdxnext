@@ -124,16 +124,19 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     // ------------------------------------------------------------ 主题区
 
     /// <summary>当前主题来源：联网缓存 / 安装目录 / 内置占位。</summary>
-    public string ThemeSourceText
+    public string ThemeSourceText => T(ThemeSourceKey);
+
+    /// <summary>当前主题来源对应的本地化键（展示文案与状态栏共用，避免两处 switch 漂移）。</summary>
+    private string ThemeSourceKey
     {
         get
         {
             var source = _theme?.Source ?? Game?.Theme.Source ?? ThemeAssetSource.BuiltInPlaceholder;
             return source switch
             {
-                ThemeAssetSource.OnlineCache => T(Keys.SettingsThemeSourceOnline),
-                ThemeAssetSource.InstallDir => T(Keys.SettingsThemeSourceInstallDir),
-                _ => T(Keys.SettingsThemeSourceBuiltIn),
+                ThemeAssetSource.OnlineCache => Keys.SettingsThemeSourceOnline,
+                ThemeAssetSource.InstallDir => Keys.SettingsThemeSourceInstallDir,
+                _ => Keys.SettingsThemeSourceBuiltIn,
             };
         }
     }
@@ -550,10 +553,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     {
         var sameGame = IsSameGame(_game, game);
 
-        RefreshPlaySetDisplayMode();
-        RefreshBackgroundDisplayMode();
-        RefreshModThumbnailSize();
-        RefreshRetentions();
+        RefreshOptionSelections();
         Game = game;
         _theme = game?.Theme;
         if (!sameGame)
@@ -683,12 +683,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             OnPropertyChanged(nameof(ThemeSourceText));
             RaiseThemeProps();
 
-            var sourceKey = _theme.Source switch
-            {
-                ThemeAssetSource.OnlineCache => Keys.SettingsThemeSourceOnline,
-                ThemeAssetSource.InstallDir => Keys.SettingsThemeSourceInstallDir,
-                _ => Keys.SettingsThemeSourceBuiltIn,
-            };
+            var sourceKey = ThemeSourceKey;
             SetStatus(Keys.SettingsThemeStatusDone, T(sourceKey), NextCheckText);
             AppServices.Logger.Info("主题检查完成（gameId=" + Game.GameId + "，source=" + T(sourceKey) + "）");
         }
@@ -1152,48 +1147,29 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>设置可能被其它页面改过（或 settings.json 被外部编辑），重新读一遍。</summary>
-    private void RefreshPlaySetDisplayMode()
+    /// <summary>
+    /// 设置可能被其它页面改过（或 settings.json 被外部编辑）：把所有下拉的选项集合与选中项重新解析一遍。
+    /// </summary>
+    private void RefreshOptionSelections()
     {
-        var resolved = PlaySetPageDisplayModeCatalog.Resolve(AppServices.Settings.PlaySetPageDisplayMode);
-        if (!ReferenceEquals(resolved, _selectedPlaySetDisplayMode))
-        {
-            _selectedPlaySetDisplayMode = resolved;
-        }
-
-        OnPropertyChanged(nameof(PlaySetDisplayModes));
-        OnPropertyChanged(nameof(SelectedPlaySetDisplayMode));
-    }
-
-    /// <summary>背景显示方式可能被外部改过（或 settings.json 被手动编辑），重新读一遍。</summary>
-    private void RefreshBackgroundDisplayMode()
-    {
+        _selectedPlaySetDisplayMode =
+            PlaySetPageDisplayModeCatalog.Resolve(AppServices.Settings.PlaySetPageDisplayMode);
         _selectedBackgroundDisplayMode =
             BackgroundDisplayModeCatalog.Resolve(AppServices.Settings.BackgroundDisplayMode);
-
-        OnPropertyChanged(nameof(BackgroundDisplayModeOptions));
-        OnPropertyChanged(nameof(SelectedBackgroundDisplayMode));
-    }
-
-    /// <summary>Mod 缩略图尺寸可能被外部改过，重新读一遍。</summary>
-    private void RefreshModThumbnailSize()
-    {
         _selectedModThumbnailSize =
             ModThumbnailSizeCatalog.Resolve(AppServices.Settings.ModThumbnailSize);
-
-        OnPropertyChanged(nameof(ModThumbnailSizeOptions));
-        OnPropertyChanged(nameof(SelectedModThumbnailSize));
-    }
-
-    /// <summary>两处「保留天数」与界面语言也可能被外部改过，重新读一遍。</summary>
-    private void RefreshRetentions()
-    {
         _selectedModThumbnailRetention =
             ModThumbnailRetentionCatalog.Resolve(AppServices.Settings.ModThumbnailCacheDays);
         _selectedDlcDescriptionRetention =
             DlcDescriptionRetentionCatalog.Resolve(AppServices.Settings.DlcDescriptionCacheDays);
         _selectedUiLanguage = UiLanguageCatalog.Resolve(AppServices.Settings.UiLanguage);
 
+        OnPropertyChanged(nameof(PlaySetDisplayModes));
+        OnPropertyChanged(nameof(SelectedPlaySetDisplayMode));
+        OnPropertyChanged(nameof(BackgroundDisplayModeOptions));
+        OnPropertyChanged(nameof(SelectedBackgroundDisplayMode));
+        OnPropertyChanged(nameof(ModThumbnailSizeOptions));
+        OnPropertyChanged(nameof(SelectedModThumbnailSize));
         OnPropertyChanged(nameof(ModThumbnailRetentions));
         OnPropertyChanged(nameof(SelectedModThumbnailRetention));
         OnPropertyChanged(nameof(DlcDescriptionRetentions));
