@@ -13,8 +13,8 @@
 
 ```
 Page
-└─ Grid Padding=20 RowSpacing=12（两行，* / Auto）
-   ├─ Row0 Grid ColumnSpacing=16（216 / *）
+└─ Grid Padding=20 RowSpacing=12 ColumnSpacing=16（两行 * / Auto、两列 216 / *）
+   ├─ 列布局：Col0 216（分节导航）/ Col1 *（滚动内容），列间距 16 DIP
    │  ├─ Col0 NavigationView x:Name=navSettingsSections（AutomationId=lstSettingsSections，
    │  │   PaneDisplayMode=Left、OpenPaneLength=216、IsPaneToggleButtonVisible=False、
    │  │   IsSettingsVisible=False、Background=Transparent）
@@ -144,4 +144,10 @@ Page
 - `cmd /c build.cmd`：0 警告 0 错误、16 个检查类、失败 0、断言失败 0。
 - 备注：`1f5f23f` 提交的 `SettingsPage.xaml.cs` 已经是 `NavigationView` 版，而当时的 XAML 还是 `ListView`，
   两者不配对（HEAD 编译不过）；本次 XAML 提交补齐了这个缺口。
+- 顺手补回列间距：换控件时把原来的 `Row0 Grid ColumnSpacing="16"` 合并进外层 `Grid`，`ColumnSpacing`
+  一度漏掉，导致导航面板与卡片只见一条描边、几乎贴在一起。现在外层 `Grid` 带 `ColumnSpacing="16"`，
+  卡片整体右移 25 px（≈16 DIP）并收窄同等宽度：卡片填充左缘 `x=693 → 718`，右缘 `x=1735` 未变
+  （滚动条通道量值不受影响：描边 `1736–1737`、滚动条 `1751–1752`，间隙仍是 12 px）。
+  导航面板右缘到卡片左缘约 27 px（≈18 DIP）。`verify-settings3.ps1` 三次读数仍然完全一致
+  （本次窗口位置下 `1492,1130,492x60`），说明「点按钮不跳动」这条没有回退。
 

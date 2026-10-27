@@ -67,6 +67,8 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
   NavigationViewSelectionChangedEventArgs)` + `CurrentSectionIndex()` 解析 `Tag`，`ShowSection` 逻辑未变。
 - 提醒：`PaneBackground` 在 WinUI 3 的 `NavigationView` 上**不存在**（XamlCompiler `WMC0011`），要透明只能设 `Background`。
 - `docs/SETTINGS-REWORK.md`：结构图、新增「分节导航控件」条目、切分节说明、新的量测小节。
+- 补回列间距：合并内外层 Grid 时 `ColumnSpacing="16"` 漏掉过，导航面板一度只隔着一条描边就贴住卡片；
+  现在外层 `Grid` 带 `ColumnSpacing="16"`，卡片左缘 `x=693 → 718`、宽度收窄 25 px、右缘 `1735` 不变。
 
 ### 0.17.4 验证（Release，真机截图 + 像素测量 + UIA）
 
@@ -77,6 +79,9 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 - `.scratch/rework/verify-settings2.ps1`：appearance 46 / launch 39 / paths 46 / online 39 / cache 44 /
   advanced 38（比旧基线各 +4，来自 `NavigationView` 的 `PaneRoot` / `PaneTitleTextBlock` /
   `PART_TitleText` / `PART_SubtitleText` 节点）。
+- 列间距复查（`scrollgutter-hover.png`）：卡片填充左缘 `x=718`、右缘 `x=1735`、滚动条 `1751–1752`
+  ⇒ 导航面板与卡片之间约 27 px，滚动条通道间隙仍 12 px；`verify-settings3.ps1` 三次读数一致
+  （本次 `1492,1130,492x60`），点按钮不跳动这条没回退。
 
 ### 0.17.5 待办与盲区
 
