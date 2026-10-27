@@ -234,7 +234,7 @@ public sealed partial class Localizer
         ["mods.row.moveUp"] = "上移",
         ["mods.row.moveUpToolTip"] = "上移一位",
         ["mods.row.positionEditName"] = "第 {0} 位，共 {1} 位，可编辑",
-        ["mods.row.positionToolTip"] = "点击修改位次：输入目标序号后按回车（其余行依次顺移）",
+        ["mods.row.positionToolTip"] = "点击修改位次：输入目标序号后按回车；超过总数视为置底，其余行依次顺移",
         ["mods.row.remove"] = "从播放集中移除",
         ["mods.row.removeToolTip"] = "从播放集中移除（自动保存）",
         ["mods.status.activateFailed"] = "激活失败：{0}",
@@ -245,6 +245,7 @@ public sealed partial class Localizer
         ["mods.status.addModsFailedTitle"] = "添加模组失败",
         ["mods.status.allDisabled"] = "已禁用全部可见 mod（自动保存中）",
         ["mods.status.allEnabled"] = "已启用全部可见 mod（自动保存中）",
+        ["mods.status.alreadyAtPosition"] = "「{0}」已经在第 {1} 位",
         ["mods.status.autoSaveFailed"] = "自动保存失败：{0}",
         ["mods.status.autoSaveSaved"] = "已自动保存：sqlite（playsets_mods/playsets_dlcs）与加载文件一致",
         ["mods.status.autoSaveSavedTo"] = "已自动保存到「{0}」（未激活，游戏加载文件未改动）",
@@ -259,7 +260,7 @@ public sealed partial class Localizer
         ["mods.status.deletedActivated"] = "已删除播放集「{0}」，已自动激活「{1}」并写入加载文件",
         ["mods.status.deletedActivatedNoLoadFile"] = "已删除播放集「{0}」，已自动激活「{1}」，但写入加载文件失败",
         ["mods.status.deletedInactive"] = "已删除播放集「{0}」（激活状态未变）",
-        ["mods.status.invalidPosition"] = "位次无效：请输入 1–{0} 之间的整数",
+        ["mods.status.invalidPosition"] = "位次无效：请输入不小于 1 的整数（大于 {0} 视为置底）",
         ["mods.status.loadFailed"] = "加载失败：{0}",
         ["mods.status.loadedPlaySets"] = "已加载 {0} 个播放集",
         ["mods.status.modDisabled"] = "已禁用「{0}」（自动保存中）",
@@ -806,7 +807,7 @@ public sealed partial class Localizer
         ["mods.row.moveUp"] = "Move Up",
         ["mods.row.moveUpToolTip"] = "Move up one row",
         ["mods.row.positionEditName"] = "Position {0} of {1}, editable",
-        ["mods.row.positionToolTip"] = "Click to change position: type the target number and press Enter (other rows shift accordingly)",
+        ["mods.row.positionToolTip"] = "Click to change position: type the target number and press Enter; a number above the total moves it to the end (other rows shift accordingly)",
         ["mods.row.remove"] = "Remove from Play Set",
         ["mods.row.removeToolTip"] = "Remove from this play set (auto-saved)",
         ["mods.status.activateFailed"] = "Activation failed: {0}",
@@ -817,6 +818,7 @@ public sealed partial class Localizer
         ["mods.status.addModsFailedTitle"] = "Add Mods Failed",
         ["mods.status.allDisabled"] = "Disabled all visible mods (auto-saving)",
         ["mods.status.allEnabled"] = "Enabled all visible mods (auto-saving)",
+        ["mods.status.alreadyAtPosition"] = "\"{0}\" is already at row {1}",
         ["mods.status.autoSaveFailed"] = "Auto-save failed: {0}",
         ["mods.status.autoSaveSaved"] = "Auto-saved: sqlite (playsets_mods/playsets_dlcs) matches the load file",
         ["mods.status.autoSaveSavedTo"] = "Auto-saved to \"{0}\" (not active; the game load file was not changed)",
@@ -831,7 +833,7 @@ public sealed partial class Localizer
         ["mods.status.deletedActivated"] = "Deleted play set \"{0}\"; activated \"{1}\" and wrote the load file",
         ["mods.status.deletedActivatedNoLoadFile"] = "Deleted play set \"{0}\"; activated \"{1}\" but writing the load file failed",
         ["mods.status.deletedInactive"] = "Deleted play set \"{0}\" (activation unchanged)",
-        ["mods.status.invalidPosition"] = "Invalid position: enter a whole number between 1 and {0}",
+        ["mods.status.invalidPosition"] = "Invalid position: enter a whole number of 1 or more (anything above {0} moves it to the end)",
         ["mods.status.loadFailed"] = "Failed to load: {0}",
         ["mods.status.loadedPlaySets"] = "Loaded {0} play sets",
         ["mods.status.modDisabled"] = "Disabled \"{0}\" (auto-saving)",
@@ -1389,6 +1391,7 @@ public sealed partial class Localizer
         ("mods.status.addModsFailedTitle", "ModsStatusAddModsFailedTitle"),
         ("mods.status.allDisabled", "ModsStatusAllDisabled"),
         ("mods.status.allEnabled", "ModsStatusAllEnabled"),
+        ("mods.status.alreadyAtPosition", "ModsStatusAlreadyAtPosition"),
         ("mods.status.autoSaveFailed", "ModsStatusAutoSaveFailed"),
         ("mods.status.autoSaveSaved", "ModsStatusAutoSaveSaved"),
         ("mods.status.autoSaveSavedTo", "ModsStatusAutoSaveSavedTo"),
@@ -1959,6 +1962,7 @@ public sealed partial class Localizer
     public string ModsStatusAddModsFailedTitle => Format("mods.status.addModsFailedTitle");
     public string ModsStatusAllDisabled => Format("mods.status.allDisabled");
     public string ModsStatusAllEnabled => Format("mods.status.allEnabled");
+    public string ModsStatusAlreadyAtPosition => Format("mods.status.alreadyAtPosition");
     public string ModsStatusAutoSaveFailed => Format("mods.status.autoSaveFailed");
     public string ModsStatusAutoSaveSaved => Format("mods.status.autoSaveSaved");
     public string ModsStatusAutoSaveSavedTo => Format("mods.status.autoSaveSavedTo");
@@ -2532,6 +2536,7 @@ internal static class Keys
     public const string ModsStatusAddModsFailedTitle = "mods.status.addModsFailedTitle";
     public const string ModsStatusAllDisabled = "mods.status.allDisabled";
     public const string ModsStatusAllEnabled = "mods.status.allEnabled";
+    public const string ModsStatusAlreadyAtPosition = "mods.status.alreadyAtPosition";
     public const string ModsStatusAutoSaveFailed = "mods.status.autoSaveFailed";
     public const string ModsStatusAutoSaveSaved = "mods.status.autoSaveSaved";
     public const string ModsStatusAutoSaveSavedTo = "mods.status.autoSaveSavedTo";

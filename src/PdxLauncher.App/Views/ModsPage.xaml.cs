@@ -572,7 +572,7 @@ public sealed partial class ModsPage : Page
         return null;
     }
 
-    /// <summary>回车提交：把输入框原文交给视图模型判定（解析、越界、搜索态都在那边统一处理）。</summary>
+    /// <summary>回车提交：把输入框原文交给视图模型判定（解析、钳位、搜索态都在那边统一处理）。</summary>
     private void OnPositionEditKeyDown(object sender, KeyRoutedEventArgs e)
     {
         try

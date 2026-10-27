@@ -602,15 +602,16 @@ public sealed class ModsViewModel : LocalizedObservableObject
     /// <summary>
     /// 把一行直接移到用户输入的位次（界面看到的 1 起数字）。
     /// 语义是「插入」：其余行依次顺移/前移，由 <see cref="PlaySetEditor.Move"/> 的 RemoveAt + Insert 保证。
-    /// 解析与范围校验都在这里做，界面只负责把输入框原文递进来 ——
-    /// 这样文案、边界与状态栏反馈只有一处真源，也便于日后单独测。
+    /// 输入大于总行数时由 <see cref="PositionInput.TryParse"/> 钳到末位（置底），不报错。
+    /// 解析与范围校验都在那边做，界面只负责把输入框原文递进来 ——
+    /// 这样文案、边界与状态栏反馈只有一处真源，也便于单独测。
     /// </summary>
     /// <param name="row">要移动的可见行。</param>
     /// <param name="text">输入框原文（可能含空白、全角数字、负数、小数等）。</param>
     /// <returns>
     /// <see cref="PositionEditResult.Applied"/> 已重排并请求自动保存，界面应退出编辑态；
     /// <see cref="PositionEditResult.Unchanged"/> 目标位就是当前位，未改数据，界面应退出编辑态；
-    /// <see cref="PositionEditResult.Invalid"/> 输入非法或越界，状态栏已提示，界面应保持编辑态；
+    /// <see cref="PositionEditResult.Invalid"/> 输入非法（空、非纯数字、小于 1），状态栏已提示，界面应保持编辑态；
     /// <see cref="PositionEditResult.Blocked"/> 搜索过滤态不允许改顺序，状态栏已提示，界面应退出编辑态。
     /// </returns>
     public PositionEditResult TryMoveModToPosition(ModRowViewModel row, string? text)
@@ -630,7 +631,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
         }
 
         var count = Mods.Count;
-        if (!TryParsePosition(text, count, out var targetPosition))
+        if (!PositionInput.TryParse(text, count, out var targetPosition))
         {
             StatusMessage = T(Keys.ModsStatusInvalidPosition, count);
             return PositionEditResult.Invalid;
@@ -639,6 +640,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
         var target = targetPosition - 1;
         if (target == index)
         {
+            StatusMessage = T(Keys.ModsStatusAlreadyAtPosition, row.Name, targetPosition);
             return PositionEditResult.Unchanged;
         }
 
@@ -653,44 +655,6 @@ public sealed class ModsViewModel : LocalizedObservableObject
         RequestAutoSave();
         RowRevealRequested?.Invoke(row.ModId);
         return PositionEditResult.Applied;
-    }
-
-    /// <summary>
-    /// 严格解析用户输入的位次：只接受纯 ASCII 十进制数字，范围 1..<paramref name="count"/>。
-    /// 显式拒绝全角数字、中文数字、正负号、小数点、空串 —— 这些在中文输入法下都可能被敲出来，
-    /// 而本仓库部署的 WinUI 2.3.9 没有 <c>KeyRoutedEventArgs.IsCommitted</c>，
-    /// 无法在按键层面区分「输入法确认」与「提交」，所以判定放在文本层，结果才是确定的。
-    /// </summary>
-    internal static bool TryParsePosition(string? text, int count, out int position)
-    {
-        position = 0;
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return false;
-        }
-
-        var trimmed = text.Trim();
-        for (var i = 0; i < trimmed.Length; i++)
-        {
-            var c = trimmed[i];
-            if (c is < '0' or > '9')
-            {
-                return false;
-            }
-        }
-
-        if (!int.TryParse(trimmed, NumberStyles.None, CultureInfo.InvariantCulture, out var value))
-        {
-            return false;
-        }
-
-        if (value < 1 || value > count)
-        {
-            return false;
-        }
-
-        position = value;
-        return true;
     }
 
     /// <summary>启用全部 / 禁用全部（作用于可见行），随后自动保存。</summary>

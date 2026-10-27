@@ -17,5 +17,11 @@
       用「链接源码」而不是「引用 PdxLauncher.App」：App 是 WinExe + windows TFM，检查工程引用不了。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\PlaySetEditor.cs" Link="Linked\PlaySetEditor.cs" />
+    <!--
+      位次输入的解析（含「超过总数＝置底」的钳位）也在 App/Services，只依赖 System.Globalization，
+      同样可以原样链接进来。之所以要把解析抽成独立类而不是留在 ModsViewModel 里：
+      视图模型在 App（WinExe + windows TFM），检查工程引用不到，逻辑就测不到。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\PositionInput.cs" Link="Linked\PositionInput.cs" />
   </ItemGroup>
 </Project>

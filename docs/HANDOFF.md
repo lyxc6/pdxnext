@@ -51,7 +51,56 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 
 **2026-10-28 00:40 追加：播放集页「位次就地编辑」——点行首序号直接输入目标位次（回车生效 / Esc 或点别处取消 / 插入语义 / 搜索态整体置灰），附带修掉「↑↓ 在搜索态看着能点但点了没反应」的老缺陷、序号列 24→40、状态播报对读屏可见、排序动作补日志，并新增 `PlaySetOrderChecks`（检查类 22 个 / 0 失败）。经用户拍板选择「就地输入框」方案（专家评审一致推荐的是「移动到第 N 位」对话框，用户改成更直接的就地编辑），见 §0.24。**
 
-## 0.24 最新一轮（2026-10-28 00:00–01:00）：播放集页「位次就地编辑」
+**2026-10-28 01:25 追加：位次输入的「大于总数＝报错」改成「大于总数＝置底」。反例来自用户截图——4 行的播放集输入 5，得到「位次无效：请输入 1–4 之间的整数」，而用户想要的是「放最后」。现在向上越界一律钳到末位（`0` 与负数仍判无效），并新增 `PositionInput` 纯解析类 + `PositionInputChecks`（检查类 23 个 / 0 失败），见 §0.25。**
+
+## 0.25 最新一轮（2026-10-28 01:10–01:30）：位次输入向上越界改为「置底」
+
+### 0.25.1 用户需求
+
+- User said (m00731)：「范围不能设计成我输入一个大于目前的 mod 数，自动把 mod 放到最后一位的这种设计」
+  ——配合截图 (m00729)：播放集 4 行，用户输入 `5`，状态栏回「位次无效：请输入 1–4 之间的整数」。
+  诉求就是这条错误提示本身：数字大于总数应当理解为「放最后」，而不是拒绝。
+
+### 0.25.2 改动与决策依据
+
+- **钳位落在解析层**：`src/PdxLauncher.App/Services/PositionInput.cs`（新增）`public static bool TryParse(string? text, int count, out int position)`。
+  原 `ModsViewModel.TryParsePosition`（`internal static`）整体搬过来，把 `value < 1 || value > count → false` 改成
+  `value < 1 → false`；`position = value > count ? count : value`。
+  选解析层而不是调用方，理由：该方法本来就收 `count`，且**唯一调用点**是 `ModsViewModel.TryMoveModToPosition:634`，
+  不存在漏钳位的旁路；钳位后 `target = count - 1` 恒为合法下标，不会落进 `PlaySetEditor.Move` 的静默 no-op 分支；
+  状态栏报**钳位后的真实位次**（`→ 第 4 位`），不报用户敲的 `5`（那是界面上不存在的位置）。
+- **抽类的唯一动机是可测**：视图模型在 `PdxLauncher.App`（WinExe + windows TFM），检查工程引用不到 → 逻辑测不到，
+  这正是上一轮「位次无效」口径悄悄上线的原因。做法沿用 §0.24.5 已建立的 `<Compile Include>` 链接源码先例。
+- **`0` 与负数仍判无效（有意的产品选择，不是缺陷）**：诉求只涉及上界；`0` 既可读作「置顶」也可读作「误触」，不猜。
+  若后续要对称的「0＝置顶」，只需把那行改成 `value < 1 ? 1 : …` 并同步文案与断言。
+- **`Unchanged` 不再静默**：钳位后「输入 9 但本就在末位」会变常见，无反馈看着像没生效。
+  `target == index` 分支补 `StatusMessage = T(Keys.ModsStatusAlreadyAtPosition, row.Name, targetPosition)`；
+  仍不动数据、不 `RequestAutoSave`、不触发 `RowRevealRequested`。
+- **↑/↓ 路径不受影响**：`MoveMod` 不经过 `PositionInput`；搜索态 `Blocked` 判定仍在钳位之前。
+
+### 0.25.3 改了哪些文件
+
+- 新增 `src/PdxLauncher.App/Services/PositionInput.cs`；`ModsViewModel.cs` 删掉 `TryParsePosition`、改调
+  `PositionInput.TryParse`、补 `Unchanged` 状态、文档注释把「越界」措辞改成「钳位」（`ModsPage.xaml.cs:575` 同步）。
+- `tools/i18n/{zh-CN,en-US}/mods.json`：`mods.row.positionToolTip` 加「超过总数视为置底」；
+  `mods.status.invalidPosition` 改「请输入不小于 1 的整数（大于 {0} 视为置底）」；新增 `mods.status.alreadyAtPosition`
+  「「{0}」已经在第 {1} 位」。键总数 568 → **569**，`Strings.g.cs` 已重新生成。
+- `tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj`：第二条 `<Compile Include>` 链接 `PositionInput.cs`。
+- 新增 `tests/PdxLauncher.Checks/PositionInputChecks.cs`：**39 条断言**——钳位（`5/9/42/9999` @count=4 → 4）、
+  边界与 Trim（`1→1`、`4→4`、`" 3 "→3`、`count=1` 时 `7→1`）、拒绝 `0/-1/-5`、拒绝全角与中文数字、
+  拒绝 `null/""/"   "/abc/3a/1.5/1e2/+2/99999999999999`（溢出）、`count<=0` 防御、
+  以及「钳位后的位次喂给 `PlaySetEditor.Move` 确实落到末位且 position 连续」。
+- `README.md:167` 补「输入的数字大于总行数时视为置底，不会报错」。
+
+### 0.25.4 验收口径（已实际执行）
+
+- `dotnet build "PdxLauncher.sln" -c Release -m:1 -p:ArtifactsPath="G:/Work/paradox启动器/.tmp/verify"` → **0 警告 0 错误**。
+- `dotnet .tmp/verify/bin/PdxLauncher.Checks/release/PdxLauncher.Checks.dll` → **检查类: 23，失败: 0，断言失败总数: 0**（`PositionInputChecks` 39 条全 ok）。
+- `python tools/gen-i18n.py --check` → 通过。
+
+**仍未做**：真机没点过（焦点/输入法/滚动这条链依旧只有代码推断支撑）；无 undo；搜索态仍不允许排序。
+
+## 0.24 上一轮（2026-10-28 00:00–01:00）：播放集页「位次就地编辑」
 
 ### 0.24.1 用户需求
 

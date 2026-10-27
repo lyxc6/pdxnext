@@ -9,10 +9,13 @@ public enum PositionEditResult
     /// <summary>已重排并请求自动保存，界面应退出编辑态。</summary>
     Applied,
 
-    /// <summary>目标位就是当前位，什么都没改，界面应退出编辑态。</summary>
+    /// <summary>目标位就是当前位（含向上越界被钳到末位、而该行本就在末位），什么都没改，界面应退出编辑态。</summary>
     Unchanged,
 
-    /// <summary>输入非法或越界，状态栏已给提示，界面应保持编辑态让用户改。</summary>
+    /// <summary>
+    /// 输入本身非法（空 / 非纯 ASCII 数字 / 小于 1），状态栏已给提示，界面应保持编辑态让用户改。
+    /// 向上越界不算非法：一律钳到末位置底。
+    /// </summary>
     Invalid,
 
     /// <summary>搜索过滤态不允许改顺序，状态栏已给提示，界面应退出编辑态。</summary>
