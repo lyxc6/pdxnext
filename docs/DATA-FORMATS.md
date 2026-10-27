@@ -150,8 +150,8 @@ CK3 的 playsets_dlcs 为空 ⇒ disabled_dlcs: []，与真机文件一致。
 - .mod 描述符目录：<gameDataDir>\mod。CK3 **382** 个 .mod（2026-10-27 实测，此前 387）；Stellaris **313**；V3 **0**（V3 mod 全在 workshop）。
 - .mod 键：name→displayName、version、tags、picture、supported_version→requiredVersion、path→dirPath、archive→archivePath、remote_file_id→steamId。
 - 命名：ugc_<steamId>.mod / pdx_<pdxId>.mod / <dirname>.mod；本地目录 mod 目录内有 descriptor.mod。
-- V3 workshop mod 无 .mod：元数据在 <modDir>\.metadata\metadata.json，键 name, id, version, supported_game_version, short_description, thumbnail, tags, relationships, game_custom_data。
-- 缩略图解析（`ModThumbnailResolver`，Mod 库与播放集共用一套）：候选**目录**依次是 `dirPath` → `archivePath` 所在目录 → 把 `dirPath` 里 `steamapps\workshop\content\<appid>\<modId>` 这段尾巴重新拼到每个 Steam 库根 → `steamapps\workshop\content\<game.SteamAppId>\<steamId 或 gameRegistryId 里的 ugc_<id>>` → `InstallRoot\..\..` 当 steamapps 根再试一遍（Stellaris 的 `dirPath` 停在旧盘 E:\，mod 实际在 F:\，靠这一层重定位）。目录内文件名优先级：`.mod` / metadata 的 `picture`（= metadata 的 `thumbnail`）→ `thumbnail*` 里精确的 `thumbnail.png` → 其它 `thumbnail.<png|jpg|jpeg|bmp|gif|webp>`（`.pdn/.psd/.xcf` 不算图）→ 最后才用 sqlite 的 `thumbnailPath`（官方 `.launcher-cache`，须真实存在）。**不改写 `dirPath`**：加载文件 V1_1 与播放集 `dir:` 匹配键都依赖它。
+- V3 workshop mod 无 .mod：元数据在 <modDir>\.metadata\metadata.json，键 name, id, version, supported_game_version, short_description, **picture**（封面的相对路径，相对 `.metadata` 目录；历史写法 `thumbnail` 本项目仍兼容读取）, tags, relationships, game_custom_data。EU5 实测 22 个 mod 里 13 个带 `picture`，值多为 `thumbnail.png`，`thumbnail` 键一次都没出现。
+- 缩略图解析（`ModThumbnailResolver`，Mod 库与播放集共用一套）：候选**目录**依次是 `dirPath` → `archivePath` 所在目录 → 把 `dirPath` 里 `steamapps\workshop\content\<appid>\<modId>` 这段尾巴重新拼到每个 Steam 库根 → `steamapps\workshop\content\<game.SteamAppId>\<steamId 或 gameRegistryId 里的 ugc_<id>>` → `InstallRoot\..\..` 当 steamapps 根再试一遍（Stellaris 的 `dirPath` 停在旧盘 E:\，mod 实际在 F:\，靠这一层重定位）。**每个候选目录内**先试 `picture`，再扫目录，两级顺序都是「先 mod 根目录，再 `.metadata` 子目录」：① `<dir>\<picture>` → ② `<dir>\<picture 的文件名>`（picture 带子目录但被摊平）→ ③ `<dir>\.metadata\<picture>` → ④ `<dir>\.metadata\<picture 的文件名>` → ⑤ `<dir>\thumbnail*` → ⑥ `<dir>\.metadata\thumbnail*`；`thumbnail*` 里精确的 `thumbnail.png` 优先，其它 `thumbnail.<jpg|jpeg|bmp|gif|webp|dds>` 次之（`.pdn/.psd/.xcf` 不算图）。全 miss 才用 sqlite 的 `thumbnailPath`（官方 `.launcher-cache`，须真实存在）。**EU5 的封面 22/22 都在 `.metadata\thumbnail.png`**，只有 6 个在根目录另有副本 —— 所以 `.metadata` 这一级是必需的；CK3 / Stellaris / EU4 的工坊目录里没有任何 `.metadata`，这一级在它们那里不产生枚举。**不改写 `dirPath`**：加载文件 V1_1 与播放集 `dir:` 匹配键都依赖它。
 - 联网补图（可选，`ModThumbnailService`）：本地解析不到时用 `mods.thumbnailUrl` 下载（域名
   `images.steamusercontent.com`，已加入 `OnlineHosts` 白名单），落 `<程序目录>\data\mod-cache\mod-thumbnails\<modId N>.<ext>`，
   索引 `mod-cache\mod-thumbnails.json` = `{version, entries: {<modId N>: {url, fileName, fetchedUtc, failedUtc}}}`。
@@ -415,7 +415,7 @@ WinUI 的 `BitmapImage` **解不了 DDS**，而 EU5 的 DLC 缩略图全是 `thu
 | --- | --- |
 | `<install>\game\dlc\<pack>\thumbnail.dds` | 3 个已装 DLC，均为 **500×500、未压缩 BGRA8**（`pfFlags=0x41`，掩码 `R=0x00FF0000 G=0x0000FF00 B=0x000000FF A=0xFF000000`），`D000_shared` 为 128×128，数据从偏移 **128** 开始 |
 | `<install>` 抽样 400 个 `.dds` | DXT5(BC3) 327、DXT1(BC1) 51、`DX10/dxgiFormat=98`(BC7) 2、未压缩 20 |
-| mod | 22 个 EU5 工坊 mod 里只有 6 个带 `thumbnail.png`，其余目录没有任何缩略图文件；`.metadata/metadata.json` 可选键 `picture` |
+| mod | 22 个 EU5 工坊 mod **22/22 都有 `.metadata\thumbnail.png`**（7.6 KB–920 KB，512×512 或 100×100；个别文件扩展名是 `.png` 但内容实为 JPEG，WinUI 按内容嗅探仍能显示），只有 **6 个**在 mod 根目录另有 `thumbnail.png` 副本；`.metadata/metadata.json` 的可选键是 `picture`（13/22 带，值多为 `thumbnail.png`，相对 `.metadata` 目录）。解析规则见 §5 |
 
 DDS 头偏移（小端）：`0` magic(`DDS `) / `4` size=124 / `8` flags / `12` height / `16` width / `28` mipCount / `76` pfSize=32 / `80` pfFlags / `84` fourCC / `88` rgbBitCount / `92..104` RGBA 掩码；`fourCC == "DX10"` 时另有 20 字节扩展头（`128` dxgiFormat）。
 

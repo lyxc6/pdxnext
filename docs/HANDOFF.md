@@ -55,7 +55,42 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 
 **2026-10-28 03:10 追加：Mod 库的「在线（PDX Mods）」视图按用户要求整体回退，功能搬进左栏独立「创意工坊」页 —— 它按当前游戏单一来源渲染（CS2 → Paradox Mods，CK3/V3 等有 Steam 工坊的 → Steam 创意工坊），不做页签切换；Paradox 登录同时从设置页分节搬成左栏独立「账号」页，并且启动时就恢复会话（原来只有进设置页才恢复）；顺手补上「记忆上次选中的游戏」（`settings.json` 新增 `lastGameId` / `lastGameInstallRoot`），见 §0.26。**
 
-## 0.26 最新一轮（2026-10-28 02:10–03:10）：独立「创意工坊」页 + 独立「账号」页 + 记忆上次游戏
+**2026-10-28 03:40 追加：EU5 mod 封面「16/22 不显示」查明是两个缺陷叠加 —— ① 解析器只扫 mod 根目录、从不进 `.metadata\`（EU5 的封面全在那里）；② metadata.json 的键读成了 `thumbnail`，真键是 `picture`。修好后真机 22/22 全部成像（16 张来自 `.metadata`），老游戏零影响，见 §0.27。**
+
+## 0.27 最新一轮（2026-10-28 03:33–03:40）：EU5 mod 封面 16/22 缺图 —— `.metadata` 布局 + metadata.json `picture` 键
+
+### 0.27.1 用户诉求
+
+User said (m00003)：「eu5的图片解析似乎又坏了，修一下」。附图是「播放集」页 11 行，只有 Nobles Auto Marry 与 Move them 有封面，其余全是灰占位。
+
+### 0.27.2 根因（两个独立缺陷叠加，都不是 DDS 解码或缓存问题）
+
+| # | 缺陷 | 证据 |
+| --- | --- | --- |
+| ① | `ModThumbnailResolver.PickThumbnailFile` 只扫 mod 根目录（`EnumerateFiles(dir, "thumbnail*", recursive: false)`），从不下探 `.metadata\`；而 EU5 / PDX Mods 布局把封面放在 `<mod>\.metadata\thumbnail.png` | `F:\SteamLibrary\steamapps\workshop\content\3450310` 下 **22/22** 个 mod 都有 `.metadata\thumbnail.png`（7.6 KB–920 KB，512×512 或 100×100，合法 PNG / 少数实为 JPEG），只有 **6** 个在根目录另有副本 —— 截图中恰好只有这 6 个里的 2 个在该播放集里 |
+| ② | `ModCatalog.AddMetadataMod` 读 metadata.json 的键写成 `"thumbnail"`，真机真键是 **`"picture"`**（13/22 个 mod 带该键，值均为 `thumbnail.png`）；`.mod` 路径（:171）读的正是 `picture`，于是 metadata 路径的「picture 优先」一直是死代码 | 22 个 metadata.json 里 `picture` 出现 13 次、`thumbnail` 0 次 |
+
+老游戏不受影响：CK3（1158310）384 个工坊目录、Stellaris（281990）307 个、EU4（394360）79 个，**都没有任何 `.metadata` 子目录**，所以新增的 `.metadata` 一级在它们那里连枚举都不发生。
+
+### 0.27.3 改动
+
+- `src/PdxLauncher.Core/Playsets/ModThumbnailResolver.cs`：新增 `MetadataDirectoryName = ".metadata"`；`ResolveInDirectory` 的单目录查找顺序改为 **`<dir>\<picture>` → `<dir>\<picture 文件名>` → `<dir>\.metadata\<picture>` → `<dir>\.metadata\<picture 文件名>` → `<dir>\thumbnail*` → `<dir>\.metadata\thumbnail*`**。前四级抽进 `TryExistingImage(dir, relativePath)`（图片扩展名 + 真实存在才认），末级抽成 `PickMetadataThumbnailFile(dir)`。**根目录优先**保证那 6 个已经能显示的 mod 视觉不变；`public PickThumbnailFile` 仍是「只扫这一层」的语义（`DdsChecks.CheckModThumbnailOrder` 直接调它）。
+- `src/PdxLauncher.Core/Playsets/ModCatalog.cs:255`：`Picture` 改为 `FirstNonEmptyOrNull(root["picture"], root["thumbnail"], null)`，真键优先、旧写法留作兼容。
+- 自检：`ModThumbnailChecks` 新增 `CheckMetadataDirectory`（8 条断言：`.metadata` 命中、根目录仍优先、`.metadata` 里 `thumbnail.jpg` 也行、`picture` 相对 `.metadata`、`picture` 带子目录时退化到平铺、只有 metadata.json / 只有 `.pdn` 时为 null、陈旧 `dirPath` 重定位后仍取 `.metadata` 封面）；`PlaysetJsonChecks` 新增端到端 `CheckMetadataPictureThumbnail`（两个工坊 mod：一个只有 `picture: "cover art.png"` 指向非 thumbnail 名字的封面，一个没有该键靠扫描），并抽出 `CreateEu5Game` 夹具 helper。
+- 文档：`docs/DATA-FORMATS.md` §5 metadata 键名 `thumbnail`→`picture`、缩略图解析补 `.metadata` 两级；§16 mod 那行改真话。
+
+### 0.27.4 验证
+
+- `build-debug.cmd`：**0 警告 0 错误**，`检查类: 27，失败: 0，断言失败总数: 0`（本轮新增 11 条断言全部 ok）。
+- 真机（`.scratch` 里的一次性 harness 直接跑 `ModCatalog.DiscoverAllAsync`，走真实 22 个工坊目录）：**带封面 22/22，其中来自 `.metadata` 的 16 个**，magic bytes 全部是合法 PNG/JPEG；6 个仍走根目录 `thumbnail.png`（与修复前一致）。
+- 真机截图（与用户附图同一视图，播放集页 11 行）：**11/11 全部真实成像** —— 原本就正常的 `Nobles Auto Marry` / `Move them` 之外，Community Flavor Pack / Cheat Menu Pro / 陪都 Multiple Capital / Auto Child Education / Better Road Builder / Thick borders / Reasonable Prices / More Control Methods / Megalopolis Upgrade 共 9 行从灰占位变成真图。
+- 日志无「mod 缩略图解析失败」，`data\image-cache` 不变（PNG/JPEG 不经 DDS 转码）。
+
+### 0.27.5 遗留（与本轮无关，仅记账）
+
+日志里反复出现 `ObjectDisposedException: Cannot access a disposed object ... System.Net.Http.HttpClient`（`HttpFetcher.cs:68` ← `SteamWorkshopClient.HasWorkshopAsync` ← `WorkshopViewModel.ResolveSourceAsync` / `LoadAsync`）：创意工坊页在 HttpClient 已释放后仍去探测来源，属独立缺陷，未在本轮处理。
+
+## 0.26 上一轮（2026-10-28 02:10–03:10）：独立「创意工坊」页 + 独立「账号」页 + 记忆上次游戏
 
 ### 0.26.1 用户需求（两条，后一条否决了前一轮的设计）
 
@@ -681,13 +716,13 @@ WinUI `BitmapImage` 解不了 DDS；EU5 三个 DLC 的 `thumbnail.dds` 是 **500
 
 ### 0.20.5 验证
 - Release 构建 **0 警告 0 错误**；`PdxLauncher.Checks.exe` → **检查类: 18，失败: 0，断言失败总数: 0**。
-- 真机（EU5）：DLC 页三张 .dds 缩略图显示真实美术（凤凰盾 / 古迹 / 圣地）；`data\image-cache` 3 个 PNG 共 967.6 KB；日志只有 3 行「DDS 缩略图已转 PNG」，重启后再进 DLC 页**仍是 3 行**（证明缓存命中、不重复转码）；Mod 库 22 个 mod 中带 `thumbnail.png` 的正常显示，其余仍为占位图标（文件本身不存在）。
+- 真机（EU5）：DLC 页三张 .dds 缩略图显示真实美术（凤凰盾 / 古迹 / 圣地）；`data\image-cache` 3 个 PNG 共 967.6 KB；日志只有 3 行「DDS 缩略图已转 PNG」，重启后再进 DLC 页**仍是 3 行**（证明缓存命中、不重复转码）；Mod 库 22 个 mod 中带 `thumbnail.png` 的正常显示，其余仍为占位图标（文件本身不存在）**（← 2026-10-28 更正：这条结论是错的，那 16 个 mod 的封面在 `<mod>\.metadata\thumbnail.png`，是解析器漏扫 `.metadata`，不是文件不存在，见 §0.27）**。
 - 设置页「缓存 → DDS 转码图」显示 `967.6 KB，3 个文件`，「清空」按钮生效。
 - EU4 / CK3 等 png 缩略图不受影响。
 
 ### 0.20.6 已知缺口
 - 只解 mip0；DDS 里的 ASTC / BC6H / 浮点纹理明确失败（P 社 UI 资产里未见到）。
-- 没有缩略图文件的 mod（EU5 22 个里有 16 个）只能显示占位图标——那是数据缺失，不是解码问题；后续可考虑从工坊页抓首图。
+- 没有缩略图文件的 mod（EU5 22 个里有 16 个）只能显示占位图标——那是数据缺失，不是解码问题；后续可考虑从工坊页抓首图。**（← 2026-10-28 更正：数据并不缺失，16 个的封面在 `.metadata\thumbnail.png`；已修，见 §0.27）**
 - BC7 只覆盖 mode 0..7 的完整解码路径，未做性能优化（单张 500×500 约毫秒级，列表场景已够用）。
 ## 0.19 最新一轮（2026-10-27 16:50）：EU5 美术 + 播放集/DLC 接入
 
