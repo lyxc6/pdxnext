@@ -2,6 +2,7 @@ namespace PdxLauncher.App.ViewModels;
 
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
@@ -163,61 +164,37 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public bool OnlineRefreshEnabled
     {
         get => AppServices.Settings.OnlineThemeRefreshEnabled;
-        set
-        {
-            if (AppServices.Settings.OnlineThemeRefreshEnabled == value)
-            {
-                return;
-            }
-
-            AppServices.Settings.OnlineThemeRefreshEnabled = value;
-            SaveSettings();
-            OnPropertyChanged();
-            SetStatus(value ? Keys.SettingsThemeStatusOn : Keys.SettingsThemeStatusOff);
-        }
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.OnlineThemeRefreshEnabled,
+            v => AppServices.Settings.OnlineThemeRefreshEnabled = v,
+            Keys.SettingsThemeStatusOn,
+            Keys.SettingsThemeStatusOff);
     }
 
     /// <summary>DLC 简介联网开关；写入 AppSettings.OnlineDlcDescriptionEnabled 并立即落盘。</summary>
     public bool DlcDescriptionOnlineEnabled
     {
         get => AppServices.Settings.OnlineDlcDescriptionEnabled;
-        set
-        {
-            if (AppServices.Settings.OnlineDlcDescriptionEnabled == value)
-            {
-                return;
-            }
-
-            AppServices.Settings.OnlineDlcDescriptionEnabled = value;
-            SaveSettings();
-            OnPropertyChanged();
-            if (value)
-            {
-                SetStatus(Keys.SettingsDataStatusDlcOn, AppServices.Settings.DlcDescriptionCacheDays);
-            }
-            else
-            {
-                SetStatus(Keys.SettingsDataStatusDlcOff);
-            }
-        }
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.OnlineDlcDescriptionEnabled,
+            v => AppServices.Settings.OnlineDlcDescriptionEnabled = v,
+            Keys.SettingsDataStatusDlcOn,
+            Keys.SettingsDataStatusDlcOff,
+            statusArgs: new object?[] { AppServices.Settings.DlcDescriptionCacheDays });
     }
 
     /// <summary>官方公告联网开关；写入 AppSettings.NewsFeedOnlineEnabled 并立即落盘。</summary>
     public bool NewsFeedOnlineEnabled
     {
         get => AppServices.Settings.NewsFeedOnlineEnabled;
-        set
-        {
-            if (AppServices.Settings.NewsFeedOnlineEnabled == value)
-            {
-                return;
-            }
-
-            AppServices.Settings.NewsFeedOnlineEnabled = value;
-            SaveSettings();
-            OnPropertyChanged();
-            SetStatus(value ? Keys.SettingsDataStatusNewsOn : Keys.SettingsDataStatusNewsOff);
-        }
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.NewsFeedOnlineEnabled,
+            v => AppServices.Settings.NewsFeedOnlineEnabled = v,
+            Keys.SettingsDataStatusNewsOn,
+            Keys.SettingsDataStatusNewsOff);
     }
 
     /// <summary>可选的网络代理模式（直接连接 / 跟随系统 / 手动配置）。</summary>
@@ -274,18 +251,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     }
 
     /// <summary>把内存中的 AppSettings 落盘（页面失焦 / 卸载时调用）。</summary>
-    public void PersistSettings()
-    {
-        try
-        {
-            AppServices.SaveSettings();
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("保存设置失败", ex);
-            SetStatus(Keys.SettingsStatusSaveFailed, ex.Message);
-        }
-    }
+    public void PersistSettings() => SaveSettings();
 
     // ------------------------------------------------------------ 界面区
 
@@ -299,22 +265,18 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public UiLanguageOption SelectedUiLanguage
     {
         get => _selectedUiLanguage;
-        set
-        {
-            if (value is null || ReferenceEquals(_selectedUiLanguage, value))
+        set => ApplyOption(
+            value,
+            _selectedUiLanguage,
+            Keys.SettingsInterfaceStatusLanguage,
+            v =>
             {
-                return;
-            }
-
-            _selectedUiLanguage = value;
-            AppServices.Settings.UiLanguage = value.Key;
-            SaveSettings();
-            OnPropertyChanged();
-            Localizer.Instance.Apply(value.Key);
-
+                _selectedUiLanguage = v;
+                AppServices.Settings.UiLanguage = v.Key;
+            },
             // 切语言后 T() 已经读新表，这里写进状态栏的就是新语言的句子。
-            SetStatus(Keys.SettingsInterfaceStatusLanguage, value.Title);
-        }
+            afterSave: () => Localizer.Instance.Apply(value.Key),
+            statusArgs: v => new object?[] { v.Title });
     }
 
     /// <summary>可选的播放集页面显示方式。</summary>
@@ -327,20 +289,16 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public PlaySetPageDisplayModeOption SelectedPlaySetDisplayMode
     {
         get => _selectedPlaySetDisplayMode;
-        set
-        {
-            if (value is null || ReferenceEquals(_selectedPlaySetDisplayMode, value))
+        set => ApplyOption(
+            value,
+            _selectedPlaySetDisplayMode,
+            Keys.SettingsInterfaceStatusPlaySet,
+            v =>
             {
-                return;
-            }
-
-            _selectedPlaySetDisplayMode = value;
-            OnPropertyChanged();
-            AppServices.Settings.PlaySetPageDisplayMode =
-                PlaySetPageDisplayModes.Normalize(value.Key);
-            SaveSettings();
-            SetStatus(Keys.SettingsInterfaceStatusPlaySet, value.Title);
-        }
+                _selectedPlaySetDisplayMode = v;
+                AppServices.Settings.PlaySetPageDisplayMode = PlaySetPageDisplayModes.Normalize(v.Key);
+            },
+            statusArgs: v => new object?[] { v.Title });
     }
 
     /// <summary>可选的整窗背景显示方式。</summary>
@@ -353,20 +311,17 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public BackgroundDisplayModeOption SelectedBackgroundDisplayMode
     {
         get => _selectedBackgroundDisplayMode;
-        set
-        {
-            if (value is null || ReferenceEquals(_selectedBackgroundDisplayMode, value))
+        set => ApplyOption(
+            value,
+            _selectedBackgroundDisplayMode,
+            Keys.SettingsInterfaceStatusBackground,
+            v =>
             {
-                return;
-            }
-
-            _selectedBackgroundDisplayMode = value;
-            OnPropertyChanged();
-            AppServices.Settings.BackgroundDisplayMode = BackgroundDisplayModes.Normalize(value.Key);
-            SaveSettings();
-            AppServices.NotifyBackgroundDisplayChanged();
-            SetStatus(Keys.SettingsInterfaceStatusBackground, value.Title);
-        }
+                _selectedBackgroundDisplayMode = v;
+                AppServices.Settings.BackgroundDisplayMode = BackgroundDisplayModes.Normalize(v.Key);
+            },
+            afterSave: AppServices.NotifyBackgroundDisplayChanged,
+            statusArgs: v => new object?[] { v.Title });
     }
 
     /// <summary>可选的 Mod 缩略图尺寸。</summary>
@@ -379,19 +334,16 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public ModThumbnailSizeOption SelectedModThumbnailSize
     {
         get => _selectedModThumbnailSize;
-        set
-        {
-            if (value is null || ReferenceEquals(_selectedModThumbnailSize, value))
+        set => ApplyOption(
+            value,
+            _selectedModThumbnailSize,
+            Keys.SettingsInterfaceStatusThumbnailSize,
+            v =>
             {
-                return;
-            }
-
-            _selectedModThumbnailSize = value;
-            OnPropertyChanged();
-            AppServices.Settings.ModThumbnailSize = ModThumbnailSizes.Normalize(value.Key);
-            SaveSettings();
-            SetStatus(Keys.SettingsInterfaceStatusThumbnailSize, value.Title, value.Pixels);
-        }
+                _selectedModThumbnailSize = v;
+                AppServices.Settings.ModThumbnailSize = ModThumbnailSizes.Normalize(v.Key);
+            },
+            statusArgs: v => new object?[] { v.Title, v.Pixels });
     }
 
     /// <summary>
@@ -541,19 +493,16 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public RetentionDaysOption SelectedDlcDescriptionRetention
     {
         get => _selectedDlcDescriptionRetention;
-        set
-        {
-            if (value is null || ReferenceEquals(_selectedDlcDescriptionRetention, value))
+        set => ApplyOption(
+            value,
+            _selectedDlcDescriptionRetention,
+            Keys.SettingsDataStatusDlcDays,
+            v =>
             {
-                return;
-            }
-
-            _selectedDlcDescriptionRetention = value;
-            OnPropertyChanged();
-            AppServices.Settings.DlcDescriptionCacheDays = value.Days;
-            SaveSettings();
-            SetStatus(Keys.SettingsDataStatusDlcDays, value.Days);
-        }
+                _selectedDlcDescriptionRetention = v;
+                AppServices.Settings.DlcDescriptionCacheDays = v.Days;
+            },
+            statusArgs: v => new object?[] { v.Days });
     }
 
     // ------------------------------------------------------------ 危险区
@@ -562,19 +511,13 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public bool WriteDlcSignature
     {
         get => AppServices.Settings.WriteDlcSignature;
-        set
-        {
-            if (AppServices.Settings.WriteDlcSignature == value)
-            {
-                return;
-            }
-
-            AppServices.Settings.WriteDlcSignature = value;
-            SaveSettings();
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(CanRegenerateSignature));
-            SetStatus(value ? Keys.SettingsDangerStatusAllowed : Keys.SettingsDangerStatusForbidden);
-        }
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.WriteDlcSignature,
+            v => AppServices.Settings.WriteDlcSignature = v,
+            Keys.SettingsDangerStatusAllowed,
+            Keys.SettingsDangerStatusForbidden,
+            afterSave: () => OnPropertyChanged(nameof(CanRegenerateSignature)));
     }
 
     /// <summary>开关关闭时禁用"重新生成"按钮。</summary>
@@ -989,20 +932,12 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public bool ModThumbnailOnlineEnabled
     {
         get => AppServices.Settings.OnlineModThumbnailEnabled;
-        set
-        {
-            if (AppServices.Settings.OnlineModThumbnailEnabled == value)
-            {
-                return;
-            }
-
-            AppServices.Settings.OnlineModThumbnailEnabled = value;
-            SaveSettings();
-            OnPropertyChanged();
-            SetStatus(value
-                ? Keys.SettingsModThumbnailsStatusOnlineOn
-                : Keys.SettingsModThumbnailsStatusOnlineOff);
-        }
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.OnlineModThumbnailEnabled,
+            v => AppServices.Settings.OnlineModThumbnailEnabled = v,
+            Keys.SettingsModThumbnailsStatusOnlineOn,
+            Keys.SettingsModThumbnailsStatusOnlineOff);
     }
 
     /// <summary>可选的 Mod 缩略图保留天数。</summary>
@@ -1013,19 +948,16 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public RetentionDaysOption SelectedModThumbnailRetention
     {
         get => _selectedModThumbnailRetention;
-        set
-        {
-            if (value is null || ReferenceEquals(_selectedModThumbnailRetention, value))
+        set => ApplyOption(
+            value,
+            _selectedModThumbnailRetention,
+            Keys.SettingsModThumbnailsStatusRetention,
+            v =>
             {
-                return;
-            }
-
-            _selectedModThumbnailRetention = value;
-            OnPropertyChanged();
-            AppServices.Settings.ModThumbnailCacheDays = value.Days;
-            SaveSettings();
-            SetStatus(Keys.SettingsModThumbnailsStatusRetention, value.Days);
-        }
+                _selectedModThumbnailRetention = v;
+                AppServices.Settings.ModThumbnailCacheDays = v.Days;
+            },
+            statusArgs: v => new object?[] { v.Days });
     }
 
     /// <summary>Mod 缩略图缓存目录。</summary>
@@ -1054,6 +986,67 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     private static string FormatLocal(DateTimeOffset utc) =>
         utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// 开关型设置的统一落盘路径：值没变直接返回；变了才赋值、落盘、发属性通知、跑附加动作，最后写状态栏。
+    /// 属性名由 setter 经 <see cref="CallerMemberNameAttribute"/> 传入，省掉每个属性手写 nameof。
+    /// </summary>
+    private void ApplyFlag(
+        bool value,
+        bool current,
+        Action<bool> assign,
+        string onStatusKey,
+        string offStatusKey,
+        Action? afterSave = null,
+        object?[]? statusArgs = null,
+        [CallerMemberName] string? propertyName = null)
+    {
+        if (value == current)
+        {
+            return;
+        }
+
+        assign(value);
+        SaveSettings();
+        OnPropertyChanged(propertyName);
+        afterSave?.Invoke();
+
+        if (value)
+        {
+            SetStatus(onStatusKey, statusArgs ?? Array.Empty<object?>());
+        }
+        else
+        {
+            SetStatus(offStatusKey);
+        }
+    }
+
+    /// <summary>
+    /// 下拉选项型设置的统一落盘路径：null 或同一个实例直接返回；否则赋值、落盘、发属性通知、跑附加动作、写状态栏。
+    /// statusArgs 用委托延迟求值，避免调用方在 null 检查之前碰 value。
+    /// </summary>
+    private bool ApplyOption<T>(
+        T? value,
+        T? current,
+        string statusKey,
+        Action<T> assign,
+        Action? afterSave = null,
+        Func<T, object?[]>? statusArgs = null,
+        [CallerMemberName] string? propertyName = null)
+        where T : class
+    {
+        if (value is null || ReferenceEquals(value, current))
+        {
+            return false;
+        }
+
+        assign(value);
+        SaveSettings();
+        OnPropertyChanged(propertyName);
+        afterSave?.Invoke();
+        SetStatus(statusKey, statusArgs?.Invoke(value) ?? Array.Empty<object?>());
+        return true;
+    }
 
     private void SaveSettings()
     {
