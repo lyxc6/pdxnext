@@ -1,0 +1,21 @@
+{
+  "library.title": "游戏库",
+  "library.refreshName": "刷新游戏库",
+  "library.gridName": "已安装游戏列表",
+  "library.launch": "启动",
+  "library.count": "共 {0} 个已安装游戏",
+  "library.emptyHint": "未发现已安装的 Paradox 游戏。已扫描 Steam 库与官方启动器的游戏库路径（含 %LOCALAPPDATA%\\Programs\\Paradox Interactive\\games）；请确认游戏目录里有 launcher-settings.json，或点击右上角刷新。",
+  "library.notFound": "未发现已安装的 Paradox 游戏",
+  "library.found": "已发现 {0} 个游戏",
+  "library.badge.unsupported": "未适配",
+  "library.badge.launchOnly": "仅启动",
+  "library.version": "版本 {0}",
+  "library.versionUnknown": "版本未知",
+  "library.status.servicesNotReady": "服务尚未就绪，无法扫描 Steam 库。",
+  "library.launchFailedTitle": "启动失败",
+  "library.launchedTitle": "已启动",
+  "library.processCreated": "游戏进程已创建。",
+  "library.processCreatedWithPid": "游戏进程已创建（PID {0}）。",
+  "library.unknownReason": "未知原因",
+  "library.launchCanceled": "启动已取消"
+}

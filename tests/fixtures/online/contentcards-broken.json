@@ -1,0 +1,10 @@
+{
+  "main": {
+    "slotType": "main",
+    "contentGroups": [
+      {
+        "id": "content-group-broken-main",
+        "contentItems": [
+          {
+            "id": "broken-main",
+            "content": { "title": { "en": "这条 JSON 是故意截断的

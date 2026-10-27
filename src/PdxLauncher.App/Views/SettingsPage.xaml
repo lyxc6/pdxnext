@@ -1,0 +1,547 @@
+<Page
+    x:Class="PdxLauncher.App.Views.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:contracts="using:PdxLauncher.Core.Contracts"
+    xmlns:controls="using:PdxLauncher.App.Controls"
+    xmlns:svc="using:PdxLauncher.App.Services"
+    xmlns:vm="using:PdxLauncher.App.ViewModels"
+    NavigationCacheMode="Required"
+    Background="{ThemeResource PdxPageVeilBrush}">
+
+    <Grid Padding="20" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="216" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Spacing="12">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{x:Bind L.SettingsTitle, Mode=OneWay}" Style="{StaticResource TitleTextBlockStyle}" />
+                    <TextBlock Text="{x:Bind ViewModel.GameTitle, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+
+                <ListView x:Name="lstSettingsSections"
+                          AutomationProperties.AutomationId="lstSettingsSections"
+                          AutomationProperties.Name="{x:Bind L.SettingsSectionName, Mode=OneWay}"
+                          SelectionMode="Single"
+                          SelectedIndex="0"
+                          Background="Transparent"
+                          SelectionChanged="OnSectionChanged">
+                    <ListViewItem AutomationProperties.AutomationId="navSettingsAppearance" Padding="8,10" HorizontalContentAlignment="Stretch">
+                        <TextBlock Text="{x:Bind L.SettingsNavAppearance, Mode=OneWay}" />
+                    </ListViewItem>
+                    <ListViewItem AutomationProperties.AutomationId="navSettingsLaunch" Padding="8,10" HorizontalContentAlignment="Stretch">
+                        <TextBlock Text="{x:Bind L.SettingsNavLaunch, Mode=OneWay}" />
+                    </ListViewItem>
+                    <ListViewItem AutomationProperties.AutomationId="navSettingsPaths" Padding="8,10" HorizontalContentAlignment="Stretch">
+                        <TextBlock Text="{x:Bind L.SettingsNavPaths, Mode=OneWay}" />
+                    </ListViewItem>
+                    <ListViewItem AutomationProperties.AutomationId="navSettingsOnline" Padding="8,10" HorizontalContentAlignment="Stretch">
+                        <TextBlock Text="{x:Bind L.SettingsNavOnline, Mode=OneWay}" />
+                    </ListViewItem>
+                    <ListViewItem AutomationProperties.AutomationId="navSettingsCache" Padding="8,10" HorizontalContentAlignment="Stretch">
+                        <TextBlock Text="{x:Bind L.SettingsNavCache, Mode=OneWay}" />
+                    </ListViewItem>
+                    <ListViewItem AutomationProperties.AutomationId="navSettingsAdvanced" Padding="8,10" HorizontalContentAlignment="Stretch">
+                        <TextBlock Text="{x:Bind L.SettingsNavAdvanced, Mode=OneWay}" />
+                    </ListViewItem>
+                </ListView>
+            </StackPanel>
+
+            <ScrollViewer Grid.Column="1"
+                          VerticalScrollBarVisibility="Visible"
+                          HorizontalScrollBarVisibility="Disabled"
+                          HorizontalScrollMode="Disabled"
+                          HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="12">
+
+                    <StackPanel x:Name="secAppearance" Spacing="8">
+                        <TextBlock Text="{x:Bind L.SettingsSectionTheme, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsThemeSource, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <TextBlock AutomationProperties.AutomationId="txtThemeSource"
+                                           AutomationProperties.Name="{x:Bind L.SettingsThemeSource, Mode=OneWay}"
+                                           Text="{x:Bind ViewModel.ThemeSourceText, Mode=OneWay}"
+                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsThemeLastCheck, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <TextBlock AutomationProperties.AutomationId="txtThemeLastCheck"
+                                           AutomationProperties.Name="{x:Bind L.SettingsThemeLastCheck, Mode=OneWay}"
+                                           Text="{x:Bind ViewModel.LastCheckText, Mode=OneWay}"
+                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsThemeNextCheck, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <TextBlock AutomationProperties.AutomationId="txtThemeNextCheck"
+                                           AutomationProperties.Name="{x:Bind L.SettingsThemeNextCheck, Mode=OneWay}"
+                                           Text="{x:Bind ViewModel.NextCheckText, Mode=OneWay}"
+                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsThemeOnlineOn, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                    <ProgressRing AutomationProperties.AutomationId="ringSettingsBusy"
+                                                  Width="20" Height="20"
+                                                  IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                                                  Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsBusy), Mode=OneWay}" />
+                                    <ToggleSwitch AutomationProperties.AutomationId="tglOnlineThemeRefresh"
+                                                  AutomationProperties.Name="{x:Bind L.SettingsThemeOnlineOn, Mode=OneWay}"
+                                                  IsOn="{x:Bind ViewModel.OnlineRefreshEnabled, Mode=TwoWay}" />
+                                    <Button AutomationProperties.AutomationId="btnCheckThemeNow"
+                                            AutomationProperties.Name="{x:Bind L.SettingsThemeCheckNow, Mode=OneWay}"
+                                            Content="{x:Bind L.SettingsThemeCheckNow, Mode=OneWay}"
+                                            Click="OnCheckThemeClick"
+                                            IsEnabled="{x:Bind ViewModel.IsLoaded, Mode=OneWay}" />
+                                </StackPanel>
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <TextBlock Text="{x:Bind L.SettingsThemeHint, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+
+                        <TextBlock Text="{x:Bind L.SettingsSectionInterface, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsInterfaceLanguage, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ComboBox AutomationProperties.AutomationId="cmbUiLanguage"
+                                          AutomationProperties.Name="{x:Bind L.SettingsInterfaceLanguageName, Mode=OneWay}"
+                                          Width="320" MinHeight="32"
+                                          ItemsSource="{x:Bind ViewModel.LanguageOptions, Mode=OneWay}"
+                                          DisplayMemberPath="Title"
+                                          SelectedItem="{x:Bind ViewModel.SelectedUiLanguage, Mode=TwoWay}"
+                                          ToolTipService.ToolTip="{x:Bind ViewModel.SelectedUiLanguage.Description, Mode=OneWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsInterfacePlaySetMode, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ComboBox AutomationProperties.AutomationId="cmbPlaySetPageDisplayMode"
+                                          AutomationProperties.Name="{x:Bind L.SettingsInterfacePlaySetModeName, Mode=OneWay}"
+                                          Width="320" MinHeight="32"
+                                          ItemsSource="{x:Bind ViewModel.PlaySetDisplayModes, Mode=OneWay}"
+                                          DisplayMemberPath="Title"
+                                          SelectedItem="{x:Bind ViewModel.SelectedPlaySetDisplayMode, Mode=TwoWay}"
+                                          ToolTipService.ToolTip="{x:Bind ViewModel.SelectedPlaySetDisplayMode.Description, Mode=OneWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsInterfaceBackgroundMode, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ComboBox AutomationProperties.AutomationId="cmbBackgroundDisplayMode"
+                                          AutomationProperties.Name="{x:Bind L.SettingsInterfaceBackgroundModeName, Mode=OneWay}"
+                                          Width="320" MinHeight="32"
+                                          ItemsSource="{x:Bind ViewModel.BackgroundDisplayModeOptions, Mode=OneWay}"
+                                          DisplayMemberPath="Title"
+                                          SelectedItem="{x:Bind ViewModel.SelectedBackgroundDisplayMode, Mode=TwoWay}"
+                                          ToolTipService.ToolTip="{x:Bind ViewModel.SelectedBackgroundDisplayMode.Description, Mode=OneWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsInterfaceModThumbnailSize, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ComboBox AutomationProperties.AutomationId="cmbModThumbnailSize"
+                                          AutomationProperties.Name="{x:Bind L.SettingsInterfaceModThumbnailSizeName, Mode=OneWay}"
+                                          Width="320" MinHeight="32"
+                                          ItemsSource="{x:Bind ViewModel.ModThumbnailSizeOptions, Mode=OneWay}"
+                                          DisplayMemberPath="Title"
+                                          SelectedItem="{x:Bind ViewModel.SelectedModThumbnailSize, Mode=TwoWay}"
+                                          ToolTipService.ToolTip="{x:Bind ViewModel.SelectedModThumbnailSize.Description, Mode=OneWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsInterfaceAlwaysOnTop, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ToggleSwitch AutomationProperties.AutomationId="tglAlwaysOnTop"
+                                              AutomationProperties.Name="{x:Bind L.SettingsInterfaceAlwaysOnTopName, Mode=OneWay}"
+                                              IsOn="{x:Bind ViewModel.AlwaysOnTop, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <TextBlock Text="{x:Bind L.SettingsInterfaceHint, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                    </StackPanel>
+
+                    <StackPanel x:Name="secLaunch" Spacing="8" Visibility="Collapsed">
+                        <TextBlock Text="{x:Bind L.SettingsSectionLaunch, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsLaunchExe, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <TextBlock AutomationProperties.AutomationId="txtExePath"
+                                           AutomationProperties.Name="{x:Bind L.SettingsLaunchExeName, Mode=OneWay}"
+                                           Text="{x:Bind ViewModel.ExePath, Mode=OneWay}"
+                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           ToolTipService.ToolTip="{x:Bind ViewModel.ExePath, Mode=OneWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsLaunchArgs, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <TextBlock AutomationProperties.AutomationId="txtExeArgs"
+                                           AutomationProperties.Name="{x:Bind L.SettingsLaunchArgsName, Mode=OneWay}"
+                                           Text="{x:Bind ViewModel.ExeArgsText, Mode=OneWay}"
+                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsLaunchAlternatives, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ComboBox AutomationProperties.AutomationId="cmbAlternativeExecutable"
+                                          AutomationProperties.Name="{x:Bind L.SettingsLaunchAlternativesName, Mode=OneWay}"
+                                          Width="320" MinHeight="32"
+                                          ItemsSource="{x:Bind ViewModel.Alternatives, Mode=OneWay}"
+                                          DisplayMemberPath="DisplayLabel"
+                                          SelectedItem="{x:Bind ViewModel.SelectedAlternative, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+                    </StackPanel>
+
+                    <StackPanel x:Name="secPaths" Spacing="8" Visibility="Collapsed">
+                        <TextBlock Text="{x:Bind L.SettingsSectionData, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsDataGameData, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock AutomationProperties.AutomationId="txtGameDataPath"
+                                               AutomationProperties.Name="{x:Bind L.SettingsDataGameDataName, Mode=OneWay}"
+                                               Text="{x:Bind ViewModel.GameDataPath, Mode=OneWay}"
+                                               MaxWidth="380" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{x:Bind ViewModel.GameDataPath, Mode=OneWay}" />
+                                    <Button AutomationProperties.AutomationId="btnOpenDataDirectory"
+                                            AutomationProperties.Name="{x:Bind L.SettingsDataOpenName, Mode=OneWay}"
+                                            Content="{x:Bind L.SettingsDataOpen, Mode=OneWay}"
+                                            Click="OnOpenDataDirectoryClick" />
+                                </StackPanel>
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsDataDlcScan, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <TextBlock AutomationProperties.AutomationId="txtDlcPath"
+                                           AutomationProperties.Name="{x:Bind L.SettingsDataDlcScanName, Mode=OneWay}"
+                                           Text="{x:Bind ViewModel.DlcPath, Mode=OneWay}"
+                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           ToolTipService.ToolTip="{x:Bind ViewModel.DlcPath, Mode=OneWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsDataModDir, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <TextBlock AutomationProperties.AutomationId="txtModDir"
+                                           AutomationProperties.Name="{x:Bind L.SettingsDataModDirName, Mode=OneWay}"
+                                           Text="{x:Bind ViewModel.ModDir, Mode=OneWay}"
+                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           ToolTipService.ToolTip="{x:Bind ViewModel.ModDir, Mode=OneWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsDataFormatVersion, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <TextBlock AutomationProperties.AutomationId="txtFormatVersion"
+                                           AutomationProperties.Name="{x:Bind L.SettingsDataFormatVersionName, Mode=OneWay}"
+                                           Text="{x:Bind ViewModel.FormatVersionText, Mode=OneWay}"
+                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsDataLoadFile, Mode=OneWay}"
+                                               Description="{x:Bind ViewModel.LoadFileStateText, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <TextBlock AutomationProperties.AutomationId="txtLoadFilePath"
+                                           AutomationProperties.Name="{x:Bind L.SettingsDataLoadFileName, Mode=OneWay}"
+                                           Text="{x:Bind ViewModel.LoadFilePath, Mode=OneWay}"
+                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           ToolTipService.ToolTip="{x:Bind ViewModel.LoadFilePath, Mode=OneWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <TextBlock Text="{x:Bind L.SettingsDataDlcHint, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+
+                        <TextBlock Text="{x:Bind L.SettingsSectionAppData, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsAppDataCurrent, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock AutomationProperties.AutomationId="txtAppDataDirectory"
+                                               AutomationProperties.Name="{x:Bind L.SettingsAppDataCurrentName, Mode=OneWay}"
+                                               Text="{x:Bind ViewModel.DataDirectoryPath, Mode=OneWay}"
+                                               MaxWidth="380" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{x:Bind ViewModel.DataDirectoryPath, Mode=OneWay}" />
+                                    <Button AutomationProperties.AutomationId="btnOpenAppDataDirectory"
+                                            AutomationProperties.Name="{x:Bind L.SettingsAppDataOpenName, Mode=OneWay}"
+                                            Content="{x:Bind L.SettingsAppDataOpen, Mode=OneWay}"
+                                            Click="OnOpenAppDataDirectoryClick" />
+                                </StackPanel>
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsAppDataLegacy, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock AutomationProperties.AutomationId="txtLegacyDataDirectory"
+                                               AutomationProperties.Name="{x:Bind L.SettingsAppDataLegacyName, Mode=OneWay}"
+                                               Text="{x:Bind ViewModel.LegacyDataDirectoryPath, Mode=OneWay}"
+                                               MaxWidth="380" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{x:Bind ViewModel.LegacyDataDirectoryPath, Mode=OneWay}" />
+                                    <Button AutomationProperties.AutomationId="btnClearLegacyData"
+                                            AutomationProperties.Name="{x:Bind L.SettingsAppDataClearLegacyName, Mode=OneWay}"
+                                            Content="{x:Bind L.SettingsAppDataClearLegacy, Mode=OneWay}"
+                                            Click="OnClearLegacyDataClick" />
+                                </StackPanel>
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <TextBlock Text="{x:Bind L.SettingsAppDataHint, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                    </StackPanel>
+
+                    <StackPanel x:Name="secOnline" Spacing="8" Visibility="Collapsed">
+                        <TextBlock Text="{x:Bind L.SettingsSectionProxy, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsProxyMode, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ComboBox AutomationProperties.AutomationId="cmbProxyMode"
+                                          AutomationProperties.Name="{x:Bind L.SettingsProxyModeName, Mode=OneWay}"
+                                          Width="320" MinHeight="32"
+                                          ItemsSource="{x:Bind ViewModel.ProxyModeOptions, Mode=OneWay}"
+                                          DisplayMemberPath="Title"
+                                          SelectedItem="{x:Bind ViewModel.SelectedProxyMode, Mode=TwoWay}"
+                                          ToolTipService.ToolTip="{x:Bind ViewModel.SelectedProxyMode.Description, Mode=OneWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsProxyAddress, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <TextBox AutomationProperties.AutomationId="txtProxyUrl"
+                                         AutomationProperties.Name="{x:Bind L.SettingsProxyAddress, Mode=OneWay}"
+                                         Width="320"
+                                         PlaceholderText="{x:Bind L.SettingsProxyAddressPlaceholder, Mode=OneWay}"
+                                         Text="{x:Bind ViewModel.ProxyUrl, Mode=OneWay}"
+                                         IsEnabled="{x:Bind ViewModel.IsManualProxy, Mode=OneWay}"
+                                         TextChanged="OnProxyUrlChanged"
+                                         LostFocus="OnProxyUrlLostFocus"
+                                         KeyDown="OnProxyUrlKeyDown" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsProxyCurrent, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <TextBlock AutomationProperties.AutomationId="txtProxyStatus"
+                                           AutomationProperties.Name="{x:Bind L.SettingsProxyCurrentName, Mode=OneWay}"
+                                           Text="{x:Bind ViewModel.ProxyStatusText, Mode=OneWay}"
+                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           ToolTipService.ToolTip="{x:Bind ViewModel.ProxyStatusText, Mode=OneWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <TextBlock Text="{x:Bind L.SettingsProxyHint, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+
+                        <TextBlock Text="{x:Bind L.SettingsSectionData, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsDataDlcOnlineOn, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ToggleSwitch AutomationProperties.AutomationId="tglOnlineDlcDescription"
+                                              AutomationProperties.Name="{x:Bind L.SettingsDataDlcOnlineOn, Mode=OneWay}"
+                                              IsOn="{x:Bind ViewModel.DlcDescriptionOnlineEnabled, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsDataDlcCacheDays, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ComboBox AutomationProperties.AutomationId="cmbDlcDescriptionRetention"
+                                          AutomationProperties.Name="{x:Bind L.SettingsDataDlcCacheDaysName, Mode=OneWay}"
+                                          Width="200" MinHeight="32"
+                                          ItemsSource="{x:Bind ViewModel.DlcDescriptionRetentions, Mode=OneWay}"
+                                          DisplayMemberPath="Title"
+                                          SelectedItem="{x:Bind ViewModel.SelectedDlcDescriptionRetention, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsDataNewsOnlineOn, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ToggleSwitch AutomationProperties.AutomationId="tglOnlineNewsFeed"
+                                              AutomationProperties.Name="{x:Bind L.SettingsDataNewsOnlineOn, Mode=OneWay}"
+                                              IsOn="{x:Bind ViewModel.NewsFeedOnlineEnabled, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <TextBlock Text="{x:Bind L.SettingsDataNewsHint, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+
+                        <TextBlock Text="{x:Bind L.SettingsSectionModThumbnails, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsModThumbnailsOnlineOn, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ToggleSwitch AutomationProperties.AutomationId="tglOnlineModThumbnail"
+                                              AutomationProperties.Name="{x:Bind L.SettingsModThumbnailsOnlineOn, Mode=OneWay}"
+                                              IsOn="{x:Bind ViewModel.ModThumbnailOnlineEnabled, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsModThumbnailsRetention, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ComboBox AutomationProperties.AutomationId="cmbModThumbnailRetention"
+                                          AutomationProperties.Name="{x:Bind L.SettingsModThumbnailsRetentionName, Mode=OneWay}"
+                                          Width="200" MinHeight="32"
+                                          ItemsSource="{x:Bind ViewModel.ModThumbnailRetentions, Mode=OneWay}"
+                                          DisplayMemberPath="Title"
+                                          SelectedItem="{x:Bind ViewModel.SelectedModThumbnailRetention, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsModThumbnailsCacheDir, Mode=OneWay}"
+                                               Description="{x:Bind ViewModel.ModThumbnailCacheSummary, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <TextBlock AutomationProperties.AutomationId="txtModThumbnailCachePath"
+                                           AutomationProperties.Name="{x:Bind L.SettingsModThumbnailsCacheDirName, Mode=OneWay}"
+                                           Text="{x:Bind ViewModel.ModThumbnailCachePath, Mode=OneWay}"
+                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           ToolTipService.ToolTip="{x:Bind ViewModel.ModThumbnailCachePath, Mode=OneWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <TextBlock Text="{x:Bind L.SettingsModThumbnailsHint, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                    </StackPanel>
+
+                    <StackPanel x:Name="secCache" Spacing="8" Visibility="Collapsed">
+                        <TextBlock Text="{x:Bind L.SettingsSectionCache, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
+
+                        <controls:SettingsCard Header="{x:Bind ViewModel.CacheTotalText, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button AutomationProperties.AutomationId="btnRefreshCache"
+                                            AutomationProperties.Name="{x:Bind L.SettingsCacheRefreshName, Mode=OneWay}"
+                                            Content="{x:Bind L.SettingsCacheRefresh, Mode=OneWay}"
+                                            Click="OnRefreshCacheClick" />
+                                    <Button AutomationProperties.AutomationId="btnClearAllCaches"
+                                            AutomationProperties.Name="{x:Bind L.SettingsCacheClearAllName, Mode=OneWay}"
+                                            Content="{x:Bind L.SettingsCacheClearAll, Mode=OneWay}"
+                                            Click="OnClearAllCachesClick" />
+                                </StackPanel>
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.CacheRows, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:CacheRowViewModel">
+                                    <controls:SettingsCard Margin="0,0,0,8"
+                                                           Header="{x:Bind Title, Mode=OneWay}"
+                                                           Description="{x:Bind Description, Mode=OneWay}"
+                                                           ToolTipService.ToolTip="{x:Bind Path, Mode=OneWay}">
+                                        <controls:SettingsCard.ActionContent>
+                                            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                                <ProgressRing Width="16" Height="16"
+                                                              IsActive="{x:Bind IsBusy, Mode=OneWay}"
+                                                              Visibility="{x:Bind svc:XamlVisibility.FromBool(IsBusy), Mode=OneWay}" />
+                                                <TextBlock Text="{x:Bind SizeText, Mode=OneWay}"
+                                                           MinWidth="96" TextAlignment="Right" VerticalAlignment="Center" />
+                                                <Button Content="{x:Bind L.CommonClear, Mode=OneWay}"
+                                                        IsEnabled="{x:Bind CanClear, Mode=OneWay}"
+                                                        Click="OnClearCacheRowClick" />
+                                            </StackPanel>
+                                        </controls:SettingsCard.ActionContent>
+                                    </controls:SettingsCard>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="{x:Bind L.SettingsCacheHint, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                    </StackPanel>
+
+                    <StackPanel x:Name="secAdvanced" Spacing="8" Visibility="Collapsed">
+                        <TextBlock Text="{x:Bind L.SettingsSectionDanger, Mode=OneWay}"
+                                   Style="{StaticResource SubtitleTextBlockStyle}"
+                                   Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsDangerAllowOn, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ToggleSwitch AutomationProperties.AutomationId="tglWriteDlcSignature"
+                                              AutomationProperties.Name="{x:Bind L.SettingsDangerAllowOn, Mode=OneWay}"
+                                              IsOn="{x:Bind ViewModel.WriteDlcSignature, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsDangerRegenerateTitle, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <Button AutomationProperties.AutomationId="btnRegenerateDlcSignature"
+                                        AutomationProperties.Name="{x:Bind L.SettingsDangerRegenerate, Mode=OneWay}"
+                                        Content="{x:Bind L.SettingsDangerRegenerate, Mode=OneWay}"
+                                        IsEnabled="{x:Bind ViewModel.CanRegenerateSignature, Mode=OneWay}"
+                                        Click="OnRegenerateSignatureClick" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsDangerSignatureName, Mode=OneWay}"
+                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasLastSignature), Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <TextBlock AutomationProperties.AutomationId="txtLastSignature"
+                                           AutomationProperties.Name="{x:Bind L.SettingsDangerSignatureName, Mode=OneWay}"
+                                           Text="{x:Bind ViewModel.LastSignature, Mode=OneWay}"
+                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           ToolTipService.ToolTip="{x:Bind ViewModel.LastSignature, Mode=OneWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <TextBlock Text="{x:Bind L.SettingsDangerHint, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <Border Grid.Row="1"
+                Background="{ThemeResource PdxCardBackgroundBrush}"
+                BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                BorderThickness="1"
+                CornerRadius="8"
+                Padding="16,10"
+                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasStatusMessage), Mode=OneWay}">
+            <TextBlock AutomationProperties.AutomationId="txtSettingsStatus"
+                       AutomationProperties.Name="{x:Bind L.SettingsStatusName, Mode=OneWay}"
+                       Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       TextWrapping="NoWrap"
+                       TextTrimming="CharacterEllipsis" />
+        </Border>
+    </Grid>
+</Page>

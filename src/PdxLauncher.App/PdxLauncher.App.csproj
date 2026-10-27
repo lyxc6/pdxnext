@@ -1,0 +1,92 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>PdxLauncher.App</RootNamespace>
+    <AssemblyName>PdxLauncher.App</AssemblyName>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>true</UseWinUI>
+    <WinUISDKReferences>false</WinUISDKReferences>
+    <EnableMsixTooling>false</EnableMsixTooling>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <EnableDefaultApplicationDefinition>true</EnableDefaultApplicationDefinition>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PdxLauncher.Core\PdxLauncher.Core.csproj" />
+  </ItemGroup>
+  <!-- 手工构建路径（tools/manual-build.py）：Core 已由 csc 预编译，这里改成直接引用 dll，
+       避免 MSBuild 去构建 Core 项目（其 Csc 任务在本机会被沙箱拒绝）。 -->
+  <ItemGroup Condition="'$(ManualBuild)' == 'true'">
+    <ProjectReference Remove="..\PdxLauncher.Core\PdxLauncher.Core.csproj" />
+    <Reference Include="PdxLauncher.Core">
+      <HintPath>$(ManualCoreDll)</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!--
+    ============================ publish 修复 ============================
+    问题：dotnet publish 的产物缺 App.xbf / MainWindow.xbf / Views\*.xbf /
+    <AssemblyName>.pri / Assets\，双击 exe 立即退出（退出码 127，无窗口、无日志）。
+
+    原因：WinUI 的 XAML 编译产物只由 Microsoft.WinUI.NET.Markup.Compiler.targets 里
+    AddProcessedXamlFilesToCopyLocal 目标（BeforeTargets="GetCopyToOutputDirectoryItems"）
+    复制进 $(OutDir)，而 publish 走的是 GetCopyToPublishDirectoryItems 这条完全独立的链路，
+    看不到那些项；.pri 与 Assets 同理只在 build 时复制。
+
+    修法：ComputeFilesToPublish 之后把 $(OutDir) 里这五类产物补进 ResolvedFileToPublish，
+    并显式给出 RelativePath（publish 目标路径由该元数据决定）。
+    注意：这里按「目录 + 通配」分成三个组，不用 %(RelativeDir) 推导——
+    因为通配项没有天然的相对根，推导结果会带上 $(OutDir) 绝对路径前缀。
+  -->
+  <Target Name="AddWinUIXamlArtifactsToPublish"
+          AfterTargets="ComputeFilesToPublish"
+          Condition="'$(WindowsPackageType)' == 'None' and '$(EnableMsixTooling)' != 'true'">
+    <ItemGroup>
+      <!-- 根目录下的 XAML 编译产物 -->
+      <_WinUIPublishRootXaml Include="$(OutDir)*.xbf" />
+      <!-- Views\ 下的页面 XAML 编译产物 -->
+      <_WinUIPublishViewXaml Include="$(OutDir)Views\*.xbf" />
+      <!-- 资源索引（makepri 在 build 阶段合并生成，只在 $(OutDir) 里） -->
+      <_WinUIPublishPri Include="$(OutDir)$(AssemblyName).pri" />
+      <!-- Assets\（含多级子目录） -->
+      <_WinUIPublishAsset Include="$(OutDir)Assets\**\*.*" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <_WinUIPublishXamlArtifact Include="@(_WinUIPublishRootXaml)">
+        <RelativePath>%(Filename)%(Extension)</RelativePath>
+      </_WinUIPublishXamlArtifact>
+      <_WinUIPublishXamlArtifact Include="@(_WinUIPublishViewXaml)">
+        <RelativePath>Views\%(Filename)%(Extension)</RelativePath>
+      </_WinUIPublishXamlArtifact>
+      <_WinUIPublishXamlArtifact Include="@(_WinUIPublishPri)">
+        <RelativePath>%(Filename)%(Extension)</RelativePath>
+      </_WinUIPublishXamlArtifact>
+      <_WinUIPublishXamlArtifact Include="@(_WinUIPublishAsset)">
+        <RelativePath>Assets\%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+      </_WinUIPublishXamlArtifact>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ResolvedFileToPublish Include="@(_WinUIPublishXamlArtifact)">
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+
+    <Message Importance="normal"
+             Text="publish 补入 WinUI 产物: @(_WinUIPublishXamlArtifact->'%(RelativePath)', ', ')" />
+  </Target>
+</Project>

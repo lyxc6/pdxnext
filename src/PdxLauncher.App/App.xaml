@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Application
+    x:Class="PdxLauncher.App.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!--
+                只保留本项目真正需要的语义画笔：窗口底色 / 整窗遮罩 / 导航栏玻璃 / 页面纱 / 卡片（含玻璃）/
+                卡片描边 / 图片占位 / 遮罩文字。
+                其余一律用 WinUI 内置主题资源（TextFillColor*、CardBackgroundFillColor*、SubtleFillColor*、
+                LayerFillColor*），这样 Light / Dark / HighContrast 由框架统一负责，切换主题不会缺资源。
+
+                整窗背景（方案 B）：游戏主题背景图铺满窗口，标题栏与 NavigationView 浮在图上，所以
+                  · PdxWindowScrimBrush 压在图与文字之间，保证对比度；
+                  · PdxPaneGlassBrush 是左栏的玻璃底，透过它能看见图；
+                  · PdxPageVeilBrush 是内容页的纱，主页例外（Transparent，直接把图当主视觉）；
+                  · PdxCardGlassBrush 是主页卡片的玻璃底；
+                  · PdxTopScrimBrush 是标题栏条顶部的渐隐压暗，保证标题在浅色/高亮主题图上仍读得清。
+                纱/玻璃就是页面底色加 alpha：没有背景图时压在同色底上等于原色，视觉与旧版一致。
+
+                下面四个 NavigationView* key 是 WinUI 框架模板（generic.xaml）用的内部资源名，
+                必须在三套主题字典里都覆盖，否则左栏会退回亚克力/不透明底，把整窗背景挡住：
+                  NavigationViewDefaultPaneBackground / NavigationViewExpandedPaneBackground —— 根 SplitView 的 PaneBackground
+                  NavigationViewTopPaneBackground —— 顶部导航形态用
+                  NavigationViewContentBackground —— 内容宿主 ContentGrid 的底色
+            -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="PdxWindowBackgroundBrush" Color="#FF1B1B1F" />
+                    <LinearGradientBrush x:Key="PdxWindowScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#26000000" Offset="0" />
+                        <GradientStop Color="#66000000" Offset="0.5" />
+                        <GradientStop Color="#B3000000" Offset="1" />
+                    </LinearGradientBrush>
+                    <LinearGradientBrush x:Key="PdxTopScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#B3000000" Offset="0" />
+                        <GradientStop Color="#4D000000" Offset="0.62" />
+                        <GradientStop Color="#00000000" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="PdxPaneGlassBrush" Color="#B31B1B1F" />
+                    <SolidColorBrush x:Key="PdxPageVeilBrush" Color="#991B1B1F" />
+                    <SolidColorBrush x:Key="PdxCardBackgroundBrush" Color="#FF27272C" />
+                    <SolidColorBrush x:Key="PdxCardGlassBrush" Color="#D927272C" />
+                    <SolidColorBrush x:Key="PdxCardStrokeBrush" Color="#33FFFFFF" />
+                    <SolidColorBrush x:Key="PdxPlaceholderBackgroundBrush" Color="#FF303036" />
+                    <SolidColorBrush x:Key="PdxOverlayBrush" Color="#B3000000" />
+                    <SolidColorBrush x:Key="PdxOverlayTextBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="PdxCardHoverTintBrush" Color="#14FFFFFF" />
+                    <SolidColorBrush x:Key="PdxCardHoverStrokeBrush" Color="#8CFFFFFF" />
+
+                    <StaticResource x:Key="NavigationViewDefaultPaneBackground" ResourceKey="PdxPaneGlassBrush" />
+                    <StaticResource x:Key="NavigationViewExpandedPaneBackground" ResourceKey="PdxPaneGlassBrush" />
+                    <StaticResource x:Key="NavigationViewTopPaneBackground" ResourceKey="PdxPaneGlassBrush" />
+                    <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="PdxWindowBackgroundBrush" Color="#FFF3F3F3" />
+                    <LinearGradientBrush x:Key="PdxWindowScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#33FFFFFF" Offset="0" />
+                        <GradientStop Color="#80FFFFFF" Offset="0.5" />
+                        <GradientStop Color="#CCFFFFFF" Offset="1" />
+                    </LinearGradientBrush>
+                    <LinearGradientBrush x:Key="PdxTopScrimBrush" StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Color="#B3FFFFFF" Offset="0" />
+                        <GradientStop Color="#4DFFFFFF" Offset="0.62" />
+                        <GradientStop Color="#00FFFFFF" Offset="1" />
+                    </LinearGradientBrush>
+                    <SolidColorBrush x:Key="PdxPaneGlassBrush" Color="#B3F3F3F3" />
+                    <SolidColorBrush x:Key="PdxPageVeilBrush" Color="#99FFFFFF" />
+                    <SolidColorBrush x:Key="PdxCardBackgroundBrush" Color="#FFF7F7F7" />
+                    <SolidColorBrush x:Key="PdxCardGlassBrush" Color="#D9F7F7F7" />
+                    <SolidColorBrush x:Key="PdxCardStrokeBrush" Color="#22000000" />
+                    <SolidColorBrush x:Key="PdxPlaceholderBackgroundBrush" Color="#FFE6E6E6" />
+                    <SolidColorBrush x:Key="PdxOverlayBrush" Color="#99FFFFFF" />
+                    <SolidColorBrush x:Key="PdxOverlayTextBrush" Color="#FF1A1A1A" />
+                    <SolidColorBrush x:Key="PdxCardHoverTintBrush" Color="#0D000000" />
+                    <SolidColorBrush x:Key="PdxCardHoverStrokeBrush" Color="#66000000" />
+
+                    <StaticResource x:Key="NavigationViewDefaultPaneBackground" ResourceKey="PdxPaneGlassBrush" />
+                    <StaticResource x:Key="NavigationViewExpandedPaneBackground" ResourceKey="PdxPaneGlassBrush" />
+                    <StaticResource x:Key="NavigationViewTopPaneBackground" ResourceKey="PdxPaneGlassBrush" />
+                    <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="PdxWindowBackgroundBrush" Color="#FF000000" />
+                    <!-- 高对比度不显示装饰图：纯色遮罩把整窗压黑，保证前景文字与系统色对比度。 -->
+                    <SolidColorBrush x:Key="PdxWindowScrimBrush" Color="#FF000000" />
+                    <SolidColorBrush x:Key="PdxTopScrimBrush" Color="#FF000000" />
+                    <SolidColorBrush x:Key="PdxPaneGlassBrush" Color="#FF000000" />
+                    <SolidColorBrush x:Key="PdxPageVeilBrush" Color="#FF000000" />
+                    <SolidColorBrush x:Key="PdxCardBackgroundBrush" Color="#FF000000" />
+                    <SolidColorBrush x:Key="PdxCardGlassBrush" Color="#FF000000" />
+                    <SolidColorBrush x:Key="PdxCardStrokeBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="PdxPlaceholderBackgroundBrush" Color="#FF000000" />
+                    <SolidColorBrush x:Key="PdxOverlayBrush" Color="#B3000000" />
+                    <SolidColorBrush x:Key="PdxOverlayTextBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="PdxCardHoverTintBrush" Color="#33FFFFFF" />
+                    <SolidColorBrush x:Key="PdxCardHoverStrokeBrush" Color="#FFFFFFFF" />
+
+                    <StaticResource x:Key="NavigationViewDefaultPaneBackground" ResourceKey="PdxPaneGlassBrush" />
+                    <StaticResource x:Key="NavigationViewExpandedPaneBackground" ResourceKey="PdxPaneGlassBrush" />
+                    <StaticResource x:Key="NavigationViewTopPaneBackground" ResourceKey="PdxPaneGlassBrush" />
+                    <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

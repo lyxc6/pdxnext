@@ -1,0 +1,24 @@
+{
+  "background": {
+    "backgroundImage": "app-background.png"
+  },
+  "logo": {
+    "imagePath": "logo.svg"
+  },
+  "button": {
+    "backgroundImage": "button.png",
+    "color": "hsla(53, 31%, 85%, 0.9)",
+    "fontSize": 24,
+    "fontWeight": 200,
+    "fontPath": "fonts/CormorantGaramond-Regular.ttf"
+  },
+  "buttonHover": {
+    "color": "hsla(53, 36%, 95%, 1)"
+  },
+  "modsPlaceholder": {
+    "imagePath": "mods-placeholder-background.png"
+  },
+  "newsPlaceholder": {
+    "imagePath": "news-placeholder-background.png"
+  }
+}

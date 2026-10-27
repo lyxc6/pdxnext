@@ -1,0 +1,137 @@
+{
+  "main": {
+    "slotType": "main",
+    "contentGroups": [
+      {
+        "id": "content-group-main",
+        "settings": {
+          "weight": 2,
+          "visible": {
+            "from": "2024-01-01T00:00:00Z",
+            "until": "2099-12-31T23:59:59Z"
+          }
+        },
+        "contentItems": [
+          {
+            "id": "NmFkMWYxOWE1Y2QyN2EwMDg4YTM4NzFjXyRfY2M9NmI2NjIyNjUtNTk4OC0zZjk0LTAzZTEtYWNkNDgxNDgyYzY4Jm12PTZhZDFmMTlhNWNkMjdhMDA4OGEzODcyMSZwaT1jbXA=",
+            "content": {
+              "title": {
+                "en": ""
+              },
+              "text": {
+                "en": ""
+              },
+              "image": {
+                "src": "https://braze-images.com/appboy/communication/marketing/content_cards_message_variations/images/6ad1f19a5cd27a0088a38721/03b1c94cf65de8046e8e82454f7f7a3616a655a8/original.gif?1792143864",
+                "opacity": 100
+              },
+              "link": {
+                "href": "https://www.paradoxinteractive.com/games/crusader-kings-iii/add-ons/crusader-kings-iii-silk-and-silver?utm_source=launcher-ck&utm_medium=launcherv2&utm_content=main&utm_term=cawe&utm_campaign=sisi_rda_20261019_anon"
+              },
+              "video": {
+                "src": null
+              }
+            },
+            "contentType": "image+button",
+            "delay": 5000,
+            "image": {
+              "backgroundImage": "url(https://braze-images.com/appboy/communication/marketing/content_cards_message_variations/images/6ad1f19a5cd27a0088a38721/03b1c94cf65de8046e8e82454f7f7a3616a655a8/original.gif?1792143864)",
+              "opacity": 1
+            },
+            "localizedTitle": ""
+          }
+        ]
+      }
+    ]
+  },
+  "secondary-2": {
+    "slotType": "secondary-2",
+    "contentGroups": [
+      {
+        "id": "content-group-secondary-2",
+        "settings": {
+          "weight": 1,
+          "visible": {
+            "from": "2024-01-01T00:00:00Z",
+            "until": "2099-12-31T23:59:59Z"
+          }
+        },
+        "contentItems": [
+          {
+            "id": "NmE2MzYzNThhY2Y2MTkwMDg2ZjhmNTU1XyRfY2M9OTZiZGU3OTEtMTQ2OS01ZTBiLTcwYzctZTYyNGNkNDc3NzY0Jm12PTZhNjM2MzU4YWNmNjE5MDA4NmY4ZjU1MyZwaT1jbXA=",
+            "content": {
+              "title": {
+                "en": ""
+              },
+              "text": {
+                "en": ""
+              },
+              "image": {
+                "src": "https://braze-images.com/appboy/communication/marketing/content_cards_message_variations/images/6a636358acf6190086f8f553/fb4d687dcd2a7d0358208bc1a96a40a71bfa7499/original.jpg?1784898395",
+                "opacity": 100
+              },
+              "link": {
+                "href": "pdxlaun://accountonboarding"
+              },
+              "video": {
+                "src": null
+              }
+            },
+            "contentType": "image+button",
+            "delay": 5000,
+            "image": {
+              "backgroundImage": "url(https://braze-images.com/appboy/communication/marketing/content_cards_message_variations/images/6a636358acf6190086f8f553/fb4d687dcd2a7d0358208bc1a96a40a71bfa7499/original.jpg?1784898395)",
+              "opacity": 1
+            },
+            "localizedTitle": ""
+          }
+        ]
+      }
+    ]
+  },
+  "secondary-1": {
+    "slotType": "secondary-1",
+    "contentGroups": [
+      {
+        "id": "content-group-secondary-1",
+        "settings": {
+          "weight": 1,
+          "visible": {
+            "from": "2024-01-01T00:00:00Z",
+            "until": "2099-12-31T23:59:59Z"
+          }
+        },
+        "contentItems": [
+          {
+            "id": "NmE2MzYxZjQ4MmZiODIwMDg2NjE3OTI2XyRfY2M9NWUwNjkyN2MtNzUyNy1mNjNjLTMyNjAtYTRjMGQ2ZTFkZDhkJm12PTZhNjM2MWY0ODJmYjgyMDA4NjYxNzkyYSZwaT1jbXA=",
+            "content": {
+              "title": {
+                "en": ""
+              },
+              "text": {
+                "en": ""
+              },
+              "image": {
+                "src": "https://braze-images.com/appboy/communication/marketing/content_cards_message_variations/images/6a6361f482fb82008661792a/a4f02995d396a2af6f46533ead63c1e28e397044/original.jpg?1784898040",
+                "opacity": 100
+              },
+              "link": {
+                "href": "https://www.paradoxinteractive.com/games/crusader-kings-iii/legends-of-crusader-kings-iii/quiz?utm_source=launcher-ck&utm_medium=launcherv2&utm_content=sec1&utm_term=cawe&utm_campaign=lock_ck_20250416_quiz_anon"
+              },
+              "video": {
+                "src": null
+              }
+            },
+            "contentType": "image+button",
+            "delay": 5000,
+            "image": {
+              "backgroundImage": "url(https://braze-images.com/appboy/communication/marketing/content_cards_message_variations/images/6a6361f482fb82008661792a/a4f02995d396a2af6f46533ead63c1e28e397044/original.jpg?1784898040)",
+              "opacity": 1
+            },
+            "localizedTitle": ""
+          }
+        ]
+      }
+    ]
+  }
+}

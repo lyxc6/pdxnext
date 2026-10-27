@@ -1,0 +1,24 @@
+{
+  "appIcon": {
+    "appIconPath": "app-icon.png"
+  },
+  "appTaskbarIcon": {
+    "appIconPath": "app-icon.ico"
+  },
+  "background": {
+    "backgroundImage": "launcher-background.jpg"
+  },
+  "logo": {
+    "imagePath": "launcher-logo.png"
+  },
+  "button": {
+    "backgroundImage": "launcher-button.jpg",
+    "color": "hsla(53, 36%, 90%, 0.9)",
+    "fontSize": 24,
+    "fontWeight": 200,
+    "fontPath": "fonts/CormorantGaramond-Regular.ttf"
+  },
+  "buttonHover": {
+    "color": "hsla(53, 36%, 95%, 1)"
+  }
+}

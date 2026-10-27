@@ -1,0 +1,66 @@
+{
+  "main": {
+    "slotType": "main",
+    "contentGroups": [
+      {
+        "id": "content-group-expired-main",
+        "settings": {
+          "weight": 2,
+          "visible": {
+            "from": "2020-01-01T00:00:00Z",
+            "until": "2020-06-01T00:00:00Z"
+          }
+        },
+        "contentItems": [
+          {
+            "id": "expired-main",
+            "content": {
+              "title": { "en": "下班了" },
+              "image": { "src": "https://braze-images.com/expired/main.gif" },
+              "link": { "href": "https://www.paradoxinteractive.com/expired" }
+            },
+            "contentType": "image+button"
+          }
+        ]
+      }
+    ]
+  },
+  "secondary-1": {
+    "slotType": "secondary-1",
+    "contentGroups": [
+      {
+        "id": "content-group-expired-secondary-1",
+        "settings": {
+          "weight": 1,
+          "visible": { "until": "2020-06-01T00:00:00Z" }
+        },
+        "contentItems": [
+          {
+            "id": "expired-secondary-1",
+            "content": { "title": { "en": "过期一" } },
+            "contentType": "image+button"
+          }
+        ]
+      }
+    ]
+  },
+  "secondary-2": {
+    "slotType": "secondary-2",
+    "contentGroups": [
+      {
+        "id": "content-group-expired-secondary-2",
+        "settings": {
+          "weight": 1,
+          "visible": { "from": "2099-01-01T00:00:00Z" }
+        },
+        "contentItems": [
+          {
+            "id": "expired-secondary-2",
+            "content": { "title": { "en": "还没上线" } },
+            "contentType": "image+button"
+          }
+        ]
+      }
+    ]
+  }
+}

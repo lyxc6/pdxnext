@@ -1,0 +1,40 @@
+# PdxNext 构建脚本消息表 —— UTF-8（无 BOM），格式 KEY:文本
+# 只能由 scripts\msg.cmd 读取；请勿把中文写回顶层 .cmd 文件。
+
+B_TITLE:  PdxNext 构建（Release + 自检）
+B_NODOTNET:[错误] 找不到 dotnet。请安装 .NET SDK 10 或更高版本。
+B_STEP1:[1/3] 构建解决方案...
+B_FAILBUILD:[失败] 构建失败。
+B_STEP2:[2/3] 运行自检...
+B_FAILCHECK:[失败] 自检未通过。
+B_STEP3:[3/3] 完成。
+B_EXE:可执行文件:
+
+D_TITLE1:[1/2] 构建 Debug 解决方案...
+D_NODOTNET:[错误] 找不到 dotnet。
+D_TITLE2:[2/2] 运行自检...
+D_EXE:可执行文件:
+
+R_NOEXE:[错误] 找不到 Release 可执行文件，先运行 build.cmd，或改用 run-debug.cmd。
+R_EXPECT:        期望路径:
+
+RD_NOEXE:[错误] 找不到 Debug 可执行文件，先运行 build-debug.cmd 或 build.cmd。
+RD_EXPECT:        期望路径:
+
+P_TITLE:  PdxNext 发布（Release + 自包含）
+P_NODOTNET:[错误] 找不到 dotnet。请安装 .NET SDK 10 或更高版本。
+P_STEP1:[1/4] 构建 Release...
+P_FAILBUILD:[失败] 构建失败。
+P_STEP2:[2/4] 运行自检...
+P_FAILCHECK:[失败] 自检未通过，已停止发布。
+P_CHECKOK:      自检通过。
+P_STEP3:[3/4] 发布...
+P_FAILPUB:[失败] 发布失败。
+P_STEP4:[4/4] 拷贝到
+P_FAILDIR:[失败] 拷贝到目标目录失败。
+P_DONE:完成。
+P_EXE:  可执行文件:
+P_SIZE:  目录大小:   约 230 MB（自包含，目标机无需 .NET 运行时、无需 Windows App SDK Runtime）
+P_BROKEN1:[失败] publish 产物缺少 WinUI 关键文件（App.xbf / Views\*.xbf / .pri / Assets）。
+P_BROKEN2:       请确认 src\PdxLauncher.App\PdxLauncher.App.csproj 里的
+P_BROKEN3:       AddWinUIXamlArtifactsToPublish 目标仍然存在。

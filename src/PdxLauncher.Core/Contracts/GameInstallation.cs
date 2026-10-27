@@ -1,0 +1,30 @@
+namespace PdxLauncher.Core.Contracts;
+
+/// <summary>
+/// 一款已安装的 Paradox 游戏。所有路径均为绝对路径；GameDataDir 已展开 %USER_DOCUMENTS%。
+/// </summary>
+public sealed record GameInstallation(
+    string GameId,
+    string DisplayName,
+    string Version,
+    string InstallRoot,
+    string LauncherSettingsPath,
+    LoadFileFormat Format,
+    string GameDataDir,
+    string DlcPath,
+    string ModDir,
+    string ExePath,
+    IReadOnlyList<string> ExeArgs,
+    IReadOnlyList<AlternativeExecutable> Alternatives,
+    ThemeSpec Theme,
+    string? BrowserDlcUrl,
+    string? BrowserModUrl,
+    int? SteamAppId,
+    GameSupport Support)
+{
+    /// <summary>能识别并展示（不代表能管理内容）；等价于 <c>Support != Unsupported</c>。</summary>
+    public bool IsSupported => Support != GameSupport.Unsupported;
+
+    /// <summary>能否接管播放集 / mod / DLC / 加载文件；只有 <see cref="GameSupport.Full"/> 为 true。</summary>
+    public bool SupportsContentManagement => Support == GameSupport.Full;
+}

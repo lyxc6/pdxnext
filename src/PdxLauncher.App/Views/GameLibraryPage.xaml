@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="PdxLauncher.App.Views.GameLibraryPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:svc="using:PdxLauncher.App.Services"
+    NavigationCacheMode="Required"
+    Background="{ThemeResource PdxPageVeilBrush}">
+
+    <Page.Resources>
+        <!--
+            GridView 默认的 GridViewItem 容器比卡片大（单元格 336x248、容器 332x244、卡片 320x232），
+            pointer-over 底色与 1px 描边会从卡片右侧/下侧露出 12px 的 L 形色带，看起来像重影。
+            这里把容器 chrome 置透明，hover 反馈改由卡片自身的底色/描边表达。
+        -->
+        <SolidColorBrush x:Key="GridViewItemBackgroundPointerOver" Color="Transparent" />
+        <SolidColorBrush x:Key="GridViewItemBackgroundPressed" Color="Transparent" />
+        <SolidColorBrush x:Key="GridViewItemPointerOverBorderBrush" Color="Transparent" />
+        <!-- 容器圆角与卡片（8）对齐：键盘焦点框、以及将来若恢复容器底色，都不会与卡片错位。 -->
+        <CornerRadius x:Key="GridViewItemCornerRadius">8</CornerRadius>
+    </Page.Resources>
+
+    <Grid Padding="24" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- 页头：标题 + 计数 + 刷新 -->
+        <Grid Grid.Row="0" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Spacing="4">
+                <TextBlock
+                    AutomationProperties.AutomationId="txtLibraryTitle"
+                    Style="{StaticResource TitleTextBlockStyle}"
+                    Text="{x:Bind L.LibraryTitle, Mode=OneWay}" />
+                <TextBlock
+                    AutomationProperties.AutomationId="txtLibraryCount"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    Text="{x:Bind ViewModel.CountText, Mode=OneWay}" />
+            </StackPanel>
+            <StackPanel
+                Grid.Column="1"
+                Orientation="Horizontal"
+                Spacing="8"
+                VerticalAlignment="Center">
+                <ProgressRing
+                    Width="20"
+                    Height="20"
+                    AutomationProperties.AutomationId="ringLibraryBusy"
+                    IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
+                <Button
+                    AutomationProperties.AutomationId="btnRefreshLibrary"
+                    AutomationProperties.Name="{x:Bind L.LibraryRefreshName, Mode=OneWay}"
+                    Click="OnRefreshClick"
+                    Content="{x:Bind L.CommonRefresh, Mode=OneWay}"
+                    IsEnabled="{x:Bind ViewModel.IsRefreshEnabled, Mode=OneWay}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- 游戏卡片 -->
+        <GridView
+            x:Name="GamesGrid"
+            Grid.Row="1"
+            AutomationProperties.AutomationId="gridGames"
+            AutomationProperties.Name="{x:Bind L.LibraryGridName, Mode=OneWay}"
+            ContainerContentChanging="OnGameContainerContentChanging"
+            IsItemClickEnabled="True"
+            ItemClick="OnGameCardClick"
+            ItemsSource="{x:Bind ViewModel.Cards, Mode=OneTime}"
+            SelectionMode="None">
+            <GridView.ItemContainerStyle>
+                <!--
+                    单元格是 336x248，容器在这里吃掉 16px 的行/列间距，于是容器边界 == 卡片边界（320x232）。
+                    默认样式的 Margin="0,0,4,4" + Center 对齐会让卡片贴在容器左上角，hover 底色因此错位。
+                -->
+                <Style TargetType="GridViewItem">
+                    <Setter Property="Margin" Value="0,0,16,16" />
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="MinWidth" Value="0" />
+                    <Setter Property="MinHeight" Value="0" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                </Style>
+            </GridView.ItemContainerStyle>
+            <GridView.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <ItemsWrapGrid
+                        ItemHeight="248"
+                        ItemWidth="336"
+                        Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </GridView.ItemsPanel>
+            <GridView.ItemTemplate>
+                <DataTemplate x:DataType="svc:GameCardItem">
+                    <Border
+                        Background="{ThemeResource PdxCardBackgroundBrush}"
+                        BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        PointerEntered="OnCardPointerEntered"
+                        PointerExited="OnCardPointerExited">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="128" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Background="{ThemeResource PdxPlaceholderBackgroundBrush}">
+                                <Image
+                                    AutomationProperties.AutomationId="{x:Bind CoverAutomationId, Mode=OneTime}"
+                                    AutomationProperties.Name="{x:Bind DisplayName, Mode=OneTime}"
+                                    Source="{x:Bind svc:XamlImage.FromPath(CoverImagePath), Mode=OneTime}"
+                                    Stretch="UniformToFill" />
+                                <Border
+                                    Margin="8"
+                                    Padding="6,2"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    Background="{ThemeResource PdxOverlayBrush}"
+                                    CornerRadius="4"
+                                    Visibility="{x:Bind svc:XamlVisibility.FromBool(HasSupportBadge), Mode=OneTime}">
+                                    <TextBlock
+                                        Foreground="{ThemeResource PdxOverlayTextBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="{x:Bind SupportBadge, Mode=OneTime}" />
+                                </Border>
+                            </Grid>
+
+                            <Grid Grid.Row="1" Padding="12,8,12,10">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <StackPanel Grid.Row="0" Spacing="2">
+                                    <TextBlock
+                                        AutomationProperties.AutomationId="{x:Bind NameAutomationId, Mode=OneTime}"
+                                        MaxLines="1"
+                                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                                        Text="{x:Bind DisplayName, Mode=OneTime}"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        AutomationProperties.AutomationId="{x:Bind VersionAutomationId, Mode=OneTime}"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Style="{StaticResource CaptionTextBlockStyle}"
+                                        Text="{x:Bind VersionText, Mode=OneTime}" />
+                                </StackPanel>
+                                <Button
+                                    Grid.Row="1"
+                                    Margin="0,8,0,0"
+                                    HorizontalAlignment="Left"
+                                    AutomationProperties.AutomationId="{x:Bind LaunchAutomationId, Mode=OneTime}"
+                                    AutomationProperties.Name="{x:Bind DisplayName, Mode=OneTime}"
+                                    Click="OnCardLaunchClick"
+                                    Content="{x:Bind L.LibraryLaunch, Mode=OneWay}" />
+                            </Grid>
+
+                            <!--
+                                悬停反馈：卡片内叠加一层圆角描边（浅色高光 + 细边），pointer 进出时切 Visibility。
+                                不改卡片自身的 Background/BorderBrush —— ThemeResource 画笔在代码里按主题查不到，
+                                查表失败会静默没有 hover；叠加层的画笔由 XAML 解析，一定生效。
+                            -->
+                            <Border
+                                x:Name="CardHoverRing"
+                                Grid.RowSpan="2"
+                                Background="{ThemeResource PdxCardHoverTintBrush}"
+                                BorderBrush="{ThemeResource PdxCardHoverStrokeBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                IsHitTestVisible="False"
+                                Visibility="Collapsed" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </GridView.ItemTemplate>
+        </GridView>
+
+        <!-- 空状态 -->
+        <TextBlock
+            Grid.Row="1"
+            MaxWidth="480"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            AutomationProperties.AutomationId="txtLibraryEmpty"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Style="{StaticResource BodyStrongTextBlockStyle}"
+            Text="{x:Bind L.LibraryEmptyHint, Mode=OneWay}"
+            TextWrapping="Wrap"
+            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasNoCards), Mode=OneWay}" />
+
+        <!-- 底部：状态 + 启动结果 -->
+        <StackPanel Grid.Row="2" Spacing="8">
+            <!-- InfoBar 自己管开合；启动失败的提示不能因为 StatusMessage 为空而被父容器隐藏 -->
+            <InfoBar
+                x:Name="LibraryInfoBar"
+                AutomationProperties.AutomationId="infLibraryLaunch"
+                IsOpen="False"
+                Severity="Error"
+                Title="{x:Bind L.LibraryLaunchFailedTitle, Mode=OneWay}" />
+            <TextBlock
+                AutomationProperties.AutomationId="txtLibraryStatus"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Style="{StaticResource CaptionTextBlockStyle}"
+                Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                TextWrapping="Wrap"
+                Visibility="{x:Bind svc:XamlVisibility.FromString(ViewModel.StatusMessage), Mode=OneWay}" />
+        </StackPanel>
+    </Grid>
+</Page>

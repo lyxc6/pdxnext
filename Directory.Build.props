@@ -1,0 +1,18 @@
+<Project>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <!-- 关闭隐式 using：手工 csc 构建不会注入它们，统一改用各项目的 GlobalUsings.cs，
+         这样 MSBuild 与 tools/manual-build.py 两条构建路径行为完全一致。 -->
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;MVVMTK0045</NoWarn>
+    <!-- MVVMTK0045：CommunityToolkit.Mvvm 8.4.2 不支持 C# 13 的 partial property 写法
+         （实测 [ObservableProperty] public partial string X { get; set; } 会报 CS9248/CS8050），
+         因此全部 ViewModel 统一用字段式 [ObservableProperty]。该警告只针对 Native AOT + WinRT
+         封送场景，本项目不启用 AOT，故显式关闭。 -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

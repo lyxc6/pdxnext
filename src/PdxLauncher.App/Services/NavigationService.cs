@@ -1,0 +1,128 @@
+namespace PdxLauncher.App.Services;
+
+using Microsoft.UI.Xaml.Controls;
+using PdxLauncher.Core.Abstractions;
+
+/// <summary>
+/// 页面导航。NavigationView 的 Tag 是字符串，这里把 Tag 映射成页面类型再交给 Frame。
+/// 页面用无参构造，依赖从 <see cref="AppServices"/> 取；类型解析失败只记 Warn，不崩。
+/// </summary>
+public sealed class NavigationService
+{
+    /// <summary>游戏库页的导航 Tag。</summary>
+    public const string LibraryTag = "library";
+
+    /// <summary>当前游戏主页的导航 Tag。</summary>
+    public const string HomeTag = "home";
+
+    /// <summary>播放集页的导航 Tag。</summary>
+    public const string PlaySetsTag = "playsets";
+
+    /// <summary>Mod 库页的导航 Tag。</summary>
+    public const string ModLibraryTag = "modlibrary";
+
+    /// <summary>DLC 页的导航 Tag。</summary>
+    public const string DlcTag = "dlc";
+
+    /// <summary>设置页的导航 Tag。</summary>
+    public const string SettingsTag = "settings";
+
+    private static readonly Dictionary<string, string> TypeNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [LibraryTag] = "PdxLauncher.App.Views.GameLibraryPage",
+        [HomeTag] = "PdxLauncher.App.Views.HomePage",
+        [PlaySetsTag] = "PdxLauncher.App.Views.ModsPage",
+        [ModLibraryTag] = "PdxLauncher.App.Views.ModLibraryPage",
+        [DlcTag] = "PdxLauncher.App.Views.DlcPage",
+        [SettingsTag] = "PdxLauncher.App.Views.SettingsPage",
+    };
+
+    private readonly IAppLogger _logger;
+
+    public NavigationService(IAppLogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+        _logger = logger;
+    }
+
+    /// <summary>宿主 Frame；由 MainWindow 在构造后注入。</summary>
+    public Frame? Frame { get; set; }
+
+    /// <summary>当前页的导航 Tag；未导航时为 null。</summary>
+    public string? CurrentTag { get; private set; }
+
+    /// <summary>Tag → 页面类型；未知 Tag 或类型未编译进来时返回 null。</summary>
+    public Type? ResolvePageType(string? tag)
+    {
+        if (string.IsNullOrWhiteSpace(tag) || !TypeNames.TryGetValue(tag, out var typeName))
+        {
+            return null;
+        }
+
+        return typeof(NavigationService).Assembly.GetType(typeName, throwOnError: false, ignoreCase: false);
+    }
+
+    /// <summary>按 Tag 导航；成功返回 true。重复导航到当前页会被跳过。</summary>
+    public bool Navigate(string? tag)
+    {
+        if (Frame is null)
+        {
+            _logger.Warn("导航失败：Frame 尚未注入 (" + tag + ")");
+            return false;
+        }
+
+        if (string.Equals(CurrentTag, tag, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var pageType = ResolvePageType(tag);
+        if (pageType is null)
+        {
+            _logger.Warn("导航失败：找不到页面类型 (" + tag + ")");
+            return false;
+        }
+
+        try
+        {
+            var navigated = Frame.Navigate(pageType);
+            if (navigated)
+            {
+                CurrentTag = tag;
+            }
+            else
+            {
+                _logger.Warn("导航失败：Frame.Navigate 返回 false (" + tag + ")");
+            }
+
+            return navigated;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or TypeLoadException)
+        {
+            _logger.Error("导航异常 (" + tag + ")", ex);
+            return false;
+        }
+    }
+
+    /// <summary>回到游戏库页。</summary>
+    public bool GoBackToLibrary() => Navigate(LibraryTag);
+
+    /// <summary>页面类型 → 导航 Tag；用于 Frame.Navigated 之后同步左侧选中项。</summary>
+    public static string? TagForPageType(Type? pageType)
+    {
+        if (pageType?.FullName is not { } fullName)
+        {
+            return null;
+        }
+
+        foreach (var pair in TypeNames)
+        {
+            if (string.Equals(pair.Value, fullName, StringComparison.Ordinal))
+            {
+                return pair.Key;
+            }
+        }
+
+        return null;
+    }
+}

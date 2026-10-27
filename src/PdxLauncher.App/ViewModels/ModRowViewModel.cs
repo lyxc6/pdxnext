@@ -1,0 +1,187 @@
+namespace PdxLauncher.App.ViewModels;
+
+using System.Globalization;
+using System.Windows.Input;
+using CommunityToolkit.Mvvm.Input;
+using PdxLauncher.App.Localization;
+using PdxLauncher.Core.Configuration;
+using PdxLauncher.Core.Contracts;
+
+/// <summary>
+/// 播放集列表里的一行。Core 的 <see cref="PlaySetMod"/> 是不可变 record，
+/// 无法直接双向绑定 ToggleSwitch，所以在这里包一层可变视图模型。
+/// 不引用任何 Microsoft.UI.Xaml 类型：启用、上移下移、移除都通过回调交给 <see cref="ModsViewModel"/>。
+/// </summary>
+public sealed class ModRowViewModel : LocalizedObservableObject
+{
+    private readonly Action<ModRowViewModel>? _onEnabledChanged;
+    private readonly Action<ModRowViewModel, int>? _onMove;
+    private readonly Action<ModRowViewModel>? _onRemove;
+
+    private bool _isEnabled;
+    private int _position;
+    private string? _sizeText;
+    private string _status;
+
+    public ModRowViewModel(
+        PlaySetMod mod,
+        Action<ModRowViewModel>? onEnabledChanged = null,
+        Action<ModRowViewModel, int>? onMove = null,
+        Action<ModRowViewModel>? onRemove = null,
+        int thumbnailSize = ModThumbnailSizes.MediumPixels)
+    {
+        ArgumentNullException.ThrowIfNull(mod);
+
+        ThumbnailSize = thumbnailSize;
+        ModId = mod.ModId;
+        Name = mod.Name;
+        DirPath = mod.DirPath;
+        ArchivePath = mod.ArchivePath;
+        GameRegistryId = mod.GameRegistryId;
+        ThumbnailPath = mod.ThumbnailPath;
+        RequiredVersion = mod.RequiredVersion;
+        SteamId = mod.SteamId;
+        _status = mod.Status;
+        _isEnabled = mod.Enabled;
+        _position = mod.Position;
+
+        _onEnabledChanged = onEnabledChanged;
+        _onMove = onMove;
+        _onRemove = onRemove;
+
+        MoveUpCommand = new RelayCommand(() => _onMove?.Invoke(this, -1));
+        MoveDownCommand = new RelayCommand(() => _onMove?.Invoke(this, 1));
+        RemoveCommand = new RelayCommand(() => _onRemove?.Invoke(this));
+    }
+
+    public Guid ModId { get; }
+
+    public string Name { get; }
+
+    public string DirPath { get; }
+
+    public string? ArchivePath { get; }
+
+    public string GameRegistryId { get; }
+
+    /// <summary>缩略图绝对路径；为空时界面显示占位色块。</summary>
+    public string? ThumbnailPath { get; }
+
+    /// <summary>缩略图边长（像素）：由设置里的「Mod 图片大小」三档（32 / 48 / 72）决定。</summary>
+    public double ThumbnailSize { get; }
+
+    public string RequiredVersion { get; }
+
+    /// <summary>Steam 创意工坊物品 id；没有（本地 mod / 老库）时为 null。</summary>
+    public string? SteamId { get; }
+
+    /// <summary>列表左侧的序号（position + 1），从 1 开始给人看。</summary>
+    public string PositionText => (_position + 1).ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>mod 大小（如 "1.2 MB"）；未知时为空，界面不显示。</summary>
+    public string? SizeText
+    {
+        get => _sizeText;
+        private set
+        {
+            if (SetProperty(ref _sizeText, value))
+            {
+                OnPropertyChanged(nameof(Subtitle));
+            }
+        }
+    }
+
+    /// <summary>
+    /// 名称下方的一行小字：有大小就显示大小（更贴近原版启动器），否则退回注册 id；
+    /// 有 RequiredVersion 时保持旧格式 "v{版本}  ·  {明细}"。
+    /// </summary>
+    public string Subtitle
+    {
+        get
+        {
+            var detail = GameRegistryId;
+            if (_sizeText is { Length: > 0 } size)
+            {
+                detail = size;
+            }
+
+            return string.IsNullOrWhiteSpace(RequiredVersion)
+                ? detail
+                : "v" + RequiredVersion + "  ·  " + detail;
+        }
+    }
+
+    public bool HasThumbnail => !string.IsNullOrWhiteSpace(ThumbnailPath);
+
+    /// <summary>启用开关的自动化 Id（每个 mod 唯一，供 UI 测试定位）。</summary>
+    public string ToggleAutomationId => "modToggle_" + ModId.ToString("N");
+
+    /// <summary>上移按钮的自动化 Id。</summary>
+    public string MoveUpAutomationId => "modMoveUp_" + ModId.ToString("N");
+
+    /// <summary>下移按钮的自动化 Id。</summary>
+    public string MoveDownAutomationId => "modMoveDown_" + ModId.ToString("N");
+
+    /// <summary>移除按钮的自动化 Id。</summary>
+    public string RemoveAutomationId => "modRemove_" + ModId.ToString("N");
+
+    /// <summary>上移一格（由页面按钮的 Command 调用）。</summary>
+    public ICommand MoveUpCommand { get; }
+
+    /// <summary>下移一格。</summary>
+    public ICommand MoveDownCommand { get; }
+
+    /// <summary>从当前播放集中移除（只改内存，需保存后才落盘）。</summary>
+    public ICommand RemoveCommand { get; }
+
+    /// <summary>相对排序位置（0 起），保存时写回 sqlite 的 position 字段。</summary>
+    public int Position
+    {
+        get => _position;
+        set
+        {
+            if (SetProperty(ref _position, value))
+            {
+                OnPropertyChanged(nameof(PositionText));
+            }
+        }
+    }
+
+    public bool IsEnabled
+    {
+        get => _isEnabled;
+        set
+        {
+            if (SetProperty(ref _isEnabled, value))
+            {
+                _onEnabledChanged?.Invoke(this);
+            }
+        }
+    }
+
+    public string Status
+    {
+        get => _status;
+        set => SetProperty(ref _status, value);
+    }
+
+    /// <summary>用 mod 库里的信息补全行细节（目前只有大小，未知则传 null）。</summary>
+    public void SetDetails(string? sizeText)
+    {
+        SizeText = string.IsNullOrWhiteSpace(sizeText) ? null : sizeText;
+    }
+
+    /// <summary>导出成 Core 契约（保存用）。</summary>
+    public PlaySetMod ToPlaySetMod() => new(
+        ModId,
+        Name,
+        DirPath,
+        ArchivePath,
+        GameRegistryId,
+        ThumbnailPath,
+        RequiredVersion,
+        Status,
+        IsEnabled,
+        Position,
+        SteamId);
+}

@@ -1,0 +1,27 @@
+{
+  "main": {
+    "slotType": "main",
+    "contentGroups": [
+      {
+        "id": "content-group-minimal-main",
+        "settings": {
+          "weight": 1,
+          "visible": {
+            "from": "2024-01-01T00:00:00Z",
+            "until": "2099-12-31T23:59:59Z"
+          }
+        },
+        "contentItems": [
+          {
+            "id": "minimal-main",
+            "content": {
+              "title": { "en": "Patch 1.10" },
+              "text": { "en": "A short changelog for the minimal card." }
+            },
+            "contentType": "text"
+          }
+        ]
+      }
+    ]
+  }
+}

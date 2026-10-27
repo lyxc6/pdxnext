@@ -1,0 +1,15 @@
+{
+  "gameId": "prison_architect_pc_console",
+  "exePath": "../Prison Architect64.exe",
+  "exeArgs": [ "--launched-from-launcher" ],
+  "gameDataPath": "%USERPROFILE%/AppData/Local/Introversion/Prison Architect",
+  "ingameSettingsLayoutPath": "launcher-ingame-settings.json",
+  "ingameSettingsPath": "settings.txt",
+  "distPlatform": "steam",
+  "formatVersion": 1,
+  "themeFile": "launcher-assets/theme-settings.json",
+  "browserDlcUrl": "https://store.steampowered.com/dlc/233450/",
+  "browserModUrl": "https://steamcommunity.com/app/233450/workshop/",
+  "version": "The_Jailhouse_1.02",
+  "dlcPath": "./"
+}

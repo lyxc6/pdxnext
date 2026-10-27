@@ -1,0 +1,21 @@
+{
+  "library.title": "Game Library",
+  "library.refreshName": "Refresh game library",
+  "library.gridName": "Installed games list",
+  "library.launch": "Launch",
+  "library.count": "{0} installed games",
+  "library.emptyHint": "No installed Paradox games found. The Steam library and the official launcher's game paths (including %LOCALAPPDATA%\\Programs\\Paradox Interactive\\games) were scanned; make sure the game folder contains launcher-settings.json, or click Refresh in the top right.",
+  "library.notFound": "No installed Paradox games found",
+  "library.found": "Found {0} games",
+  "library.badge.unsupported": "Not supported",
+  "library.badge.launchOnly": "Launch only",
+  "library.version": "Version {0}",
+  "library.versionUnknown": "Version unknown",
+  "library.status.servicesNotReady": "Services are not ready; the Steam library cannot be scanned.",
+  "library.launchFailedTitle": "Launch Failed",
+  "library.launchedTitle": "Launched",
+  "library.processCreated": "Game process created.",
+  "library.processCreatedWithPid": "Game process created (PID {0}).",
+  "library.unknownReason": "Unknown reason",
+  "library.launchCanceled": "Launch canceled"
+}
