@@ -23,6 +23,15 @@ public sealed class ModRowViewModel : LocalizedObservableObject
     private string? _sizeText;
     private string _status;
 
+    /// <summary>可见列表总行数（1 起口径），默认 0 表示尚未由列表写入。</summary>
+    private int _totalCount;
+
+    /// <summary>能否改位次，默认 true；搜索过滤时被列表置为 false。</summary>
+    private bool _canMove = true;
+
+    /// <summary>序号单元格是否处于编辑态。</summary>
+    private bool _isEditingPosition;
+
     public ModRowViewModel(
         PlaySetMod mod,
         Action<ModRowViewModel>? onEnabledChanged = null,
@@ -78,6 +87,12 @@ public sealed class ModRowViewModel : LocalizedObservableObject
     /// <summary>列表左侧的序号（position + 1），从 1 开始给人看。</summary>
     public string PositionText => (_position + 1).ToString(CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// 序号单元格的读屏文案：「第 N 位，共 M 位，可编辑」。
+    /// M 由 <see cref="ModsViewModel"/> 在重建行时写入 <see cref="TotalCount"/>。
+    /// </summary>
+    public string PositionEditName => T(Keys.ModsRowPositionEditName, PositionText, TotalCount);
+
     /// <summary>mod 大小（如 "1.2 MB"）；未知时为空，界面不显示。</summary>
     public string? SizeText
     {
@@ -125,6 +140,12 @@ public sealed class ModRowViewModel : LocalizedObservableObject
     /// <summary>移除按钮的自动化 Id。</summary>
     public string RemoveAutomationId => "modRemove_" + ModId.ToString("N");
 
+    /// <summary>序号显示态按钮（点击进入编辑）的自动化 Id。</summary>
+    public string PositionButtonAutomationId => "modPosition_" + ModId.ToString("N");
+
+    /// <summary>序号编辑态输入框的自动化 Id。</summary>
+    public string PositionEditAutomationId => "modPositionEdit_" + ModId.ToString("N");
+
     /// <summary>上移一格（由页面按钮的 Command 调用）。</summary>
     public ICommand MoveUpCommand { get; }
 
@@ -143,8 +164,45 @@ public sealed class ModRowViewModel : LocalizedObservableObject
             if (SetProperty(ref _position, value))
             {
                 OnPropertyChanged(nameof(PositionText));
+                OnPropertyChanged(nameof(PositionEditName));
             }
         }
+    }
+
+    /// <summary>
+    /// 可见列表总行数（1 起口径），用于序号单元格的读屏文案与输入范围提示。
+    /// 由 <see cref="ModsViewModel.RebuildVisibleMods"/> 在每次重建时写入。
+    /// </summary>
+    public int TotalCount
+    {
+        get => _totalCount;
+        set
+        {
+            if (SetProperty(ref _totalCount, value))
+            {
+                OnPropertyChanged(nameof(PositionEditName));
+            }
+        }
+    }
+
+    /// <summary>
+    /// 本行当前能否改位次：搜索过滤时为 false（可见顺序与真实 position 不一致）。
+    /// 逐行镜像 <see cref="ModsViewModel.CanMoveMods"/>，界面用它禁用序号入口与 ↑↓。
+    /// </summary>
+    public bool CanMove
+    {
+        get => _canMove;
+        set => SetProperty(ref _canMove, value);
+    }
+
+    /// <summary>
+    /// 序号单元格是否处于编辑态。由 code-behind 写入（同一时刻只有一行为 true）。
+    /// 行对象在每次重建时重新创建，因此该状态天然随重建复位。
+    /// </summary>
+    public bool IsEditingPosition
+    {
+        get => _isEditingPosition;
+        set => SetProperty(ref _isEditingPosition, value);
     }
 
     public bool IsEnabled

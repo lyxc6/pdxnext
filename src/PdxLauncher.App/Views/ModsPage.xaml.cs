@@ -3,10 +3,13 @@ namespace PdxLauncher.App.Views;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
 using PdxLauncher.Core.Contracts;
+using Windows.System;
 
 /// <summary>
 /// 播放集页：原版启动器布局（工具条里切换播放集、条目自动保存）或留空占位。
@@ -22,6 +25,9 @@ public sealed partial class ModsPage : Page
 
     /// <summary>重载协调器：连点游戏时取消旧重载，只应用最新那次的结果。</summary>
     private readonly ReloadCoordinator _reload = new();
+
+    /// <summary>当前正在编辑位次的行；null 表示没有行处于编辑态。同一时刻只允许一行。</summary>
+    private ModRowViewModel? _editingRow;
 
     public ModsPage()
     {
@@ -55,6 +61,9 @@ public sealed partial class ModsPage : Page
             AppServices.CurrentGameChanged -= OnCurrentGameChanged;
             AppServices.CurrentGameChanged += OnCurrentGameChanged;
 
+            _viewModel.RowRevealRequested -= OnRowRevealRequested;
+            _viewModel.RowRevealRequested += OnRowRevealRequested;
+
             if (!AppServices.IsInitialized)
             {
                 await _viewModel.LoadAsync(null, _lifetime.Token);
@@ -76,6 +85,7 @@ public sealed partial class ModsPage : Page
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
+        _viewModel.RowRevealRequested -= OnRowRevealRequested;
 
         _lifetime.Cancel();
     }
@@ -472,6 +482,187 @@ public sealed partial class ModsPage : Page
         catch (Exception ex)
         {
             AppServices.Logger.Error("ModsPage 禁用全部失败", ex);
+        }
+    }
+
+    // ------------------------------------------------------------ 排序编号就地编辑
+
+    /// <summary>
+    /// 点击序号进入编辑态。同一时刻只允许一行在编辑：先结束上一行，再置位新行。
+    /// </summary>
+    private void OnPositionEditClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is not FrameworkElement { DataContext: ModRowViewModel row })
+            {
+                return;
+            }
+
+            EndPositionEdit();
+
+            row.IsEditingPosition = true;
+            _editingRow = row;
+            FocusPositionEditor(row);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 进入位次编辑失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 输入框的显隐由 IsEditingPosition 绑定，翻转后要等布局跑完才真正可见，
+    /// 所以排到 DispatcherQueue 里再取文字、抢焦点、全选。
+    /// 这是本仓库第一处程序化聚焦（改动前 grep <c>Focus(FocusState</c> 为零命中），
+    /// 用在不可见控件上会静默失败，因此必须延后。
+    /// </summary>
+    private void FocusPositionEditor(ModRowViewModel row, string? text = null)
+    {
+        if (!DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                var box = FindPositionEditor(row);
+                if (box is null)
+                {
+                    return;
+                }
+
+                box.Text = text ?? row.PositionText;
+                box.Focus(FocusState.Programmatic);
+                box.SelectAll();
+            }
+            catch (Exception ex)
+            {
+                AppServices.Logger.Error("ModsPage 聚焦位次输入框失败", ex);
+            }
+        }))
+        {
+            AppServices.Logger.Warn("ModsPage 无法派发位次输入框聚焦");
+        }
+    }
+
+    /// <summary>
+    /// 按 ModId 找到该行的序号输入框。条目容器会被回收复用，不能靠 x:Name 取控件；
+    /// 行模板里只有这一个 TextBox（序号输入框），所以按类型找是唯一且稳定的。
+    /// </summary>
+    private TextBox? FindPositionEditor(ModRowViewModel row) =>
+        ModList.ContainerFromItem(row) is ListViewItem { ContentTemplateRoot: { } root }
+            ? FindDescendant<TextBox>(root)
+            : null;
+
+    private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
+    {
+        var childCount = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < childCount; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is T match)
+            {
+                return match;
+            }
+
+            if (FindDescendant<T>(child) is { } nested)
+            {
+                return nested;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>回车提交：把输入框原文交给视图模型判定（解析、越界、搜索态都在那边统一处理）。</summary>
+    private void OnPositionEditKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        try
+        {
+            if (e.Key is not (VirtualKey.Enter or VirtualKey.Escape) || sender is not TextBox box)
+            {
+                return;
+            }
+
+            e.Handled = true;
+
+            // 以发送者所在行为准：_editingRow 只是「谁在编辑」的记录，重排会让行对象换人，
+            // 直接从控件的 DataContext 取才是当前这一行的真身。
+            var row = box.DataContext as ModRowViewModel ?? _editingRow;
+            if (row is null)
+            {
+                return;
+            }
+
+            // Esc 一律放弃。
+            if (e.Key == VirtualKey.Escape)
+            {
+                EndPositionEdit();
+                return;
+            }
+
+            // 回车才把原文交出去。注意顺序：非法输入时不能先退出再重进编辑态——
+            // 那样输入框会「隐藏又显示」，其自身失焦事件随即把刚恢复的编辑态又关掉。
+            // 所以先判定，只有不该继续编辑时才退出。
+            if (_viewModel.TryMoveModToPosition(row, box.Text) == PositionEditResult.Invalid)
+            {
+                FocusPositionEditor(row, box.Text);
+                return;
+            }
+
+            EndPositionEdit();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 提交位次编辑失败", ex);
+        }
+    }
+
+    /// <summary>失焦（点别处、Tab 走、窗口切走）一律按取消处理，不做隐式提交。</summary>
+    private void OnPositionEditLostFocus(object sender, RoutedEventArgs e) => EndPositionEdit();
+
+    /// <summary>收回编辑态并清掉跟踪；重复调用安全。</summary>
+    private void EndPositionEdit()
+    {
+        var row = _editingRow;
+        _editingRow = null;
+
+        if (row is null)
+        {
+            return;
+        }
+
+        try
+        {
+            row.IsEditingPosition = false;
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 退出位次编辑失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 排序后把目标行滚进视野。重排会重建所有行对象（ObservableCollection.Reset），
+    /// 虚拟化列表会因此回到顶部，不主动定位用户就看不到结果。
+    /// </summary>
+    private void OnRowRevealRequested(Guid modId)
+    {
+        if (!DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                var row = _viewModel.Mods.FirstOrDefault(m => m.ModId == modId);
+                if (row is not null)
+                {
+                    ModList.ScrollIntoView(row, ScrollIntoViewAlignment.Default);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppServices.Logger.Error("ModsPage 滚动到目标行失败", ex);
+            }
+        }))
+        {
+            AppServices.Logger.Warn("ModsPage 无法派发滚动到目标行");
         }
     }
 

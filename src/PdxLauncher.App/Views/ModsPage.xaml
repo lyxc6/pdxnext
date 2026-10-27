@@ -156,7 +156,7 @@
                         <DataTemplate x:DataType="vm:ModRowViewModel">
                             <Grid ColumnSpacing="10" Padding="4,6">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="24" />
+                                    <ColumnDefinition Width="40" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
@@ -164,13 +164,39 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <!-- 序号 -->
-                                <TextBlock Grid.Column="0"
-                                           Text="{x:Bind PositionText, Mode=OneWay}"
-                                           Style="{StaticResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           TextAlignment="Right"
-                                           VerticalAlignment="Center" />
+                                <!-- 序号：显示态是透明 Button（点击进入编辑；用 Button 而非 TextBlock 是为了保住
+                                     Tab 可达与 ≥24×24 命中区），编辑态是就地 TextBox。两层按 IsEditingPosition 互斥显隐。
+                                     列宽 24→40 是为容纳三位数序号与输入框（1040 最小窗宽 + 32/48/72 缩略图下不破版）。 -->
+                                <Grid Grid.Column="0" VerticalAlignment="Center">
+                                    <Button x:Name="PositionButton"
+                                            Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(IsEditingPosition), Mode=OneWay}"
+                                            IsEnabled="{x:Bind CanMove, Mode=OneWay}"
+                                            Click="OnPositionEditClick"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Padding="4,0"
+                                            MinWidth="0"
+                                            MinHeight="0"
+                                            ToolTipService.ToolTip="{x:Bind L.ModsRowPositionToolTip, Mode=OneWay}"
+                                            AutomationProperties.AutomationId="{x:Bind PositionButtonAutomationId, Mode=OneTime}"
+                                            AutomationProperties.Name="{x:Bind PositionEditName, Mode=OneWay}">
+                                        <TextBlock Text="{x:Bind PositionText, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                   TextAlignment="Right" />
+                                    </Button>
+                                    <TextBox x:Name="PositionEditBox"
+                                             Visibility="{x:Bind svc:XamlVisibility.FromBool(IsEditingPosition), Mode=OneWay}"
+                                             MaxWidth="40"
+                                             Padding="2,0"
+                                             HorizontalContentAlignment="Right"
+                                             MaxLength="4"
+                                             InputScope="Number"
+                                             KeyDown="OnPositionEditKeyDown"
+                                             LostFocus="OnPositionEditLostFocus"
+                                             AutomationProperties.AutomationId="{x:Bind PositionEditAutomationId, Mode=OneTime}"
+                                             AutomationProperties.Name="{x:Bind PositionEditName, Mode=OneWay}" />
+                                </Grid>
 
                                 <!-- 缩略图 -->
                                 <Border Grid.Column="1"
@@ -204,15 +230,17 @@
                                               AutomationProperties.AutomationId="{x:Bind ToggleAutomationId, Mode=OneWay}"
                                               AutomationProperties.Name="{x:Bind Name, Mode=OneTime}" />
 
-                                <!-- 上移 / 下移 -->
+                                <!-- 上移 / 下移（搜索态与序号入口一起变灰：绑行上的 CanMove） -->
                                 <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                                     <Button Command="{x:Bind MoveUpCommand, Mode=OneWay}"
                                             Content="↑"
+                                            IsEnabled="{x:Bind CanMove, Mode=OneWay}"
                                             ToolTipService.ToolTip="{x:Bind L.ModsRowMoveUpToolTip, Mode=OneWay}"
                                             AutomationProperties.AutomationId="{x:Bind MoveUpAutomationId, Mode=OneWay}"
                                             AutomationProperties.Name="{x:Bind L.ModsRowMoveUp, Mode=OneWay}" />
                                     <Button Command="{x:Bind MoveDownCommand, Mode=OneWay}"
                                             Content="↓"
+                                            IsEnabled="{x:Bind CanMove, Mode=OneWay}"
                                             ToolTipService.ToolTip="{x:Bind L.ModsRowMoveDownToolTip, Mode=OneWay}"
                                             AutomationProperties.AutomationId="{x:Bind MoveDownAutomationId, Mode=OneWay}"
                                             AutomationProperties.Name="{x:Bind L.ModsRowMoveDown, Mode=OneWay}" />
@@ -270,6 +298,7 @@
                                Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                TextWrapping="Wrap"
+                               AutomationProperties.LiveSetting="Assertive"
                                AutomationProperties.AutomationId="txtModsStatus"
                                AutomationProperties.Name="{x:Bind L.ModsStatusName, Mode=OneWay}" />
 

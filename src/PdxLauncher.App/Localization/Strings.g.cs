@@ -230,9 +230,11 @@ public sealed partial class Localizer
         ["mods.playSet.switcherName"] = "当前播放集",
         ["mods.playSet.switcherToolTip"] = "切换播放集只切换查看目标，点「激活播放集」后游戏才会使用它",
         ["mods.row.moveDown"] = "下移",
-        ["mods.row.moveDownToolTip"] = "下移（position + 1）",
+        ["mods.row.moveDownToolTip"] = "下移一位",
         ["mods.row.moveUp"] = "上移",
-        ["mods.row.moveUpToolTip"] = "上移（position - 1）",
+        ["mods.row.moveUpToolTip"] = "上移一位",
+        ["mods.row.positionEditName"] = "第 {0} 位，共 {1} 位，可编辑",
+        ["mods.row.positionToolTip"] = "点击修改位次：输入目标序号后按回车（其余行依次顺移）",
         ["mods.row.remove"] = "从播放集中移除",
         ["mods.row.removeToolTip"] = "从播放集中移除（自动保存）",
         ["mods.status.activateFailed"] = "激活失败：{0}",
@@ -257,6 +259,7 @@ public sealed partial class Localizer
         ["mods.status.deletedActivated"] = "已删除播放集「{0}」，已自动激活「{1}」并写入加载文件",
         ["mods.status.deletedActivatedNoLoadFile"] = "已删除播放集「{0}」，已自动激活「{1}」，但写入加载文件失败",
         ["mods.status.deletedInactive"] = "已删除播放集「{0}」（激活状态未变）",
+        ["mods.status.invalidPosition"] = "位次无效：请输入 1–{0} 之间的整数",
         ["mods.status.loadFailed"] = "加载失败：{0}",
         ["mods.status.loadedPlaySets"] = "已加载 {0} 个播放集",
         ["mods.status.modDisabled"] = "已禁用「{0}」（自动保存中）",
@@ -266,7 +269,7 @@ public sealed partial class Localizer
         ["mods.status.name"] = "状态",
         ["mods.status.noModsAdded"] = "没有添加任何 mod",
         ["mods.status.noPlaySets"] = "该游戏还没有播放集，点「新建」创建一个",
-        ["mods.status.orderMoved"] = "已调整顺序：position {0} → {1}（自动保存中）",
+        ["mods.status.orderMoved"] = "已调整顺序：「{0}」第 {1} 位 → 第 {2} 位（自动保存中，其余行依次顺移）",
         ["mods.status.readLibraryFailed"] = "读取 mod 库失败：{0}",
         ["mods.status.readModsFailed"] = "读取 mod 失败：{0}",
         ["mods.status.renameFailed"] = "重命名失败",
@@ -799,9 +802,11 @@ public sealed partial class Localizer
         ["mods.playSet.switcherName"] = "Current Play Set",
         ["mods.playSet.switcherToolTip"] = "Switching play sets only changes what you view; click Activate Play Set to apply it to the game",
         ["mods.row.moveDown"] = "Move Down",
-        ["mods.row.moveDownToolTip"] = "Move down (position + 1)",
+        ["mods.row.moveDownToolTip"] = "Move down one row",
         ["mods.row.moveUp"] = "Move Up",
-        ["mods.row.moveUpToolTip"] = "Move up (position - 1)",
+        ["mods.row.moveUpToolTip"] = "Move up one row",
+        ["mods.row.positionEditName"] = "Position {0} of {1}, editable",
+        ["mods.row.positionToolTip"] = "Click to change position: type the target number and press Enter (other rows shift accordingly)",
         ["mods.row.remove"] = "Remove from Play Set",
         ["mods.row.removeToolTip"] = "Remove from this play set (auto-saved)",
         ["mods.status.activateFailed"] = "Activation failed: {0}",
@@ -826,6 +831,7 @@ public sealed partial class Localizer
         ["mods.status.deletedActivated"] = "Deleted play set \"{0}\"; activated \"{1}\" and wrote the load file",
         ["mods.status.deletedActivatedNoLoadFile"] = "Deleted play set \"{0}\"; activated \"{1}\" but writing the load file failed",
         ["mods.status.deletedInactive"] = "Deleted play set \"{0}\" (activation unchanged)",
+        ["mods.status.invalidPosition"] = "Invalid position: enter a whole number between 1 and {0}",
         ["mods.status.loadFailed"] = "Failed to load: {0}",
         ["mods.status.loadedPlaySets"] = "Loaded {0} play sets",
         ["mods.status.modDisabled"] = "Disabled \"{0}\" (auto-saving)",
@@ -835,7 +841,7 @@ public sealed partial class Localizer
         ["mods.status.name"] = "Status",
         ["mods.status.noModsAdded"] = "No mods were added",
         ["mods.status.noPlaySets"] = "This game has no play sets yet. Click New to create one.",
-        ["mods.status.orderMoved"] = "Reordered: position {0} → {1} (auto-saving)",
+        ["mods.status.orderMoved"] = "Reordered: \"{0}\" moved from row {1} to row {2} (auto-saving; other rows shift accordingly)",
         ["mods.status.readLibraryFailed"] = "Failed to read the mod library: {0}",
         ["mods.status.readModsFailed"] = "Failed to read mods: {0}",
         ["mods.status.renameFailed"] = "Rename failed",
@@ -1371,6 +1377,8 @@ public sealed partial class Localizer
         ("mods.row.moveDownToolTip", "ModsRowMoveDownToolTip"),
         ("mods.row.moveUp", "ModsRowMoveUp"),
         ("mods.row.moveUpToolTip", "ModsRowMoveUpToolTip"),
+        ("mods.row.positionEditName", "ModsRowPositionEditName"),
+        ("mods.row.positionToolTip", "ModsRowPositionToolTip"),
         ("mods.row.remove", "ModsRowRemove"),
         ("mods.row.removeToolTip", "ModsRowRemoveToolTip"),
         ("mods.status.activateFailed", "ModsStatusActivateFailed"),
@@ -1395,6 +1403,7 @@ public sealed partial class Localizer
         ("mods.status.deletedActivated", "ModsStatusDeletedActivated"),
         ("mods.status.deletedActivatedNoLoadFile", "ModsStatusDeletedActivatedNoLoadFile"),
         ("mods.status.deletedInactive", "ModsStatusDeletedInactive"),
+        ("mods.status.invalidPosition", "ModsStatusInvalidPosition"),
         ("mods.status.loadFailed", "ModsStatusLoadFailed"),
         ("mods.status.loadedPlaySets", "ModsStatusLoadedPlaySets"),
         ("mods.status.modDisabled", "ModsStatusModDisabled"),
@@ -1938,6 +1947,8 @@ public sealed partial class Localizer
     public string ModsRowMoveDownToolTip => Format("mods.row.moveDownToolTip");
     public string ModsRowMoveUp => Format("mods.row.moveUp");
     public string ModsRowMoveUpToolTip => Format("mods.row.moveUpToolTip");
+    public string ModsRowPositionEditName => Format("mods.row.positionEditName");
+    public string ModsRowPositionToolTip => Format("mods.row.positionToolTip");
     public string ModsRowRemove => Format("mods.row.remove");
     public string ModsRowRemoveToolTip => Format("mods.row.removeToolTip");
     public string ModsStatusActivateFailed => Format("mods.status.activateFailed");
@@ -1962,6 +1973,7 @@ public sealed partial class Localizer
     public string ModsStatusDeletedActivated => Format("mods.status.deletedActivated");
     public string ModsStatusDeletedActivatedNoLoadFile => Format("mods.status.deletedActivatedNoLoadFile");
     public string ModsStatusDeletedInactive => Format("mods.status.deletedInactive");
+    public string ModsStatusInvalidPosition => Format("mods.status.invalidPosition");
     public string ModsStatusLoadFailed => Format("mods.status.loadFailed");
     public string ModsStatusLoadedPlaySets => Format("mods.status.loadedPlaySets");
     public string ModsStatusModDisabled => Format("mods.status.modDisabled");
@@ -2508,6 +2520,8 @@ internal static class Keys
     public const string ModsRowMoveDownToolTip = "mods.row.moveDownToolTip";
     public const string ModsRowMoveUp = "mods.row.moveUp";
     public const string ModsRowMoveUpToolTip = "mods.row.moveUpToolTip";
+    public const string ModsRowPositionEditName = "mods.row.positionEditName";
+    public const string ModsRowPositionToolTip = "mods.row.positionToolTip";
     public const string ModsRowRemove = "mods.row.remove";
     public const string ModsRowRemoveToolTip = "mods.row.removeToolTip";
     public const string ModsStatusActivateFailed = "mods.status.activateFailed";
@@ -2532,6 +2546,7 @@ internal static class Keys
     public const string ModsStatusDeletedActivated = "mods.status.deletedActivated";
     public const string ModsStatusDeletedActivatedNoLoadFile = "mods.status.deletedActivatedNoLoadFile";
     public const string ModsStatusDeletedInactive = "mods.status.deletedInactive";
+    public const string ModsStatusInvalidPosition = "mods.status.invalidPosition";
     public const string ModsStatusLoadFailed = "mods.status.loadFailed";
     public const string ModsStatusLoadedPlaySets = "mods.status.loadedPlaySets";
     public const string ModsStatusModDisabled = "mods.status.modDisabled";

@@ -9,4 +9,13 @@
     <ProjectReference Include="..\..\src\PdxLauncher.Core\PdxLauncher.Core.csproj" />
     <ProjectReference Include="..\..\src\PdxLauncher.Imaging\PdxLauncher.Imaging.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!--
+      链接 App 层的 PlaySetEditor 源码进来做自检。该文件通篇只用 Core 的类型
+      （IPlaySetRepository / ILoadFileWriter / IAppLogger / GameInstallation / DlcCatalog 全在 Core），
+      不引用任何 XAML/UI 类型，因此在 net10.0 的检查工程里可原样编译。
+      用「链接源码」而不是「引用 PdxLauncher.App」：App 是 WinExe + windows TFM，检查工程引用不了。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\PlaySetEditor.cs" Link="Linked\PlaySetEditor.cs" />
+  </ItemGroup>
 </Project>

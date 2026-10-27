@@ -49,7 +49,116 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 
 **2026-10-27 20:20 追加：CS2（天际线 2）从「管不到」做到「能管 + 能逛工坊」——① 「外部操控工坊」那个工具查明是 **Skyve CS-II**，而它调用的 PDX Mods 平台确实有 HTTP API（无公开文档，协议是从官方 `app.asar` 逆向 + 现网实测拿的）；② 播放集/启用/排序接管 CS2 的 `playset_config.json`；③ 新增 Paradox 账号登录（设置页新节）；④ Mod 库页多了「在线（PDX Mods）」视图（搜索/排序/翻页/详情/封面）。顺手修掉「本地 CS2 缩略图全空」的真 bug，见 §0.23。**
 
-## 0.23 最新一轮（2026-10-27 19:30–20:20）：CS2 mod 管理 + Paradox 账号 + PDX Mods 在线视图
+**2026-10-28 00:40 追加：播放集页「位次就地编辑」——点行首序号直接输入目标位次（回车生效 / Esc 或点别处取消 / 插入语义 / 搜索态整体置灰），附带修掉「↑↓ 在搜索态看着能点但点了没反应」的老缺陷、序号列 24→40、状态播报对读屏可见、排序动作补日志，并新增 `PlaySetOrderChecks`（检查类 22 个 / 0 失败）。经用户拍板选择「就地输入框」方案（专家评审一致推荐的是「移动到第 N 位」对话框，用户改成更直接的就地编辑），见 §0.24。**
+
+## 0.24 最新一轮（2026-10-28 00:00–01:00）：播放集页「位次就地编辑」
+
+### 0.24.1 用户需求
+
+- User said (m00001)：「播放集页面的排序编号添加更改功能，方便user进行快速排序」
+
+需求本身一句话：**别再靠连点 ↑↓ 一格一格挪**，直接给序号就能到位。
+
+### 0.24.2 方案怎么定的（这段是给后来人看的决策依据）
+
+先开了一轮三个专家的独立评审（产品 / UX 研究 / 软件架构），三方**独立收敛到同一个结论**：
+用「移动到第 N 位」的 ContentDialog（复用页面里已有的 `PromptForNameAsync` 模式），
+把就地编辑放二期、拖拽放三期。但用户在看过方案对比后**拍板选了就地编辑**
+（A 方案：序号本身变成输入框）——理由很直接，就地点一下比开对话框少一步，
+而且要的就是「快」。**结论按用户的来**，但下面这些评审结论仍然成立并被吸收进了实现：
+
+| 评审结论 | 落地情况 |
+| --- | --- |
+| `CanMoveMods` 一个 XAML 都没绑 → 搜索态下 ↑↓ 看着能点、点了静默无反应（P0 缺陷） | 已修：行 VM 新增 `CanMove`，↑↓ 与序号按钮全部绑 `IsEnabled` |
+| 重排后列表会被 `ObservableCollection.Clear()` 重置、虚拟化列表回到顶部 → 用户看不到结果（P0） | 已修：`ModsViewModel.RowRevealRequested` 事件 + `ModList.ScrollIntoView` |
+| 状态栏会被随后的自动保存回执覆盖，且读屏听不到 | 已修：`StatusText` 加 `AutomationProperties.LiveSetting="Assertive"`；排序文案改成「已调整顺序：「mod 名」第 N 位 → 第 M 位」 |
+| 序号口径不一致：行里是 1 基、状态栏原先打 0 基 index | 已修：两处统一 1 基，文案带 mod 名 |
+| 语义必须是「插入」不是「交换」（改 5→2 时 2..5 依次后移） | 已定：沿用 `PlaySetEditor.Move` 的 RemoveAt+Insert，tooltip 与文案都写明「其余行依次顺移」 |
+| 越界输入要让 `PlaySetEditor.Move` 的静默 no-op 变成**进不去** | 已做：`TryParsePosition` 在 VM 里先挡掉非 1..count，UI 侧 `Invalid` 时不退出编辑态 |
+| 没有 undo，删除对话框都写着「无法撤销」 | 接受为已知限制，不做 undo（成本远大于收益） |
+| 搜索态能否排序是产品决策 | 用户选「搜索态禁用即可」，不做可见序↔全局序的映射层 |
+
+两处**专家结论被实测推翻**，记下来免得再走一遍：
+
+- 架构师说 `PlaySetEditor` 因为有 App 层依赖（`LoadFileContent`）所以不能搬 / 只能搬纯逻辑段。
+  **实测：`ILoadFileWriter` 与 `LoadFileContent` 都定义在 `src/PdxLauncher.Core/Abstractions/ILoadFileWriter.cs`
+  与 `Core/Contracts/LoadFileContent.cs`**，整个文件对 App 层类型的引用数为零 → 整份源码可以直接
+  `<Compile Include>` 链接进只引用 Core + Imaging 的检查工程（已这么做，见 0.24.5）。
+- 架构师说 `DispatcherQueuePriority.Low` 可以用。**实测：WinUI 2.3.9 的 `Microsoft.WinUI.xml` 里根本没有
+  `DispatcherQueuePriority` / `TryEnqueue` 的文档条目**（`Microsoft.UI.Dispatching` 在另一个程序集），
+  为免赌一个查不到的 API，改用仓库里已有先例的 `DispatcherQueue.TryEnqueue(Action)` 单参重载
+  （先例：`DlcPage.xaml.cs:81`、`GameLibraryPage.xaml.cs:103`、`HomePage.xaml.cs:192`）。
+
+### 0.24.3 输入法这一层为什么最后只做「文本层校验」
+
+原计划三层防御（关 IME → 读 `KeyRoutedEventArgs.IsCommitted` → 纯 ASCII 校验）。
+实测 WinUI 2.3.9 的 `KeyRoutedEventArgs` **只有** `DeviceId / Handled / Key / KeyStatus / OriginalKey`，
+**没有 `IsCommitted`**；`IsInputMethodEnabled` 与 `Microsoft.UI.Xaml.Input.InputMethod.*` 也都不存在。
+也就是说：按回车时**无法在按键层区分「用户确认真实回车」与「输入法上屏确认」**。
+最终做法是退到文本层：
+
+- `TryParsePosition` 逐字符只放行 ASCII 数字（`c is < '0' or > '9'` 直接拒），全角数字 / 中文数字 / 正负号 / 小数 / 空串全部判非法；
+- 判非法时**不退出编辑态**、原文放回输入框，用户就地改，不会静默吞掉；
+- `InputScope="Number"` 只是提示软键盘，不作为正确性依赖。
+
+代价：若用户用中文输入法打「三」再按回车，会看到「位次无效：请输入 1–N 之间的整数」，需要自己改成阿拉伯数字。
+这是可接受的行为边界，不是缺陷。
+
+### 0.24.4 交互与状态机
+
+- 显示态＝透明 `Button`（内含原来的 `CaptionTextBlockStyle` 序号文本），用 Button 而不是 TextBlock 是为了
+  保住 Tab 可达与 ≥24×24 命中区（原生 TextBlock 只有 24px 宽、命中区不达标）。
+- 点击进编辑态：同一时刻只允许一行；先结束上一行再置位新行。
+- **焦点**：`IsEditingPosition` 翻转后控件要等布局才真正可见，直接 `Focus()` 会静默失效，
+  所以统一排进 `DispatcherQueue.TryEnqueue`，再 `Text = PositionText` → `Focus(FocusState.Programmatic)` → `SelectAll()`。
+  这是**本仓库第一处程序化聚焦**（改动前 `grep "Focus(FocusState" src/PdxLauncher.App/` 零命中），所以留了注释。
+- 找控件不能靠 `x:Name`（条目容器会被回收复用），走 `ModList.ContainerFromItem(row)` 拿 `ContentTemplateRoot`
+  再按类型找**唯一的那个 `TextBox`**（行模板里只有序号输入框一个）。
+- 回车＝提交；Esc＝放弃；**失焦一律按取消处理**（不做隐式提交，避免「点别处结果改了」的意外）。
+- `PositionEditResult` 四态决定 UI 收不收编辑态：`Applied / Unchanged / Blocked` → 收起；`Invalid` → 留在编辑态。
+- **提交分支的顺序是硬约束**（`OnPositionEditKeyDown`）：必须「先判定、只有不该继续编辑时才 `EndPositionEdit()`」。
+  早期写法是先 `EndPositionEdit()` 再在 `Invalid` 时把 `IsEditingPosition` 设回 `true`，这会引发竞态：
+  置 `false` → 输入框隐藏 → 隐藏同步触发它自己的 `LostFocus` → 该 handler 又调 `EndPositionEdit()`
+  → 刚恢复的编辑态被关掉，用户看到的是「非法输入后输入框凭空消失」，而文案还停在「位次无效」。
+  另外提交时的 row 取 `box.DataContext as ModRowViewModel ?? _editingRow`，以发送者所在行为准
+  ——`_editingRow` 只是「谁在编辑」的跟踪记录，重排会让行对象换人。
+
+### 0.24.5 改了哪些文件
+
+- `src/PdxLauncher.App/ViewModels/PositionEditResult.cs`（新增）：`enum { Applied, Unchanged, Invalid, Blocked }`。
+- `src/PdxLauncher.App/ViewModels/ModRowViewModel.cs`：新增 `TotalCount` / `CanMove` / `IsEditingPosition` /
+  `PositionEditName` / `PositionButtonAutomationId` / `PositionEditAutomationId`；`Position` 的 setter 同步 raise `PositionEditName`。
+  该文件仍然**不引用任何 `Microsoft.UI.Xaml` 类型**（这条是硬约束）。
+- `src/PdxLauncher.App/ViewModels/ModsViewModel.cs`：新增 `TryMoveModToPosition(ModRowViewModel, string?)`（**收原文**，
+  解析/越界/文案全在 VM 里，单一事实源）、`internal static TryParsePosition`、`event Action<Guid> RowRevealRequested`；
+  `RebuildVisibleMods()` 给每行写 `TotalCount` 与 `CanMove`；`MoveMod` 补日志并把状态文案改 1 基带 mod 名。
+- `src/PdxLauncher.App/Views/ModsPage.xaml`：序号列 `24 → 40`；序号格子改成「透明 Button ＋ 就地 TextBox」两层按
+  `IsEditingPosition` 互斥；↑↓ 补 `IsEnabled="{x:Bind CanMove}"`；状态栏补 `AutomationProperties.LiveSetting="Assertive"`。
+- `src/PdxLauncher.App/Views/ModsPage.xaml.cs`：`_editingRow` 单编辑跟踪；`OnPositionEditClick` /
+  `OnPositionEditKeyDown` / `OnPositionEditLostFocus` / `EndPositionEdit` / `FocusPositionEditor` /
+  `FindPositionEditor` / `FindDescendant<T>` / `OnRowRevealRequested`；`Loaded`/`Unloaded` 里成对订阅/退订 `RowRevealRequested`。
+- `tools/i18n/{zh-CN,en-US}/mods.json`：改 `mods.row.moveUpToolTip`「上移一位」/`moveDownToolTip`「下移一位」（去掉 0 基说法）、
+  重写 `mods.status.orderMoved`（1 基 + mod 名 + 「其余行依次顺移」）；新增 `mods.row.positionToolTip` /
+  `mods.row.positionEditName` / `mods.status.invalidPosition`。`Strings.g.cs` 已用 `python tools/gen-i18n.py` 重新生成，
+  键总数 530 → 568，`--check` 通过。
+- `tests/PdxLauncher.Checks/PlaySetOrderChecks.cs`（新增）：16 条断言，覆盖 `Renumber` 连续性与顺序、`Move` 的插入语义
+  （`A,B,C,D,E` 第 5 位移到第 2 位 → `A,E,B,C,D`）、移到首/末位、index 与 target 双向越界的兜底、以及「只改 position
+  不动 `Enabled` / `GameRegistryId` / `ModId`」。
+- `tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj`：加一条 `<Compile Include="..\..\src\PdxLauncher.App\Services\PlaySetEditor.cs" Link="Linked\PlaySetEditor.cs" />`
+  —— 仓库里**此前没有任何 `<Compile Include>` 先例**（`Directory.Build.props:45` 用 `**/*.cs` 通配），所以注释里写了为什么能链接。
+
+### 0.24.6 验收口径（已实际执行的部分）
+
+- `dotnet build "PdxLauncher.sln" -c Release -m:1 -p:ArtifactsPath="G:/Work/paradox启动器/.tmp/verify"` → **0 警告 0 错误**。
+  （用 `ArtifactsPath` 是因为用户的 `PdxLauncher.App.exe` 正在运行、锁着 `bin\...\PdxLauncher.Core.dll`，
+  普通 `build.cmd` 会 MSB3021/MSB3027 文件占用。**正斜杠必须**，反斜杠会被吃掉变成 `G:Workparadox启动器.tmpverify`。）
+- `dotnet .tmp/verify/bin/PdxLauncher.Checks/release/PdxLauncher.Checks.dll` → **检查类: 22，失败: 0，断言失败总数: 0**。
+- `python tools/gen-i18n.py --check` → 通过。
+
+**未做（后续接手请注意）**：没有真机点过这个交互（编译与纯逻辑自检绿，但键盘/焦点/滚动这条链只有代码推断支撑）；
+`winapp ui` 能否自动化 ContentDialog 与条目标签尚未验证；undo 不存在。
+
+## 0.23 上一轮（2026-10-27 19:30–20:20）：CS2 mod 管理 + Paradox 账号 + PDX Mods 在线视图
 
 ### 0.23.1 用户两问
 

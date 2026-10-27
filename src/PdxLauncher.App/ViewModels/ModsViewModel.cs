@@ -54,6 +54,13 @@ public sealed class ModsViewModel : LocalizedObservableObject
         _logger = logger;
     }
 
+    /// <summary>
+    /// 请求把某个 mod 的行滚到可见区域内。排序成功后触发，由页面订阅后调 ListView.ScrollIntoView。
+    /// 视图模型不引用 ListView（保持无 UI 依赖），所以用事件把「想让它出现」这件事交出去。
+    /// 参数是 ModId 而不是行对象：重排会重建所有行，旧行对象此时已经不在集合里。
+    /// </summary>
+    public event Action<Guid>? RowRevealRequested;
+
     /// <summary>播放集列表；IsActive 供模板显示"● 激活"标记。</summary>
     public ObservableCollection<PlaySet> PlaySets { get; } = new();
 
@@ -121,6 +128,8 @@ public sealed class ModsViewModel : LocalizedObservableObject
             if (SetProperty(ref _searchText, value))
             {
                 OnPropertyChanged(nameof(CanMoveMods));
+                // RebuildVisibleMods 重建每一行并写入 CanMove（行模板绑的是行上的 CanMove，
+                // 不是 ViewModel.CanMoveMods —— 历史缺陷：搜索态按钮看着能点、点了只回一句状态栏）。
                 RebuildVisibleMods();
             }
         }
@@ -498,6 +507,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
     private void RebuildVisibleMods()
     {
         var filtered = PlaySetEditor.Filter(_allMods, SearchText);
+        var canMove = CanMoveMods;
         Mods.Clear();
         foreach (var mod in filtered)
         {
@@ -512,6 +522,8 @@ public sealed class ModsViewModel : LocalizedObservableObject
                 row.SetDetails(FormatSize(entry.SizeBytes));
             }
 
+            row.TotalCount = filtered.Count;
+            row.CanMove = canMove;
             Mods.Add(row);
         }
 
@@ -578,8 +590,107 @@ public sealed class ModsViewModel : LocalizedObservableObject
         FlushVisibleRows();
         _allMods = PlaySetEditor.Move(_allMods, index, offset);
         RebuildVisibleMods();
-        StatusMessage = T(Keys.ModsStatusOrderMoved, index, target);
+        StatusMessage = T(Keys.ModsStatusOrderMoved, row.Name, index + 1, target + 1);
+        _logger.Info("播放集排序（step）：「" + row.Name + "」第 " + (index + 1).ToString(CultureInfo.InvariantCulture)
+            + " 位 → 第 " + (target + 1).ToString(CultureInfo.InvariantCulture) + " 位，共 "
+            + Mods.Count.ToString(CultureInfo.InvariantCulture) + " 行，激活集=" + (IsSelectedPlaySetActive ? "是" : "否")
+            + "（playSetId=" + (SelectedPlaySet?.Id.ToString("N") ?? "-") + "）");
         RequestAutoSave();
+        RowRevealRequested?.Invoke(row.ModId);
+    }
+
+    /// <summary>
+    /// 把一行直接移到用户输入的位次（界面看到的 1 起数字）。
+    /// 语义是「插入」：其余行依次顺移/前移，由 <see cref="PlaySetEditor.Move"/> 的 RemoveAt + Insert 保证。
+    /// 解析与范围校验都在这里做，界面只负责把输入框原文递进来 ——
+    /// 这样文案、边界与状态栏反馈只有一处真源，也便于日后单独测。
+    /// </summary>
+    /// <param name="row">要移动的可见行。</param>
+    /// <param name="text">输入框原文（可能含空白、全角数字、负数、小数等）。</param>
+    /// <returns>
+    /// <see cref="PositionEditResult.Applied"/> 已重排并请求自动保存，界面应退出编辑态；
+    /// <see cref="PositionEditResult.Unchanged"/> 目标位就是当前位，未改数据，界面应退出编辑态；
+    /// <see cref="PositionEditResult.Invalid"/> 输入非法或越界，状态栏已提示，界面应保持编辑态；
+    /// <see cref="PositionEditResult.Blocked"/> 搜索过滤态不允许改顺序，状态栏已提示，界面应退出编辑态。
+    /// </returns>
+    public PositionEditResult TryMoveModToPosition(ModRowViewModel row, string? text)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        if (!CanMoveMods)
+        {
+            StatusMessage = T(Keys.ModsStatusSearchBlocksMove);
+            return PositionEditResult.Blocked;
+        }
+
+        var index = Mods.IndexOf(row);
+        if (index < 0)
+        {
+            return PositionEditResult.Invalid;
+        }
+
+        var count = Mods.Count;
+        if (!TryParsePosition(text, count, out var targetPosition))
+        {
+            StatusMessage = T(Keys.ModsStatusInvalidPosition, count);
+            return PositionEditResult.Invalid;
+        }
+
+        var target = targetPosition - 1;
+        if (target == index)
+        {
+            return PositionEditResult.Unchanged;
+        }
+
+        FlushVisibleRows();
+        _allMods = PlaySetEditor.Move(_allMods, index, target - index);
+        RebuildVisibleMods();
+        StatusMessage = T(Keys.ModsStatusOrderMoved, row.Name, index + 1, targetPosition);
+        _logger.Info("播放集排序（jump）：「" + row.Name + "」第 " + (index + 1).ToString(CultureInfo.InvariantCulture)
+            + " 位 → 第 " + targetPosition.ToString(CultureInfo.InvariantCulture) + " 位，共 "
+            + count.ToString(CultureInfo.InvariantCulture) + " 行，激活集=" + (IsSelectedPlaySetActive ? "是" : "否")
+            + "（playSetId=" + (SelectedPlaySet?.Id.ToString("N") ?? "-") + "）");
+        RequestAutoSave();
+        RowRevealRequested?.Invoke(row.ModId);
+        return PositionEditResult.Applied;
+    }
+
+    /// <summary>
+    /// 严格解析用户输入的位次：只接受纯 ASCII 十进制数字，范围 1..<paramref name="count"/>。
+    /// 显式拒绝全角数字、中文数字、正负号、小数点、空串 —— 这些在中文输入法下都可能被敲出来，
+    /// 而本仓库部署的 WinUI 2.3.9 没有 <c>KeyRoutedEventArgs.IsCommitted</c>，
+    /// 无法在按键层面区分「输入法确认」与「提交」，所以判定放在文本层，结果才是确定的。
+    /// </summary>
+    internal static bool TryParsePosition(string? text, int count, out int position)
+    {
+        position = 0;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var trimmed = text.Trim();
+        for (var i = 0; i < trimmed.Length; i++)
+        {
+            var c = trimmed[i];
+            if (c is < '0' or > '9')
+            {
+                return false;
+            }
+        }
+
+        if (!int.TryParse(trimmed, NumberStyles.None, CultureInfo.InvariantCulture, out var value))
+        {
+            return false;
+        }
+
+        if (value < 1 || value > count)
+        {
+            return false;
+        }
+
+        position = value;
+        return true;
     }
 
     /// <summary>启用全部 / 禁用全部（作用于可见行），随后自动保存。</summary>
