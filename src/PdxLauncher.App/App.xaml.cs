@@ -24,10 +24,24 @@ public partial class App : Application
 {
     private Window? _window;
 
+    /// <summary>
+    /// 当前主窗口。崩溃处理路径（<see cref="Services.CrashReporter"/>）需要它来拿 XamlRoot 弹框，
+    /// 而那条路径拿不到注入的服务，所以这里只读暴露一个静态入口。
+    /// </summary>
+    internal static Window? MainWindowInstance { get; private set; }
+
+    /// <summary>崩溃处理路径的重入闩：弹框/写盘过程中再次抛异常时直接放弃，避免无限递归。</summary>
+    private static bool _handlingCrash;
+
     public App()
     {
         InitializeComponent();
         UnhandledException += OnUnhandledException;
+
+        // WinUI 的 UnhandledException 只覆盖 UI 线程。后台线程与未观察的 Task 异常
+        // 会让进程直接退出（用户看到的是「启动器自己关了」），所以这两处也要留痕。
+        AppDomain.CurrentDomain.UnhandledException += OnDomainUnhandledException;
+        TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
@@ -39,6 +53,7 @@ public partial class App : Application
         AppServices.Logger.Info("PdxNext 启动，创建主窗口（冷启动不联网）");
 
         _window = new MainWindow();
+        MainWindowInstance = _window;
         _window.Activate();
     }
 
@@ -115,11 +130,79 @@ public partial class App : Application
         logger.Info("服务装配完成");
     }
 
+    /// <summary>
+    /// UI 线程未处理异常。这里是「从零崩溃可观测性到能定位」的落点：
+    /// 写崩溃记录 + 弹可复制错误框 + <c>Handled = true</c> 让进程活下来。
+    /// <para>
+    /// 置 <c>Handled</c> 的取舍：不置的话 WinUI 会直接终止进程，用户只看到窗口消失、
+    /// 日志里可能什么都没有。置了之后界面可能处于半损坏状态，但至少用户能复制错误、
+    /// 能看到崩溃记录路径，而不是无迹可寻。所以只在<b>已经成功写下崩溃记录</b>时才置。
+    /// </para>
+    /// </summary>
     private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
-        if (AppServices.IsInitialized)
+        if (_handlingCrash)
         {
-            AppServices.Logger.Error("未处理的异常: " + e.Message, e.Exception);
+            // 弹框 / 记录过程中再次抛异常：放弃处理，让系统走它自己的终止流程。
+            return;
+        }
+
+        _handlingCrash = true;
+        try
+        {
+            var context = AppServices.IsInitialized ? "game=" + (AppServices.CurrentGame?.GameId ?? "(none)") : "startup";
+            var path = Services.CrashReporter.Record("未处理的异常: " + e.Message, e.Exception, context);
+            if (path is not null)
+            {
+                e.Handled = true;
+                Services.CrashReporter.ShowDialog("未处理的异常: " + e.Message, e.Exception, path);
+            }
+        }
+        finally
+        {
+            _handlingCrash = false;
+        }
+    }
+
+    /// <summary>
+    /// 非 UI 线程的未处理异常。.NET 会在这之后直接终止进程，改不了这个结果，
+    /// 唯一能做的是<b>在死之前把现场留下来</b>。
+    /// </summary>
+    private void OnDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs e)
+    {
+        if (_handlingCrash)
+        {
+            return;
+        }
+
+        _handlingCrash = true;
+        try
+        {
+            Services.CrashReporter.Record(
+                "后台线程未处理异常（进程即将终止）",
+                e.ExceptionObject as Exception,
+                "terminating=" + e.IsTerminating);
+        }
+        catch
+        {
+            // 进程已经在死，不能再抛。
+        }
+        finally
+        {
+            _handlingCrash = false;
+        }
+    }
+
+    /// <summary>未观察的 Task 异常：默认会被 GC 静默吞掉，这里至少留一条记录。</summary>
+    private void OnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+    {
+        try
+        {
+            Services.CrashReporter.Record("未观察的 Task 异常", e.Exception, null);
+        }
+        catch
+        {
+            // 记录失败就算了，这条路径本来就不该影响运行。
         }
     }
 }

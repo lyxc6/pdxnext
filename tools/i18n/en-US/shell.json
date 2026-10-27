@@ -24,5 +24,11 @@
   "shell.playSet.renameMissing": "Rename failed: the target does not exist or could not be written",
   "shell.playSet.renameFailed": "Rename failed: {0}",
   "shell.playSet.deleteBusy": "Delete failed: the target does not exist, is the active playset, or could not be written",
-  "shell.playSet.deleteFailed": "Delete failed: {0}"
+  "shell.playSet.deleteFailed": "Delete failed: {0}",
+  "shell.crash.title": "The launcher hit an unhandled error",
+  "shell.crash.message": "Error: {0}",
+  "shell.crash.path": "Crash record written to: {0}",
+  "shell.crash.hint": "The app tried to keep running. If the UI misbehaves, restart the launcher and attach the crash record file.",
+  "shell.crash.copy": "Copy details",
+  "shell.crash.copied": "Copied to clipboard"
 }

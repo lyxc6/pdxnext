@@ -494,6 +494,12 @@ public sealed partial class Localizer
         ["shell.alwaysOnTop.notReady"] = "启动器服务尚未初始化，无法切换窗口置顶",
         ["shell.alwaysOnTop.saveFailed"] = "保存窗口置顶设置失败：{0}",
         ["shell.alwaysOnTop.unsupported"] = "当前窗口不是 Overlapped 呈现方式，无法切换置顶",
+        ["shell.crash.copied"] = "已复制到剪贴板",
+        ["shell.crash.copy"] = "复制详情",
+        ["shell.crash.hint"] = "程序已尝试继续运行。如果界面出现异常，请重启启动器，并把崩溃记录文件一并提供。",
+        ["shell.crash.message"] = "错误：{0}",
+        ["shell.crash.path"] = "崩溃记录已写入：{0}",
+        ["shell.crash.title"] = "启动器遇到未处理的错误",
         ["shell.nav.home"] = "当前游戏",
         ["shell.nav.library"] = "游戏库",
         ["shell.nav.modLibrary"] = "Mod 库",
@@ -997,6 +1003,12 @@ public sealed partial class Localizer
         ["shell.alwaysOnTop.notReady"] = "The launcher service is not initialized yet; cannot change always-on-top",
         ["shell.alwaysOnTop.saveFailed"] = "Could not save the always-on-top setting: {0}",
         ["shell.alwaysOnTop.unsupported"] = "This window is not using the Overlapped presenter; always-on-top is unavailable",
+        ["shell.crash.copied"] = "Copied to clipboard",
+        ["shell.crash.copy"] = "Copy details",
+        ["shell.crash.hint"] = "The app tried to keep running. If the UI misbehaves, restart the launcher and attach the crash record file.",
+        ["shell.crash.message"] = "Error: {0}",
+        ["shell.crash.path"] = "Crash record written to: {0}",
+        ["shell.crash.title"] = "The launcher hit an unhandled error",
         ["shell.nav.home"] = "Current Game",
         ["shell.nav.library"] = "Game Library",
         ["shell.nav.modLibrary"] = "Mod Library",
@@ -1500,6 +1512,12 @@ public sealed partial class Localizer
         ("shell.alwaysOnTop.notReady", "ShellAlwaysOnTopNotReady"),
         ("shell.alwaysOnTop.saveFailed", "ShellAlwaysOnTopSaveFailed"),
         ("shell.alwaysOnTop.unsupported", "ShellAlwaysOnTopUnsupported"),
+        ("shell.crash.copied", "ShellCrashCopied"),
+        ("shell.crash.copy", "ShellCrashCopy"),
+        ("shell.crash.hint", "ShellCrashHint"),
+        ("shell.crash.message", "ShellCrashMessage"),
+        ("shell.crash.path", "ShellCrashPath"),
+        ("shell.crash.title", "ShellCrashTitle"),
         ("shell.nav.home", "ShellNavHome"),
         ("shell.nav.library", "ShellNavLibrary"),
         ("shell.nav.modLibrary", "ShellNavModLibrary"),
@@ -2001,6 +2019,12 @@ public sealed partial class Localizer
     public string ShellAlwaysOnTopNotReady => Format("shell.alwaysOnTop.notReady");
     public string ShellAlwaysOnTopSaveFailed => Format("shell.alwaysOnTop.saveFailed");
     public string ShellAlwaysOnTopUnsupported => Format("shell.alwaysOnTop.unsupported");
+    public string ShellCrashCopied => Format("shell.crash.copied");
+    public string ShellCrashCopy => Format("shell.crash.copy");
+    public string ShellCrashHint => Format("shell.crash.hint");
+    public string ShellCrashMessage => Format("shell.crash.message");
+    public string ShellCrashPath => Format("shell.crash.path");
+    public string ShellCrashTitle => Format("shell.crash.title");
     public string ShellNavHome => Format("shell.nav.home");
     public string ShellNavLibrary => Format("shell.nav.library");
     public string ShellNavModLibrary => Format("shell.nav.modLibrary");
@@ -2505,6 +2529,12 @@ internal static class Keys
     public const string ShellAlwaysOnTopNotReady = "shell.alwaysOnTop.notReady";
     public const string ShellAlwaysOnTopSaveFailed = "shell.alwaysOnTop.saveFailed";
     public const string ShellAlwaysOnTopUnsupported = "shell.alwaysOnTop.unsupported";
+    public const string ShellCrashCopied = "shell.crash.copied";
+    public const string ShellCrashCopy = "shell.crash.copy";
+    public const string ShellCrashHint = "shell.crash.hint";
+    public const string ShellCrashMessage = "shell.crash.message";
+    public const string ShellCrashPath = "shell.crash.path";
+    public const string ShellCrashTitle = "shell.crash.title";
     public const string ShellNavHome = "shell.nav.home";
     public const string ShellNavLibrary = "shell.nav.library";
     public const string ShellNavModLibrary = "shell.nav.modLibrary";

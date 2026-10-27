@@ -24,5 +24,11 @@
   "shell.playSet.renameMissing": "重命名播放集失败：目标不存在或写入失败",
   "shell.playSet.renameFailed": "重命名播放集失败：{0}",
   "shell.playSet.deleteBusy": "删除播放集失败：目标不存在、当前是活动播放集，或写入失败",
-  "shell.playSet.deleteFailed": "删除播放集失败：{0}"
+  "shell.playSet.deleteFailed": "删除播放集失败：{0}",
+  "shell.crash.title": "启动器遇到未处理的错误",
+  "shell.crash.message": "错误：{0}",
+  "shell.crash.path": "崩溃记录已写入：{0}",
+  "shell.crash.hint": "程序已尝试继续运行。如果界面出现异常，请重启启动器，并把崩溃记录文件一并提供。",
+  "shell.crash.copy": "复制详情",
+  "shell.crash.copied": "已复制到剪贴板"
 }

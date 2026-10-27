@@ -196,6 +196,41 @@ public static class InfrastructureChecks
                 !blockedStore.HasPendingWrite);
             blockedStore.Dispose();
 
+            // --- 崩溃记录：写盘 + 内容形状 + 同秒不互相覆盖 + 目录不可写时返回失败而不抛
+            var crashDir = Path.Combine(tempRoot, "logs", "crash");
+            var crashClock = new FixedClock(new DateTimeOffset(2026, 10, 27, 19, 0, 0, TimeSpan.Zero));
+            var crashWriter = new CrashReportWriter(fs, crashClock, crashDir);
+            // 堆栈只有在异常真正被抛出后才存在，所以这里必须 throw 一次再 catch。
+            var boom = CaptureThrown();
+            var crashResult = crashWriter.Write("未处理的异常: 测试", boom, "game=ck3");
+            ChecksContext.Check("崩溃记录写入成功", crashResult.IsSuccess, crashResult.ErrorMessage);
+            var crashPath = crashResult.Value ?? string.Empty;
+            ChecksContext.Check("崩溃记录文件存在", crashPath.Length > 0 && fs.FileExists(crashPath), crashPath);
+            var crashText = crashPath.Length > 0 && fs.FileExists(crashPath) ? fs.ReadAllText(crashPath) : string.Empty;
+            ChecksContext.Check("崩溃记录含异常类型", crashText.Contains("System.InvalidOperationException", StringComparison.Ordinal));
+            ChecksContext.Check("崩溃记录含内层异常", crashText.Contains("System.IO.IOException", StringComparison.Ordinal));
+            ChecksContext.Check("崩溃记录含上下文", crashText.Contains("context: game=ck3", StringComparison.Ordinal));
+            ChecksContext.Check("崩溃记录含堆栈段", crashText.Contains("stack:", StringComparison.Ordinal));
+
+            // 同一时刻再写一次：文件名必须不同，不能覆盖上一次的现场。
+            var crashAgain = crashWriter.Write("第二次崩溃", boom, null);
+            ChecksContext.Check("同秒崩溃不覆盖", crashAgain.IsSuccess && !string.Equals(crashAgain.Value, crashPath, StringComparison.Ordinal), crashAgain.Value ?? string.Empty);
+            ChecksContext.Check("两次崩溃都在盘上", fs.FileExists(crashPath) && crashAgain.Value is { } second && fs.FileExists(second));
+
+            // 目录被同名文件占住：必须返回 Io 失败，而不是抛异常。
+            var blockedCrashDir = Path.Combine(tempRoot, "blocked-crash");
+            fs.WriteAllTextAtomic(blockedCrashDir, "not a directory");
+            var blockedCrash = new CrashReportWriter(fs, crashClock, blockedCrashDir).Write("写不进去", boom, null);
+            ChecksContext.Check(
+                "崩溃记录写失败返回 ErrorKind.Io",
+                !blockedCrash.IsSuccess && blockedCrash.Kind == ErrorKind.Io,
+                blockedCrash.ErrorMessage ?? "(no message)");
+
+            // Compose 是纯函数：exception 为 null 时也要给出可读的最小现场。
+            var nullText = CrashReportWriter.Compose("无异常对象", null, "startup");
+            ChecksContext.Check("无异常时仍含 message", nullText.Contains("message: 无异常对象", StringComparison.Ordinal));
+            ChecksContext.Check("无异常时不含 exception 段", !nullText.Contains("--- exception ---", StringComparison.Ordinal));
+
         }
         finally
         {
@@ -227,6 +262,27 @@ public static class InfrastructureChecks
 
         public void Error(string message, Exception? exception = null)
         {
+        }
+    }
+
+    /// <summary>固定时间源：崩溃记录文件名带时间戳，自检要能稳定断言「同秒不覆盖」。</summary>
+    private sealed class FixedClock : IClock
+    {
+        public FixedClock(DateTimeOffset now) => UtcNow = now;
+
+        public DateTimeOffset UtcNow { get; }
+    }
+
+    /// <summary>造一个「真的被抛出过」的异常：只有这样 StackTrace 才非空。</summary>
+    private static InvalidOperationException CaptureThrown()
+    {
+        try
+        {
+            throw new InvalidOperationException("外层", new IOException("内层"));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ex;
         }
     }
 }

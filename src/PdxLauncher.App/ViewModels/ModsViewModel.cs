@@ -701,6 +701,17 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
             StatusMessage = T(Keys.ModsStatusRenamed, newName.Trim());
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // 仓储已经改成返回 AppResult，正常失败不会走到这里；这里是兜底：
+            // 旧版没有 catch，一次异常会直接冒到 async void 事件处理器，进程就没了。
+            _logger.Error("重命名播放集失败（playSetId=" + playSetId.ToString("N") + "）", ex);
+            StatusMessage = T(Keys.ModsStatusRenameFailed, ex.Message);
+        }
         finally
         {
             IsBusy = false;
