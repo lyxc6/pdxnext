@@ -260,7 +260,41 @@ public static class OnlineChecks
         ChecksContext.Check("拒绝公告图子域 cdn.braze-images.com", !OnlineHosts.IsAllowed(new Uri("https://cdn.braze-images.com/x.gif")));
         ChecksContext.Check("拒绝非绝对 URI", !OnlineHosts.IsAllowed(new Uri("/relative", UriKind.Relative)));
 
+        // 出口强制：白名单必须由 HttpFetcher 自己校验，不能只靠调用方自觉。
+        // 用真实 HttpFetcher 断言「被拒域名连连接都不会建立」——校验发生在发请求之前。
+        using (var realFetcher = new HttpFetcher(new RecordingLogger()))
+        {
+            ChecksContext.Check(
+                "HttpFetcher.GetAsync 出口拒绝白名单外域名",
+                ThrowsHostNotAllowed(() => realFetcher.GetAsync(new Uri("https://evil.example/x.png"), CancellationToken.None)));
+            ChecksContext.Check(
+                "HttpFetcher.PostJsonAsync 出口拒绝白名单外域名",
+                ThrowsHostNotAllowed(() => realFetcher.PostJsonAsync(new Uri("https://evil.example/api"), "{}", CancellationToken.None)));
+            ChecksContext.Check(
+                "HttpFetcher 出口拒绝非 http(s) scheme",
+                ThrowsHostNotAllowed(() => realFetcher.GetAsync(new Uri("file:///C:/x.png"), CancellationToken.None)));
+        }
+
         downloader.Dispose();
+    }
+
+    /// <summary>调用是否以 <c>host-not-allowed:</c> 的 HttpRequestException 结束（且没有真的联网）。</summary>
+    private static bool ThrowsHostNotAllowed(Func<Task> call)
+    {
+        try
+        {
+            call().GetAwaiter().GetResult();
+            return false;
+        }
+        catch (HttpRequestException exception)
+        {
+            return exception.Message.Contains("host-not-allowed", StringComparison.Ordinal);
+        }
+        catch (Exception)
+        {
+            // 走到网络层（DNS 失败等）说明出口校验没生效。
+            return false;
+        }
     }
 
     // --------------------------------------------------------------- 下载器

@@ -63,6 +63,7 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
     public async Task<Stream> GetAsync(Uri uri, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(uri);
+        EnsureAllowed(uri);
 
         var response = await _client
             .GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
@@ -90,6 +91,7 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
     {
         ArgumentNullException.ThrowIfNull(uri);
         ArgumentNullException.ThrowIfNull(jsonBody);
+        EnsureAllowed(uri);
 
         using var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
         using var response = await _client.PostAsync(uri, content, cancellationToken).ConfigureAwait(false);
@@ -100,6 +102,20 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
         }
 
         return text;
+    }
+
+    /// <summary>
+    /// 出口强制白名单。这里而不是调用方做校验，是因为「调用方自觉」这个约定已经在实测中失效：
+    /// 出站调用点里有若干处根本没调 <see cref="OnlineHosts.IsAllowed"/>，加了新集成也不会有人记得补。
+    /// 校验放在唯一出口上，漏一个调用点也不可能把请求发到白名单外。
+    /// </summary>
+    /// <exception cref="HttpRequestException">域名不在白名单内。</exception>
+    private static void EnsureAllowed(Uri uri)
+    {
+        if (!OnlineHosts.IsAllowed(uri))
+        {
+            throw new HttpRequestException("host-not-allowed:" + uri.Host);
+        }
     }
 
     public void Dispose() => _client.Dispose();
