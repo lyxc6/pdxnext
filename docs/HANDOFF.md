@@ -41,6 +41,137 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 
 **2026-10-27 16:50 追加：EU5 从「只被发现」做到「能管」—— 自带 1920×1080 背景 + 卡片封面、`playsets.json` 播放集读写、EU5 自己的 `.dlc.json` 与英文本地化名字；同一轮在真机上挖出三个数据格式坑（metadata.json 带 BOM、库搬家后的陈旧路径、DLC 描述文件不是 v3 结构），见 §0.19。**
 
+**2026-10-27 19:30 追加：五个 P0 数据完整性 / 可观测性批次已全部落地并逐批提交（分支 `fix/data-integrity`，`26a926d` → `1984a62`）—— 写路径失败不再静默当成功、设置落盘失败有返回值、未处理异常不再静默退出、域名白名单移进网络出口。见 §0.22。**
+
+## 0.22 最新一轮（2026-10-27 17:15–19:30）：五个 P0 批次 —— 数据静默丢失、崩溃不可观测、白名单靠自觉
+
+### 0.22.1 起因
+
+上一轮架构审核（两位专家 + Lead 交叉复核）确认：项目的业务规则极薄，复杂度全在**集成**，但真正会咬人的是
+**「写失败被静默吞掉」**这一类问题 —— 用户的播放集在磁盘上没了，界面却说「保存成功」。审核给出的 P0 清单里，
+前五项都属于「改完不改对外行为、但能把一类静默失败变成可见失败」的高性价比改动。
+
+### 0.22.2 批次 1（`26a926d`）：写路径错误契约
+
+`IPlaySetRepository` 的 7 个写方法原本返回值语义**四套并存**：`Task`（调用方无从得知成败）、
+`Task<Guid>`（`CreatePlaySetAsync` 失败仍返回一个 id）、`Task<bool>`（失败与「目标不存在」不可区分）。
+更糟的是 sqlite 仓储的 `WriteAsync<T>(..., T fallback = default!)` 把 `catch` 后的返回值交给**调用方传进来的兜底值**，
+于是 `CreatePlaySetAsync` 写失败时把刚 new 出来的 Guid 当成功返回。
+
+现在：`AppResult<T>` 扩成 `(bool IsSuccess, T? Value, string? ErrorMessage, ErrorKind Kind)`，
+新增 `ErrorKind { Unknown, NotFound, Conflict, Invalid, Io, Unsupported }`；7 个写方法统一返回 `AppResult`；
+`WriteAsync<T>` **删掉 `fallback` 参数**，失败即 `Fail(ErrorKind.Io, action + ":" + ex.Message)`，
+库不存在 `Fail(NotFound, "database-not-found:" + path)`，`body` 返回失败时**先 `Rollback()` 再返回**；
+`BackupDatabase` 从 `void` 改成 `AppResult<bool>`，备份失败**中止写入**（原来只 Warn 然后继续写）。
+JSON 仓储（EU5）同步改造：`RequirePlaySet` 的 `throw InvalidOperationException` 全部换成 `Fail(NotFound/Conflict, ...)`。
+
+**错误文案上移**：`PlaySetEditor` 里 9 处 `Localizer.Instance.T(Keys....)` 全部删掉（`grep -n "Localizer\|Keys\."` 零命中），
+改成 `ErrorMessage` 只承载错误码（`step=mods;` / `step=dlcs;` / `step=loadfile;` / `step=readback;` / `step=verify;`、
+`playSet-not-found:<guid>`、`playSet-is-active:<guid>`、`playSet-name-empty`），中文翻译移到 VM 层。
+**这条同时解锁了「`PlaySetEditor` 下沉到 Core 被 `Checks` 覆盖」**——它不再依赖 App 的 `Localizer`。
+
+### 0.22.3 批次 2（`69a1e99`）：保存后回读 sqlite 仓储
+
+批次 1 之后还剩一个洞：`SaveAsync` 写完 sqlite 与加载文件后会**回读加载文件**比对，
+但加载文件只是「写进游戏目录的那份」，**播放集真正的持久化载体是仓储**。sqlite 仓储用
+`DELETE FROM playsets_mods WHERE playsetId = ?` + 逐行 `INSERT` 改写，中途失败会让行数/顺序与写入不一致，
+而加载文件校验完全兜不住这个（加载文件写成功 ≠ 仓储写成功）。
+
+新增 `VerifySqliteStoreAsync`：回读 `GetPlaySetModsAsync`/`GetPlaySetDlcsAsync`，
+期望 key = `mod.ModId.ToString("D") + ":" + (mod.Enabled ? 1 : 0)`，逐条比对（复用 `AddSequenceDiff`），
+差异时返回 `step=verify-store;...`。
+
+两个设计取舍值得记：
+- **期望值必须用同一个 `Renumber(mods)` 结果**——`SavePlaySetModsAsync` 传进去的就是重排后的列表，
+  用原始列表比对会假差异。所以 `SaveAsync` 里先把 `orderedMods = Renumber(mods)` 提出来共用。
+- **只对 sqlite 路径校验**（判据 `game.WritesLoadFile`）。EU5/CS2 是整份文档原子替换（`WriteAllTextAtomic`），
+  没有「删表后逐行插」这种半途失败风险；而且 CS2 的 ModId 由 sourceId 派生，比身份会假差异。
+  初版写成「所有格式都比对」被自己否掉，就是因为它既依赖并行会话的 CS2 枚举、又会误报。
+- DLC 特例：Stellaris 的 `launcher-v2.sqlite` 可能没有 `playsets_dlcs` 表，写入被合法跳过，
+  所以回读为空时**只有期望也为空才算通过**，否则 Warn 后跳过 DLC 比对。
+
+### 0.22.4 批次 3（`4fce7d0`）：设置落盘不再静默失败 + 300ms 合并
+
+`AppSettingsStore.Save` 原本 `catch IOException` / `catch UnauthorizedAccessException` 后只 `_logger.Error`，
+**没有返回值**——所以 `SettingsViewModel` 里那句 `catch { SetStatus(Keys.SettingsStatusSaveFailed, ...) }` 是**死代码**，
+`SaveSettings()` 被调 16 次，一次都没进过 catch。
+
+现在 `Save` 返回 `AppResult<bool>`，并且整个 Store 变成 `IDisposable`：
+- `Save(settings)` —— 立即写，成功 `Ok(true)`，失败带 `settings-write:` / `settings-write-denied:` 错误码；
+- `SaveDeferred(settings)` —— 登记 300ms 后合并写（定时器回调里**绝不抛异常**，失败只记日志）；
+- `Flush()` —— 立刻把待写项落盘；`Dispose()` —— 停表 + 落最后一次。
+
+`_pending` 存的是**引用不存副本**，因为 `AppServices.Settings` 是长期复用的同一实例，
+拷贝会丢掉这 300ms 内的后续改动。
+
+调用点按「要不要立刻确定生效」分流：设置页里 8 处「改属性 → 落盘」走 `SaveSettingsDeferred()`；
+改代理、窗口置顶、关窗口走 `SaveSettings()` / `FlushSettings()`（关窗口是最后一次落盘机会，
+先 `Flush` 再 `Save`，否则最近 300ms 内的改动会丢）。
+
+**踩坑记一条**：只 `-p:BuildProjectReferences=false` 单独编 App 会用到**旧的 Core dll**，
+报 `CS0029 无法将类型"void"隐式转换为 AppResult<bool>`。正确顺序是**先编 Core，再编 App**。
+
+### 0.22.5 批次 4（`68d335c`）：崩溃不再静默退出
+
+原来 `App.OnUnhandledException` 只在 `AppServices.IsInitialized` 时 `Logger.Error`，
+**不设 `e.Handled`、不弹框、不写标记文件**。更关键的是 WinUI 的 `UnhandledException` **只覆盖 UI 线程**——
+后台线程和未观察的 Task 异常会让进程直接退出，用户看到的只是「启动器自己关了」，日志里什么都没有。
+
+三处改动：
+- 新增 `src/PdxLauncher.Core/Infrastructure/CrashReportWriter.cs`：把异常类型/消息/堆栈/版本/时间写成
+  `crash-<yyyyMMdd-HHmmss>.txt` 落到数据根，保留最近 N 份，**写失败绝不抛**（这条路径本身不能崩）。
+- 新增 `src/PdxLauncher.App/Services/CrashReporter.cs`：`Record(...)` 写文件 + 记日志；
+  `ShowDialogAsync(...)` 弹一个**文本可选中复制**的对话框（全仓原本没有任何 `Clipboard` 用法，这里新写的）。
+  带**重入闩**：弹框/写盘过程中再次抛异常就直接放弃，避免无限递归。
+- `App` 挂三个处理器：`UnhandledException`（UI 线程，`e.Handled = true` 保住进程 + 弹框）、
+  `AppDomain.CurrentDomain.UnhandledException`（后台线程，只能记录，进程必死）、
+  `TaskScheduler.UnobservedTaskException`（未观察的 Task，记录后 `SetObserved()`）。
+
+`Handled` 的取舍：UI 线程异常设 `Handled = true` 意味着进程继续跑，但状态可能已经不一致。
+这里选「保住进程 + 明确告知」而不是「直接退出」，因为用户手里的播放集数据比进程存活更重要 ——
+崩了能弹框让他先保存/复制错误信息，比静默消失好。后台线程那条无法挽救，只能留痕。
+
+顺带补了 `ModsViewModel.RenameSelectedAsync` 缺失的 `catch`（原本异常会冒到 UI 线程）。
+
+### 0.22.6 批次 5（`1984a62`）：域名白名单移进网络出口
+
+`OnlineHosts.IsAllowed` 全仓只有 **4 处调用**（`AssetDownloader`、`DlcDescriptionService`、
+`NewsFeedService` 两处），而 `HttpFetcher.GetAsync`/`PostJsonAsync` **内部无任何校验**——
+白名单是「调用方自觉」。新加一个集成、或者像 `SteamCoverUrlResolver` 那样直接调 `GetAsync` 的路径，
+就完全不受约束。
+
+现在 `HttpFetcher` 两个入口自己校验，不在白名单内直接抛 `host-not-allowed`，**连接都不会建立**；
+非 http(s) scheme 同样拒绝。`PdxHttpTransport`（账户/PDX mods 那条通道）早就这么做了，两条传输口径现在一致。
+
+**调用点原有的校验保留**，不是重复的摆设：
+- `AssetDownloader` 那处能在本地就拒掉，避免 `host-not-allowed` 被 `catch (HttpRequestException)` 当成瞬时失败
+  白跑三次重试；
+- 其余几处的 warn 日志比出口抛异常更具体（带原始 URL）。
+
+### 0.22.7 验证与遗留
+
+- 每批都跑了 `dotnet build` 与 `PdxLauncher.Checks.dll`：**0 警告 0 错误**，自检 **20 个检查类 / 0 失败**
+  （开工前是 16 类，期间并行会话加了 `DdsChecks` / `DiscoveryCacheChecks` / `CatalogCacheChecks` 等）。
+- 自检新增断言：`InfrastructureChecks` 覆盖 `AppSettingsStore` 的返回值/延迟写/`Flush`/损坏文件容错与
+  `CrashReportWriter` 的写盘/裁剪；`OnlineChecks` 用真实 `HttpFetcher` 断言被拒域名与非 http(s) scheme
+  都**不会发起请求**；`PlaysetChecks` / `PlaysetJsonChecks` 跟着新签名调整。
+- **环境限制**：验证期间用户一直开着启动器（`PdxLauncher.App` PID 37388/37076），
+  解决方案级 `dotnet build` 在最后一步复制 `PdxLauncher.Core.dll` 到 App 输出目录时被文件锁挡住
+  （`MSB3027` / `MSB3021`）。逐项目构建全绿，那 10 个 `MSB3026` 重试警告与 2 个错误**全部来自文件锁**，与代码无关。
+- **同一工作树里有第二个写入者**（并行会话在做 CS2 / 账号 / DDS 图片缓存）。
+  `App.xaml.cs`、`Strings.g.cs`、`ModsViewModel.cs` 等文件的 hunk 会混批，`git add` 会把对方半成品带进去。
+  本轮的分离手法：`.scratch/stage-hunks.py`（按 hunk 序号切 patch，**参数 1-based**）与
+  `.scratch/stage-from-head.py`（从 `git show HEAD:<path>` 取基线、只重放本批编辑、`git update-index --cacheinfo`，
+  **完全不动工作树**）。
+  **踩坑**：`core.autocrlf=true` 下 `git show` 输出的是 CRLF，而 blob 存的是 LF —— 内部必须统一按 LF 处理，
+  否则整个文件都显示成改动（第一版就是这样，`331 +207/-124`，修正后降到 `87 +85/-2`）。
+  `git apply --cached` **不幂等**，重复执行会报 `patch does not apply`，不要重试。
+
+**下一轮从这里接**：`HANDOFF.md` 的 D1–D20 缺陷台账里**至今没有一条属于「数据静默丢失」类别**，
+本轮五批补的就是这个空白。审核给出的后续批次（抽 `ICacheStore<T>` 收编三份缓存实现、
+`LoadFileFormat` 收敛为策略类、`.editorconfig` + `TreatWarningsAsErrors`、把 `PlaySetEditor` 下沉 Core）
+**都还没做**，其中「下沉 Core」现在已经被批次 1 解锁（`PlaySetEditor` 不再依赖 `Localizer`）。
+
 ## 0.19 最新一轮（2026-10-27 16:50）：EU5 美术 + 播放集/DLC 接入
 
 ### 0.19.1 用户诉求
