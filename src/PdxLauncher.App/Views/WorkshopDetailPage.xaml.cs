@@ -8,6 +8,8 @@ using Microsoft.UI.Xaml.Navigation;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
+using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Steam;
 
 namespace PdxLauncher.App.Views;
 
@@ -19,6 +21,7 @@ namespace PdxLauncher.App.Views;
 public sealed partial class WorkshopDetailPage : Page
 {
     private readonly WorkshopDetailViewModel _viewModel;
+    private readonly SteamWorkshopBridge? _steamBridge;
     private WorkshopRowViewModel? _row;
     private CancellationTokenSource? _lifetime;
 
@@ -26,6 +29,8 @@ public sealed partial class WorkshopDetailPage : Page
     public WorkshopDetailPage()
     {
         InitializeComponent();
+
+        _steamBridge = CreateSteamBridge();
 
         _viewModel = new WorkshopDetailViewModel(
             new WorkshopDetailSource(
@@ -45,7 +50,12 @@ public sealed partial class WorkshopDetailPage : Page
                 AppServices.FileSystem,
                 AppServices.DataRoot,
                 AppServices.Logger),
-            AppServices.Logger);
+            AppServices.Logger,
+            _steamBridge,
+            new WorkshopSubscriptionReader(
+                AppServices.FileSystem,
+                new SteamLibraryLocator(AppServices.FileSystem, AppServices.Logger),
+                AppServices.Logger));
 
         // 正文里的行内图片与顶部图片墙共用同一份缓存文件：先把解析器接上，
         // 图片下载完成后再由 GalleryImageReady 原地刷新，不重建整页。
@@ -61,6 +71,50 @@ public sealed partial class WorkshopDetailPage : Page
     {
         DescriptionView.RefreshImages();
         ChangelogView.RefreshImages();
+    }
+
+    /// <summary>
+    /// 只在设置里明确打开「Steam 工坊直连订阅」时才初始化 Steamworks：
+    /// 初始化要以当前游戏的 appid 调 SteamAPI_InitFlat，属于借用游戏的 Steam 凭据，默认绝不做。
+    /// 返回 null 表示走「打开 Steam 客户端」的降级路径。
+    /// </summary>
+    private static SteamWorkshopBridge? CreateSteamBridge()
+    {
+        if (!AppServices.Settings.SteamWorkshopSubscribeEnabled)
+        {
+            return null;
+        }
+
+        try
+        {
+            var bridge = new SteamWorkshopBridge(
+                AppServices.FileSystem,
+                AppServices.Logger,
+                new SteamApiLocator(AppServices.FileSystem, AppServices.Logger));
+
+            var appId = WorkshopSourceChooser.ResolveAppId(
+                AppServices.CurrentGame?.SteamAppId,
+                AppServices.CurrentGame?.GameId);
+
+            if (appId is null)
+            {
+                AppServices.Logger.Warn("Steam 直连订阅已开启，但当前游戏没有 Steam appid，退回打开客户端");
+                return null;
+            }
+
+            bridge.TryInitialize(
+                appId.Value,
+                AppServices.Settings.SteamApiDllPath,
+                AppServices.CurrentGame,
+                out _);
+
+            return bridge;
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("初始化 Steam 直连订阅失败，退回打开客户端", ex);
+            return null;
+        }
     }
 
     /// <summary>当前页面的取消令牌（跑在 LoadAsync / 翻页 / 订阅里）。</summary>
@@ -100,6 +154,10 @@ public sealed partial class WorkshopDetailPage : Page
     {
         _viewModel.GalleryImageReady -= OnGalleryImageReady;
         _lifetime?.Cancel();
+
+        // Steamworks 只应在这个页面存活期间初始化：离开页面就停回调泵并 Shutdown，
+        // 免得把「借来的 appid」一直挂在 Steam 客户端上。
+        _steamBridge?.Dispose();
     }
 
     private async void OnRetryClick(object sender, RoutedEventArgs e)
@@ -232,8 +290,43 @@ public sealed partial class WorkshopDetailPage : Page
     }
 
     /// <summary>Steam：订阅其实要在 Steam 客户端里完成，这里只负责把页面递过去。</summary>
-    private void OnSubscribeSteamClick(object sender, RoutedEventArgs e)
+    private async void OnSubscribeSteamClick(object sender, RoutedEventArgs e)
     {
+        // 直连可用：先让用户确认再动 Steam；不可用或失败：退回「在 Steam 客户端里打开」。
+        if (_viewModel.IsSteamDirectAvailable && _viewModel.ShowSteamSubscribeButton)
+        {
+            var subscribe = !_viewModel.IsSteamSubscribed;
+            var actionText = subscribe
+                ? L.WorkshopDetailSubscribe
+                : L.WorkshopDetailUnsubscribe;
+            var message = subscribe
+                ? L.WorkshopDetailSteamSubscribeConfirm
+                : L.WorkshopDetailSteamUnsubscribeConfirm;
+
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = actionText,
+                Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
+                PrimaryButtonText = actionText,
+                CloseButtonText = L.CommonCancel,
+                DefaultButton = ContentDialogButton.Close,
+            };
+
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            var result = await _viewModel.ToggleSteamSubscriptionAsync(subscribe, CurrentToken);
+            _viewModel.StatusText = result.Ok
+                ? (subscribe ? L.WorkshopDetailSubscribeOk : L.WorkshopDetailUnsubscribeOk)
+                : L.T(
+                    subscribe ? Keys.WorkshopDetailSubscribeFailed : Keys.WorkshopDetailUnsubscribeFailed,
+                    result.ErrorText ?? string.Empty);
+            return;
+        }
+
         ShellLauncher.TryOpenSteam(_viewModel.SteamUrl, "创意工坊详情（订阅）");
     }
 

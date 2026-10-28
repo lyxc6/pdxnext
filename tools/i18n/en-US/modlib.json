@@ -1,5 +1,9 @@
 {
   "modlib.countText": "{0} mods",
+  "modlib.detailNoWorkshop": "This mod has no workshop page (local mod)",
+  "modlib.detailPdxUnresolved": "This Paradox mod has no usable mod id, so the detail page can't open",
+  "modlib.detailSteamUnresolved": "This Steam mod has no workshop id, so the detail page can't open",
+  "modlib.detailUnknownSource": "The source of this mod is unrecognized, so the detail page can't open",
   "modlib.listName": "Mod library list",
   "modlib.loadFailed": "Failed to load: {0}",
   "modlib.noGameHint": "Select a game in your library first",
@@ -8,6 +12,7 @@
   "modlib.noModsHint": "This game has no mods yet",
   "modlib.noModsName": "No mods hint",
   "modlib.openBrowser": "Open in browser",
+  "modlib.openDetail": "Open detail page",
   "modlib.openFolder": "Open local folder",
   "modlib.openSteam": "Open in Steam",
   "modlib.playSetCount": "In {0} play sets",

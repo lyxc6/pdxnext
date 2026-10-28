@@ -1,5 +1,9 @@
 {
   "modlib.countText": "{0} 个 mod",
+  "modlib.detailNoWorkshop": "这个 mod 没有工坊详情页（本地 mod）",
+  "modlib.detailPdxUnresolved": "这个 Paradox mod 没有可用的工坊编号，打不开详情页",
+  "modlib.detailSteamUnresolved": "这个 Steam mod 没有创意工坊编号，打不开详情页",
+  "modlib.detailUnknownSource": "这个 mod 的来源无法识别，打不开详情页",
   "modlib.listName": "Mod 库列表",
   "modlib.loadFailed": "加载失败：{0}",
   "modlib.noGameHint": "请先在游戏库里选择一款游戏",
@@ -8,6 +12,7 @@
   "modlib.noModsHint": "该游戏还没有任何 mod",
   "modlib.noModsName": "没有 mod 提示",
   "modlib.openBrowser": "在浏览器中打开",
+  "modlib.openDetail": "打开详情页",
   "modlib.openFolder": "打开本地文件夹",
   "modlib.openSteam": "在 Steam 中打开",
   "modlib.playSetCount": "在 {0} 个播放集中",

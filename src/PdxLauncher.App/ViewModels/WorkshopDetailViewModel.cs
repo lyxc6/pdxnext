@@ -11,6 +11,7 @@ using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Steam;
 using PdxLauncher.Core.Text;
 
 /// <summary>
@@ -34,6 +35,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     private readonly WorkshopDetailSource _source;
     private readonly WorkshopImageCache _images;
     private readonly WorkshopSubscriptionService _subscription;
+    private readonly IWorkshopSubscribeBackend? _steamBackend;
+    private readonly WorkshopSubscriptionReader? _steamReader;
     private readonly IAppLogger _logger;
 
     /// <summary>Steam 评论翻页要用作者 SteamID（接口路径里的一部分）。</summary>
@@ -47,16 +50,24 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <param name="images">图片缓存（封面/截图落地）。</param>
     /// <param name="subscription">PDX 订阅服务。</param>
     /// <param name="logger">日志。</param>
+    /// <param name="steamBackend">Steam 直连订阅后端；null 或不可用表示只能打开客户端。</param>
+    /// <param name="steamReader">acf 只读查询（后端不可用时用它显示「已订阅/已安装」）。</param>
     public WorkshopDetailViewModel(
         WorkshopDetailSource source,
         WorkshopImageCache images,
         WorkshopSubscriptionService subscription,
-        IAppLogger logger)
+        IAppLogger logger,
+        IWorkshopSubscribeBackend? steamBackend = null,
+        WorkshopSubscriptionReader? steamReader = null)
     {
         _source = source;
         _images = images;
         _subscription = subscription;
         _logger = logger;
+        _steamBackend = steamBackend;
+        _steamReader = steamReader;
+        IsSteamDirectAvailable = steamBackend?.IsAvailable ?? false;
+        SteamUnavailableReason = steamBackend?.UnavailableReason ?? string.Empty;
     }
 
     /// <summary>当前展示的 mod 行；null 表示还没加载。</summary>
@@ -169,6 +180,26 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>订阅操作的即时反馈（成功/失败文案），空串表示没有。</summary>
     [ObservableProperty]
     private string _statusText = string.Empty;
+
+    /// <summary>Steam 侧是否已订阅（来自 Steamworks 实时状态或本地 acf）。</summary>
+    [ObservableProperty]
+    private bool _isSteamSubscribed;
+
+    /// <summary>Steam 订阅状态是否已确认（读不到 acf、后端不可用时保持 false）。</summary>
+    [ObservableProperty]
+    private bool _isSteamStateKnown;
+
+    /// <summary>Steam 订阅请求正在飞（接口要等 Steam 确认，可能好几秒）。</summary>
+    [ObservableProperty]
+    private bool _isSteamSubscribing;
+
+    /// <summary>Steam 订阅不可用的原因（dll 没找到 / 设置里没开开关），用于按钮下方提示。</summary>
+    [ObservableProperty]
+    private string _steamUnavailableReason = string.Empty;
+
+    /// <summary>Steam 订阅按钮是否真的直连（false 表示只能打开客户端）。</summary>
+    [ObservableProperty]
+    private bool _isSteamDirectAvailable;
 
     /// <summary>图片墙（PDX 截图 + 描述里内嵌的图）。</summary>
     public ObservableCollection<WorkshopScreenshotViewModel> Screenshots { get; } = [];
@@ -338,6 +369,34 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     /// <summary>订阅状态是否已确认（未确认时不显示「未订阅」这种断言文案）。</summary>
     public bool ShowSubscriptionState => CanSubscribe && IsSubscriptionKnown;
+
+    /// <summary>Steam 订阅按钮文案：订阅 / 订阅中… / 取消订阅。</summary>
+    public string SteamSubscribeActionText => IsSteamSubscribing
+        ? T(Keys.WorkshopDetailSubscribing)
+        : IsSteamSubscribed
+            ? T(Keys.WorkshopDetailUnsubscribe)
+            : T(Keys.WorkshopDetailSubscribe);
+
+    /// <summary>Steam 订阅按钮是否可点：直连可用、当前没有请求在飞。</summary>
+    public bool CanToggleSteamSubscription =>
+        ShowSteamSubscribeButton && IsSteamDirectAvailable && !IsSteamSubscribing;
+
+    /// <summary>Steam 订阅框的说明（直连开没开）。</summary>
+    public string SteamSubscribeHint => !ShowSteamSubscribeButton
+        ? string.Empty
+        : IsSteamDirectAvailable
+            ? T(Keys.WorkshopDetailSteamSubscribeHintOn)
+            : T(Keys.WorkshopDetailSteamSubscribeHintOff);
+
+    /// <summary>是否有 Steam 订阅说明。</summary>
+    public bool HasSteamSubscribeHint => !string.IsNullOrWhiteSpace(SteamSubscribeHint);
+
+    /// <summary>Steam 直连不可用的具体原因（找不到 dll 等），有才显示。</summary>
+    public bool HasSteamUnavailableReason =>
+        ShowSteamSubscribeButton && !string.IsNullOrWhiteSpace(SteamUnavailableReason);
+
+    /// <summary>Steam 订阅状态已确认时显示「已订阅」徽标。</summary>
+    public bool ShowSteamSubscribeState => ShowSteamSubscribeButton && IsSteamStateKnown;
 
     /// <summary>加载指定行；重复调用会先清空上一次的内容。</summary>
     /// <param name="row">创意工坊列表行。</param>
@@ -525,6 +584,127 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         }
     }
 
+    /// <summary>
+    /// 查询 Steam 工坊订阅状态：后端可用时读 Steamworks 实时状态，否则只读本地 acf。
+    /// 两边都读不到就保持「未确认」，不猜。
+    /// </summary>
+    /// <param name="row">列表行。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task RefreshSteamSubscriptionAsync(WorkshopRowViewModel row, CancellationToken cancellationToken)
+    {
+        if (row.Source != WorkshopSource.Steam || !ulong.TryParse(row.Id, out var fileId))
+        {
+            return;
+        }
+
+        try
+        {
+            if (_steamBackend is { IsAvailable: true } backend)
+            {
+                ApplySteamInstallState(backend.ReadState(fileId), "Steamworks");
+            }
+            else if (_steamReader is not null && ResolveSteamAppId() is int appId)
+            {
+                // acf 解析是纯磁盘操作，丢到线程池里别占 UI 线程。
+                var state = await Task
+                    .Run(() => _steamReader.Read(appId, row.Id), cancellationToken)
+                    .ConfigureAwait(true);
+                ApplySteamInstallState(state, "acf");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("查询 Steam 订阅状态异常: " + ex.Message);
+        }
+        finally
+        {
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>订阅 / 退订 Steam 工坊条目（界面已做二次确认）。</summary>
+    /// <param name="subscribe">true 订阅，false 退订。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<WorkshopSubscribeResult> ToggleSteamSubscriptionAsync(
+        bool subscribe,
+        CancellationToken cancellationToken)
+    {
+        if (_steamBackend is not { IsAvailable: true } backend)
+        {
+            return WorkshopSubscribeResult.Fail(T(Keys.WorkshopDetailSteamSubscribeHintOff));
+        }
+
+        if (Row is not { } row || !ulong.TryParse(row.Id, out var fileId))
+        {
+            return WorkshopSubscribeResult.Fail(T(Keys.WorkshopDetailErrorUnknown));
+        }
+
+        IsSteamSubscribing = true;
+        NotifyStateChanged();
+
+        try
+        {
+            var result = await backend
+                .SetSubscribedAsync(fileId, subscribe, cancellationToken)
+                .ConfigureAwait(true);
+
+            if (result.Ok)
+            {
+                IsSteamSubscribed = subscribe;
+                IsSteamStateKnown = true;
+            }
+
+            return result;
+        }
+        finally
+        {
+            IsSteamSubscribing = false;
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>把 acf / Steamworks 读到的状态落到界面上。</summary>
+    /// <param name="state">读到的安装状态。</param>
+    /// <param name="source">状态来源（Steamworks / acf），只用于日志。</param>
+    private void ApplySteamInstallState(WorkshopInstallState state, string source)
+    {
+        _logger.Info(
+            "Steam 订阅状态（" + source + "）：订阅=" + Describe(state.IsSubscribed)
+            + " 安装=" + Describe(state.IsInstalled)
+            + " 下载中=" + Describe(state.IsDownloading)
+            + " acf=" + (state.AcfPath ?? "无"));
+
+        if (state.IsSubscribed is bool subscribed)
+        {
+            IsSteamSubscribed = subscribed;
+            IsSteamStateKnown = true;
+        }
+        else if (state.IsInstalled is bool installed)
+        {
+            // 只有内容目录、没有 acf：能确定装过，但不敢断言订阅状态。
+            IsSteamSubscribed = installed;
+            IsSteamStateKnown = false;
+        }
+    }
+
+    /// <summary>把三态布尔写成日志里能一眼看懂的中文。</summary>
+    private static string Describe(bool? value) => value switch
+    {
+        true => "是",
+        false => "否",
+        _ => "未知",
+    };
+
+    /// <summary>当前游戏的 Steam appid（acf 与 Steamworks 都要它）。</summary>
+    private static int? ResolveSteamAppId() =>
+        WorkshopSourceChooser.ResolveAppId(
+            AppServices.CurrentGame?.SteamAppId,
+            AppServices.CurrentGame?.GameId);
+
     /// <summary>下行前把上一次的内容清掉，避免看到上一个 mod 的正文。</summary>
     private void ResetForLoad(WorkshopRowViewModel row)
     {
@@ -557,6 +737,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         CommentsPage = 1;
         _steamCreatorId = null;
         _inlineImages.Clear();
+        IsSteamSubscribed = false;
+        IsSteamStateKnown = false;
+        IsSteamSubscribing = false;
 
         // 列表里已经下好的封面先直接用，别在详情页再下一次。
         CoverPath = row.CoverPath;
@@ -668,6 +851,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         }
 
         BuildGallery(row, galleryUrls);
+
+        // Steam 工坊订阅状态：后端可用读实时状态，否则读 acf（都读不到就保持未知）。
+        await RefreshSteamSubscriptionAsync(row, cancellationToken).ConfigureAwait(true);
 
         var inlineUrls = imageUrls.Count > 0 ? imageUrls : document.ImageUrls.ToList();
 
@@ -1098,6 +1284,12 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(ShowSteamSubscribeButton));
         OnPropertyChanged(nameof(ShowSubscriptionState));
         OnPropertyChanged(nameof(HasStatusText));
+        OnPropertyChanged(nameof(SteamSubscribeActionText));
+        OnPropertyChanged(nameof(CanToggleSteamSubscription));
+        OnPropertyChanged(nameof(SteamSubscribeHint));
+        OnPropertyChanged(nameof(HasSteamSubscribeHint));
+        OnPropertyChanged(nameof(HasSteamUnavailableReason));
+        OnPropertyChanged(nameof(ShowSteamSubscribeState));
     }
 
     partial void OnCoverPathChanged(string? value) => OnPropertyChanged(nameof(HasCover));
@@ -1167,4 +1359,28 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     partial void OnDependencySummaryChanged(string value) => OnPropertyChanged(nameof(HasDependencySummary));
 
     partial void OnCommentsSummaryChanged(string value) => OnPropertyChanged(nameof(HasCommentsSummary));
+
+    partial void OnIsSteamSubscribingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanToggleSteamSubscription));
+        OnPropertyChanged(nameof(SteamSubscribeActionText));
+    }
+
+    partial void OnIsSteamSubscribedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SteamSubscribeActionText));
+        OnPropertyChanged(nameof(ShowSteamSubscribeState));
+    }
+
+    partial void OnIsSteamStateKnownChanged(bool value) => OnPropertyChanged(nameof(ShowSteamSubscribeState));
+
+    partial void OnIsSteamDirectAvailableChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanToggleSteamSubscription));
+        OnPropertyChanged(nameof(SteamSubscribeHint));
+        OnPropertyChanged(nameof(HasSteamSubscribeHint));
+        OnPropertyChanged(nameof(HasSteamUnavailableReason));
+    }
+
+    partial void OnSteamUnavailableReasonChanged(string value) => OnPropertyChanged(nameof(HasSteamUnavailableReason));
 }

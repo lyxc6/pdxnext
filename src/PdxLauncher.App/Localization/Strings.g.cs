@@ -157,6 +157,10 @@ public sealed partial class Localizer
         ["library.version"] = "版本 {0}",
         ["library.versionUnknown"] = "版本未知",
         ["modlib.countText"] = "{0} 个 mod",
+        ["modlib.detailNoWorkshop"] = "这个 mod 没有工坊详情页（本地 mod）",
+        ["modlib.detailPdxUnresolved"] = "这个 Paradox mod 没有可用的工坊编号，打不开详情页",
+        ["modlib.detailSteamUnresolved"] = "这个 Steam mod 没有创意工坊编号，打不开详情页",
+        ["modlib.detailUnknownSource"] = "这个 mod 的来源无法识别，打不开详情页",
         ["modlib.listName"] = "Mod 库列表",
         ["modlib.loadFailed"] = "加载失败：{0}",
         ["modlib.noGameHint"] = "请先在游戏库里选择一款游戏",
@@ -165,6 +169,7 @@ public sealed partial class Localizer
         ["modlib.noModsHint"] = "该游戏还没有任何 mod",
         ["modlib.noModsName"] = "没有 mod 提示",
         ["modlib.openBrowser"] = "在浏览器中打开",
+        ["modlib.openDetail"] = "打开详情页",
         ["modlib.openFolder"] = "打开本地文件夹",
         ["modlib.openSteam"] = "在 Steam 中打开",
         ["modlib.playSetCount"] = "在 {0} 个播放集中",
@@ -261,6 +266,7 @@ public sealed partial class Localizer
         ["mods.status.deletedActivated"] = "已删除播放集「{0}」，已自动激活「{1}」并写入加载文件",
         ["mods.status.deletedActivatedNoLoadFile"] = "已删除播放集「{0}」，已自动激活「{1}」，但写入加载文件失败",
         ["mods.status.deletedInactive"] = "已删除播放集「{0}」（激活状态未变）",
+        ["mods.status.externalChange"] = "官方启动器已改动该播放集，已重新加载（本次修改未保存）",
         ["mods.status.invalidPosition"] = "位次无效：请输入不小于 1 的整数（大于 {0} 视为置底）",
         ["mods.status.loadFailed"] = "加载失败：{0}",
         ["mods.status.loadedPlaySets"] = "已加载 {0} 个播放集",
@@ -534,6 +540,12 @@ public sealed partial class Localizer
         ["settings.status.openedDataDir"] = "已打开数据目录：{0}",
         ["settings.status.saveFailed"] = "保存设置失败：{0}",
         ["settings.status.selectGameFirst"] = "请先在游戏库里选择一款游戏",
+        ["settings.steamApiMissing"] = "未找到 steam_api64.dll：{0}",
+        ["settings.steamApiReady"] = "已找到 steam_api64.dll",
+        ["settings.steamSubscribeHint"] = "开启后，创意工坊详情页的「在 Steam 中订阅」按钮会直接调用 Steam 客户端完成订阅 / 取消订阅；关闭时只会在 Steam 客户端里打开该 mod 页面。需要 steam_api64.dll（放在程序目录或游戏目录）。",
+        ["settings.steamSubscribeOn"] = "Steam 工坊直连订阅（实验）",
+        ["settings.steamSubscribeStatusOff"] = "已关闭 Steam 工坊直连订阅",
+        ["settings.steamSubscribeStatusOn"] = "已开启 Steam 工坊直连订阅",
         ["settings.theme.busy"] = "处理中",
         ["settings.theme.checkNow"] = "立即检查",
         ["settings.theme.dialogFailedTitle"] = "检查主题失败",
@@ -605,6 +617,7 @@ public sealed partial class Localizer
         ["workshop.dependencyVersion"] = "需要版本 {0}",
         ["workshop.detailAuthorHint"] = "作者主页",
         ["workshop.detailBack"] = "返回创意工坊",
+        ["workshop.detailBackLibrary"] = "返回 Mod 库",
         ["workshop.detailCached"] = "网络不可用，显示上次缓存的详情",
         ["workshop.detailChangelog"] = "更新日志",
         ["workshop.detailCloseViewer"] = "关闭大图",
@@ -627,6 +640,10 @@ public sealed partial class Localizer
         ["workshop.detailScreenshots"] = "截图 {0} 张",
         ["workshop.detailScreenshotsLoading"] = "正在下载截图…",
         ["workshop.detailScreenshotsTitle"] = "截图",
+        ["workshop.detailSteamSubscribeConfirm"] = "将通过 Steam 客户端订阅这个工坊物品，Steam 会立刻开始下载。确定继续吗？",
+        ["workshop.detailSteamSubscribeHintOff"] = "未开启直连订阅：按钮只会在 Steam 客户端里打开该 mod。可在设置页的「Steam 工坊直连订阅」里打开。",
+        ["workshop.detailSteamSubscribeHintOn"] = "已开启直连订阅：按钮会直接调用 Steam 客户端订阅 / 取消订阅。",
+        ["workshop.detailSteamUnsubscribeConfirm"] = "将取消订阅这个工坊物品。Steam 会在游戏退出后移除已下载的内容。确定继续吗？",
         ["workshop.detailSubscribe"] = "订阅",
         ["workshop.detailSubscribeFailed"] = "订阅失败：{0}",
         ["workshop.detailSubscribeOk"] = "已订阅",
@@ -839,6 +856,10 @@ public sealed partial class Localizer
         ["library.version"] = "Version {0}",
         ["library.versionUnknown"] = "Version unknown",
         ["modlib.countText"] = "{0} mods",
+        ["modlib.detailNoWorkshop"] = "This mod has no workshop page (local mod)",
+        ["modlib.detailPdxUnresolved"] = "This Paradox mod has no usable mod id, so the detail page can't open",
+        ["modlib.detailSteamUnresolved"] = "This Steam mod has no workshop id, so the detail page can't open",
+        ["modlib.detailUnknownSource"] = "The source of this mod is unrecognized, so the detail page can't open",
         ["modlib.listName"] = "Mod library list",
         ["modlib.loadFailed"] = "Failed to load: {0}",
         ["modlib.noGameHint"] = "Select a game in your library first",
@@ -847,6 +868,7 @@ public sealed partial class Localizer
         ["modlib.noModsHint"] = "This game has no mods yet",
         ["modlib.noModsName"] = "No mods hint",
         ["modlib.openBrowser"] = "Open in browser",
+        ["modlib.openDetail"] = "Open detail page",
         ["modlib.openFolder"] = "Open local folder",
         ["modlib.openSteam"] = "Open in Steam",
         ["modlib.playSetCount"] = "In {0} play sets",
@@ -943,6 +965,7 @@ public sealed partial class Localizer
         ["mods.status.deletedActivated"] = "Deleted play set \"{0}\"; activated \"{1}\" and wrote the load file",
         ["mods.status.deletedActivatedNoLoadFile"] = "Deleted play set \"{0}\"; activated \"{1}\" but writing the load file failed",
         ["mods.status.deletedInactive"] = "Deleted play set \"{0}\" (activation unchanged)",
+        ["mods.status.externalChange"] = "The official launcher changed this play set; reloaded without saving your change",
         ["mods.status.invalidPosition"] = "Invalid position: enter a whole number of 1 or more (anything above {0} moves it to the end)",
         ["mods.status.loadFailed"] = "Failed to load: {0}",
         ["mods.status.loadedPlaySets"] = "Loaded {0} play sets",
@@ -1216,6 +1239,12 @@ public sealed partial class Localizer
         ["settings.status.openedDataDir"] = "Opened the data folder: {0}",
         ["settings.status.saveFailed"] = "Could not save settings: {0}",
         ["settings.status.selectGameFirst"] = "Pick a game in the library first",
+        ["settings.steamApiMissing"] = "steam_api64.dll not found: {0}",
+        ["settings.steamApiReady"] = "steam_api64.dll found",
+        ["settings.steamSubscribeHint"] = "When on, the Subscribe button on a Workshop detail page subscribes or unsubscribes through the Steam client. When off, it only opens the item in the Steam client. Requires steam_api64.dll next to the launcher or in the game folder.",
+        ["settings.steamSubscribeOn"] = "Direct Steam Workshop subscription (experimental)",
+        ["settings.steamSubscribeStatusOff"] = "Direct Steam Workshop subscription disabled",
+        ["settings.steamSubscribeStatusOn"] = "Direct Steam Workshop subscription enabled",
         ["settings.theme.busy"] = "Working",
         ["settings.theme.checkNow"] = "Check now",
         ["settings.theme.dialogFailedTitle"] = "Theme check failed",
@@ -1287,6 +1316,7 @@ public sealed partial class Localizer
         ["workshop.dependencyVersion"] = "Version {0} required",
         ["workshop.detailAuthorHint"] = "Author profile",
         ["workshop.detailBack"] = "Back to workshop",
+        ["workshop.detailBackLibrary"] = "Back to Mod library",
         ["workshop.detailCached"] = "The network is unavailable; showing the cached details",
         ["workshop.detailChangelog"] = "Changelog",
         ["workshop.detailCloseViewer"] = "Close image",
@@ -1309,6 +1339,10 @@ public sealed partial class Localizer
         ["workshop.detailScreenshots"] = "{0} screenshots",
         ["workshop.detailScreenshotsLoading"] = "Downloading screenshots…",
         ["workshop.detailScreenshotsTitle"] = "Screenshots",
+        ["workshop.detailSteamSubscribeConfirm"] = "This subscribes to the Workshop item through the Steam client, and Steam starts downloading it immediately. Continue?",
+        ["workshop.detailSteamSubscribeHintOff"] = "Direct subscription is off: the button only opens this item in the Steam client. Turn it on in Settings.",
+        ["workshop.detailSteamSubscribeHintOn"] = "Direct subscription is on: the button subscribes or unsubscribes through the Steam client.",
+        ["workshop.detailSteamUnsubscribeConfirm"] = "This unsubscribes from the Workshop item. Steam removes the downloaded content after the game quits. Continue?",
         ["workshop.detailSubscribe"] = "Subscribe",
         ["workshop.detailSubscribeFailed"] = "Subscribe failed: {0}",
         ["workshop.detailSubscribeOk"] = "Subscribed",
@@ -1521,6 +1555,10 @@ public sealed partial class Localizer
         ("library.version", "LibraryVersion"),
         ("library.versionUnknown", "LibraryVersionUnknown"),
         ("modlib.countText", "ModlibCountText"),
+        ("modlib.detailNoWorkshop", "ModlibDetailNoWorkshop"),
+        ("modlib.detailPdxUnresolved", "ModlibDetailPdxUnresolved"),
+        ("modlib.detailSteamUnresolved", "ModlibDetailSteamUnresolved"),
+        ("modlib.detailUnknownSource", "ModlibDetailUnknownSource"),
         ("modlib.listName", "ModlibListName"),
         ("modlib.loadFailed", "ModlibLoadFailed"),
         ("modlib.noGameHint", "ModlibNoGameHint"),
@@ -1529,6 +1567,7 @@ public sealed partial class Localizer
         ("modlib.noModsHint", "ModlibNoModsHint"),
         ("modlib.noModsName", "ModlibNoModsName"),
         ("modlib.openBrowser", "ModlibOpenBrowser"),
+        ("modlib.openDetail", "ModlibOpenDetail"),
         ("modlib.openFolder", "ModlibOpenFolder"),
         ("modlib.openSteam", "ModlibOpenSteam"),
         ("modlib.playSetCount", "ModlibPlaySetCount"),
@@ -1625,6 +1664,7 @@ public sealed partial class Localizer
         ("mods.status.deletedActivated", "ModsStatusDeletedActivated"),
         ("mods.status.deletedActivatedNoLoadFile", "ModsStatusDeletedActivatedNoLoadFile"),
         ("mods.status.deletedInactive", "ModsStatusDeletedInactive"),
+        ("mods.status.externalChange", "ModsStatusExternalChange"),
         ("mods.status.invalidPosition", "ModsStatusInvalidPosition"),
         ("mods.status.loadFailed", "ModsStatusLoadFailed"),
         ("mods.status.loadedPlaySets", "ModsStatusLoadedPlaySets"),
@@ -1898,6 +1938,12 @@ public sealed partial class Localizer
         ("settings.status.openedDataDir", "SettingsStatusOpenedDataDir"),
         ("settings.status.saveFailed", "SettingsStatusSaveFailed"),
         ("settings.status.selectGameFirst", "SettingsStatusSelectGameFirst"),
+        ("settings.steamApiMissing", "SettingsSteamApiMissing"),
+        ("settings.steamApiReady", "SettingsSteamApiReady"),
+        ("settings.steamSubscribeHint", "SettingsSteamSubscribeHint"),
+        ("settings.steamSubscribeOn", "SettingsSteamSubscribeOn"),
+        ("settings.steamSubscribeStatusOff", "SettingsSteamSubscribeStatusOff"),
+        ("settings.steamSubscribeStatusOn", "SettingsSteamSubscribeStatusOn"),
         ("settings.theme.busy", "SettingsThemeBusy"),
         ("settings.theme.checkNow", "SettingsThemeCheckNow"),
         ("settings.theme.dialogFailedTitle", "SettingsThemeDialogFailedTitle"),
@@ -1969,6 +2015,7 @@ public sealed partial class Localizer
         ("workshop.dependencyVersion", "WorkshopDependencyVersion"),
         ("workshop.detailAuthorHint", "WorkshopDetailAuthorHint"),
         ("workshop.detailBack", "WorkshopDetailBack"),
+        ("workshop.detailBackLibrary", "WorkshopDetailBackLibrary"),
         ("workshop.detailCached", "WorkshopDetailCached"),
         ("workshop.detailChangelog", "WorkshopDetailChangelog"),
         ("workshop.detailCloseViewer", "WorkshopDetailCloseViewer"),
@@ -1991,6 +2038,10 @@ public sealed partial class Localizer
         ("workshop.detailScreenshots", "WorkshopDetailScreenshots"),
         ("workshop.detailScreenshotsLoading", "WorkshopDetailScreenshotsLoading"),
         ("workshop.detailScreenshotsTitle", "WorkshopDetailScreenshotsTitle"),
+        ("workshop.detailSteamSubscribeConfirm", "WorkshopDetailSteamSubscribeConfirm"),
+        ("workshop.detailSteamSubscribeHintOff", "WorkshopDetailSteamSubscribeHintOff"),
+        ("workshop.detailSteamSubscribeHintOn", "WorkshopDetailSteamSubscribeHintOn"),
+        ("workshop.detailSteamUnsubscribeConfirm", "WorkshopDetailSteamUnsubscribeConfirm"),
         ("workshop.detailSubscribe", "WorkshopDetailSubscribe"),
         ("workshop.detailSubscribeFailed", "WorkshopDetailSubscribeFailed"),
         ("workshop.detailSubscribeOk", "WorkshopDetailSubscribeOk"),
@@ -2201,6 +2252,10 @@ public sealed partial class Localizer
     public string LibraryVersion => Format("library.version");
     public string LibraryVersionUnknown => Format("library.versionUnknown");
     public string ModlibCountText => Format("modlib.countText");
+    public string ModlibDetailNoWorkshop => Format("modlib.detailNoWorkshop");
+    public string ModlibDetailPdxUnresolved => Format("modlib.detailPdxUnresolved");
+    public string ModlibDetailSteamUnresolved => Format("modlib.detailSteamUnresolved");
+    public string ModlibDetailUnknownSource => Format("modlib.detailUnknownSource");
     public string ModlibListName => Format("modlib.listName");
     public string ModlibLoadFailed => Format("modlib.loadFailed");
     public string ModlibNoGameHint => Format("modlib.noGameHint");
@@ -2209,6 +2264,7 @@ public sealed partial class Localizer
     public string ModlibNoModsHint => Format("modlib.noModsHint");
     public string ModlibNoModsName => Format("modlib.noModsName");
     public string ModlibOpenBrowser => Format("modlib.openBrowser");
+    public string ModlibOpenDetail => Format("modlib.openDetail");
     public string ModlibOpenFolder => Format("modlib.openFolder");
     public string ModlibOpenSteam => Format("modlib.openSteam");
     public string ModlibPlaySetCount => Format("modlib.playSetCount");
@@ -2305,6 +2361,7 @@ public sealed partial class Localizer
     public string ModsStatusDeletedActivated => Format("mods.status.deletedActivated");
     public string ModsStatusDeletedActivatedNoLoadFile => Format("mods.status.deletedActivatedNoLoadFile");
     public string ModsStatusDeletedInactive => Format("mods.status.deletedInactive");
+    public string ModsStatusExternalChange => Format("mods.status.externalChange");
     public string ModsStatusInvalidPosition => Format("mods.status.invalidPosition");
     public string ModsStatusLoadFailed => Format("mods.status.loadFailed");
     public string ModsStatusLoadedPlaySets => Format("mods.status.loadedPlaySets");
@@ -2578,6 +2635,12 @@ public sealed partial class Localizer
     public string SettingsStatusOpenedDataDir => Format("settings.status.openedDataDir");
     public string SettingsStatusSaveFailed => Format("settings.status.saveFailed");
     public string SettingsStatusSelectGameFirst => Format("settings.status.selectGameFirst");
+    public string SettingsSteamApiMissing => Format("settings.steamApiMissing");
+    public string SettingsSteamApiReady => Format("settings.steamApiReady");
+    public string SettingsSteamSubscribeHint => Format("settings.steamSubscribeHint");
+    public string SettingsSteamSubscribeOn => Format("settings.steamSubscribeOn");
+    public string SettingsSteamSubscribeStatusOff => Format("settings.steamSubscribeStatusOff");
+    public string SettingsSteamSubscribeStatusOn => Format("settings.steamSubscribeStatusOn");
     public string SettingsThemeBusy => Format("settings.theme.busy");
     public string SettingsThemeCheckNow => Format("settings.theme.checkNow");
     public string SettingsThemeDialogFailedTitle => Format("settings.theme.dialogFailedTitle");
@@ -2649,6 +2712,7 @@ public sealed partial class Localizer
     public string WorkshopDependencyVersion => Format("workshop.dependencyVersion");
     public string WorkshopDetailAuthorHint => Format("workshop.detailAuthorHint");
     public string WorkshopDetailBack => Format("workshop.detailBack");
+    public string WorkshopDetailBackLibrary => Format("workshop.detailBackLibrary");
     public string WorkshopDetailCached => Format("workshop.detailCached");
     public string WorkshopDetailChangelog => Format("workshop.detailChangelog");
     public string WorkshopDetailCloseViewer => Format("workshop.detailCloseViewer");
@@ -2671,6 +2735,10 @@ public sealed partial class Localizer
     public string WorkshopDetailScreenshots => Format("workshop.detailScreenshots");
     public string WorkshopDetailScreenshotsLoading => Format("workshop.detailScreenshotsLoading");
     public string WorkshopDetailScreenshotsTitle => Format("workshop.detailScreenshotsTitle");
+    public string WorkshopDetailSteamSubscribeConfirm => Format("workshop.detailSteamSubscribeConfirm");
+    public string WorkshopDetailSteamSubscribeHintOff => Format("workshop.detailSteamSubscribeHintOff");
+    public string WorkshopDetailSteamSubscribeHintOn => Format("workshop.detailSteamSubscribeHintOn");
+    public string WorkshopDetailSteamUnsubscribeConfirm => Format("workshop.detailSteamUnsubscribeConfirm");
     public string WorkshopDetailSubscribe => Format("workshop.detailSubscribe");
     public string WorkshopDetailSubscribeFailed => Format("workshop.detailSubscribeFailed");
     public string WorkshopDetailSubscribeOk => Format("workshop.detailSubscribeOk");
@@ -2884,6 +2952,10 @@ internal static class Keys
     public const string LibraryVersion = "library.version";
     public const string LibraryVersionUnknown = "library.versionUnknown";
     public const string ModlibCountText = "modlib.countText";
+    public const string ModlibDetailNoWorkshop = "modlib.detailNoWorkshop";
+    public const string ModlibDetailPdxUnresolved = "modlib.detailPdxUnresolved";
+    public const string ModlibDetailSteamUnresolved = "modlib.detailSteamUnresolved";
+    public const string ModlibDetailUnknownSource = "modlib.detailUnknownSource";
     public const string ModlibListName = "modlib.listName";
     public const string ModlibLoadFailed = "modlib.loadFailed";
     public const string ModlibNoGameHint = "modlib.noGameHint";
@@ -2892,6 +2964,7 @@ internal static class Keys
     public const string ModlibNoModsHint = "modlib.noModsHint";
     public const string ModlibNoModsName = "modlib.noModsName";
     public const string ModlibOpenBrowser = "modlib.openBrowser";
+    public const string ModlibOpenDetail = "modlib.openDetail";
     public const string ModlibOpenFolder = "modlib.openFolder";
     public const string ModlibOpenSteam = "modlib.openSteam";
     public const string ModlibPlaySetCount = "modlib.playSetCount";
@@ -2988,6 +3061,7 @@ internal static class Keys
     public const string ModsStatusDeletedActivated = "mods.status.deletedActivated";
     public const string ModsStatusDeletedActivatedNoLoadFile = "mods.status.deletedActivatedNoLoadFile";
     public const string ModsStatusDeletedInactive = "mods.status.deletedInactive";
+    public const string ModsStatusExternalChange = "mods.status.externalChange";
     public const string ModsStatusInvalidPosition = "mods.status.invalidPosition";
     public const string ModsStatusLoadFailed = "mods.status.loadFailed";
     public const string ModsStatusLoadedPlaySets = "mods.status.loadedPlaySets";
@@ -3261,6 +3335,12 @@ internal static class Keys
     public const string SettingsStatusOpenedDataDir = "settings.status.openedDataDir";
     public const string SettingsStatusSaveFailed = "settings.status.saveFailed";
     public const string SettingsStatusSelectGameFirst = "settings.status.selectGameFirst";
+    public const string SettingsSteamApiMissing = "settings.steamApiMissing";
+    public const string SettingsSteamApiReady = "settings.steamApiReady";
+    public const string SettingsSteamSubscribeHint = "settings.steamSubscribeHint";
+    public const string SettingsSteamSubscribeOn = "settings.steamSubscribeOn";
+    public const string SettingsSteamSubscribeStatusOff = "settings.steamSubscribeStatusOff";
+    public const string SettingsSteamSubscribeStatusOn = "settings.steamSubscribeStatusOn";
     public const string SettingsThemeBusy = "settings.theme.busy";
     public const string SettingsThemeCheckNow = "settings.theme.checkNow";
     public const string SettingsThemeDialogFailedTitle = "settings.theme.dialogFailedTitle";
@@ -3332,6 +3412,7 @@ internal static class Keys
     public const string WorkshopDependencyVersion = "workshop.dependencyVersion";
     public const string WorkshopDetailAuthorHint = "workshop.detailAuthorHint";
     public const string WorkshopDetailBack = "workshop.detailBack";
+    public const string WorkshopDetailBackLibrary = "workshop.detailBackLibrary";
     public const string WorkshopDetailCached = "workshop.detailCached";
     public const string WorkshopDetailChangelog = "workshop.detailChangelog";
     public const string WorkshopDetailCloseViewer = "workshop.detailCloseViewer";
@@ -3354,6 +3435,10 @@ internal static class Keys
     public const string WorkshopDetailScreenshots = "workshop.detailScreenshots";
     public const string WorkshopDetailScreenshotsLoading = "workshop.detailScreenshotsLoading";
     public const string WorkshopDetailScreenshotsTitle = "workshop.detailScreenshotsTitle";
+    public const string WorkshopDetailSteamSubscribeConfirm = "workshop.detailSteamSubscribeConfirm";
+    public const string WorkshopDetailSteamSubscribeHintOff = "workshop.detailSteamSubscribeHintOff";
+    public const string WorkshopDetailSteamSubscribeHintOn = "workshop.detailSteamSubscribeHintOn";
+    public const string WorkshopDetailSteamUnsubscribeConfirm = "workshop.detailSteamUnsubscribeConfirm";
     public const string WorkshopDetailSubscribe = "workshop.detailSubscribe";
     public const string WorkshopDetailSubscribeFailed = "workshop.detailSubscribeFailed";
     public const string WorkshopDetailSubscribeOk = "workshop.detailSubscribeOk";

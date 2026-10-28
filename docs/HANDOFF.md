@@ -3386,3 +3386,99 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
 - 顺序问题：数组顺序与页面顺序可能不同，**以 `highlight_screenshot_<id>` 的页面顺序为准**。
 - 只有视频（`highlight_movie`）没有截图的 mod → `ScreenshotUrls` 为空 → 退回 `preview_url`。
 - 页面改版导致抓不到时同样静默退回封面，不抛异常、不留空卡。
+
+## 0.45 2026-10-29：创意工坊详情页可以真的订阅 Steam 工坊（直连 Steamworks）
+
+**背景**
+
+- 详情页的「订阅」按钮一直是两套行为：Paradox Mods 走 §0.41 的真订阅接口，Steam 那侧只
+  `ShellLauncher.TryOpenSteam` 打开客户端页面（用户还得在 Steam 里再点一次）。
+- 用户问「能实现 Steam 创意工坊订阅吗，是不是需要 Steam 的 SDK」，并在拿到 SDK 后选了
+  「Stage B」——即接受「用游戏 appid 初始化 Steamworks」这条越界路线，要真订阅。
+
+**为什么 Web API 走不通（先排除的两条路）**
+
+- `ISteamRemoteStorage/SubscribePublishedFile` 是 **PUBLISHER 专属**（`partner.steam-api.com`），
+  第三方拿不到，也不该拿。
+- 社区站点 `https://steamcommunity.com/sharedfiles/subscribe/?publishedfileid=…` 存在，但需要
+  用户自己的 Steam 网页登录态；实测未登录直接 **HTTP 401**，且新版 Steam 的 `config.vdf` 里
+  已经没有 `steamLoginSecure` / `WebCookies` / `sessionid`（0 命中），没有可复用的 cookie。
+- OpenID 只回 Claimed ID（`http://steamcommunity.com/openid/id/<steamid>`），是身份不是授权令牌。
+- 剩下唯一能「代表本机用户订阅」的入口就是 **本地 Steamworks 客户端 API**。
+
+**SDK 1.65 与老版本 DLL 的差别（实测导出表）**
+
+- `sdk/public/steam/steam_api.h` 把 `SteamAPI_Init()` 改成了 inline（转调 `SteamInternal_SteamAPI_Init`），
+  所以 **1.65 的 `steam_api64.dll` 不再导出 `SteamAPI_Init`**，只导出 `SteamAPI_InitFlat` / `SteamAPI_InitSafe`。
+  → 这也是不用 Steamworks.NET（2024.8.0 走旧导出）的原因，改用 P/Invoke 直连 flat API。
+- 1.65 才有 `SteamAPI_SteamUGC_v021()`（老游戏自带 DLL 没有）；`SteamAPI_ISteamUGC_SubscribeItem`
+  /`UnsubscribeItem`/`GetItemState` 两代都有。`SteamAPI_IsSteamRunning` 返回 C++ bool（1 字节），
+  必须 `[return: MarshalAs(UnmanagedType.I1)]`，否则高位垃圾会让判断恒真。
+
+**改法**
+
+1. `src/PdxLauncher.Core/Steam/SteamApiLocator.cs`（新增）：按「手填路径 → 程序目录 →
+   逐级父目录下的 `sdk/redistributable_bin/win64/` → 游戏目录 binaries/bin/steamworks」找 DLL，
+   体积 < 64 KB 视为占位文件；`Candidates` 保序去重，`Resolve` 取第一个可用的。
+2. `src/PdxLauncher.Core/Steam/WorkshopSubscriptionReader.cs`（新增）：读
+   `steamapps/workshop/appworkshop_<appid>.acf` 的 `WorkshopItemDetails`（已订阅）与
+   `WorkshopItemsInstalled`（已安装），配合 `steamapps/workshop/content/<appid>/<fileid>` 是否存在；
+   订阅了但没装完 → `IsDownloading`。纯解析入口 `ReadFromAcf(...)` 抽成 public static 供自检造数据。
+   acf 残缺（缺 `AppWorkshop` 或 `appid`）按 **未知** 处理，不谎报「未订阅」。
+3. `src/PdxLauncher.Core/Steam/WorkshopInstallState.cs`（新增）：三态记录（`bool?` 订阅/安装/下载中 + acf 路径）。
+4. `src/PdxLauncher.App/Services/SteamNativeApi.cs`（新增）：1.65 flat API 的 DllImport 表。
+5. `src/PdxLauncher.App/Services/SteamWorkshopBridge.cs`（新增）：`NativeLibrary.SetDllImportResolver`
+   指向解析到的 DLL（只能设一次）→ 写 `steam_appid.txt` 与 `SteamAppId` 环境变量 →
+   `SteamAPI_InitFlat` → 取 `ISteamUGC*`；100 ms `DispatcherQueueTimer` 泵 `RunCallbacks`；
+   `SetSubscribedAsync` 调 `SubscribeItem`/`UnsubscribeItem` 后 **每 500 ms 轮询 `GetItemState` 最多 40 次**，
+   等 Steam 真正确认（而不是发了就报成功）；`Dispose` 停泵 + `SteamAPI_Shutdown`。
+6. `src/PdxLauncher.App/Services/IWorkshopSubscribeBackend.cs`（新增）：`IsAvailable`/`SetSubscribedAsync`
+   /`ReadState`，让 VM 可以脱开原生层跑；`WorkshopSubscribeResult` 带失败原因。
+7. `src/PdxLauncher.App/ViewModels/WorkshopDetailViewModel.cs`：新增 `IsSteamSubscribed`、
+   `IsSteamStateKnown`、`IsSteamSubscribing`、`IsSteamDirectAvailable`、`SteamUnavailableReason`、
+   `SteamSubscribeActionText`、`CanToggleSteamSubscription`、`SteamSubscribeHint`、`ShowSteamSubscribeState`；
+   打开 Steam mod 时 `RefreshSteamSubscriptionAsync` —— 后端可用读 Steamworks 实时状态，否则退回 acf。
+   `ApplySteamInstallState` 里补一条 INFO 日志（订阅/安装/下载中 + 来源），方便用户报障时对账。
+8. `src/PdxLauncher.App/Views/WorkshopDetailPage.*`：Steam 按钮文案改绑 `SteamSubscribeActionText`，
+   可点性绑 `CanToggleSteamSubscription`，订阅中单独一个 ProgressRing，已订阅显示强调色徽标，
+   下方给「直连可用 / 未启用 / 不可用原因」提示；`OnSubscribeSteamClick` 在直连可用时走
+   ContentDialog 二次确认 → 真订阅；直连不可用仍退回打开 Steam 页面。离开页面 `Dispose` 桥（关 Steamworks）。
+9. 设置：`SettingsViewModel.SteamSubscribeEnabled`（默认关的实验开关）+ `RefreshSteamApiStatus()`
+   （设置项里显示解析到的 DLL 路径或前两条候选）；`AppSettings.SteamWorkshopSubscribeEnabled`
+   /`SteamApiDllPath`（后者 v1 不在 UI 暴露，可手写 settings.json）。
+10. i18n：`workshop.json` 各 +4（`detailSteamSubscribeHintOn/Off`、`detailSteamSubscribeConfirm`
+    /`detailSteamUnsubscribeConfirm`），`settings.json` 各 +6（`steamSubscribeOn/Hint/StatusOn/StatusOff`、
+    `steamApiReady/steamApiMissing`）；`gen-i18n` 后 695 键。
+11. 不分发 Valve 二进制：`.gitignore` 加 `sdk/`、`steam_api64.dll`、`steam_appid.txt`；
+    `PdxLauncher.App.csproj` 用 `Condition="Exists(...)"` 的 `None` 项把开发机上的 DLL 复制到输出。
+
+**自检**
+
+- `dotnet build PdxLauncher.sln -c Debug -m:1`（在隔离 worktree 里，因为别处的 `ModLibraryRowViewModel`
+  正在改）→ 0 警告 0 错误。
+- 新增 `tests/PdxLauncher.Checks/WorkshopSteamSubscribeChecks.cs`（4 组）：DLL 可用性判定与 `Resolve`、
+  候选顺序/去重、acf 四种分支（订阅+安装 / 订阅未装完 → 下载中 / 未订阅 / 只有内容目录）、
+  坏 acf 与缺 `AppWorkshop` 一律未知。全部用临时目录造数据，不联网、不碰真 Steam。
+- `dotnet tests\PdxLauncher.Checks\bin\Debug\net10.0\PdxLauncher.Checks.dll` → `检查类: 39，失败: 0，断言失败总数: 0`。
+
+**实测（真机，Steam 在跑，CK3 appid 1158310）**
+
+- 日志：`已写入 steam_appid.txt：1158310` → `Steamworks 已初始化（appid=1158310，dll=…\steam_api64.dll）`
+  → `Steam 订阅状态（Steamworks）：订阅=否 安装=否 下载中=否 acf=无`。
+- 界面：订阅卡提示「已开启直连订阅：按钮会直接调 Steam 客户端订阅 / 取消订阅。」，按钮文案「订阅」可点。
+- **未真实点下订阅**：那会往用户 Steam 账号里真加一条订阅并开始下载内容，属于对用户账号的写操作，
+  留待用户在场时点一次确认（代码路径与状态回读都已就绪）。
+
+**踩坑 / 边界**
+
+- `SteamAPI_Init` 在 1.65 不存在 → 任何直接 P/Invoke 老符号的封装（含 Steamworks.NET）都会
+  `EntryPointNotFoundException`。用 `InitFlat` + `SteamUGC_v021`。
+- `SetDllImportResolver` 每个程序集只能设一次，第二次抛 `InvalidOperationException`；DLL 路径变了要
+  **重启应用**才生效（桥里对这一点做了兜底：解析器已装过就沿用第一次的路径）。
+- `steam_appid.txt` 必须是「当前游戏」的 appid；本功能默认关闭，且只在详情页打开期间初始化，
+  离开页面即 `Shutdown`，避免长期占着 Steamworks。
+- 订阅成功与否以 Steam 的 `GetItemState` 为准：`SubscribeItem` 只是投递请求，20 秒内没有
+  `Subscribed` 位就按失败提示（大 mod 首次解析可能更慢，可重试）。
+- acf 只反映「本机 Steam 记录的订阅」，与账号云端状态可能有延迟；直连可用时优先用 Steamworks。
+- 用游戏 appid 初始化 Steamworks 不在 Valve 的对外授权范围内（本启动器不是 Steam 上发行的产品），
+  因此默认关闭、需要用户显式开启，且不分发 `steam_api64.dll`。

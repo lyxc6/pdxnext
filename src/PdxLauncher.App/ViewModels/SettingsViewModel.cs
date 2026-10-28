@@ -1,4 +1,4 @@
-﻿namespace PdxLauncher.App.ViewModels;
+namespace PdxLauncher.App.ViewModels;
 
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -10,6 +10,7 @@ using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Patch;
+using PdxLauncher.Core.Steam;
 using PdxLauncher.Core.Storage;
 
 /// <summary>
@@ -35,6 +36,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     private object?[] _statusArgs = Array.Empty<object?>();
     private string _proxyUrl = string.Empty;
     private string _proxyStatusText = string.Empty;
+    private string _steamApiStatusText = string.Empty;
     private long _cacheTotalBytes;
     private ProxyModeOption _selectedProxyMode =
         ProxyModeCatalog.Resolve(AppServices.Settings.ProxyMode, AppServices.Settings.ProxyUrl);
@@ -106,6 +108,77 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                     CacheStorage.Clear(AppServices.FileSystem, AppServices.WorkshopCacheRoot);
                 }),
         };
+    }
+
+    /// <summary>
+    /// Steam 工坊直连订阅开关（实验性，默认关）：写入 AppSettings.SteamWorkshopSubscribeEnabled 并登记延迟落盘。
+    /// 关掉时不碰任何 Steamworks 接口，详情页按钮退回「在 Steam 客户端里打开」。
+    /// </summary>
+    public bool SteamSubscribeEnabled
+    {
+        get => AppServices.Settings.SteamWorkshopSubscribeEnabled;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.SteamWorkshopSubscribeEnabled,
+            v => AppServices.Settings.SteamWorkshopSubscribeEnabled = v,
+            Keys.SettingsSteamSubscribeStatusOn,
+            Keys.SettingsSteamSubscribeStatusOff,
+            afterSave: RefreshSteamApiStatus);
+    }
+
+    /// <summary>steam_api64.dll 的检测结果（找到 / 没找到及原因），供设置页直显。</summary>
+    public string SteamApiStatusText => _steamApiStatusText;
+
+    /// <summary>
+    /// 重新检测 steam_api64.dll：与本启动器实际加载时用的是同一套查找顺序
+    /// （手填路径 → 程序目录 → 仓库 sdk/ → 游戏目录），所以这里显示的结果就是订阅时用的结果。
+    /// </summary>
+    public void RefreshSteamApiStatus()
+    {
+        try
+        {
+            var locator = new SteamApiLocator(AppServices.FileSystem, AppServices.Logger);
+            var resolved = locator.Resolve(
+                AppServices.Settings.SteamApiDllPath,
+                AppContext.BaseDirectory,
+                AppServices.CurrentGame);
+
+            SetSteamApiStatus(resolved is null
+                ? T(Keys.SettingsSteamApiMissing, DescribeSteamApiCandidates(locator))
+                : T(Keys.SettingsSteamApiReady));
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("检测 steam_api64.dll 失败: " + ex.Message);
+            SetSteamApiStatus(T(Keys.SettingsSteamApiMissing, ex.Message));
+        }
+    }
+
+    /// <summary>把候选路径压成一句短说明（只列前两条，避免状态栏过长）。</summary>
+    private static string DescribeSteamApiCandidates(SteamApiLocator locator)
+    {
+        var candidates = locator.Candidates(
+            AppServices.Settings.SteamApiDllPath,
+            AppContext.BaseDirectory,
+            AppServices.CurrentGame);
+
+        return candidates.Count switch
+        {
+            0 => "无候选路径",
+            1 => candidates[0],
+            _ => string.Join(" / ", candidates.Take(2)),
+        };
+    }
+
+    private void SetSteamApiStatus(string text)
+    {
+        if (string.Equals(_steamApiStatusText, text, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _steamApiStatusText = text;
+        OnPropertyChanged(nameof(SteamApiStatusText));
     }
 
     public GameInstallation? Game
@@ -848,6 +921,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
 
         RefreshProxyStatus();
+        RefreshSteamApiStatus();
         IsLoaded = true;
 
         RaiseThemeProps();

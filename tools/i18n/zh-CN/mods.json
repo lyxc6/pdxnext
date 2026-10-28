@@ -64,6 +64,7 @@
   "mods.status.deletedActivated": "已删除播放集「{0}」，已自动激活「{1}」并写入加载文件",
   "mods.status.deletedActivatedNoLoadFile": "已删除播放集「{0}」，已自动激活「{1}」，但写入加载文件失败",
   "mods.status.deletedInactive": "已删除播放集「{0}」（激活状态未变）",
+  "mods.status.externalChange": "官方启动器已改动该播放集，已重新加载（本次修改未保存）",
   "mods.status.invalidPosition": "位次无效：请输入不小于 1 的整数（大于 {0} 视为置底）",
   "mods.status.loadFailed": "加载失败：{0}",
   "mods.status.loadedPlaySets": "已加载 {0} 个播放集",

@@ -258,10 +258,25 @@
                                 <Button x:Name="btnWorkshopDetailSubscribeSteam"
                                         HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Center"
-                                        Content="{x:Bind L.WorkshopDetailSubscribeSteam, Mode=OneWay}"
+                                        Content="{x:Bind ViewModel.SteamSubscribeActionText, Mode=OneWay}"
                                         Click="OnSubscribeSteamClick"
+                                        IsEnabled="{x:Bind ViewModel.CanToggleSteamSubscription, Mode=OneWay}"
                                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSteamSubscribeButton), Mode=OneWay}"
                                         AutomationProperties.AutomationId="btnWorkshopDetailSubscribeSteam" />
+                                <Border Padding="8,3"
+                                        HorizontalAlignment="Left"
+                                        Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                        CornerRadius="4"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSteamSubscribeState), Mode=OneWay}">
+                                    <TextBlock Text="{x:Bind L.WorkshopDetailInstalled, Mode=OneWay}"
+                                               Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                                               Style="{StaticResource CaptionTextBlockStyle}" />
+                                </Border>
+                                <ProgressRing Width="16"
+                                              Height="16"
+                                              HorizontalAlignment="Left"
+                                              IsActive="{x:Bind ViewModel.IsSteamSubscribing, Mode=OneWay}"
+                                              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsSteamSubscribing), Mode=OneWay}" />
                                 <ProgressRing Width="16"
                                               Height="16"
                                               HorizontalAlignment="Left"
@@ -278,6 +293,18 @@
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            TextWrapping="Wrap"
                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasSubscribeHint), Mode=OneWay}" />
+                                <TextBlock Text="{x:Bind ViewModel.SteamSubscribeHint, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"
+                                           AutomationProperties.AutomationId="txtWorkshopDetailSteamSubscribeHint"
+                                           Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasSteamSubscribeHint), Mode=OneWay}" />
+                                <TextBlock Text="{x:Bind ViewModel.SteamUnavailableReason, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                           TextWrapping="Wrap"
+                                           AutomationProperties.AutomationId="txtWorkshopDetailSteamUnavailable"
+                                           Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasSteamUnavailableReason), Mode=OneWay}" />
                             </StackPanel>
                         </Border>
 

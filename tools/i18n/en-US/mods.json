@@ -64,6 +64,7 @@
   "mods.status.deletedActivated": "Deleted play set \"{0}\"; activated \"{1}\" and wrote the load file",
   "mods.status.deletedActivatedNoLoadFile": "Deleted play set \"{0}\"; activated \"{1}\" but writing the load file failed",
   "mods.status.deletedInactive": "Deleted play set \"{0}\" (activation unchanged)",
+  "mods.status.externalChange": "The official launcher changed this play set; reloaded without saving your change",
   "mods.status.invalidPosition": "Invalid position: enter a whole number of 1 or more (anything above {0} moves it to the end)",
   "mods.status.loadFailed": "Failed to load: {0}",
   "mods.status.loadedPlaySets": "Loaded {0} play sets",

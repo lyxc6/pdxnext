@@ -36,6 +36,12 @@ TestResults/
 __pycache__/
 *.pyc
 
+# Valve 的可再发行组件与本地 Steamworks SDK：本启动器不随包分发它们的二进制。
+# 用户自己下载的 sdk/ 与运行期生成的 steam_appid.txt 都不进仓。
+sdk/
+steam_api64.dll
+steam_appid.txt
+
 # 编辑器
 .idea/
 .vscode/

@@ -25,6 +25,22 @@ public sealed class AppSettings
     }
 
     /// <summary>
+    /// 是否启用「Steam 工坊直连订阅」（默认关，实验性）：开启后详情页会用 Steamworks 原生接口
+    /// <c>ISteamUGC::SubscribeItem/UnsubscribeItem</c> 直接订阅，而不是打开浏览器。
+    /// <para>
+    /// 默认为关的原因：这需要以某个已发行游戏的 appid 调 <c>SteamAPI_InitFlat</c>，
+    /// 属于借用游戏的 Steam 凭据，只在用户自己明确打开时才会发生。
+    /// </para>
+    /// </summary>
+    public bool SteamWorkshopSubscribeEnabled { get; set; }
+
+    /// <summary>
+    /// 手动指定的 <c>steam_api64.dll</c> 路径；null/空表示自动查找（程序目录 → 仓库 sdk/ → 游戏目录）。
+    /// 本启动器不分发 Valve 的二进制，所以要么用户手填，要么靠上面几处已存在的副本。
+    /// </summary>
+    public string? SteamApiDllPath { get; set; }
+
+    /// <summary>
     /// 是否允许联网获取官方启动器的公告卡（默认开；关掉后只读本地缓存，绝不发起请求）。
     /// 公告是装饰性内容，失败不影响主页其它区域。
     /// </summary>
