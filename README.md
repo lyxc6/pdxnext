@@ -198,12 +198,17 @@ gameId 一律取自 JSON 里的 `gameId` 字段，**不看文件夹名**；同�
 - Mod 库页：只读展示 `mods` 表全量（即官方启动器的「MOD 库」），每行显示缩略图、名称、大小、
   订阅日期、mod **自己声明的支持版本**（`requiredVersion`，即 .mod 的 `supported_version` /
   metadata.json 的 `supported_game_version`，原样显示不做换算）、以及「在 N 个播放集中」（不在任何播放集时不占位）；
-  本地 mod / 状态异常有警告标记；行尾**三个图标按钮**分别打开本地文件夹、在 Steam 中打开、
-  在浏览器中打开（拿不到目录或创意工坊 id 时对应按钮置灰）；支持搜索（名称 / 注册 ID / 目录）、
+  本地 mod / 状态异常有警告标记；行尾**四个图标按钮**分别是打开工坊详情页（复用创意工坊那个详情子页）、
+  打开本地文件夹、在 Steam 中打开、在浏览器中打开（拿不到目录或工坊编号时对应按钮置灰）；支持搜索（名称 / 注册 ID / 目录）、
   按名称 / 大小 / 订阅时间排序、刷新；数量徽标 = `SELECT COUNT(*) FROM mods`。
   行操作的地址由 `SteamWorkshop` 拼装：创意工坊 id 优先取 `mods.steamId`，为空时回退从
   `mod/ugc_<id>.mod` 解析；打开动作是 `Process.Start` + `UseShellExecute`（资源管理器 / `steam://` / https），
   不经 `IFileSystem`，也不受 `OnlineHosts` 白名单约束（那是本进程 HTTP 的白名单）。
+  「打开详情页」这一路先把行翻译成 `ModWorkshopRef`（平台 + 编号：Steam 用上面那套判定，
+  CS2 的 `pdx:<sourceId>` 取数字部分），再交给 `WorkshopRowViewModel.FromLibrary` 造一条详情行导航进
+  `WorkshopDetailPage`；编号解析不出来的行按钮置灰，提示文案直接说明为什么（本地 mod / 没有工坊编号）。
+  详情子页的返回按钮回到**发起方那一页**（`WorkshopDetailNavigationRequest.ReturnTag`），
+  左栏选中项也停在发起方。
 - DLC 页：纵向列表，**左侧固定 208×117 缩略图，右侧标题 + 两行简介**（文字再长也不会把图片压小，超出两行省略、鼠标悬停看全文），逐项启用禁用，写 `playsets_dlcs` 并同步加载文件。简介优先用本地描述（Victoria 3 的 `.dlc.json` 自带 `description`），CK3 / Stellaris 的 `.dlc` 没有简介字段，联网时按 Steam appid 查商店简介补全并缓存 7 天（设置页可关）
 
 播放集 / Mod 库 / DLC 三页**只对「完整适配」的游戏生效**；选中「仅启动」的游戏时，左侧这三项置灰、左栏底部常驻一行说明（禁用的导航项收不到指针事件，所以不用悬停提示），主页的播放集下拉隐藏、改显示一行「由游戏本体管理」的说明，不会去读它的 sqlite，也不会扫 DLC 目录。

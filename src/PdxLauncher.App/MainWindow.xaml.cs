@@ -49,6 +49,9 @@ public sealed partial class MainWindow : Window
 
     private WorkshopPage? _workshopPage;
 
+    /// <summary>Mod 库页；它也能打开工坊详情子页，所以要订阅它的详情请求。</summary>
+    private ModLibraryPage? _modLibraryPage;
+
     /// <summary>工坊详情子页；离开它就 detach 事件，避免持有已丢弃页面的引用。</summary>
     private WorkshopDetailPage? _workshopDetailPage;
 
@@ -248,6 +251,12 @@ public sealed partial class MainWindow : Window
             _workshopPage = null;
         }
 
+        if (_modLibraryPage is not null)
+        {
+            _modLibraryPage.DetailRequested -= OnWorkshopDetailRequested;
+            _modLibraryPage = null;
+        }
+
         if (_workshopDetailPage is not null)
         {
             _workshopDetailPage.NavigationRequested -= OnPageNavigationRequested;
@@ -267,6 +276,12 @@ public sealed partial class MainWindow : Window
             workshopPage.DetailRequested += OnWorkshopDetailRequested;
         }
 
+        if (content is ModLibraryPage modLibraryPage)
+        {
+            _modLibraryPage = modLibraryPage;
+            modLibraryPage.DetailRequested += OnWorkshopDetailRequested;
+        }
+
         if (content is WorkshopDetailPage workshopDetailPage)
         {
             _workshopDetailPage = workshopDetailPage;
@@ -277,14 +292,19 @@ public sealed partial class MainWindow : Window
     private void OnWorkshopAccountRequested(object? sender, EventArgs e) =>
         NavigateTo(NavigationService.AccountTag);
 
-    /// <summary>创意工坊列表页要求打开某条 mod 的详情子页（页面自己不持导航职责）。</summary>
-    private void OnWorkshopDetailRequested(object? sender, WorkshopRowViewModel row) => NavigateToWorkshopDetail(row);
+    /// <summary>
+    /// 创意工坊列表页 / Mod 库页要求打开某条 mod 的详情子页（页面自己不持导航职责）。
+    /// 两个页面用同一种请求，返回目标在请求里。
+    /// </summary>
+    private void OnWorkshopDetailRequested(object? sender, WorkshopDetailNavigationRequest request) =>
+        NavigateToWorkshopDetail(request);
 
-    private void NavigateToWorkshopDetail(WorkshopRowViewModel row)
+    private void NavigateToWorkshopDetail(WorkshopDetailNavigationRequest request)
     {
         try
         {
-            if (!_navigation.Navigate(NavigationService.WorkshopDetailTag, row))
+            var row = request.Row;
+            if (!_navigation.Navigate(NavigationService.WorkshopDetailTag, request))
             {
                 if (AppServices.IsInitialized)
                 {
@@ -294,13 +314,13 @@ public sealed partial class MainWindow : Window
                 return;
             }
 
-            // 故意不同步左栏选中项：详情子页没有对应菜单项，选中态应停在「创意工坊」。
+            // 故意不同步左栏选中项：详情子页没有对应菜单项，选中态应停在发起方那一页（创意工坊或 Mod 库）。
         }
         catch (Exception ex)
         {
             if (AppServices.IsInitialized)
             {
-                AppServices.Logger.Error("导航到工坊详情异常: " + row.Id, ex);
+                AppServices.Logger.Error("导航到工坊详情异常: " + request.Row.Id, ex);
             }
         }
     }
@@ -372,6 +392,12 @@ public sealed partial class MainWindow : Window
                 _workshopPage.AccountRequested -= OnWorkshopAccountRequested;
                 _workshopPage.DetailRequested -= OnWorkshopDetailRequested;
                 _workshopPage = null;
+            }
+
+            if (_modLibraryPage is not null)
+            {
+                _modLibraryPage.DetailRequested -= OnWorkshopDetailRequested;
+                _modLibraryPage = null;
             }
 
             if (_workshopDetailPage is not null)

@@ -343,6 +343,40 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         RaiseDerived();
     }
 
+    /// <summary>
+    /// 为「打开详情页」按钮建一条工坊详情行：把这一行的 (平台, 编号) 交给
+    /// <see cref="WorkshopRowViewModel.FromLibrary"/>，元数据尽量从工坊信息缓存里补。
+    /// <para>
+    /// 缓存命中时副标题就有作者/评分/订阅数；没命中也不影响 —— 详情页会自己做一次真实请求，
+    /// 拿到正文、作者显示名和评分后再填。编号不可用时返回 null（按钮本身已置灰，这里是第二道闸）。
+    /// </para>
+    /// </summary>
+    /// <param name="row">Mod 库里的某一行。</param>
+    public WorkshopRowViewModel? CreateDetailRow(ModLibraryRowViewModel row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        var reference = row.WorkshopRef;
+        if (!reference.CanOpen)
+        {
+            return null;
+        }
+
+        WorkshopInfoCacheEntry? cached = null;
+        if (AppServices.WorkshopInfo.TryGet(WorkshopInfoCache.Key(reference.Source, reference.Id), out var entry))
+        {
+            cached = entry;
+        }
+
+        return WorkshopRowViewModel.FromLibrary(
+            reference,
+            row.Name,
+            row.Entry.SizeBytes,
+            row.ThumbnailPath,
+            cached,
+            ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize));
+    }
+
     /// <summary>搜索匹配：名称 / 游戏注册 ID / mod 目录，忽略大小写。</summary>
     private static bool MatchesSearch(ModLibraryEntry entry, string query) =>
         entry.Name.Contains(query, StringComparison.OrdinalIgnoreCase)

@@ -17,6 +17,9 @@ using PdxLauncher.Core.Playsets;
 /// </summary>
 public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
 {
+    /// <summary>Paradox Mods 网页端的条目地址前缀（与 <c>OnlineHosts.ModsWebHost</c> 同一主机）。</summary>
+    private const string PdxWebPrefix = "https://mods.paradoxplaza.com/mods/";
+
     /// <summary>封面本地缓存路径；还没下载好时为 null。</summary>
     [ObservableProperty]
     private string? _coverPath;
@@ -197,7 +200,7 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
             null,
             summary.CoverUrl,
             thumbnailSize,
-            "https://mods.paradoxplaza.com/mods/" + summary.ModId,
+            PdxWebPrefix + summary.ModId,
             null,
             null,
             summary);
@@ -248,10 +251,89 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
             thumbnailSize,
             isSteam
                 ? SteamWorkshop.GetBrowserAddress(entry.Id) ?? string.Empty
-                : "https://mods.paradoxplaza.com/mods/" + entry.Id,
+                : PdxWebPrefix + entry.Id,
             isSteam ? SteamWorkshop.GetSteamAddress(entry.Id) : null,
             null,
             null);
+    }
+
+    /// <summary>
+    /// 从 Mod 库的一行建详情行：那边只有 (平台, 编号) 与本地记录，没有列表接口那种对象。
+    /// <para>
+    /// 缺的元数据由 <paramref name="cached"/>（工坊信息缓存里可能有，也可能没有）补，补不到的段落
+    /// 就留空 —— 副标题是「非空段拼接」，空段自动省略，不会留孤立分隔符。详情正文本来就是一次真实请求，
+    /// 评分/标签/更新时间到了详情页再填；Steam 侧连作者显示名都能从物品页拿到。
+    /// </para>
+    /// </summary>
+    /// <param name="reference">已经解析过的工坊引用（平台 + 编号，见 <see cref="ModWorkshopRef.Resolve"/>）。</param>
+    /// <param name="name">mod 名称（取本地记录里的显示名）。</param>
+    /// <param name="sizeBytes">本地安装体积；工坊那边显示的是文件大小，量纲一致所以直接拿来用。</param>
+    /// <param name="localThumbnailPath">本地已经解码/下载到的缩略图，直接当封面，省一次网络。</param>
+    /// <param name="cached">工坊信息缓存里的同名条目；没缓存过时为 null。</param>
+    /// <param name="thumbnailSize">封面边长（像素）。</param>
+    public static WorkshopRowViewModel FromLibrary(
+        ModWorkshopRef reference,
+        string name,
+        long? sizeBytes,
+        string? localThumbnailPath,
+        WorkshopInfoCacheEntry? cached,
+        int thumbnailSize)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        if (!reference.CanOpen)
+        {
+            throw new ArgumentException("这一行没有可用的工坊编号，建不出详情行", nameof(reference));
+        }
+
+        var isSteam = reference.Source == WorkshopSource.Steam;
+        var authorText = string.IsNullOrWhiteSpace(cached?.Author)
+            ? string.Empty
+            : T(Keys.WorkshopAuthor, cached!.Author);
+        var rating = cached is { RatingsTotal: > 0 } && cached.Rating is > 0
+            ? T(
+                Keys.WorkshopRating,
+                cached.Rating.Value.ToString("0.##", CultureInfo.InvariantCulture),
+                cached.RatingsTotal!.Value)
+            : null;
+        var subscriptions = cached?.Subscriptions is > 0
+            ? T(Keys.WorkshopSubscriptions, cached!.Subscriptions!.Value.ToString("N0", CultureInfo.CurrentCulture))
+            : null;
+        var updated = cached is { UpdatedUtc: { } updatedUtc } && updatedUtc > DateTimeOffset.UnixEpoch
+            ? T(Keys.WorkshopUpdated, updatedUtc.ToLocalTime().ToString("yyyy/MM/dd", CultureInfo.InvariantCulture))
+            : null;
+        var size = sizeBytes > 0
+            ? T(Keys.WorkshopSize, ModSizeText.Format(sizeBytes))
+            : null;
+
+        // 封面地址只取工坊缓存里的（和创意工坊列表同一张图）。本地缩略图是文件路径，不能当 URL 用：
+        // 详情正文的配图兜底会把它当地址去下载，所以它只走 CoverPath 这条「已经是本地文件」的路。
+        var coverUrl = string.IsNullOrWhiteSpace(cached?.CoverUrl) ? null : cached!.CoverUrl;
+
+        var row = new WorkshopRowViewModel(
+            reference.Source,
+            reference.Id,
+            name,
+            authorText,
+            rating,
+            subscriptions,
+            updated,
+            size,
+            coverUrl,
+            thumbnailSize,
+            isSteam
+                ? SteamWorkshop.GetBrowserAddress(reference.Id) ?? string.Empty
+                : PdxWebPrefix + reference.Id,
+            isSteam ? SteamWorkshop.GetSteamAddress(reference.Id) : null,
+            null,
+            null);
+
+        // 本地缩略图已经在 Mod 库上显示出来了，直接当封面，省一次下载（详情页只在没有封面时才补图）。
+        if (!string.IsNullOrWhiteSpace(localThumbnailPath))
+        {
+            row.CoverPath = localThumbnailPath;
+        }
+
+        return row;
     }
 
     partial void OnCoverPathChanged(string? value) => OnPropertyChanged(nameof(HasCover));

@@ -166,8 +166,20 @@
                                            AutomationProperties.Name="{x:Bind L.ModlibPlaySetName, Mode=OneWay}"
                                            Visibility="{x:Bind svc:XamlVisibility.FromString(PlaySetText), Mode=OneWay}" />
 
-                                <!-- 行操作：三个图标按钮，一个动作一个按钮，不用再展开菜单 -->
+                                <!-- 行操作：四个图标按钮，一个动作一个按钮，不用再展开菜单 -->
                                 <StackPanel Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
+                                    <Button Width="32"
+                                            Height="32"
+                                            Padding="0"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Click="OnOpenDetailClick"
+                                            IsEnabled="{x:Bind HasWorkshopDetail, Mode=OneTime}"
+                                            ToolTipService.ToolTip="{x:Bind WorkshopDetailText, Mode=OneWay}"
+                                            AutomationProperties.AutomationId="{x:Bind WorkshopDetailAutomationId, Mode=OneTime}"
+                                            AutomationProperties.Name="{x:Bind WorkshopDetailText, Mode=OneWay}">
+                                        <FontIcon Glyph="&#xE946;" FontSize="16" />
+                                    </Button>
                                     <Button Width="32"
                                             Height="32"
                                             Padding="0"

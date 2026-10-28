@@ -49,8 +49,11 @@ public sealed partial class WorkshopPage : Page
     /// <summary>用户点了「去登录」：交给外壳导航到账号页（页面自己不持有导航职责）。</summary>
     public event EventHandler? AccountRequested;
 
-    /// <summary>用户点了某一行：交给外壳导航到 <see cref="WorkshopDetailPage"/>（参数就是这一行）。</summary>
-    public event EventHandler<WorkshopRowViewModel>? DetailRequested;
+    /// <summary>
+    /// 用户点了某一行：交给外壳导航到 <see cref="WorkshopDetailPage"/>。
+    /// 参数除了这一行还带上返回目标（本页），与 Mod 库页共用同一种请求。
+    /// </summary>
+    public event EventHandler<WorkshopDetailNavigationRequest>? DetailRequested;
 
     public WorkshopViewModel ViewModel => _viewModel;
 
@@ -342,12 +345,12 @@ public sealed partial class WorkshopPage : Page
         }
     }
 
-    /// <summary>点一行：把这一行交给外壳，导航到详情子页。</summary>
+    /// <summary>点一行：把这一行交给外壳，导航到详情子页（返回目标写本页）。</summary>
     private void OnItemClick(object sender, ItemClickEventArgs e)
     {
         if (e.ClickedItem is WorkshopRowViewModel row)
         {
-            DetailRequested?.Invoke(this, row);
+            DetailRequested?.Invoke(this, new WorkshopDetailNavigationRequest(row, NavigationService.WorkshopTag));
         }
     }
 }

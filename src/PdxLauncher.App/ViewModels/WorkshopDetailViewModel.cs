@@ -42,6 +42,11 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>Steam 评论翻页要用作者 SteamID（接口路径里的一部分）。</summary>
     private string? _steamCreatorId;
 
+    /// <summary>
+    /// 这一页的「返回」该回哪儿（导航发起方给的 Tag）；null 表示按默认的创意工坊列表处理。
+    /// </summary>
+    private string? _returnTag;
+
     /// <summary>正文配图：URL → 本地文件。与顶部图片墙分开，避免重复下载与互相覆盖。</summary>
     private readonly Dictionary<string, string> _inlineImages = new(StringComparer.Ordinal);
 
@@ -311,6 +316,15 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>是否有可打开的浏览器地址（决定页头按钮是否可用）。</summary>
     public bool HasWebUrl => !string.IsNullOrWhiteSpace(WebUrl);
 
+    /// <summary>
+    /// 页头「返回」按钮的文案：从创意工坊列表进来是「返回创意工坊」，
+    /// 从 Mod 库进来是「返回 Mod 库」—— 按钮永远只是「回上一页」，
+    /// 但用户需要知道这一下会回到哪儿。
+    /// </summary>
+    public string BackText => string.Equals(_returnTag, NavigationService.ModLibraryTag, StringComparison.OrdinalIgnoreCase)
+        ? T(Keys.WorkshopDetailBackLibrary)
+        : T(Keys.WorkshopDetailBack);
+
     /// <summary>评论总数超过一页才显示分页控件。</summary>
     public bool HasCommentsPaging => ShowCommentsSection && CommentsTotal > CommentsPageSize;
 
@@ -401,11 +415,19 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>加载指定行；重复调用会先清空上一次的内容。</summary>
     /// <param name="row">创意工坊列表行。</param>
     /// <param name="cancellationToken">取消令牌（页面离开时取消）。</param>
-    public async Task LoadAsync(WorkshopRowViewModel row, CancellationToken cancellationToken)
+    /// <param name="returnTag">
+    /// 「返回」按钮要回到的页面 Tag（null 表示创意工坊列表）。详情页能被多个页面复用，
+    /// 由发起方说回来处，正文与文案都按它调整。
+    /// </param>
+    public async Task LoadAsync(
+        WorkshopRowViewModel row,
+        CancellationToken cancellationToken,
+        string? returnTag = null)
     {
         ArgumentNullException.ThrowIfNull(row);
 
         Row = row;
+        _returnTag = returnTag;
         ResetForLoad(row);
         NotifyStateChanged();
 
@@ -442,10 +464,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>重新加载当前行（「重试」按钮）。</summary>
+    /// <summary>重新加载当前行（「重试」按钮）；返回目标沿用上一次加载拿到的值。</summary>
     /// <param name="cancellationToken">取消令牌。</param>
     public Task ReloadAsync(CancellationToken cancellationToken) =>
-        Row is null ? Task.CompletedTask : LoadAsync(Row, cancellationToken);
+        Row is null ? Task.CompletedTask : LoadAsync(Row, cancellationToken, _returnTag);
 
     /// <summary>
     /// 载入某一页评论（Steam 走翻页接口）。
@@ -1268,6 +1290,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasWebUrl));
         OnPropertyChanged(nameof(SteamUrl));
         OnPropertyChanged(nameof(CanOpenSteam));
+        OnPropertyChanged(nameof(BackText));
         OnPropertyChanged(nameof(HasCommentsPaging));
         OnPropertyChanged(nameof(CommentsPageCount));
         OnPropertyChanged(nameof(CommentsPageText));

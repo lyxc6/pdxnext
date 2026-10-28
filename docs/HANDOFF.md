@@ -80,6 +80,8 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 
 **2026-10-28 03:40 追加：EU5 mod 封面「16/22 不显示」查明是两个缺陷叠加 —— ① 解析器只扫 mod 根目录、从不进 `.metadata\`（EU5 的封面全在那里）；② metadata.json 的键读成了 `thumbnail`，真键是 `picture`。修好后真机 22/22 全部成像（16 张来自 `.metadata`），老游戏零影响，见 §0.27。**
 
+**2026-10-29 07:20 追加：Mod 库每行加第四个按钮「打开详情页」，复用创意工坊那个详情子页 —— 行先翻译成 `ModWorkshopRef`（平台 + 编号），`WorkshopRowViewModel.FromLibrary` 造详情行；解析不出编号（本地 mod）就置灰并把原因写进 tooltip。详情子页的「返回」不再写死回创意工坊：发起方经 `WorkshopDetailNavigationRequest.ReturnTag` 说回来处，从 Mod 库进来按钮显示「返回 Mod 库」，见 §0.46。**
+
 ## 0.27 最新一轮（2026-10-28 03:33–03:40）：EU5 mod 封面 16/22 缺图 —— `.metadata` 布局 + metadata.json `picture` 键
 
 ### 0.27.1 用户诉求
@@ -3482,3 +3484,86 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
 - acf 只反映「本机 Steam 记录的订阅」，与账号云端状态可能有延迟；直连可用时优先用 Steamworks。
 - 用游戏 appid 初始化 Steamworks 不在 Valve 的对外授权范围内（本启动器不是 Steam 上发行的产品），
   因此默认关闭、需要用户显式开启，且不分发 `steam_api64.dll`。
+
+## 0.46 2026-10-29：Mod 库行可以打开创意工坊详情页（复用 WorkshopDetailPage）
+
+**背景**
+
+- 用户诉求原话：「对mod库进行修改，添加mod详情页按钮，调用写好的详情页（就是创意工坊的那个详情页）」。
+- 详情页正文此前已存在（§0.26 把内容从弹窗搬进 `WorkshopDetailPage`），但只有一个入口：创意工坊列表点行。
+  Mod 库的行只有「打开文件夹 / Steam / 浏览器」三个跳转按钮，看不到描述、changelog、依赖、配图。
+
+**改法**
+
+1. `src/PdxLauncher.Core/Playsets/ModWorkshopRef.cs`（新增）：把 Mod 库行翻译成「平台 + 编号」
+   （`sealed record ModWorkshopRef(WorkshopSource Source, string Id, string? StatusTextKey)`）。
+   `Resolve(steamId, gameRegistryId, source)` 六步：先走 `SteamWorkshop.GetWorkshopId`（`mods.steamId`
+   纯数字或 `mod/ugc_<id>.mod`）；CS2 的 `pdx_mods` 行剥 `pdx:` 前缀取 PDX 数字 id；`local` / 拿不到
+   编号的 `steam` / `paradox` / 未知来源分别带一个状态文案键（按钮置灰时 tooltip 直接说原因）。
+   PDX id 逐字符 ASCII 数字判定 —— 不能用 `long.TryParse`，它接受 `+12` / `1_2` / `12L`。
+2. `src/PdxLauncher.App/ViewModels/ModLibraryRowViewModel.cs`：`WorkshopRef` + `HasWorkshopDetail` +
+   `WorkshopDetailText`（可点=「打开详情页」，置灰=状态键文案）+ `WorkshopDetailAutomationId`
+   （`modLibraryOpenDetail_<ModId N>`，沿用行内其余按钮的命名规律）。
+3. `src/PdxLauncher.App/ViewModels/WorkshopRowViewModel.cs`：新增公开工厂 `FromLibrary(reference, name,
+   sizeBytes, localThumbnailPath, cached, thumbnailSize)` —— 元数据尽量从 `WorkshopInfoCache` 里捞
+   （作者/评分/订阅数/更新时间/CoverUrl），捞不到就留空，详情页自己会去抓真数据（稀疏行从 `FromCache`
+   时代起就是被验证过的路径）。**本地缩略图只塞 `CoverPath`，绝不冒充 `CoverUrl`**：封面兜底会拿
+   `CoverUrl` 走 `AssetDownloader`，把 `G:\...png` 当远程地址既浪费又不安全（白名单也过不了）。
+4. `src/PdxLauncher.App/ViewModels/ModLibraryViewModel.cs`：`CreateDetailRow(row)` —— 查缓存、建详情行；
+   解析不出编号返回 null（页面把原因写进状态栏）。
+5. `src/PdxLauncher.App/ViewModels/WorkshopDetailNavigationRequest.cs`（新增）：`record (Row, ReturnTag)`。
+   详情页的「返回」原来写死回创意工坊列表（`OnBackClick` → `NavigationService.WorkshopTag`），从 Mod 库
+   进来会把用户甩到别的页面 —— 现在返回目标由发起方随参数带进来。`WorkshopPage.DetailRequested` 与
+   `ModLibraryPage.DetailRequested` 统一成 `EventHandler<WorkshopDetailNavigationRequest>`，MainWindow 里
+   一个 `OnWorkshopDetailRequested` 同时挂两页。
+6. `src/PdxLauncher.App/Views/ModLibraryPage.xaml`：行操作区第三个位置前**新加第一个按钮**「打开详情页」
+   （glyph `E946` Info，全仓未占用），置灰行为与其余三个一致；`.xaml.cs` 加 `DetailRequested` 事件与
+   `OnOpenDetailClick`（模板同其余三个 handler）。
+7. `src/PdxLauncher.App/MainWindow.xaml.cs`：新增 `_modLibraryPage` 字段，`AttachPageEvents` 与
+   `OnWindowClosed` 两处都补了 ModLibraryPage 的挂/摘（漏一处就会出现「返回后再进 Mod 库按钮失效」）。
+   `NavigateToWorkshopDetail(request)` 把整个 request 当导航参数传给 Frame。
+8. `src/PdxLauncher.App/Views/WorkshopDetailPage.xaml(.cs)`：`OnNavigatedTo` 兼容两种参数
+   （request 或裸 row，裸 row 回落创意工坊列表）；`OnBackClick` 回 `_returnTag ?? WorkshopTag`；
+   返回按钮的 ToolTip/AutomationName 从 `L.WorkshopDetailBack` 改绑 `ViewModel.BackText`。
+9. `src/PdxLauncher.App/ViewModels/WorkshopDetailViewModel.cs`：`LoadAsync(row, ct, returnTag = null)`，
+   `_returnTag` 存字段；派生属性 `BackText`（`returnTag == ModLibraryTag` → 「返回 Mod 库」，否则
+   「返回创意工坊」）加进 `NotifyStateChanged`，`ReloadAsync`（重试按钮）沿用上次 returnTag。
+10. i18n：`modlib.json` +5（`openDetail`、`detailNoWorkshop`、`detailSteamUnresolved`、
+    `detailPdxUnresolved`、`detailUnknownSource`）、`workshop.json` +1（`detailBackLibrary`）。
+    （这批键随 §0.45 那笔提交 `463d933` 一起进了 HEAD，本轮工作区里 modlib/workshop json 已无 diff。）
+11. README.md Mod 库段「三个图标按钮」→「四个」并补 `ModWorkshopRef` / `FromLibrary` / ReturnTag 说明。
+
+**为什么 Steam 稀疏行不用特殊处理（复核过，避免下轮再查）**
+
+`ApplySteamAsync` 里 `MetaText = BuildSteamMeta(row.SteamItem, detail)`：views/订阅数/大小/更新时间
+在 `SteamWorkshopItemDetail` 里都有，item 为 null 时用 detail 兜底；只有评分 / 收藏 / 发布时间依赖列表
+item，缺失时该行自动省略。作者名会被物品页 `page.AuthorName` 覆盖回来；描述、评论、配图全走
+`GetSteamItemPageAsync`，与列表行无关。所以 Mod 库进来的行**不会报错**，只是个别 meta 缺项。
+
+**自检**
+
+- `python tools/gen-i18n.py --check` 通过；`dotnet build PdxLauncher.sln -c Release -m:1` 0 警告 0 错误。
+- `dotnet tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll` → `检查类: 40，失败: 0`
+  （含新增 `ModWorkshopRefChecks`：Steam 优先、`pdx:` 剥前缀、`+12`/`1_2`/`12L`/`1.2` 拒绝、
+  local/未知来源置灰原因、四个状态键 + `openDetail` 在 zh-CN/en-US 两份 modlib.json 里都存在 ——
+  Core 引用不到 App 的 `Keys`，键名拼错界面只会显示 `⟨键名⟩`，只能这样钉住）。
+
+**实测（真机 UIA，Victoria 3，用新构建单独起了一个实例 8740，没动用户原来开着的 50496，验完自关）**
+
+- Mod 库 52 行全部出现 `modLibraryOpenDetail_*`，51 行 tooltip「打开详情页」可点；唯一一条未登记本地
+  mod（Daoyu Cheat）按钮 **disabled** 且 tooltip「这个 mod 没有工坊详情页（本地 mod）」。
+- 点 Auto-Diplomacy 的详情 → `WorkshopDetailPage` 打开：标题、徽标「Steam 创意工坊」、正文与图片墙
+  正常（日志 `素材下载完成 …shots\steam_3432933121\shot_*.jpg` 五张，acf 订阅状态 `订阅=是 安装=是`），
+  全程无「导航到工坊详情失败/异常」日志。
+- 返回按钮 UIA 名「**返回 Mod 库**」（不是「返回创意工坊」），点一下回到的正是 `lstModLibrary`，
+  左栏选中项停在 Mod 库。
+
+**边界 / 踩坑**
+
+- `WorkshopDetailPage` 没设 `NavigationCacheMode`（其余八页都是 `Required`）→ 每次导航新建实例，
+  所以 `_returnTag` 不会串页；ModLibraryPage 是 Required，返回时 `OnLoaded → ReloadAsync` 重扫一遍
+  （原有行为，未改）。
+- 本次提交落在 `feat/workshop-steam-subscribe` 分支上：工作区改动是叠在未提交的 §0.44（播放集防覆盖）
+  之上的，README/HANDOFF/Strings.g.cs/Checks.csproj/PlaysetChecks.cs/settings.json 等文件里 §0.44 的
+  hunk **未提交、留在工作区**，README 与 HANDOFF 用 hunk 级 `git apply --cached` 只取本轮改动。
+- 从 Mod 库进详情页时 Steam 直连订阅（§0.45）照常可用 —— 两个功能是同一页面上正交的。

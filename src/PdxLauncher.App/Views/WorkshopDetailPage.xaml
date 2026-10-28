@@ -12,7 +12,7 @@
         创意工坊 mod 详情子页：从列表点一行进来，整页滚动显示完整内容。
         版式参照 Steam 物品页：标题 → 图片区（FlipView + 缩略图条）→ 左订阅 / 右信息两列
         → 描述（Markdown）→ 依赖 → 更新日志 → 外链 → 评论区（Steam 可翻页看全部评论）。
-        左栏选中项保持「创意工坊」，页头的返回按钮负责退回列表。
+        左栏选中项保持进入前的那一页，页头的返回按钮退回发起方（创意工坊列表或 Mod 库）。
     -->
     <Grid>
         <Grid Padding="16" RowSpacing="12">
@@ -37,9 +37,9 @@
                         Padding="0"
                         VerticalAlignment="Center"
                         Click="OnBackClick"
-                        ToolTipService.ToolTip="{x:Bind L.WorkshopDetailBack, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.BackText, Mode=OneWay}"
                         AutomationProperties.AutomationId="btnWorkshopDetailBack"
-                        AutomationProperties.Name="{x:Bind L.WorkshopDetailBack, Mode=OneWay}">
+                        AutomationProperties.Name="{x:Bind ViewModel.BackText, Mode=OneWay}">
                     <FontIcon Glyph="&#xE72B;" FontSize="14" />
                 </Button>
 

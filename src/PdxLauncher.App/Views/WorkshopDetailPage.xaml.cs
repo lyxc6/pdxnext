@@ -14,7 +14,9 @@ using PdxLauncher.Core.Steam;
 namespace PdxLauncher.App.Views;
 
 /// <summary>
-/// 创意工坊 mod 详情子页。行数据通过导航参数（<see cref="WorkshopRowViewModel"/>）传进来，
+/// 创意工坊 mod 详情子页。行数据通过导航参数传进来 —— 兼容两种写法：
+/// <see cref="WorkshopDetailNavigationRequest"/>（行 + 返回目标，创意工坊列表和 Mod 库都用它）
+/// 或裸的 <see cref="WorkshopRowViewModel"/>（返回目标缺省为创意工坊列表）。
 /// 详情正文、图片墙、依赖、评论由 <see cref="WorkshopDetailViewModel"/> 负责加载。
 /// 页面本身不持有导航服务：返回 / 去别处一律抛 <see cref="NavigationRequested"/>，由 MainWindow 处理。
 /// </summary>
@@ -23,6 +25,13 @@ public sealed partial class WorkshopDetailPage : Page
     private readonly WorkshopDetailViewModel _viewModel;
     private readonly SteamWorkshopBridge? _steamBridge;
     private WorkshopRowViewModel? _row;
+
+    /// <summary>
+    /// 「返回」要回到的页面 Tag；由发起方在导航参数里指定。
+    /// 写死回创意工坊列表会让从 Mod 库进来的用户被甩到别的页面，所以缺值才回落 <see cref="NavigationService.WorkshopTag"/>。
+    /// </summary>
+    private string? _returnTag;
+
     private CancellationTokenSource? _lifetime;
 
     /// <summary>初始化详情页，并接好依赖。</summary>
@@ -134,8 +143,17 @@ public sealed partial class WorkshopDetailPage : Page
     {
         base.OnNavigatedTo(e);
 
-        // 参数就是列表里的那一行；缺失时页面只显示空壳并报错，不做静默兜底。
-        _row = e.Parameter as WorkshopRowViewModel;
+        // 参数可能是「行 + 返回目标」的请求，也可能只是那一行；缺失时页面只显示空壳并报错，不做静默兜底。
+        _returnTag = null;
+        if (e.Parameter is WorkshopDetailNavigationRequest request)
+        {
+            _row = request.Row;
+            _returnTag = request.ReturnTag;
+        }
+        else
+        {
+            _row = e.Parameter as WorkshopRowViewModel;
+        }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -178,7 +196,7 @@ public sealed partial class WorkshopDetailPage : Page
 
         try
         {
-            await _viewModel.LoadAsync(row, _lifetime.Token);
+            await _viewModel.LoadAsync(row, _lifetime.Token, _returnTag);
         }
         catch (OperationCanceledException)
         {
@@ -218,7 +236,8 @@ public sealed partial class WorkshopDetailPage : Page
 
     private void OnBackClick(object sender, RoutedEventArgs e)
     {
-        NavigationRequested?.Invoke(this, NavigationService.WorkshopTag);
+        // 回到发起方那一页；没有带返回目标（裸行参数）时才回落创意工坊列表。
+        NavigationRequested?.Invoke(this, _returnTag ?? NavigationService.WorkshopTag);
     }
 
     private void OnOpenBrowserClick(object sender, RoutedEventArgs e)

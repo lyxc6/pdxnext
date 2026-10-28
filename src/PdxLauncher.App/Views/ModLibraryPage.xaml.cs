@@ -40,6 +40,12 @@ public sealed partial class ModLibraryPage : Page
     /// <summary>XAML 里 <c>{x:Bind L.SomeKey, Mode=OneWay}</c> 的入口。</summary>
     public Localizer L => Localizer.Instance;
 
+    /// <summary>
+    /// 请求打开某一行的工坊详情子页；参数是详情行 + 返回目标（本页）。
+    /// 页面本身不导航 —— 导航由外壳 <see cref="MainWindow"/> 统一负责，回到本页也由它决定。
+    /// </summary>
+    public event EventHandler<WorkshopDetailNavigationRequest>? DetailRequested;
+
     // ------------------------------------------------------------ 生命周期
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -250,6 +256,26 @@ public sealed partial class ModLibraryPage : Page
     }
 
     /// <summary>
+    /// 行尾「打开详情页」：把这一行交给工坊详情子页（复用创意工坊那个详情页）。
+    /// 页面自己不导航，只把请求抛给外壳；编号解析不出来的行按钮本来就是灰的，
+    /// 这里再兜一次底，把原因写进状态栏。
+    /// </summary>
+    private void OnOpenDetailClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is FrameworkElement { DataContext: ModLibraryRowViewModel row })
+            {
+                OpenWorkshopDetail(row);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModLibraryPage 打开详情页失败", ex);
+        }
+    }
+
+    /// <summary>
     /// 用资源管理器打开 mod 所在位置：目录型 mod 打开目录本身，
     /// 压缩包型 mod 打开所在目录并选中压缩包。
     /// </summary>
@@ -311,6 +337,23 @@ public sealed partial class ModLibraryPage : Page
         {
             _viewModel.SetStatus(L.T(Keys.ModlibStatusOpenedBrowser, row.Name));
         }
+    }
+
+    /// <summary>
+    /// 把这一行翻译成工坊详情行并请求导航。返回目标写本页：详情子页的返回按钮按发起方回退，
+    /// 否则从 Mod 库进来会被甩到创意工坊列表。
+    /// </summary>
+    private void OpenWorkshopDetail(ModLibraryRowViewModel row)
+    {
+        var detailRow = _viewModel.CreateDetailRow(row);
+        if (detailRow is null)
+        {
+            // 编号解析不出来时按钮已经是灰的；真走到这里说明数据在渲染后又变了，把原因写进状态栏。
+            _viewModel.SetStatus(row.WorkshopDetailText);
+            return;
+        }
+
+        DetailRequested?.Invoke(this, new WorkshopDetailNavigationRequest(detailRow, NavigationService.ModLibraryTag));
     }
 
     /// <summary>

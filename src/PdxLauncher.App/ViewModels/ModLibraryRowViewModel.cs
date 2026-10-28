@@ -41,6 +41,7 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
         ThumbnailPath = entry.ThumbnailPath;
         IsInPlaySet = entry.IsInPlaySet;
         WorkshopId = SteamWorkshop.GetWorkshopId(entry.SteamId, entry.GameRegistryId);
+        WorkshopRef = ModWorkshopRef.Resolve(entry.SteamId, entry.GameRegistryId, entry.Source);
         _gameVersion = gameVersion;
     }
 
@@ -93,6 +94,23 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
     /// <summary>是否有创意工坊页面（决定「在 Steam / 浏览器中打开」两个按钮是否可用）。</summary>
     public bool HasWorkshopPage => !string.IsNullOrWhiteSpace(WorkshopId);
 
+    /// <summary>
+    /// 这一行对应的工坊引用（平台 + 编号）：点「打开详情页」时用它建详情行。
+    /// 永远非 null —— 解析不出编号时 <see cref="ModWorkshopRef.CanOpen"/> 为 false 并带原因文案键。
+    /// </summary>
+    public ModWorkshopRef WorkshopRef { get; }
+
+    /// <summary>能否进创意工坊详情页（决定「打开详情页」按钮是否可用）。</summary>
+    public bool HasWorkshopDetail => WorkshopRef.CanOpen;
+
+    /// <summary>
+    /// 「打开详情页」按钮的提示文案：可用时是动作名，不可用时换成说明为什么打不开
+    /// —— 按钮置灰后没有别的途径告诉用户「这行是本地 mod」。
+    /// </summary>
+    public string WorkshopDetailText => WorkshopRef.CanOpen
+        ? T(Keys.ModlibOpenDetail)
+        : WorkshopRef.StatusTextKey is { Length: > 0 } statusKey ? T(statusKey) : T(Keys.ModlibOpenDetail);
+
     /// <summary>磁盘上有没有可打开的本地文件（目录型看 DirPath，压缩包型看 ArchivePath）。</summary>
     public bool HasLocalContent
         => !string.IsNullOrWhiteSpace(Entry.DirPath) || !string.IsNullOrWhiteSpace(Entry.ArchivePath);
@@ -117,6 +135,9 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
 
     /// <summary>行尾「在浏览器中打开」按钮的自动化 Id。</summary>
     public string OpenBrowserAutomationId => "modLibraryOpenBrowser_" + ModId.ToString("N");
+
+    /// <summary>行尾「打开详情页」按钮的自动化 Id。</summary>
+    public string WorkshopDetailAutomationId => "modLibraryOpenDetail_" + ModId.ToString("N");
 
     partial void OnThumbnailPathChanged(string? value) => OnPropertyChanged(nameof(HasThumbnail));
 
