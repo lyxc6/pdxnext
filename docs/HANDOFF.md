@@ -3280,6 +3280,8 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
   ② `WorkshopDetailViewModel.ApplySteamAsync` 用这份 URL 列表 `BuildGallery(...)` 当「截图」铺顶部；
   ③ `MarkdownView.AppendInlines` 的 `MarkdownImageInline` 分支只渲染成文本超链接。
   而 Steam 详情接口**没有截图字段**，所以顶部的「截图」本来就全是简介配图。
+- 第一版把 Steam 的顶部图片区整块隐藏，用户反馈「Steam 图片区根本不出图」——
+  于是改成：顶部给**一张工坊预览图**（`preview_url`），简介配图只留在正文内联显示。
 
 **改法**
 
@@ -3288,14 +3290,21 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
    点击触发 `ImageRequested` 进全屏查看器；支持 `<a><img></a>` 这种被链接/样式包住的图（只含一个子节点时递归识别）。
    新增 `ImageResolver`（URL → 本地缓存路径）与 `RefreshImages()`：下载完成后原地换图，不重建整页、不跳滚动位置。
 2. `src/PdxLauncher.App/ViewModels/WorkshopDetailViewModel.cs`：
-   新增 `ShowGalleryCard`（`HasScreenshots && Row.Source == Pdx`，Steam 不再把简介配图当截图铺顶部）、
-   `ResolveImagePath(url)`（在 `Screenshots` 里按 URL 查本地文件）、`GalleryImageReady` 事件（每张下载成功触发）；
-   Steam 分支顺带把作者显示名改成物品页的 `AuthorName`（列表条目里只有 SteamID）。
-3. `src/PdxLauncher.App/Views/WorkshopDetailPage.xaml`：图片区卡的可见性由 `HasScreenshots` 改绑 `ShowGalleryCard`；
+   新增 `ShowGalleryCard`（= `HasScreenshots`，所有来源都显示顶部图片区）、
+   `ResolveImagePath(url)`（先查新增的 `_inlineImages` 字典，再回退到 `Screenshots` 里按 URL 查本地文件）、
+   `GalleryImageReady` 事件（每张下载成功触发）；
+   Steam 分支的「截图」只放**一个** `detail.PreviewUrl`（工坊预览图，和 Steam 物品页一致），
+   正文里的 `<img>` 由新增的 `DownloadInlineImagesAsync(...)` 单独下载进 `_inlineImages`，
+   这样预览图与正文图各有各的缓存文件，不会互相顶掉。
+   顺带把作者显示名改成物品页的 `AuthorName`（列表条目里只有 SteamID）。
+3. `src/PdxLauncher.App/Views/WorkshopDetailPage.xaml`：图片区卡的可见性绑 `ShowGalleryCard`；
    描述与更新日志的 `MarkdownView` 命名 `DescriptionView` / `ChangelogView`。
 4. `src/PdxLauncher.App/Views/WorkshopDetailPage.xaml.cs`：给两个 `MarkdownView` 接 `ImageResolver`，
    订阅 `GalleryImageReady` → `RefreshImages()`，`OnUnloaded` 解绑。
-5. `tests/PdxLauncher.Checks/WorkshopRichTextChecks.cs`：新增「`<img><br>文字` 混合描述首块是图片」「配图顺序」
+5. `src/PdxLauncher.App/Services/WorkshopImageCache.cs`：`EnsureScreenshotAsync` 去掉 `index` 参数，
+   缓存文件改按 **URL 稳定哈希** 命名（FNV-1a 32 位 → `shot_b8001693.gif`）。
+   原来用序号 `shot_00`，预览图与正文第一张图会抢同一个文件名（先下的被后下的覆盖，表现为顶部空白）。
+6. `tests/PdxLauncher.Checks/WorkshopRichTextChecks.cs`：新增「`<img><br>文字` 混合描述首块是图片」「配图顺序」
    「只有图片的简介不算空」三条断言。
 
 **自检**
@@ -3305,16 +3314,19 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
 
 **实测**
 
-- CK3 / Steam `Renovatio`：描述里 Rate/Favorited 横幅、Features 横幅按原文顺序出现，正文段落夹在中间，
-  顶部不再有「截图」卡；页头作者从 `76561198145098971` 变成 `Anumari`（可点跳个人页）。
-  截图 `ui-test-artifacts/workshop-img/01-detail-top.png`。
-- CS2 / PDX `Unified Icon Library`：顶部图片区仍在（FlipView 3 张 + 缩略图条），订阅卡显示「登录 Paradox 账号后才能订阅」。
-  截图 `ui-test-artifacts/workshop-img-pdx/01-detail-top.png`。
+- CK3 / Steam `Renovatio`：顶部图片区显示工坊预览图 RENOVATIO（计数「1 / 1」+ 缩略图高亮），
+  描述里 Rate/Favorited 横幅、Features 横幅按原文顺序出现，正文段落夹在中间；
+  页头作者从 `76561198145098971` 变成 `Anumari`（可点跳个人页），评论区「第 1 / 9 页 · 共 121 条」正常。
+  截图 `ui-test-artifacts/workshop-img5/{01-detail-top,02-detail-bottom,03-detail-mid}.png`。
+- CS2 / PDX `Unified Icon Library`：顶部图片区仍是 3 张工坊截图（FlipView + 缩略图条），
+  订阅卡显示「登录 Paradox 账号后才能订阅」。截图 `ui-test-artifacts/workshop-img-pdx2/01-detail-top.png`。
 
 **踩坑 / 边界**
 
 - 图片是异步下载的：先占位图标，`GalleryImageReady` 后原地刷新；单张失败只留占位，不影响其它内容；
   点击占位也进查看器（`Screenshots` 与正文图同源同序，可左右翻）。
+- **截图冒烟要等图**：详情页刚打开时图片还在下，早拍会拍到空图位（曾误判成「图片区不出图」）；
+  `.tmp/ui-img.ps1` 现在等标题出现后再 `Start-Sleep 10` 才拍。
 - 描述解析走 `HtmlDescriptionParser`（`<img>` → `MarkdownImageInline`）；PDX 的 `longDescription` 是 Markdown 且实测零内嵌图，
   所以 PDX 不会出现「正文图 + 顶部截图」重复。
-- 若以后想让 Steam 顶部也铺一份图片墙，把 XAML 那处 `ShowGalleryCard` 改回 `HasScreenshots` 即可，其余改动不受影响。
+- 顶部图片区若以后想按来源收（例如 Steam 完全不显示空白卡），把 `ShowGalleryCard` 加回来源判断即可，其余改动不受影响。

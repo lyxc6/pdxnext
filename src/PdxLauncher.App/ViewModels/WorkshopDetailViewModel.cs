@@ -39,6 +39,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>Steam 评论翻页要用作者 SteamID（接口路径里的一部分）。</summary>
     private string? _steamCreatorId;
 
+    /// <summary>正文配图：URL → 本地文件。与顶部图片墙分开，避免重复下载与互相覆盖。</summary>
+    private readonly Dictionary<string, string> _inlineImages = new(StringComparer.Ordinal);
+
     /// <summary>构造。</summary>
     /// <param name="source">详情取数。</param>
     /// <param name="images">图片缓存（封面/截图落地）。</param>
@@ -200,11 +203,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>
     /// 是否显示顶部图片区。
     /// <para>
-    /// 只有 PDX 的详情接口带真正的截图列表；Steam 的「图片」全都来自简介正文里的
-    /// <c>&lt;img&gt;</c>，它们应该留在正文里显示，再在顶部铺一遍就成了「配图跑到上面」。
+    /// PDX 是详情接口给的真实截图；Steam 只有一张大图预览（简介里的配图留在正文，不属于这里）。
     /// </para>
     /// </summary>
-    public bool ShowGalleryCard => HasScreenshots && Row?.Source == WorkshopSource.Pdx;
+    public bool ShowGalleryCard => HasScreenshots;
 
     /// <summary>正文配图下载完成（交给页面刷新 MarkdownView 里的图片）。</summary>
     public event EventHandler? GalleryImageReady;
@@ -215,6 +217,11 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         if (string.IsNullOrWhiteSpace(url))
         {
             return null;
+        }
+
+        if (_inlineImages.TryGetValue(url, out var inlinePath) && !string.IsNullOrWhiteSpace(inlinePath))
+        {
+            return inlinePath;
         }
 
         foreach (var shot in Screenshots)
@@ -549,6 +556,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         CommentsTotal = 0;
         CommentsPage = 1;
         _steamCreatorId = null;
+        _inlineImages.Clear();
 
         // 列表里已经下好的封面先直接用，别在详情页再下一次。
         CoverPath = row.CoverPath;
@@ -642,21 +650,32 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             : MarkdownParser.Parse(WorkshopText.ToPlainText(detail.Description));
         ApplyDescription(document);
 
-        if (imageUrls.Count == 0)
+        // 顶部图片区只放 Steam 的大图预览（详情里的 preview；缓存命中时退到列表封面）。
+        // 简介里的 <img> 属于正文，单独下载给正文用，不再铺到顶部。
+        var previewUrl = !string.IsNullOrWhiteSpace(detail.PreviewUrl)
+            ? detail.PreviewUrl
+            : !string.IsNullOrWhiteSpace(row.CoverUrl) ? row.CoverUrl : null;
+
+        var galleryUrls = new List<string>();
+        if (previewUrl is not null)
         {
-            imageUrls.AddRange(document.ImageUrls);
+            galleryUrls.Add(previewUrl);
         }
 
-        BuildGallery(row, imageUrls);
+        BuildGallery(row, galleryUrls);
+
+        var inlineUrls = imageUrls.Count > 0 ? imageUrls : document.ImageUrls.ToList();
 
         NotifyStateChanged();
         IsLoading = false;
-        IsLoadingScreenshots = Screenshots.Count > 0;
+        IsLoadingScreenshots = galleryUrls.Count > 0;
         NotifyStateChanged();
 
         try
         {
-            await DownloadGalleryAsync(row, cancellationToken).ConfigureAwait(true);
+            await Task.WhenAll(
+                DownloadGalleryAsync(row, cancellationToken),
+                DownloadInlineImagesAsync(row, inlineUrls, cancellationToken)).ConfigureAwait(true);
         }
         finally
         {
@@ -961,7 +980,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             try
             {
                 shot.Path = await _images
-                    .EnsureScreenshotAsync(row.Source, row.Id, shot.Url, shot.Index, cancellationToken)
+                    .EnsureScreenshotAsync(row.Source, row.Id, shot.Url, cancellationToken)
                     .ConfigureAwait(true);
 
                 if (shot.HasPath)
@@ -978,6 +997,53 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             {
                 // 单张图片失败不该让整页报错，留占位即可。
                 _logger.Warn("创意工坊图片下载失败: " + row.Id + " #" + shot.Index + " " + ex.Message);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        })).ConfigureAwait(true);
+    }
+
+    /// <summary>正文配图逐张下载（最多 2 张并发），每张完成即通知页面原地换图。</summary>
+    private async Task DownloadInlineImagesAsync(
+        WorkshopRowViewModel row,
+        IReadOnlyList<string> urls,
+        CancellationToken cancellationToken)
+    {
+        if (urls.Count == 0)
+        {
+            return;
+        }
+
+        // 同一张图在正文里可能出现多次，按 URL 去重后再下。
+        var distinct = urls.Distinct(StringComparer.Ordinal).ToList();
+
+        using var gate = new SemaphoreSlim(MaxConcurrentScreenshots);
+
+        await Task.WhenAll(distinct.Select(async url =>
+        {
+            await gate.WaitAsync(cancellationToken).ConfigureAwait(true);
+            try
+            {
+                var path = await _images
+                    .EnsureScreenshotAsync(row.Source, row.Id, url, cancellationToken)
+                    .ConfigureAwait(true);
+
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    _inlineImages[url] = path;
+                    GalleryImageReady?.Invoke(this, EventArgs.Empty);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // 单张配图失败不该让整页报错，留占位即可。
+                _logger.Warn("创意工坊正文配图下载失败: " + row.Id + " " + url + " " + ex.Message);
             }
             finally
             {

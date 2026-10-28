@@ -90,13 +90,15 @@ public sealed class WorkshopImageCache
     /// <param name="source">来源。</param>
     /// <param name="id">工坊条目 id。</param>
     /// <param name="url">截图地址。</param>
-    /// <param name="index">该截图在列表里的序号（决定文件名）。</param>
     /// <param name="cancellationToken">取消令牌。</param>
+    /// <remarks>
+    /// 文件名按 URL 哈希生成（不是列表序号）：同一张图在顶部图片墙和正文里指的是同一个文件，
+    /// 也不会因为「上次这一序号是别的图」而显示成旧图。
+    /// </remarks>
     public async Task<string?> EnsureScreenshotAsync(
         WorkshopSource source,
         string id,
         string url,
-        int index,
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(url))
@@ -105,7 +107,7 @@ public sealed class WorkshopImageCache
         }
 
         var directory = ShotsDirectory(source, id);
-        var stem = ShotStem(index);
+        var stem = ShotStem(url);
         var existing = FindExisting(directory, stem);
         if (existing is not null)
         {
@@ -130,9 +132,20 @@ public sealed class WorkshopImageCache
     private static string CoverRelativeName(WorkshopSource source, string id) =>
         SourceTag(source) + "/" + id;
 
-    /// <summary>截图文件名主干（不含扩展名）。</summary>
-    /// <param name="index">序号。</param>
-    private static string ShotStem(int index) => "shot_" + index.ToString("00", CultureInfo.InvariantCulture);
+    /// <summary>截图文件名主干（不含扩展名）：URL 的稳定哈希，同一张图永远同一个文件名。</summary>
+    /// <param name="url">图片地址。</param>
+    private static string ShotStem(string url)
+    {
+        // FNV-1a 32 位：短、稳定、不需要引 System.Security.Cryptography。
+        var hash = 2166136261u;
+        foreach (var ch in url)
+        {
+            hash ^= ch;
+            hash *= 16777619u;
+        }
+
+        return "shot_" + hash.ToString("x8", CultureInfo.InvariantCulture);
+    }
 
     /// <summary>按「同名前缀 + 任意扩展名」找已下载的那张。</summary>
     private string? FindExisting(string directory, string stem)
