@@ -35,5 +35,9 @@ public sealed partial class WorkshopScreenshotViewModel : LocalizedObservableObj
     /// <summary>本地图是否就绪。</summary>
     public bool HasPath => !string.IsNullOrWhiteSpace(Path);
 
+    /// <summary>是否是内联大图当前显示的那一张（缩略图条据此加描边）。</summary>
+    [ObservableProperty]
+    private bool _isCurrent;
+
     partial void OnPathChanged(string? value) => OnPropertyChanged(nameof(HasPath));
 }

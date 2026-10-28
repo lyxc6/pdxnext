@@ -248,12 +248,57 @@
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            VerticalAlignment="Center" />
                             </StackPanel>
-                            <!-- 图片墙：横向缩略图条，点任意一张进全屏查看器（可在查看器里翻页/缩放）。 -->
+                            <!-- 内联大图：用 FlipView 直接翻页；点图进全屏查看器（浮层里还能放大）。 -->
+                            <Grid>
+                                <FlipView x:Name="FlipWorkshopScreenshots"
+                                          Height="360"
+                                          AutomationProperties.AutomationId="flipWorkshopScreenshots"
+                                          AutomationProperties.Name="{x:Bind L.WorkshopDetailScreenshotsTitle, Mode=OneWay}"
+                                          SelectionChanged="OnInlineGallerySelectionChanged">
+                                    <!-- FlipView 的条目默认靠左上且不拉伸；不显式设成 Stretch，大图会被量成 0 尺寸显示不出来。 -->
+                                    <FlipView.ItemContainerStyle>
+                                        <Style TargetType="FlipViewItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                                        </Style>
+                                    </FlipView.ItemContainerStyle>
+                                    <FlipView.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:WorkshopScreenshotViewModel">
+                                            <Grid Background="Transparent"
+                                                  Tapped="OnInlineImageTapped">
+                                                <FontIcon Glyph="&#xE8B9;"
+                                                         FontSize="32"
+                                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                         HorizontalAlignment="Center"
+                                                         VerticalAlignment="Center"
+                                                         Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasPath), Mode=OneWay}" />
+                                                <Image Source="{x:Bind svc:XamlImage.FromPath(Path), Mode=OneWay}"
+                                                       Stretch="Uniform"
+                                                       Margin="8"
+                                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(HasPath), Mode=OneWay}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </FlipView.ItemTemplate>
+                                </FlipView>
+                                <Border HorizontalAlignment="Right"
+                                        VerticalAlignment="Top"
+                                        Margin="0,10,10,0"
+                                        Padding="8,3"
+                                        CornerRadius="4"
+                                        Background="#99000000">
+                                    <TextBlock x:Name="txtWorkshopInlineCounter"
+                                               Foreground="White"
+                                               Style="{StaticResource CaptionTextBlockStyle}" />
+                                </Border>
+                            </Grid>
+                            <!-- 缩略图条：点哪张，内联大图就翻到哪张（当前张加描边）。 -->
                             <ScrollViewer HorizontalScrollBarVisibility="Auto"
                                           HorizontalScrollMode="Enabled"
                                           VerticalScrollBarVisibility="Disabled"
                                           VerticalScrollMode="Disabled">
-                                <ItemsControl ItemsSource="{x:Bind ViewModel.Screenshots, Mode=OneWay}">
+                                <ItemsControl x:Name="lstWorkshopScreenshots"
+                                              ItemsSource="{x:Bind ViewModel.Screenshots, Mode=OneWay}"
+                                              AutomationProperties.AutomationId="lstWorkshopScreenshots">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate>
                                             <StackPanel Orientation="Horizontal" Spacing="8" />
@@ -261,30 +306,37 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:WorkshopScreenshotViewModel">
-                                            <Button Width="200"
-                                                    Height="120"
-                                                    Padding="0"
-                                                    Background="Transparent"
-                                                    BorderThickness="0"
-                                                    Click="OnScreenshotClick"
-                                                    AutomationProperties.AutomationId="{x:Bind AutomationId}"
-                                                    ToolTipService.ToolTip="{x:Bind L.WorkshopDetailViewImage, Mode=OneWay}">
-                                                <Border CornerRadius="8"
-                                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}">
-                                                    <Grid>
-                                                        <FontIcon Glyph="&#xE8B9;"
-                                                                 FontSize="32"
-                                                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                 HorizontalAlignment="Center"
-                                                                 VerticalAlignment="Center"
-                                                                 Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasPath), Mode=OneWay}" />
-                                                        <Image Source="{x:Bind svc:XamlImage.FromPath(Path), Mode=OneWay}"
-                                                               Stretch="Uniform"
-                                                               Margin="6"
-                                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(HasPath), Mode=OneWay}" />
-                                                    </Grid>
-                                                </Border>
-                                            </Button>
+                                            <Grid>
+                                                <Button Width="200"
+                                                        Height="120"
+                                                        Padding="0"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
+                                                        Click="OnThumbnailClick"
+                                                        AutomationProperties.AutomationId="{x:Bind AutomationId}"
+                                                        ToolTipService.ToolTip="{x:Bind L.WorkshopDetailViewImage, Mode=OneWay}">
+                                                    <Border CornerRadius="8"
+                                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                                                        <Grid>
+                                                            <FontIcon Glyph="&#xE8B9;"
+                                                                     FontSize="32"
+                                                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                     HorizontalAlignment="Center"
+                                                                     VerticalAlignment="Center"
+                                                                     Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasPath), Mode=OneWay}" />
+                                                            <Image Source="{x:Bind svc:XamlImage.FromPath(Path), Mode=OneWay}"
+                                                                   Stretch="Uniform"
+                                                                   Margin="6"
+                                                                   Visibility="{x:Bind svc:XamlVisibility.FromBool(HasPath), Mode=OneWay}" />
+                                                        </Grid>
+                                                    </Border>
+                                                </Button>
+                                                <Border BorderThickness="2"
+                                                        BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                                                        CornerRadius="8"
+                                                        IsHitTestVisible="False"
+                                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(IsCurrent), Mode=OneWay}" />
+                                            </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
@@ -513,7 +565,7 @@
                 </Button>
             </Grid>
 
-            <FlipView x:Name="GalleryFlip"
+            <FlipView x:Name="FlipWorkshopViewer"
                       Grid.Row="1"
                       AutomationProperties.AutomationId="flipWorkshopImages"
                       AutomationProperties.Name="{x:Bind L.WorkshopDetailScreenshotsTitle, Mode=OneWay}"
@@ -526,8 +578,10 @@
                                       MaxZoomFactor="4"
                                       HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollMode="Enabled"
-                                      VerticalScrollMode="Enabled">
+                                      HorizontalScrollMode="Disabled"
+                                      VerticalScrollMode="Disabled"
+                                      DoubleTapped="OnViewerDoubleTapped"
+                                      PointerWheelChanged="OnViewerPointerWheelChanged">
                             <Image Source="{x:Bind svc:XamlImage.FromPath(Path), Mode=OneWay}"
                                    Stretch="Uniform"
                                    Margin="16" />

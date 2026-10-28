@@ -108,6 +108,32 @@ public sealed partial class WorkshopDetailPage : Page
         {
             AppServices.Logger.Error("创意工坊详情页加载异常: " + row.Id, ex);
         }
+
+        // 截图是加载过程中异步落到集合里的，FlipView 不会自己选中第一个；
+        // 这里补一次，保证大图一打开就有内容、右上角计数也有值。
+        EnsureGallerySelection();
+    }
+
+    private void EnsureGallerySelection()
+    {
+        if (_viewModel.Screenshots.Count == 0)
+        {
+            return;
+        }
+
+        // 内联 FlipView 与缩略图条共用同一份集合；这里显式兜一次 ItemsSource，
+        // 避免 x:Bind 早于集合填充时 FlipView 拿不到条目（会显示成一块空白）。
+        if (FlipWorkshopScreenshots.ItemsSource is null)
+        {
+            FlipWorkshopScreenshots.ItemsSource = _viewModel.Screenshots;
+        }
+
+        if (FlipWorkshopScreenshots.SelectedIndex < 0)
+        {
+            FlipWorkshopScreenshots.SelectedIndex = 0;
+        }
+
+        SyncCurrentShot(FlipWorkshopScreenshots.SelectedIndex);
     }
 
     private void OnBackClick(object sender, RoutedEventArgs e)
@@ -178,15 +204,27 @@ public sealed partial class WorkshopDetailPage : Page
         ShellLauncher.TryOpenUrl(url, "创意工坊详情（图片）");
     }
 
-    /// <summary>点图片墙里的某一张。</summary>
-    private void OnScreenshotClick(object sender, RoutedEventArgs e)
+    /// <summary>点缩略图：把页面里的大图翻到那一张（不打开浮层，浮层要点大图才进）。</summary>
+    private void OnThumbnailClick(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not WorkshopScreenshotViewModel shot)
         {
             return;
         }
 
-        OpenViewer(shot.Index);
+        FlipWorkshopScreenshots.SelectedIndex = Math.Clamp(shot.Index, 0, Math.Max(0, _viewModel.Screenshots.Count - 1));
+    }
+
+    /// <summary>内联大图翻页：同步缩略图描边与两处计数器。</summary>
+    private void OnInlineGallerySelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        SyncCurrentShot(FlipWorkshopScreenshots.SelectedIndex);
+    }
+
+    /// <summary>点内联大图：打开全屏查看器并停在同一张。</summary>
+    private void OnInlineImageTapped(object sender, TappedRoutedEventArgs e)
+    {
+        OpenViewer(FlipWorkshopScreenshots.SelectedIndex);
     }
 
     /// <summary>打开全屏图片查看器（页面内浮层，不是 ContentDialog）。</summary>
@@ -197,24 +235,136 @@ public sealed partial class WorkshopDetailPage : Page
             return;
         }
 
-        GalleryFlip.ItemsSource = _viewModel.Screenshots;
         var target = Math.Clamp(index, 0, _viewModel.Screenshots.Count - 1);
-        GalleryFlip.SelectedIndex = target;
+        FlipWorkshopScreenshots.SelectedIndex = target;
+        FlipWorkshopViewer.ItemsSource = _viewModel.Screenshots;
+        FlipWorkshopViewer.SelectedIndex = target;
         UpdateCounter(target);
+        SyncCurrentShot(target);
 
         ImageOverlay.Visibility = Visibility.Visible;
-        GalleryFlip.Focus(FocusState.Programmatic);
+        FlipWorkshopViewer.Focus(FocusState.Programmatic);
     }
 
     private void OnCloseImageViewer(object sender, RoutedEventArgs e)
     {
         ImageOverlay.Visibility = Visibility.Collapsed;
-        GalleryFlip.ItemsSource = null;
+        FlipWorkshopViewer.ItemsSource = null;
+
+        // 关掉浮层后把焦点还给当前缩略图，键盘用户不会「丢焦点」。
+        var index = Math.Clamp(FlipWorkshopScreenshots.SelectedIndex, 0, Math.Max(0, _viewModel.Screenshots.Count - 1));
+        var shot = index >= 0 && index < _viewModel.Screenshots.Count ? _viewModel.Screenshots[index] : null;
+        if (shot is not null && FindThumbnail(shot.AutomationId) is { } button)
+        {
+            button.Focus(FocusState.Programmatic);
+        }
+        else
+        {
+            FlipWorkshopScreenshots.Focus(FocusState.Programmatic);
+        }
     }
 
     private void OnGallerySelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        UpdateCounter(GalleryFlip.SelectedIndex);
+        var index = FlipWorkshopViewer.SelectedIndex;
+        UpdateCounter(index);
+        SyncCurrentShot(index);
+    }
+
+    /// <summary>浮层里双击：在 1x 与 2x 之间切换。</summary>
+    private void OnViewerDoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+    {
+        if (sender is not ScrollViewer viewer)
+        {
+            return;
+        }
+
+        var factor = viewer.ZoomFactor < 1.5f ? 2f : 1f;
+        ApplyZoom(viewer, factor);
+        e.Handled = true;
+    }
+
+    /// <summary>浮层里 Ctrl + 滚轮：连续缩放（1–4x）。不按 Ctrl 时把滚轮让给 FlipView 翻页。</summary>
+    private void OnViewerPointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        if (sender is not ScrollViewer viewer ||
+            (e.KeyModifiers & Windows.System.VirtualKeyModifiers.Control) == 0)
+        {
+            return;
+        }
+
+        var delta = e.GetCurrentPoint(viewer).Properties.MouseWheelDelta;
+        if (delta == 0)
+        {
+            return;
+        }
+
+        var factor = (float)Math.Clamp(viewer.ZoomFactor * (delta > 0 ? 1.2f : 1f / 1.2f), 1f, 4f);
+        ApplyZoom(viewer, factor);
+        e.Handled = true;
+    }
+
+    /// <summary>应用缩放；放大时允许拖动查看，缩回 1x 时把拖动让回给 FlipView 翻页。</summary>
+    private static void ApplyZoom(ScrollViewer viewer, float factor)
+    {
+        var zoom = Math.Clamp(factor, 1f, 4f);
+        var scrollable = zoom > 1.01f ? ScrollMode.Enabled : ScrollMode.Disabled;
+        viewer.HorizontalScrollMode = scrollable;
+        viewer.VerticalScrollMode = scrollable;
+        viewer.ChangeView(null, null, zoom, disableAnimation: true);
+    }
+
+    /// <summary>把「当前张」标记写到截图行上（缩略图条靠它画描边）。</summary>
+    private void SyncCurrentShot(int index)
+    {
+        for (var i = 0; i < _viewModel.Screenshots.Count; i++)
+        {
+            _viewModel.Screenshots[i].IsCurrent = i == index;
+        }
+
+        var total = _viewModel.Screenshots.Count;
+        txtWorkshopInlineCounter.Text = total <= 0
+            ? string.Empty
+            : (Math.Clamp(index, 0, total - 1) + 1) + " / " + total;
+    }
+
+    private Button? FindThumbnail(string automationId)
+    {
+        foreach (var shot in _viewModel.Screenshots)
+        {
+            if (!string.Equals(shot.AutomationId, automationId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (FindByName(lstWorkshopScreenshots, automationId) is Button button)
+            {
+                return button;
+            }
+        }
+
+        return null;
+    }
+
+    private static FrameworkElement? FindByName(DependencyObject root, string automationId)
+    {
+        var count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is FrameworkElement element &&
+                string.Equals(Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(element), automationId, StringComparison.Ordinal))
+            {
+                return element;
+            }
+
+            if (FindByName(child, automationId) is { } found)
+            {
+                return found;
+            }
+        }
+
+        return null;
     }
 
     private void UpdateCounter(int index)

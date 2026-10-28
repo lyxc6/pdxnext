@@ -3159,3 +3159,49 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
 3. `WMC1506`：`x:Bind` 的 OneWay 源必须实现通知，行视图模型因此继承 `LocalizedObservableObject` 而不是裸 `ObservableObject`。
 4. `winapp ui` 的 `click/focus` 要求窗口在前台，被全屏游戏挡住会直接失败；`px` 里 `$pid` 是只读变量，要用自己的变量名。
 5. Steam 端到端（评论区、作者外链）在本机受网络与前台窗口限制，尚未跑通全程，仅以解析器样例自检兜底。
+
+## 0.40 2026-10-28：创意工坊详情页图片区改用 FlipView（页内翻页 + 缩略图条 + 浮层缩放）
+
+**背景**
+
+§0.39 的图片墙是「横向缩略图条，点开才进浮层查看器」：页内看不到大图，翻页必须先开浮层。
+用户问「能用 FlipView 实现吗」——浮层本来就是 `FlipView`，缺的是页内翻页与缩放交互，于是把图片区重做。
+
+**改法**
+
+1. 截图卡改成「内联 `FlipView`（`Height=360`，`AutomationId=flipWorkshopScreenshots`）+ 下方缩略图条」：
+   页内直接左右翻页，右上角保留「当前 / 总数」计数器（`txtWorkshopInlineCounter`）。
+2. 缩略图条每个按钮 `Click="OnThumbnailClick"` 只切内联 `SelectedIndex`；当前张用 2px `AccentFillColorDefaultBrush`
+   描边高亮（绑 `WorkshopScreenshotViewModel.IsCurrent`，新增的可观察属性）。
+3. 点内联大图（`Tapped`）进浮层查看器；浮层仍是 `FlipView`，新增双击 1x/2x 切换、
+   Ctrl+滚轮 1–4x 缩放（未按 Ctrl 的滚轮留给 FlipView 翻页）、放大超过 1.01x 才允许拖动、关闭后焦点回到当前缩略图。
+4. 浮层 `FlipView` 改名 `FlipWorkshopViewer`（`AutomationId` 仍是 `flipWorkshopImages`，脚本不用改）。
+
+**两个必须记住的坑**
+
+1. `FlipView` 的条目容器默认 `HorizontalContentAlignment/VerticalContentAlignment = Left/Top`，
+   `ItemTemplate` 里的 `Grid` 会被量成 0 尺寸 → 整块显示为空白。必须加 `ItemContainerStyle` 设成 `Stretch`。
+2. `x:Bind ViewModel.Screenshots` 是「绑定一次集合实例」，截图是加载中异步 `Add` 进来的；
+   内联 `FlipView` 在这条路径上拿不到条目（`ItemsSource` 为 null、`SelectedIndex` 一直是 -1），
+   因此在 `RunAsync` 末尾补了 `EnsureGallerySelection()`：显式兜一次 `ItemsSource`、选中第 0 张、刷新计数器。
+   同一份集合给 `ItemsControl` 用时却没有这个问题，只有 `FlipView` 需要兜底。
+
+**自检**
+
+- `bash tools/build-app.sh -v q` → 0 警告 0 错误；`dotnet build PdxLauncher.sln -c Debug -m:1` → 0 警告 0 错误；
+  `检查类: 35，失败: 0`（本次只改视图与视图模型，未新增检查类）。
+
+**实测**（Release exe，2026-10-28 18:2x，CS2 / Paradox Mods，`Unified Icon Library`）
+
+- 页内大图直接显示第 1 张，右上计数「1 / 3」；`invoke workshopDetailShot_1` / `_2` 后计数变「2 / 3」「3 / 3」，
+  大图与缩略图高亮同步跟随。
+- 截图见 `ui-test-artifacts/workshop-flip2/`：`01-inline-first.png`（1/3 + 大图）、`02-thumb-2.png`（2/3）、
+  `05-strip.png`（缩略图条 + 第 3 张描边高亮）。
+
+**边界**
+
+- 双击缩放、Ctrl+滚轮缩放、Esc 关闭这三项依赖真实鼠标/键盘，本轮**没有端到端跑**：
+  本机前台被全屏游戏占用，`winapp ui click/focus` 会拒绝执行（`Target window is not in the foreground`）。
+  为绕开它，冒烟时临时加过一个 `PDX_UI_OPEN_FIRST_MOD=1` 的自动开详情钩子，验证完已删除，
+  最终 diff 只剩 3 个文件（截图 VM、详情页 XAML、详情页后置代码）。
+- 内联 `FlipView` 高度写死 360；窗口很矮时大图会挤压缩略图条，暂不处理。
