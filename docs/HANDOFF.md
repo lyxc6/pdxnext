@@ -3330,3 +3330,59 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
 - 描述解析走 `HtmlDescriptionParser`（`<img>` → `MarkdownImageInline`）；PDX 的 `longDescription` 是 Markdown 且实测零内嵌图，
   所以 PDX 不会出现「正文图 + 顶部截图」重复。
 - 顶部图片区若以后想按来源收（例如 Steam 完全不显示空白卡），把 `ShowGalleryCard` 加回来源判断即可，其余改动不受影响。
+
+## 0.43 2026-10-29：Steam 详情页截图改抓物品页画廊（`#highlight_player_area`）
+
+**背景**
+
+- §0.42 之后 Steam 顶部图区只剩一张 `preview_url`（mod 封面小图），用户指出「获取错误的截图，
+  应该是显示 `<div id="highlight_player_area">` 中的内容」——即 Steam 物品页顶部那个官方画廊。
+
+**页面结构（`https://steamcommunity.com/sharedfiles/filedetails/?id=<id>`，实测三份 HTML）**
+
+- 服务端只给占位：`<div id="highlight_player_area">` 里每张图是
+  `<div class="highlight_player_item highlight_screenshot" id="highlight_screenshot_<previewid>">`
+  + `<img id="previewImage<id>" src=".../trans.gif">`；真实地址由页尾脚本填。
+- 页尾两个变量：
+  - `var rgScreenshotURLs = { '<id>': '<url imw=637&imh=358>', … }`（小图，兜底用）
+  - `var rgFullScreenshotURLs = [ { 'previewid' : '<id>', 'url': '<url imw=5000&imh=5000&…> }, … ]`（原图）
+- 实测 `Renovatio`：7 个 id / 7 条 full URL 全对应；另一份 2 张的页面同样一致。
+  `imw=5000` 的图实际只有 392 KB（源图 1920×1080），所以**不改写 URL 参数**，原样下载。
+
+**改法**
+
+1. `src/PdxLauncher.Core/Online/SteamWorkshopItemPageParser.cs`：新增
+   `PlayerShotIdRegex`（`highlight_screenshot_(\d+)`）、`FullShotRegex`（`'previewid'…'url'…`）、
+   `PreviewShotRegex`（`'<id>': 'https://…'`）与 `ExtractScreenshotUrls(html)`：
+   按 **id 出现顺序** 取图（不是数组顺序），缺 url 的 id 跳过、URL 去重、上限 `MaxScreenshots = 20`；
+   full 数组整体缺失时退回 637 字典；没有 `highlight_player_area` 时返回空。
+2. `src/PdxLauncher.Core/Online/SteamWorkshopModels.cs`：`SteamWorkshopItemPage` 增加
+   `IReadOnlyList<string> ScreenshotUrls`（官方画廊，顺序同页面；与描述内联 `ImageUrls` 分开）。
+3. `src/PdxLauncher.App/ViewModels/WorkshopDetailViewModel.cs`（`ApplySteamAsync`）：
+   图区优先用 `page.ScreenshotUrls`，为空才退回 `preview_url`/封面（只有视频或页面改版时）。
+4. `tests/PdxLauncher.Checks/WorkshopRichTextChecks.cs`：新增 `CheckItemPageScreenshots()`——
+   数组故意反序验证「按 id 顺序」、验证取 `imw=5000` 而非 637 版、描述 `<img>` 不进画廊、
+   id 无 url 时跳过、缺 full 数组时用字典兜底、无画廊区时为空。
+
+**自检**
+
+- `bash tools/build-app.sh -v q` → 0 警告 0 错误；`dotnet build PdxLauncher.sln -c Debug -m:1` → 0 警告 0 错误。
+- `检查类: 37`；与本次无关的唯一失败是 `PlaysetChecks` 的真机 Victoria 3 断言
+  「V3 激活播放集全部启用」——本机 V3 播放集现在是 24 行且至少一行未启用（官方启动器/V3 侧改动）。
+  用 `git stash` 暂存本次改动后复跑，该断言同样失败（`断言失败总数: 1`），确认与本次改动无关；
+  另两个 `FAIL ... (Run 返回 1)` 是它把全局计数带下去的连锁。
+
+**实测（Release exe，UI 自动化）**
+
+- CK3 / Steam `Renovatio`：顶部图区 **7 张**官方截图（计数「1 / 7」，缩略图条里是衣服/甲胄/纹章等真实截图），
+  简介配图仍在正文，评论区「第 1 / 9 页 · 共 121 条」。
+  截图 `ui-test-artifacts/workshop-shots/01-detail-top.png`。
+- CS2 / PDX `Unified Icon Library`：回归无变化（3 张工坊截图，计数 1 / 3）。
+  截图 `ui-test-artifacts/workshop-shots-pdx/01-detail-top.png`。
+
+**踩坑 / 边界**
+
+- 画廊里 `img` 是 `trans.gif` 占位，直接抓 `src` 只会得到占位图 —— 必须解析脚本数组。
+- 顺序问题：数组顺序与页面顺序可能不同，**以 `highlight_screenshot_<id>` 的页面顺序为准**。
+- 只有视频（`highlight_movie`）没有截图的 mod → `ScreenshotUrls` 为空 → 退回 `preview_url`。
+- 页面改版导致抓不到时同样静默退回封面，不抛异常、不留空卡。

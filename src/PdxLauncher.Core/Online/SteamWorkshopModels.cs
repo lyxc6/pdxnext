@@ -144,6 +144,7 @@ public sealed record SteamWorkshopItemDetail(
 /// <param name="AuthorProfileUrl">作者主页（可能是自定义 /id/ 形式）。</param>
 /// <param name="DescriptionHtml">描述原文（HTML）。</param>
 /// <param name="ImageUrls">描述里内嵌的图片。</param>
+/// <param name="ScreenshotUrls">官方画廊截图（来自 <c>#highlight_player_area</c>），顺序与页面一致。</param>
 /// <param name="TotalComments">讨论总数（页面上报的 total_count）。</param>
 /// <param name="Comments">首屏评论。</param>
 public sealed record SteamWorkshopItemPage(
@@ -151,6 +152,7 @@ public sealed record SteamWorkshopItemPage(
     string? AuthorProfileUrl,
     string? DescriptionHtml,
     IReadOnlyList<string> ImageUrls,
+    IReadOnlyList<string> ScreenshotUrls,
     int TotalComments,
     IReadOnlyList<SteamWorkshopComment> Comments);
 

@@ -23,6 +23,9 @@ public static class SteamWorkshopItemPageParser
     /// <summary>单条评论正文的长度上限。</summary>
     public const int MaxCommentLength = 2000;
 
+    /// <summary>最多取多少张画廊截图（防止极端页面把图区撑爆）。</summary>
+    public const int MaxScreenshots = 20;
+
     private static readonly Regex TotalCountRegex = new(
         "\"total_count\"\\s*:\\s*(\\d+)",
         RegexOptions.CultureInvariant);
@@ -34,6 +37,21 @@ public static class SteamWorkshopItemPageParser
     private static readonly Regex AvatarRegex = new(
         "avatars\\.fastly\\.steamstatic\\.com|community\\.fastly\\.steamstatic\\.com",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>画廊里每张截图的容器 id（<c>id="highlight_screenshot_47595438"</c>），出现顺序即页面顺序。</summary>
+    private static readonly Regex PlayerShotIdRegex = new(
+        "highlight_screenshot_(\\d+)",
+        RegexOptions.CultureInvariant);
+
+    /// <summary><c>rgFullScreenshotURLs</c> 的数组成员（原图尺寸）。</summary>
+    private static readonly Regex FullShotRegex = new(
+        "\\{\\s*'previewid'\\s*:\\s*'(\\d+)'\\s*,\\s*'url'\\s*:\\s*'([^']+)'\\s*\\}",
+        RegexOptions.CultureInvariant);
+
+    /// <summary><c>rgScreenshotURLs</c> 的字典成员（637×358 版，仅作兜底）。</summary>
+    private static readonly Regex PreviewShotRegex = new(
+        "'(\\d+)'\\s*:\\s*'(https://[^']+)'",
+        RegexOptions.CultureInvariant);
 
     /// <summary>解析物品页；连标题都拿不到时返回 null。</summary>
     /// <param name="html">页面 HTML。</param>
@@ -48,6 +66,7 @@ public static class SteamWorkshopItemPageParser
         var authorUrl = ExtractAuthorUrl(html);
         var descriptionHtml = ExtractDescription(html);
         var images = ExtractImages(descriptionHtml);
+        var screenshots = ExtractScreenshotUrls(html);
         var comments = ParseComments(html);
         var totalComments = ExtractTotalComments(html);
 
@@ -61,6 +80,7 @@ public static class SteamWorkshopItemPageParser
             AuthorProfileUrl: authorUrl,
             DescriptionHtml: descriptionHtml,
             ImageUrls: images,
+            ScreenshotUrls: screenshots,
             TotalComments: totalComments,
             Comments: comments);
     }
@@ -160,6 +180,96 @@ public static class SteamWorkshopItemPageParser
         }
 
         return urls;
+    }
+
+    /// <summary>
+    /// 取物品页顶部画廊（<c>div#highlight_player_area</c>）里的截图。
+    /// <para>
+    /// 页面只给占位 <c>trans.gif</c>，真实地址在页尾脚本里：
+    /// <c>rgFullScreenshotURLs</c>（原图尺寸）与 <c>rgScreenshotURLs</c>（637×358）。
+    /// 顺序以画廊里截图的 <c>highlight_screenshot_&lt;id&gt;</c> 出现顺序为准，缺图跳过。
+    /// </para>
+    /// </summary>
+    /// <param name="html">物品页 HTML。</param>
+    private static IReadOnlyList<string> ExtractScreenshotUrls(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html) || IndexOf(html, "highlight_player_area") < 0)
+        {
+            return [];
+        }
+
+        var full = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (Match match in FullShotRegex.Matches(html))
+        {
+            full[match.Groups[1].Value] = System.Net.WebUtility.HtmlDecode(match.Groups[2].Value).Trim();
+        }
+
+        // full 数组缺失时退回 637×358 的字典（结构不同，值仍是可用地址）。
+        if (full.Count == 0)
+        {
+            var dictStart = IndexOf(html, "var rgScreenshotURLs");
+            if (dictStart >= 0)
+            {
+                var dictEnd = IndexOf(html, "};", dictStart);
+                var segment = dictEnd > dictStart ? html[dictStart..dictEnd] : html[dictStart..];
+                foreach (Match match in PreviewShotRegex.Matches(segment))
+                {
+                    full[match.Groups[1].Value] = System.Net.WebUtility.HtmlDecode(match.Groups[2].Value).Trim();
+                }
+            }
+        }
+
+        if (full.Count == 0)
+        {
+            return [];
+        }
+
+        // 画廊里的 id 顺序即展示顺序；拿不到 id 时按数组自身顺序。
+        var ids = new List<string>();
+        var seenIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match match in PlayerShotIdRegex.Matches(html))
+        {
+            if (seenIds.Add(match.Groups[1].Value))
+            {
+                ids.Add(match.Groups[1].Value);
+            }
+        }
+
+        var ordered = new List<string>();
+        var seenUrls = new HashSet<string>(StringComparer.Ordinal);
+
+        void Append(string? url)
+        {
+            if (string.IsNullOrWhiteSpace(url) || !url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (ordered.Count < MaxScreenshots && seenUrls.Add(url))
+            {
+                ordered.Add(url);
+            }
+        }
+
+        if (ids.Count > 0)
+        {
+            foreach (var id in ids)
+            {
+                if (full.TryGetValue(id, out var url))
+                {
+                    Append(url);
+                }
+            }
+        }
+        else
+        {
+            foreach (var url in full.Values)
+            {
+                Append(url);
+            }
+        }
+
+        return ordered;
     }
 
     /// <summary>

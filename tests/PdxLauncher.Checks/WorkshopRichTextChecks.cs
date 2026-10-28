@@ -26,6 +26,7 @@ public static class WorkshopRichTextChecks
         CheckMarkdownTruncation();
         CheckHtmlDescription();
         CheckItemPage();
+        CheckItemPageScreenshots();
         CheckCommentPaging();
         return ChecksContext.Failures - before;
     }
@@ -202,6 +203,94 @@ public static class WorkshopRichTextChecks
         ChecksContext.Equal("空 HTML 返回 null", null, SteamWorkshopItemPageParser.Parse(null));
         ChecksContext.Equal("无关 HTML 返回 null", null, SteamWorkshopItemPageParser.Parse("<html><body>hello</body></html>"));
     }
+    private static void CheckItemPageScreenshots()
+    {
+        // 画廊缩略图顺序 ≠ 脚本数组顺序：真实页面里数组常被重排，必须按 id 顺序取。
+        const string Html = """
+            <div class="workshopItemPreviewArea">
+              <div id="highlight_player_area">
+                <div class="highlight_player_item highlight_screenshot" id="highlight_screenshot_300">
+                  <img src="https://community.steamstatic.com/public/images/trans.gif">
+                </div>
+                <div class="highlight_player_item highlight_screenshot" id="highlight_screenshot_100">
+                  <img src="https://community.steamstatic.com/public/images/trans.gif">
+                </div>
+                <div class="highlight_player_item highlight_screenshot" id="highlight_screenshot_200">
+                  <img src="https://community.steamstatic.com/public/images/trans.gif">
+                </div>
+                <div class="highlight_player_item highlight_screenshot" id="highlight_screenshot_999">
+                  <img src="https://community.steamstatic.com/public/images/trans.gif">
+                </div>
+              </div>
+            </div>
+            <div class="workshopItemDescription">正文图
+              <img src="https://i.imgur.com/desc.png">
+            </div>
+            <div class="creatorsBlock">
+              <a class="friendBlockLinkOverlay" href="https://steamcommunity.com/profiles/76561198000000000"></a>
+              <div class="friendBlockContent">Agami</div>
+            </div>
+            <script>
+              var rgScreenshotURLs = {
+                '300': 'https://images.steamusercontent.com/ugc/300/?imw=637&imh=358',
+                '100': 'https://images.steamusercontent.com/ugc/100/?imw=637&imh=358',
+                '200': 'https://images.steamusercontent.com/ugc/200/?imw=637&imh=358'
+              };
+              var rgFullScreenshotURLs = [
+                { 'previewid' : '200', 'url': 'https://images.steamusercontent.com/ugc/200/?imw=5000&imh=5000&letterbox=false' },
+                { 'previewid' : '100', 'url': 'https://images.steamusercontent.com/ugc/100/?imw=5000&imh=5000&letterbox=false' },
+                { 'previewid' : '300', 'url': 'https://images.steamusercontent.com/ugc/300/?imw=5000&imh=5000&letterbox=false' }
+              ];
+            </script>
+            """;
+
+        var page = SteamWorkshopItemPageParser.Parse(Html);
+        ChecksContext.Equal("画廊截图数量（缺 url 的 id 跳过）", 3, page?.ScreenshotUrls.Count ?? -1);
+        ChecksContext.Equal(
+            "画廊顺序按页面 id",
+            "https://images.steamusercontent.com/ugc/300/?imw=5000&imh=5000&letterbox=false",
+            page?.ScreenshotUrls[0]);
+        ChecksContext.Equal(
+            "画廊第二张",
+            "https://images.steamusercontent.com/ugc/100/?imw=5000&imh=5000&letterbox=false",
+            page?.ScreenshotUrls[1]);
+        ChecksContext.Equal(
+            "画廊第三张",
+            "https://images.steamusercontent.com/ugc/200/?imw=5000&imh=5000&letterbox=false",
+            page?.ScreenshotUrls[2]);
+        ChecksContext.Check(
+            "用原图尺寸而不是 637 预览版",
+            page is not null && page.ScreenshotUrls.All(url => url.Contains("imw=5000", StringComparison.Ordinal)),
+            page?.ScreenshotUrls[0]);
+        ChecksContext.Check(
+            "描述里的图不进画廊",
+            page is not null && page.ScreenshotUrls.All(url => !url.Contains("i.imgur.com", StringComparison.Ordinal)),
+            null);
+        ChecksContext.Check(
+            "描述里的图仍在 ImageUrls",
+            page is not null && page.ImageUrls.Any(url => url.Contains("i.imgur.com/desc.png", StringComparison.Ordinal)),
+            page?.ImageUrls.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        // 只有 637 字典、没有 full 数组时兜底用字典。
+        const string FallbackHtml = """
+            <div id="highlight_player_area">
+              <div class="highlight_player_item highlight_screenshot" id="highlight_screenshot_7"></div>
+            </div>
+            <script>
+              var rgScreenshotURLs = { '7': 'https://images.steamusercontent.com/ugc/7/?imw=637&imh=358' };
+            </script>
+            <div class="friendBlockContent">Agami</div>
+            """;
+        var fallback = SteamWorkshopItemPageParser.Parse(FallbackHtml);
+        ChecksContext.Equal("缺 full 数组时用字典兜底", 1, fallback?.ScreenshotUrls.Count ?? -1);
+
+        // 没有画廊区的页面（只有视频/改版）→ 空列表，调用方退回封面。
+        var noGallery = SteamWorkshopItemPageParser.Parse(
+            "<div class=\"friendBlockContent\">Agami</div><div class=\"workshopItemDescription\">纯文字</div>");
+        ChecksContext.Equal("没有画廊区时为空", 0, noGallery?.ScreenshotUrls.Count ?? -1);
+        ChecksContext.Equal("空 HTML 时画廊为空", 0, SteamWorkshopItemPageParser.Parse(null)?.ScreenshotUrls.Count ?? 0);
+    }
+
     private static void CheckCommentPaging()
     {
         // 翻页接口返回的是裸片段（没有物品页外壳），解析器必须能直接吃。

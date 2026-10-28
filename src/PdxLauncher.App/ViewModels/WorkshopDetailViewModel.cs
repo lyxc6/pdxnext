@@ -650,15 +650,20 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             : MarkdownParser.Parse(WorkshopText.ToPlainText(detail.Description));
         ApplyDescription(document);
 
-        // 顶部图片区只放 Steam 的大图预览（详情里的 preview；缓存命中时退到列表封面）。
+        // 顶部图片区用物品页官方画廊（#highlight_player_area）里的截图；抓不到时退回预览图。
         // 简介里的 <img> 属于正文，单独下载给正文用，不再铺到顶部。
         var previewUrl = !string.IsNullOrWhiteSpace(detail.PreviewUrl)
             ? detail.PreviewUrl
             : !string.IsNullOrWhiteSpace(row.CoverUrl) ? row.CoverUrl : null;
 
         var galleryUrls = new List<string>();
-        if (previewUrl is not null)
+        if (page is { ScreenshotUrls.Count: > 0 })
         {
+            galleryUrls.AddRange(page.ScreenshotUrls);
+        }
+        else if (previewUrl is not null)
+        {
+            // 只有视频、或页面结构变化抓不到画廊时的兜底：至少显示封面。
             galleryUrls.Add(previewUrl);
         }
 
