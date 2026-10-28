@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -47,8 +47,20 @@ public sealed partial class WorkshopDetailPage : Page
                 AppServices.Logger),
             AppServices.Logger);
 
+        // 正文里的行内图片与顶部图片墙共用同一份缓存文件：先把解析器接上，
+        // 图片下载完成后再由 GalleryImageReady 原地刷新，不重建整页。
+        DescriptionView.ImageResolver = _viewModel.ResolveImagePath;
+        ChangelogView.ImageResolver = _viewModel.ResolveImagePath;
+        _viewModel.GalleryImageReady += OnGalleryImageReady;
+
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+    }
+
+    private void OnGalleryImageReady(object? sender, EventArgs e)
+    {
+        DescriptionView.RefreshImages();
+        ChangelogView.RefreshImages();
     }
 
     /// <summary>当前页面的取消令牌（跑在 LoadAsync / 翻页 / 订阅里）。</summary>
@@ -86,6 +98,7 @@ public sealed partial class WorkshopDetailPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _viewModel.GalleryImageReady -= OnGalleryImageReady;
         _lifetime?.Cancel();
     }
 

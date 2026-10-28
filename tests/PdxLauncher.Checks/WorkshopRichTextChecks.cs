@@ -1,4 +1,4 @@
-﻿namespace PdxLauncher.Checks;
+namespace PdxLauncher.Checks;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Online;
@@ -133,6 +133,25 @@ public static class WorkshopRichTextChecks
             "https://images.steamusercontent.com/a.png",
             document.ImageUrls.Count == 1 ? document.ImageUrls[0] : string.Join(",", document.ImageUrls));
         ChecksContext.Equal("空 HTML 给空文档", true, HtmlDescriptionParser.Parse(null).IsEmpty);
+
+        // Steam 正文里的配图（<img><br><文字>）：图片必须是正文的一部分，不能只被收集：
+        // 一个「只剩图片」的简介也不该被判成空文档，否则整段正文会被隐藏。
+        var mixed = HtmlDescriptionParser.Parse(
+            "<img src=\"https://i.imgur.com/NrstAKw.gif\" /><br><br><div class=\"bb_h1\">标题</div><br>Renovatio adds…");
+        ChecksContext.Equal(
+            "正文里的第一块就是图片",
+            true,
+            mixed.Blocks.Count > 0
+            && mixed.Blocks[0] is MarkdownParagraph { Inlines.Count: > 0 } first
+            && first.Inlines[0] is MarkdownImageInline);
+        ChecksContext.Equal(
+            "正文配图顺序正确",
+            "https://i.imgur.com/NrstAKw.gif",
+            mixed.ImageUrls.Count > 0 ? mixed.ImageUrls[0] : string.Join(",", mixed.ImageUrls));
+
+        var imageOnly = HtmlDescriptionParser.Parse("<img src=\"https://i.imgur.com/only.png\" />");
+        ChecksContext.Equal("只有图片的简介不算空", false, imageOnly.IsEmpty);
+        ChecksContext.Equal("只有图片也进 ImageUrls", 1, imageOnly.ImageUrls.Count);
     }
 
     /// <summary>物品页解析：作者、描述配图、评论与总数。</summary>

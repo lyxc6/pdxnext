@@ -3269,3 +3269,52 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
 - Steam 侧没有依赖数据（`GetPublishedFileDetails` 无依赖字段、物品页也没有依赖标记），依赖卡只对 PDX 显示。
 - UI 自动化仍受前台限制：`winapp ui click/focus` 要求窗口在前台，`invoke` 不需要；
   行点击靠临时 `PDX_UI_OPEN_FIRST_MOD=1` 钩子自动打开首行详情，验证完已删除。
+
+## 0.42 2026-10-29：Steam 详情页把简介配图当成了「截图」，正文里只剩「［图片］」
+
+**背景**
+
+- 用户点开 CK3 的 Steam mod（`https://steamcommunity.com/sharedfiles/filedetails/?id=3798537678`）：
+  简介里的配图（Rate/Favorited 横幅、Features、Load Order…）全被搬到顶部「截图」区，正文对应位置只剩一个「［图片］」文本链接。
+- 起因是三处叠加：① `SteamWorkshopItemPageParser` 把描述里的 `<img src>` 收进 `page.ImageUrls`；
+  ② `WorkshopDetailViewModel.ApplySteamAsync` 用这份 URL 列表 `BuildGallery(...)` 当「截图」铺顶部；
+  ③ `MarkdownView.AppendInlines` 的 `MarkdownImageInline` 分支只渲染成文本超链接。
+  而 Steam 详情接口**没有截图字段**，所以顶部的「截图」本来就全是简介配图。
+
+**改法**
+
+1. `src/PdxLauncher.App/Controls/MarkdownView.cs`：段落/列表项改用 `BuildFlow(...)` 分段渲染 ——
+   行内流按图片切成「文字段 + 图片块」，图片单独成块（`Border` 圆角 + `MaxWidth 640/MaxHeight 420` + `Stretch=Uniform`），
+   点击触发 `ImageRequested` 进全屏查看器；支持 `<a><img></a>` 这种被链接/样式包住的图（只含一个子节点时递归识别）。
+   新增 `ImageResolver`（URL → 本地缓存路径）与 `RefreshImages()`：下载完成后原地换图，不重建整页、不跳滚动位置。
+2. `src/PdxLauncher.App/ViewModels/WorkshopDetailViewModel.cs`：
+   新增 `ShowGalleryCard`（`HasScreenshots && Row.Source == Pdx`，Steam 不再把简介配图当截图铺顶部）、
+   `ResolveImagePath(url)`（在 `Screenshots` 里按 URL 查本地文件）、`GalleryImageReady` 事件（每张下载成功触发）；
+   Steam 分支顺带把作者显示名改成物品页的 `AuthorName`（列表条目里只有 SteamID）。
+3. `src/PdxLauncher.App/Views/WorkshopDetailPage.xaml`：图片区卡的可见性由 `HasScreenshots` 改绑 `ShowGalleryCard`；
+   描述与更新日志的 `MarkdownView` 命名 `DescriptionView` / `ChangelogView`。
+4. `src/PdxLauncher.App/Views/WorkshopDetailPage.xaml.cs`：给两个 `MarkdownView` 接 `ImageResolver`，
+   订阅 `GalleryImageReady` → `RefreshImages()`，`OnUnloaded` 解绑。
+5. `tests/PdxLauncher.Checks/WorkshopRichTextChecks.cs`：新增「`<img><br>文字` 混合描述首块是图片」「配图顺序」
+   「只有图片的简介不算空」三条断言。
+
+**自检**
+
+- `bash tools/build-app.sh -v q` → 0 警告 0 错误；`dotnet build PdxLauncher.sln -c Debug -m:1` → 0 警告 0 错误；
+- `dotnet tests/PdxLauncher.Checks/bin/Debug/net10.0/PdxLauncher.Checks.dll` → 检查类 37，失败 0。
+
+**实测**
+
+- CK3 / Steam `Renovatio`：描述里 Rate/Favorited 横幅、Features 横幅按原文顺序出现，正文段落夹在中间，
+  顶部不再有「截图」卡；页头作者从 `76561198145098971` 变成 `Anumari`（可点跳个人页）。
+  截图 `ui-test-artifacts/workshop-img/01-detail-top.png`。
+- CS2 / PDX `Unified Icon Library`：顶部图片区仍在（FlipView 3 张 + 缩略图条），订阅卡显示「登录 Paradox 账号后才能订阅」。
+  截图 `ui-test-artifacts/workshop-img-pdx/01-detail-top.png`。
+
+**踩坑 / 边界**
+
+- 图片是异步下载的：先占位图标，`GalleryImageReady` 后原地刷新；单张失败只留占位，不影响其它内容；
+  点击占位也进查看器（`Screenshots` 与正文图同源同序，可左右翻）。
+- 描述解析走 `HtmlDescriptionParser`（`<img>` → `MarkdownImageInline`）；PDX 的 `longDescription` 是 Markdown 且实测零内嵌图，
+  所以 PDX 不会出现「正文图 + 顶部截图」重复。
+- 若以后想让 Steam 顶部也铺一份图片墙，把 XAML 那处 `ShowGalleryCard` 改回 `HasScreenshots` 即可，其余改动不受影响。

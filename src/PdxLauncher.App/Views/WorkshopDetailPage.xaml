@@ -109,7 +109,7 @@
                             BorderThickness="1"
                             CornerRadius="8"
                             Padding="16"
-                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasScreenshots), Mode=OneWay}">
+                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowGalleryCard), Mode=OneWay}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="{x:Bind L.WorkshopDetailScreenshotsTitle, Mode=OneWay}"
                                        Style="{StaticResource BodyStrongTextBlockStyle}" />
@@ -358,7 +358,8 @@
                         <StackPanel Spacing="8">
                             <TextBlock Text="{x:Bind L.WorkshopDetailDescription, Mode=OneWay}"
                                        Style="{StaticResource BodyStrongTextBlockStyle}" />
-                            <ctl:MarkdownView Markdown="{x:Bind ViewModel.DescriptionDocument, Mode=OneWay}"
+                            <ctl:MarkdownView x:Name="DescriptionView"
+                                              Markdown="{x:Bind ViewModel.DescriptionDocument, Mode=OneWay}"
                                               LinkRequested="OnMarkdownLinkRequested"
                                               ImageRequested="OnMarkdownImageRequested"
                                               AutomationProperties.AutomationId="txtWorkshopDetailDescription"
@@ -440,7 +441,8 @@
                         <StackPanel Spacing="8">
                             <TextBlock Text="{x:Bind L.WorkshopDetailChangelog, Mode=OneWay}"
                                        Style="{StaticResource BodyStrongTextBlockStyle}" />
-                            <ctl:MarkdownView Markdown="{x:Bind ViewModel.ChangelogDocument, Mode=OneWay}"
+                            <ctl:MarkdownView x:Name="ChangelogView"
+                                              Markdown="{x:Bind ViewModel.ChangelogDocument, Mode=OneWay}"
                                               LinkRequested="OnMarkdownLinkRequested"
                                               ImageRequested="OnMarkdownImageRequested"
                                               AutomationProperties.AutomationId="txtWorkshopDetailChangelog" />

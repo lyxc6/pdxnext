@@ -1,4 +1,4 @@
-﻿namespace PdxLauncher.App.ViewModels;
+namespace PdxLauncher.App.ViewModels;
 
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -196,6 +196,37 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     /// <summary>是否有图片（截图或描述配图）。</summary>
     public bool HasScreenshots => Screenshots.Count > 0;
+
+    /// <summary>
+    /// 是否显示顶部图片区。
+    /// <para>
+    /// 只有 PDX 的详情接口带真正的截图列表；Steam 的「图片」全都来自简介正文里的
+    /// <c>&lt;img&gt;</c>，它们应该留在正文里显示，再在顶部铺一遍就成了「配图跑到上面」。
+    /// </para>
+    /// </summary>
+    public bool ShowGalleryCard => HasScreenshots && Row?.Source == WorkshopSource.Pdx;
+
+    /// <summary>正文配图下载完成（交给页面刷新 MarkdownView 里的图片）。</summary>
+    public event EventHandler? GalleryImageReady;
+
+    /// <summary>图片 URL → 本地缓存路径（未下载完成返回 null），供正文内联图片使用。</summary>
+    public string? ResolveImagePath(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+
+        foreach (var shot in Screenshots)
+        {
+            if (shot.HasPath && string.Equals(shot.Url, url, StringComparison.Ordinal))
+            {
+                return shot.Path;
+            }
+        }
+
+        return null;
+    }
 
     /// <summary>是否有外链。</summary>
     public bool HasLinks => Links.Count > 0;
@@ -582,6 +613,12 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             {
                 AuthorProfileUrl = page.AuthorProfileUrl;
             }
+
+            // 列表条目里只有作者的 SteamID，物品页才有显示名。
+            if (!string.IsNullOrWhiteSpace(page.AuthorName))
+            {
+                AuthorText = page.AuthorName;
+            }
         }
         else
         {
@@ -926,6 +963,12 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                 shot.Path = await _images
                     .EnsureScreenshotAsync(row.Source, row.Id, shot.Url, shot.Index, cancellationToken)
                     .ConfigureAwait(true);
+
+                if (shot.HasPath)
+                {
+                    // 正文里的内联图片拿的是同一份缓存文件，通知页面原地换图。
+                    GalleryImageReady?.Invoke(this, EventArgs.Empty);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -952,6 +995,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasChangelog));
         OnPropertyChanged(nameof(HasTags));
         OnPropertyChanged(nameof(HasScreenshots));
+        OnPropertyChanged(nameof(ShowGalleryCard));
         OnPropertyChanged(nameof(HasLinks));
         OnPropertyChanged(nameof(HasDependencies));
         OnPropertyChanged(nameof(HasDependencySummary));
