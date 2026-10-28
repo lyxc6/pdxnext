@@ -50,6 +50,14 @@ public sealed record PdxModsSummary(
 /// <param name="ForumUrl">官方论坛链接。</param>
 /// <param name="SizeBytes">服务端登记的安装体积（详情里是字符串 "36977023"，解析失败为 null）。</param>
 /// <param name="IsInstalled">当前账号是否已订阅（未登录时恒为 false）。</param>
+/// <param name="ScreenshotThumbnailUrls">
+/// 与 <paramref name="ScreenshotUrls"/> 一一对应的缩略图 URL；服务端没给缩略图的位置为空串。
+/// 缩略图常用于详情的图片墙先显示低清版。
+/// </param>
+/// <param name="ExternalLinkTypes">
+/// 与 <paramref name="ExternalLinks"/> 一一对应的类型标签（原样保留，空串表示缺失）。
+/// 服务端的 <c>displayName</c> 经常为 null，界面要给链接起名时需要这个类型。
+/// </param>
 public sealed record PdxModsDetail(
     PdxModsSummary Summary,
     string LongDescription,
@@ -58,7 +66,9 @@ public sealed record PdxModsDetail(
     IReadOnlyList<PdxModsLink> ExternalLinks,
     string? ForumUrl,
     long? SizeBytes,
-    bool IsInstalled);
+    bool IsInstalled,
+    IReadOnlyList<string> ScreenshotThumbnailUrls,
+    IReadOnlyList<string> ExternalLinkTypes);
 
 /// <summary>mod 详情里的一个外部链接。</summary>
 /// <param name="Url">绝对地址。</param>

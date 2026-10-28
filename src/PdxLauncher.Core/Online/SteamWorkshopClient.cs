@@ -74,6 +74,12 @@ public sealed class SteamWorkshopClient
             // 参数名是 searchtext（没有下划线），配 browsesort=textsearch 才生效。
             builder.Append("&searchtext=").Append(Uri.EscapeDataString(keyword));
         }
+        else if (query.Days is { } days && SupportsDays(query.Sort))
+        {
+            // 时间范围只对「最热门 / 最受好评」生效（Steam 的时间范围下拉也只在这两档排序下出现）；
+            // 参数名是 days（服务端回显成 trend_days）。0 是合法值（发布至今）。
+            builder.Append("&days=").Append(Math.Max(days, 0).ToString(CultureInfo.InvariantCulture));
+        }
 
         return new Uri(builder.ToString());
     }
@@ -212,7 +218,7 @@ public sealed class SteamWorkshopClient
     /// <summary>兜底探测：工坊列表页里能解析出 SSR 数据就算有创意工坊。</summary>
     private async Task<bool?> ProbeWorkshopPageAsync(int appId, CancellationToken cancellationToken)
     {
-        var query = new SteamWorkshopQuery(SearchText: null, Sort: SteamWorkshopSort.MostPopular, Page: 0, PageSize: DefaultPageSize);
+        var query = new SteamWorkshopQuery(SearchText: null, Sort: SteamWorkshopSort.Trend, Page: 0, PageSize: DefaultPageSize);
 
         try
         {
@@ -309,12 +315,17 @@ public sealed class SteamWorkshopClient
         }
     }
 
+    private static bool SupportsDays(SteamWorkshopSort sort) =>
+        sort is SteamWorkshopSort.Trend or SteamWorkshopSort.TopRated;
+
     private static string SortValue(SteamWorkshopSort sort) => sort switch
     {
-        SteamWorkshopSort.MostRecent => "mostrecent",
         SteamWorkshopSort.TopRated => "toprated",
+        SteamWorkshopSort.MostRecent => "mostrecent",
+        SteamWorkshopSort.MostUpdated => "mostupdated",
+        SteamWorkshopSort.MostSubscribed => "mostsubscribed",
         SteamWorkshopSort.TextSearch => "textsearch",
-        _ => "mostpopular",
+        _ => "trend",
     };
 
     private static DateTimeOffset FromUnixSeconds(long seconds)

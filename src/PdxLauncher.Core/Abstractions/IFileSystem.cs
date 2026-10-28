@@ -35,4 +35,7 @@ public interface IFileSystem
     void Delete(string path);
 
     void Copy(string source, string destination, bool overwrite);
+
+    /// <summary>移动/改名（同卷为原子操作）；目标目录不存在时自动创建。</summary>
+    void Move(string source, string destination, bool overwrite);
 }

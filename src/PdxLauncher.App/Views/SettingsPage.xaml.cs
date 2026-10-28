@@ -503,6 +503,104 @@ public sealed partial class SettingsPage : Page
         }
     }
 
+    // ------------------------------------------------------------ 补丁
+
+    private async void OnApplyPatchClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (_viewModel.Game is null)
+            {
+                _viewModel.SetStatus(Keys.SettingsStatusSelectGameFirst);
+                return;
+            }
+
+            var confirm = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = T(Keys.SettingsPatchApplyDialogTitle),
+                Content = T(Keys.SettingsPatchApplyDialogContent),
+                PrimaryButtonText = T(Keys.SettingsPatchApplyConfirm),
+                CloseButtonText = T(Keys.CommonCancel),
+                DefaultButton = ContentDialogButton.Close,
+            };
+
+            var result = await confirm.ShowAsync();
+            if (result != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            await _viewModel.ApplyPatchAsync(_lifetime.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("SettingsPage 打补丁失败", ex);
+            await ShowMessageAsync(T(Keys.SettingsPatchApplyDialogTitle), ex.Message).ConfigureAwait(true);
+        }
+    }
+
+    private async void OnRemovePatchClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (_viewModel.Game is null)
+            {
+                _viewModel.SetStatus(Keys.SettingsStatusSelectGameFirst);
+                return;
+            }
+
+            var confirm = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = T(Keys.SettingsPatchRemoveDialogTitle),
+                Content = T(Keys.SettingsPatchRemoveDialogContent),
+                PrimaryButtonText = T(Keys.SettingsPatchRemoveConfirm),
+                CloseButtonText = T(Keys.CommonCancel),
+                DefaultButton = ContentDialogButton.Close,
+            };
+
+            var result = await confirm.ShowAsync();
+            if (result != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            await _viewModel.RemovePatchAsync(_lifetime.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("SettingsPage 移除补丁失败", ex);
+            await ShowMessageAsync(T(Keys.SettingsPatchRemoveDialogTitle), ex.Message).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>素材目录可能还不存在（首次运行），这里按需建出来再打开，免得用户对着路径干瞪眼。</summary>
+    private void OnOpenPatchAssetsClick(object sender, RoutedEventArgs e)
+    {
+        var path = AppServices.GamePatch.AssetsDirectory;
+        try
+        {
+            AppServices.FileSystem.EnsureDirectory(path);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("SettingsPage 创建补丁素材目录失败：" + path, ex);
+            _viewModel.SetStatus(Keys.SettingsStatusOpenFailed, ex.Message);
+            return;
+        }
+
+        OpenDirectory(path, T(Keys.SettingsPatchOpenAssetsName));
+    }
+
     // ------------------------------------------------------------ 危险区
 
     private async void OnRegenerateSignatureClick(object sender, RoutedEventArgs e)

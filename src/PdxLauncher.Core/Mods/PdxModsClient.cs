@@ -171,19 +171,27 @@ public sealed class PdxModsClient
 
             var summary = ParseSummary(detail);
             var screenshots = new List<string>();
+
+            // 与 ScreenshotUrls 一一对应：没有缩略图的位置塞空串，保证索引能对上。
+            var screenshotThumbnails = new List<string>();
             if (detail["screenshots"] is JsonArray shots)
             {
                 foreach (var shot in shots)
                 {
-                    var url = shot is JsonObject shotObject ? GetString(shotObject, "image") : string.Empty;
+                    var shotObject = shot as JsonObject;
+                    var url = shotObject is null ? string.Empty : GetString(shotObject, "image");
                     if (url.Length > 0)
                     {
                         screenshots.Add(url);
+                        screenshotThumbnails.Add(shotObject is null ? string.Empty : GetString(shotObject, "thumbnail"));
                     }
                 }
             }
 
             var links = new List<PdxModsLink>();
+
+            // 与 ExternalLinks 一一对应；displayName 经常为 null，界面要靠类型起名。
+            var linkTypes = new List<string>();
             if (detail["externalLinks"] is JsonArray external)
             {
                 foreach (var link in external)
@@ -196,10 +204,12 @@ public sealed class PdxModsClient
                     var url = GetString(linkObject, "url");
                     if (url.Length > 0)
                     {
+                        var type = GetString(linkObject, "type");
                         links.Add(new PdxModsLink(
                             url,
-                            GetString(linkObject, "type"),
+                            type,
                             GetString(linkObject, "displayName")));
+                        linkTypes.Add(type);
                     }
                 }
             }
@@ -225,7 +235,9 @@ public sealed class PdxModsClient
                 ExternalLinks: links,
                 ForumUrl: NullIfEmpty(GetString(detail, "forumLink")),
                 SizeBytes: size,
-                IsInstalled: installed));
+                IsInstalled: installed,
+                ScreenshotThumbnailUrls: screenshotThumbnails,
+                ExternalLinkTypes: linkTypes));
         }
         catch (JsonException ex)
         {

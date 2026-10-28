@@ -8,6 +8,7 @@ using PdxLauncher.App.Services;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Patch;
 using PdxLauncher.Core.Storage;
 
 /// <summary>
@@ -38,6 +39,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         ProxyModeCatalog.Resolve(AppServices.Settings.ProxyMode, AppServices.Settings.ProxyUrl);
     private AlternativeExecutable? _selectedAlternative;
     private string _lastSignature = string.Empty;
+    private GamePatchReport? _patchReport;
+    private string _patchStatusText = string.Empty;
+    private string _patchDetailText = string.Empty;
     private PlaySetPageDisplayModeOption _selectedPlaySetDisplayMode =
         PlaySetPageDisplayModeCatalog.Resolve(AppServices.Settings.PlaySetPageDisplayMode);
     private RetentionDaysOption _selectedModThumbnailRetention =
@@ -80,6 +84,11 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 Keys.SettingsCacheRowImagesTitle,
                 Keys.SettingsCacheRowImagesDesc,
                 AppServices.ImageArt.CacheDirectory),
+            new CacheRowViewModel(
+                CacheRowViewModel.WorkshopKey,
+                Keys.SettingsCacheRowWorkshopTitle,
+                Keys.SettingsCacheRowWorkshopDesc,
+                AppServices.WorkshopCacheRoot),
         };
     }
 
@@ -100,7 +109,14 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public bool IsBusy
     {
         get => _isBusy;
-        private set => SetProperty(ref _isBusy, value);
+        private set
+        {
+            if (SetProperty(ref _isBusy, value))
+            {
+                OnPropertyChanged(nameof(CanApplyPatch));
+                OnPropertyChanged(nameof(CanRemovePatch));
+            }
+        }
     }
 
     public bool IsLoaded
@@ -558,6 +574,215 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
+    // ------------------------------------------------------------ 补丁
+
+    /// <summary>补丁状态文案（按当前语言渲染；语言切换后由 <see cref="RefreshPatchState"/> 重建）。</summary>
+    public string PatchStatusText
+    {
+        get => _patchStatusText;
+        private set => SetProperty(ref _patchStatusText, value);
+    }
+
+    /// <summary>补丁状态的技术细节（实际目录、appId、失败原因）；无内容时为空串。</summary>
+    public string PatchDetailText
+    {
+        get => _patchDetailText;
+        private set
+        {
+            if (SetProperty(ref _patchDetailText, value))
+            {
+                OnPropertyChanged(nameof(HasPatchDetail));
+            }
+        }
+    }
+
+    public bool HasPatchDetail => !string.IsNullOrEmpty(PatchDetailText);
+
+    /// <summary>没选游戏时整个补丁区只显示提示，按钮都不可用。</summary>
+    public bool HasPatchInfo => Game is not null;
+
+    public bool CanApplyPatch => !IsBusy && _patchReport?.CanApply == true;
+
+    public bool CanRemovePatch => !IsBusy && _patchReport?.CanRevert == true;
+
+    /// <summary>按磁盘现状重读补丁状态（切换游戏、后台刷新、语言切换后都会调用）。</summary>
+    public void RefreshPatchState()
+    {
+        OnPropertyChanged(nameof(HasPatchInfo));
+
+        if (Game is null)
+        {
+            _patchReport = null;
+            PatchStatusText = T(Keys.SettingsPatchStateNoGame);
+            PatchDetailText = string.Empty;
+            RaisePatchProps();
+            return;
+        }
+
+        GamePatchReport report;
+        try
+        {
+            report = AppServices.GamePatch.Inspect(Game);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("检查补丁状态失败（gameId=" + Game.GameId + "）", ex);
+            _patchReport = null;
+            PatchStatusText = T(Keys.SettingsPatchStateUnsupported);
+            PatchDetailText = ex.Message;
+            RaisePatchProps();
+            return;
+        }
+
+        _patchReport = report;
+        PatchStatusText = T(PatchStatusKey(report.Status));
+        PatchDetailText = BuildPatchDetail(report);
+        RaisePatchProps();
+    }
+
+    /// <summary>
+    /// 一键打补丁（页面必须先弹 ContentDialog 确认）。
+    /// 先备份当前 steam_api 再覆盖 loader，失败只在状态栏说明原因，不动已备份的原文件。
+    /// </summary>
+    public async Task ApplyPatchAsync(CancellationToken cancellationToken)
+    {
+        if (Game is null)
+        {
+            SetStatus(Keys.SettingsStatusSelectGameFirst);
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var game = Game;
+            var report = await Task.Run(() => AppServices.GamePatch.Apply(game), cancellationToken)
+                .ConfigureAwait(true);
+
+            _patchReport = report;
+            PatchStatusText = T(PatchStatusKey(report.Status));
+            PatchDetailText = BuildPatchDetail(report);
+            RaisePatchProps();
+
+            if (report.Status == GamePatchStatus.Patched)
+            {
+                SetStatus(
+                    Keys.SettingsPatchStatusApplied,
+                    report.ApiFileName ?? string.Empty,
+                    report.SteamAppId?.ToString(CultureInfo.InvariantCulture) ?? "-");
+                AppServices.Logger.Info("已打补丁（gameId=" + game.GameId + "，dir=" + report.ApiDirectory + "）");
+            }
+            else
+            {
+                SetStatus(Keys.SettingsPatchStatusFailed, report.Detail ?? T(PatchStatusKey(report.Status)));
+                AppServices.Logger.Warn("打补丁未完成（gameId=" + game.GameId + "）：" + report.Detail);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("打补丁失败（gameId=" + Game.GameId + "）", ex);
+            SetStatus(Keys.SettingsPatchStatusFailed, ex.Message);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>移除补丁、把原文件移回原位（页面必须先弹 ContentDialog 确认）。</summary>
+    public async Task RemovePatchAsync(CancellationToken cancellationToken)
+    {
+        if (Game is null)
+        {
+            SetStatus(Keys.SettingsStatusSelectGameFirst);
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var game = Game;
+            var report = await Task.Run(() => AppServices.GamePatch.Revert(game), cancellationToken)
+                .ConfigureAwait(true);
+
+            _patchReport = report;
+            PatchStatusText = T(PatchStatusKey(report.Status));
+            PatchDetailText = BuildPatchDetail(report);
+            RaisePatchProps();
+
+            if (report.Status == GamePatchStatus.Vanilla)
+            {
+                SetStatus(Keys.SettingsPatchStatusReverted, report.ApiFileName ?? string.Empty);
+                AppServices.Logger.Info("已移除补丁（gameId=" + game.GameId + "）");
+            }
+            else
+            {
+                SetStatus(Keys.SettingsPatchStatusFailed, report.Detail ?? T(PatchStatusKey(report.Status)));
+                AppServices.Logger.Warn("移除补丁未完成（gameId=" + game.GameId + "）：" + report.Detail);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("移除补丁失败（gameId=" + Game.GameId + "）", ex);
+            SetStatus(Keys.SettingsPatchStatusFailed, ex.Message);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private static string PatchStatusKey(GamePatchStatus status) => status switch
+    {
+        GamePatchStatus.Unsupported => Keys.SettingsPatchStateUnsupported,
+        GamePatchStatus.NotDetected => Keys.SettingsPatchStateNotDetected,
+        GamePatchStatus.Vanilla => Keys.SettingsPatchStateVanilla,
+        GamePatchStatus.Patched => Keys.SettingsPatchStatePatched,
+        GamePatchStatus.PatchedOther => Keys.SettingsPatchStatePatchedOther,
+        GamePatchStatus.SteamOverwrote => Keys.SettingsPatchStateSteamOverwrote,
+        _ => Keys.SettingsPatchStateUnsupported,
+    };
+
+    /// <summary>细节行：实际目录 + appId，失败/特殊情况再加一行原因。</summary>
+    private string BuildPatchDetail(GamePatchReport report)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(report.ApiDirectory))
+        {
+            parts.Add(T(Keys.SettingsPatchDetailPath, report.ApiDirectory));
+        }
+
+        if (report.SteamAppId is { } appId)
+        {
+            parts.Add(T(Keys.SettingsPatchDetailAppId, appId.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        parts.Add(T(AppServices.GamePatch.UsesExternalAssets
+            ? Keys.SettingsPatchAssetsExternal
+            : Keys.SettingsPatchAssetsBuiltIn));
+
+        if (!string.IsNullOrEmpty(report.Detail))
+        {
+            parts.Add(report.Detail);
+        }
+
+        return string.Join(Environment.NewLine, parts);
+    }
+
+    private void RaisePatchProps()
+    {
+        OnPropertyChanged(nameof(CanApplyPatch));
+        OnPropertyChanged(nameof(CanRemovePatch));
+    }
+
     // ------------------------------------------------------------ 危险区
 
     /// <summary>是否允许写 dlc_signature（默认关闭）。</summary>
@@ -627,6 +852,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             IsLoaded = false;
             SetStatus(Keys.SettingsStatusSelectGameFirst);
             RaiseThemeProps();
+            RefreshPatchState();
             return Task.CompletedTask;
         }
 
@@ -662,6 +888,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         // 这里只展示 game.Theme，不再重复解析、也不在页面加载路径上发网络请求。
         _theme = game.Theme;
         RaiseThemeProps();
+        RefreshPatchState();
         return Task.CompletedTask;
     }
 
@@ -692,6 +919,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         RefreshProxyStatus();
         RaiseThemeProps();
         RaiseGameProps();
+        RefreshPatchState();
         return true;
     }
 
@@ -820,7 +1048,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     // ------------------------------------------------------------ 缓存卡片
 
-    /// <summary>五类联网缓存各一行（顺序即界面顺序）。</summary>
+    /// <summary>六类联网缓存各一行（顺序即界面顺序）。</summary>
     public ObservableCollection<CacheRowViewModel> CacheRows { get; }
 
     /// <summary>合计占用文案（只统计字节，文件数在每行里）。</summary>
@@ -891,7 +1119,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>清除全部五类缓存。</summary>
+    /// <summary>清除全部六类缓存。</summary>
     public async Task ClearAllCachesAsync(CancellationToken cancellationToken)
     {
         var before = _cacheTotalBytes;
@@ -1042,6 +1270,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         RefreshProxyStatus();
         OnPropertyChanged(nameof(CacheTotalText));
         RefreshAlternativeLabels();
+        RefreshPatchState();
         if (_statusKey is not null)
         {
             StatusMessage = T(_statusKey, _statusArgs);
@@ -1160,6 +1389,11 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             case CacheRowViewModel.ImagesKey:
                 CacheStorage.Clear(fileSystem, AppServices.ImageArt.CacheDirectory);
                 AppServices.ImageArt.Reset();
+                break;
+            case CacheRowViewModel.WorkshopKey:
+                // 索引在内存里也有一份，删目录后必须一起清掉，否则下次还会报「命中」。
+                AppServices.WorkshopInfo.Clear();
+                CacheStorage.Clear(fileSystem, AppServices.WorkshopCacheRoot);
                 break;
             default:
                 CacheStorage.Clear(fileSystem, row.Path);

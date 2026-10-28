@@ -48,6 +48,10 @@ public sealed partial class MainWindow : Window
     private GameLibraryPage? _libraryPage;
 
     private WorkshopPage? _workshopPage;
+
+    /// <summary>工坊详情子页；离开它就 detach 事件，避免持有已丢弃页面的引用。</summary>
+    private WorkshopDetailPage? _workshopDetailPage;
+
     private BitmapLoader? _bitmapLoader;
     private CancellationTokenSource? _backdropLifetime;
 
@@ -240,7 +244,14 @@ public sealed partial class MainWindow : Window
         if (_workshopPage is not null)
         {
             _workshopPage.AccountRequested -= OnWorkshopAccountRequested;
+            _workshopPage.DetailRequested -= OnWorkshopDetailRequested;
             _workshopPage = null;
+        }
+
+        if (_workshopDetailPage is not null)
+        {
+            _workshopDetailPage.NavigationRequested -= OnPageNavigationRequested;
+            _workshopDetailPage = null;
         }
 
         if (content is GameLibraryPage libraryPage)
@@ -253,11 +264,46 @@ public sealed partial class MainWindow : Window
         {
             _workshopPage = workshopPage;
             workshopPage.AccountRequested += OnWorkshopAccountRequested;
+            workshopPage.DetailRequested += OnWorkshopDetailRequested;
+        }
+
+        if (content is WorkshopDetailPage workshopDetailPage)
+        {
+            _workshopDetailPage = workshopDetailPage;
+            workshopDetailPage.NavigationRequested += OnPageNavigationRequested;
         }
     }
 
     private void OnWorkshopAccountRequested(object? sender, EventArgs e) =>
         NavigateTo(NavigationService.AccountTag);
+
+    /// <summary>创意工坊列表页要求打开某条 mod 的详情子页（页面自己不持导航职责）。</summary>
+    private void OnWorkshopDetailRequested(object? sender, WorkshopRowViewModel row) => NavigateToWorkshopDetail(row);
+
+    private void NavigateToWorkshopDetail(WorkshopRowViewModel row)
+    {
+        try
+        {
+            if (!_navigation.Navigate(NavigationService.WorkshopDetailTag, row))
+            {
+                if (AppServices.IsInitialized)
+                {
+                    AppServices.Logger.Warn("导航到工坊详情失败: " + row.Id);
+                }
+
+                return;
+            }
+
+            // 故意不同步左栏选中项：详情子页没有对应菜单项，选中态应停在「创意工坊」。
+        }
+        catch (Exception ex)
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Error("导航到工坊详情异常: " + row.Id, ex);
+            }
+        }
+    }
 
     private void OnPageNavigationRequested(object? sender, string tag) => NavigateTo(tag);
 
@@ -324,7 +370,14 @@ public sealed partial class MainWindow : Window
             if (_workshopPage is not null)
             {
                 _workshopPage.AccountRequested -= OnWorkshopAccountRequested;
+                _workshopPage.DetailRequested -= OnWorkshopDetailRequested;
                 _workshopPage = null;
+            }
+
+            if (_workshopDetailPage is not null)
+            {
+                _workshopDetailPage.NavigationRequested -= OnPageNavigationRequested;
+                _workshopDetailPage = null;
             }
 
             if (!AppServices.IsInitialized)
@@ -388,6 +441,7 @@ public sealed partial class MainWindow : Window
                 && (string.Equals(tag, NavigationService.PlaySetsTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.ModLibraryTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.WorkshopTag, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(tag, NavigationService.WorkshopDetailTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.DlcTag, StringComparison.OrdinalIgnoreCase)))
             {
                 NavigateTo(NavigationService.HomeTag);

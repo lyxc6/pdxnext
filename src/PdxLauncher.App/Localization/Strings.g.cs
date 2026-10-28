@@ -332,6 +332,8 @@ public sealed partial class Localizer
         ["settings.cache.statusClearedAll"] = "已清除全部缓存（释放 {0}）",
         ["settings.cache.statusFailed"] = "清除缓存失败：{0}",
         ["settings.cache.summary"] = "缓存合计 {0}",
+        ["settings.cacheRowWorkshopDesc"] = "创意工坊 mod 的名称、作者、评分、封面与详情；同一个 id 再次出现直接复用，不重复请求。",
+        ["settings.cacheRowWorkshopTitle"] = "创意工坊 mod 信息",
         ["settings.danger.allowOff"] = "禁止写入 dlc_signature（推荐）",
         ["settings.danger.allowOn"] = "允许写入 dlc_signature",
         ["settings.danger.dialogConfirm"] = "重新生成",
@@ -462,6 +464,35 @@ public sealed partial class Localizer
         ["settings.nav.launch"] = "启动",
         ["settings.nav.online"] = "联网",
         ["settings.nav.paths"] = "路径",
+        ["settings.patch.apply"] = "一键打补丁",
+        ["settings.patch.applyConfirm"] = "打补丁",
+        ["settings.patch.applyDialogContent"] = "将把当前游戏的 steam_api 备份成同目录的 *_o.dll，再替换成 loader 并生成 cream_api.ini。\n\n请先退出游戏和 Steam 以外的占用程序；打完补丁后从本启动器启动即可。\n\n确定要打补丁吗？",
+        ["settings.patch.applyDialogTitle"] = "打补丁",
+        ["settings.patch.applyName"] = "一键打补丁",
+        ["settings.patch.assetsBuiltIn"] = "素材：内置",
+        ["settings.patch.assetsExternal"] = "素材：外部覆盖目录",
+        ["settings.patch.detailAppId"] = "appId：{0}",
+        ["settings.patch.detailPath"] = "目录：{0}",
+        ["settings.patch.hint"] = "一键给当前游戏打上 DLC 解锁补丁：把 steam_api 替换成 loader，并生成 cream_api.ini。只处理当前选中的游戏，随时可以移除、还原成 Steam 原版文件；不碰游戏内容文件，也不联网。",
+        ["settings.patch.openAssets"] = "打开素材目录",
+        ["settings.patch.openAssetsName"] = "打开补丁素材目录",
+        ["settings.patch.remove"] = "移除补丁",
+        ["settings.patch.removeConfirm"] = "移除",
+        ["settings.patch.removeDialogContent"] = "将把备份的 Steam 原版 steam_api 移回原位，并删除本启动器生成的 cream_api.ini。\n\n游戏需要处于关闭状态。确定要移除补丁吗？",
+        ["settings.patch.removeDialogTitle"] = "移除补丁",
+        ["settings.patch.removeName"] = "移除补丁",
+        ["settings.patch.state.noGame"] = "未选择游戏",
+        ["settings.patch.state.notDetected"] = "未找到 steam_api 文件",
+        ["settings.patch.state.patched"] = "已打补丁",
+        ["settings.patch.state.patchedOther"] = "已有其它补丁（不是本启动器打的）",
+        ["settings.patch.state.steamOverwrote"] = "补丁已被 Steam 更新覆盖（备份还在）",
+        ["settings.patch.state.unsupported"] = "无法打补丁（缺少 Steam appId 或补丁素材）",
+        ["settings.patch.state.vanilla"] = "原版（未打补丁）",
+        ["settings.patch.statusApplied"] = "已打补丁：{0}（appId {1}）",
+        ["settings.patch.statusFailed"] = "补丁操作失败：{0}",
+        ["settings.patch.statusReverted"] = "已移除补丁，恢复原文件：{0}",
+        ["settings.patch.statusTitle"] = "补丁状态",
+        ["settings.patch.title"] = "补丁",
         ["settings.proxy.address"] = "代理地址",
         ["settings.proxy.addressPlaceholder"] = "127.0.0.1:7890（留空为直连）",
         ["settings.proxy.current"] = "当前生效",
@@ -559,10 +590,25 @@ public sealed partial class Localizer
         ["shell.version"] = "版本 {0}",
         ["workshop.author"] = "作者 {0}",
         ["workshop.countText"] = "{0} 个结果",
-        ["workshop.detailClose"] = "关闭",
+        ["workshop.coverProgress"] = "封面 {0}/{1}",
+        ["workshop.detailBack"] = "返回创意工坊",
+        ["workshop.detailCached"] = "网络不可用，显示上次缓存的详情",
+        ["workshop.detailChangelog"] = "更新日志",
+        ["workshop.detailCreated"] = "发布于 {0}",
+        ["workshop.detailDescription"] = "简介",
+        ["workshop.detailErrorUnknown"] = "原因未知",
         ["workshop.detailFailed"] = "读取详情失败：{0}",
+        ["workshop.detailFavorites"] = "收藏 {0}",
+        ["workshop.detailForum"] = "论坛帖子",
+        ["workshop.detailInstalled"] = "已订阅",
+        ["workshop.detailLinks"] = "相关链接",
         ["workshop.detailLoading"] = "正在读取详情…",
+        ["workshop.detailNoDescription"] = "作者没有填写简介",
+        ["workshop.detailRetry"] = "重试",
         ["workshop.detailScreenshots"] = "截图 {0} 张",
+        ["workshop.detailScreenshotsTitle"] = "截图",
+        ["workshop.detailTags"] = "标签",
+        ["workshop.detailViews"] = "浏览 {0}",
         ["workshop.emptyHint"] = "这个游戏还没有创意工坊内容",
         ["workshop.emptyName"] = "空列表提示",
         ["workshop.listName"] = "创意工坊列表",
@@ -583,20 +629,34 @@ public sealed partial class Localizer
         ["workshop.signInAction"] = "去登录",
         ["workshop.signInHint"] = "未登录 Paradox 账号，只显示公开内容",
         ["workshop.size"] = "体积 {0}",
+        ["workshop.sortMostRecent"] = "最近发行",
+        ["workshop.sortMostSubscribed"] = "不重复订阅者总计",
+        ["workshop.sortMostUpdated"] = "最新更新",
         ["workshop.sortName"] = "排序方式",
-        ["workshop.sortPopular"] = "最热门",
         ["workshop.sortRating"] = "评分最高",
-        ["workshop.sortRecent"] = "最近更新",
+        ["workshop.sortTopRated"] = "最受好评",
+        ["workshop.sortTrend"] = "最热门",
         ["workshop.sourceDetecting"] = "正在判断该游戏有没有 Steam 创意工坊…",
         ["workshop.sourcePdx"] = "Paradox Mods",
         ["workshop.sourceSteam"] = "Steam 创意工坊",
         ["workshop.statusEmpty"] = "没有匹配「{0}」的内容",
         ["workshop.statusFailed"] = "加载失败：{0}",
         ["workshop.statusLoaded"] = "已加载 {0} 个结果",
+        ["workshop.statusLoadedCached"] = "已加载 {0} 个结果（来自缓存）",
         ["workshop.statusLoading"] = "正在加载创意工坊…",
+        ["workshop.statusLoadingPage"] = "正在加载第 {0} 页…",
         ["workshop.statusName"] = "状态",
+        ["workshop.statusOffline"] = "网络不可用，显示缓存中的 {0} 个结果",
         ["workshop.statusParseFailed"] = "Steam 页面结构解析失败，暂时无法显示列表",
         ["workshop.subscriptions"] = "{0} 订阅",
+        ["workshop.timeAll"] = "发布至今",
+        ["workshop.timeHalfYear"] = "6 个月",
+        ["workshop.timeMonth"] = "30 天",
+        ["workshop.timeQuarter"] = "3 个月",
+        ["workshop.timeRangeName"] = "时间范围",
+        ["workshop.timeToday"] = "今天",
+        ["workshop.timeWeek"] = "1 周",
+        ["workshop.timeYear"] = "1 年",
         ["workshop.title"] = "创意工坊",
         ["workshop.updated"] = "更新于 {0}",
     };
@@ -922,6 +982,8 @@ public sealed partial class Localizer
         ["settings.cache.statusClearedAll"] = "Cleared all caches (freed {0})",
         ["settings.cache.statusFailed"] = "Could not clear the cache: {0}",
         ["settings.cache.summary"] = "Cache total {0}",
+        ["settings.cacheRowWorkshopDesc"] = "Names, authors, ratings, covers and details of workshop mods; reused whenever the same id appears again.",
+        ["settings.cacheRowWorkshopTitle"] = "Workshop mod info",
         ["settings.danger.allowOff"] = "Block dlc_signature writes (recommended)",
         ["settings.danger.allowOn"] = "Allow writing dlc_signature",
         ["settings.danger.dialogConfirm"] = "Regenerate",
@@ -1052,6 +1114,35 @@ public sealed partial class Localizer
         ["settings.nav.launch"] = "Launch",
         ["settings.nav.online"] = "Online",
         ["settings.nav.paths"] = "Paths",
+        ["settings.patch.apply"] = "Apply patch",
+        ["settings.patch.applyConfirm"] = "Apply",
+        ["settings.patch.applyDialogContent"] = "The current steam_api will be backed up next to itself as *_o.dll, replaced by the loader, and cream_api.ini will be generated.\n\nClose the game first. Afterwards, launch it from this launcher.\n\nApply the patch?",
+        ["settings.patch.applyDialogTitle"] = "Apply patch",
+        ["settings.patch.applyName"] = "Apply patch",
+        ["settings.patch.assetsBuiltIn"] = "Assets: built in",
+        ["settings.patch.assetsExternal"] = "Assets: external override folder",
+        ["settings.patch.detailAppId"] = "appId: {0}",
+        ["settings.patch.detailPath"] = "Folder: {0}",
+        ["settings.patch.hint"] = "Applies the DLC unlock patch to the selected game: replaces steam_api with the loader and writes cream_api.ini. Only the current game is touched, and it can be removed at any time to restore the original Steam files. Game content files are never modified, and nothing is downloaded.",
+        ["settings.patch.openAssets"] = "Open assets folder",
+        ["settings.patch.openAssetsName"] = "Open patch assets folder",
+        ["settings.patch.remove"] = "Remove patch",
+        ["settings.patch.removeConfirm"] = "Remove",
+        ["settings.patch.removeDialogContent"] = "The backed-up Steam steam_api will be moved back into place and the cream_api.ini generated by this launcher will be deleted.\n\nThe game must be closed. Remove the patch?",
+        ["settings.patch.removeDialogTitle"] = "Remove patch",
+        ["settings.patch.removeName"] = "Remove patch",
+        ["settings.patch.state.noGame"] = "No game selected",
+        ["settings.patch.state.notDetected"] = "steam_api not found",
+        ["settings.patch.state.patched"] = "Patched",
+        ["settings.patch.state.patchedOther"] = "Patched by another tool (not this launcher)",
+        ["settings.patch.state.steamOverwrote"] = "Patch overwritten by a Steam update (backup still present)",
+        ["settings.patch.state.unsupported"] = "Cannot patch (missing Steam appId or patch assets)",
+        ["settings.patch.state.vanilla"] = "Vanilla (not patched)",
+        ["settings.patch.statusApplied"] = "Patch applied: {0} (appId {1})",
+        ["settings.patch.statusFailed"] = "Patch operation failed: {0}",
+        ["settings.patch.statusReverted"] = "Patch removed, original file restored: {0}",
+        ["settings.patch.statusTitle"] = "Patch status",
+        ["settings.patch.title"] = "Patch",
         ["settings.proxy.address"] = "Proxy address",
         ["settings.proxy.addressPlaceholder"] = "127.0.0.1:7890 (empty for direct)",
         ["settings.proxy.current"] = "In effect",
@@ -1149,10 +1240,25 @@ public sealed partial class Localizer
         ["shell.version"] = "Version {0}",
         ["workshop.author"] = "by {0}",
         ["workshop.countText"] = "{0} results",
-        ["workshop.detailClose"] = "Close",
+        ["workshop.coverProgress"] = "Covers {0}/{1}",
+        ["workshop.detailBack"] = "Back to workshop",
+        ["workshop.detailCached"] = "The network is unavailable; showing the cached details",
+        ["workshop.detailChangelog"] = "Changelog",
+        ["workshop.detailCreated"] = "Published {0}",
+        ["workshop.detailDescription"] = "Description",
+        ["workshop.detailErrorUnknown"] = "unknown reason",
         ["workshop.detailFailed"] = "Failed to load details: {0}",
+        ["workshop.detailFavorites"] = "{0} favorites",
+        ["workshop.detailForum"] = "Forum thread",
+        ["workshop.detailInstalled"] = "Subscribed",
+        ["workshop.detailLinks"] = "Links",
         ["workshop.detailLoading"] = "Loading details…",
+        ["workshop.detailNoDescription"] = "The author left no description",
+        ["workshop.detailRetry"] = "Retry",
         ["workshop.detailScreenshots"] = "{0} screenshots",
+        ["workshop.detailScreenshotsTitle"] = "Screenshots",
+        ["workshop.detailTags"] = "Tags",
+        ["workshop.detailViews"] = "{0} views",
         ["workshop.emptyHint"] = "This game has no workshop content yet",
         ["workshop.emptyName"] = "Empty list hint",
         ["workshop.listName"] = "Workshop list",
@@ -1173,20 +1279,34 @@ public sealed partial class Localizer
         ["workshop.signInAction"] = "Sign in",
         ["workshop.signInHint"] = "Not signed in to Paradox; only public items are shown",
         ["workshop.size"] = "Size {0}",
+        ["workshop.sortMostRecent"] = "Most recent",
+        ["workshop.sortMostSubscribed"] = "Most subscribed",
+        ["workshop.sortMostUpdated"] = "Most updated",
         ["workshop.sortName"] = "Sort by",
-        ["workshop.sortPopular"] = "Most popular",
         ["workshop.sortRating"] = "Highest rated",
-        ["workshop.sortRecent"] = "Recently updated",
+        ["workshop.sortTopRated"] = "Top rated",
+        ["workshop.sortTrend"] = "Most popular",
         ["workshop.sourceDetecting"] = "Checking whether this game has a Steam Workshop…",
         ["workshop.sourcePdx"] = "Paradox Mods",
         ["workshop.sourceSteam"] = "Steam Workshop",
         ["workshop.statusEmpty"] = "No items match \"{0}\"",
         ["workshop.statusFailed"] = "Load failed: {0}",
         ["workshop.statusLoaded"] = "Loaded {0} results",
+        ["workshop.statusLoadedCached"] = "Loaded {0} results (from cache)",
         ["workshop.statusLoading"] = "Loading workshop…",
+        ["workshop.statusLoadingPage"] = "Loading page {0}…",
         ["workshop.statusName"] = "Status",
+        ["workshop.statusOffline"] = "Network unavailable, showing {0} cached results",
         ["workshop.statusParseFailed"] = "Steam page structure could not be parsed; the list is unavailable",
         ["workshop.subscriptions"] = "{0} subscriptions",
+        ["workshop.timeAll"] = "All time",
+        ["workshop.timeHalfYear"] = "6 months",
+        ["workshop.timeMonth"] = "30 days",
+        ["workshop.timeQuarter"] = "3 months",
+        ["workshop.timeRangeName"] = "Time range",
+        ["workshop.timeToday"] = "Today",
+        ["workshop.timeWeek"] = "1 week",
+        ["workshop.timeYear"] = "1 year",
         ["workshop.title"] = "Workshop",
         ["workshop.updated"] = "Updated {0}",
     };
@@ -1512,6 +1632,8 @@ public sealed partial class Localizer
         ("settings.cache.statusClearedAll", "SettingsCacheStatusClearedAll"),
         ("settings.cache.statusFailed", "SettingsCacheStatusFailed"),
         ("settings.cache.summary", "SettingsCacheSummary"),
+        ("settings.cacheRowWorkshopDesc", "SettingsCacheRowWorkshopDesc"),
+        ("settings.cacheRowWorkshopTitle", "SettingsCacheRowWorkshopTitle"),
         ("settings.danger.allowOff", "SettingsDangerAllowOff"),
         ("settings.danger.allowOn", "SettingsDangerAllowOn"),
         ("settings.danger.dialogConfirm", "SettingsDangerDialogConfirm"),
@@ -1642,6 +1764,35 @@ public sealed partial class Localizer
         ("settings.nav.launch", "SettingsNavLaunch"),
         ("settings.nav.online", "SettingsNavOnline"),
         ("settings.nav.paths", "SettingsNavPaths"),
+        ("settings.patch.apply", "SettingsPatchApply"),
+        ("settings.patch.applyConfirm", "SettingsPatchApplyConfirm"),
+        ("settings.patch.applyDialogContent", "SettingsPatchApplyDialogContent"),
+        ("settings.patch.applyDialogTitle", "SettingsPatchApplyDialogTitle"),
+        ("settings.patch.applyName", "SettingsPatchApplyName"),
+        ("settings.patch.assetsBuiltIn", "SettingsPatchAssetsBuiltIn"),
+        ("settings.patch.assetsExternal", "SettingsPatchAssetsExternal"),
+        ("settings.patch.detailAppId", "SettingsPatchDetailAppId"),
+        ("settings.patch.detailPath", "SettingsPatchDetailPath"),
+        ("settings.patch.hint", "SettingsPatchHint"),
+        ("settings.patch.openAssets", "SettingsPatchOpenAssets"),
+        ("settings.patch.openAssetsName", "SettingsPatchOpenAssetsName"),
+        ("settings.patch.remove", "SettingsPatchRemove"),
+        ("settings.patch.removeConfirm", "SettingsPatchRemoveConfirm"),
+        ("settings.patch.removeDialogContent", "SettingsPatchRemoveDialogContent"),
+        ("settings.patch.removeDialogTitle", "SettingsPatchRemoveDialogTitle"),
+        ("settings.patch.removeName", "SettingsPatchRemoveName"),
+        ("settings.patch.state.noGame", "SettingsPatchStateNoGame"),
+        ("settings.patch.state.notDetected", "SettingsPatchStateNotDetected"),
+        ("settings.patch.state.patched", "SettingsPatchStatePatched"),
+        ("settings.patch.state.patchedOther", "SettingsPatchStatePatchedOther"),
+        ("settings.patch.state.steamOverwrote", "SettingsPatchStateSteamOverwrote"),
+        ("settings.patch.state.unsupported", "SettingsPatchStateUnsupported"),
+        ("settings.patch.state.vanilla", "SettingsPatchStateVanilla"),
+        ("settings.patch.statusApplied", "SettingsPatchStatusApplied"),
+        ("settings.patch.statusFailed", "SettingsPatchStatusFailed"),
+        ("settings.patch.statusReverted", "SettingsPatchStatusReverted"),
+        ("settings.patch.statusTitle", "SettingsPatchStatusTitle"),
+        ("settings.patch.title", "SettingsPatchTitle"),
         ("settings.proxy.address", "SettingsProxyAddress"),
         ("settings.proxy.addressPlaceholder", "SettingsProxyAddressPlaceholder"),
         ("settings.proxy.current", "SettingsProxyCurrent"),
@@ -1739,10 +1890,25 @@ public sealed partial class Localizer
         ("shell.version", "ShellVersion"),
         ("workshop.author", "WorkshopAuthor"),
         ("workshop.countText", "WorkshopCountText"),
-        ("workshop.detailClose", "WorkshopDetailClose"),
+        ("workshop.coverProgress", "WorkshopCoverProgress"),
+        ("workshop.detailBack", "WorkshopDetailBack"),
+        ("workshop.detailCached", "WorkshopDetailCached"),
+        ("workshop.detailChangelog", "WorkshopDetailChangelog"),
+        ("workshop.detailCreated", "WorkshopDetailCreated"),
+        ("workshop.detailDescription", "WorkshopDetailDescription"),
+        ("workshop.detailErrorUnknown", "WorkshopDetailErrorUnknown"),
         ("workshop.detailFailed", "WorkshopDetailFailed"),
+        ("workshop.detailFavorites", "WorkshopDetailFavorites"),
+        ("workshop.detailForum", "WorkshopDetailForum"),
+        ("workshop.detailInstalled", "WorkshopDetailInstalled"),
+        ("workshop.detailLinks", "WorkshopDetailLinks"),
         ("workshop.detailLoading", "WorkshopDetailLoading"),
+        ("workshop.detailNoDescription", "WorkshopDetailNoDescription"),
+        ("workshop.detailRetry", "WorkshopDetailRetry"),
         ("workshop.detailScreenshots", "WorkshopDetailScreenshots"),
+        ("workshop.detailScreenshotsTitle", "WorkshopDetailScreenshotsTitle"),
+        ("workshop.detailTags", "WorkshopDetailTags"),
+        ("workshop.detailViews", "WorkshopDetailViews"),
         ("workshop.emptyHint", "WorkshopEmptyHint"),
         ("workshop.emptyName", "WorkshopEmptyName"),
         ("workshop.listName", "WorkshopListName"),
@@ -1763,20 +1929,34 @@ public sealed partial class Localizer
         ("workshop.signInAction", "WorkshopSignInAction"),
         ("workshop.signInHint", "WorkshopSignInHint"),
         ("workshop.size", "WorkshopSize"),
+        ("workshop.sortMostRecent", "WorkshopSortMostRecent"),
+        ("workshop.sortMostSubscribed", "WorkshopSortMostSubscribed"),
+        ("workshop.sortMostUpdated", "WorkshopSortMostUpdated"),
         ("workshop.sortName", "WorkshopSortName"),
-        ("workshop.sortPopular", "WorkshopSortPopular"),
         ("workshop.sortRating", "WorkshopSortRating"),
-        ("workshop.sortRecent", "WorkshopSortRecent"),
+        ("workshop.sortTopRated", "WorkshopSortTopRated"),
+        ("workshop.sortTrend", "WorkshopSortTrend"),
         ("workshop.sourceDetecting", "WorkshopSourceDetecting"),
         ("workshop.sourcePdx", "WorkshopSourcePdx"),
         ("workshop.sourceSteam", "WorkshopSourceSteam"),
         ("workshop.statusEmpty", "WorkshopStatusEmpty"),
         ("workshop.statusFailed", "WorkshopStatusFailed"),
         ("workshop.statusLoaded", "WorkshopStatusLoaded"),
+        ("workshop.statusLoadedCached", "WorkshopStatusLoadedCached"),
         ("workshop.statusLoading", "WorkshopStatusLoading"),
+        ("workshop.statusLoadingPage", "WorkshopStatusLoadingPage"),
         ("workshop.statusName", "WorkshopStatusName"),
+        ("workshop.statusOffline", "WorkshopStatusOffline"),
         ("workshop.statusParseFailed", "WorkshopStatusParseFailed"),
         ("workshop.subscriptions", "WorkshopSubscriptions"),
+        ("workshop.timeAll", "WorkshopTimeAll"),
+        ("workshop.timeHalfYear", "WorkshopTimeHalfYear"),
+        ("workshop.timeMonth", "WorkshopTimeMonth"),
+        ("workshop.timeQuarter", "WorkshopTimeQuarter"),
+        ("workshop.timeRangeName", "WorkshopTimeRangeName"),
+        ("workshop.timeToday", "WorkshopTimeToday"),
+        ("workshop.timeWeek", "WorkshopTimeWeek"),
+        ("workshop.timeYear", "WorkshopTimeYear"),
         ("workshop.title", "WorkshopTitle"),
         ("workshop.updated", "WorkshopUpdated"),
     ];
@@ -2100,6 +2280,8 @@ public sealed partial class Localizer
     public string SettingsCacheStatusClearedAll => Format("settings.cache.statusClearedAll");
     public string SettingsCacheStatusFailed => Format("settings.cache.statusFailed");
     public string SettingsCacheSummary => Format("settings.cache.summary");
+    public string SettingsCacheRowWorkshopDesc => Format("settings.cacheRowWorkshopDesc");
+    public string SettingsCacheRowWorkshopTitle => Format("settings.cacheRowWorkshopTitle");
     public string SettingsDangerAllowOff => Format("settings.danger.allowOff");
     public string SettingsDangerAllowOn => Format("settings.danger.allowOn");
     public string SettingsDangerDialogConfirm => Format("settings.danger.dialogConfirm");
@@ -2230,6 +2412,35 @@ public sealed partial class Localizer
     public string SettingsNavLaunch => Format("settings.nav.launch");
     public string SettingsNavOnline => Format("settings.nav.online");
     public string SettingsNavPaths => Format("settings.nav.paths");
+    public string SettingsPatchApply => Format("settings.patch.apply");
+    public string SettingsPatchApplyConfirm => Format("settings.patch.applyConfirm");
+    public string SettingsPatchApplyDialogContent => Format("settings.patch.applyDialogContent");
+    public string SettingsPatchApplyDialogTitle => Format("settings.patch.applyDialogTitle");
+    public string SettingsPatchApplyName => Format("settings.patch.applyName");
+    public string SettingsPatchAssetsBuiltIn => Format("settings.patch.assetsBuiltIn");
+    public string SettingsPatchAssetsExternal => Format("settings.patch.assetsExternal");
+    public string SettingsPatchDetailAppId => Format("settings.patch.detailAppId");
+    public string SettingsPatchDetailPath => Format("settings.patch.detailPath");
+    public string SettingsPatchHint => Format("settings.patch.hint");
+    public string SettingsPatchOpenAssets => Format("settings.patch.openAssets");
+    public string SettingsPatchOpenAssetsName => Format("settings.patch.openAssetsName");
+    public string SettingsPatchRemove => Format("settings.patch.remove");
+    public string SettingsPatchRemoveConfirm => Format("settings.patch.removeConfirm");
+    public string SettingsPatchRemoveDialogContent => Format("settings.patch.removeDialogContent");
+    public string SettingsPatchRemoveDialogTitle => Format("settings.patch.removeDialogTitle");
+    public string SettingsPatchRemoveName => Format("settings.patch.removeName");
+    public string SettingsPatchStateNoGame => Format("settings.patch.state.noGame");
+    public string SettingsPatchStateNotDetected => Format("settings.patch.state.notDetected");
+    public string SettingsPatchStatePatched => Format("settings.patch.state.patched");
+    public string SettingsPatchStatePatchedOther => Format("settings.patch.state.patchedOther");
+    public string SettingsPatchStateSteamOverwrote => Format("settings.patch.state.steamOverwrote");
+    public string SettingsPatchStateUnsupported => Format("settings.patch.state.unsupported");
+    public string SettingsPatchStateVanilla => Format("settings.patch.state.vanilla");
+    public string SettingsPatchStatusApplied => Format("settings.patch.statusApplied");
+    public string SettingsPatchStatusFailed => Format("settings.patch.statusFailed");
+    public string SettingsPatchStatusReverted => Format("settings.patch.statusReverted");
+    public string SettingsPatchStatusTitle => Format("settings.patch.statusTitle");
+    public string SettingsPatchTitle => Format("settings.patch.title");
     public string SettingsProxyAddress => Format("settings.proxy.address");
     public string SettingsProxyAddressPlaceholder => Format("settings.proxy.addressPlaceholder");
     public string SettingsProxyCurrent => Format("settings.proxy.current");
@@ -2327,10 +2538,25 @@ public sealed partial class Localizer
     public string ShellVersion => Format("shell.version");
     public string WorkshopAuthor => Format("workshop.author");
     public string WorkshopCountText => Format("workshop.countText");
-    public string WorkshopDetailClose => Format("workshop.detailClose");
+    public string WorkshopCoverProgress => Format("workshop.coverProgress");
+    public string WorkshopDetailBack => Format("workshop.detailBack");
+    public string WorkshopDetailCached => Format("workshop.detailCached");
+    public string WorkshopDetailChangelog => Format("workshop.detailChangelog");
+    public string WorkshopDetailCreated => Format("workshop.detailCreated");
+    public string WorkshopDetailDescription => Format("workshop.detailDescription");
+    public string WorkshopDetailErrorUnknown => Format("workshop.detailErrorUnknown");
     public string WorkshopDetailFailed => Format("workshop.detailFailed");
+    public string WorkshopDetailFavorites => Format("workshop.detailFavorites");
+    public string WorkshopDetailForum => Format("workshop.detailForum");
+    public string WorkshopDetailInstalled => Format("workshop.detailInstalled");
+    public string WorkshopDetailLinks => Format("workshop.detailLinks");
     public string WorkshopDetailLoading => Format("workshop.detailLoading");
+    public string WorkshopDetailNoDescription => Format("workshop.detailNoDescription");
+    public string WorkshopDetailRetry => Format("workshop.detailRetry");
     public string WorkshopDetailScreenshots => Format("workshop.detailScreenshots");
+    public string WorkshopDetailScreenshotsTitle => Format("workshop.detailScreenshotsTitle");
+    public string WorkshopDetailTags => Format("workshop.detailTags");
+    public string WorkshopDetailViews => Format("workshop.detailViews");
     public string WorkshopEmptyHint => Format("workshop.emptyHint");
     public string WorkshopEmptyName => Format("workshop.emptyName");
     public string WorkshopListName => Format("workshop.listName");
@@ -2351,20 +2577,34 @@ public sealed partial class Localizer
     public string WorkshopSignInAction => Format("workshop.signInAction");
     public string WorkshopSignInHint => Format("workshop.signInHint");
     public string WorkshopSize => Format("workshop.size");
+    public string WorkshopSortMostRecent => Format("workshop.sortMostRecent");
+    public string WorkshopSortMostSubscribed => Format("workshop.sortMostSubscribed");
+    public string WorkshopSortMostUpdated => Format("workshop.sortMostUpdated");
     public string WorkshopSortName => Format("workshop.sortName");
-    public string WorkshopSortPopular => Format("workshop.sortPopular");
     public string WorkshopSortRating => Format("workshop.sortRating");
-    public string WorkshopSortRecent => Format("workshop.sortRecent");
+    public string WorkshopSortTopRated => Format("workshop.sortTopRated");
+    public string WorkshopSortTrend => Format("workshop.sortTrend");
     public string WorkshopSourceDetecting => Format("workshop.sourceDetecting");
     public string WorkshopSourcePdx => Format("workshop.sourcePdx");
     public string WorkshopSourceSteam => Format("workshop.sourceSteam");
     public string WorkshopStatusEmpty => Format("workshop.statusEmpty");
     public string WorkshopStatusFailed => Format("workshop.statusFailed");
     public string WorkshopStatusLoaded => Format("workshop.statusLoaded");
+    public string WorkshopStatusLoadedCached => Format("workshop.statusLoadedCached");
     public string WorkshopStatusLoading => Format("workshop.statusLoading");
+    public string WorkshopStatusLoadingPage => Format("workshop.statusLoadingPage");
     public string WorkshopStatusName => Format("workshop.statusName");
+    public string WorkshopStatusOffline => Format("workshop.statusOffline");
     public string WorkshopStatusParseFailed => Format("workshop.statusParseFailed");
     public string WorkshopSubscriptions => Format("workshop.subscriptions");
+    public string WorkshopTimeAll => Format("workshop.timeAll");
+    public string WorkshopTimeHalfYear => Format("workshop.timeHalfYear");
+    public string WorkshopTimeMonth => Format("workshop.timeMonth");
+    public string WorkshopTimeQuarter => Format("workshop.timeQuarter");
+    public string WorkshopTimeRangeName => Format("workshop.timeRangeName");
+    public string WorkshopTimeToday => Format("workshop.timeToday");
+    public string WorkshopTimeWeek => Format("workshop.timeWeek");
+    public string WorkshopTimeYear => Format("workshop.timeYear");
     public string WorkshopTitle => Format("workshop.title");
     public string WorkshopUpdated => Format("workshop.updated");
 }
@@ -2691,6 +2931,8 @@ internal static class Keys
     public const string SettingsCacheStatusClearedAll = "settings.cache.statusClearedAll";
     public const string SettingsCacheStatusFailed = "settings.cache.statusFailed";
     public const string SettingsCacheSummary = "settings.cache.summary";
+    public const string SettingsCacheRowWorkshopDesc = "settings.cacheRowWorkshopDesc";
+    public const string SettingsCacheRowWorkshopTitle = "settings.cacheRowWorkshopTitle";
     public const string SettingsDangerAllowOff = "settings.danger.allowOff";
     public const string SettingsDangerAllowOn = "settings.danger.allowOn";
     public const string SettingsDangerDialogConfirm = "settings.danger.dialogConfirm";
@@ -2821,6 +3063,35 @@ internal static class Keys
     public const string SettingsNavLaunch = "settings.nav.launch";
     public const string SettingsNavOnline = "settings.nav.online";
     public const string SettingsNavPaths = "settings.nav.paths";
+    public const string SettingsPatchApply = "settings.patch.apply";
+    public const string SettingsPatchApplyConfirm = "settings.patch.applyConfirm";
+    public const string SettingsPatchApplyDialogContent = "settings.patch.applyDialogContent";
+    public const string SettingsPatchApplyDialogTitle = "settings.patch.applyDialogTitle";
+    public const string SettingsPatchApplyName = "settings.patch.applyName";
+    public const string SettingsPatchAssetsBuiltIn = "settings.patch.assetsBuiltIn";
+    public const string SettingsPatchAssetsExternal = "settings.patch.assetsExternal";
+    public const string SettingsPatchDetailAppId = "settings.patch.detailAppId";
+    public const string SettingsPatchDetailPath = "settings.patch.detailPath";
+    public const string SettingsPatchHint = "settings.patch.hint";
+    public const string SettingsPatchOpenAssets = "settings.patch.openAssets";
+    public const string SettingsPatchOpenAssetsName = "settings.patch.openAssetsName";
+    public const string SettingsPatchRemove = "settings.patch.remove";
+    public const string SettingsPatchRemoveConfirm = "settings.patch.removeConfirm";
+    public const string SettingsPatchRemoveDialogContent = "settings.patch.removeDialogContent";
+    public const string SettingsPatchRemoveDialogTitle = "settings.patch.removeDialogTitle";
+    public const string SettingsPatchRemoveName = "settings.patch.removeName";
+    public const string SettingsPatchStateNoGame = "settings.patch.state.noGame";
+    public const string SettingsPatchStateNotDetected = "settings.patch.state.notDetected";
+    public const string SettingsPatchStatePatched = "settings.patch.state.patched";
+    public const string SettingsPatchStatePatchedOther = "settings.patch.state.patchedOther";
+    public const string SettingsPatchStateSteamOverwrote = "settings.patch.state.steamOverwrote";
+    public const string SettingsPatchStateUnsupported = "settings.patch.state.unsupported";
+    public const string SettingsPatchStateVanilla = "settings.patch.state.vanilla";
+    public const string SettingsPatchStatusApplied = "settings.patch.statusApplied";
+    public const string SettingsPatchStatusFailed = "settings.patch.statusFailed";
+    public const string SettingsPatchStatusReverted = "settings.patch.statusReverted";
+    public const string SettingsPatchStatusTitle = "settings.patch.statusTitle";
+    public const string SettingsPatchTitle = "settings.patch.title";
     public const string SettingsProxyAddress = "settings.proxy.address";
     public const string SettingsProxyAddressPlaceholder = "settings.proxy.addressPlaceholder";
     public const string SettingsProxyCurrent = "settings.proxy.current";
@@ -2918,10 +3189,25 @@ internal static class Keys
     public const string ShellVersion = "shell.version";
     public const string WorkshopAuthor = "workshop.author";
     public const string WorkshopCountText = "workshop.countText";
-    public const string WorkshopDetailClose = "workshop.detailClose";
+    public const string WorkshopCoverProgress = "workshop.coverProgress";
+    public const string WorkshopDetailBack = "workshop.detailBack";
+    public const string WorkshopDetailCached = "workshop.detailCached";
+    public const string WorkshopDetailChangelog = "workshop.detailChangelog";
+    public const string WorkshopDetailCreated = "workshop.detailCreated";
+    public const string WorkshopDetailDescription = "workshop.detailDescription";
+    public const string WorkshopDetailErrorUnknown = "workshop.detailErrorUnknown";
     public const string WorkshopDetailFailed = "workshop.detailFailed";
+    public const string WorkshopDetailFavorites = "workshop.detailFavorites";
+    public const string WorkshopDetailForum = "workshop.detailForum";
+    public const string WorkshopDetailInstalled = "workshop.detailInstalled";
+    public const string WorkshopDetailLinks = "workshop.detailLinks";
     public const string WorkshopDetailLoading = "workshop.detailLoading";
+    public const string WorkshopDetailNoDescription = "workshop.detailNoDescription";
+    public const string WorkshopDetailRetry = "workshop.detailRetry";
     public const string WorkshopDetailScreenshots = "workshop.detailScreenshots";
+    public const string WorkshopDetailScreenshotsTitle = "workshop.detailScreenshotsTitle";
+    public const string WorkshopDetailTags = "workshop.detailTags";
+    public const string WorkshopDetailViews = "workshop.detailViews";
     public const string WorkshopEmptyHint = "workshop.emptyHint";
     public const string WorkshopEmptyName = "workshop.emptyName";
     public const string WorkshopListName = "workshop.listName";
@@ -2942,20 +3228,34 @@ internal static class Keys
     public const string WorkshopSignInAction = "workshop.signInAction";
     public const string WorkshopSignInHint = "workshop.signInHint";
     public const string WorkshopSize = "workshop.size";
+    public const string WorkshopSortMostRecent = "workshop.sortMostRecent";
+    public const string WorkshopSortMostSubscribed = "workshop.sortMostSubscribed";
+    public const string WorkshopSortMostUpdated = "workshop.sortMostUpdated";
     public const string WorkshopSortName = "workshop.sortName";
-    public const string WorkshopSortPopular = "workshop.sortPopular";
     public const string WorkshopSortRating = "workshop.sortRating";
-    public const string WorkshopSortRecent = "workshop.sortRecent";
+    public const string WorkshopSortTopRated = "workshop.sortTopRated";
+    public const string WorkshopSortTrend = "workshop.sortTrend";
     public const string WorkshopSourceDetecting = "workshop.sourceDetecting";
     public const string WorkshopSourcePdx = "workshop.sourcePdx";
     public const string WorkshopSourceSteam = "workshop.sourceSteam";
     public const string WorkshopStatusEmpty = "workshop.statusEmpty";
     public const string WorkshopStatusFailed = "workshop.statusFailed";
     public const string WorkshopStatusLoaded = "workshop.statusLoaded";
+    public const string WorkshopStatusLoadedCached = "workshop.statusLoadedCached";
     public const string WorkshopStatusLoading = "workshop.statusLoading";
+    public const string WorkshopStatusLoadingPage = "workshop.statusLoadingPage";
     public const string WorkshopStatusName = "workshop.statusName";
+    public const string WorkshopStatusOffline = "workshop.statusOffline";
     public const string WorkshopStatusParseFailed = "workshop.statusParseFailed";
     public const string WorkshopSubscriptions = "workshop.subscriptions";
+    public const string WorkshopTimeAll = "workshop.timeAll";
+    public const string WorkshopTimeHalfYear = "workshop.timeHalfYear";
+    public const string WorkshopTimeMonth = "workshop.timeMonth";
+    public const string WorkshopTimeQuarter = "workshop.timeQuarter";
+    public const string WorkshopTimeRangeName = "workshop.timeRangeName";
+    public const string WorkshopTimeToday = "workshop.timeToday";
+    public const string WorkshopTimeWeek = "workshop.timeWeek";
+    public const string WorkshopTimeYear = "workshop.timeYear";
     public const string WorkshopTitle = "workshop.title";
     public const string WorkshopUpdated = "workshop.updated";
 }

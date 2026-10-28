@@ -203,5 +203,56 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
             summary);
     }
 
+    /// <summary>
+    /// 从缓存条目重建一行（断网/查询失败时的回退）。
+    /// 缓存里只有列表级元数据，所以没有 <see cref="SteamItem"/> / <see cref="PdxSummary"/>，
+    /// 打开详情时走一次真实请求；封面文件名命中后由调用方直接绑本地路径。
+    /// </summary>
+    /// <param name="entry">缓存条目。</param>
+    /// <param name="thumbnailSize">封面边长（像素）。</param>
+    public static WorkshopRowViewModel FromCache(WorkshopInfoCacheEntry entry, int thumbnailSize)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        var isSteam = string.Equals(entry.Source, "steam", StringComparison.OrdinalIgnoreCase);
+        var source = isSteam ? WorkshopSource.Steam : WorkshopSource.Pdx;
+        var author = string.IsNullOrWhiteSpace(entry.Author)
+            ? string.Empty
+            : T(Keys.WorkshopAuthor, entry.Author);
+        var rating = entry.RatingsTotal is > 0 && entry.Rating is > 0
+            ? T(
+                Keys.WorkshopRating,
+                entry.Rating.Value.ToString("0.##", CultureInfo.InvariantCulture),
+                entry.RatingsTotal.Value)
+            : null;
+        var subscriptions = entry.Subscriptions is > 0
+            ? T(Keys.WorkshopSubscriptions, entry.Subscriptions.Value.ToString("N0", CultureInfo.CurrentCulture))
+            : null;
+        var updated = entry.UpdatedUtc is { } updatedUtc && updatedUtc > DateTimeOffset.UnixEpoch
+            ? T(Keys.WorkshopUpdated, updatedUtc.ToLocalTime().ToString("yyyy/MM/dd", CultureInfo.InvariantCulture))
+            : null;
+        var size = entry.SizeBytes is > 0
+            ? T(Keys.WorkshopSize, ModSizeText.Format(entry.SizeBytes))
+            : null;
+
+        return new WorkshopRowViewModel(
+            source,
+            entry.Id,
+            entry.Name ?? string.Empty,
+            author,
+            rating,
+            subscriptions,
+            updated,
+            size,
+            entry.CoverUrl,
+            thumbnailSize,
+            isSteam
+                ? SteamWorkshop.GetBrowserAddress(entry.Id) ?? string.Empty
+                : "https://mods.paradoxplaza.com/mods/" + entry.Id,
+            isSteam ? SteamWorkshop.GetSteamAddress(entry.Id) : null,
+            null,
+            null);
+    }
+
     partial void OnCoverPathChanged(string? value) => OnPropertyChanged(nameof(HasCover));
 }

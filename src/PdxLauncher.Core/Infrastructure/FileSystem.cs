@@ -140,4 +140,15 @@ public sealed class FileSystem : Abstractions.IFileSystem
 
         File.Copy(source, destination, overwrite);
     }
+
+    public void Move(string source, string destination, bool overwrite)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(destination));
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        File.Move(source, destination, overwrite);
+    }
 }

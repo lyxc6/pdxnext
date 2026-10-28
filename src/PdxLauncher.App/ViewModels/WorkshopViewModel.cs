@@ -16,9 +16,14 @@ using PdxLauncher.Core.Online;
 /// 「创意工坊」页的视图模型。这个页面**只有一个来源**：按当前游戏决定显示 Steam 创意工坊
 /// 还是 Paradox Mods（游戏有 Steam 工坊就用 Steam，没有就用 PDX；独立版没有 appId，直接 PDX）。
 /// <para>
-/// 判定顺序：<see cref="WorkshopSourceChooser.Resolve"/> 先用 <c>SteamAppId</c> 排除独立版，
-/// 再等 <see cref="SteamWorkshopClient.HasWorkshopAsync"/> 的探测结果；探测请求本身失败时
-/// 退回 PDX Mods 并在状态栏说明原因，而不是把页面留在空状态。
+/// 排序照 Steam 创意工坊自己的下拉框做：最热门 / 最受好评 / 最近发行 / 最新更新 / 不重复订阅者总计，
+/// 最热门与最受好评还可以再选时间范围（今天 ~ 发布至今）。PDX Mods 只有三档，见
+/// <see cref="ResolvePdxSort"/>。
+/// </para>
+/// <para>
+/// 同一条 mod 的信息（名称/作者/评分/订阅/更新时间/体积/封面/详情）按「来源 + id」缓存在
+/// <see cref="WorkshopInfoCache"/> 里：翻页回来、切游戏回来、断网时都直接复用，封面不重复下载，
+/// 详情在 TTL 内不再请求。
 /// </para>
 /// 本类不引用任何 Microsoft.UI.Xaml 类型。
 /// </summary>
@@ -30,18 +35,48 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>Steam 每页条数。</summary>
     private const int SteamPageSize = SteamWorkshopClient.DefaultPageSize;
 
-    /// <summary>三档排序的文案键：两个平台共用一套顺序（最热门 / 最近更新 / 评分最高）。</summary>
-    private static readonly string[] SortKeys =
+    /// <summary>Steam 的排序档位（与网页一致）。</summary>
+    private static readonly string[] SteamSortKeys =
     [
-        Keys.WorkshopSortPopular,
-        Keys.WorkshopSortRecent,
+        Keys.WorkshopSortTrend,
+        Keys.WorkshopSortTopRated,
+        Keys.WorkshopSortMostRecent,
+        Keys.WorkshopSortMostUpdated,
+        Keys.WorkshopSortMostSubscribed,
+    ];
+
+    /// <summary>PDX Mods 的排序档位（只有最热门 / 最新更新 / 评分最高）。</summary>
+    private static readonly string[] PdxSortKeys =
+    [
+        Keys.WorkshopSortTrend,
+        Keys.WorkshopSortMostUpdated,
         Keys.WorkshopSortRating,
     ];
+
+    /// <summary>Steam 的时间范围文案键（与 <see cref="TimeRangeDays"/> 一一对应）。</summary>
+    private static readonly string[] TimeRangeKeys =
+    [
+        Keys.WorkshopTimeToday,
+        Keys.WorkshopTimeWeek,
+        Keys.WorkshopTimeMonth,
+        Keys.WorkshopTimeQuarter,
+        Keys.WorkshopTimeHalfYear,
+        Keys.WorkshopTimeYear,
+        Keys.WorkshopTimeAll,
+    ];
+
+    /// <summary>时间范围对应的服务端 <c>days</c>；0 表示发布至今。</summary>
+    private static readonly int[] TimeRangeDays = [1, 7, 30, 90, 180, 365, 0];
+
+    /// <summary>默认时间范围的索引（30 天，与 Steam 网页默认一致）。</summary>
+    private const int DefaultTimeRangeIndex = 2;
 
     private readonly SteamWorkshopClient _steam;
     private readonly PdxModsClient _pdx;
     private readonly AccountService _account;
     private readonly IAssetDownloader _assets;
+    private readonly WorkshopInfoCache _info;
+    private readonly WorkshopPageCache _pages;
     private readonly IAppLogger _logger;
 
     /// <summary>当前游戏的注册 ID（PDX 查询用）；null 表示还没选游戏。</summary>
@@ -59,8 +94,20 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>服务端报告的总页数；0 表示未知。</summary>
     private int _totalPages;
 
-    /// <summary>语言切换时重建排序下拉框：此时改选中项不算用户操作。</summary>
+    /// <summary>语言切换时重建下拉框：此时改选中项不算用户操作。</summary>
     private bool _isRelocalizing;
+
+    /// <summary>当前这一轮封面下载的令牌；翻页时取消上一轮，避免下载队列越积越长。</summary>
+    private CancellationTokenSource? _coverLifetime;
+
+    /// <summary>封面进度：已完成张数。</summary>
+    private int _coverDone;
+
+    /// <summary>封面进度：本轮总张数。</summary>
+    private int _coverTotal;
+
+    /// <summary>同时下载的封面数上限。</summary>
+    private const int MaxConcurrentCovers = 6;
 
     /// <summary>当前游戏；null 表示还没在游戏库里选游戏。</summary>
     [ObservableProperty]
@@ -86,35 +133,55 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     [ObservableProperty]
     private string _selectedSortMode = string.Empty;
 
-    /// <summary>排序下拉框的选项（按当前语言生成）。</summary>
+    /// <summary>排序下拉框的选项（随来源与语言变化）。</summary>
     [ObservableProperty]
     private IReadOnlyList<string> _sortModes = [];
+
+    /// <summary>当前时间范围，取值来自 <see cref="TimeRangeModes"/>（仅 Steam）。</summary>
+    [ObservableProperty]
+    private string _selectedTimeRange = string.Empty;
+
+    /// <summary>时间范围下拉框的选项（按当前语言生成）。</summary>
+    [ObservableProperty]
+    private IReadOnlyList<string> _timeRangeModes = [];
 
     /// <summary>当前显示的来源。</summary>
     [ObservableProperty]
     private WorkshopSource _source;
+
+    /// <summary>是否正在补封面。</summary>
+    [ObservableProperty]
+    private bool _isFillingCovers;
 
     public WorkshopViewModel(
         SteamWorkshopClient steam,
         PdxModsClient pdx,
         AccountService account,
         IAssetDownloader assets,
+        WorkshopInfoCache info,
+        WorkshopPageCache pages,
         IAppLogger logger)
     {
         ArgumentNullException.ThrowIfNull(steam);
         ArgumentNullException.ThrowIfNull(pdx);
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(assets);
+        ArgumentNullException.ThrowIfNull(info);
+        ArgumentNullException.ThrowIfNull(pages);
         ArgumentNullException.ThrowIfNull(logger);
 
         _steam = steam;
         _pdx = pdx;
         _account = account;
         _assets = assets;
+        _info = info;
+        _pages = pages;
         _logger = logger;
 
-        SortModes = BuildSortModes();
+        SortModes = BuildSortModes(WorkshopSource.None);
         _selectedSortMode = SortModes[0];
+        TimeRangeModes = BuildTimeRangeModes();
+        _selectedTimeRange = TimeRangeModes[DefaultTimeRangeIndex];
     }
 
     /// <summary>当前可见的创意工坊行。</summary>
@@ -148,6 +215,14 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>是否还有下一页。</summary>
     public bool HasNextPage => _totalPages > 0 && _page + 1 < _totalPages;
 
+    /// <summary>封面进度文案「封面 12/30」；没有进行中的下载时为空串。</summary>
+    public string CoverProgressText => _coverTotal > 0
+        ? T(Keys.WorkshopCoverProgress, _coverDone, _coverTotal)
+        : string.Empty;
+
+    /// <summary>是否显示封面进度。</summary>
+    public bool ShowCoverProgress => _coverTotal > 0;
+
     /// <summary>页码文案：第 1 / 42 页；没有结果时为空串。</summary>
     public string PageText => _totalPages > 0 ? T(Keys.WorkshopPage, _page + 1, _totalPages) : string.Empty;
 
@@ -156,6 +231,12 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
     /// <summary>PDX 来源且未登录时显示「去登录」提示条。</summary>
     public bool ShowSignInHint => Source == WorkshopSource.Pdx && !_account.IsSignedIn;
+
+    /// <summary>
+    /// 时间范围只对 Steam 的「最热门 / 最受好评」有意义（Steam 网页也只在这两个排序下给时间范围），
+    /// 其他排序或 PDX 来源都隐藏这个下拉。
+    /// </summary>
+    public bool ShowTimeRange => Source == WorkshopSource.Steam && IsTimeRangeSort();
 
     /// <summary>
     /// 换游戏 / 首次进入：重置页码与列表，判定来源后查一次。
@@ -173,7 +254,9 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _page = 0;
         _totalCount = 0;
         _totalPages = 0;
+        CancelCoverFill();
         Rows.Clear();
+        _pages.Clear();
         Source = WorkshopSource.None;
 
         if (game is null)
@@ -224,7 +307,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
     /// <summary>刷新当前页。</summary>
     public Task RefreshAsync() => HasGame
-        ? QueryAsync(CancellationToken.None)
+        ? QueryAsync(CancellationToken.None, force: true)
         : LoadAsync(Game, CancellationToken.None);
 
     /// <summary>供页面写入一次性状态提示（例如「已在浏览器中打开」）。</summary>
@@ -245,22 +328,6 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _page = target;
         await QueryAsync(cancellationToken).ConfigureAwait(true);
     }
-
-    /// <summary>取 Steam 工坊条目的详情（页面用它弹详情对话框）。</summary>
-    /// <param name="row">Steam 来源的行。</param>
-    /// <param name="cancellationToken">取消令牌。</param>
-    public Task<AppResult<SteamWorkshopItemDetail>> GetSteamDetailAsync(
-        WorkshopRowViewModel row,
-        CancellationToken cancellationToken) =>
-        _steam.GetDetailAsync(row.Id, cancellationToken);
-
-    /// <summary>取 PDX Mods 条目的详情（页面用它弹详情对话框）。</summary>
-    /// <param name="row">PDX 来源的行。</param>
-    /// <param name="cancellationToken">取消令牌。</param>
-    public Task<AppResult<PdxModsDetail>> GetPdxDetailAsync(
-        WorkshopRowViewModel row,
-        CancellationToken cancellationToken) =>
-        _pdx.GetDetailAsync(row.Id, _account.Session, cancellationToken);
 
     /// <summary>
     /// 判定来源：没有 Steam appId（独立版）直接 PDX；否则探测该游戏有没有 Steam 工坊。
@@ -286,29 +353,47 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 按当前来源执行一次查询：先清空列表再查，成功后建行并异步补封面。
+    /// 按当前来源执行一次查询。命中内存页缓存就立刻铺满列表（回看过的页不必再抓 1–3 MB 的 SSR 页面），
+    /// 未命中才联网；联网期间保留旧行，不白屏。
     /// </summary>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    private async Task QueryAsync(CancellationToken cancellationToken)
+    /// <param name="force">true 表示跳过缓存读取（刷新按钮、换筛选条件时用）。</param>
+    private async Task QueryAsync(CancellationToken cancellationToken, bool force = false)
     {
         if (_gameId is null || Source == WorkshopSource.None)
         {
             return;
         }
 
+        var key = BuildPageKey();
+        if (!force && _pages.TryGet(key, out var cached))
+        {
+            ApplyCachedPage(cached);
+            StatusMessage = T(Keys.WorkshopStatusLoadedCached, _totalCount);
+            RaiseDerived();
+
+            // 过期的页仍然先显示，再悄悄刷新一次；用户不必盯着转圈。
+            if (!_pages.IsFresh(cached))
+            {
+                _ = RefreshSilentlyAsync(key, cancellationToken);
+            }
+
+            return;
+        }
+
         IsBusy = true;
-        Rows.Clear();
+        StatusMessage = T(Keys.WorkshopStatusLoadingPage, _page + 1);
         RaiseDerived();
 
         try
         {
             if (Source == WorkshopSource.Steam)
             {
-                await QuerySteamAsync(cancellationToken).ConfigureAwait(true);
+                await QuerySteamAsync(cancellationToken, key).ConfigureAwait(true);
             }
             else
             {
-                await QueryPdxAsync(cancellationToken).ConfigureAwait(true);
+                await QueryPdxAsync(cancellationToken, key).ConfigureAwait(true);
             }
         }
         catch (OperationCanceledException)
@@ -318,8 +403,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         catch (Exception ex)
         {
             IsLoaded = true;
-            Rows.Clear();
-            StatusMessage = T(Keys.WorkshopStatusFailed, ex.Message);
+            ShowFailureOrCache(Source, ex.Message);
             _logger.Error("创意工坊查询失败（game=" + _gameId + "）", ex);
             RaiseDerived();
         }
@@ -330,29 +414,139 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         }
     }
 
+    /// <summary>生成页缓存的键：来源、游戏、关键词、排序、时间范围、页码都参与。</summary>
+    private string BuildPageKey()
+    {
+        var search = string.IsNullOrWhiteSpace(SearchText) ? null : SearchText.Trim();
+        if (Source == WorkshopSource.Steam)
+        {
+            var sort = ResolveSteamSort();
+            var days = sort is SteamWorkshopSort.Trend or SteamWorkshopSort.TopRated ? ResolveDays() : (int?)null;
+            return WorkshopPageCache.Key(WorkshopSource.Steam, _gameId, search, sort.ToString(), days, _page);
+        }
+
+        return WorkshopPageCache.Key(WorkshopSource.Pdx, _gameId, search, ResolvePdxSort().ToString(), null, _page);
+    }
+
+    /// <summary>把缓存的一页直接铺到列表上（封面只认磁盘命中，不联网）。</summary>
+    /// <param name="page">页快照。</param>
+    private void ApplyCachedPage(WorkshopPageCache.Page page)
+    {
+        _totalCount = page.TotalCount;
+        _totalPages = page.TotalPages;
+
+        var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
+        var rows = new List<WorkshopRowViewModel>(page.Items.Count);
+        foreach (var entry in page.Items)
+        {
+            var row = WorkshopRowViewModel.FromCache(entry, size);
+            if (_info.TryGetCachedCover(WorkshopInfoCache.Key(row.Source, row.Id), out var cover))
+            {
+                row.CoverPath = cover;
+            }
+
+            rows.Add(row);
+        }
+
+        ReplaceRows(rows);
+    }
+
+    /// <summary>整体替换列表行；先取消上一轮封面下载，避免旧页任务继续占用带宽。</summary>
+    /// <param name="rows">新行。</param>
+    private void ReplaceRows(IEnumerable<WorkshopRowViewModel> rows)
+    {
+        CancelCoverFill();
+        Rows.Clear();
+        foreach (var row in rows)
+        {
+            Rows.Add(row);
+        }
+    }
+
+    /// <summary>页缓存过期时的静默刷新：不置忙碌、失败只记 Warn。</summary>
+    /// <param name="key">页缓存键。</param>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    private async Task RefreshSilentlyAsync(string key, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (Source == WorkshopSource.Steam)
+            {
+                await QuerySteamAsync(cancellationToken, key).ConfigureAwait(true);
+            }
+            else
+            {
+                await QueryPdxAsync(cancellationToken, key).ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面卸载：放弃刷新。
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _logger.Warn("创意工坊静默刷新失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>取消当前这一轮封面下载。</summary>
+    private void CancelCoverFill()
+    {
+        var lifetime = _coverLifetime;
+        _coverLifetime = null;
+        if (lifetime is null)
+        {
+            return;
+        }
+
+        try
+        {
+            lifetime.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 已经收尾，忽略。
+        }
+
+        lifetime.Dispose();
+    }
+
+    /// <summary>封面进度变化时通知两个派生属性。</summary>
+    private void RaiseCoverProgress()
+    {
+        OnPropertyChanged(nameof(ShowCoverProgress));
+        OnPropertyChanged(nameof(CoverProgressText));
+    }
+
     /// <summary>Steam 创意工坊查询。</summary>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    private async Task QuerySteamAsync(CancellationToken cancellationToken)
+    /// <param name="pageKey">页缓存键（成功后把这一页写进去）。</param>
+    private async Task QuerySteamAsync(CancellationToken cancellationToken, string pageKey)
     {
         if (_steamAppId is not { } appId)
         {
             return;
         }
 
+        var sort = ResolveSteamSort();
+        var days = sort is SteamWorkshopSort.Trend or SteamWorkshopSort.TopRated ? ResolveDays() : (int?)null;
         var query = new SteamWorkshopQuery(
             string.IsNullOrWhiteSpace(SearchText) ? null : SearchText.Trim(),
-            ResolveSteamSort(),
+            sort,
             _page,
-            SteamPageSize);
+            SteamPageSize,
+            days);
 
         var result = await _steam.BrowseAsync(appId, query, cancellationToken).ConfigureAwait(true);
         IsLoaded = true;
 
         if (!result.IsSuccess || result.Value is null)
         {
-            StatusMessage = result.Kind == ErrorKind.Unsupported
-                ? T(Keys.WorkshopStatusParseFailed)
-                : T(Keys.WorkshopStatusFailed, result.ErrorMessage ?? "steam-workshop");
+            ShowFailureOrCache(
+                WorkshopSource.Steam,
+                result.Kind == ErrorKind.Unsupported
+                    ? "steam-workshop-parse"
+                    : result.ErrorMessage ?? "steam-workshop");
             RaiseDerived();
             return;
         }
@@ -362,12 +556,32 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _totalPages = page.TotalPages;
 
         var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
+        var rows = new List<WorkshopRowViewModel>(page.Items.Count);
+        var entries = new List<WorkshopInfoCacheEntry>(page.Items.Count);
         foreach (var item in page.Items)
         {
-            Rows.Add(WorkshopRowViewModel.FromSteam(item, size));
+            // 先把元数据并进缓存，再从缓存取封面文件名：同一个 id 第二次出现不必再下载图片。
+            RecordSteamItem(item);
+            var cacheKey = WorkshopInfoCache.Key(WorkshopSource.Steam, item.PublishedFileId);
+            var row = WorkshopRowViewModel.FromSteam(item, size);
+            if (_info.TryGetCachedCover(cacheKey, out var cover))
+            {
+                row.CoverPath = cover;
+            }
+
+            rows.Add(row);
+            if (_info.TryGet(cacheKey, out var entry))
+            {
+                entries.Add(entry);
+            }
         }
 
-        StatusMessage = Rows.Count == 0
+        ReplaceRows(rows);
+        _pages.Set(pageKey, entries, _totalCount, _totalPages);
+
+        // 30 条累加后只落盘一次（逐条 Save 会卡在同步 IO 上）。
+        _info.Flush();
+        StatusMessage = rows.Count == 0
             ? T(Keys.WorkshopStatusEmpty, SearchText.Trim())
             : T(Keys.WorkshopStatusLoaded, _totalCount);
         RaiseDerived();
@@ -377,7 +591,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
     /// <summary>PDX Mods 查询。</summary>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    private async Task QueryPdxAsync(CancellationToken cancellationToken)
+    /// <param name="pageKey">页缓存键（成功后把这一页写进去）。</param>
+    private async Task QueryPdxAsync(CancellationToken cancellationToken, string pageKey)
     {
         if (_gameId is not { } gameId)
         {
@@ -399,7 +614,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
         if (!result.IsSuccess || result.Value is null)
         {
-            StatusMessage = T(Keys.WorkshopStatusFailed, result.ErrorMessage ?? "pdx-mods");
+            ShowFailureOrCache(WorkshopSource.Pdx, result.ErrorMessage ?? "pdx-mods");
             RaiseDerived();
             return;
         }
@@ -409,12 +624,29 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _totalPages = page.TotalCount == 0 ? 0 : ((page.TotalCount - 1) / PdxPageSize) + 1;
 
         var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
+        var rows = new List<WorkshopRowViewModel>(page.Items.Count);
+        var entries = new List<WorkshopInfoCacheEntry>(page.Items.Count);
         foreach (var item in page.Items)
         {
-            Rows.Add(WorkshopRowViewModel.FromPdx(item, size));
+            RecordPdxItem(item);
+            var cacheKey = WorkshopInfoCache.Key(WorkshopSource.Pdx, item.ModId);
+            var row = WorkshopRowViewModel.FromPdx(item, size);
+            if (_info.TryGetCachedCover(cacheKey, out var cover))
+            {
+                row.CoverPath = cover;
+            }
+
+            rows.Add(row);
+            if (_info.TryGet(cacheKey, out var entry))
+            {
+                entries.Add(entry);
+            }
         }
 
-        StatusMessage = Rows.Count == 0
+        ReplaceRows(rows);
+        _pages.Set(pageKey, entries, _totalCount, _totalPages);
+        _info.Flush();
+        StatusMessage = rows.Count == 0
             ? T(Keys.WorkshopStatusEmpty, SearchText.Trim())
             : T(Keys.WorkshopStatusLoaded, _totalCount);
         RaiseDerived();
@@ -423,70 +655,202 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 封面补全：把封面下载到 <c>data\workshop-covers\{steam|pdx}\{id}</c> 再绑路径。
-    /// 纯增强，任何失败只记日志；下载到一张就刷新一行。
+    /// 查询失败：先用这个游戏之前缓存过的条目把列表填上，
+    /// 一条都没有才显示失败原因。断网时页面仍然是可用的。
+    /// </summary>
+    /// <param name="source">当前来源。</param>
+    /// <param name="reason">失败原因（用于日志/兜底文案）。</param>
+    private void ShowFailureOrCache(WorkshopSource source, string reason)
+    {
+        var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
+        var entries = _info.Snapshot(source, _gameId);
+        var rows = new List<WorkshopRowViewModel>(entries.Count);
+        foreach (var entry in entries)
+        {
+            var row = WorkshopRowViewModel.FromCache(entry, size);
+            if (_info.TryGetCachedCover(WorkshopInfoCache.Key(source, entry.Id), out var cover))
+            {
+                row.CoverPath = cover;
+            }
+
+            rows.Add(row);
+        }
+
+        ReplaceRows(rows);
+
+        if (rows.Count > 0)
+        {
+            _totalCount = rows.Count;
+            _totalPages = 1;
+            StatusMessage = T(Keys.WorkshopStatusOffline, rows.Count);
+            _logger.Warn("创意工坊查询失败，改用缓存（" + source + "，" + rows.Count + " 条）：" + reason);
+            return;
+        }
+
+        StatusMessage = T(Keys.WorkshopStatusFailed, reason);
+    }
+
+    /// <summary>
+    /// 并发补封面（同时最多 6 张）：每张完成就刷新对应行，不阻塞列表显示。
+    /// 翻页会取消上一轮任务，避免下载队列越积越长。
     /// </summary>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
     private async Task FillCoversAsync(CancellationToken cancellationToken)
     {
-        var pending = Rows.Where(static row => !string.IsNullOrWhiteSpace(row.CoverUrl)).ToList();
+        CancelCoverFill();
+        var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _coverLifetime = lifetime;
+        var token = lifetime.Token;
+
+        var pending = Rows
+            .Where(static row => !string.IsNullOrWhiteSpace(row.CoverUrl) && !row.HasCover)
+            .ToList();
         if (pending.Count == 0)
         {
             return;
         }
 
-        var root = AppServices.WorkshopCoverRoot;
+        _coverTotal = pending.Count;
+        _coverDone = 0;
+        IsFillingCovers = true;
+        RaiseCoverProgress();
+
+        var root = _info.CoverRoot;
+        using var gate = new SemaphoreSlim(MaxConcurrentCovers);
         try
         {
             AppServices.FileSystem.EnsureDirectory(root);
             AppServices.FileSystem.EnsureDirectory(AppServices.FileSystem.Combine(root, "steam"));
             AppServices.FileSystem.EnsureDirectory(AppServices.FileSystem.Combine(root, "pdx"));
 
-            foreach (var row in pending)
+            await Task.WhenAll(pending.Select(async row =>
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var target = AppServices.FileSystem.Combine(root, row.CoverCacheKey);
-                var local = await _assets
-                    .DownloadAsync(row.CoverUrl!, target, cancellationToken)
-                    .ConfigureAwait(true);
-
-                if (!string.IsNullOrWhiteSpace(local))
+                await gate.WaitAsync(token).ConfigureAwait(true);
+                try
                 {
+                    token.ThrowIfCancellationRequested();
+                    var target = AppServices.FileSystem.Combine(root, row.CoverCacheKey);
+                    var local = await _assets.DownloadAsync(row.CoverUrl!, target, token).ConfigureAwait(true);
+                    if (string.IsNullOrWhiteSpace(local))
+                    {
+                        return;
+                    }
+
                     row.CoverPath = local;
+
+                    // 记下文件名（含来源子目录），下次这条 id 再出现直接绑本地文件。
+                    _info.SetCover(
+                        WorkshopInfoCache.Key(row.Source, row.Id),
+                        row.CoverCacheKey + Path.GetExtension(local),
+                        row.CoverUrl);
                 }
-            }
+                finally
+                {
+                    gate.Release();
+                    _coverDone++;
+                    RaiseCoverProgress();
+                }
+            })).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
-            // 页面已卸载：补图任务随令牌作废，不需要提示。
+            _logger.Info("取消上一页封面任务");
         }
         catch (Exception ex)
         {
             _logger.Warn("创意工坊封面下载失败：" + ex.Message);
         }
+        finally
+        {
+            if (ReferenceEquals(_coverLifetime, lifetime))
+            {
+                _coverLifetime = null;
+            }
+
+            lifetime.Dispose();
+            IsFillingCovers = false;
+            _coverDone = 0;
+            _coverTotal = 0;
+            RaiseDerived();
+
+            // 落盘放到线程池：封面写完再收尾，不占 UI 线程。
+            _ = Task.Run(_info.Flush);
+        }
     }
+
+    /// <summary>把 Steam 列表条目并进缓存（不覆盖已抓到的封面文件名与详情）。</summary>
+    /// <param name="item">Steam 条目。</param>
+    private void RecordSteamItem(SteamWorkshopItem item)
+    {
+        _info.Upsert(new WorkshopInfoCacheEntry
+        {
+            Source = "steam",
+            Id = item.PublishedFileId,
+            GameId = _gameId,
+            Name = item.Title,
+            Author = item.AuthorSteamId,
+            Rating = item.StarRating,
+            RatingsTotal = item.TotalVotes,
+            Subscriptions = item.Subscriptions,
+            UpdatedUtc = item.UpdatedUtc,
+            SizeBytes = item.FileSizeBytes,
+            CoverUrl = item.PreviewUrl,
+        });
+    }
+
+    /// <summary>把 PDX 列表条目并进缓存。</summary>
+    /// <param name="summary">PDX 条目。</param>
+    private void RecordPdxItem(PdxModsSummary summary)
+    {
+        _info.Upsert(new WorkshopInfoCacheEntry
+        {
+            Source = "pdx",
+            Id = summary.ModId,
+            GameId = _gameId,
+            Name = summary.DisplayName,
+            Author = summary.Author,
+            Rating = summary.Rating,
+            RatingsTotal = summary.RatingsTotal,
+            Subscriptions = summary.Subscriptions,
+            UpdatedUtc = summary.UpdatedOn,
+            CoverUrl = summary.CoverUrl,
+        });
+    }
+
+    /// <summary>当前来源可用的排序文案键。</summary>
+    private static string[] SortKeysFor(WorkshopSource source) =>
+        source == WorkshopSource.Steam ? SteamSortKeys : PdxSortKeys;
 
     /// <summary>把当前选中文案反查成 Steam 的排序枚举。</summary>
     private SteamWorkshopSort ResolveSteamSort() => ResolveSortKey() switch
     {
-        var key when key == Keys.WorkshopSortRecent => SteamWorkshopSort.MostRecent,
-        var key when key == Keys.WorkshopSortRating => SteamWorkshopSort.TopRated,
-        _ => SteamWorkshopSort.MostPopular,
+        var key when key == Keys.WorkshopSortTopRated => SteamWorkshopSort.TopRated,
+        var key when key == Keys.WorkshopSortMostRecent => SteamWorkshopSort.MostRecent,
+        var key when key == Keys.WorkshopSortMostUpdated => SteamWorkshopSort.MostUpdated,
+        var key when key == Keys.WorkshopSortMostSubscribed => SteamWorkshopSort.MostSubscribed,
+        _ => SteamWorkshopSort.Trend,
     };
 
     /// <summary>把当前选中文案反查成 PDX Mods 的排序枚举。</summary>
     private PdxModsSort ResolvePdxSort() => ResolveSortKey() switch
     {
-        var key when key == Keys.WorkshopSortRecent => PdxModsSort.Updated,
+        var key when key == Keys.WorkshopSortMostUpdated => PdxModsSort.Updated,
         var key when key == Keys.WorkshopSortRating => PdxModsSort.Rating,
         _ => PdxModsSort.Popularity,
     };
 
+    /// <summary>当前时间范围对应的 <c>days</c> 值。</summary>
+    private int ResolveDays()
+    {
+        var index = Array.FindIndex(TimeRangeModes.ToArray(), item => string.Equals(item, SelectedTimeRange, StringComparison.Ordinal));
+        return TimeRangeDays[Math.Clamp(index < 0 ? DefaultTimeRangeIndex : index, 0, TimeRangeDays.Length - 1)];
+    }
+
     /// <summary>把下拉框里的文案反查成文案键（切语言后仍然是同一档排序）。</summary>
     private string ResolveSortKey()
     {
-        foreach (var key in SortKeys)
+        var keys = SortKeysFor(Source);
+        foreach (var key in keys)
         {
             if (string.Equals(T(key), SelectedSortMode, StringComparison.Ordinal))
             {
@@ -494,11 +858,15 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             }
         }
 
-        return SortKeys[0];
+        return keys[0];
     }
 
-    /// <summary>排序下拉框的选项（按当前语言生成）。</summary>
-    private string[] BuildSortModes() => SortKeys.Select(static key => T(key)).ToArray();
+    /// <summary>排序下拉框的选项（按来源与当前语言生成）。</summary>
+    private static string[] BuildSortModes(WorkshopSource source) =>
+        SortKeysFor(source).Select(static key => T(key)).ToArray();
+
+    /// <summary>时间范围下拉框的选项。</summary>
+    private static string[] BuildTimeRangeModes() => TimeRangeKeys.Select(static key => T(key)).ToArray();
 
     partial void OnSearchTextChanged(string value) => _ = OnFilterChangedAsync();
 
@@ -509,12 +877,56 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             return;
         }
 
+        OnPropertyChanged(nameof(ShowTimeRange));
+
         _ = OnFilterChangedAsync();
     }
 
-    partial void OnSourceChanged(WorkshopSource value) => RaiseDerived();
+    partial void OnSelectedTimeRangeChanged(string value)
+    {
+        if (_isRelocalizing)
+        {
+            return;
+        }
 
-    /// <summary>搜索词或排序变了：回到第一页重查。</summary>
+        _ = OnFilterChangedAsync();
+    }
+
+    partial void OnSourceChanged(WorkshopSource value)
+    {
+        // 来源换了，排序档位跟着换（Steam 5 档 / PDX 3 档）；重置到第一档避免选中项越界。
+        RebuildSortModes(value);
+        OnPropertyChanged(nameof(ShowTimeRange));
+        RaiseDerived();
+    }
+
+    /// <summary>当前排序是否属于「带时间范围」的两档（最热门 / 最受好评）。</summary>
+    private bool IsTimeRangeSort()
+    {
+        var key = ResolveSortKey();
+        return key == Keys.WorkshopSortTrend || key == Keys.WorkshopSortTopRated;
+    }
+
+    /// <summary>按来源重建排序档位，并把选中项放到第一档。</summary>
+    /// <param name="source">当前来源。</param>
+    private void RebuildSortModes(WorkshopSource source)
+    {
+        var wasRelocalizing = _isRelocalizing;
+        _isRelocalizing = true;
+        try
+        {
+            SortModes = BuildSortModes(source);
+            SelectedSortMode = SortModes[0];
+        }
+        finally
+        {
+            _isRelocalizing = wasRelocalizing;
+        }
+
+        OnPropertyChanged(nameof(SelectedSortMode));
+    }
+
+    /// <summary>搜索词、排序或时间范围变了：回到第一页重查。</summary>
     private async Task OnFilterChangedAsync()
     {
         if (!HasGame || _isRelocalizing)
@@ -523,27 +935,31 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         }
 
         _page = 0;
-        await QueryAsync(CancellationToken.None).ConfigureAwait(true);
+        await QueryAsync(CancellationToken.None, force: true).ConfigureAwait(true);
     }
 
-    /// <summary>切语言后重建排序选项，并把选中项换到新语言的同一档上。</summary>
+    /// <summary>切语言后重建排序与时间范围选项，并把选中项换到新语言的同一档上。</summary>
     protected override void Relocalize()
     {
         var sortKey = ResolveSortKey();
-        SortModes = BuildSortModes();
+        var timeIndex = Array.FindIndex(TimeRangeModes.ToArray(), item => string.Equals(item, SelectedTimeRange, StringComparison.Ordinal));
 
         _isRelocalizing = true;
         try
         {
+            SortModes = BuildSortModes(Source);
             SelectedSortMode = T(sortKey);
+            TimeRangeModes = BuildTimeRangeModes();
+            SelectedTimeRange = TimeRangeModes[Math.Clamp(timeIndex < 0 ? DefaultTimeRangeIndex : timeIndex, 0, TimeRangeModes.Count - 1)];
         }
         finally
         {
             _isRelocalizing = false;
         }
 
-        // 新旧文案可能相同（例如中英文都是「Paradox Mods」），显式补一次通知让 x:Bind 刷新。
+        // 新旧文案可能相同（例如中英文都是「最热门」），显式补一次通知让 x:Bind 刷新。
         OnPropertyChanged(nameof(SelectedSortMode));
+        OnPropertyChanged(nameof(SelectedTimeRange));
         RaiseDerived();
     }
 
@@ -560,5 +976,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(PageText));
         OnPropertyChanged(nameof(ShowEmptyState));
         OnPropertyChanged(nameof(ShowSignInHint));
+        OnPropertyChanged(nameof(ShowTimeRange));
+        OnPropertyChanged(nameof(ShowCoverProgress));
+        OnPropertyChanged(nameof(CoverProgressText));
     }
 }

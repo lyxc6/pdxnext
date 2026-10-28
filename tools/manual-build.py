@@ -27,6 +27,9 @@ OBJ = os.path.join(SCRATCH, "obj")
 DOTNET = "dotnet"
 CSC = r"C:/Program Files/dotnet/sdk/10.0.402/Roslyn/bincore/csc.dll"
 NETREF = r"C:/Program Files/dotnet/packs/Microsoft.NETCore.App.Ref/10.0.13/ref/net10.0"
+# .NET SDK 自带的分析器（源生成器）：[GeneratedRegex] 必须有 regex 生成器才会生成实现部件。
+NETREF_ANALYZERS = os.path.join(os.path.dirname(os.path.dirname(NETREF)), "analyzers", "dotnet", "cs")
+REGEX_GENERATOR = os.path.join(NETREF_ANALYZERS, "System.Text.RegularExpressions.Generator.dll")
 NUGET = r"C:/Users/17147/.nuget/packages"
 XAMLCOMPILER = os.path.join(NUGET, "microsoft.windowsappsdk.winui/2.3.9/tools/net472/XamlCompiler.exe")
 MT = os.path.join(NUGET, "microsoft.windows.sdk.buildtools/10.0.28000.2705/bin/10.0.28000.0/x64/mt.exe")
@@ -38,6 +41,7 @@ MVVM_ANALYZER = os.path.join(
 MVVM_REF = os.path.join(NUGET, "communitytoolkit.mvvm/8.4.2/lib/net8.0/CommunityToolkit.Mvvm.dll")
 
 CORE_PROJ = os.path.join(WS, "src", "PdxLauncher.Core")
+IMAGING_PROJ = os.path.join(WS, "src", "PdxLauncher.Imaging")
 APP_PROJ = os.path.join(WS, "src", "PdxLauncher.App")
 CHECKS_PROJ = os.path.join(WS, "tests", "PdxLauncher.Checks")
 
@@ -45,6 +49,12 @@ problems = []
 
 
 def log(msg):
+    # 自检输出里含 emoji（如 🙂），控制台默认 cp936 会 UnicodeEncodeError 直接崩掉；
+    # 统一半途替换成 '?' 而不是抛异常。
+    try:
+        sys.stdout.reconfigure(errors="replace")
+    except (AttributeError, ValueError):
+        pass
     print(msg, flush=True)
 
 
@@ -81,7 +91,7 @@ def sources(proj, exclude_dirs=("obj", "bin")):
     return sorted(out)
 
 
-def compile_library(name, srcs, refs, outdir, extra_defines=None, target="library", analyzers=None):
+def compile_library(name, srcs, refs, outdir, extra_defines=None, target="library", analyzers=None, resources=None):
     os.makedirs(outdir, exist_ok=True)
     dll = os.path.join(outdir, name + ".dll")
     args = [DOTNET, CSC, "-nologo", "-target:" + target, "-nullable:enable", "-langversion:latest",
@@ -91,6 +101,12 @@ def compile_library(name, srcs, refs, outdir, extra_defines=None, target="librar
     for a in analyzers or ():
         if os.path.exists(a):
             args.append("-analyzer:" + a)
+    # 内嵌资源：-resource:<绝对路径>,<逻辑名>，与 csproj 的 EmbeddedResource+LogicalName 等价。
+    for path, logical in resources or ():
+        if not os.path.exists(path):
+            fail(name + ": 内嵌资源不存在 " + path)
+            return None
+        args.append("-resource:" + path + "," + logical)
     args += ["-r:" + r for r in refs]
     args += srcs
     logpath = os.path.join(OBJ, name + ".csc.log")
@@ -106,28 +122,64 @@ def compile_library(name, srcs, refs, outdir, extra_defines=None, target="librar
 
 
 # ---------------------------------------------------------------- Core
+def core_resources():
+    """Core 的内嵌补丁素材；逻辑名必须与 Patch/PatchAssets.cs 的常量一致。"""
+    assets = os.path.join(CORE_PROJ, "Patch", "Assets")
+    return [
+        (os.path.join(assets, "steam_api.dll"), "PdxLauncher.Patch.steam_api.dll"),
+        (os.path.join(assets, "steam_api64.dll"), "PdxLauncher.Patch.steam_api64.dll"),
+        (os.path.join(assets, "cream_api.ini"), "PdxLauncher.Patch.cream_api.ini"),
+    ]
+
+
 def build_core():
     log("[core] 编译 PdxLauncher.Core ...")
     srcs = sources(CORE_PROJ)
     if not srcs:
         fail("core: 没有找到 .cs 源文件")
         return None
-    dll = compile_library("PdxLauncher.Core", srcs, netrefs(), BUILD)
+    dll = compile_library(
+        "PdxLauncher.Core",
+        srcs,
+        netrefs(),
+        BUILD,
+        analyzers=[REGEX_GENERATOR],
+        resources=core_resources())
     if dll:
         log("  OK  " + dll + "  (" + str(os.path.getsize(dll)) + " B, " + str(len(srcs)) + " 源文件)")
     return dll
 
 
+# ---------------------------------------------------------------- Imaging
+def build_imaging():
+    log("[imaging] 编译 PdxLauncher.Imaging ...")
+    srcs = sources(IMAGING_PROJ)
+    if not srcs:
+        fail("imaging: 没有找到 .cs 源文件")
+        return None
+    dll = compile_library("PdxLauncher.Imaging", srcs, netrefs(), BUILD, analyzers=[REGEX_GENERATOR])
+    if dll:
+        log("  OK  " + dll + "  (" + str(len(srcs)) + " 源文件)")
+    return dll
+
+
 # ---------------------------------------------------------------- Checks
-def build_checks(core_dll):
+def build_checks(core_dll, imaging_dll):
     log("[checks] 编译 PdxLauncher.Checks ...")
     srcs = sources(CHECKS_PROJ)
+    # csproj 用 <Compile Include> 链接了 App 层两个纯逻辑文件（不引用 UI 类型），手工构建要自己补上。
+    srcs += [
+        os.path.join(APP_PROJ, "Services", "PlaySetEditor.cs"),
+        os.path.join(APP_PROJ, "Services", "PositionInput.cs"),
+    ]
     if not srcs:
         fail("checks: 没有找到 .cs 源文件")
         return None
     refs = netrefs() + [core_dll]
+    if imaging_dll:
+        refs.append(imaging_dll)
     # 自检程序必须是 exe：Program.Main 是入口点
-    dll = compile_library("PdxLauncher.Checks", srcs, refs, BUILD, target="exe")
+    dll = compile_library("PdxLauncher.Checks", srcs, refs, BUILD, target="exe", analyzers=[REGEX_GENERATOR])
     if dll:
         log("  OK  " + dll)
     return dll
@@ -269,9 +321,10 @@ def main():
     os.makedirs(OBJ, exist_ok=True)
 
     core = build_core()
+    imaging = build_imaging() if what in ("checks", "app", "all") and core else None
     checks = None
     if what in ("checks", "all") and core:
-        checks = build_checks(core)
+        checks = build_checks(core, imaging or "")
         run_checks(checks)
     if what in ("app", "all") and core:
         build_app(core)

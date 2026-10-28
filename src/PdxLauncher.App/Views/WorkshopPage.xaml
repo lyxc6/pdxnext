@@ -65,10 +65,11 @@
             </StackPanel>
         </Grid>
 
-        <!-- 行1：搜索 / 排序 / 忙碌 / 刷新 -->
+        <!-- 行1：搜索 / 排序 / 时间范围 / 忙碌 / 刷新 -->
         <Grid Grid.Row="1" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
@@ -95,13 +96,24 @@
                       AutomationProperties.AutomationId="cmbWorkshopSort"
                       AutomationProperties.Name="{x:Bind L.WorkshopSortName, Mode=OneWay}" />
 
-            <ProgressRing Grid.Column="2"
+            <ComboBox Grid.Column="2"
+                      x:Name="TimeRangeBox"
+                      MinWidth="130"
+                      VerticalAlignment="Center"
+                      Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowTimeRange), Mode=OneWay}"
+                      ItemsSource="{x:Bind ViewModel.TimeRangeModes, Mode=OneWay}"
+                      SelectedItem="{x:Bind ViewModel.SelectedTimeRange, Mode=OneWay}"
+                      SelectionChanged="OnTimeRangeSelectionChanged"
+                      AutomationProperties.AutomationId="cmbWorkshopTimeRange"
+                      AutomationProperties.Name="{x:Bind L.WorkshopTimeRangeName, Mode=OneWay}" />
+
+            <ProgressRing Grid.Column="3"
                           Width="20"
                           Height="20"
                           IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                           AutomationProperties.AutomationId="ringWorkshopBusy" />
 
-            <Button Grid.Column="3"
+            <Button Grid.Column="4"
                     Click="OnRefreshClick"
                     AutomationProperties.AutomationId="btnWorkshopRefresh"
                     AutomationProperties.Name="{x:Bind L.WorkshopRefreshName, Mode=OneWay}">
@@ -138,6 +150,14 @@
         <!-- 行3：列表 / 空状态 -->
         <Grid Grid.Row="3">
             <Border Background="{ThemeResource PdxCardGlassBrush}" CornerRadius="8" />
+
+            <!-- 翻页/查询中的细进度条：不遮挡列表，只在忙碌时出现 -->
+            <ProgressBar x:Name="barWorkshopLoading"
+                         Height="3"
+                         VerticalAlignment="Top"
+                         IsIndeterminate="True"
+                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsBusy), Mode=OneWay}"
+                         AutomationProperties.AutomationId="barWorkshopLoading" />
 
             <ListView x:Name="WorkshopList"
                       ItemsSource="{x:Bind ViewModel.Rows, Mode=OneWay}"
@@ -285,10 +305,27 @@
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1">
-                <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
-                           Style="{StaticResource CaptionTextBlockStyle}"
-                           TextWrapping="Wrap"
-                           AutomationProperties.AutomationId="txtWorkshopStatus" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Column="0"
+                               Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               TextWrapping="Wrap"
+                               AutomationProperties.AutomationId="txtWorkshopStatus" />
+
+                    <TextBlock Grid.Column="1"
+                               x:Name="txtWorkshopCoverProgress"
+                               Text="{x:Bind ViewModel.CoverProgressText, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               VerticalAlignment="Center"
+                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowCoverProgress), Mode=OneWay}"
+                               AutomationProperties.AutomationId="txtWorkshopCoverProgress" />
+                </Grid>
             </Border>
         </Grid>
     </Grid>

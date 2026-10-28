@@ -42,11 +42,11 @@ public static class SteamWorkshopApiChecks
     {
         var popular = SteamWorkshopClient.BuildBrowseUri(
             Ck3AppId,
-            new SteamWorkshopQuery(null, SteamWorkshopSort.MostPopular, 0)).AbsoluteUri;
+            new SteamWorkshopQuery(null, SteamWorkshopSort.Trend, 0)).AbsoluteUri;
 
         ChecksContext.Check("URI：appid", popular.Contains("appid=1158310", StringComparison.Ordinal), popular);
         ChecksContext.Check("URI：只看可用条目", popular.Contains("section=readytouseitems", StringComparison.Ordinal));
-        ChecksContext.Check("URI：最热门排序", popular.Contains("browsesort=mostpopular", StringComparison.Ordinal));
+        ChecksContext.Check("URI：最热门排序", popular.Contains("browsesort=trend", StringComparison.Ordinal));
         ChecksContext.Check("URI：默认每页 30", popular.Contains("num_per_page=30", StringComparison.Ordinal));
         ChecksContext.Check("URI：对外第 0 页即 p=1", popular.Contains("p=1", StringComparison.Ordinal));
 
@@ -61,10 +61,36 @@ public static class SteamWorkshopApiChecks
             new SteamWorkshopQuery(null, SteamWorkshopSort.TopRated, 0)).AbsoluteUri;
         ChecksContext.Check("URI：评分排序", rated.Contains("browsesort=toprated", StringComparison.Ordinal));
 
+        var updated = SteamWorkshopClient.BuildBrowseUri(
+            Ck3AppId,
+            new SteamWorkshopQuery(null, SteamWorkshopSort.MostUpdated, 0)).AbsoluteUri;
+        ChecksContext.Check("URI：最新更新排序", updated.Contains("browsesort=mostupdated", StringComparison.Ordinal), updated);
+
+        var subscribed = SteamWorkshopClient.BuildBrowseUri(
+            Ck3AppId,
+            new SteamWorkshopQuery(null, SteamWorkshopSort.MostSubscribed, 0)).AbsoluteUri;
+        ChecksContext.Check("URI：订阅者排序", subscribed.Contains("browsesort=mostsubscribed", StringComparison.Ordinal), subscribed);
+
+        // 时间范围只跟最热门/最受好评一起用；0 是「发布至今」，必须原样传出去。
+        var weekly = SteamWorkshopClient.BuildBrowseUri(
+            Ck3AppId,
+            new SteamWorkshopQuery(null, SteamWorkshopSort.Trend, 0, 30, 7)).AbsoluteUri;
+        ChecksContext.Check("URI：时间范围 days=7", weekly.Contains("days=7", StringComparison.Ordinal), weekly);
+
+        var allTime = SteamWorkshopClient.BuildBrowseUri(
+            Ck3AppId,
+            new SteamWorkshopQuery(null, SteamWorkshopSort.TopRated, 0, 30, 0)).AbsoluteUri;
+        ChecksContext.Check("URI：发布至今 days=0", allTime.Contains("days=0", StringComparison.Ordinal), allTime);
+
+        var noDays = SteamWorkshopClient.BuildBrowseUri(
+            Ck3AppId,
+            new SteamWorkshopQuery(null, SteamWorkshopSort.MostUpdated, 0, 30, 30)).AbsoluteUri;
+        ChecksContext.Check("URI：非热门排序不传 days", !noDays.Contains("days=", StringComparison.Ordinal), noDays);
+
         // 有关键词时排序必须切成 textsearch，参数名是 searchtext（无下划线）。
         var search = SteamWorkshopClient.BuildBrowseUri(
             Ck3AppId,
-            new SteamWorkshopQuery("my mod+y", SteamWorkshopSort.MostPopular, 2, 40)).AbsoluteUri;
+            new SteamWorkshopQuery("my mod+y", SteamWorkshopSort.Trend, 2, 40)).AbsoluteUri;
         ChecksContext.Check("URI：关键词强制 textsearch", search.Contains("browsesort=textsearch", StringComparison.Ordinal));
         ChecksContext.Check("URI：searchtext 参数", search.Contains("searchtext=my%20mod%2By", StringComparison.Ordinal), search);
         ChecksContext.Check("URI：关键词时页码仍生效", search.Contains("p=3", StringComparison.Ordinal));
@@ -73,12 +99,12 @@ public static class SteamWorkshopApiChecks
         // 超过服务端上限要钳到 50，否则 Steam 会回落成 30 让分页对不上。
         var clamped = SteamWorkshopClient.BuildBrowseUri(
             Ck3AppId,
-            new SteamWorkshopQuery(null, SteamWorkshopSort.MostPopular, 0, 500)).AbsoluteUri;
+            new SteamWorkshopQuery(null, SteamWorkshopSort.Trend, 0, 500)).AbsoluteUri;
         ChecksContext.Check("URI：每页条数钳到 50", clamped.Contains("num_per_page=50", StringComparison.Ordinal), clamped);
 
         ChecksContext.Check(
             "URI：负数页码归 0",
-            SteamWorkshopClient.BuildBrowseUri(Ck3AppId, new SteamWorkshopQuery(null, SteamWorkshopSort.MostPopular, -3))
+            SteamWorkshopClient.BuildBrowseUri(Ck3AppId, new SteamWorkshopQuery(null, SteamWorkshopSort.Trend, -3))
                 .AbsoluteUri.Contains("p=1", StringComparison.Ordinal));
     }
 
@@ -273,7 +299,7 @@ public static class SteamWorkshopApiChecks
         http.Responses["steamcommunity.com/workshop/browse/"] = html;
         var page = client.BrowseAsync(
             Ck3AppId,
-            new SteamWorkshopQuery(null, SteamWorkshopSort.MostPopular, 0),
+            new SteamWorkshopQuery(null, SteamWorkshopSort.Trend, 0),
             CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Check("浏览：成功", page.IsSuccess);
         ChecksContext.Equal("浏览：条目数", 2, page.Value?.Items.Count ?? -1);
@@ -281,7 +307,7 @@ public static class SteamWorkshopApiChecks
         var noScript = new CapturingHttpFetcher();
         noScript.Responses["steamcommunity.com/workshop/browse/"] = "<html><body>no data</body></html>";
         var parseFail = new SteamWorkshopClient(noScript, new NullLogger())
-            .BrowseAsync(Ck3AppId, new SteamWorkshopQuery(null, SteamWorkshopSort.MostPopular, 0), CancellationToken.None)
+            .BrowseAsync(Ck3AppId, new SteamWorkshopQuery(null, SteamWorkshopSort.Trend, 0), CancellationToken.None)
             .GetAwaiter().GetResult();
         ChecksContext.Check("浏览：结构变了要失败而不是空列表", !parseFail.IsSuccess);
         ChecksContext.Check(

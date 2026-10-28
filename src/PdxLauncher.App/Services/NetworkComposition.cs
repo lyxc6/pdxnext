@@ -12,12 +12,16 @@ using PdxLauncher.Core.Online;
 /// <param name="Account">Paradox 账号客户端（登录/续期/账号资料）。</param>
 /// <param name="PdxMods">PDX Mods 平台客户端（搜索 / 详情）；与 <paramref name="PdxHttp"/> 同源。</param>
 /// <param name="SteamWorkshop">Steam 创意工坊客户端（列表 / 详情 / 能力探测）；匿名 keyless。</param>
+/// <param name="WorkshopInfo">创意工坊 mod 信息缓存（同一 id 的元数据 / 封面 / 详情复用）。</param>
+/// <param name="WorkshopPages">创意工坊列表页的内存缓存（翻回看过的页不必重抓 SSR 页面）。</param>
 internal sealed record NetworkServices(
     HttpFetcher Http,
     PdxHttpTransport PdxHttp,
     PdxAccountClient Account,
     PdxModsClient PdxMods,
     SteamWorkshopClient SteamWorkshop,
+    WorkshopInfoCache WorkshopInfo,
+    WorkshopPageCache WorkshopPages,
     MetadataClient Metadata,
     AssetDownloader Assets,
     ThemeResolver Themes,
@@ -58,6 +62,14 @@ internal static class NetworkComposition
         // Steam 创意工坊走普通 IHttpFetcher：匿名公开页 + keyless 接口，不需要认证头。
         var steamWorkshop = new SteamWorkshopClient(http, logger);
 
+        // 工坊 mod 信息缓存：按「来源 + id」存元数据与详情，封面文件落在同一个目录下。
+        var workshopPages = new WorkshopPageCache(clock);
+        var workshopInfo = new WorkshopInfoCache(
+            fileSystem,
+            logger,
+            clock,
+            AppServices.WorkshopCacheRoot);
+
         var metadata = new MetadataClient(http, logger);
         var assets = new AssetDownloader(http, logger, fileSystem);
         var steamCovers = new SteamCoverUrlResolver(http, logger);
@@ -79,6 +91,8 @@ internal static class NetworkComposition
             account,
             pdxMods,
             steamWorkshop,
+            workshopInfo,
+            workshopPages,
             metadata,
             assets,
             themes,

@@ -529,6 +529,58 @@
                     </StackPanel>
 
                     <StackPanel x:Name="secAdvanced" Spacing="8" Visibility="Collapsed">
+                        <!-- 补丁：只处理当前选中的游戏；素材与清单都在程序目录下，随时可整体移除。 -->
+                        <TextBlock Text="{x:Bind L.SettingsPatchTitle, Mode=OneWay}"
+                                   Style="{StaticResource SubtitleTextBlockStyle}" />
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsPatchStatusTitle, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <StackPanel Spacing="2" MaxWidth="440" HorizontalAlignment="Right">
+                                    <TextBlock AutomationProperties.AutomationId="txtPatchStatus"
+                                               AutomationProperties.Name="{x:Bind L.SettingsPatchStatusTitle, Mode=OneWay}"
+                                               Text="{x:Bind ViewModel.PatchStatusText, Mode=OneWay}"
+                                               HorizontalAlignment="Right"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock AutomationProperties.AutomationId="txtPatchDetail"
+                                               AutomationProperties.Name="{x:Bind L.SettingsPatchStatusTitle, Mode=OneWay}"
+                                               Text="{x:Bind ViewModel.PatchDetailText, Mode=OneWay}"
+                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasPatchDetail), Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               HorizontalAlignment="Right"
+                                               TextWrapping="Wrap"
+                                               IsTextSelectionEnabled="True" />
+                                </StackPanel>
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsPatchApply, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button AutomationProperties.AutomationId="btnApplyPatch"
+                                            AutomationProperties.Name="{x:Bind L.SettingsPatchApplyName, Mode=OneWay}"
+                                            Content="{x:Bind L.SettingsPatchApply, Mode=OneWay}"
+                                            IsEnabled="{x:Bind ViewModel.CanApplyPatch, Mode=OneWay}"
+                                            Style="{StaticResource AccentButtonStyle}"
+                                            Click="OnApplyPatchClick" />
+                                    <Button AutomationProperties.AutomationId="btnRemovePatch"
+                                            AutomationProperties.Name="{x:Bind L.SettingsPatchRemoveName, Mode=OneWay}"
+                                            Content="{x:Bind L.SettingsPatchRemove, Mode=OneWay}"
+                                            IsEnabled="{x:Bind ViewModel.CanRemovePatch, Mode=OneWay}"
+                                            Click="OnRemovePatchClick" />
+                                    <Button AutomationProperties.AutomationId="btnOpenPatchAssets"
+                                            AutomationProperties.Name="{x:Bind L.SettingsPatchOpenAssetsName, Mode=OneWay}"
+                                            Content="{x:Bind L.SettingsPatchOpenAssets, Mode=OneWay}"
+                                            Click="OnOpenPatchAssetsClick" />
+                                </StackPanel>
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <TextBlock Text="{x:Bind L.SettingsPatchHint, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+
                         <TextBlock Text="{x:Bind L.SettingsSectionDanger, Mode=OneWay}"
                                    Style="{StaticResource SubtitleTextBlockStyle}"
                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}" />

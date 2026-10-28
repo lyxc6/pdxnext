@@ -24,6 +24,9 @@ public sealed class CacheRowViewModel : LocalizedObservableObject
     /// <summary>DDS 缩略图转码缓存（image-cache 目录）。</summary>
     public const string ImagesKey = "images";
 
+    /// <summary>创意工坊 mod 信息缓存（workshop-info 目录：索引 + 封面）。</summary>
+    public const string WorkshopKey = "workshopInfo";
+
     private readonly string _titleKey;
     private readonly string _descriptionKey;
     private CacheUsage _usage = CacheUsage.Empty;

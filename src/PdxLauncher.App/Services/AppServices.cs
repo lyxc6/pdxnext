@@ -6,6 +6,7 @@ using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Patch;
 /// <summary>
 /// 应用级服务定位器。WinUI 的 Frame.Navigate 只支持无参构造，所以页面统一从这里取依赖。
 /// 由 App.xaml.cs 在启动时 <see cref="Initialize"/> 一次性装配；之后只读。
@@ -60,6 +61,15 @@ public static class AppServices
 
     /// <summary>Steam 创意工坊客户端（列表 / 详情 / 能力探测，匿名 keyless）。</summary>
     public static SteamWorkshopClient SteamWorkshop { get; private set; } = null!;
+
+    /// <summary>创意工坊 mod 信息缓存（按「来源 + id」复用元数据 / 封面 / 详情）。</summary>
+    public static WorkshopInfoCache WorkshopInfo { get; private set; } = null!;
+
+    /// <summary>创意工坊列表页的内存缓存（翻页复用，不落盘）。</summary>
+    public static WorkshopPageCache WorkshopPages { get; private set; } = null!;
+
+    /// <summary>游戏目录补丁（一键打补丁 / 移除补丁）。只在用户点按钮时读写游戏目录，不做任何自动变更。</summary>
+    public static IGamePatchService GamePatch { get; private set; } = null!;
 
     public static AppSettingsStore SettingsStore { get; private set; } = null!;
 
@@ -121,6 +131,9 @@ public static class AppServices
         AccountService account,
         PdxModsClient pdxMods,
         SteamWorkshopClient steamWorkshop,
+        WorkshopInfoCache workshopInfo,
+        WorkshopPageCache workshopPages,
+        IGamePatchService gamePatch,
         AppSettingsStore settingsStore,
         IReadOnlyList<GameInstallation> games,
         IDisposable? networkLifetime = null)
@@ -145,6 +158,9 @@ public static class AppServices
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(pdxMods);
         ArgumentNullException.ThrowIfNull(steamWorkshop);
+        ArgumentNullException.ThrowIfNull(workshopInfo);
+        ArgumentNullException.ThrowIfNull(workshopPages);
+        ArgumentNullException.ThrowIfNull(gamePatch);
         ArgumentNullException.ThrowIfNull(settingsStore);
         ArgumentNullException.ThrowIfNull(games);
 
@@ -168,6 +184,9 @@ public static class AppServices
         Account = account;
         PdxMods = pdxMods;
         SteamWorkshop = steamWorkshop;
+        WorkshopInfo = workshopInfo;
+        WorkshopPages = workshopPages;
+        GamePatch = gamePatch;
         SettingsStore = settingsStore;
         _networkLifetime = networkLifetime;
         Settings = settingsStore.Load();
@@ -278,6 +297,8 @@ public static class AppServices
         PdxAccountClient accountClient,
         PdxModsClient pdxMods,
         SteamWorkshopClient steamWorkshop,
+        WorkshopInfoCache workshopInfo,
+        WorkshopPageCache workshopPages,
         IDisposable? lifetime)
     {
         ArgumentNullException.ThrowIfNull(metadata);
@@ -289,6 +310,8 @@ public static class AppServices
         ArgumentNullException.ThrowIfNull(accountClient);
         ArgumentNullException.ThrowIfNull(pdxMods);
         ArgumentNullException.ThrowIfNull(steamWorkshop);
+        ArgumentNullException.ThrowIfNull(workshopInfo);
+        ArgumentNullException.ThrowIfNull(workshopPages);
 
         Metadata = metadata;
         Assets = assets;
@@ -298,6 +321,8 @@ public static class AppServices
         NewsFeed = newsFeed;
         PdxMods = pdxMods;
         SteamWorkshop = steamWorkshop;
+        WorkshopInfo = workshopInfo;
+        WorkshopPages = workshopPages;
 
         // 会话保留在 AccountService 里，只换掉底层 HTTP 客户端（新代理）。
         Account.ReplaceClient(accountClient);
@@ -331,6 +356,8 @@ public static class AppServices
                 services.Account,
                 services.PdxMods,
                 services.SteamWorkshop,
+                services.WorkshopInfo,
+                services.WorkshopPages,
                 new DisposableGroup(services.Http, services.PdxHttp));
             Logger.Info("已按新代理设置重建联网服务");
             return NetworkRebuildResult.Ok;
@@ -363,11 +390,11 @@ public static class AppServices
     public static string ImageCacheRoot => Path.Combine(DataRoot, "image-cache");
 
     /// <summary>
-    /// 创意工坊结果的封面缓存目录（workshop-covers/{steam|pdx}/{id}）。
+    /// 创意工坊 mod 信息缓存根目录（索引 workshop-info.json + 封面 {steam|pdx}/{id}.*）。
     /// 与本地 mod 缩略图缓存分开：那边的键是 <see cref="System.Guid"/>（mods.id），
     /// 创意工坊结果用的是 Steam publishedfileid / PDX Mods 的数字 id，两套 id 空间不能混在一个目录里。
     /// </summary>
-    public static string WorkshopCoverRoot => Path.Combine(DataRoot, "workshop-covers");
+    public static string WorkshopCacheRoot => Path.Combine(DataRoot, "workshop-info");
 
     /// <summary>本启动器自己的日志路径。</summary>
     public static string LogPath => Path.Combine(DataRoot, "logs", "pdxnext.log");

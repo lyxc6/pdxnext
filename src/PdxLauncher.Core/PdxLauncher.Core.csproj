@@ -5,4 +5,21 @@
     <AssemblyName>PdxLauncher.Core</AssemblyName>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <!--
+    补丁素材（DLC 解锁 loader + cream_api.ini 模板）内嵌进 PdxLauncher.Core.dll，
+    发布时整个目录拷走即可用，不依赖外部文件。LogicalName 必须与
+    Patch/PatchAssets.cs 里的常量、tools/manual-build.py 的 -resource: 参数一致。
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Patch\Assets\steam_api.dll">
+      <LogicalName>PdxLauncher.Patch.steam_api.dll</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Patch\Assets\steam_api64.dll">
+      <LogicalName>PdxLauncher.Patch.steam_api64.dll</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Patch\Assets\cream_api.ini">
+      <LogicalName>PdxLauncher.Patch.cream_api.ini</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
 </Project>

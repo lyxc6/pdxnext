@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="PdxLauncher.App.Views.WorkshopDetailPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:svc="using:PdxLauncher.App.Services"
+    xmlns:vm="using:PdxLauncher.App.ViewModels"
+    Background="{ThemeResource PdxPageVeilBrush}">
+
+    <!--
+        创意工坊 mod 详情子页：从列表点一行进来，整页滚动显示完整内容
+        （封面 / 作者 / 评分订阅收藏浏览 / 简介 / 截图 / 更新日志 / 外链 / 标签）。
+        以前这些挤在一个 MaxHeight=560 的 ContentDialog 里，长描述看不全。
+        左栏选中项保持「创意工坊」，页头的返回按钮负责退回列表。
+    -->
+    <Grid Padding="16" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 页头：返回 / 标题 / 来源 / 打开方式 -->
+        <Grid Grid.Row="0" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0"
+                    x:Name="btnWorkshopDetailBack"
+                    Width="36"
+                    Height="36"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    Click="OnBackClick"
+                    ToolTipService.ToolTip="{x:Bind L.WorkshopDetailBack, Mode=OneWay}"
+                    AutomationProperties.AutomationId="btnWorkshopDetailBack"
+                    AutomationProperties.Name="{x:Bind L.WorkshopDetailBack, Mode=OneWay}">
+                <FontIcon Glyph="&#xE72B;" FontSize="14" />
+            </Button>
+
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                <TextBlock Text="{x:Bind ViewModel.Title, Mode=OneWay}"
+                           Style="{StaticResource SubtitleTextBlockStyle}"
+                           TextWrapping="Wrap"
+                           AutomationProperties.AutomationId="txtWorkshopDetailTitle" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="{x:Bind ViewModel.SourceLabel, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               Visibility="{x:Bind svc:XamlVisibility.FromString(ViewModel.SourceLabel), Mode=OneWay}" />
+                    <TextBlock Text="{x:Bind ViewModel.AuthorText, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               Visibility="{x:Bind svc:XamlVisibility.FromString(ViewModel.AuthorText), Mode=OneWay}" />
+                </StackPanel>
+            </StackPanel>
+
+            <Button Grid.Column="2"
+                    x:Name="btnWorkshopDetailBrowser"
+                    Width="36"
+                    Height="36"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    Click="OnOpenBrowserClick"
+                    IsEnabled="{x:Bind ViewModel.HasWebUrl, Mode=OneWay}"
+                    ToolTipService.ToolTip="{x:Bind L.WorkshopOpenBrowser, Mode=OneWay}"
+                    AutomationProperties.AutomationId="btnWorkshopDetailBrowser"
+                    AutomationProperties.Name="{x:Bind L.WorkshopOpenBrowserName, Mode=OneWay}">
+                <FontIcon Glyph="&#xE8A7;" FontSize="14" />
+            </Button>
+
+            <Button Grid.Column="3"
+                    x:Name="btnWorkshopDetailSteam"
+                    Width="36"
+                    Height="36"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    Click="OnOpenSteamClick"
+                    IsEnabled="{x:Bind ViewModel.CanOpenSteam, Mode=OneWay}"
+                    ToolTipService.ToolTip="{x:Bind L.WorkshopOpenSteam, Mode=OneWay}"
+                    AutomationProperties.AutomationId="btnWorkshopDetailSteam"
+                    AutomationProperties.Name="{x:Bind L.WorkshopOpenSteamName, Mode=OneWay}">
+                <FontIcon Glyph="&#xE7FC;" FontSize="14" />
+            </Button>
+        </Grid>
+
+        <!-- 正文：整页纵向滚动 -->
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollMode="Disabled"
+                      AutomationProperties.AutomationId="scrollWorkshopDetail">
+            <StackPanel Spacing="12">
+
+                <!-- 概览卡：封面 + 元信息 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0"
+                                Width="320"
+                                Height="180"
+                                CornerRadius="8"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                            <Grid>
+                                <FontIcon Glyph="&#xE8B9;"
+                                         FontSize="32"
+                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center"
+                                         Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(ViewModel.HasCover), Mode=OneWay}" />
+                                <Image Source="{x:Bind svc:XamlImage.FromPath(ViewModel.CoverPath), Mode=OneWay}"
+                                       Stretch="UniformToFill"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasCover), Mode=OneWay}" />
+                            </Grid>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+                            <TextBlock Text="{x:Bind ViewModel.MetaText, Mode=OneWay}"
+                                       Style="{StaticResource BodyTextBlockStyle}"
+                                       TextWrapping="Wrap"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromString(ViewModel.MetaText), Mode=OneWay}" />
+                            <TextBlock Text="{x:Bind ViewModel.CreatedText, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasCreated), Mode=OneWay}" />
+                            <Border HorizontalAlignment="Left"
+                                    Padding="8,3"
+                                    CornerRadius="4"
+                                    BorderThickness="1"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                    Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowInstalled), Mode=OneWay}">
+                                <TextBlock Text="{x:Bind L.WorkshopDetailInstalled, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}" />
+                            </Border>
+                            <TextBlock Text="{x:Bind ViewModel.TagsText, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasTags), Mode=OneWay}" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- 读取中 -->
+                <Border Padding="16"
+                        CornerRadius="8"
+                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsLoading), Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <ProgressRing IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}" Width="18" Height="18" />
+                        <TextBlock Text="{x:Bind L.WorkshopDetailLoading, Mode=OneWay}"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource BodyTextBlockStyle}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 失败：原因 + 重试 -->
+                <Border Padding="16"
+                        CornerRadius="8"
+                        BorderThickness="1"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasError), Mode=OneWay}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="{x:Bind ViewModel.ErrorText, Mode=OneWay}"
+                                   Style="{StaticResource BodyTextBlockStyle}"
+                                   TextWrapping="Wrap"
+                                   AutomationProperties.AutomationId="txtWorkshopDetailError" />
+                        <Button Content="{x:Bind L.WorkshopDetailRetry, Mode=OneWay}"
+                                Click="OnRetryClick"
+                                AutomationProperties.AutomationId="btnWorkshopDetailRetry" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 正文来自缓存（断网兜底） -->
+                <Border Padding="12"
+                        CornerRadius="8"
+                        BorderThickness="1"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasCachedHint), Mode=OneWay}">
+                    <TextBlock Text="{x:Bind ViewModel.CachedHint, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               TextWrapping="Wrap" />
+                </Border>
+
+                <!-- 简介 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="{x:Bind L.WorkshopDetailDescription, Mode=OneWay}"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock Text="{x:Bind ViewModel.DescriptionText, Mode=OneWay}"
+                                   Style="{StaticResource BodyTextBlockStyle}"
+                                   TextWrapping="Wrap"
+                                   IsTextSelectionEnabled="True"
+                                   Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasDescription), Mode=OneWay}"
+                                   AutomationProperties.AutomationId="txtWorkshopDetailDescription" />
+                        <TextBlock Text="{x:Bind L.WorkshopDetailNoDescription, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextWrapping="Wrap"
+                                   Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowNoDescription), Mode=OneWay}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 截图（PDX 有；Steam 详情接口没有截图列表） -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasScreenshots), Mode=OneWay}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="{x:Bind L.WorkshopDetailScreenshotsTitle, Mode=OneWay}"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.Screenshots, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:WorkshopScreenshotViewModel">
+                                    <Border Margin="0,0,0,8"
+                                            CornerRadius="8"
+                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                            AutomationProperties.AutomationId="{x:Bind AutomationId}">
+                                        <Grid MinHeight="120">
+                                            <FontIcon Glyph="&#xE8B9;"
+                                                     FontSize="32"
+                                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                     HorizontalAlignment="Center"
+                                                     VerticalAlignment="Center"
+                                                     Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasPath), Mode=OneWay}" />
+                                            <Image Source="{x:Bind svc:XamlImage.FromPath(Path), Mode=OneWay}"
+                                                   Stretch="Uniform"
+                                                   MaxHeight="420"
+                                                   Visibility="{x:Bind svc:XamlVisibility.FromBool(HasPath), Mode=OneWay}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- 更新日志（PDX 有） -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasChangelog), Mode=OneWay}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="{x:Bind L.WorkshopDetailChangelog, Mode=OneWay}"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock Text="{x:Bind ViewModel.ChangelogText, Mode=OneWay}"
+                                   Style="{StaticResource BodyTextBlockStyle}"
+                                   TextWrapping="Wrap"
+                                   IsTextSelectionEnabled="True"
+                                   AutomationProperties.AutomationId="txtWorkshopDetailChangelog" />
+                    </StackPanel>
+                </Border>
+
+                <!-- 外链 + 论坛帖 -->
+                <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasLinks), Mode=OneWay}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="{x:Bind L.WorkshopDetailLinks, Mode=OneWay}"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.Links, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:WorkshopLinkViewModel">
+                                    <Button Margin="0,0,0,4"
+                                            Padding="10,6"
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Left"
+                                            Click="OnLinkClick"
+                                            AutomationProperties.AutomationId="{x:Bind AutomationId}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xE71B;" FontSize="14" VerticalAlignment="Center" />
+                                            <TextBlock Text="{x:Bind Title}"
+                                                       Style="{StaticResource BodyTextBlockStyle}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{x:Bind Url}"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

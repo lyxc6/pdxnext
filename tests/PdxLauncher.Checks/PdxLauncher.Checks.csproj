@@ -23,5 +23,11 @@
       视图模型在 App（WinExe + windows TFM），检查工程引用不到，逻辑就测不到。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\PositionInput.cs" Link="Linked\PositionInput.cs" />
+    <!--
+      工坊详情的正文清洗（BBCode/HTML/Markdown 剥离、片段拼接、时间格式化）同样只依赖 System.*，
+      可以原样链接进来。它决定详情子页上长描述长什么样：漏剥一个标记，界面上就直接露出来，
+      所以口径要由 WorkshopTextChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\WorkshopText.cs" Link="Linked\WorkshopText.cs" />
   </ItemGroup>
 </Project>

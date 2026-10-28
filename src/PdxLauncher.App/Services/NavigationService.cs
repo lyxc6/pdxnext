@@ -5,7 +5,9 @@ using PdxLauncher.Core.Abstractions;
 
 /// <summary>
 /// 页面导航。NavigationView 的 Tag 是字符串，这里把 Tag 映射成页面类型再交给 Frame。
-/// 页面用无参构造，依赖从 <see cref="AppServices"/> 取；类型解析失败只记 Warn，不崩。
+/// 页面用无参构造，依赖从 <see cref="AppServices"/> 取；需要入参的页面（如工坊详情子页）
+/// 通过 <see cref="Navigate(string?, object?)"/> 的 parameter 交给 <c>OnNavigatedTo</c>。
+/// 类型解析失败只记 Warn，不崩。
 /// </summary>
 public sealed class NavigationService
 {
@@ -24,6 +26,9 @@ public sealed class NavigationService
     /// <summary>创意工坊页的导航 Tag。</summary>
     public const string WorkshopTag = "workshop";
 
+    /// <summary>创意工坊 mod 详情子页的导航 Tag（不是左栏菜单项；靠参数指定是哪个 mod）。</summary>
+    public const string WorkshopDetailTag = "workshopdetail";
+
     /// <summary>DLC 页的导航 Tag。</summary>
     public const string DlcTag = "dlc";
 
@@ -40,6 +45,7 @@ public sealed class NavigationService
         [PlaySetsTag] = "PdxLauncher.App.Views.ModsPage",
         [ModLibraryTag] = "PdxLauncher.App.Views.ModLibraryPage",
         [WorkshopTag] = "PdxLauncher.App.Views.WorkshopPage",
+        [WorkshopDetailTag] = "PdxLauncher.App.Views.WorkshopDetailPage",
         [DlcTag] = "PdxLauncher.App.Views.DlcPage",
         [AccountTag] = "PdxLauncher.App.Views.AccountPage",
         [SettingsTag] = "PdxLauncher.App.Views.SettingsPage",
@@ -70,8 +76,15 @@ public sealed class NavigationService
         return typeof(NavigationService).Assembly.GetType(typeName, throwOnError: false, ignoreCase: false);
     }
 
-    /// <summary>按 Tag 导航；成功返回 true。重复导航到当前页会被跳过。</summary>
-    public bool Navigate(string? tag)
+    /// <summary>
+    /// 按 Tag 导航；成功返回 true。<paramref name="parameter"/> 为 null 时，重复导航到当前页会被跳过。
+    /// <para>
+    /// 带参数时不跳过：详情子页用同一个 Tag 打开不同的 mod，必须允许「同 Tag 再导航」。
+    /// </para>
+    /// </summary>
+    /// <param name="tag">目标页的导航 Tag。</param>
+    /// <param name="parameter">传给页面 <c>OnNavigatedTo</c> 的参数；普通页面不传。</param>
+    public bool Navigate(string? tag, object? parameter = null)
     {
         if (Frame is null)
         {
@@ -79,7 +92,7 @@ public sealed class NavigationService
             return false;
         }
 
-        if (string.Equals(CurrentTag, tag, StringComparison.OrdinalIgnoreCase))
+        if (parameter is null && string.Equals(CurrentTag, tag, StringComparison.OrdinalIgnoreCase))
         {
             return true;
         }
@@ -93,7 +106,7 @@ public sealed class NavigationService
 
         try
         {
-            var navigated = Frame.Navigate(pageType);
+            var navigated = Frame.Navigate(pageType, parameter);
             if (navigated)
             {
                 CurrentTag = tag;

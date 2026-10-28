@@ -244,6 +244,8 @@ public static class CatalogCacheChecks
 
         public void Copy(string source, string destination, bool overwrite) => _inner.Copy(source, destination, overwrite);
 
+        public void Move(string source, string destination, bool overwrite) => _inner.Move(source, destination, overwrite);
+
         private void RecordThread()
         {
             if (_firstReadThreadId == 0)

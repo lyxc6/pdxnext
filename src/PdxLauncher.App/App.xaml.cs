@@ -13,6 +13,7 @@ using PdxLauncher.Core.Infrastructure;
 using PdxLauncher.Core.Launching;
 using PdxLauncher.Core.LoadFiles;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Patch;
 using PdxLauncher.Core.Playsets;
 using PdxLauncher.Core.Playsets.Json;
 using PdxLauncher.Core.Playsets.PlaysetConfig;
@@ -112,6 +113,11 @@ public partial class App : Application
         var continueGame = new ContinueGameReader(fileSystem, logger);
         var dlcSignatures = new DlcSignatureService(fileSystem, logger);
 
+        // 补丁素材：内嵌进 Core 的资源是兜底，程序目录下的 patch\assets 可整体替换（换新整合包不用重编译）。
+        var patchAssets = new PatchAssets(fileSystem, logger, Path.Combine(PdxDataRoot.Directory, "patch", "assets"));
+        var gamePatch = new GamePatchService(
+            fileSystem, logger, patchAssets, Path.Combine(PdxDataRoot.Directory, "patch", "state.json"));
+
         // Paradox 账号：会话落盘（DPAPI 保护）与登录客户端分开，代理重建时只换客户端。
         var secretProtector = new DpapiSecretProtector(logger);
         var sessionStore = new PdxSessionStore(fileSystem, logger, secretProtector);
@@ -139,6 +145,9 @@ public partial class App : Application
             account,
             network.PdxMods,
             network.SteamWorkshop,
+            network.WorkshopInfo,
+            network.WorkshopPages,
+            gamePatch,
             settingsStore,
             Array.Empty<GameInstallation>(),
             new DisposableGroup(network.Http, network.PdxHttp));
