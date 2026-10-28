@@ -1,4 +1,4 @@
-﻿# 交接文档（HANDOFF）—— 下一轮对话从这里开始
+# 交接文档（HANDOFF）—— 下一轮对话从这里开始
 
 > 本文件由上一轮会话在用户要求「停止，留下文档给下个对话使用，需要任务拆分」时写入。
 > 状态时间：2026-10-25 22:30（本机时区 Asia/Hong_Kong）。
@@ -3047,3 +3047,61 @@ Steam 网页把排序分成三块：排序顺序 + 时间范围 + 分类筛选�
 `System.ObjectDisposedException: Cannot access a disposed object. Object name: 'System.Net.Http.HttpClient'`。
 2026-10-28 14:33 的日志里就是这个错（用户在设置页切了「跟随系统代理」之后）。修法有两种：
 让 `AppServices` 在重建后发事件、由各视图模型重取客户端，或把客户端改成按需从 `AppServices` 取。
+**已修，见 §0.38。**
+
+## 0.38 2026-10-28：修复「改代理后联网全废（HttpClient 已释放）」
+
+**背景**
+
+§0.37 末尾记录的那个缺陷：设置页改「连接方式」后，`SettingsViewModel.SelectedProxyMode` setter 立刻调
+`ApplyProxySettings()` → `AppServices.TryRebuildNetworkServices()`，后者用 `NetworkComposition.Create`
+**把整条联网服务全部重造**并 `previous?.Dispose()` 释放旧连接池。但页面是 `NavigationCacheMode="Required"`、
+常驻不销毁，视图模型是在构造函数里拿的 `AppServices.SteamWorkshop` / `PdxMods` / `Assets`（无 DI 容器，
+没有重新注入的时机），于是后续请求全打到已 Dispose 的旧 `HttpClient` 上：
+
+```
+System.ObjectDisposedException: Cannot access a disposed object. Object name: 'System.Net.Http.HttpClient'
+  at HttpFetcher.GetAsync → SteamWorkshopClient.BrowseAsync → WorkshopViewModel.QuerySteamAsync
+```
+
+创意工坊、详情子页、MOD 库、DLC 说明、公告一起挂，只有重启进程才能恢复。
+
+**改法：换连接池，不换服务对象**
+
+沿仓库里已有的正确范式（`AccountService.ReplaceClient`：客户端实例不变、内部指针可换），把「热替换」下沉到 HTTP 层：
+
+1. `src/PdxLauncher.Core/Online/HttpFetcher.cs`（重写）：`_client` 改非 `readonly`；抽出
+   `private static HttpClient BuildClient(IWebProxy? proxy, TimeSpan totalTimeout)`（handler 配置与 UA 头原样搬入）；
+   新增 `public void UseProxy(IWebProxy? proxy, TimeSpan? totalTimeout = null)` —— 建新池、
+   `Interlocked.Exchange(ref _client, next)`、旧池进 `_retired` 队列（`MaxRetiredClients = 2`，超出的 Dispose，
+   保证正飞到一半的请求还能把响应读完）；三个请求方法改用 `Volatile.Read(ref _client)`；`Dispose()` 收尾当前 + 退休队列。
+2. `src/PdxLauncher.Core/Online/PdxHttpTransport.cs`（重写）：PDX 那条链路（自己的 `SocketsHttpHandler`）同样处理，
+   日志「PDX 连接池已重建（…）」。
+3. `src/PdxLauncher.App/Services/AppServices.cs`：`IDisposable? _networkLifetime` → `NetworkLink? _networkLink`；
+   **删除 `ReplaceNetwork` 整个 12 参方法**；`TryRebuildNetworkServices()` 只做
+   `ProxyResolver.Resolve(Settings, Logger)` → `_networkLink.Http.UseProxy(proxy)` + `_networkLink.PdxHttp.UseProxy(proxy)`。
+4. `src/PdxLauncher.App/Services/NetworkComposition.cs`：`DisposableGroup` 换成 `public sealed class NetworkLink`（只持有两个连接池属主，
+   因为它是 `AppServices.Initialize` 的 public 参数类型，必须 public）；`Create` 不变。
+5. `src/PdxLauncher.App/App.xaml.cs`：装配时把 `new NetworkLink(network.Http, network.PdxHttp)` 交给 `Initialize`。
+
+**结果**：`SteamWorkshopClient`、`PdxModsClient`、`AssetDownloader`、`ThemeResolver` 等对象身份全程不变，
+页面与视图模型**不需要任何改动**，改代理立即生效。
+
+**自检**
+
+新增 `tests/PdxLauncher.Checks/HttpFetcherChecks.cs`：换池后 `ReferenceEquals` 仍成立（对象身份稳定）、
+换池后仍拒绝白名单外域名（不联网，断言 `host-not-allowed:` 前缀）、`null`/`WebProxy` 交替 5 次不抛、
+`Dispose()` 幂等。`检查类: 33，失败: 0`；Release `0 警告 0 错误`（648 键）。
+
+**实测**（Release exe，2026-10-28 15:19）
+
+创意工坊先加载出「已加载 27395 个结果 / 第 1 / 1142 页」→ 设置页把「连接方式」从「跟随系统」切到「手动配置」→
+日志出现 `HTTP 连接池已重建（…）`、`PDX 连接池已重建（…）`、`已按新代理设置重建联网连接池` →
+回创意工坊点刷新，**仍是 27395 个结果**，`grep ObjectDisposedException` 没有任何新增（最后一批停在 14:33 修复前的旧构建）。
+
+**踩坑**
+
+1. `NetworkLink` 若写成 `internal` 会报 `CS0051`（`AppServices.Initialize` 是 public 且带该参数）。
+2. 旧池不能立刻 Dispose：`_retired` 队列最多留 2 个，超过再放最老的；否则并发中的请求会炸在读取响应阶段。
+3. 验证时注意 Debug 产物常被运行中的 `PdxLauncher.App` 锁住（`MSB3027/MSB3021`），可只构建
+   `tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj` 跑自检，Release 用 `tools/build-app.sh`。

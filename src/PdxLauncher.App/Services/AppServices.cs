@@ -1,4 +1,4 @@
-namespace PdxLauncher.App.Services;
+﻿namespace PdxLauncher.App.Services;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Accounts;
@@ -107,8 +107,12 @@ public static class AppServices
 
     public static bool IsInitialized { get; private set; }
 
-    /// <summary>当前联网服务里 HttpFetcher 的属主（代理重建时换掉并 Dispose）。</summary>
-    private static IDisposable? _networkLifetime;
+    /// <summary>
+    /// 当前联网连接池的属主。<b>改代理时原地换池，不换服务对象</b>：
+    /// 页面在构造函数里缓存了 <see cref="SteamWorkshop"/> / <see cref="PdxMods"/> 等实例，
+    /// 换对象会让这些引用指向已释放的 HttpClient（实测 <c>ObjectDisposedException</c>）。
+    /// </summary>
+    private static NetworkLink? _networkLink;
 
     public static void Initialize(
         IFileSystem fileSystem,
@@ -136,7 +140,7 @@ public static class AppServices
         IGamePatchService gamePatch,
         AppSettingsStore settingsStore,
         IReadOnlyList<GameInstallation> games,
-        IDisposable? networkLifetime = null)
+        NetworkLink? networkLink = null)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(logger);
@@ -188,7 +192,7 @@ public static class AppServices
         WorkshopPages = workshopPages;
         GamePatch = gamePatch;
         SettingsStore = settingsStore;
-        _networkLifetime = networkLifetime;
+        _networkLink = networkLink;
         Settings = settingsStore.Load();
         Games = games;
         CurrentGame = SelectDefaultGame(games);
@@ -284,56 +288,12 @@ public static class AppServices
     public static AppResult<bool> FlushSettings() => SettingsStore.Flush();
 
     /// <summary>
-    /// 用新构造的联网服务替换旧的（设置页改了代理地址后调用）。
-    /// <paramref name="lifetime"> 是旧 HttpFetcher 的属主，换下来之后立即 Dispose（会关掉连接池）。
-    /// </summary>
-    public static void ReplaceNetwork(
-        IMetadataClient metadata,
-        IAssetDownloader assets,
-        IModThumbnailService modThumbnails,
-        IThemeResolver themeResolver,
-        IDlcDescriptionService dlcDescriptions,
-        INewsFeedService newsFeed,
-        PdxAccountClient accountClient,
-        PdxModsClient pdxMods,
-        SteamWorkshopClient steamWorkshop,
-        WorkshopInfoCache workshopInfo,
-        WorkshopPageCache workshopPages,
-        IDisposable? lifetime)
-    {
-        ArgumentNullException.ThrowIfNull(metadata);
-        ArgumentNullException.ThrowIfNull(assets);
-        ArgumentNullException.ThrowIfNull(modThumbnails);
-        ArgumentNullException.ThrowIfNull(themeResolver);
-        ArgumentNullException.ThrowIfNull(dlcDescriptions);
-        ArgumentNullException.ThrowIfNull(newsFeed);
-        ArgumentNullException.ThrowIfNull(accountClient);
-        ArgumentNullException.ThrowIfNull(pdxMods);
-        ArgumentNullException.ThrowIfNull(steamWorkshop);
-        ArgumentNullException.ThrowIfNull(workshopInfo);
-        ArgumentNullException.ThrowIfNull(workshopPages);
-
-        Metadata = metadata;
-        Assets = assets;
-        ModThumbnails = modThumbnails;
-        ThemeResolver = themeResolver;
-        DlcDescriptions = dlcDescriptions;
-        NewsFeed = newsFeed;
-        PdxMods = pdxMods;
-        SteamWorkshop = steamWorkshop;
-        WorkshopInfo = workshopInfo;
-        WorkshopPages = workshopPages;
-
-        // 会话保留在 AccountService 里，只换掉底层 HTTP 客户端（新代理）。
-        Account.ReplaceClient(accountClient);
-
-        var previous = Interlocked.Exchange(ref _networkLifetime, lifetime);
-        previous?.Dispose();
-    }
-
-    /// <summary>
-    /// 按当前 <see cref="Settings"/> 里的代理设置重建联网服务。
-    /// 失败只记日志、保留旧实例：设置页要能把失败原因显示出来，不能让异常冒到 UI 线程。
+    /// 按当前 <see cref="Settings"/> 里的代理设置重建联网连接池（不换服务对象）。
+    /// <para>
+    /// 只调用两条连接的 <c>UseProxy</c>：客户端实例保持不变，页面构造函数里缓存的引用继续有效；
+    /// 旧连接池进退休队列延迟释放，在途请求不会被打断。
+    /// </para>
+    /// 失败只记日志、保留旧连接池：设置页要能把失败原因显示出来，不能让异常冒到 UI 线程。
     /// </summary>
     /// <returns>结果里只有原因码与细节，界面文案由调用方按语言取（见 <see cref="NetworkRebuildResult"/>）。</returns>
     public static NetworkRebuildResult TryRebuildNetworkServices()
@@ -343,30 +303,25 @@ public static class AppServices
             return NetworkRebuildResult.NotReady;
         }
 
+        if (_networkLink is null)
+        {
+            // 装配时没交连接池属主（只有测试/特殊启动会这样），无从换起。
+            Logger.Warn("联网服务尚未登记连接池属主，无法按代理设置重建");
+            return NetworkRebuildResult.NotReady;
+        }
+
         try
         {
-            var services = NetworkComposition.Create(FileSystem, Logger, Clock, Settings);
-            ReplaceNetwork(
-                services.Metadata,
-                services.Assets,
-                services.ModThumbnails,
-                services.Themes,
-                services.Descriptions,
-                services.NewsFeed,
-                services.Account,
-                services.PdxMods,
-                services.SteamWorkshop,
-                services.WorkshopInfo,
-                services.WorkshopPages,
-                new DisposableGroup(services.Http, services.PdxHttp));
-            Logger.Info("已按新代理设置重建联网服务");
+            var proxy = ProxyResolver.Resolve(Settings, Logger);
+            _networkLink.Http.UseProxy(proxy);
+            _networkLink.PdxHttp.UseProxy(proxy);
+            Logger.Info("已按新代理设置重建联网连接池");
             return NetworkRebuildResult.Ok;
         }
         catch (Exception ex)
         {
-            // 重建中途抛异常时，已经构造出来的 HttpFetcher 归还不了（Create 内部的局部变量），
-            // 旧实例仍然有效，只是会占着一个连接池，直到进程退出。
-            Logger.Error("按新代理设置重建联网服务失败，继续沿用旧链路", ex);
+            // 换池失败时旧连接池仍在用，功能不受影响，只是代理改动没生效。
+            Logger.Error("按新代理设置重建联网连接池失败，继续沿用旧连接池", ex);
             return NetworkRebuildResult.Failed(ex.Message);
         }
     }

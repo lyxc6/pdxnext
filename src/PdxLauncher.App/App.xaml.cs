@@ -85,7 +85,7 @@ public partial class App : Application
         var settings = settingsStore.Load();
 
         // 联网链路（HttpFetcher → 元数据 / 素材 / 主题 / DLC 简介）集中在 NetworkComposition，
-        // 设置页改代理后可以整条重建（见 AppServices.TryRebuildNetworkServices）。
+        // 设置页改代理后只换连接池、不换服务对象（见 AppServices.TryRebuildNetworkServices）。
         var network = NetworkComposition.Create(fileSystem, logger, clock, settings);
 
         var gameCatalog = new GameCatalog(fileSystem, logger);
@@ -150,7 +150,7 @@ public partial class App : Application
             gamePatch,
             settingsStore,
             Array.Empty<GameInstallation>(),
-            new DisposableGroup(network.Http, network.PdxHttp));
+            new NetworkLink(network.Http, network.PdxHttp));
 
         logger.Info("服务装配完成");
 

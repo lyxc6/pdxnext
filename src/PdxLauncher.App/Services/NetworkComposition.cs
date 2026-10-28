@@ -1,4 +1,4 @@
-namespace PdxLauncher.App.Services;
+﻿namespace PdxLauncher.App.Services;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Accounts;
@@ -103,22 +103,34 @@ internal static class NetworkComposition
 }
 
 /// <summary>
-/// 把多个 <see cref="IDisposable"/> 合成一个：代理重建时一次性释放旧链路里的
-/// <see cref="HttpFetcher"/> 与 <see cref="PdxHttpTransport"/>（各自持有连接池）。
+/// 两条连接池的属主（普通 HTTP 与 PDX 传输）。
+/// <para>
+/// 只换连接池、不换服务对象：设置页改代理时调用 <see cref="HttpFetcher.UseProxy"/> /
+/// <see cref="PdxHttpTransport.UseProxy"/> 原地换池。页面在构造函数里缓存了
+/// <see cref="SteamWorkshopClient"/> / <see cref="PdxModsClient"/> 等对象，换对象会让这些引用
+/// 指向已释放的 HttpClient（实测报 <c>ObjectDisposedException: Cannot access a disposed object</c>）。
+/// </para>
 /// </summary>
-internal sealed class DisposableGroup : IDisposable
+public sealed class NetworkLink : IDisposable
 {
-    private readonly IDisposable[] _items;
-
-    internal DisposableGroup(params IDisposable[] items)
+    public NetworkLink(HttpFetcher http, PdxHttpTransport pdxHttp)
     {
-        ArgumentNullException.ThrowIfNull(items);
-        _items = items;
+        ArgumentNullException.ThrowIfNull(http);
+        ArgumentNullException.ThrowIfNull(pdxHttp);
+
+        Http = http;
+        PdxHttp = pdxHttp;
     }
+
+    /// <summary>普通 HTTP 连接池（Steam 工坊、素材、元数据、新闻等共用）。</summary>
+    public HttpFetcher Http { get; }
+
+    /// <summary>PDX 平台专用连接池（登录、Mods 搜索/详情）。</summary>
+    public PdxHttpTransport PdxHttp { get; }
 
     public void Dispose()
     {
-        foreach (var item in _items)
+        foreach (var item in new IDisposable[] { Http, PdxHttp })
         {
             try
             {
@@ -126,7 +138,7 @@ internal sealed class DisposableGroup : IDisposable
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                // 释放连接池失败不该影响重建流程。
+                // 释放连接池失败不该影响退出流程。
             }
         }
     }

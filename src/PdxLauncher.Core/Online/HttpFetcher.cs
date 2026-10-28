@@ -7,6 +7,11 @@ using PdxLauncher.Core.Abstractions;
 /// <summary>
 /// 基于 SocketsHttpHandler 的 HTTP 实现，不引用任何 NuGet 包。
 /// 下载用 ResponseHeadersRead 流式读取，所以慢速代理（实测 ~10 KB/s）不会因整体超时被截断。
+/// <para>
+/// 代理可以在运行期原地更换（<see cref="UseProxy"/>）：只换底层 <see cref="HttpClient"/> 与连接池，
+/// 本对象身份不变。这是故意的——页面在构造函数里拿到 <see cref="IHttpFetcher"/> 之后会长期持有，
+/// 换对象等于把它们的引用变成指向已释放连接池的僵尸。
+/// </para>
 /// </summary>
 public sealed class HttpFetcher : IHttpFetcher, IDisposable
 {
@@ -28,36 +33,56 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
     /// <summary>与官方启动器一致的版本头值。</summary>
     public const string LauncherVersionHeaderValue = "1.0";
 
-    private readonly HttpClient _client;
+    /// <summary>
+    /// 换代理时最多保留几个已退休的连接池。在途请求仍握着旧 client，
+    /// 立刻 Dispose 会把这些请求打断（正是本轮要修的故障形态），所以延迟释放；
+    /// 但不能无限堆积，超过上限就从最老的开始真释放。
+    /// </summary>
+    private const int MaxRetiredClients = 2;
+
+    private readonly IAppLogger _logger;
+
+    private readonly TimeSpan _totalTimeout;
+
+    /// <summary>已换下来、等下次换池或 Dispose 时释放的连接池。</summary>
+    private readonly List<HttpClient> _retired = new();
+
+    private readonly object _retireGate = new();
+
+    /// <summary>当前连接池；由 <see cref="UseProxy"/> 原子替换，读侧一律 <c>Volatile.Read</c>。</summary>
+    private HttpClient _client;
 
     public HttpFetcher(IAppLogger logger, IWebProxy? proxy = null, TimeSpan? totalTimeout = null)
     {
         ArgumentNullException.ThrowIfNull(logger);
 
-        // 代理完全由调用方（NetworkComposition / ProxyResolver）决定：
-        // 这里再隐式读环境变量会让「直接连接」模式名不副实。
-        var effectiveProxy = proxy;
-        var handler = new SocketsHttpHandler
-        {
-            AutomaticDecompression =
-                DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
-            ConnectTimeout = ConnectTimeout,
-            Proxy = effectiveProxy,
-            UseProxy = effectiveProxy is not null,
-            AllowAutoRedirect = true,
-            MaxAutomaticRedirections = 5,
-            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-            // 公司/校园网代理常见 407 NTLM 质询：用登录用户的默认凭据应答。
-            // 直连时该属性不生效；代理地址里显式写了 user:pass 的仍以 WebProxy.Credentials 为准。
-            DefaultProxyCredentials = CredentialCache.DefaultCredentials,
-        };
+        _logger = logger;
+        _totalTimeout = totalTimeout ?? DefaultTotalTimeout;
+        _client = BuildClient(proxy, _totalTimeout);
+    }
 
-        _client = new HttpClient(handler, disposeHandler: true)
+    /// <summary>
+    /// 按新代理重建连接池，本对象身份保持不变（页面里缓存的引用继续有效）。
+    /// 旧连接池进退休队列延迟释放，避免打断正在跑的请求。
+    /// </summary>
+    /// <param name="proxy">新代理；null 表示直连。</param>
+    /// <param name="totalTimeout">整请求超时；null 沿用上一次的超时设置。</param>
+    public void UseProxy(IWebProxy? proxy, TimeSpan? totalTimeout = null)
+    {
+        var timeout = totalTimeout ?? _totalTimeout;
+        var next = BuildClient(proxy, timeout);
+        var previous = Interlocked.Exchange(ref _client, next);
+        if (previous is not null)
         {
-            Timeout = totalTimeout ?? DefaultTotalTimeout,
-        };
-        _client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", UserAgent);
-        _client.DefaultRequestHeaders.TryAddWithoutValidation(LauncherVersionHeaderName, LauncherVersionHeaderValue);
+            Retire(previous);
+        }
+
+        _logger.Info(
+            "HTTP 连接池已重建（"
+            + (proxy is null ? "直连" : "经代理")
+            + "，整请求超时 "
+            + (int)timeout.TotalSeconds
+            + " 秒）");
     }
 
     public async Task<Stream> GetAsync(Uri uri, CancellationToken cancellationToken)
@@ -65,7 +90,7 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
         ArgumentNullException.ThrowIfNull(uri);
         EnsureAllowed(uri);
 
-        var response = await _client
+        var response = await Volatile.Read(ref _client)
             .GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
             .ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
@@ -94,7 +119,9 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
         EnsureAllowed(uri);
 
         using var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
-        using var response = await _client.PostAsync(uri, content, cancellationToken).ConfigureAwait(false);
+        using var response = await Volatile.Read(ref _client)
+            .PostAsync(uri, content, cancellationToken)
+            .ConfigureAwait(false);
         var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
@@ -111,7 +138,9 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
         EnsureAllowed(uri);
 
         using var content = new StringContent(formBody, Encoding.UTF8, "application/x-www-form-urlencoded");
-        using var response = await _client.PostAsync(uri, content, cancellationToken).ConfigureAwait(false);
+        using var response = await Volatile.Read(ref _client)
+            .PostAsync(uri, content, cancellationToken)
+            .ConfigureAwait(false);
         var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
@@ -135,5 +164,72 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
         }
     }
 
-    public void Dispose() => _client.Dispose();
+    /// <summary>
+    /// 按代理与超时装配一个连接池。构造与 <see cref="UseProxy"/> 共用，
+    /// 保证换池前后行为一致（代理凭据、解压、重定向、连接寿命都一样）。
+    /// </summary>
+    private static HttpClient BuildClient(IWebProxy? proxy, TimeSpan totalTimeout)
+    {
+        // 代理完全由调用方（NetworkComposition / ProxyResolver）决定：
+        // 这里再隐式读环境变量会让「直接连接」模式名不副实。
+        var effectiveProxy = proxy;
+        var handler = new SocketsHttpHandler
+        {
+            AutomaticDecompression =
+                DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
+            ConnectTimeout = ConnectTimeout,
+            Proxy = effectiveProxy,
+            UseProxy = effectiveProxy is not null,
+            AllowAutoRedirect = true,
+            MaxAutomaticRedirections = 5,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+            // 公司/校园网代理常见 407 NTLM 质询：用登录用户的默认凭据应答。
+            // 直连时该属性不生效；代理地址里显式写了 user:pass 的仍以 WebProxy.Credentials 为准。
+            DefaultProxyCredentials = CredentialCache.DefaultCredentials,
+        };
+
+        var client = new HttpClient(handler, disposeHandler: true)
+        {
+            Timeout = totalTimeout,
+        };
+        client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", UserAgent);
+        client.DefaultRequestHeaders.TryAddWithoutValidation(LauncherVersionHeaderName, LauncherVersionHeaderValue);
+        return client;
+    }
+
+    /// <summary>把换下来的连接池放进退休队列；超上限时释放最老的那个。</summary>
+    private void Retire(HttpClient client)
+    {
+        List<HttpClient> expired;
+        lock (_retireGate)
+        {
+            _retired.Add(client);
+            if (_retired.Count <= MaxRetiredClients)
+            {
+                return;
+            }
+
+            expired = _retired.GetRange(0, _retired.Count - MaxRetiredClients);
+            _retired.RemoveRange(0, expired.Count);
+        }
+
+        foreach (var item in expired)
+        {
+            item.Dispose();
+        }
+    }
+
+    public void Dispose()
+    {
+        Volatile.Read(ref _client).Dispose();
+        lock (_retireGate)
+        {
+            foreach (var item in _retired)
+            {
+                item.Dispose();
+            }
+
+            _retired.Clear();
+        }
+    }
 }
