@@ -159,6 +159,47 @@ public sealed class SteamWorkshopClient
         }
     }
 
+    /// <summary>
+    /// 取创意工坊「物品页」上的补充信息：作者主页、描述里的图片、首屏评论。
+    /// <para>
+    /// 这些字段 <c>GetPublishedFileDetails</c> 都不给，只能读页面；页面改版时解析会失败，
+    /// 此时返回 Fail 让调用方静默降级，绝不影响详情主体。
+    /// </para>
+    /// </summary>
+    /// <param name="publishedFileId">Steam 已发布文件 id。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<AppResult<SteamWorkshopItemPage>> GetItemPageAsync(
+        string publishedFileId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(publishedFileId);
+
+        var uri = new Uri(
+            OnlineHosts.SteamCommunityItemEndpoint,
+            "?id=" + Uri.EscapeDataString(publishedFileId));
+
+        try
+        {
+            await using var stream = await _http.GetAsync(uri, cancellationToken).ConfigureAwait(false);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            var html = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+
+            var parsed = SteamWorkshopItemPageParser.Parse(html);
+            if (parsed is null)
+            {
+                _logger.Warn("Steam 创意工坊物品页结构无法解析: id=" + publishedFileId);
+                return AppResult<SteamWorkshopItemPage>.Fail(ErrorKind.Unsupported, "steam-item-page-parse");
+            }
+
+            return AppResult<SteamWorkshopItemPage>.Ok(parsed);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.Warn("Steam 创意工坊物品页请求失败: id=" + publishedFileId + " " + ex.Message);
+            return AppResult<SteamWorkshopItemPage>.Fail(ErrorKind.Unknown, "steam-item-page-http");
+        }
+    }
+
     /// <summary>探测某款游戏有没有 Steam 创意工坊（结果按 appId 缓存）。</summary>
     /// <param name="appId">Steam appid。</param>
     /// <param name="cancellationToken">取消令牌。</param>
@@ -307,12 +348,37 @@ public sealed class SteamWorkshopClient
                 FileSizeBytes: LongOf(item, "file_size"),
                 CreatedUtc: FromUnixSeconds(LongOf(item, "time_created")),
                 UpdatedUtc: FromUnixSeconds(LongOf(item, "time_updated")),
-                Filename: StringOf(item, "filename"));
+                Filename: StringOf(item, "filename"),
+                CreatorSteamId: StringOf(item, "creator"),
+                Tags: TagsOf(item),
+                Views: LongOf(item, "views"),
+                LifetimeSubscriptions: LongOf(item, "lifetime_subscriptions"));
         }
         catch (JsonException)
         {
             return null;
         }
+    }
+
+    /// <summary>取 <c>tags[].tag</c>（Steam 返回的是对象数组，旧代码直接丢弃了）。</summary>
+    private static IReadOnlyList<string> TagsOf(JsonObject item)
+    {
+        if (item["tags"] is not JsonArray tags)
+        {
+            return [];
+        }
+
+        var values = new List<string>(tags.Count);
+        foreach (var entry in tags)
+        {
+            if (entry?["tag"] is JsonValue value && value.TryGetValue<string>(out var tag)
+                && !string.IsNullOrWhiteSpace(tag))
+            {
+                values.Add(tag.Trim());
+            }
+        }
+
+        return values;
     }
 
     private static bool SupportsDays(SteamWorkshopSort sort) =>

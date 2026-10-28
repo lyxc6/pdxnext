@@ -589,12 +589,27 @@ public sealed partial class Localizer
         ["shell.support.managedByGame"] = "该游戏的模组与 DLC 由游戏本体管理（游戏内 MOD 菜单 / Steam 创意工坊），本启动器不接管",
         ["shell.version"] = "版本 {0}",
         ["workshop.author"] = "作者 {0}",
+        ["workshop.commentsCount"] = "共 {0} 条评论",
+        ["workshop.commentsMore"] = "显示前 {0} 条，共 {1} 条",
         ["workshop.countText"] = "{0} 个结果",
         ["workshop.coverProgress"] = "封面 {0}/{1}",
+        ["workshop.dependencyDisabled"] = "已安装未启用",
+        ["workshop.dependencyEnabled"] = "已启用",
+        ["workshop.dependencyMissing"] = "未安装",
+        ["workshop.dependencySummaryDisabled"] = "共 {0} 个依赖，{1} 个已安装但未启用",
+        ["workshop.dependencySummaryMissing"] = "共 {0} 个依赖，{1} 个未安装",
+        ["workshop.dependencySummaryOk"] = "共 {0} 个依赖，全部就绪",
+        ["workshop.dependencyUnknown"] = "未知",
+        ["workshop.dependencyVersion"] = "需要版本 {0}",
+        ["workshop.detailAuthorHint"] = "作者主页",
         ["workshop.detailBack"] = "返回创意工坊",
         ["workshop.detailCached"] = "网络不可用，显示上次缓存的详情",
         ["workshop.detailChangelog"] = "更新日志",
+        ["workshop.detailCloseViewer"] = "关闭大图",
+        ["workshop.detailComments"] = "讨论",
+        ["workshop.detailCommentsAll"] = "在 Steam 上查看全部讨论",
         ["workshop.detailCreated"] = "发布于 {0}",
+        ["workshop.detailDependencies"] = "依赖的 mod",
         ["workshop.detailDescription"] = "简介",
         ["workshop.detailErrorUnknown"] = "原因未知",
         ["workshop.detailFailed"] = "读取详情失败：{0}",
@@ -603,12 +618,14 @@ public sealed partial class Localizer
         ["workshop.detailInstalled"] = "已订阅",
         ["workshop.detailLinks"] = "相关链接",
         ["workshop.detailLoading"] = "正在读取详情…",
+        ["workshop.detailNoComments"] = "还没有人留言",
         ["workshop.detailNoDescription"] = "作者没有填写简介",
         ["workshop.detailRetry"] = "重试",
         ["workshop.detailScreenshots"] = "截图 {0} 张",
         ["workshop.detailScreenshotsLoading"] = "正在下载截图…",
         ["workshop.detailScreenshotsTitle"] = "截图",
         ["workshop.detailTags"] = "标签",
+        ["workshop.detailViewImage"] = "查看大图",
         ["workshop.detailViews"] = "浏览 {0}",
         ["workshop.emptyHint"] = "这个游戏还没有创意工坊内容",
         ["workshop.emptyName"] = "空列表提示",
@@ -1241,12 +1258,27 @@ public sealed partial class Localizer
         ["shell.support.managedByGame"] = "This game manages its own mods and DLC (in-game MOD menu / Steam Workshop); this launcher does not",
         ["shell.version"] = "Version {0}",
         ["workshop.author"] = "by {0}",
+        ["workshop.commentsCount"] = "{0} comments",
+        ["workshop.commentsMore"] = "Showing the first {0} of {1}",
         ["workshop.countText"] = "{0} results",
         ["workshop.coverProgress"] = "Covers {0}/{1}",
+        ["workshop.dependencyDisabled"] = "Installed, disabled",
+        ["workshop.dependencyEnabled"] = "Enabled",
+        ["workshop.dependencyMissing"] = "Not installed",
+        ["workshop.dependencySummaryDisabled"] = "{0} dependencies, {1} installed but disabled",
+        ["workshop.dependencySummaryMissing"] = "{0} dependencies, {1} missing",
+        ["workshop.dependencySummaryOk"] = "All {0} dependencies are ready",
+        ["workshop.dependencyUnknown"] = "Unknown",
+        ["workshop.dependencyVersion"] = "Version {0} required",
+        ["workshop.detailAuthorHint"] = "Author profile",
         ["workshop.detailBack"] = "Back to workshop",
         ["workshop.detailCached"] = "The network is unavailable; showing the cached details",
         ["workshop.detailChangelog"] = "Changelog",
+        ["workshop.detailCloseViewer"] = "Close image",
+        ["workshop.detailComments"] = "Discussion",
+        ["workshop.detailCommentsAll"] = "See all discussions on Steam",
         ["workshop.detailCreated"] = "Published {0}",
+        ["workshop.detailDependencies"] = "Required mods",
         ["workshop.detailDescription"] = "Description",
         ["workshop.detailErrorUnknown"] = "unknown reason",
         ["workshop.detailFailed"] = "Failed to load details: {0}",
@@ -1255,12 +1287,14 @@ public sealed partial class Localizer
         ["workshop.detailInstalled"] = "Subscribed",
         ["workshop.detailLinks"] = "Links",
         ["workshop.detailLoading"] = "Loading details…",
+        ["workshop.detailNoComments"] = "No comments yet",
         ["workshop.detailNoDescription"] = "The author left no description",
         ["workshop.detailRetry"] = "Retry",
         ["workshop.detailScreenshots"] = "{0} screenshots",
         ["workshop.detailScreenshotsLoading"] = "Downloading screenshots…",
         ["workshop.detailScreenshotsTitle"] = "Screenshots",
         ["workshop.detailTags"] = "Tags",
+        ["workshop.detailViewImage"] = "View image",
         ["workshop.detailViews"] = "{0} views",
         ["workshop.emptyHint"] = "This game has no workshop content yet",
         ["workshop.emptyName"] = "Empty list hint",
@@ -1893,12 +1927,27 @@ public sealed partial class Localizer
         ("shell.support.managedByGame", "ShellSupportManagedByGame"),
         ("shell.version", "ShellVersion"),
         ("workshop.author", "WorkshopAuthor"),
+        ("workshop.commentsCount", "WorkshopCommentsCount"),
+        ("workshop.commentsMore", "WorkshopCommentsMore"),
         ("workshop.countText", "WorkshopCountText"),
         ("workshop.coverProgress", "WorkshopCoverProgress"),
+        ("workshop.dependencyDisabled", "WorkshopDependencyDisabled"),
+        ("workshop.dependencyEnabled", "WorkshopDependencyEnabled"),
+        ("workshop.dependencyMissing", "WorkshopDependencyMissing"),
+        ("workshop.dependencySummaryDisabled", "WorkshopDependencySummaryDisabled"),
+        ("workshop.dependencySummaryMissing", "WorkshopDependencySummaryMissing"),
+        ("workshop.dependencySummaryOk", "WorkshopDependencySummaryOk"),
+        ("workshop.dependencyUnknown", "WorkshopDependencyUnknown"),
+        ("workshop.dependencyVersion", "WorkshopDependencyVersion"),
+        ("workshop.detailAuthorHint", "WorkshopDetailAuthorHint"),
         ("workshop.detailBack", "WorkshopDetailBack"),
         ("workshop.detailCached", "WorkshopDetailCached"),
         ("workshop.detailChangelog", "WorkshopDetailChangelog"),
+        ("workshop.detailCloseViewer", "WorkshopDetailCloseViewer"),
+        ("workshop.detailComments", "WorkshopDetailComments"),
+        ("workshop.detailCommentsAll", "WorkshopDetailCommentsAll"),
         ("workshop.detailCreated", "WorkshopDetailCreated"),
+        ("workshop.detailDependencies", "WorkshopDetailDependencies"),
         ("workshop.detailDescription", "WorkshopDetailDescription"),
         ("workshop.detailErrorUnknown", "WorkshopDetailErrorUnknown"),
         ("workshop.detailFailed", "WorkshopDetailFailed"),
@@ -1907,12 +1956,14 @@ public sealed partial class Localizer
         ("workshop.detailInstalled", "WorkshopDetailInstalled"),
         ("workshop.detailLinks", "WorkshopDetailLinks"),
         ("workshop.detailLoading", "WorkshopDetailLoading"),
+        ("workshop.detailNoComments", "WorkshopDetailNoComments"),
         ("workshop.detailNoDescription", "WorkshopDetailNoDescription"),
         ("workshop.detailRetry", "WorkshopDetailRetry"),
         ("workshop.detailScreenshots", "WorkshopDetailScreenshots"),
         ("workshop.detailScreenshotsLoading", "WorkshopDetailScreenshotsLoading"),
         ("workshop.detailScreenshotsTitle", "WorkshopDetailScreenshotsTitle"),
         ("workshop.detailTags", "WorkshopDetailTags"),
+        ("workshop.detailViewImage", "WorkshopDetailViewImage"),
         ("workshop.detailViews", "WorkshopDetailViews"),
         ("workshop.emptyHint", "WorkshopEmptyHint"),
         ("workshop.emptyName", "WorkshopEmptyName"),
@@ -2543,12 +2594,27 @@ public sealed partial class Localizer
     public string ShellSupportManagedByGame => Format("shell.support.managedByGame");
     public string ShellVersion => Format("shell.version");
     public string WorkshopAuthor => Format("workshop.author");
+    public string WorkshopCommentsCount => Format("workshop.commentsCount");
+    public string WorkshopCommentsMore => Format("workshop.commentsMore");
     public string WorkshopCountText => Format("workshop.countText");
     public string WorkshopCoverProgress => Format("workshop.coverProgress");
+    public string WorkshopDependencyDisabled => Format("workshop.dependencyDisabled");
+    public string WorkshopDependencyEnabled => Format("workshop.dependencyEnabled");
+    public string WorkshopDependencyMissing => Format("workshop.dependencyMissing");
+    public string WorkshopDependencySummaryDisabled => Format("workshop.dependencySummaryDisabled");
+    public string WorkshopDependencySummaryMissing => Format("workshop.dependencySummaryMissing");
+    public string WorkshopDependencySummaryOk => Format("workshop.dependencySummaryOk");
+    public string WorkshopDependencyUnknown => Format("workshop.dependencyUnknown");
+    public string WorkshopDependencyVersion => Format("workshop.dependencyVersion");
+    public string WorkshopDetailAuthorHint => Format("workshop.detailAuthorHint");
     public string WorkshopDetailBack => Format("workshop.detailBack");
     public string WorkshopDetailCached => Format("workshop.detailCached");
     public string WorkshopDetailChangelog => Format("workshop.detailChangelog");
+    public string WorkshopDetailCloseViewer => Format("workshop.detailCloseViewer");
+    public string WorkshopDetailComments => Format("workshop.detailComments");
+    public string WorkshopDetailCommentsAll => Format("workshop.detailCommentsAll");
     public string WorkshopDetailCreated => Format("workshop.detailCreated");
+    public string WorkshopDetailDependencies => Format("workshop.detailDependencies");
     public string WorkshopDetailDescription => Format("workshop.detailDescription");
     public string WorkshopDetailErrorUnknown => Format("workshop.detailErrorUnknown");
     public string WorkshopDetailFailed => Format("workshop.detailFailed");
@@ -2557,12 +2623,14 @@ public sealed partial class Localizer
     public string WorkshopDetailInstalled => Format("workshop.detailInstalled");
     public string WorkshopDetailLinks => Format("workshop.detailLinks");
     public string WorkshopDetailLoading => Format("workshop.detailLoading");
+    public string WorkshopDetailNoComments => Format("workshop.detailNoComments");
     public string WorkshopDetailNoDescription => Format("workshop.detailNoDescription");
     public string WorkshopDetailRetry => Format("workshop.detailRetry");
     public string WorkshopDetailScreenshots => Format("workshop.detailScreenshots");
     public string WorkshopDetailScreenshotsLoading => Format("workshop.detailScreenshotsLoading");
     public string WorkshopDetailScreenshotsTitle => Format("workshop.detailScreenshotsTitle");
     public string WorkshopDetailTags => Format("workshop.detailTags");
+    public string WorkshopDetailViewImage => Format("workshop.detailViewImage");
     public string WorkshopDetailViews => Format("workshop.detailViews");
     public string WorkshopEmptyHint => Format("workshop.emptyHint");
     public string WorkshopEmptyName => Format("workshop.emptyName");
@@ -3196,12 +3264,27 @@ internal static class Keys
     public const string ShellSupportManagedByGame = "shell.support.managedByGame";
     public const string ShellVersion = "shell.version";
     public const string WorkshopAuthor = "workshop.author";
+    public const string WorkshopCommentsCount = "workshop.commentsCount";
+    public const string WorkshopCommentsMore = "workshop.commentsMore";
     public const string WorkshopCountText = "workshop.countText";
     public const string WorkshopCoverProgress = "workshop.coverProgress";
+    public const string WorkshopDependencyDisabled = "workshop.dependencyDisabled";
+    public const string WorkshopDependencyEnabled = "workshop.dependencyEnabled";
+    public const string WorkshopDependencyMissing = "workshop.dependencyMissing";
+    public const string WorkshopDependencySummaryDisabled = "workshop.dependencySummaryDisabled";
+    public const string WorkshopDependencySummaryMissing = "workshop.dependencySummaryMissing";
+    public const string WorkshopDependencySummaryOk = "workshop.dependencySummaryOk";
+    public const string WorkshopDependencyUnknown = "workshop.dependencyUnknown";
+    public const string WorkshopDependencyVersion = "workshop.dependencyVersion";
+    public const string WorkshopDetailAuthorHint = "workshop.detailAuthorHint";
     public const string WorkshopDetailBack = "workshop.detailBack";
     public const string WorkshopDetailCached = "workshop.detailCached";
     public const string WorkshopDetailChangelog = "workshop.detailChangelog";
+    public const string WorkshopDetailCloseViewer = "workshop.detailCloseViewer";
+    public const string WorkshopDetailComments = "workshop.detailComments";
+    public const string WorkshopDetailCommentsAll = "workshop.detailCommentsAll";
     public const string WorkshopDetailCreated = "workshop.detailCreated";
+    public const string WorkshopDetailDependencies = "workshop.detailDependencies";
     public const string WorkshopDetailDescription = "workshop.detailDescription";
     public const string WorkshopDetailErrorUnknown = "workshop.detailErrorUnknown";
     public const string WorkshopDetailFailed = "workshop.detailFailed";
@@ -3210,12 +3293,14 @@ internal static class Keys
     public const string WorkshopDetailInstalled = "workshop.detailInstalled";
     public const string WorkshopDetailLinks = "workshop.detailLinks";
     public const string WorkshopDetailLoading = "workshop.detailLoading";
+    public const string WorkshopDetailNoComments = "workshop.detailNoComments";
     public const string WorkshopDetailNoDescription = "workshop.detailNoDescription";
     public const string WorkshopDetailRetry = "workshop.detailRetry";
     public const string WorkshopDetailScreenshots = "workshop.detailScreenshots";
     public const string WorkshopDetailScreenshotsLoading = "workshop.detailScreenshotsLoading";
     public const string WorkshopDetailScreenshotsTitle = "workshop.detailScreenshotsTitle";
     public const string WorkshopDetailTags = "workshop.detailTags";
+    public const string WorkshopDetailViewImage = "workshop.detailViewImage";
     public const string WorkshopDetailViews = "workshop.detailViews";
     public const string WorkshopEmptyHint = "workshop.emptyHint";
     public const string WorkshopEmptyName = "workshop.emptyName";

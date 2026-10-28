@@ -58,6 +58,10 @@ public sealed record PdxModsSummary(
 /// 与 <paramref name="ExternalLinks"/> 一一对应的类型标签（原样保留，空串表示缺失）。
 /// 服务端的 <c>displayName</c> 经常为 null，界面要给链接起名时需要这个类型。
 /// </param>
+/// <param name="Requirements">
+/// 前置依赖（服务端 <c>requirements[]</c>）。<c>productType</c> 为 <c>MOD</c> 时是另一个 mod，
+/// 其它值（如 DLC）原样保留给界面显示。空列表表示无依赖。
+/// </param>
 public sealed record PdxModsDetail(
     PdxModsSummary Summary,
     string LongDescription,
@@ -68,7 +72,25 @@ public sealed record PdxModsDetail(
     long? SizeBytes,
     bool IsInstalled,
     IReadOnlyList<string> ScreenshotThumbnailUrls,
-    IReadOnlyList<string> ExternalLinkTypes);
+    IReadOnlyList<string> ExternalLinkTypes,
+    IReadOnlyList<PdxModRequirement> Requirements);
+
+/// <summary>mod 详情里的一条前置依赖（<c>modDetail.requirements[]</c>）。</summary>
+/// <param name="ProductType">产物类型：<c>MOD</c> / DLC 等。</param>
+/// <param name="Id">依赖目标的 id（MOD 时就是 modId）。</param>
+/// <param name="Name">依赖目标显示名。</param>
+/// <param name="Version">服务端记录的版本号（可能为 null）。</param>
+/// <param name="DependencyVersion">要求依赖方的版本（可能为 null）。</param>
+public sealed record PdxModRequirement(
+    string ProductType,
+    string Id,
+    string Name,
+    int? Version,
+    string? DependencyVersion)
+{
+    /// <summary>是不是另一个 mod（而不是 DLC/工具）。</summary>
+    public bool IsMod => string.Equals(ProductType, "MOD", StringComparison.OrdinalIgnoreCase);
+}
 
 /// <summary>mod 详情里的一个外部链接。</summary>
 /// <param name="Url">绝对地址。</param>

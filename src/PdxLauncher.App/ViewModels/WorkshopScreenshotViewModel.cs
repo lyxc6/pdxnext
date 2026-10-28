@@ -2,11 +2,13 @@ namespace PdxLauncher.App.ViewModels;
 
 using CommunityToolkit.Mvvm.ComponentModel;
 
+using PdxLauncher.App.Localization;
+
 /// <summary>
 /// 工坊详情里的一张截图：先占位，下载完成把本地路径填进 <see cref="Path"/>，
 /// 界面靠 <see cref="HasPath"/> 在占位图案与真图之间切换。
 /// </summary>
-public sealed partial class WorkshopScreenshotViewModel : ObservableObject
+public sealed partial class WorkshopScreenshotViewModel : LocalizedObservableObject
 {
     /// <summary>构造。</summary>
     /// <param name="index">在截图列表里的序号（决定缓存文件名与 AutomationId）。</param>

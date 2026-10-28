@@ -227,6 +227,8 @@ public sealed class PdxModsClient
             var installed = detail["enabled"] is JsonValue enabledValue
                 && enabledValue.TryGetValue<bool>(out var enabled) && enabled;
 
+            var requirements = ParseRequirements(detail);
+
             return AppResult<PdxModsDetail>.Ok(new PdxModsDetail(
                 summary,
                 LongDescription: GetString(detail, "longDescription"),
@@ -237,13 +239,55 @@ public sealed class PdxModsClient
                 SizeBytes: size,
                 IsInstalled: installed,
                 ScreenshotThumbnailUrls: screenshotThumbnails,
-                ExternalLinkTypes: linkTypes));
+                ExternalLinkTypes: linkTypes,
+                Requirements: requirements));
         }
         catch (JsonException ex)
         {
             _logger.Warn("PDX Mods 详情响应解析失败: " + ex.Message);
             return AppResult<PdxModsDetail>.Fail(ErrorKind.Io, "pdx-mods-detail:bad-json");
         }
+    }
+
+    /// <summary>解析 <c>modDetail.requirements[]</c>（前置依赖）；缺 id 的项直接跳过。</summary>
+    private static IReadOnlyList<PdxModRequirement> ParseRequirements(JsonObject detail)
+    {
+        if (detail["requirements"] is not JsonArray array)
+        {
+            return [];
+        }
+
+        var list = new List<PdxModRequirement>(array.Count);
+        foreach (var entry in array)
+        {
+            if (entry is not JsonObject requirement)
+            {
+                continue;
+            }
+
+            var id = GetString(requirement, "id");
+            if (id.Length == 0)
+            {
+                continue;
+            }
+
+            int? version = int.TryParse(
+                GetString(requirement, "version"),
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var parsedVersion)
+                ? parsedVersion
+                : null;
+
+            list.Add(new PdxModRequirement(
+                ProductType: GetString(requirement, "productType"),
+                Id: id,
+                Name: GetString(requirement, "name"),
+                Version: version,
+                DependencyVersion: NullIfEmpty(GetString(requirement, "dependencyVersion"))));
+        }
+
+        return list;
     }
 
     /// <summary>发请求；网络层故障统一折算成 0（调用方据此给 <see cref="ErrorKind.Io"/>）。</summary>

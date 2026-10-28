@@ -42,6 +42,9 @@ public static class OnlineHosts
     /// <summary>Steam 创意工坊列表页（HTML + <c>valve-ssr-data</c>）。</summary>
     public static Uri SteamWorkshopBrowseEndpoint { get; } = new("https://steamcommunity.com/workshop/browse/");
 
+    /// <summary>Steam 创意工坊物品页（作者主页、描述配图与评论区都在这份 HTML 里）。</summary>
+    public static Uri SteamCommunityItemEndpoint { get; } = new("https://steamcommunity.com/sharedfiles/filedetails/");
+
     /// <summary>Steam 商店 appdetails（<c>filters=categories</c> 用来判定有没有创意工坊）。</summary>
     public static Uri SteamAppDetailsEndpoint { get; } = new("https://store.steampowered.com/api/appdetails");
 

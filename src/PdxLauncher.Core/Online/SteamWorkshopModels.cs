@@ -112,6 +112,10 @@ public sealed record SteamWorkshopPage(
 /// <param name="CreatedUtc">创建时间。</param>
 /// <param name="UpdatedUtc">更新时间。</param>
 /// <param name="Filename">原始文件名（可能是空串）。</param>
+/// <param name="CreatorSteamId">作者 SteamID64（详情接口本来就返回，之前丢掉了）。</param>
+/// <param name="Tags">标签原文。</param>
+/// <param name="Views">浏览数。</param>
+/// <param name="LifetimeSubscriptions">历史订阅总数。</param>
 public sealed record SteamWorkshopItemDetail(
     string PublishedFileId,
     string Title,
@@ -120,4 +124,47 @@ public sealed record SteamWorkshopItemDetail(
     long FileSizeBytes,
     DateTimeOffset CreatedUtc,
     DateTimeOffset UpdatedUtc,
-    string? Filename);
+    string? Filename,
+    string? CreatorSteamId = null,
+    IReadOnlyList<string>? Tags = null,
+    long Views = 0,
+    long LifetimeSubscriptions = 0)
+{
+    /// <summary>标签（非 null，便于界面直接绑定）。</summary>
+    public IReadOnlyList<string> TagList => Tags ?? [];
+
+    /// <summary>作者主页地址；没有 SteamID 时为 null。</summary>
+    public string? CreatorProfileUrl => string.IsNullOrWhiteSpace(CreatorSteamId)
+        ? null
+        : "https://steamcommunity.com/profiles/" + CreatorSteamId;
+}
+
+/// <summary>创意工坊条目页（HTML）解析结果。</summary>
+/// <param name="AuthorName">作者显示名。</param>
+/// <param name="AuthorProfileUrl">作者主页（可能是自定义 /id/ 形式）。</param>
+/// <param name="DescriptionHtml">描述原文（HTML）。</param>
+/// <param name="ImageUrls">描述里内嵌的图片。</param>
+/// <param name="TotalComments">讨论总数（页面上报的 total_count）。</param>
+/// <param name="Comments">首屏评论。</param>
+public sealed record SteamWorkshopItemPage(
+    string? AuthorName,
+    string? AuthorProfileUrl,
+    string? DescriptionHtml,
+    IReadOnlyList<string> ImageUrls,
+    int TotalComments,
+    IReadOnlyList<SteamWorkshopComment> Comments);
+
+/// <summary>一条 Steam 创意工坊评论。</summary>
+/// <param name="Id">评论 id（页面上的 <c>comment_&lt;id&gt;</c>）。</param>
+/// <param name="AuthorName">作者显示名。</param>
+/// <param name="AuthorProfileUrl">作者主页。</param>
+/// <param name="PostedUtc">发表时间。</param>
+/// <param name="TextHtml">正文 HTML。</param>
+/// <param name="TextPlain">正文纯文本（兜底/无障碍）。</param>
+public sealed record SteamWorkshopComment(
+    string Id,
+    string AuthorName,
+    string? AuthorProfileUrl,
+    DateTimeOffset PostedUtc,
+    string TextHtml,
+    string TextPlain);

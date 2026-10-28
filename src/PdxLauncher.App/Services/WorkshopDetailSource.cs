@@ -21,6 +21,7 @@ public sealed class WorkshopDetailSource
     private readonly PdxModsClient _pdx;
     private readonly AccountService _account;
     private readonly WorkshopInfoCache _info;
+    private readonly IPlaySetRepository _playSets;
     private readonly IAppLogger _logger;
 
     /// <summary>构造。</summary>
@@ -28,18 +29,21 @@ public sealed class WorkshopDetailSource
     /// <param name="pdx">PDX Mods 客户端。</param>
     /// <param name="account">账号服务（PDX 详情要带登录态）。</param>
     /// <param name="info">工坊信息缓存。</param>
+    /// <param name="playSets">播放集仓储（依赖检查要读本机 mod 库）。</param>
     /// <param name="logger">日志。</param>
     public WorkshopDetailSource(
         SteamWorkshopClient steam,
         PdxModsClient pdx,
         AccountService account,
         WorkshopInfoCache info,
+        IPlaySetRepository playSets,
         IAppLogger logger)
     {
         _steam = steam;
         _pdx = pdx;
         _account = account;
         _info = info;
+        _playSets = playSets;
         _logger = logger;
     }
 
@@ -104,6 +108,60 @@ public sealed class WorkshopDetailSource
         return result;
     }
 
+    /// <summary>取 Steam 物品页补充信息（作者主页、描述配图、首屏评论）；失败由调用方静默降级。</summary>
+    /// <param name="id">工坊条目 id。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public Task<AppResult<SteamWorkshopItemPage>> GetSteamItemPageAsync(
+        string id,
+        CancellationToken cancellationToken) =>
+        _steam.GetItemPageAsync(id, cancellationToken);
+
+    /// <summary>
+    /// 读本机 mod 库与当前播放集的启用情况，供依赖检查比对。
+    /// <para>任何一步读不到都返回「未知」（两个字段为 null），让界面显示「无法判断」而不是误报缺依赖。</para>
+    /// </summary>
+    /// <param name="game">当前游戏；null 表示没有选中游戏。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<WorkshopLocalMods> LoadLocalModsAsync(
+        GameInstallation? game,
+        CancellationToken cancellationToken)
+    {
+        if (game is null)
+        {
+            return WorkshopLocalMods.Unknown;
+        }
+
+        try
+        {
+            var library = await _playSets.GetModLibraryAsync(game, cancellationToken).ConfigureAwait(true);
+            var active = await _playSets.GetActivePlaySetAsync(game, cancellationToken).ConfigureAwait(true);
+            if (active is null)
+            {
+                return new WorkshopLocalMods(library, new HashSet<Guid>());
+            }
+
+            var mods = await _playSets
+                .GetPlaySetModsAsync(game, active.Id, cancellationToken)
+                .ConfigureAwait(true);
+
+            var enabled = mods
+                .Where(static mod => mod.Enabled)
+                .Select(static mod => mod.ModId)
+                .ToHashSet();
+
+            return new WorkshopLocalMods(library, enabled);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("读取本机 mod 库失败，依赖状态按未知处理: " + ex.Message);
+            return WorkshopLocalMods.Unknown;
+        }
+    }
+
     /// <summary>上次抓到过的详情正文；没有就返回 null（断网兜底用）。</summary>
     /// <param name="source">来源。</param>
     /// <param name="id">工坊条目 id。</param>
@@ -118,4 +176,15 @@ public sealed class WorkshopDetailSource
         _logger.Info("工坊详情使用缓存正文：" + id);
         return cached.DetailText;
     }
+}
+
+/// <summary>本机 mod 库的快照：字段为 null 表示读不到（依赖状态只能显示「未知」）。</summary>
+/// <param name="Installed">已安装的 mod 行。</param>
+/// <param name="Enabled">当前活动播放集里启用中的 mod id。</param>
+public sealed record WorkshopLocalMods(
+    IReadOnlyList<ModLibraryEntry>? Installed,
+    IReadOnlySet<Guid>? Enabled)
+{
+    /// <summary>读不到任何本机信息。</summary>
+    public static WorkshopLocalMods Unknown { get; } = new(null, null);
 }

@@ -3105,3 +3105,57 @@ System.ObjectDisposedException: Cannot access a disposed object. Object name: 'S
 2. 旧池不能立刻 Dispose：`_retired` 队列最多留 2 个，超过再放最老的；否则并发中的请求会炸在读取响应阶段。
 3. 验证时注意 Debug 产物常被运行中的 `PdxLauncher.App` 锁住（`MSB3027/MSB3021`），可只构建
    `tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj` 跑自检，Release 用 `tools/build-app.sh`。
+
+## 0.39 2026-10-28：创意工坊详情页二期（Markdown 简介 / 图片查看 / 依赖检查 / 作者外链 / Steam 评论）
+
+**背景**
+
+详情子页（§0.35 起）此前把 PDX 的 `longDescription` 当纯文本塞进一个 `TextBlock`，`#`、`*`、`-` 原样露出来；
+Steam 侧除了描述什么都没有；图片只有一张封面；作者只是一串文字；从来看不出「这个 mod 还缺哪个前置」。
+这一轮把详情页做成真正能读的页面。
+
+**改法**
+
+1. `src/PdxLauncher.Core/Text/`（新增，纯 `System.*`，可被检查工程链接）：
+   - `MarkdownDocument.cs`：块级/行内 AST（标题、段落、列表项、代码块、引用、分隔线；粗体/斜体/删除线/行内代码/链接/图片/硬换行），
+     `MarkdownDocument.ImageUrls` 去重、`ToPlainText()`。
+   - `MarkdownParser.cs`：手写子集解析器（标题、段落、有序/无序列表含缩进层级、围栏代码块、行内样式、`[t](u)`、`![alt](u)`、`<br>`/`<img>`），
+     `MaxInputLength = 20000` 截断并置 `IsTruncated`；列表层级用 `lastListLevel` 归一化，避免 4 空格缩进跳级。
+   - `HtmlDescriptionParser.cs`：Steam 的 HTML 描述 → 同一套 AST（`<p>`/`<div>`/`<li>`/`<b>`/`<a>`/`<img>`/`<br>`/`<pre>` 等）。
+   - `WorkshopHtml.cs`：老的 BBCode/HTML 洗字逻辑迁到 Core（`WorkshopText.ToPlainText` 就此退役）。
+2. `src/PdxLauncher.Core/Online/SteamWorkshopItemPageParser.cs`（新增）：解析 `steamcommunity.com/sharedfiles/filedetails/?id=<id>`
+   —— 作者名与主页、描述 HTML 与内嵌图片、最多 10 条评论（作者/主页/时间戳/正文）与 `total_count`。
+   这是**唯一**能拿到 Steam 评论的途径（`ISteamRemoteStorage/GetPublishedFileDetails` 不含评论）。
+3. `src/PdxLauncher.Core/Online/SteamWorkshopClient.cs`：新增 `GetItemPageAsync`；`ParseDetail` 补上原先丢掉的
+   `creator`/`tags`/`views`/`lifetime_subscriptions`（`SteamWorkshopItemDetail` 追加 4 个可选参数 + `CreatorProfileUrl`、`TagList`）。
+4. `src/PdxLauncher.Core/Mods/`：`PdxModsClient` 解析 `modDetail.requirements[]` → `PdxModRequirement`；
+   新增 `WorkshopDependencyMatcher`（按注册 id / `SteamId` / 名称匹配本地 `ModLibraryEntry`，注册 id 用数字边界比较，
+   避免 74417 命中 774417），状态 = 已启用 / 已装未启用 / 缺失 / 未知。
+5. `src/PdxLauncher.App/Controls/MarkdownView.cs`（新增）：`ContentControl`，`Markdown` 依赖属性，把 AST 渲染成
+   `TextBlock` + `Hyperlink`/`HyperlinkButton`，并抛出 `LinkRequested`/`ImageRequested` 事件（页面负责打开浏览器/查看器）。
+6. `src/PdxLauncher.App/Views/WorkshopDetailPage.xaml`：简介与更新日志换成 `MarkdownView`；新增依赖卡（含「未安装」警示图标）、
+   评论区（Steam）、作者改成可点 `HyperlinkButton`；图片墙改横向 200x120 缩略图条；
+   `ImageOverlay` 浮层 = `FlipView` + 每页 `ScrollViewer(ZoomMode=Enabled, MinZoom=1, MaxZoom=4)`，右上角计数与关闭按钮，Esc 关闭。
+7. i18n 两语言 `workshop.json` 各加 17 键（作者提示、看大图、依赖、讨论、各依赖状态、评论计数等），`gen-i18n` 后共 665 键。
+
+**自检**
+
+- 新增 `tests/PdxLauncher.Checks/WorkshopRichTextChecks.cs`（Markdown 各块/行内/列表层级/截断、HTML 描述、Steam 物品页含评论的完整样例）
+  与 `WorkshopDependencyMatcherChecks.cs`（未知库/已启用/装了没启用/缺失/注册 id 数字边界/SteamId 与名称兜底）。
+- `dotnet build PdxLauncher.sln -c Debug -m:1` → 0 警告 0 错误；检查类 **35，失败 0**。
+
+**实测**（Release exe，2026-10-28 16:2x，CS2 / Paradox Mods）
+
+- `Unified Icon Library`：简介按 Markdown 渲染（`## Description` 变粗体标题、段落分行、`###` 子标题、项目符号列表）；
+  作者「algernon」显示为超链接；图片墙三张缩略图横排，点开进浮层查看器（计数 1/3、可缩放、Esc 关闭）。
+- `Anarchy`：依赖卡显示「共 1 个依赖，1 个已安装但未启用」+ 明细行 `Unified Icon Library`。
+- 截图见 `ui-test-artifacts/workshop-rich-b/`。
+
+**踩坑 / 边界**
+
+1. Steam 评论要抓物品页（每 mod 一次 5–20 秒、~100KB），因此**详情正文先出，评论区后到**（`IsLoadingComments` 单独转圈）；
+   物品页抓不到时只降级评论区与配图，不影响其余内容。
+2. Steam 侧**没有依赖数据**（API 与物品页都没有），依赖卡只在 PDX 侧出现。
+3. `WMC1506`：`x:Bind` 的 OneWay 源必须实现通知，行视图模型因此继承 `LocalizedObservableObject` 而不是裸 `ObservableObject`。
+4. `winapp ui` 的 `click/focus` 要求窗口在前台，被全屏游戏挡住会直接失败；`px` 里 `$pid` 是只读变量，要用自己的变量名。
+5. Steam 端到端（评论区、作者外链）在本机受网络与前台窗口限制，尚未跑通全程，仅以解析器样例自检兜底。

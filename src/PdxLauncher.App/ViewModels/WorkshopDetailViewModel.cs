@@ -11,18 +11,17 @@ using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Text;
 
 /// <summary>
 /// 「创意工坊 mod 详情」子页的视图模型：先把列表行已有的元数据摆上去（名字/作者/评分立刻可见），
-/// 再异步补详情正文、截图、外链。原来这些内容挤在一个 MaxHeight=560 的 ContentDialog 里，
-/// 长描述根本看不全，现在改成整页滚动。
+/// 再异步补详情正文、截图、外链、依赖与评论。原来这些内容挤在一个 MaxHeight=560 的 ContentDialog 里，
+/// 长描述根本看不全，现在改成整页滚动 + 富文本渲染。
 /// <para>
-/// 两种来源的字段差异在这里抹平：Steam 只有描述/体积/标签，PDX 还有更新日志、截图、外链与论坛帖。
+/// 两种来源的字段差异在这里抹平：Steam 有作者主页与评论区，PDX 有更新日志、截图、外链和前置依赖。
 /// 页面只认这里的属性，不判断来源。
 /// </para>
-/// <para>
-/// 本类不引用任何 Microsoft.UI.Xaml 类型。
-/// </para>
+/// <para>本类不引用任何 Microsoft.UI.Xaml 类型。</para>
 /// </summary>
 public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 {
@@ -58,9 +57,13 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     [ObservableProperty]
     private string _sourceLabel = string.Empty;
 
-    /// <summary>作者一行。</summary>
+    /// <summary>作者一行（含「作者」前缀）。</summary>
     [ObservableProperty]
     private string _authorText = string.Empty;
+
+    /// <summary>作者主页地址；null 表示拿不到（PDX 只有显示名）。</summary>
+    [ObservableProperty]
+    private string? _authorProfileUrl;
 
     /// <summary>评分 / 订阅 / 收藏 / 浏览 / 体积 / 更新时间拼成的一行。</summary>
     [ObservableProperty]
@@ -70,17 +73,29 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     [ObservableProperty]
     private string _createdText = string.Empty;
 
-    /// <summary>简介正文（已清成纯文本）。</summary>
+    /// <summary>简介纯文本（无障碍名与兜底显示用）。</summary>
     [ObservableProperty]
     private string _descriptionText = string.Empty;
 
-    /// <summary>更新日志正文（仅 PDX 有）。</summary>
+    /// <summary>简介富文本。</summary>
     [ObservableProperty]
-    private string _changelogText = string.Empty;
+    private MarkdownDocument? _descriptionDocument;
+
+    /// <summary>更新日志富文本（仅 PDX 有）。</summary>
+    [ObservableProperty]
+    private MarkdownDocument? _changelogDocument;
 
     /// <summary>标签拼成的单行文本。</summary>
     [ObservableProperty]
     private string _tagsText = string.Empty;
+
+    /// <summary>依赖摘要（「共 3 个前置 mod，1 个未启用」）。</summary>
+    [ObservableProperty]
+    private string _dependencySummary = string.Empty;
+
+    /// <summary>评论摘要（「共 136 条讨论，显示最新 10 条」）。</summary>
+    [ObservableProperty]
+    private string _commentsSummary = string.Empty;
 
     /// <summary>封面本地路径。</summary>
     [ObservableProperty]
@@ -106,6 +121,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     [ObservableProperty]
     private bool _isLoadingScreenshots;
 
+    /// <summary>评论区还在抓（Steam 物品页比详情接口慢）。</summary>
+    [ObservableProperty]
+    private bool _isLoadingComments;
+
     /// <summary>是否读取失败（此时展示 <see cref="ErrorText"/> 与「重试」）。</summary>
     [ObservableProperty]
     private bool _hasError;
@@ -114,32 +133,56 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     [ObservableProperty]
     private bool _isInstalled;
 
-    /// <summary>截图列表。</summary>
+    /// <summary>图片墙（PDX 截图 + 描述里内嵌的图）。</summary>
     public ObservableCollection<WorkshopScreenshotViewModel> Screenshots { get; } = [];
 
     /// <summary>外链列表（含论坛帖）。</summary>
     public ObservableCollection<WorkshopLinkViewModel> Links { get; } = [];
 
+    /// <summary>前置依赖。</summary>
+    public ObservableCollection<WorkshopDependencyViewModel> Dependencies { get; } = [];
+
+    /// <summary>评论区。</summary>
+    public ObservableCollection<WorkshopCommentViewModel> Comments { get; } = [];
+
     /// <summary>封面是否就绪。</summary>
     public bool HasCover => !string.IsNullOrWhiteSpace(CoverPath);
 
     /// <summary>简介是否有内容。</summary>
-    public bool HasDescription => !string.IsNullOrWhiteSpace(DescriptionText);
+    public bool HasDescription => DescriptionDocument is { IsEmpty: false } || !string.IsNullOrWhiteSpace(DescriptionText);
 
     /// <summary>简介是否为空（读到详情后才提示「作者没有填写简介」）。</summary>
     public bool ShowNoDescription => IsLoaded && !HasError && !HasDescription;
 
     /// <summary>更新日志是否有内容。</summary>
-    public bool HasChangelog => !string.IsNullOrWhiteSpace(ChangelogText);
+    public bool HasChangelog => ChangelogDocument is { IsEmpty: false };
 
     /// <summary>是否有标签。</summary>
     public bool HasTags => !string.IsNullOrWhiteSpace(TagsText);
 
-    /// <summary>是否有截图。</summary>
+    /// <summary>是否有图片（截图或描述配图）。</summary>
     public bool HasScreenshots => Screenshots.Count > 0;
 
     /// <summary>是否有外链。</summary>
     public bool HasLinks => Links.Count > 0;
+
+    /// <summary>是否有前置依赖。</summary>
+    public bool HasDependencies => Dependencies.Count > 0;
+
+    /// <summary>是否有依赖摘要。</summary>
+    public bool HasDependencySummary => !string.IsNullOrWhiteSpace(DependencySummary);
+
+    /// <summary>是否有评论。</summary>
+    public bool HasComments => Comments.Count > 0;
+
+    /// <summary>读到详情后仍然没有评论（显示「暂无讨论」）。</summary>
+    public bool ShowNoComments => IsLoaded && !HasError && !IsLoadingComments && !HasComments && ShowCommentsSection;
+
+    /// <summary>是否显示「讨论」卡（Steam 才有评论区）。</summary>
+    public bool ShowCommentsSection => Row?.Source == WorkshopSource.Steam;
+
+    /// <summary>是否有评论摘要。</summary>
+    public bool HasCommentsSummary => !string.IsNullOrWhiteSpace(CommentsSummary);
 
     /// <summary>是否有发布时间。</summary>
     public bool HasCreated => !string.IsNullOrWhiteSpace(CreatedText);
@@ -149,6 +192,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     /// <summary>是否显示「已订阅」徽标。</summary>
     public bool ShowInstalled => IsInstalled;
+
+    /// <summary>作者主页是否可用（决定作者那一行能不能点）。</summary>
+    public bool HasAuthorProfile => !string.IsNullOrWhiteSpace(AuthorProfileUrl);
 
     /// <summary>浏览器地址。</summary>
     public string WebUrl => Row?.WebUrl ?? string.Empty;
@@ -179,17 +225,11 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
             if (row.Source == WorkshopSource.Steam)
             {
-                var result = await _source
-                    .GetSteamDetailAsync(row.Id, row.Name, cancellationToken)
-                    .ConfigureAwait(true);
-                ApplySteam(row, result);
+                await ApplySteamAsync(row, cancellationToken).ConfigureAwait(true);
             }
             else
             {
-                var result = await _source
-                    .GetPdxDetailAsync(row.Id, cancellationToken)
-                    .ConfigureAwait(true);
-                await ApplyPdxAsync(row, result, cancellationToken).ConfigureAwait(true);
+                await ApplyPdxAsync(row, cancellationToken).ConfigureAwait(true);
             }
 
             IsLoaded = !HasError;
@@ -206,6 +246,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         finally
         {
             IsLoading = false;
+            IsLoadingScreenshots = false;
+            IsLoadingComments = false;
             NotifyStateChanged();
         }
     }
@@ -223,11 +265,15 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             ? T(Keys.WorkshopSourceSteam)
             : T(Keys.WorkshopSourcePdx);
         AuthorText = row.AuthorText;
+        AuthorProfileUrl = null;
         MetaText = row.SubtitleText;
         CreatedText = string.Empty;
         DescriptionText = string.Empty;
-        ChangelogText = string.Empty;
+        DescriptionDocument = null;
+        ChangelogDocument = null;
         TagsText = string.Empty;
+        DependencySummary = string.Empty;
+        CommentsSummary = string.Empty;
         ErrorText = string.Empty;
         CachedHint = string.Empty;
         IsInstalled = false;
@@ -235,12 +281,15 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         IsLoaded = false;
         IsLoading = true;
         IsLoadingScreenshots = false;
+        IsLoadingComments = false;
 
         // 列表里已经下好的封面先直接用，别在详情页再下一次。
         CoverPath = row.CoverPath;
 
         Screenshots.Clear();
         Links.Clear();
+        Dependencies.Clear();
+        Comments.Clear();
     }
 
     /// <summary>封面：列表没给就按缓存复用/下载补一张。</summary>
@@ -256,42 +305,94 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             .ConfigureAwait(true);
     }
 
-    /// <summary>套用 Steam 详情（只有描述/体积/标签，没有截图与外链）。</summary>
-    private void ApplySteam(WorkshopRowViewModel row, AppResult<SteamWorkshopItemDetail> result)
+    /// <summary>
+    /// Steam：详情接口给描述/体积/标签，物品页给作者主页、描述配图与评论区。
+    /// 两路并发，物品页失败只影响配图与评论（静默降级）。
+    /// </summary>
+    private async Task ApplySteamAsync(WorkshopRowViewModel row, CancellationToken cancellationToken)
     {
-        if (result is not { IsSuccess: true, Value: { } detail })
+        var detailTask = _source.GetSteamDetailAsync(row.Id, row.Name, cancellationToken);
+        var pageTask = _source.GetSteamItemPageAsync(row.Id, cancellationToken);
+
+        var detailResult = await detailTask.ConfigureAwait(true);
+        if (detailResult is not { IsSuccess: true, Value: { } detail })
         {
-            UseCachedDescription(row, result.ErrorMessage);
+            UseCachedDescription(row, detailResult.ErrorMessage);
             return;
         }
 
         var item = row.SteamItem;
-        DescriptionText = WorkshopText.ToPlainText(detail.Description);
         MetaText = BuildSteamMeta(item, detail);
+        AuthorProfileUrl = detail.CreatorProfileUrl;
+        TagsText = BuildSteamTags(detail, item);
 
         // 缓存命中的 CreatedUtc 是「抓取时间」，不是发布时间，所以只认列表条目里的真实值。
         CreatedText = item is { } steamItem && steamItem.CreatedUtc > DateTimeOffset.UnixEpoch
             ? T(Keys.WorkshopDetailCreated, WorkshopText.FormatDate(steamItem.CreatedUtc))
             : string.Empty;
-        TagsText = item is null
-            ? string.Empty
-            : WorkshopText.Join(item.Tags.Select(static tag => tag.DisplayName), " · ");
+
+        var descriptionHtml = (string?)null;
+        var imageUrls = new List<string>();
+
+        var pageResult = await pageTask.ConfigureAwait(true);
+        if (pageResult is { IsSuccess: true, Value: { } page })
+        {
+            descriptionHtml = page.DescriptionHtml;
+            imageUrls.AddRange(page.ImageUrls);
+            if (!string.IsNullOrWhiteSpace(page.AuthorProfileUrl))
+            {
+                AuthorProfileUrl = page.AuthorProfileUrl;
+            }
+
+            ApplyComments(page);
+        }
+        else
+        {
+            _logger.Info("Steam 物品页不可用，评论区与描述配图降级: " + row.Id);
+            CommentsSummary = string.Empty;
+        }
+
+        // 描述优先用物品页的 HTML（有排版），退到接口给的 BBCode 纯文本。
+        var document = !string.IsNullOrWhiteSpace(descriptionHtml)
+            ? HtmlDescriptionParser.Parse(descriptionHtml)
+            : MarkdownParser.Parse(WorkshopText.ToPlainText(detail.Description));
+        ApplyDescription(document);
+
+        if (imageUrls.Count == 0)
+        {
+            imageUrls.AddRange(document.ImageUrls);
+        }
+
+        BuildGallery(row, imageUrls);
+
+        NotifyStateChanged();
+        IsLoading = false;
+        IsLoadingScreenshots = Screenshots.Count > 0;
+        NotifyStateChanged();
+
+        try
+        {
+            await DownloadGalleryAsync(row, cancellationToken).ConfigureAwait(true);
+        }
+        finally
+        {
+            IsLoadingScreenshots = false;
+            NotifyStateChanged();
+        }
     }
 
-    /// <summary>套用 PDX 详情：正文 + 更新日志 + 截图 + 外链 + 论坛帖。</summary>
-    private async Task ApplyPdxAsync(
-        WorkshopRowViewModel row,
-        AppResult<PdxModsDetail> result,
-        CancellationToken cancellationToken)
+    /// <summary>PDX：正文与更新日志本来就是 Markdown；截图、外链、依赖都要补。</summary>
+    private async Task ApplyPdxAsync(WorkshopRowViewModel row, CancellationToken cancellationToken)
     {
+        var result = await _source.GetPdxDetailAsync(row.Id, cancellationToken).ConfigureAwait(true);
         if (result is not { IsSuccess: true, Value: { } detail })
         {
             UseCachedDescription(row, result.ErrorMessage);
             return;
         }
 
-        DescriptionText = WorkshopText.ToPlainText(detail.LongDescription);
-        ChangelogText = WorkshopText.ToPlainText(detail.Changelog);
+        ApplyDescription(MarkdownParser.Parse(detail.LongDescription));
+        ChangelogDocument = MarkdownParser.Parse(detail.Changelog);
         MetaText = BuildPdxMeta(detail);
         CreatedText = detail.Summary.CreatedOn is { } created && created > DateTimeOffset.UnixEpoch
             ? T(Keys.WorkshopDetailCreated, WorkshopText.FormatDate(created))
@@ -300,30 +401,107 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         IsInstalled = detail.IsInstalled;
 
         BuildLinks(detail);
+        BuildGallery(row, detail.ScreenshotUrls);
 
-        Screenshots.Clear();
-        for (var index = 0; index < detail.ScreenshotUrls.Count; index++)
-        {
-            Screenshots.Add(new WorkshopScreenshotViewModel(index, detail.ScreenshotUrls[index]));
-        }
+        await BuildDependenciesAsync(detail, cancellationToken).ConfigureAwait(true);
 
         NotifyStateChanged();
 
         // 正文与元信息已经能看了，就不该再挂着「正在读取详情…」——
         // 剩下只有截图在下载，改用截图卡里的独立进度提示。
         IsLoading = false;
-        IsLoadingScreenshots = detail.ScreenshotUrls.Count > 0;
+        IsLoadingScreenshots = Screenshots.Count > 0;
         NotifyStateChanged();
 
         try
         {
-            await DownloadScreenshotsAsync(row, detail, cancellationToken).ConfigureAwait(true);
+            await DownloadGalleryAsync(row, cancellationToken).ConfigureAwait(true);
         }
         finally
         {
             IsLoadingScreenshots = false;
             NotifyStateChanged();
         }
+    }
+
+    /// <summary>把 AST 同时存成富文本与纯文本（纯文本供无障碍名与「无简介」判断）。</summary>
+    private void ApplyDescription(MarkdownDocument document)
+    {
+        DescriptionDocument = document.IsEmpty ? null : document;
+        DescriptionText = document.ToPlainText();
+    }
+
+    /// <summary>图片墙：先按顺序建好行，下载留给 <see cref="DownloadGalleryAsync"/>。</summary>
+    private void BuildGallery(WorkshopRowViewModel row, IReadOnlyList<string> urls)
+    {
+        Screenshots.Clear();
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var url in urls)
+        {
+            if (string.IsNullOrWhiteSpace(url) || !seen.Add(url))
+            {
+                continue;
+            }
+
+            Screenshots.Add(new WorkshopScreenshotViewModel(Screenshots.Count, url));
+        }
+    }
+
+    /// <summary>依赖清单与本机 mod 库比对；读不到库时全部标「未知」。</summary>
+    private async Task BuildDependenciesAsync(PdxModsDetail detail, CancellationToken cancellationToken)
+    {
+        if (detail.Requirements.Count == 0)
+        {
+            return;
+        }
+
+        var local = await _source
+            .LoadLocalModsAsync(AppServices.CurrentGame, cancellationToken)
+            .ConfigureAwait(true);
+
+        var matched = WorkshopDependencyMatcher.Match(detail.Requirements, local.Installed, local.Enabled);
+        for (var index = 0; index < matched.Count; index++)
+        {
+            Dependencies.Add(new WorkshopDependencyViewModel(index, matched[index]));
+        }
+
+        var missing = matched.Count(static item => item.State == WorkshopDependencyState.Missing);
+        var disabled = matched.Count(static item => item.State == WorkshopDependencyState.InstalledDisabled);
+
+        DependencySummary = missing > 0
+            ? T(Keys.WorkshopDependencySummaryMissing, matched.Count, missing)
+            : disabled > 0
+                ? T(Keys.WorkshopDependencySummaryDisabled, matched.Count, disabled)
+                : T(Keys.WorkshopDependencySummaryOk, matched.Count);
+    }
+
+    /// <summary>评论区：首屏评论 + 总数提示。</summary>
+    private void ApplyComments(SteamWorkshopItemPage page)
+    {
+        Comments.Clear();
+
+        for (var index = 0; index < page.Comments.Count; index++)
+        {
+            var comment = page.Comments[index];
+            var body = !string.IsNullOrWhiteSpace(comment.TextHtml)
+                ? HtmlDescriptionParser.Parse(comment.TextHtml)
+                : MarkdownParser.Parse(comment.TextPlain);
+
+            Comments.Add(new WorkshopCommentViewModel(
+                index,
+                comment.AuthorName,
+                comment.AuthorProfileUrl,
+                comment.PostedUtc,
+                body,
+                comment.TextPlain));
+        }
+
+        CommentsSummary = page.TotalComments > Comments.Count
+            ? T(Keys.WorkshopCommentsMore, Comments.Count, page.TotalComments)
+            : Comments.Count > 0
+                ? T(Keys.WorkshopCommentsCount, Comments.Count)
+                : string.Empty;
     }
 
     /// <summary>详情取不到时退回缓存正文，至少还能看上次抓到的东西。</summary>
@@ -336,7 +514,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             return;
         }
 
-        DescriptionText = WorkshopText.ToPlainText(cached);
+        ApplyDescription(MarkdownParser.Parse(cached));
         CachedHint = T(Keys.WorkshopDetailCached);
         IsLoaded = true;
     }
@@ -352,20 +530,23 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>Steam 的元信息一行：评分 · 订阅 · 收藏 · 浏览 · 体积 · 更新于。</summary>
     private static string BuildSteamMeta(SteamWorkshopItem? item, SteamWorkshopItemDetail detail)
     {
+        var views = item is { Views: > 0 } ? item.Views : detail.Views;
+        var subs = item is { Subscriptions: > 0 } ? item.Subscriptions : detail.LifetimeSubscriptions;
+
         var parts = new List<string?>
         {
             item is null || item.TotalVotes <= 0 || item.StarRating <= 0
                 ? null
                 : T(Keys.WorkshopRating, item.StarRating.ToString("0.##", CultureInfo.InvariantCulture), item.TotalVotes),
-            item is null || item.Subscriptions <= 0
+            subs <= 0
                 ? null
-                : T(Keys.WorkshopSubscriptions, item.Subscriptions.ToString("N0", CultureInfo.CurrentCulture)),
+                : T(Keys.WorkshopSubscriptions, subs.ToString("N0", CultureInfo.CurrentCulture)),
             item is null || item.Favorites <= 0
                 ? null
                 : T(Keys.WorkshopDetailFavorites, item.Favorites.ToString("N0", CultureInfo.CurrentCulture)),
-            item is null || item.Views <= 0
+            views <= 0
                 ? null
-                : T(Keys.WorkshopDetailViews, item.Views.ToString("N0", CultureInfo.CurrentCulture)),
+                : T(Keys.WorkshopDetailViews, views.ToString("N0", CultureInfo.CurrentCulture)),
             detail.FileSizeBytes <= 0
                 ? null
                 : T(Keys.WorkshopSize, SizeFormatter.Format(detail.FileSizeBytes)),
@@ -375,6 +556,19 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         };
 
         return WorkshopText.Join(parts, " · ");
+    }
+
+    /// <summary>Steam 标签：详情接口给了就用，没有就退回列表条目。</summary>
+    private static string BuildSteamTags(SteamWorkshopItemDetail detail, SteamWorkshopItem? item)
+    {
+        if (detail.TagList.Count > 0)
+        {
+            return WorkshopText.Join(detail.TagList, " · ");
+        }
+
+        return item is null
+            ? string.Empty
+            : WorkshopText.Join(item.Tags.Select(static tag => tag.DisplayName), " · ");
     }
 
     /// <summary>PDX 的元信息一行：评分 · 订阅 · 体积 · 更新于。</summary>
@@ -438,11 +632,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             : link.Url;
     }
 
-    /// <summary>截图逐张下载（最多 2 张并发），每张完成即刷新对应项。</summary>
-    private async Task DownloadScreenshotsAsync(
-        WorkshopRowViewModel row,
-        PdxModsDetail detail,
-        CancellationToken cancellationToken)
+    /// <summary>图片逐张下载（最多 2 张并发），每张完成即刷新对应项。</summary>
+    private async Task DownloadGalleryAsync(WorkshopRowViewModel row, CancellationToken cancellationToken)
     {
         if (Screenshots.Count == 0)
         {
@@ -457,10 +648,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             await gate.WaitAsync(cancellationToken).ConfigureAwait(true);
             try
             {
-                var index = shot.Index;
-                var url = index < detail.ScreenshotUrls.Count ? detail.ScreenshotUrls[index] : shot.Url;
                 shot.Path = await _images
-                    .EnsureScreenshotAsync(row.Source, row.Id, url, index, cancellationToken)
+                    .EnsureScreenshotAsync(row.Source, row.Id, shot.Url, shot.Index, cancellationToken)
                     .ConfigureAwait(true);
             }
             catch (OperationCanceledException)
@@ -469,8 +658,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             }
             catch (Exception ex)
             {
-                // 单张截图失败不该让整页报错，留占位即可。
-                _logger.Warn("创意工坊截图下载失败: " + row.Id + " #" + shot.Index + " " + ex.Message);
+                // 单张图片失败不该让整页报错，留占位即可。
+                _logger.Warn("创意工坊图片下载失败: " + row.Id + " #" + shot.Index + " " + ex.Message);
             }
             finally
             {
@@ -489,9 +678,16 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasTags));
         OnPropertyChanged(nameof(HasScreenshots));
         OnPropertyChanged(nameof(HasLinks));
+        OnPropertyChanged(nameof(HasDependencies));
+        OnPropertyChanged(nameof(HasDependencySummary));
+        OnPropertyChanged(nameof(HasComments));
+        OnPropertyChanged(nameof(ShowNoComments));
+        OnPropertyChanged(nameof(ShowCommentsSection));
+        OnPropertyChanged(nameof(HasCommentsSummary));
         OnPropertyChanged(nameof(HasCreated));
         OnPropertyChanged(nameof(HasCachedHint));
         OnPropertyChanged(nameof(ShowInstalled));
+        OnPropertyChanged(nameof(HasAuthorProfile));
         OnPropertyChanged(nameof(WebUrl));
         OnPropertyChanged(nameof(HasWebUrl));
         OnPropertyChanged(nameof(SteamUrl));
@@ -506,9 +702,29 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(ShowNoDescription));
     }
 
+    partial void OnDescriptionDocumentChanged(MarkdownDocument? value)
+    {
+        OnPropertyChanged(nameof(HasDescription));
+        OnPropertyChanged(nameof(ShowNoDescription));
+    }
+
+    partial void OnChangelogDocumentChanged(MarkdownDocument? value) => OnPropertyChanged(nameof(HasChangelog));
+
     partial void OnIsInstalledChanged(bool value) => OnPropertyChanged(nameof(ShowInstalled));
 
     partial void OnCachedHintChanged(string value) => OnPropertyChanged(nameof(HasCachedHint));
 
-    partial void OnIsLoadedChanged(bool value) => OnPropertyChanged(nameof(ShowNoDescription));
+    partial void OnAuthorProfileUrlChanged(string? value) => OnPropertyChanged(nameof(HasAuthorProfile));
+
+    partial void OnIsLoadedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowNoDescription));
+        OnPropertyChanged(nameof(ShowNoComments));
+    }
+
+    partial void OnIsLoadingCommentsChanged(bool value) => OnPropertyChanged(nameof(ShowNoComments));
+
+    partial void OnDependencySummaryChanged(string value) => OnPropertyChanged(nameof(HasDependencySummary));
+
+    partial void OnCommentsSummaryChanged(string value) => OnPropertyChanged(nameof(HasCommentsSummary));
 }
