@@ -2988,3 +2988,62 @@ Steam 网页把排序分成三块：排序顺序 + 时间范围 + 分类筛选�
 
 5. **`WorkshopPageCache.Key` 与 `WorkshopInfoCache.Key` 不要混用**：前者是「一页」，后者是「一条」。名字像、参数不同，混掉会让翻页永远不命中。
 6. **封面进度先于完成**：`_coverTotal` 要在 `Rows` 建完、开始下载前设置，否则第一帧看不到进度；`HasCover` 变化必须 `OnPropertyChanged`，否则绑定的 `XamlVisibility` 不会刷新。
+
+---
+
+## 0.37 2026-10-28：创意工坊来源判定改为内置表（不再联网探测）
+
+**背景**
+
+创意工坊页进入时要先判定「这个游戏用 Steam 创意工坊还是 Paradox Mods」。原实现走
+`WorkshopViewModel.ResolveSourceAsync` → `SteamWorkshopClient.HasWorkshopAsync(appId)`：
+先请求 `store.steampowered.com/api/appdetails`（读 `categories` 里有没有 `Steam Workshop`），
+失败再抓 `steamcommunity.com` 的工坊列表页。两个毛病：
+
+1. **慢且会卡死页面**：`HttpFetcher.ConnectTimeout = 30s`、总超时 180s，探测要串最多两次请求；
+   本机连不上 Steam 时实测 CK3 卡在「正在判断该游戏有没有 Steam 创意工坊…」75 秒以上。
+2. **结果本身不可靠**：appdetails 的 `categories` 接口对部分老游戏不返回 `Steam Workshop` 分类 ——
+   实测 CK2（203770）、BattleTech（637090）明明有创意工坊却被判成「没有」，于是被错划到 Paradox Mods。
+
+**改法**
+
+- 新增 `src/PdxLauncher.Core/Online/SteamWorkshopGames.cs`：gameId → 是否有 Steam 工坊的**内置事实表**
+  （`Dictionary<string,bool>`，`OrdinalIgnoreCase`，每行注释里写 Steam appId），API 只有一个
+  `bool? TryGet(string? gameId)`（`null` = 未登记）。表里同时收官方启动器的 id 别名
+  （`infinite` / `prison_architect` / `surviving_aftermath` / `surviving_mars_relaunched`）。
+  判断错了**只改这一张表**；不要塞进 `KnownGames`（那边是「支持等级」语义）。
+- `WorkshopSourceChooser` 增加三参重载 `Resolve(int? steamAppId, bool? hasWorkshop, string? gameId)`：
+  表命中就按表定来源（不看探测结果），未登记才退回原来的两参逻辑。
+- `WorkshopViewModel.ResolveSourceAsync` 改为三步：① 表命中 → 直接返回并 `_logger.Info("创意工坊来源按内置表判定：…")`；
+  ② 没有 appId（独立版）→ Paradox Mods；③ 未登记但有 appId → 探测，且用
+  `CancellationTokenSource.CreateLinkedTokenSource` + `CancelAfter(5s)`（私有常量 `WorkshopProbeTimeout`）设预算，
+  超时记 Warn 并回落 Paradox Mods，外部取消照旧向上抛。
+- i18n 新增 `workshop.probeTimeout`（zh「Steam 创意工坊探测超时，已改用 Paradox Mods」/ en 对应），
+  `gen-i18n` 后共 648 键；`workshop.sourceDetecting` 保留，只在未登记游戏探测期间显示。
+
+**自检**
+
+新增 `tests/PdxLauncher.Checks/SteamWorkshopGamesChecks.cs`（纯内存、不联网）：有/无工坊的代表性游戏
+（含 CK2、BattleTech 两个「分类接口会误判」的回归样例）、未登记返回 `null`、别名一致、大小写不敏感、
+`GameSteamAppIds` 里 12 个 gameId 全部有答案（防两表漂移）、以及三参 `Resolve` 的「表优先于探测结果」。
+`检查类: 32，失败: 0`，Release `0 警告 0 错误`。
+
+**实测**（Release exe，本机）
+
+- CS2：日志 `创意工坊来源按内置表判定：game=cities_skylines_2 source=Pdx`，**没有 appdetails 请求**，
+  进入页面约 6 秒出列表（含首屏抓取），状态栏「已加载 27393 个结果」。
+- CK3：日志 `… game=ck3 source=Steam`，来源徽标直接显示「Steam 创意工坊」，不再出现「正在判断…」。
+
+**踩坑**
+
+1. cities_skylines_2 这类「明确没有 Steam 工坊」的游戏必须写进表，否则仍会每次进页面探测一次。
+2. 5 秒预算只包住探测请求；真正的列表抓取仍用页面生命周期令牌（否则大页面还没抓完就被砍）。
+3. UI 冒烟脚本会改 exe 同目录 `data/settings.json` 的 `lastGameId`，跑完记得还原成用户原先选中的游戏。
+
+**顺带发现（未修，另开任务）**
+
+设置页改代理会触发 `AppServices.ReplaceNetwork` → 旧的 `HttpFetcher`（`HttpClient`）被 Dispose，
+但 `WorkshopViewModel` 等视图模型仍持有构造时注入的旧 `SteamWorkshopClient`，之后再查工坊就报
+`System.ObjectDisposedException: Cannot access a disposed object. Object name: 'System.Net.Http.HttpClient'`。
+2026-10-28 14:33 的日志里就是这个错（用户在设置页切了「跟随系统代理」之后）。修法有两种：
+让 `AppServices` 在重建后发事件、由各视图模型重取客户端，或把客户端改成按需从 `AppServices` 取。

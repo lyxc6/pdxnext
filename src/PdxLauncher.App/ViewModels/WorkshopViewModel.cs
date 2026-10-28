@@ -71,6 +71,12 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>默认时间范围的索引（30 天，与 Steam 网页默认一致）。</summary>
     private const int DefaultTimeRangeIndex = 2;
 
+    /// <summary>
+    /// 未登记游戏的来源探测预算。HttpFetcher 的连接超时是 30 秒、总超时 180 秒，
+    /// 不设上限时页面会长时间停在「正在判断…」，所以只等 5 秒，超时按 Paradox Mods 处理。
+    /// </summary>
+    private static readonly TimeSpan WorkshopProbeTimeout = TimeSpan.FromSeconds(5);
+
     private readonly SteamWorkshopClient _steam;
     private readonly PdxModsClient _pdx;
     private readonly AccountService _account;
@@ -330,18 +336,46 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 判定来源：没有 Steam appId（独立版）直接 PDX；否则探测该游戏有没有 Steam 工坊。
-    /// 探测请求失败时退回 PDX，并把原因写进状态栏。
+    /// 判定来源，按三步走：
+    /// <list type="number">
+    /// <item><description>内置表（<see cref="SteamWorkshopGames"/>）里有登记 → 直接定来源，不发任何请求；</description></item>
+    /// <item><description>没有 Steam appId（独立版）→ PDX；</description></item>
+    /// <item><description>未登记但拿得到 appId → 探测，最多等 <see cref="WorkshopProbeTimeout"/>，
+    /// 超时或失败都退回 PDX 并写明原因。</description></item>
+    /// </list>
     /// </summary>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
     private async Task<WorkshopSource> ResolveSourceAsync(CancellationToken cancellationToken)
     {
+        // 表里登记过的游戏不做任何网络判定：以前这里要先打 appdetails 再抓工坊页，
+        // 网络不通时页面会长时间停在「正在判断…」，而且结果对 CK2 / BattleTech 这类老游戏还是错的。
+        if (SteamWorkshopGames.TryGet(_gameId) is { } known)
+        {
+            _logger.Info("创意工坊来源按内置表判定：game=" + _gameId + " source=" + (known ? "Steam" : "Pdx"));
+            return known ? WorkshopSource.Steam : WorkshopSource.Pdx;
+        }
+
         if (_steamAppId is not { } appId)
         {
             return WorkshopSource.Pdx;
         }
 
-        var probe = await _steam.HasWorkshopAsync(appId, cancellationToken).ConfigureAwait(true);
+        // 未登记的游戏才探测，给 5 秒预算：HttpFetcher 的连接超时是 30 秒，不设限会把页面卡死。
+        using var probeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        probeCts.CancelAfter(WorkshopProbeTimeout);
+
+        AppResult<bool> probe;
+        try
+        {
+            probe = await _steam.HasWorkshopAsync(appId, probeCts.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            StatusMessage = T(Keys.WorkshopProbeTimeout);
+            _logger.Warn("Steam 工坊探测超时（" + WorkshopProbeTimeout.TotalSeconds + "s），按 Paradox Mods 处理：game=" + _gameId);
+            return WorkshopSource.Pdx;
+        }
+
         if (!probe.IsSuccess)
         {
             StatusMessage = T(Keys.WorkshopProbeFailed);
@@ -349,7 +383,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             return WorkshopSource.Pdx;
         }
 
-        return WorkshopSourceChooser.Resolve(appId, probe.Value);
+        return WorkshopSourceChooser.Resolve(appId, probe.Value, _gameId);
     }
 
     /// <summary>

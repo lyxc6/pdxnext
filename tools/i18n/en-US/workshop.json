@@ -34,6 +34,7 @@
   "workshop.page": "Page {0} / {1}",
   "workshop.prev": "Previous",
   "workshop.probeFailed": "Steam Workshop probe failed; using Paradox Mods instead",
+  "workshop.probeTimeout": "Steam Workshop probe timed out; using Paradox Mods instead",
   "workshop.rating": "{0} ({1} ratings)",
   "workshop.refreshName": "Refresh workshop",
   "workshop.searchName": "Search workshop",

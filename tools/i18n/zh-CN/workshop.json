@@ -34,6 +34,7 @@
   "workshop.page": "第 {0} / {1} 页",
   "workshop.prev": "上一页",
   "workshop.probeFailed": "Steam 创意工坊探测失败，已改用 Paradox Mods",
+  "workshop.probeTimeout": "Steam 创意工坊探测超时，已改用 Paradox Mods",
   "workshop.rating": "{0} 分（{1} 人评分）",
   "workshop.refreshName": "刷新创意工坊",
   "workshop.searchName": "搜索创意工坊",

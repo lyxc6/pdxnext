@@ -55,4 +55,22 @@ public static class WorkshopSourceChooser
 
         return hasWorkshop == true ? WorkshopSource.Steam : WorkshopSource.Pdx;
     }
+
+    /// <summary>
+    /// 带内置表的判定：<see cref="SteamWorkshopGames"/> 里登记过就按表定来源（不看探测结果、也不发请求），
+    /// 只有未登记的游戏才退回 <see cref="Resolve(int?, bool?)"/> 的两参逻辑。
+    /// </summary>
+    /// <param name="steamAppId">游戏的 Steam appId；独立版为 null。</param>
+    /// <param name="hasWorkshop">Steam 工坊探测结果；未探测为 null。</param>
+    /// <param name="gameId">启动器内部的游戏 id。</param>
+    /// <returns>该游戏对应的创意工坊来源。</returns>
+    public static WorkshopSource Resolve(int? steamAppId, bool? hasWorkshop, string? gameId)
+    {
+        if (SteamWorkshopGames.TryGet(gameId) is { } known)
+        {
+            return known ? WorkshopSource.Steam : WorkshopSource.Pdx;
+        }
+
+        return Resolve(steamAppId, hasWorkshop);
+    }
 }

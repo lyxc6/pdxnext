@@ -623,6 +623,7 @@ public sealed partial class Localizer
         ["workshop.page"] = "第 {0} / {1} 页",
         ["workshop.prev"] = "上一页",
         ["workshop.probeFailed"] = "Steam 创意工坊探测失败，已改用 Paradox Mods",
+        ["workshop.probeTimeout"] = "Steam 创意工坊探测超时，已改用 Paradox Mods",
         ["workshop.rating"] = "{0} 分（{1} 人评分）",
         ["workshop.refreshName"] = "刷新创意工坊",
         ["workshop.searchName"] = "搜索创意工坊",
@@ -1274,6 +1275,7 @@ public sealed partial class Localizer
         ["workshop.page"] = "Page {0} / {1}",
         ["workshop.prev"] = "Previous",
         ["workshop.probeFailed"] = "Steam Workshop probe failed; using Paradox Mods instead",
+        ["workshop.probeTimeout"] = "Steam Workshop probe timed out; using Paradox Mods instead",
         ["workshop.rating"] = "{0} ({1} ratings)",
         ["workshop.refreshName"] = "Refresh workshop",
         ["workshop.searchName"] = "Search workshop",
@@ -1925,6 +1927,7 @@ public sealed partial class Localizer
         ("workshop.page", "WorkshopPage"),
         ("workshop.prev", "WorkshopPrev"),
         ("workshop.probeFailed", "WorkshopProbeFailed"),
+        ("workshop.probeTimeout", "WorkshopProbeTimeout"),
         ("workshop.rating", "WorkshopRating"),
         ("workshop.refreshName", "WorkshopRefreshName"),
         ("workshop.searchName", "WorkshopSearchName"),
@@ -2574,6 +2577,7 @@ public sealed partial class Localizer
     public string WorkshopPage => Format("workshop.page");
     public string WorkshopPrev => Format("workshop.prev");
     public string WorkshopProbeFailed => Format("workshop.probeFailed");
+    public string WorkshopProbeTimeout => Format("workshop.probeTimeout");
     public string WorkshopRating => Format("workshop.rating");
     public string WorkshopRefreshName => Format("workshop.refreshName");
     public string WorkshopSearchName => Format("workshop.searchName");
@@ -3226,6 +3230,7 @@ internal static class Keys
     public const string WorkshopPage = "workshop.page";
     public const string WorkshopPrev = "workshop.prev";
     public const string WorkshopProbeFailed = "workshop.probeFailed";
+    public const string WorkshopProbeTimeout = "workshop.probeTimeout";
     public const string WorkshopRating = "workshop.rating";
     public const string WorkshopRefreshName = "workshop.refreshName";
     public const string WorkshopSearchName = "workshop.searchName";
