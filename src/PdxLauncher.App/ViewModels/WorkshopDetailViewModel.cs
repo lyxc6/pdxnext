@@ -102,6 +102,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     [ObservableProperty]
     private bool _isLoaded;
 
+    /// <summary>正文已就位、只剩截图还在下载。</summary>
+    [ObservableProperty]
+    private bool _isLoadingScreenshots;
+
     /// <summary>是否读取失败（此时展示 <see cref="ErrorText"/> 与「重试」）。</summary>
     [ObservableProperty]
     private bool _hasError;
@@ -230,6 +234,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         HasError = false;
         IsLoaded = false;
         IsLoading = true;
+        IsLoadingScreenshots = false;
 
         // 列表里已经下好的封面先直接用，别在详情页再下一次。
         CoverPath = row.CoverPath;
@@ -303,7 +308,22 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         }
 
         NotifyStateChanged();
-        await DownloadScreenshotsAsync(row, detail, cancellationToken).ConfigureAwait(true);
+
+        // 正文与元信息已经能看了，就不该再挂着「正在读取详情…」——
+        // 剩下只有截图在下载，改用截图卡里的独立进度提示。
+        IsLoading = false;
+        IsLoadingScreenshots = detail.ScreenshotUrls.Count > 0;
+        NotifyStateChanged();
+
+        try
+        {
+            await DownloadScreenshotsAsync(row, detail, cancellationToken).ConfigureAwait(true);
+        }
+        finally
+        {
+            IsLoadingScreenshots = false;
+            NotifyStateChanged();
+        }
     }
 
     /// <summary>详情取不到时退回缓存正文，至少还能看上次抓到的东西。</summary>

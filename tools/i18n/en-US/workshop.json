@@ -18,6 +18,7 @@
   "workshop.detailRetry": "Retry",
   "workshop.detailScreenshots": "{0} screenshots",
   "workshop.detailScreenshotsTitle": "Screenshots",
+  "workshop.detailScreenshotsLoading": "Downloading screenshots…",
   "workshop.detailTags": "Tags",
   "workshop.detailViews": "{0} views",
   "workshop.emptyHint": "This game has no workshop content yet",

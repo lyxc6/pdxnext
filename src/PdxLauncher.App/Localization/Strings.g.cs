@@ -606,6 +606,7 @@ public sealed partial class Localizer
         ["workshop.detailNoDescription"] = "作者没有填写简介",
         ["workshop.detailRetry"] = "重试",
         ["workshop.detailScreenshots"] = "截图 {0} 张",
+        ["workshop.detailScreenshotsLoading"] = "正在下载截图…",
         ["workshop.detailScreenshotsTitle"] = "截图",
         ["workshop.detailTags"] = "标签",
         ["workshop.detailViews"] = "浏览 {0}",
@@ -1256,6 +1257,7 @@ public sealed partial class Localizer
         ["workshop.detailNoDescription"] = "The author left no description",
         ["workshop.detailRetry"] = "Retry",
         ["workshop.detailScreenshots"] = "{0} screenshots",
+        ["workshop.detailScreenshotsLoading"] = "Downloading screenshots…",
         ["workshop.detailScreenshotsTitle"] = "Screenshots",
         ["workshop.detailTags"] = "Tags",
         ["workshop.detailViews"] = "{0} views",
@@ -1906,6 +1908,7 @@ public sealed partial class Localizer
         ("workshop.detailNoDescription", "WorkshopDetailNoDescription"),
         ("workshop.detailRetry", "WorkshopDetailRetry"),
         ("workshop.detailScreenshots", "WorkshopDetailScreenshots"),
+        ("workshop.detailScreenshotsLoading", "WorkshopDetailScreenshotsLoading"),
         ("workshop.detailScreenshotsTitle", "WorkshopDetailScreenshotsTitle"),
         ("workshop.detailTags", "WorkshopDetailTags"),
         ("workshop.detailViews", "WorkshopDetailViews"),
@@ -2554,6 +2557,7 @@ public sealed partial class Localizer
     public string WorkshopDetailNoDescription => Format("workshop.detailNoDescription");
     public string WorkshopDetailRetry => Format("workshop.detailRetry");
     public string WorkshopDetailScreenshots => Format("workshop.detailScreenshots");
+    public string WorkshopDetailScreenshotsLoading => Format("workshop.detailScreenshotsLoading");
     public string WorkshopDetailScreenshotsTitle => Format("workshop.detailScreenshotsTitle");
     public string WorkshopDetailTags => Format("workshop.detailTags");
     public string WorkshopDetailViews => Format("workshop.detailViews");
@@ -3205,6 +3209,7 @@ internal static class Keys
     public const string WorkshopDetailNoDescription = "workshop.detailNoDescription";
     public const string WorkshopDetailRetry = "workshop.detailRetry";
     public const string WorkshopDetailScreenshots = "workshop.detailScreenshots";
+    public const string WorkshopDetailScreenshotsLoading = "workshop.detailScreenshotsLoading";
     public const string WorkshopDetailScreenshotsTitle = "workshop.detailScreenshotsTitle";
     public const string WorkshopDetailTags = "workshop.detailTags";
     public const string WorkshopDetailViews = "workshop.detailViews";

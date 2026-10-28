@@ -18,6 +18,7 @@
   "workshop.detailRetry": "重试",
   "workshop.detailScreenshots": "截图 {0} 张",
   "workshop.detailScreenshotsTitle": "截图",
+  "workshop.detailScreenshotsLoading": "正在下载截图…",
   "workshop.detailTags": "标签",
   "workshop.detailViews": "浏览 {0}",
   "workshop.emptyHint": "这个游戏还没有创意工坊内容",
