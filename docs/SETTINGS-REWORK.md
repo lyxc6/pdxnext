@@ -1,4 +1,4 @@
-# 设置页改版说明（2025-10-27）
+﻿# 设置页改版说明（2025-10-27）
 
 > **2026-10-28 追加**：Paradox 账号分节（曾经的 `navSettingsAccount`，`Tag=4`）已从设置页移出，改成左栏底部独立「账号」页（`src/PdxLauncher.App/Views/AccountPage.xaml`）。设置页回到本文描述的 **6 个分节**（`Tag="0".."5"`），`CacheSectionIndex` 回到 `4`；文案键 `settings.nav.account` / `settings.section.account` / 全部 `settings.account.*` 已删，迁到 `tools/i18n/*/account.json`（`account.*`）。详见 `docs/HANDOFF.md` §0.26。
 
@@ -94,12 +94,35 @@ Page
 - `dotnet build "PdxLauncher.sln" -c Release -m:1`：0 警告 0 错误。
 - `bash .scratch/rework/build-checks.sh`：15 个检查类、断言失败 0。
 - `python tools/gen-i18n.py --check`：499 个键合法。
-- UI 自动化（`pwsh .scratch/rework/verify-settings2.ps1`）：六个分类逐个切换，
-  各节期望的 AutomationId 全部命中（appearance 42 / launch 35 / paths 42 / online 41 / cache 34 / advanced 34），
-  截图见 `.scratch/rework/settings-{appearance,launch,paths,online,cache,advanced}.png`。
-- 症状回归（`.scratch/rework/verify-settings3.ps1`）：切换「背景显示方式」与开关「窗口置顶」后，
+- UI 自动化（`powershell -File scripts/verify-settings-sections.ps1`）：六个分类逐个切换，
+  各节期望的 AutomationId 全部命中（每节 missing 全空；count 含公共导航与状态栏、且随缓存统计/进度环浮动，不作为断言），
+  截图见 `.scratch/rework/settings-{appearance,launch,paths,online,cache,advanced}.png`，另附缓存节滚动到底的
+  `settings-cache-bottom.png`。
+- 症状回归（`powershell -File scripts/verify-settings-regression.ps1`）：切换「背景显示方式」与开关「窗口置顶」后，
   其它下拉与开关的值保持不变；被操作控件的位置与尺寸在前后完全一致（`1323,940,492x60`），
   即不再出现整页跳动。
+
+---
+
+## 2026-10-27 追加：缓存接管「数据 / Mod 缩略图」，并做一轮去重
+
+用户诉求原话：「联网页面的数据和缩略图应该在缓存里；重新审视下设置中的代码，降低代码重复度」。
+
+- 信息架构：`联网` 分类只剩「网络代理」三卡；`数据`（DLC 简介开关 + 简介缓存天数 + 公告开关）与
+  `Mod 缩略图`（联网开关 + 图片保留天数 + 缓存目录卡）整块移到 `缓存` 分类，顺序为
+  缓存标题 → 合计卡（刷新大小 / 清除全部）→ 四行缓存清单 → 数据 → Mod 缩略图 → 缓存说明。
+  AutomationId 全部保留，`scripts/verify-settings-sections.ps1` 的 want 列表随之调整。
+- 代码去重（行为保持，逐步 commit + build）：
+  - `SettingsViewModel`：新增 `ApplyFlag` / `ApplyOption`（`[CallerMemberName]`），6 个开关 + 6 个下拉的 setter 收敛；
+    `PersistSettings()` 改为 `=> SaveSettings()`；四个 `Refresh*` 合并为 `RefreshOptionSelections()`；
+    主题来源只留一处 `ThemeSourceKey`；`CacheRowViewModel` 构造时注入清除委托，删掉 `ClearCacheCore` 的 Key 分派。
+  - 保留天数目录：`ModThumbnailRetentionCatalog` + `DlcDescriptionRetentionCatalog` 合并为 `RetentionDaysCatalog`
+    （`ModThumbnails` 默认 30 天、`DlcDescriptions` 默认 7 天两个静态实例）。
+  - XAML：只读值卡改由新控件 `Controls/SettingsValueCard` 承载（Header / Description / Value /
+    ValueAutomationId / ValueAutomationName / MaxValueWidth / ShowToolTip），hint 与二级小节标题改走
+    `SettingsHintTextStyle` / `SettingsSubsectionTitleStyle`。
+  - `SettingsPage.xaml.cs`：`ConfirmAsync`（统一确认框）、`RunGuardedAsync`（事件护栏）、
+    `OpenPath`（合并 OpenDirectory / OpenExplorer）三处样板收敛。
 - 语言切换（`.scratch/rework/verify-lang2.ps1`）：简中 ↔ English 双向切换，导航与卡片文案、状态栏提示同步更新。
 
 ### 滚动条通道（2026-10-27 14:50）

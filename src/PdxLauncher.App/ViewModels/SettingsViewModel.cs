@@ -1,7 +1,8 @@
-namespace PdxLauncher.App.ViewModels;
+﻿namespace PdxLauncher.App.ViewModels;
 
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
@@ -45,9 +46,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     private PlaySetPageDisplayModeOption _selectedPlaySetDisplayMode =
         PlaySetPageDisplayModeCatalog.Resolve(AppServices.Settings.PlaySetPageDisplayMode);
     private RetentionDaysOption _selectedModThumbnailRetention =
-        ModThumbnailRetentionCatalog.Resolve(AppServices.Settings.ModThumbnailCacheDays);
+        RetentionDaysCatalog.ModThumbnails.Resolve(AppServices.Settings.ModThumbnailCacheDays);
     private RetentionDaysOption _selectedDlcDescriptionRetention =
-        DlcDescriptionRetentionCatalog.Resolve(AppServices.Settings.DlcDescriptionCacheDays);
+        RetentionDaysCatalog.DlcDescriptions.Resolve(AppServices.Settings.DlcDescriptionCacheDays);
     private BackgroundDisplayModeOption _selectedBackgroundDisplayMode =
         BackgroundDisplayModeCatalog.Resolve(AppServices.Settings.BackgroundDisplayMode);
     private ModThumbnailSizeOption _selectedModThumbnailSize =
@@ -63,32 +64,47 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 CacheRowViewModel.ThemeKey,
                 Keys.SettingsCacheRowThemeTitle,
                 Keys.SettingsCacheRowThemeDesc,
-                AppServices.ThemeCacheRoot),
+                AppServices.ThemeCacheRoot,
+                () => CacheStorage.Clear(AppServices.FileSystem, AppServices.ThemeCacheRoot)),
             new(
                 CacheRowViewModel.NewsKey,
                 Keys.SettingsCacheRowNewsTitle,
                 Keys.SettingsCacheRowNewsDesc,
-                AppServices.NewsCacheRoot),
+                AppServices.NewsCacheRoot,
+                AppServices.NewsFeed.ClearCache),
             new(
                 CacheRowViewModel.ModThumbnailsKey,
                 Keys.SettingsCacheRowModThumbnailsTitle,
                 Keys.SettingsCacheRowModThumbnailsDesc,
-                AppServices.ModThumbnailCacheRoot),
+                AppServices.ModThumbnailCacheRoot,
+                () => AppServices.ModThumbnails.Cache.Clear()),
             new(
                 CacheRowViewModel.DlcDescriptionsKey,
                 Keys.SettingsCacheRowDlcDescriptionsTitle,
                 Keys.SettingsCacheRowDlcDescriptionsDesc,
-                AppServices.DlcDescriptions.CachePath),
+                AppServices.DlcDescriptions.CachePath,
+                AppServices.DlcDescriptions.ClearCache),
             new(
                 CacheRowViewModel.ImagesKey,
                 Keys.SettingsCacheRowImagesTitle,
                 Keys.SettingsCacheRowImagesDesc,
-                AppServices.ImageArt.CacheDirectory),
-            new CacheRowViewModel(
+                AppServices.ImageArt.CacheDirectory,
+                () =>
+                {
+                    CacheStorage.Clear(AppServices.FileSystem, AppServices.ImageArt.CacheDirectory);
+                    AppServices.ImageArt.Reset();
+                }),
+            new(
                 CacheRowViewModel.WorkshopKey,
                 Keys.SettingsCacheRowWorkshopTitle,
                 Keys.SettingsCacheRowWorkshopDesc,
-                AppServices.WorkshopCacheRoot),
+                AppServices.WorkshopCacheRoot,
+                () =>
+                {
+                    // 索引在内存里也有一份，删目录后必须一起清掉，否则下次还会报「命中」。
+                    AppServices.WorkshopInfo.Clear();
+                    CacheStorage.Clear(AppServices.FileSystem, AppServices.WorkshopCacheRoot);
+                }),
         };
     }
 
@@ -144,17 +160,20 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     // ------------------------------------------------------------ 主题区
 
     /// <summary>当前主题来源：联网缓存 / 安装目录 / 内置占位。</summary>
-    public string ThemeSourceText
+    public string ThemeSourceText => T(ThemeSourceKey);
+
+    /// <summary>当前主题来源对应的本地化键（展示文案与状态栏共用，避免两处 switch 漂移）。</summary>
+    private string ThemeSourceKey
     {
         get
         {
             var source = _theme?.Source ?? Game?.Theme.Source ?? ThemeAssetSource.BuiltInPlaceholder;
             return source switch
             {
-                ThemeAssetSource.OnlineCache => T(Keys.SettingsThemeSourceOnline),
-                ThemeAssetSource.InstallDir => T(Keys.SettingsThemeSourceInstallDir),
-                ThemeAssetSource.SteamCapsule => T(Keys.SettingsThemeSourceSteam),
-                _ => T(Keys.SettingsThemeSourceBuiltIn),
+                ThemeAssetSource.OnlineCache => Keys.SettingsThemeSourceOnline,
+                ThemeAssetSource.InstallDir => Keys.SettingsThemeSourceInstallDir,
+                ThemeAssetSource.SteamCapsule => Keys.SettingsThemeSourceSteam,
+                _ => Keys.SettingsThemeSourceBuiltIn,
             };
         }
     }
@@ -185,61 +204,37 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public bool OnlineRefreshEnabled
     {
         get => AppServices.Settings.OnlineThemeRefreshEnabled;
-        set
-        {
-            if (AppServices.Settings.OnlineThemeRefreshEnabled == value)
-            {
-                return;
-            }
-
-            AppServices.Settings.OnlineThemeRefreshEnabled = value;
-            SaveSettings();
-            OnPropertyChanged();
-            SetStatus(value ? Keys.SettingsThemeStatusOn : Keys.SettingsThemeStatusOff);
-        }
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.OnlineThemeRefreshEnabled,
+            v => AppServices.Settings.OnlineThemeRefreshEnabled = v,
+            Keys.SettingsThemeStatusOn,
+            Keys.SettingsThemeStatusOff);
     }
 
     /// <summary>DLC 简介联网开关；写入 AppSettings.OnlineDlcDescriptionEnabled 并登记延迟落盘。</summary>
     public bool DlcDescriptionOnlineEnabled
     {
         get => AppServices.Settings.OnlineDlcDescriptionEnabled;
-        set
-        {
-            if (AppServices.Settings.OnlineDlcDescriptionEnabled == value)
-            {
-                return;
-            }
-
-            AppServices.Settings.OnlineDlcDescriptionEnabled = value;
-            SaveSettings();
-            OnPropertyChanged();
-            if (value)
-            {
-                SetStatus(Keys.SettingsDataStatusDlcOn, AppServices.Settings.DlcDescriptionCacheDays);
-            }
-            else
-            {
-                SetStatus(Keys.SettingsDataStatusDlcOff);
-            }
-        }
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.OnlineDlcDescriptionEnabled,
+            v => AppServices.Settings.OnlineDlcDescriptionEnabled = v,
+            Keys.SettingsDataStatusDlcOn,
+            Keys.SettingsDataStatusDlcOff,
+            statusArgs: new object?[] { AppServices.Settings.DlcDescriptionCacheDays });
     }
 
     /// <summary>官方公告联网开关；写入 AppSettings.NewsFeedOnlineEnabled 并登记延迟落盘。</summary>
     public bool NewsFeedOnlineEnabled
     {
         get => AppServices.Settings.NewsFeedOnlineEnabled;
-        set
-        {
-            if (AppServices.Settings.NewsFeedOnlineEnabled == value)
-            {
-                return;
-            }
-
-            AppServices.Settings.NewsFeedOnlineEnabled = value;
-            SaveSettings();
-            OnPropertyChanged();
-            SetStatus(value ? Keys.SettingsDataStatusNewsOn : Keys.SettingsDataStatusNewsOff);
-        }
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.NewsFeedOnlineEnabled,
+            v => AppServices.Settings.NewsFeedOnlineEnabled = v,
+            Keys.SettingsDataStatusNewsOn,
+            Keys.SettingsDataStatusNewsOff);
     }
 
     /// <summary>可选的网络代理模式（直接连接 / 跟随系统 / 手动配置）。</summary>
@@ -317,22 +312,18 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public UiLanguageOption SelectedUiLanguage
     {
         get => _selectedUiLanguage;
-        set
-        {
-            if (value is null || ReferenceEquals(_selectedUiLanguage, value))
+        set => ApplyOption(
+            value,
+            _selectedUiLanguage,
+            Keys.SettingsInterfaceStatusLanguage,
+            v =>
             {
-                return;
-            }
-
-            _selectedUiLanguage = value;
-            AppServices.Settings.UiLanguage = value.Key;
-            SaveSettings();
-            OnPropertyChanged();
-            Localizer.Instance.Apply(value.Key);
-
+                _selectedUiLanguage = v;
+                AppServices.Settings.UiLanguage = v.Key;
+            },
             // 切语言后 T() 已经读新表，这里写进状态栏的就是新语言的句子。
-            SetStatus(Keys.SettingsInterfaceStatusLanguage, value.Title);
-        }
+            afterSave: () => Localizer.Instance.Apply(value.Key),
+            statusArgs: v => new object?[] { v.Title });
     }
 
     /// <summary>可选的播放集页面显示方式。</summary>
@@ -345,20 +336,16 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public PlaySetPageDisplayModeOption SelectedPlaySetDisplayMode
     {
         get => _selectedPlaySetDisplayMode;
-        set
-        {
-            if (value is null || ReferenceEquals(_selectedPlaySetDisplayMode, value))
+        set => ApplyOption(
+            value,
+            _selectedPlaySetDisplayMode,
+            Keys.SettingsInterfaceStatusPlaySet,
+            v =>
             {
-                return;
-            }
-
-            _selectedPlaySetDisplayMode = value;
-            OnPropertyChanged();
-            AppServices.Settings.PlaySetPageDisplayMode =
-                PlaySetPageDisplayModes.Normalize(value.Key);
-            SaveSettings();
-            SetStatus(Keys.SettingsInterfaceStatusPlaySet, value.Title);
-        }
+                _selectedPlaySetDisplayMode = v;
+                AppServices.Settings.PlaySetPageDisplayMode = PlaySetPageDisplayModes.Normalize(v.Key);
+            },
+            statusArgs: v => new object?[] { v.Title });
     }
 
     /// <summary>可选的整窗背景显示方式。</summary>
@@ -371,20 +358,17 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public BackgroundDisplayModeOption SelectedBackgroundDisplayMode
     {
         get => _selectedBackgroundDisplayMode;
-        set
-        {
-            if (value is null || ReferenceEquals(_selectedBackgroundDisplayMode, value))
+        set => ApplyOption(
+            value,
+            _selectedBackgroundDisplayMode,
+            Keys.SettingsInterfaceStatusBackground,
+            v =>
             {
-                return;
-            }
-
-            _selectedBackgroundDisplayMode = value;
-            OnPropertyChanged();
-            AppServices.Settings.BackgroundDisplayMode = BackgroundDisplayModes.Normalize(value.Key);
-            SaveSettings();
-            AppServices.NotifyBackgroundDisplayChanged();
-            SetStatus(Keys.SettingsInterfaceStatusBackground, value.Title);
-        }
+                _selectedBackgroundDisplayMode = v;
+                AppServices.Settings.BackgroundDisplayMode = BackgroundDisplayModes.Normalize(v.Key);
+            },
+            afterSave: AppServices.NotifyBackgroundDisplayChanged,
+            statusArgs: v => new object?[] { v.Title });
     }
 
     /// <summary>可选的 Mod 缩略图尺寸。</summary>
@@ -397,19 +381,16 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public ModThumbnailSizeOption SelectedModThumbnailSize
     {
         get => _selectedModThumbnailSize;
-        set
-        {
-            if (value is null || ReferenceEquals(_selectedModThumbnailSize, value))
+        set => ApplyOption(
+            value,
+            _selectedModThumbnailSize,
+            Keys.SettingsInterfaceStatusThumbnailSize,
+            v =>
             {
-                return;
-            }
-
-            _selectedModThumbnailSize = value;
-            OnPropertyChanged();
-            AppServices.Settings.ModThumbnailSize = ModThumbnailSizes.Normalize(value.Key);
-            SaveSettings();
-            SetStatus(Keys.SettingsInterfaceStatusThumbnailSize, value.Title, value.Pixels);
-        }
+                _selectedModThumbnailSize = v;
+                AppServices.Settings.ModThumbnailSize = ModThumbnailSizes.Normalize(v.Key);
+            },
+            statusArgs: v => new object?[] { v.Title, v.Pixels });
     }
 
     /// <summary>
@@ -553,25 +534,22 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     /// <summary>DLC 简介缓存保留天数（1 / 3 / 7 / 14 / 30）。</summary>
     public IReadOnlyList<RetentionDaysOption> DlcDescriptionRetentions =>
-        DlcDescriptionRetentionCatalog.All;
+        RetentionDaysCatalog.DlcDescriptions.All;
 
     /// <summary>DLC 简介缓存天数；改动登记延迟落盘，下一次查询按新值判断过期。</summary>
     public RetentionDaysOption SelectedDlcDescriptionRetention
     {
         get => _selectedDlcDescriptionRetention;
-        set
-        {
-            if (value is null || ReferenceEquals(_selectedDlcDescriptionRetention, value))
+        set => ApplyOption(
+            value,
+            _selectedDlcDescriptionRetention,
+            Keys.SettingsDataStatusDlcDays,
+            v =>
             {
-                return;
-            }
-
-            _selectedDlcDescriptionRetention = value;
-            OnPropertyChanged();
-            AppServices.Settings.DlcDescriptionCacheDays = value.Days;
-            SaveSettings();
-            SetStatus(Keys.SettingsDataStatusDlcDays, value.Days);
-        }
+                _selectedDlcDescriptionRetention = v;
+                AppServices.Settings.DlcDescriptionCacheDays = v.Days;
+            },
+            statusArgs: v => new object?[] { v.Days });
     }
 
     // ------------------------------------------------------------ 补丁
@@ -789,19 +767,13 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public bool WriteDlcSignature
     {
         get => AppServices.Settings.WriteDlcSignature;
-        set
-        {
-            if (AppServices.Settings.WriteDlcSignature == value)
-            {
-                return;
-            }
-
-            AppServices.Settings.WriteDlcSignature = value;
-            SaveSettings();
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(CanRegenerateSignature));
-            SetStatus(value ? Keys.SettingsDangerStatusAllowed : Keys.SettingsDangerStatusForbidden);
-        }
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.WriteDlcSignature,
+            v => AppServices.Settings.WriteDlcSignature = v,
+            Keys.SettingsDangerStatusAllowed,
+            Keys.SettingsDangerStatusForbidden,
+            afterSave: () => OnPropertyChanged(nameof(CanRegenerateSignature)));
     }
 
     /// <summary>开关关闭时禁用"重新生成"按钮。</summary>
@@ -834,10 +806,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     {
         var sameGame = IsSameGame(_game, game);
 
-        RefreshPlaySetDisplayMode();
-        RefreshBackgroundDisplayMode();
-        RefreshModThumbnailSize();
-        RefreshRetentions();
+        RefreshOptionSelections();
         Game = game;
         _theme = game?.Theme;
         if (!sameGame)
@@ -970,13 +939,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             OnPropertyChanged(nameof(ThemeSourceText));
             RaiseThemeProps();
 
-            var sourceKey = _theme.Source switch
-            {
-                ThemeAssetSource.OnlineCache => Keys.SettingsThemeSourceOnline,
-                ThemeAssetSource.InstallDir => Keys.SettingsThemeSourceInstallDir,
-                ThemeAssetSource.SteamCapsule => Keys.SettingsThemeSourceSteam,
-                _ => Keys.SettingsThemeSourceBuiltIn,
-            };
+            var sourceKey = ThemeSourceKey;
             SetStatus(Keys.SettingsThemeStatusDone, T(sourceKey), NextCheckText);
             AppServices.Logger.Info("主题检查完成（gameId=" + Game.GameId + "，source=" + T(sourceKey) + "）");
         }
@@ -1100,7 +1063,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         row.SetBusy(true);
         try
         {
-            await Task.Run(() => ClearCacheCore(row), cancellationToken).ConfigureAwait(true);
+            await Task.Run(row.Clear, cancellationToken).ConfigureAwait(true);
             await RefreshCacheStatsAsync(cancellationToken).ConfigureAwait(true);
             SetStatus(Keys.SettingsCacheStatusCleared, row.Title, SizeFormatter.Format(before.Bytes));
         }
@@ -1130,7 +1093,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 {
                     foreach (var row in CacheRows.ToArray())
                     {
-                        ClearCacheCore(row);
+                        row.Clear();
                     }
                 },
                 cancellationToken).ConfigureAwait(true);
@@ -1216,43 +1179,32 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public bool ModThumbnailOnlineEnabled
     {
         get => AppServices.Settings.OnlineModThumbnailEnabled;
-        set
-        {
-            if (AppServices.Settings.OnlineModThumbnailEnabled == value)
-            {
-                return;
-            }
-
-            AppServices.Settings.OnlineModThumbnailEnabled = value;
-            SaveSettings();
-            OnPropertyChanged();
-            SetStatus(value
-                ? Keys.SettingsModThumbnailsStatusOnlineOn
-                : Keys.SettingsModThumbnailsStatusOnlineOff);
-        }
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.OnlineModThumbnailEnabled,
+            v => AppServices.Settings.OnlineModThumbnailEnabled = v,
+            Keys.SettingsModThumbnailsStatusOnlineOn,
+            Keys.SettingsModThumbnailsStatusOnlineOff);
     }
 
     /// <summary>可选的 Mod 缩略图保留天数。</summary>
     public IReadOnlyList<RetentionDaysOption> ModThumbnailRetentions =>
-        ModThumbnailRetentionCatalog.All;
+        RetentionDaysCatalog.ModThumbnails.All;
 
     /// <summary>Mod 缩略图缓存保留天数；改动登记延迟落盘，下次加载 Mod 库时按新值清理。</summary>
     public RetentionDaysOption SelectedModThumbnailRetention
     {
         get => _selectedModThumbnailRetention;
-        set
-        {
-            if (value is null || ReferenceEquals(_selectedModThumbnailRetention, value))
+        set => ApplyOption(
+            value,
+            _selectedModThumbnailRetention,
+            Keys.SettingsModThumbnailsStatusRetention,
+            v =>
             {
-                return;
-            }
-
-            _selectedModThumbnailRetention = value;
-            OnPropertyChanged();
-            AppServices.Settings.ModThumbnailCacheDays = value.Days;
-            SaveSettings();
-            SetStatus(Keys.SettingsModThumbnailsStatusRetention, value.Days);
-        }
+                _selectedModThumbnailRetention = v;
+                AppServices.Settings.ModThumbnailCacheDays = v.Days;
+            },
+            statusArgs: v => new object?[] { v.Days });
     }
 
     /// <summary>Mod 缩略图缓存目录。</summary>
@@ -1282,6 +1234,67 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     private static string FormatLocal(DateTimeOffset utc) =>
         utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// 开关型设置的统一落盘路径：值没变直接返回；变了才赋值、落盘、发属性通知、跑附加动作，最后写状态栏。
+    /// 属性名由 setter 经 <see cref="CallerMemberNameAttribute"/> 传入，省掉每个属性手写 nameof。
+    /// </summary>
+    private void ApplyFlag(
+        bool value,
+        bool current,
+        Action<bool> assign,
+        string onStatusKey,
+        string offStatusKey,
+        Action? afterSave = null,
+        object?[]? statusArgs = null,
+        [CallerMemberName] string? propertyName = null)
+    {
+        if (value == current)
+        {
+            return;
+        }
+
+        assign(value);
+        SaveSettings();
+        OnPropertyChanged(propertyName);
+        afterSave?.Invoke();
+
+        if (value)
+        {
+            SetStatus(onStatusKey, statusArgs ?? Array.Empty<object?>());
+        }
+        else
+        {
+            SetStatus(offStatusKey);
+        }
+    }
+
+    /// <summary>
+    /// 下拉选项型设置的统一落盘路径：null 或同一个实例直接返回；否则赋值、落盘、发属性通知、跑附加动作、写状态栏。
+    /// statusArgs 用委托延迟求值，避免调用方在 null 检查之前碰 value。
+    /// </summary>
+    private bool ApplyOption<T>(
+        T? value,
+        T? current,
+        string statusKey,
+        Action<T> assign,
+        Action? afterSave = null,
+        Func<T, object?[]>? statusArgs = null,
+        [CallerMemberName] string? propertyName = null)
+        where T : class
+    {
+        if (value is null || ReferenceEquals(value, current))
+        {
+            return false;
+        }
+
+        assign(value);
+        SaveSettings();
+        OnPropertyChanged(propertyName);
+        afterSave?.Invoke();
+        SetStatus(statusKey, statusArgs?.Invoke(value) ?? Array.Empty<object?>());
+        return true;
+    }
 
     /// <summary>
     /// 设置页各属性的落盘入口：直接写盘而不是登记 300ms 合并写。
@@ -1369,80 +1382,29 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 ?? Alternatives[0];
     }
 
-    private void ClearCacheCore(CacheRowViewModel row)
+    /// <summary>
+    /// 设置可能被其它页面改过（或 settings.json 被外部编辑）：把所有下拉的选项集合与选中项重新解析一遍。
+    /// </summary>
+    private void RefreshOptionSelections()
     {
-        var fileSystem = AppServices.FileSystem;
-        switch (row.Key)
-        {
-            case CacheRowViewModel.ThemeKey:
-                CacheStorage.Clear(fileSystem, AppServices.ThemeCacheRoot);
-                break;
-            case CacheRowViewModel.NewsKey:
-                AppServices.NewsFeed.ClearCache();
-                break;
-            case CacheRowViewModel.ModThumbnailsKey:
-                AppServices.ModThumbnails.Cache.Clear();
-                break;
-            case CacheRowViewModel.DlcDescriptionsKey:
-                AppServices.DlcDescriptions.ClearCache();
-                break;
-            case CacheRowViewModel.ImagesKey:
-                CacheStorage.Clear(fileSystem, AppServices.ImageArt.CacheDirectory);
-                AppServices.ImageArt.Reset();
-                break;
-            case CacheRowViewModel.WorkshopKey:
-                // 索引在内存里也有一份，删目录后必须一起清掉，否则下次还会报「命中」。
-                AppServices.WorkshopInfo.Clear();
-                CacheStorage.Clear(fileSystem, AppServices.WorkshopCacheRoot);
-                break;
-            default:
-                CacheStorage.Clear(fileSystem, row.Path);
-                break;
-        }
-    }
-
-    /// <summary>设置可能被其它页面改过（或 settings.json 被外部编辑），重新读一遍。</summary>
-    private void RefreshPlaySetDisplayMode()
-    {
-        var resolved = PlaySetPageDisplayModeCatalog.Resolve(AppServices.Settings.PlaySetPageDisplayMode);
-        if (!ReferenceEquals(resolved, _selectedPlaySetDisplayMode))
-        {
-            _selectedPlaySetDisplayMode = resolved;
-        }
+        _selectedPlaySetDisplayMode =
+            PlaySetPageDisplayModeCatalog.Resolve(AppServices.Settings.PlaySetPageDisplayMode);
+        _selectedBackgroundDisplayMode =
+            BackgroundDisplayModeCatalog.Resolve(AppServices.Settings.BackgroundDisplayMode);
+        _selectedModThumbnailSize =
+            ModThumbnailSizeCatalog.Resolve(AppServices.Settings.ModThumbnailSize);
+        _selectedModThumbnailRetention =
+            RetentionDaysCatalog.ModThumbnails.Resolve(AppServices.Settings.ModThumbnailCacheDays);
+        _selectedDlcDescriptionRetention =
+            RetentionDaysCatalog.DlcDescriptions.Resolve(AppServices.Settings.DlcDescriptionCacheDays);
+        _selectedUiLanguage = UiLanguageCatalog.Resolve(AppServices.Settings.UiLanguage);
 
         OnPropertyChanged(nameof(PlaySetDisplayModes));
         OnPropertyChanged(nameof(SelectedPlaySetDisplayMode));
-    }
-
-    /// <summary>背景显示方式可能被外部改过（或 settings.json 被手动编辑），重新读一遍。</summary>
-    private void RefreshBackgroundDisplayMode()
-    {
-        _selectedBackgroundDisplayMode =
-            BackgroundDisplayModeCatalog.Resolve(AppServices.Settings.BackgroundDisplayMode);
-
         OnPropertyChanged(nameof(BackgroundDisplayModeOptions));
         OnPropertyChanged(nameof(SelectedBackgroundDisplayMode));
-    }
-
-    /// <summary>Mod 缩略图尺寸可能被外部改过，重新读一遍。</summary>
-    private void RefreshModThumbnailSize()
-    {
-        _selectedModThumbnailSize =
-            ModThumbnailSizeCatalog.Resolve(AppServices.Settings.ModThumbnailSize);
-
         OnPropertyChanged(nameof(ModThumbnailSizeOptions));
         OnPropertyChanged(nameof(SelectedModThumbnailSize));
-    }
-
-    /// <summary>两处「保留天数」与界面语言也可能被外部改过，重新读一遍。</summary>
-    private void RefreshRetentions()
-    {
-        _selectedModThumbnailRetention =
-            ModThumbnailRetentionCatalog.Resolve(AppServices.Settings.ModThumbnailCacheDays);
-        _selectedDlcDescriptionRetention =
-            DlcDescriptionRetentionCatalog.Resolve(AppServices.Settings.DlcDescriptionCacheDays);
-        _selectedUiLanguage = UiLanguageCatalog.Resolve(AppServices.Settings.UiLanguage);
-
         OnPropertyChanged(nameof(ModThumbnailRetentions));
         OnPropertyChanged(nameof(SelectedModThumbnailRetention));
         OnPropertyChanged(nameof(DlcDescriptionRetentions));

@@ -1,4 +1,4 @@
-# 交接文档（HANDOFF）—— 下一轮对话从这里开始
+﻿# 交接文档（HANDOFF）—— 下一轮对话从这里开始
 
 > 本文件由上一轮会话在用户要求「停止，留下文档给下个对话使用，需要任务拆分」时写入。
 > 状态时间：2026-10-25 22:30（本机时区 Asia/Hong_Kong）。
@@ -36,6 +36,29 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-10-27 14:40 追加：应用图标从零做起 —— 石墨圆角方 + 金「P」（碗里放播放三角），`tools/gen-app-icon.py` 是唯一生成源，接进 exe 资源（`<ApplicationIcon>`）与运行期窗口（`AppWindow.SetIcon`），并替换 `Assets\` 里 8 张模板占位 PNG；dist 仍 538 文件，见 §0.15 与 §14。**
 **2026-10-27 14:50 追加：设置页「内容和滚动条重叠」已修 —— 根因是 WinUI 3 的滚动条是**浮层**，贴着 `ScrollViewer` 右边缘画在卡片描边/圆角上；现给滚动内容与状态栏各留 14 DIP 右侧通道，滚动条改落在通道里。真机三态截图 + 像素测量见 §0.16。**
 **2026-10-27 15:10 追加：设置页左侧分节导航从「纯文字 ListView」换成官方 `NavigationView`（带 `SymbolIcon`）—— 选中指示条到文字的间距从 ≈8 DIP 变成 ≈41 DIP，见 §0.17。**
+**2026-10-27 15:30 追加：设置页「缓存」分类接管「数据 / Mod 缩略图」两块（联网分类只剩代理），并做了一轮设置代码去重，见 §0.18。**
+
+## 0.18 最新一轮（2026-10-27 15:30）：设置页缓存接管「数据 / Mod 缩略图」，并做一轮去重
+
+> 用户诉求原话（截图是设置页「联网」小节）：「联网页面的数据和缩略图应该在缓存里；重新审视下设置中的代码，降低代码重复度」。
+
+- 信息架构：`联网` 分类只剩「网络代理」三卡；`数据`（DLC 简介开关 + 简介缓存天数 + 公告开关）与
+  `Mod 缩略图`（联网开关 + 图片保留天数 + 缓存目录卡）整块移到 `缓存` 分类，顺序为
+  缓存标题 → 合计卡（刷新大小 / 清除全部）→ 四行缓存清单 → 数据 → Mod 缩略图 → 缓存说明。
+  AutomationId 一个没改，只换了分区。
+- 去重（行为保持，一个 commit 一步、每步 build + Checks 通过）：
+  - 开关/下拉 setter：`SettingsViewModel` 新增 `ApplyFlag` / `ApplyOption`（`[CallerMemberName]` 让通知落在属性名上），
+    6 个开关 + 6 个下拉的「同值判断 → 写设置 → 保存 → 通知 → 状态栏」样板收敛成一行；`PersistSettings()` 改为 `=> SaveSettings()`。
+  - 下拉刷新：四个 `Refresh*` 合并为 `RefreshOptionSelections()`；主题来源键只留一处 `ThemeSourceKey`。
+  - 缓存清除：`CacheRowViewModel` 构造时注入清除委托，删掉 `SettingsViewModel.ClearCacheCore` 的 Key 分派。
+  - 保留天数目录：`ModThumbnailRetentionCatalog` + `DlcDescriptionRetentionCatalog` 合并为 `RetentionDaysCatalog`
+    （`ModThumbnails` 默认 30 天、`DlcDescriptions` 默认 7 天）。
+  - XAML：只读值卡改用新控件 `Controls/SettingsValueCard`（Header/Description/Value/ValueAutomationId/
+    ValueAutomationName/MaxValueWidth/ShowToolTip）；hint 与二级小节标题走 `SettingsHintTextStyle` / `SettingsSubsectionTitleStyle`。
+  - code-behind：`ConfirmAsync`（统一确认框）、`RunGuardedAsync`（事件护栏）、`OpenPath`（合并 OpenDirectory/OpenExplorer）。
+- 验证：`dotnet build "PdxLauncher.sln" -c Release -m:1 -nodeReuse:false -p:UseSharedCompilation=false` 0 警告 0 错误；
+  Checks 16 类 0 失败；UIA 分节六类 want 全部命中（每节 missing 全空；count 会随缓存统计/进度环等状态浮动，不作为断言）；
+  截图 `.scratch/rework/settings-*.png` 与 `.scratch/rework/settings-cache-bottom.png`。
 
 **2026-10-27 15:40 追加：EU4 卡片「发灰」与 EU5「不出现」两问全部落地 —— 前者是「20% alpha 纱层图被 WinUI 直接铺在黑底上」+「下载全超时仍写 lastCheckedUtc 锁死 5 天」两个根因，已用 `WashLayerPolicy` / `ThemeImageFlattener` 摊平 + 刷新失败不推进 TTL 修掉；后者是 EU5 安装目录压根没有 `launcher-settings.json`，已加 `InstallSignatureDetector` 按 `binaries/eu5.exe` 特征识别，见 §0.18。**
 
@@ -969,6 +992,8 @@ EU5（1.0 起）安装目录只有 `binaries\`、`game\`、`clausewitz\`、`jomi
 
 - 改动前的三份文件在 `.scratch\rework\backup-20261027-scrollgutter\`（`SettingsPage.xaml`、`SETTINGS-REWORK.md`、`HANDOFF.md`）。
 - 仓库已 git 化，本次代码与文档改动已提交；后续回滚走 `git restore` / `git revert`。
+
+**2026-10-27 15:30 追加：设置页「缓存」分类接管 DLC 简介 / 官方公告 / Mod 缩略图三块（联网只剩代理），并做了一轮开关/下拉/刷新/清除/code-behind 去重；build 0/0、Checks 16 类 0 失败、UIA 六节 want 全命中，见 §0.16。**
 
 ## 0.15 最新一轮（2026-10-27 14:40）：应用图标 —— 从零做一套，接进 exe / 窗口 / 任务栏
 

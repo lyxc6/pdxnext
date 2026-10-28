@@ -9,6 +9,19 @@
     NavigationCacheMode="Required"
     Background="{ThemeResource PdxPageVeilBrush}">
 
+    <Page.Resources>
+        <!-- 小标题下方/卡片下方的说明文字，统一走这一个样式（原来是 4 行内联属性 × 8 处）。 -->
+        <Style x:Key="SettingsHintTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="4,0,4,8" />
+        </Style>
+        <!-- 一个分类里的二级小节标题（「数据」「Mod 缩略图」「程序数据」…）。 -->
+        <Style x:Key="SettingsSubsectionTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource SubtitleTextBlockStyle}">
+            <Setter Property="Margin" Value="0,8,0,0" />
+        </Style>
+    </Page.Resources>
+
     <Grid Padding="20" RowSpacing="12" ColumnSpacing="16">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="216" />
@@ -110,32 +123,23 @@
                     <StackPanel x:Name="secAppearance" Spacing="8">
                         <TextBlock Text="{x:Bind L.SettingsSectionTheme, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsThemeSource, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <TextBlock AutomationProperties.AutomationId="txtThemeSource"
-                                           AutomationProperties.Name="{x:Bind L.SettingsThemeSource, Mode=OneWay}"
-                                           Text="{x:Bind ViewModel.ThemeSourceText, Mode=OneWay}"
-                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsThemeSource, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.ThemeSourceText, Mode=OneWay}"
+                                                    ValueAutomationId="txtThemeSource"
+                                                    ValueAutomationName="{x:Bind L.SettingsThemeSource, Mode=OneWay}"
+                                                    ShowToolTip="False" />
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsThemeLastCheck, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <TextBlock AutomationProperties.AutomationId="txtThemeLastCheck"
-                                           AutomationProperties.Name="{x:Bind L.SettingsThemeLastCheck, Mode=OneWay}"
-                                           Text="{x:Bind ViewModel.LastCheckText, Mode=OneWay}"
-                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsThemeLastCheck, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.LastCheckText, Mode=OneWay}"
+                                                    ValueAutomationId="txtThemeLastCheck"
+                                                    ValueAutomationName="{x:Bind L.SettingsThemeLastCheck, Mode=OneWay}"
+                                                    ShowToolTip="False" />
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsThemeNextCheck, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <TextBlock AutomationProperties.AutomationId="txtThemeNextCheck"
-                                           AutomationProperties.Name="{x:Bind L.SettingsThemeNextCheck, Mode=OneWay}"
-                                           Text="{x:Bind ViewModel.NextCheckText, Mode=OneWay}"
-                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsThemeNextCheck, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.NextCheckText, Mode=OneWay}"
+                                                    ValueAutomationId="txtThemeNextCheck"
+                                                    ValueAutomationName="{x:Bind L.SettingsThemeNextCheck, Mode=OneWay}"
+                                                    ShowToolTip="False" />
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsThemeOnlineOn, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
@@ -156,12 +160,9 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
-                        <TextBlock Text="{x:Bind L.SettingsThemeHint, Mode=OneWay}"
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                        <TextBlock Text="{x:Bind L.SettingsThemeHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
 
-                        <TextBlock Text="{x:Bind L.SettingsSectionInterface, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
+                        <TextBlock Text="{x:Bind L.SettingsSectionInterface, Mode=OneWay}" Style="{StaticResource SettingsSubsectionTitleStyle}" />
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsInterfaceLanguage, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
@@ -219,33 +220,22 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
-                        <TextBlock Text="{x:Bind L.SettingsInterfaceHint, Mode=OneWay}"
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                        <TextBlock Text="{x:Bind L.SettingsInterfaceHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
                     </StackPanel>
 
                     <StackPanel x:Name="secLaunch" Spacing="8" Visibility="Collapsed">
                         <TextBlock Text="{x:Bind L.SettingsSectionLaunch, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsLaunchExe, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <TextBlock AutomationProperties.AutomationId="txtExePath"
-                                           AutomationProperties.Name="{x:Bind L.SettingsLaunchExeName, Mode=OneWay}"
-                                           Text="{x:Bind ViewModel.ExePath, Mode=OneWay}"
-                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                           ToolTipService.ToolTip="{x:Bind ViewModel.ExePath, Mode=OneWay}" />
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsLaunchExe, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.ExePath, Mode=OneWay}"
+                                                    ValueAutomationId="txtExePath"
+                                                    ValueAutomationName="{x:Bind L.SettingsLaunchExeName, Mode=OneWay}" />
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsLaunchArgs, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <TextBlock AutomationProperties.AutomationId="txtExeArgs"
-                                           AutomationProperties.Name="{x:Bind L.SettingsLaunchArgsName, Mode=OneWay}"
-                                           Text="{x:Bind ViewModel.ExeArgsText, Mode=OneWay}"
-                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsLaunchArgs, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.ExeArgsText, Mode=OneWay}"
+                                                    ValueAutomationId="txtExeArgs"
+                                                    ValueAutomationName="{x:Bind L.SettingsLaunchArgsName, Mode=OneWay}"
+                                                    ShowToolTip="False" />
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsLaunchAlternatives, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
@@ -278,52 +268,31 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsDataDlcScan, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <TextBlock AutomationProperties.AutomationId="txtDlcPath"
-                                           AutomationProperties.Name="{x:Bind L.SettingsDataDlcScanName, Mode=OneWay}"
-                                           Text="{x:Bind ViewModel.DlcPath, Mode=OneWay}"
-                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                           ToolTipService.ToolTip="{x:Bind ViewModel.DlcPath, Mode=OneWay}" />
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsDataDlcScan, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.DlcPath, Mode=OneWay}"
+                                                    ValueAutomationId="txtDlcPath"
+                                                    ValueAutomationName="{x:Bind L.SettingsDataDlcScanName, Mode=OneWay}" />
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsDataModDir, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <TextBlock AutomationProperties.AutomationId="txtModDir"
-                                           AutomationProperties.Name="{x:Bind L.SettingsDataModDirName, Mode=OneWay}"
-                                           Text="{x:Bind ViewModel.ModDir, Mode=OneWay}"
-                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                           ToolTipService.ToolTip="{x:Bind ViewModel.ModDir, Mode=OneWay}" />
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsDataModDir, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.ModDir, Mode=OneWay}"
+                                                    ValueAutomationId="txtModDir"
+                                                    ValueAutomationName="{x:Bind L.SettingsDataModDirName, Mode=OneWay}" />
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsDataFormatVersion, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <TextBlock AutomationProperties.AutomationId="txtFormatVersion"
-                                           AutomationProperties.Name="{x:Bind L.SettingsDataFormatVersionName, Mode=OneWay}"
-                                           Text="{x:Bind ViewModel.FormatVersionText, Mode=OneWay}"
-                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsDataFormatVersion, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.FormatVersionText, Mode=OneWay}"
+                                                    ValueAutomationId="txtFormatVersion"
+                                                    ValueAutomationName="{x:Bind L.SettingsDataFormatVersionName, Mode=OneWay}"
+                                                    ShowToolTip="False" />
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsDataLoadFile, Mode=OneWay}"
-                                               Description="{x:Bind ViewModel.LoadFileStateText, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <TextBlock AutomationProperties.AutomationId="txtLoadFilePath"
-                                           AutomationProperties.Name="{x:Bind L.SettingsDataLoadFileName, Mode=OneWay}"
-                                           Text="{x:Bind ViewModel.LoadFilePath, Mode=OneWay}"
-                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                           ToolTipService.ToolTip="{x:Bind ViewModel.LoadFilePath, Mode=OneWay}" />
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsDataLoadFile, Mode=OneWay}"
+                                                    Description="{x:Bind ViewModel.LoadFileStateText, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.LoadFilePath, Mode=OneWay}"
+                                                    ValueAutomationId="txtLoadFilePath"
+                                                    ValueAutomationName="{x:Bind L.SettingsDataLoadFileName, Mode=OneWay}" />
 
-                        <TextBlock Text="{x:Bind L.SettingsDataDlcHint, Mode=OneWay}"
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                        <TextBlock Text="{x:Bind L.SettingsDataDlcHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
 
-                        <TextBlock Text="{x:Bind L.SettingsSectionAppData, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
+                        <TextBlock Text="{x:Bind L.SettingsSectionAppData, Mode=OneWay}" Style="{StaticResource SettingsSubsectionTitleStyle}" />
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsAppDataCurrent, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
@@ -357,10 +326,7 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
-                        <TextBlock Text="{x:Bind L.SettingsAppDataHint, Mode=OneWay}"
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                        <TextBlock Text="{x:Bind L.SettingsAppDataHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
                     </StackPanel>
 
                     <StackPanel x:Name="secOnline" Spacing="8" Visibility="Collapsed">
@@ -392,20 +358,12 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsProxyCurrent, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <TextBlock AutomationProperties.AutomationId="txtProxyStatus"
-                                           AutomationProperties.Name="{x:Bind L.SettingsProxyCurrentName, Mode=OneWay}"
-                                           Text="{x:Bind ViewModel.ProxyStatusText, Mode=OneWay}"
-                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                           ToolTipService.ToolTip="{x:Bind ViewModel.ProxyStatusText, Mode=OneWay}" />
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsProxyCurrent, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.ProxyStatusText, Mode=OneWay}"
+                                                    ValueAutomationId="txtProxyStatus"
+                                                    ValueAutomationName="{x:Bind L.SettingsProxyCurrentName, Mode=OneWay}" />
 
-                        <TextBlock Text="{x:Bind L.SettingsProxyHint, Mode=OneWay}"
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                        <TextBlock Text="{x:Bind L.SettingsProxyHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
 
                     </StackPanel>
 
@@ -451,7 +409,7 @@
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <TextBlock Text="{x:Bind L.SettingsSectionData, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
+                        <TextBlock Text="{x:Bind L.SettingsSectionData, Mode=OneWay}" Style="{StaticResource SettingsSubsectionTitleStyle}" />
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsDataDlcOnlineOn, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
@@ -480,12 +438,9 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
-                        <TextBlock Text="{x:Bind L.SettingsDataNewsHint, Mode=OneWay}"
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                        <TextBlock Text="{x:Bind L.SettingsDataNewsHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
 
-                        <TextBlock Text="{x:Bind L.SettingsSectionModThumbnails, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
+                        <TextBlock Text="{x:Bind L.SettingsSectionModThumbnails, Mode=OneWay}" Style="{StaticResource SettingsSubsectionTitleStyle}" />
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsModThumbnailsOnlineOn, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
@@ -506,26 +461,15 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsModThumbnailsCacheDir, Mode=OneWay}"
-                                               Description="{x:Bind ViewModel.ModThumbnailCacheSummary, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <TextBlock AutomationProperties.AutomationId="txtModThumbnailCachePath"
-                                           AutomationProperties.Name="{x:Bind L.SettingsModThumbnailsCacheDirName, Mode=OneWay}"
-                                           Text="{x:Bind ViewModel.ModThumbnailCachePath, Mode=OneWay}"
-                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                           ToolTipService.ToolTip="{x:Bind ViewModel.ModThumbnailCachePath, Mode=OneWay}" />
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsModThumbnailsCacheDir, Mode=OneWay}"
+                                                    Description="{x:Bind ViewModel.ModThumbnailCacheSummary, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.ModThumbnailCachePath, Mode=OneWay}"
+                                                    ValueAutomationId="txtModThumbnailCachePath"
+                                                    ValueAutomationName="{x:Bind L.SettingsModThumbnailsCacheDirName, Mode=OneWay}" />
 
-                        <TextBlock Text="{x:Bind L.SettingsModThumbnailsHint, Mode=OneWay}"
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                        <TextBlock Text="{x:Bind L.SettingsModThumbnailsHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
 
-                        <TextBlock Text="{x:Bind L.SettingsCacheHint, Mode=OneWay}"
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                        <TextBlock Text="{x:Bind L.SettingsCacheHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
                     </StackPanel>
 
                     <StackPanel x:Name="secAdvanced" Spacing="8" Visibility="Collapsed">
@@ -603,21 +547,13 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsDangerSignatureName, Mode=OneWay}"
-                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasLastSignature), Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <TextBlock AutomationProperties.AutomationId="txtLastSignature"
-                                           AutomationProperties.Name="{x:Bind L.SettingsDangerSignatureName, Mode=OneWay}"
-                                           Text="{x:Bind ViewModel.LastSignature, Mode=OneWay}"
-                                           MaxWidth="420" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                           ToolTipService.ToolTip="{x:Bind ViewModel.LastSignature, Mode=OneWay}" />
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsDangerSignatureName, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.LastSignature, Mode=OneWay}"
+                                                    ValueAutomationId="txtLastSignature"
+                                                    ValueAutomationName="{x:Bind L.SettingsDangerSignatureName, Mode=OneWay}"
+                                                    Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasLastSignature), Mode=OneWay}" />
 
-                        <TextBlock Text="{x:Bind L.SettingsDangerHint, Mode=OneWay}"
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                        <TextBlock Text="{x:Bind L.SettingsDangerHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>
