@@ -116,6 +116,20 @@ public sealed class WorkshopDetailSource
         CancellationToken cancellationToken) =>
         _steam.GetItemPageAsync(id, cancellationToken);
 
+    /// <summary>取一页 Steam 评论（翻页接口）。</summary>
+    /// <param name="creatorSteamId">条目作者 SteamID64。</param>
+    /// <param name="id">工坊条目 id。</param>
+    /// <param name="start">起始偏移（0 基）。</param>
+    /// <param name="count">本页条数。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public Task<AppResult<SteamWorkshopCommentPage>> GetSteamCommentsAsync(
+        string creatorSteamId,
+        string id,
+        int start,
+        int count,
+        CancellationToken cancellationToken) =>
+        _steam.GetCommentsAsync(creatorSteamId, id, start, count, cancellationToken);
+
     /// <summary>
     /// 读本机 mod 库与当前播放集的启用情况，供依赖检查比对。
     /// <para>任何一步读不到都返回「未知」（两个字段为 null），让界面显示「无法判断」而不是误报缺依赖。</para>

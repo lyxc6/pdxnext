@@ -314,9 +314,10 @@ public static class ModsApiChecks
             Uri uri,
             string? authorizationJson,
             string? jsonBody,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            IReadOnlyDictionary<string, string>? headers = null)
         {
-            Calls.Add(new Call(method, uri, authorizationJson, jsonBody));
+            Calls.Add(new Call(method, uri, authorizationJson, jsonBody, headers));
             if (_throw is not null)
             {
                 throw _throw;
@@ -325,7 +326,12 @@ public static class ModsApiChecks
             return Task.FromResult(new PdxHttpResponse(_status, _body));
         }
 
-        public sealed record Call(string Method, Uri Uri, string? AuthorizationJson, string? JsonBody);
+        public sealed record Call(
+            string Method,
+            Uri Uri,
+            string? AuthorizationJson,
+            string? JsonBody,
+            IReadOnlyDictionary<string, string>? Headers = null);
     }
 
     private sealed class NullLogger : IAppLogger

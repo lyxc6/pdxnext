@@ -200,6 +200,79 @@ public sealed class SteamWorkshopClient
         }
     }
 
+    /// <summary>
+    /// 取一页创意工坊评论。
+    /// <para>
+    /// 物品页 HTML 只内嵌首屏评论，翻页是页面脚本请求
+    /// <c>/comment/PublishedFile_Public/render/{作者}/{文件}/?start=…&amp;count=…</c>；
+    /// 返回 JSON 的 <c>comments_html</c> 与物品页内嵌评论同构，所以复用同一份解析。
+    /// </para>
+    /// </summary>
+    /// <param name="creatorSteamId">条目作者的 SteamID64（物品详情里的 <c>creator</c>）。</param>
+    /// <param name="publishedFileId">Steam 已发布文件 id。</param>
+    /// <param name="start">起始偏移（0 基）。</param>
+    /// <param name="count">本页条数（服务端上限 50）。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<AppResult<SteamWorkshopCommentPage>> GetCommentsAsync(
+        string creatorSteamId,
+        string publishedFileId,
+        int start,
+        int count,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(creatorSteamId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(publishedFileId);
+
+        var safeStart = Math.Max(0, start);
+        var safeCount = Math.Clamp(count, 1, MaxPageSize);
+
+        var uri = new Uri(
+            OnlineHosts.SteamCommunityCommentEndpoint.AbsoluteUri +
+            Uri.EscapeDataString(creatorSteamId) + "/" +
+            Uri.EscapeDataString(publishedFileId) + "/" +
+            "?start=" + safeStart.ToString(CultureInfo.InvariantCulture) +
+            "&count=" + safeCount.ToString(CultureInfo.InvariantCulture));
+
+        try
+        {
+            await using var stream = await _http.GetAsync(uri, cancellationToken).ConfigureAwait(false);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            var json = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+
+            var ok = root.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.True;
+            if (!ok)
+            {
+                _logger.Warn("Steam 创意工坊评论接口返回失败: id=" + publishedFileId);
+                return AppResult<SteamWorkshopCommentPage>.Fail(ErrorKind.Unsupported, "steam-comments-rejected");
+            }
+
+            var total = root.TryGetProperty("total_count", out var totalNode) && totalNode.TryGetInt32(out var totalValue)
+                ? totalValue
+                : 0;
+
+            var html = root.TryGetProperty("comments_html", out var htmlNode) && htmlNode.ValueKind == JsonValueKind.String
+                ? htmlNode.GetString()
+                : null;
+
+            var comments = SteamWorkshopItemPageParser.ParseComments(html, safeCount);
+            return AppResult<SteamWorkshopCommentPage>.Ok(
+                new SteamWorkshopCommentPage(comments, total, safeStart, safeCount));
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.Warn("Steam 创意工坊评论请求失败: id=" + publishedFileId + " " + ex.Message);
+            return AppResult<SteamWorkshopCommentPage>.Fail(ErrorKind.Unknown, "steam-comments-http");
+        }
+        catch (JsonException ex)
+        {
+            _logger.Warn("Steam 创意工坊评论解析失败: " + ex.Message);
+            return AppResult<SteamWorkshopCommentPage>.Fail(ErrorKind.Io, "steam-comments-bad-json");
+        }
+    }
+
     /// <summary>探测某款游戏有没有 Steam 创意工坊（结果按 appId 缓存）。</summary>
     /// <param name="appId">Steam appid。</param>
     /// <param name="cancellationToken">取消令牌。</param>

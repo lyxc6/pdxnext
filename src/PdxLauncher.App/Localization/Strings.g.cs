@@ -590,7 +590,9 @@ public sealed partial class Localizer
         ["shell.version"] = "版本 {0}",
         ["workshop.author"] = "作者 {0}",
         ["workshop.commentsCount"] = "共 {0} 条评论",
-        ["workshop.commentsMore"] = "显示前 {0} 条，共 {1} 条",
+        ["workshop.commentsNext"] = "下一页",
+        ["workshop.commentsPage"] = "第 {0} / {1} 页 · 共 {2} 条",
+        ["workshop.commentsPrev"] = "上一页",
         ["workshop.countText"] = "{0} 个结果",
         ["workshop.coverProgress"] = "封面 {0}/{1}",
         ["workshop.dependencyDisabled"] = "已安装未启用",
@@ -610,11 +612,12 @@ public sealed partial class Localizer
         ["workshop.detailCommentsAll"] = "在 Steam 上查看全部讨论",
         ["workshop.detailCreated"] = "发布于 {0}",
         ["workshop.detailDependencies"] = "依赖的 mod",
-        ["workshop.detailDescription"] = "简介",
+        ["workshop.detailDescription"] = "描述",
         ["workshop.detailErrorUnknown"] = "原因未知",
         ["workshop.detailFailed"] = "读取详情失败：{0}",
         ["workshop.detailFavorites"] = "收藏 {0}",
         ["workshop.detailForum"] = "论坛帖子",
+        ["workshop.detailInfo"] = "信息",
         ["workshop.detailInstalled"] = "已订阅",
         ["workshop.detailLinks"] = "相关链接",
         ["workshop.detailLoading"] = "正在读取详情…",
@@ -624,7 +627,17 @@ public sealed partial class Localizer
         ["workshop.detailScreenshots"] = "截图 {0} 张",
         ["workshop.detailScreenshotsLoading"] = "正在下载截图…",
         ["workshop.detailScreenshotsTitle"] = "截图",
+        ["workshop.detailSubscribe"] = "订阅",
+        ["workshop.detailSubscribeFailed"] = "订阅失败：{0}",
+        ["workshop.detailSubscribeOk"] = "已订阅",
+        ["workshop.detailSubscribePlaysetHint"] = "订阅会加入播放集 PdxNext，下次启动时生效",
+        ["workshop.detailSubscribeSignIn"] = "登录 Paradox 账号后才能订阅",
+        ["workshop.detailSubscribeSteam"] = "在 Steam 中订阅",
+        ["workshop.detailSubscribing"] = "正在订阅…",
         ["workshop.detailTags"] = "标签",
+        ["workshop.detailUnsubscribe"] = "取消订阅",
+        ["workshop.detailUnsubscribeFailed"] = "取消订阅失败：{0}",
+        ["workshop.detailUnsubscribeOk"] = "已取消订阅",
         ["workshop.detailViewImage"] = "查看大图",
         ["workshop.detailViews"] = "浏览 {0}",
         ["workshop.emptyHint"] = "这个游戏还没有创意工坊内容",
@@ -1259,7 +1272,9 @@ public sealed partial class Localizer
         ["shell.version"] = "Version {0}",
         ["workshop.author"] = "by {0}",
         ["workshop.commentsCount"] = "{0} comments",
-        ["workshop.commentsMore"] = "Showing the first {0} of {1}",
+        ["workshop.commentsNext"] = "Next page",
+        ["workshop.commentsPage"] = "Page {0} of {1} · {2} comments",
+        ["workshop.commentsPrev"] = "Previous page",
         ["workshop.countText"] = "{0} results",
         ["workshop.coverProgress"] = "Covers {0}/{1}",
         ["workshop.dependencyDisabled"] = "Installed, disabled",
@@ -1284,6 +1299,7 @@ public sealed partial class Localizer
         ["workshop.detailFailed"] = "Failed to load details: {0}",
         ["workshop.detailFavorites"] = "{0} favorites",
         ["workshop.detailForum"] = "Forum thread",
+        ["workshop.detailInfo"] = "Info",
         ["workshop.detailInstalled"] = "Subscribed",
         ["workshop.detailLinks"] = "Links",
         ["workshop.detailLoading"] = "Loading details…",
@@ -1293,7 +1309,17 @@ public sealed partial class Localizer
         ["workshop.detailScreenshots"] = "{0} screenshots",
         ["workshop.detailScreenshotsLoading"] = "Downloading screenshots…",
         ["workshop.detailScreenshotsTitle"] = "Screenshots",
+        ["workshop.detailSubscribe"] = "Subscribe",
+        ["workshop.detailSubscribeFailed"] = "Subscribe failed: {0}",
+        ["workshop.detailSubscribeOk"] = "Subscribed",
+        ["workshop.detailSubscribePlaysetHint"] = "Adds the mod to play set PdxNext; applies on next launch",
+        ["workshop.detailSubscribeSignIn"] = "Sign in to your Paradox account to subscribe",
+        ["workshop.detailSubscribeSteam"] = "Subscribe in Steam",
+        ["workshop.detailSubscribing"] = "Subscribing…",
         ["workshop.detailTags"] = "Tags",
+        ["workshop.detailUnsubscribe"] = "Unsubscribe",
+        ["workshop.detailUnsubscribeFailed"] = "Unsubscribe failed: {0}",
+        ["workshop.detailUnsubscribeOk"] = "Unsubscribed",
         ["workshop.detailViewImage"] = "View image",
         ["workshop.detailViews"] = "{0} views",
         ["workshop.emptyHint"] = "This game has no workshop content yet",
@@ -1928,7 +1954,9 @@ public sealed partial class Localizer
         ("shell.version", "ShellVersion"),
         ("workshop.author", "WorkshopAuthor"),
         ("workshop.commentsCount", "WorkshopCommentsCount"),
-        ("workshop.commentsMore", "WorkshopCommentsMore"),
+        ("workshop.commentsNext", "WorkshopCommentsNext"),
+        ("workshop.commentsPage", "WorkshopCommentsPage"),
+        ("workshop.commentsPrev", "WorkshopCommentsPrev"),
         ("workshop.countText", "WorkshopCountText"),
         ("workshop.coverProgress", "WorkshopCoverProgress"),
         ("workshop.dependencyDisabled", "WorkshopDependencyDisabled"),
@@ -1953,6 +1981,7 @@ public sealed partial class Localizer
         ("workshop.detailFailed", "WorkshopDetailFailed"),
         ("workshop.detailFavorites", "WorkshopDetailFavorites"),
         ("workshop.detailForum", "WorkshopDetailForum"),
+        ("workshop.detailInfo", "WorkshopDetailInfo"),
         ("workshop.detailInstalled", "WorkshopDetailInstalled"),
         ("workshop.detailLinks", "WorkshopDetailLinks"),
         ("workshop.detailLoading", "WorkshopDetailLoading"),
@@ -1962,7 +1991,17 @@ public sealed partial class Localizer
         ("workshop.detailScreenshots", "WorkshopDetailScreenshots"),
         ("workshop.detailScreenshotsLoading", "WorkshopDetailScreenshotsLoading"),
         ("workshop.detailScreenshotsTitle", "WorkshopDetailScreenshotsTitle"),
+        ("workshop.detailSubscribe", "WorkshopDetailSubscribe"),
+        ("workshop.detailSubscribeFailed", "WorkshopDetailSubscribeFailed"),
+        ("workshop.detailSubscribeOk", "WorkshopDetailSubscribeOk"),
+        ("workshop.detailSubscribePlaysetHint", "WorkshopDetailSubscribePlaysetHint"),
+        ("workshop.detailSubscribeSignIn", "WorkshopDetailSubscribeSignIn"),
+        ("workshop.detailSubscribeSteam", "WorkshopDetailSubscribeSteam"),
+        ("workshop.detailSubscribing", "WorkshopDetailSubscribing"),
         ("workshop.detailTags", "WorkshopDetailTags"),
+        ("workshop.detailUnsubscribe", "WorkshopDetailUnsubscribe"),
+        ("workshop.detailUnsubscribeFailed", "WorkshopDetailUnsubscribeFailed"),
+        ("workshop.detailUnsubscribeOk", "WorkshopDetailUnsubscribeOk"),
         ("workshop.detailViewImage", "WorkshopDetailViewImage"),
         ("workshop.detailViews", "WorkshopDetailViews"),
         ("workshop.emptyHint", "WorkshopEmptyHint"),
@@ -2595,7 +2634,9 @@ public sealed partial class Localizer
     public string ShellVersion => Format("shell.version");
     public string WorkshopAuthor => Format("workshop.author");
     public string WorkshopCommentsCount => Format("workshop.commentsCount");
-    public string WorkshopCommentsMore => Format("workshop.commentsMore");
+    public string WorkshopCommentsNext => Format("workshop.commentsNext");
+    public string WorkshopCommentsPage => Format("workshop.commentsPage");
+    public string WorkshopCommentsPrev => Format("workshop.commentsPrev");
     public string WorkshopCountText => Format("workshop.countText");
     public string WorkshopCoverProgress => Format("workshop.coverProgress");
     public string WorkshopDependencyDisabled => Format("workshop.dependencyDisabled");
@@ -2620,6 +2661,7 @@ public sealed partial class Localizer
     public string WorkshopDetailFailed => Format("workshop.detailFailed");
     public string WorkshopDetailFavorites => Format("workshop.detailFavorites");
     public string WorkshopDetailForum => Format("workshop.detailForum");
+    public string WorkshopDetailInfo => Format("workshop.detailInfo");
     public string WorkshopDetailInstalled => Format("workshop.detailInstalled");
     public string WorkshopDetailLinks => Format("workshop.detailLinks");
     public string WorkshopDetailLoading => Format("workshop.detailLoading");
@@ -2629,7 +2671,17 @@ public sealed partial class Localizer
     public string WorkshopDetailScreenshots => Format("workshop.detailScreenshots");
     public string WorkshopDetailScreenshotsLoading => Format("workshop.detailScreenshotsLoading");
     public string WorkshopDetailScreenshotsTitle => Format("workshop.detailScreenshotsTitle");
+    public string WorkshopDetailSubscribe => Format("workshop.detailSubscribe");
+    public string WorkshopDetailSubscribeFailed => Format("workshop.detailSubscribeFailed");
+    public string WorkshopDetailSubscribeOk => Format("workshop.detailSubscribeOk");
+    public string WorkshopDetailSubscribePlaysetHint => Format("workshop.detailSubscribePlaysetHint");
+    public string WorkshopDetailSubscribeSignIn => Format("workshop.detailSubscribeSignIn");
+    public string WorkshopDetailSubscribeSteam => Format("workshop.detailSubscribeSteam");
+    public string WorkshopDetailSubscribing => Format("workshop.detailSubscribing");
     public string WorkshopDetailTags => Format("workshop.detailTags");
+    public string WorkshopDetailUnsubscribe => Format("workshop.detailUnsubscribe");
+    public string WorkshopDetailUnsubscribeFailed => Format("workshop.detailUnsubscribeFailed");
+    public string WorkshopDetailUnsubscribeOk => Format("workshop.detailUnsubscribeOk");
     public string WorkshopDetailViewImage => Format("workshop.detailViewImage");
     public string WorkshopDetailViews => Format("workshop.detailViews");
     public string WorkshopEmptyHint => Format("workshop.emptyHint");
@@ -3265,7 +3317,9 @@ internal static class Keys
     public const string ShellVersion = "shell.version";
     public const string WorkshopAuthor = "workshop.author";
     public const string WorkshopCommentsCount = "workshop.commentsCount";
-    public const string WorkshopCommentsMore = "workshop.commentsMore";
+    public const string WorkshopCommentsNext = "workshop.commentsNext";
+    public const string WorkshopCommentsPage = "workshop.commentsPage";
+    public const string WorkshopCommentsPrev = "workshop.commentsPrev";
     public const string WorkshopCountText = "workshop.countText";
     public const string WorkshopCoverProgress = "workshop.coverProgress";
     public const string WorkshopDependencyDisabled = "workshop.dependencyDisabled";
@@ -3290,6 +3344,7 @@ internal static class Keys
     public const string WorkshopDetailFailed = "workshop.detailFailed";
     public const string WorkshopDetailFavorites = "workshop.detailFavorites";
     public const string WorkshopDetailForum = "workshop.detailForum";
+    public const string WorkshopDetailInfo = "workshop.detailInfo";
     public const string WorkshopDetailInstalled = "workshop.detailInstalled";
     public const string WorkshopDetailLinks = "workshop.detailLinks";
     public const string WorkshopDetailLoading = "workshop.detailLoading";
@@ -3299,7 +3354,17 @@ internal static class Keys
     public const string WorkshopDetailScreenshots = "workshop.detailScreenshots";
     public const string WorkshopDetailScreenshotsLoading = "workshop.detailScreenshotsLoading";
     public const string WorkshopDetailScreenshotsTitle = "workshop.detailScreenshotsTitle";
+    public const string WorkshopDetailSubscribe = "workshop.detailSubscribe";
+    public const string WorkshopDetailSubscribeFailed = "workshop.detailSubscribeFailed";
+    public const string WorkshopDetailSubscribeOk = "workshop.detailSubscribeOk";
+    public const string WorkshopDetailSubscribePlaysetHint = "workshop.detailSubscribePlaysetHint";
+    public const string WorkshopDetailSubscribeSignIn = "workshop.detailSubscribeSignIn";
+    public const string WorkshopDetailSubscribeSteam = "workshop.detailSubscribeSteam";
+    public const string WorkshopDetailSubscribing = "workshop.detailSubscribing";
     public const string WorkshopDetailTags = "workshop.detailTags";
+    public const string WorkshopDetailUnsubscribe = "workshop.detailUnsubscribe";
+    public const string WorkshopDetailUnsubscribeFailed = "workshop.detailUnsubscribeFailed";
+    public const string WorkshopDetailUnsubscribeOk = "workshop.detailUnsubscribeOk";
     public const string WorkshopDetailViewImage = "workshop.detailViewImage";
     public const string WorkshopDetailViews = "workshop.detailViews";
     public const string WorkshopEmptyHint = "workshop.emptyHint";

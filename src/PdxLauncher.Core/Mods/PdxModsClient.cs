@@ -34,6 +34,19 @@ public sealed class PdxModsClient
     /// <summary>详情端点（不含查询串）。</summary>
     public static Uri DetailEndpoint { get; } = new("https://api.paradox-interactive.com/mods");
 
+    /// <summary>播放集（activation set）端点前缀。</summary>
+    public static Uri SetsEndpoint { get; } = new("https://api.paradox-interactive.com/mods/sets");
+
+    /// <summary>订阅（已安装 mod）端点：POST 订阅、DELETE 退订，都按 <c>activationSetId</c> 记。</summary>
+    public static Uri InstalledEndpoint { get; } = new("https://api.paradox-interactive.com/mods/installed");
+
+    /// <summary>订阅写接口要求的版本头；缺了会被服务端按旧协议处理。</summary>
+    public static IReadOnlyDictionary<string, string> AcceptVersionHeaders { get; } =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["X-Accept-Version"] = "2",
+        };
+
     /// <summary>服务端 <c>sortBy</c> 白名单（实测 400 报文里逐字列出）。</summary>
     public static IReadOnlyList<string> AllowedSortValues { get; } =
         ["activationOrder", "created", "displayName", "popularity", "rating", "updated", "best"];
@@ -296,7 +309,8 @@ public sealed class PdxModsClient
         Uri uri,
         string? jsonBody,
         PdxLauncher.Core.Accounts.PdxSession? session,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? headers = null)
     {
         var authorization = session is null || string.IsNullOrWhiteSpace(session.SessionToken)
             ? null
@@ -304,7 +318,7 @@ public sealed class PdxModsClient
 
         try
         {
-            return await _http.SendAsync(method, uri, authorization, jsonBody, cancellationToken)
+            return await _http.SendAsync(method, uri, authorization, jsonBody, cancellationToken, headers)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
@@ -313,6 +327,310 @@ public sealed class PdxModsClient
             _logger.Warn("PDX Mods 请求失败（网络）: " + method + " " + uri.AbsolutePath + " — " + ex.Message);
             return new PdxHttpResponse(0, string.Empty);
         }
+    }
+
+    /// <summary>
+    /// 取某款游戏在 PDX 侧的播放集（activation set）列表。
+    /// <para>
+    /// 订阅按播放集登记，所以要先拿到 <c>activationSetId</c>；没有播放集时先
+    /// <see cref="CreatePlaySetAsync"/> 建一个。
+    /// </para>
+    /// </summary>
+    /// <param name="gameName">平台游戏 id（形如 <c>cities_skylines_2</c>）。</param>
+    /// <param name="session">登录会话（必填，否则 401）。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<AppResult<IReadOnlyList<PdxPlaySet>>> GetPlaySetsAsync(
+        string gameName,
+        PdxLauncher.Core.Accounts.PdxSession? session,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
+
+        if (session is null || string.IsNullOrWhiteSpace(session.SessionToken))
+        {
+            return AppResult<IReadOnlyList<PdxPlaySet>>.Fail(ErrorKind.Unauthorized, "pdx-playsets:sign-in-required");
+        }
+
+        var uri = new Uri(
+            SetsEndpoint.AbsoluteUri + "/list/" + Uri.EscapeDataString(gameName) + "?includeShared=false");
+
+        var response = await SendAsync("GET", uri, null, session, cancellationToken)
+            .ConfigureAwait(false);
+        if (!response.IsSuccess)
+        {
+            var kind = MapFailure(response.StatusCode);
+            _logger.Warn("PDX 播放集列表请求失败: game=" + gameName + " status=" + response.StatusCode);
+            return AppResult<IReadOnlyList<PdxPlaySet>>.Fail(kind, "pdx-playsets:" + kind.ToString().ToLowerInvariant());
+        }
+
+        try
+        {
+            var root = JsonNode.Parse(response.Body);
+            var list = new List<PdxPlaySet>();
+            foreach (var node in EnumerateItems(root, "sets", "playSets", "items"))
+            {
+                if (node is not JsonObject item)
+                {
+                    continue;
+                }
+
+                var id = GetLong(item, "id");
+                if (id <= 0)
+                {
+                    continue;
+                }
+
+                list.Add(new PdxPlaySet(
+                    Id: id,
+                    Name: FirstNonEmpty(GetString(item, "name"), GetString(item, "displayName")),
+                    GameName: NullIfEmpty(FirstNonEmpty(GetString(item, "game"), GetString(item, "gameName"))),
+                    ModCount: GetNullableInt(item, "modsCount")));
+            }
+
+            return AppResult<IReadOnlyList<PdxPlaySet>>.Ok(list);
+        }
+        catch (JsonException ex)
+        {
+            _logger.Warn("PDX 播放集列表解析失败: " + ex.Message);
+            return AppResult<IReadOnlyList<PdxPlaySet>>.Fail(ErrorKind.Io, "pdx-playsets:bad-json");
+        }
+    }
+
+    /// <summary>
+    /// 在 PDX 侧建一个播放集。
+    /// <para>注意：这会在用户账号里留下一个与官方启动器并列的播放集，命名要克制。</para>
+    /// </summary>
+    /// <param name="gameName">平台游戏 id。</param>
+    /// <param name="name">播放集显示名。</param>
+    /// <param name="session">登录会话（必填）。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<AppResult<PdxPlaySet>> CreatePlaySetAsync(
+        string gameName,
+        string name,
+        PdxLauncher.Core.Accounts.PdxSession? session,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gameName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+
+        if (session is null || string.IsNullOrWhiteSpace(session.SessionToken))
+        {
+            return AppResult<PdxPlaySet>.Fail(ErrorKind.Unauthorized, "pdx-playset-create:sign-in-required");
+        }
+
+        var body = new JsonObject
+        {
+            ["game"] = gameName,
+            ["name"] = name,
+        };
+
+        var response = await SendAsync("POST", SetsEndpoint, body.ToJsonString(), session, cancellationToken)
+            .ConfigureAwait(false);
+        if (!response.IsSuccess)
+        {
+            var kind = MapFailure(response.StatusCode);
+            _logger.Warn("PDX 播放集创建失败: game=" + gameName + " status=" + response.StatusCode);
+            return AppResult<PdxPlaySet>.Fail(kind, "pdx-playset-create:" + kind.ToString().ToLowerInvariant());
+        }
+
+        try
+        {
+            var root = JsonNode.Parse(response.Body);
+            var node = root as JsonObject;
+            if (node?["set"] is JsonObject nested)
+            {
+                node = nested;
+            }
+
+            var id = node is null ? 0 : GetLong(node, "id");
+            if (id <= 0)
+            {
+                return AppResult<PdxPlaySet>.Fail(ErrorKind.Io, "pdx-playset-create:bad-json");
+            }
+
+            return AppResult<PdxPlaySet>.Ok(new PdxPlaySet(
+                Id: id,
+                Name: FirstNonEmpty(GetString(node!, "name"), name),
+                GameName: gameName,
+                ModCount: 0));
+        }
+        catch (JsonException ex)
+        {
+            _logger.Warn("PDX 播放集创建响应解析失败: " + ex.Message);
+            return AppResult<PdxPlaySet>.Fail(ErrorKind.Io, "pdx-playset-create:bad-json");
+        }
+    }
+
+    /// <summary>取一个播放集里的 mod（用来判断当前 mod 是否已订阅）。</summary>
+    /// <param name="activationSetId">播放集 id。</param>
+    /// <param name="session">登录会话（必填）。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<AppResult<IReadOnlyList<PdxPlaySetMod>>> GetPlaySetModsAsync(
+        long activationSetId,
+        PdxLauncher.Core.Accounts.PdxSession? session,
+        CancellationToken cancellationToken)
+    {
+        if (activationSetId <= 0)
+        {
+            return AppResult<IReadOnlyList<PdxPlaySetMod>>.Fail(ErrorKind.Invalid, "pdx-playset-mods:bad-set");
+        }
+
+        if (session is null || string.IsNullOrWhiteSpace(session.SessionToken))
+        {
+            return AppResult<IReadOnlyList<PdxPlaySetMod>>.Fail(ErrorKind.Unauthorized, "pdx-playset-mods:sign-in-required");
+        }
+
+        var uri = new Uri(
+            SetsEndpoint.AbsoluteUri + "/" +
+            activationSetId.ToString(CultureInfo.InvariantCulture) + "/mods");
+
+        var response = await SendAsync("GET", uri, null, session, cancellationToken)
+            .ConfigureAwait(false);
+        if (!response.IsSuccess)
+        {
+            var kind = MapFailure(response.StatusCode);
+            _logger.Warn("PDX 播放集 mod 列表请求失败: set=" + activationSetId + " status=" + response.StatusCode);
+            return AppResult<IReadOnlyList<PdxPlaySetMod>>.Fail(kind, "pdx-playset-mods:" + kind.ToString().ToLowerInvariant());
+        }
+
+        try
+        {
+            var root = JsonNode.Parse(response.Body);
+            var list = new List<PdxPlaySetMod>();
+            foreach (var node in EnumerateItems(root, "mods", "items", "results"))
+            {
+                if (node is not JsonObject item)
+                {
+                    continue;
+                }
+
+                var modId = FirstNonEmpty(GetString(item, "modId"), GetString(item, "id"));
+                if (modId.Length == 0)
+                {
+                    continue;
+                }
+
+                list.Add(new PdxPlaySetMod(
+                    ModId: modId,
+                    Name: NullIfEmpty(FirstNonEmpty(GetString(item, "displayName"), GetString(item, "name"))),
+                    Version: GetNullableInt(item, "version"),
+                    Enabled: GetBool(item, "enabled", true)));
+            }
+
+            return AppResult<IReadOnlyList<PdxPlaySetMod>>.Ok(list);
+        }
+        catch (JsonException ex)
+        {
+            _logger.Warn("PDX 播放集 mod 列表解析失败: " + ex.Message);
+            return AppResult<IReadOnlyList<PdxPlaySetMod>>.Fail(ErrorKind.Io, "pdx-playset-mods:bad-json");
+        }
+    }
+
+    /// <summary>
+    /// 订阅一个 mod：<c>POST /mods/installed</c>，body 里的 <c>activationSetId</c> 决定登记到哪个播放集。
+    /// </summary>
+    /// <param name="activationSetId">播放集 id。</param>
+    /// <param name="modId">平台 mod id。</param>
+    /// <param name="version">要固定的版本号；null 表示跟随最新。</param>
+    /// <param name="session">登录会话（必填）。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<AppResult<bool>> SubscribeAsync(
+        long activationSetId,
+        string modId,
+        int? version,
+        PdxLauncher.Core.Accounts.PdxSession? session,
+        CancellationToken cancellationToken)
+    {
+        if (activationSetId <= 0)
+        {
+            return AppResult<bool>.Fail(ErrorKind.Invalid, "pdx-subscribe:bad-set");
+        }
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(modId);
+
+        if (session is null || string.IsNullOrWhiteSpace(session.SessionToken))
+        {
+            return AppResult<bool>.Fail(ErrorKind.Unauthorized, "pdx-subscribe:sign-in-required");
+        }
+
+        var entry = new JsonObject();
+        if (long.TryParse(modId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numericId))
+        {
+            entry["id"] = numericId;
+        }
+        else
+        {
+            entry["id"] = modId;
+        }
+
+        if (version is > 0)
+        {
+            entry["version"] = version.Value;
+        }
+
+        var body = new JsonObject
+        {
+            ["activationSetId"] = activationSetId,
+            ["mods"] = new JsonArray(entry),
+        };
+
+        var response = await SendAsync(
+            "POST",
+            InstalledEndpoint,
+            body.ToJsonString(),
+            session,
+            cancellationToken,
+            AcceptVersionHeaders).ConfigureAwait(false);
+
+        if (!response.IsSuccess)
+        {
+            var kind = MapFailure(response.StatusCode);
+            _logger.Warn("PDX 订阅失败: mod=" + modId + " set=" + activationSetId + " status=" + response.StatusCode);
+            return AppResult<bool>.Fail(kind, "pdx-subscribe:" + kind.ToString().ToLowerInvariant());
+        }
+
+        return AppResult<bool>.Ok(true);
+    }
+
+    /// <summary>取消订阅：<c>DELETE /mods/installed?activationSetId=…&amp;modId=…</c>。</summary>
+    /// <param name="activationSetId">播放集 id。</param>
+    /// <param name="modId">平台 mod id。</param>
+    /// <param name="session">登录会话（必填）。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<AppResult<bool>> UnsubscribeAsync(
+        long activationSetId,
+        string modId,
+        PdxLauncher.Core.Accounts.PdxSession? session,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modId);
+
+        if (session is null || string.IsNullOrWhiteSpace(session.SessionToken))
+        {
+            return AppResult<bool>.Fail(ErrorKind.Unauthorized, "pdx-unsubscribe:sign-in-required");
+        }
+
+        var uri = new Uri(
+            InstalledEndpoint.AbsoluteUri +
+            "?activationSetId=" + activationSetId.ToString(CultureInfo.InvariantCulture) +
+            "&modId=" + Uri.EscapeDataString(modId));
+
+        var response = await SendAsync(
+            "DELETE",
+            uri,
+            null,
+            session,
+            cancellationToken,
+            AcceptVersionHeaders).ConfigureAwait(false);
+
+        if (!response.IsSuccess)
+        {
+            var kind = MapFailure(response.StatusCode);
+            _logger.Warn("PDX 退订失败: mod=" + modId + " set=" + activationSetId + " status=" + response.StatusCode);
+            return AppResult<bool>.Fail(kind, "pdx-unsubscribe:" + kind.ToString().ToLowerInvariant());
+        }
+
+        return AppResult<bool>.Ok(true);
     }
 
     private static ErrorKind MapFailure(int statusCode) => statusCode switch
@@ -404,4 +722,67 @@ public sealed class PdxModsClient
         string.IsNullOrWhiteSpace(first) ? second : first;
 
     private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    /// <summary>
+    /// 从响应里取条目集合：顶层是数组就直接用，是对象则依次试给定字段名。
+    /// <para>播放集相关端点的外层包装不稳定（有时裸数组，有时 <c>{sets:[…]}</c>），所以做宽容解析。</para>
+    /// </summary>
+    private static IEnumerable<JsonNode?> EnumerateItems(JsonNode? root, params string[] keys)
+    {
+        if (root is JsonArray direct)
+        {
+            return direct;
+        }
+
+        if (root is not JsonObject node)
+        {
+            return [];
+        }
+
+        foreach (var key in keys)
+        {
+            if (node[key] is JsonArray array)
+            {
+                return array;
+            }
+        }
+
+        return [];
+    }
+
+    /// <summary>取可空整数（服务端可能给 null 或缺字段）。</summary>
+    private static int? GetNullableInt(JsonObject node, string key)
+    {
+        if (node[key] is not JsonValue value)
+        {
+            return null;
+        }
+
+        if (value.TryGetValue<int>(out var number))
+        {
+            return number;
+        }
+
+        // 有的端点是数字字符串。
+        return value.TryGetValue<string>(out var text)
+            && int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    /// <summary>取布尔（缺字段时返回 <paramref name="fallback"/>）。</summary>
+    private static bool GetBool(JsonObject node, string key, bool fallback)
+    {
+        if (node[key] is not JsonValue value)
+        {
+            return fallback;
+        }
+
+        if (value.TryGetValue<bool>(out var flag))
+        {
+            return flag;
+        }
+
+        return value.TryGetValue<string>(out var text) && bool.TryParse(text, out var parsed) ? parsed : fallback;
+    }
 }

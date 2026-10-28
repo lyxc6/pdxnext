@@ -168,3 +168,14 @@ public sealed record SteamWorkshopComment(
     DateTimeOffset PostedUtc,
     string TextHtml,
     string TextPlain);
+
+/// <summary>一页创意工坊评论（来自 <c>/comment/PublishedFile_Public/render/…</c>）。</summary>
+/// <param name="Comments">这一页的评论。</param>
+/// <param name="TotalCount">评论总数（接口返回的 total_count）。</param>
+/// <param name="Start">本页起始偏移（0 基）。</param>
+/// <param name="PageSize">本页最多条数。</param>
+public sealed record SteamWorkshopCommentPage(
+    IReadOnlyList<SteamWorkshopComment> Comments,
+    int TotalCount,
+    int Start,
+    int PageSize);

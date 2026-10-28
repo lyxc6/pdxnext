@@ -1,4 +1,4 @@
-namespace PdxLauncher.App.ViewModels;
+﻿namespace PdxLauncher.App.ViewModels;
 
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -28,21 +28,31 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>截图并发下载上限：详情页没有列表那种 6 张封面的压力，2 张够用又不抢带宽。</summary>
     private const int MaxConcurrentScreenshots = 2;
 
+    /// <summary>评论每页条数（Steam 服务端上限 50，这里取小一点让翻页有感知）。</summary>
+    public const int CommentsPageSize = 15;
+
     private readonly WorkshopDetailSource _source;
     private readonly WorkshopImageCache _images;
+    private readonly WorkshopSubscriptionService _subscription;
     private readonly IAppLogger _logger;
+
+    /// <summary>Steam 评论翻页要用作者 SteamID（接口路径里的一部分）。</summary>
+    private string? _steamCreatorId;
 
     /// <summary>构造。</summary>
     /// <param name="source">详情取数。</param>
     /// <param name="images">图片缓存（封面/截图落地）。</param>
+    /// <param name="subscription">PDX 订阅服务。</param>
     /// <param name="logger">日志。</param>
     public WorkshopDetailViewModel(
         WorkshopDetailSource source,
         WorkshopImageCache images,
+        WorkshopSubscriptionService subscription,
         IAppLogger logger)
     {
         _source = source;
         _images = images;
+        _subscription = subscription;
         _logger = logger;
     }
 
@@ -133,6 +143,30 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     [ObservableProperty]
     private bool _isInstalled;
 
+    /// <summary>订阅状态是否已从平台查到（false 时按钮仍可用，只是不敢断言「未订阅」）。</summary>
+    [ObservableProperty]
+    private bool _isSubscriptionKnown;
+
+    /// <summary>是否已登录 Paradox 账号（登录才能订阅）。</summary>
+    [ObservableProperty]
+    private bool _isSignedIn;
+
+    /// <summary>订阅/退订请求正在飞。</summary>
+    [ObservableProperty]
+    private bool _isSubscribing;
+
+    /// <summary>评论总数（服务端 total_count）。</summary>
+    [ObservableProperty]
+    private int _commentsTotal;
+
+    /// <summary>当前评论页（1 基）。</summary>
+    [ObservableProperty]
+    private int _commentsPage = 1;
+
+    /// <summary>订阅操作的即时反馈（成功/失败文案），空串表示没有。</summary>
+    [ObservableProperty]
+    private string _statusText = string.Empty;
+
     /// <summary>图片墙（PDX 截图 + 描述里内嵌的图）。</summary>
     public ObservableCollection<WorkshopScreenshotViewModel> Screenshots { get; } = [];
 
@@ -208,6 +242,65 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>是否有可打开的浏览器地址（决定页头按钮是否可用）。</summary>
     public bool HasWebUrl => !string.IsNullOrWhiteSpace(WebUrl);
 
+    /// <summary>评论总数超过一页才显示分页控件。</summary>
+    public bool HasCommentsPaging => ShowCommentsSection && CommentsTotal > CommentsPageSize;
+
+    /// <summary>评论总页数（至少 1）。</summary>
+    public int CommentsPageCount =>
+        CommentsTotal <= 0 ? 1 : (CommentsTotal + CommentsPageSize - 1) / CommentsPageSize;
+
+    /// <summary>「第 3 / 10 页 · 共 136 条」文案；没有评论时为空串。</summary>
+    public string CommentsPageText => CommentsTotal <= 0
+        ? string.Empty
+        : T(Keys.WorkshopCommentsPage, CommentsPage, CommentsPageCount, CommentsTotal);
+
+    /// <summary>是否有评论页码文案。</summary>
+    public bool HasCommentsPageText => !string.IsNullOrWhiteSpace(CommentsPageText);
+
+    /// <summary>能不能翻上一页。</summary>
+    public bool CanCommentsPrev => HasCommentsPaging && CommentsPage > 1;
+
+    /// <summary>能不能翻下一页。</summary>
+    public bool CanCommentsNext => HasCommentsPaging && CommentsPage < CommentsPageCount;
+
+    /// <summary>这张卡是不是 PDX 的订阅卡（Steam 走「在 Steam 中订阅」）。</summary>
+    public bool CanSubscribe => Row?.Source == WorkshopSource.Pdx;
+
+    /// <summary>订阅按钮是否可点（已登录且当前没有请求在飞）。</summary>
+    public bool CanToggleSubscription => CanSubscribe && IsSignedIn && !IsSubscribing;
+
+    /// <summary>订阅按钮文案：订阅 / 订阅中… / 取消订阅。</summary>
+    public string SubscribeActionText => IsSubscribing
+        ? T(Keys.WorkshopDetailSubscribing)
+        : IsInstalled
+            ? T(Keys.WorkshopDetailUnsubscribe)
+            : T(Keys.WorkshopDetailSubscribe);
+
+    /// <summary>订阅框下方的说明（未登录提示 / 播放集提示）。</summary>
+    public string SubscribeHint => !CanSubscribe
+        ? string.Empty
+        : IsSignedIn
+            ? T(Keys.WorkshopDetailSubscribePlaysetHint)
+            : T(Keys.WorkshopDetailSubscribeSignIn);
+
+    /// <summary>是否有订阅说明文案。</summary>
+    public bool HasSubscribeHint => !string.IsNullOrWhiteSpace(SubscribeHint);
+
+    /// <summary>是否有订阅操作反馈文案。</summary>
+    public bool HasStatusText => !string.IsNullOrWhiteSpace(StatusText);
+
+    /// <summary>是否显示订阅卡（两种来源都显示：PDX 走平台订阅，Steam 走客户端）。</summary>
+    public bool ShowSubscribeCard => Row is not null;
+
+    /// <summary>是否显示 PDX 的订阅按钮（Steam 显示「在 Steam 中订阅」）。</summary>
+    public bool ShowPdxSubscribeButton => CanSubscribe;
+
+    /// <summary>是否显示 Steam 的订阅按钮（跳客户端）。</summary>
+    public bool ShowSteamSubscribeButton => Row?.Source == WorkshopSource.Steam;
+
+    /// <summary>订阅状态是否已确认（未确认时不显示「未订阅」这种断言文案）。</summary>
+    public bool ShowSubscriptionState => CanSubscribe && IsSubscriptionKnown;
+
     /// <summary>加载指定行；重复调用会先清空上一次的内容。</summary>
     /// <param name="row">创意工坊列表行。</param>
     /// <param name="cancellationToken">取消令牌（页面离开时取消）。</param>
@@ -257,6 +350,143 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     public Task ReloadAsync(CancellationToken cancellationToken) =>
         Row is null ? Task.CompletedTask : LoadAsync(Row, cancellationToken);
 
+    /// <summary>
+    /// 载入某一页评论（Steam 走翻页接口）。
+    /// <para>作者 SteamID 还没拿到、或来源不是 Steam 时直接返回（首屏评论已经渲染过了）。</para>
+    /// </summary>
+    /// <param name="page">页号（1 基）。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task LoadCommentsPageAsync(int page, CancellationToken cancellationToken)
+    {
+        if (Row is not { Source: WorkshopSource.Steam } row || string.IsNullOrWhiteSpace(_steamCreatorId))
+        {
+            return;
+        }
+
+        var target = Math.Max(1, page);
+        var start = (target - 1) * CommentsPageSize;
+        if (CommentsTotal > 0 && start >= CommentsTotal)
+        {
+            return;
+        }
+
+        IsLoadingComments = true;
+        NotifyStateChanged();
+
+        try
+        {
+            var result = await _source
+                .GetSteamCommentsAsync(_steamCreatorId!, row.Id, start, CommentsPageSize, cancellationToken)
+                .ConfigureAwait(true);
+
+            if (result is { IsSuccess: true, Value: { } pageData })
+            {
+                ApplyCommentPage(pageData, target);
+            }
+            else
+            {
+                _logger.Info("Steam 评论翻页失败，保留当前页: " + row.Id + " page=" + target);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("Steam 评论翻页异常: " + ex.Message);
+        }
+        finally
+        {
+            IsLoadingComments = false;
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>查询 PDX 订阅状态（未登录/接口失败时静默保持「未知」）。</summary>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task LoadSubscriptionStateAsync(CancellationToken cancellationToken)
+    {
+        if (Row is not { Source: WorkshopSource.Pdx } row)
+        {
+            return;
+        }
+
+        var gameId = AppServices.CurrentGame?.GameId;
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return;
+        }
+
+        try
+        {
+            var state = await _subscription
+                .GetStateAsync(gameId, row.Id, cancellationToken)
+                .ConfigureAwait(true);
+
+            IsSignedIn = state.IsSignedIn;
+            IsSubscriptionKnown = state.IsKnown;
+            if (state.IsKnown)
+            {
+                IsInstalled = state.IsSubscribed;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("查询订阅状态异常: " + ex.Message);
+        }
+        finally
+        {
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>订阅 / 退订（界面已做二次确认）。成功后立刻刷新按钮与徽标。</summary>
+    /// <param name="subscribe">true 订阅，false 退订。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<AppResult<bool>> ToggleSubscriptionAsync(
+        bool subscribe,
+        CancellationToken cancellationToken)
+    {
+        if (Row is not { Source: WorkshopSource.Pdx } row)
+        {
+            return AppResult<bool>.Fail(ErrorKind.Unsupported, "workshop-subscription:not-pdx");
+        }
+
+        var gameId = AppServices.CurrentGame?.GameId;
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return AppResult<bool>.Fail(ErrorKind.Invalid, "workshop-subscription:no-game");
+        }
+
+        IsSubscribing = true;
+        NotifyStateChanged();
+
+        try
+        {
+            var result = await _subscription
+                .SetSubscribedAsync(gameId, row.Id, null, subscribe, cancellationToken)
+                .ConfigureAwait(true);
+
+            if (result.IsSuccess)
+            {
+                IsInstalled = subscribe;
+                IsSubscriptionKnown = true;
+            }
+
+            return result;
+        }
+        finally
+        {
+            IsSubscribing = false;
+            NotifyStateChanged();
+        }
+    }
+
     /// <summary>下行前把上一次的内容清掉，避免看到上一个 mod 的正文。</summary>
     private void ResetForLoad(WorkshopRowViewModel row)
     {
@@ -282,6 +512,12 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         IsLoading = true;
         IsLoadingScreenshots = false;
         IsLoadingComments = false;
+        IsSubscriptionKnown = false;
+        IsSignedIn = false;
+        IsSubscribing = false;
+        CommentsTotal = 0;
+        CommentsPage = 1;
+        _steamCreatorId = null;
 
         // 列表里已经下好的封面先直接用，别在详情页再下一次。
         CoverPath = row.CoverPath;
@@ -325,6 +561,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         MetaText = BuildSteamMeta(item, detail);
         AuthorProfileUrl = detail.CreatorProfileUrl;
         TagsText = BuildSteamTags(detail, item);
+        _steamCreatorId = string.IsNullOrWhiteSpace(detail.CreatorSteamId) ? null : detail.CreatorSteamId;
 
         // 缓存命中的 CreatedUtc 是「抓取时间」，不是发布时间，所以只认列表条目里的真实值。
         CreatedText = item is { } steamItem && steamItem.CreatedUtc > DateTimeOffset.UnixEpoch
@@ -335,21 +572,31 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         var imageUrls = new List<string>();
 
         var pageResult = await pageTask.ConfigureAwait(true);
-        if (pageResult is { IsSuccess: true, Value: { } page })
+        SteamWorkshopItemPage? page = null;
+        if (pageResult is { IsSuccess: true, Value: { } itemPage })
         {
+            page = itemPage;
             descriptionHtml = page.DescriptionHtml;
             imageUrls.AddRange(page.ImageUrls);
             if (!string.IsNullOrWhiteSpace(page.AuthorProfileUrl))
             {
                 AuthorProfileUrl = page.AuthorProfileUrl;
             }
-
-            ApplyComments(page);
         }
         else
         {
             _logger.Info("Steam 物品页不可用，评论区与描述配图降级: " + row.Id);
             CommentsSummary = string.Empty;
+        }
+
+        // 首屏评论：有作者 SteamID 就走翻页接口（能拿到全部页），否则退回物品页内嵌的十条。
+        if (_steamCreatorId is not null)
+        {
+            await LoadCommentsPageAsync(1, cancellationToken).ConfigureAwait(true);
+        }
+        else if (page is not null)
+        {
+            ApplyComments(page);
         }
 
         // 描述优先用物品页的 HTML（有排版），退到接口给的 BBCode 纯文本。
@@ -404,6 +651,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         BuildGallery(row, detail.ScreenshotUrls);
 
         await BuildDependenciesAsync(detail, cancellationToken).ConfigureAwait(true);
+        await LoadSubscriptionStateAsync(cancellationToken).ConfigureAwait(true);
 
         NotifyStateChanged();
 
@@ -483,25 +731,52 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
         for (var index = 0; index < page.Comments.Count; index++)
         {
-            var comment = page.Comments[index];
-            var body = !string.IsNullOrWhiteSpace(comment.TextHtml)
-                ? HtmlDescriptionParser.Parse(comment.TextHtml)
-                : MarkdownParser.Parse(comment.TextPlain);
-
-            Comments.Add(new WorkshopCommentViewModel(
-                index,
-                comment.AuthorName,
-                comment.AuthorProfileUrl,
-                comment.PostedUtc,
-                body,
-                comment.TextPlain));
+            Comments.Add(BuildComment(index, page.Comments[index]));
         }
 
-        CommentsSummary = page.TotalComments > Comments.Count
-            ? T(Keys.WorkshopCommentsMore, Comments.Count, page.TotalComments)
-            : Comments.Count > 0
-                ? T(Keys.WorkshopCommentsCount, Comments.Count)
-                : string.Empty;
+        CommentsTotal = page.TotalComments > 0 ? page.TotalComments : Comments.Count;
+        CommentsPage = 1;
+
+        CommentsSummary = Comments.Count > 0
+            ? T(Keys.WorkshopCommentsCount, CommentsTotal)
+            : string.Empty;
+    }
+
+    /// <summary>把翻页接口返回的一页评论换成界面上的列表。</summary>
+    private void ApplyCommentPage(SteamWorkshopCommentPage page, int requestedPage)
+    {
+        Comments.Clear();
+
+        for (var index = 0; index < page.Comments.Count; index++)
+        {
+            Comments.Add(BuildComment(index, page.Comments[index]));
+        }
+
+        if (page.TotalCount > 0)
+        {
+            CommentsTotal = page.TotalCount;
+        }
+
+        CommentsPage = Math.Max(1, requestedPage);
+        CommentsSummary = CommentsTotal > 0
+            ? T(Keys.WorkshopCommentsCount, CommentsTotal)
+            : string.Empty;
+    }
+
+    /// <summary>一条评论 → 行视图模型（正文优先按 HTML 排版解析）。</summary>
+    private static WorkshopCommentViewModel BuildComment(int index, SteamWorkshopComment comment)
+    {
+        var body = !string.IsNullOrWhiteSpace(comment.TextHtml)
+            ? HtmlDescriptionParser.Parse(comment.TextHtml)
+            : MarkdownParser.Parse(comment.TextPlain);
+
+        return new WorkshopCommentViewModel(
+            index,
+            comment.AuthorName,
+            comment.AuthorProfileUrl,
+            comment.PostedUtc,
+            body,
+            comment.TextPlain);
     }
 
     /// <summary>详情取不到时退回缓存正文，至少还能看上次抓到的东西。</summary>
@@ -692,6 +967,22 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasWebUrl));
         OnPropertyChanged(nameof(SteamUrl));
         OnPropertyChanged(nameof(CanOpenSteam));
+        OnPropertyChanged(nameof(HasCommentsPaging));
+        OnPropertyChanged(nameof(CommentsPageCount));
+        OnPropertyChanged(nameof(CommentsPageText));
+        OnPropertyChanged(nameof(HasCommentsPageText));
+        OnPropertyChanged(nameof(CanCommentsPrev));
+        OnPropertyChanged(nameof(CanCommentsNext));
+        OnPropertyChanged(nameof(CanSubscribe));
+        OnPropertyChanged(nameof(CanToggleSubscription));
+        OnPropertyChanged(nameof(SubscribeActionText));
+        OnPropertyChanged(nameof(SubscribeHint));
+        OnPropertyChanged(nameof(HasSubscribeHint));
+        OnPropertyChanged(nameof(ShowSubscribeCard));
+        OnPropertyChanged(nameof(ShowPdxSubscribeButton));
+        OnPropertyChanged(nameof(ShowSteamSubscribeButton));
+        OnPropertyChanged(nameof(ShowSubscriptionState));
+        OnPropertyChanged(nameof(HasStatusText));
     }
 
     partial void OnCoverPathChanged(string? value) => OnPropertyChanged(nameof(HasCover));
@@ -723,6 +1014,40 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     }
 
     partial void OnIsLoadingCommentsChanged(bool value) => OnPropertyChanged(nameof(ShowNoComments));
+
+    partial void OnIsSubscribingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanToggleSubscription));
+        OnPropertyChanged(nameof(SubscribeActionText));
+    }
+
+    partial void OnIsSignedInChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanToggleSubscription));
+        OnPropertyChanged(nameof(SubscribeHint));
+        OnPropertyChanged(nameof(HasSubscribeHint));
+    }
+
+    partial void OnIsSubscriptionKnownChanged(bool value) => OnPropertyChanged(nameof(ShowSubscriptionState));
+
+    partial void OnCommentsTotalChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasCommentsPaging));
+        OnPropertyChanged(nameof(CommentsPageCount));
+        OnPropertyChanged(nameof(CommentsPageText));
+        OnPropertyChanged(nameof(HasCommentsPageText));
+        OnPropertyChanged(nameof(CanCommentsPrev));
+        OnPropertyChanged(nameof(CanCommentsNext));
+    }
+
+    partial void OnStatusTextChanged(string value) => OnPropertyChanged(nameof(HasStatusText));
+
+    partial void OnCommentsPageChanged(int value)
+    {
+        OnPropertyChanged(nameof(CommentsPageText));
+        OnPropertyChanged(nameof(CanCommentsPrev));
+        OnPropertyChanged(nameof(CanCommentsNext));
+    }
 
     partial void OnDependencySummaryChanged(string value) => OnPropertyChanged(nameof(HasDependencySummary));
 

@@ -1,4 +1,4 @@
-namespace PdxLauncher.Checks;
+﻿namespace PdxLauncher.Checks;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Online;
@@ -26,6 +26,7 @@ public static class WorkshopRichTextChecks
         CheckMarkdownTruncation();
         CheckHtmlDescription();
         CheckItemPage();
+        CheckCommentPaging();
         return ChecksContext.Failures - before;
     }
 
@@ -181,5 +182,40 @@ public static class WorkshopRichTextChecks
 
         ChecksContext.Equal("空 HTML 返回 null", null, SteamWorkshopItemPageParser.Parse(null));
         ChecksContext.Equal("无关 HTML 返回 null", null, SteamWorkshopItemPageParser.Parse("<html><body>hello</body></html>"));
+    }
+    private static void CheckCommentPaging()
+    {
+        // 翻页接口返回的是裸片段（没有物品页外壳），解析器必须能直接吃。
+        const string Fragment = """
+            <div class="commentthread_comment " id="comment_3">
+              <a class="hoverunderline commentthread_author_link" href="https://steamcommunity.com/id/carol"><bdi>Carol</bdi></a>
+              <div class="commentthread_comment_timestamp" data-timestamp="1700003600">时间</div>
+              <div class="commentthread_comment_text">第三页第一条</div>
+            </div>
+            <div class="commentthread_comment " id="comment_4">
+              <a class="hoverunderline commentthread_author_link" href="https://steamcommunity.com/id/dave"><bdi>Dave</bdi></a>
+              <div class="commentthread_comment_text">第三页第二条</div>
+            </div>
+            """;
+
+        var comments = SteamWorkshopItemPageParser.ParseComments(Fragment);
+        ChecksContext.Equal("翻页片段: 解析两条", 2, comments.Count);
+        ChecksContext.Equal("翻页片段: 第一条作者", "Carol", comments.Count > 0 ? comments[0].AuthorName : null);
+        ChecksContext.Equal("翻页片段: 第一条正文", "第三页第一条", comments.Count > 0 ? comments[0].TextPlain : null);
+        ChecksContext.Equal("翻页片段: 空输入返回空列表", 0, SteamWorkshopItemPageParser.ParseComments(null).Count);
+
+        // 上限截断：翻页接口一次给太多也不该拖死界面。
+        var capped = SteamWorkshopItemPageParser.ParseComments(Fragment, 1);
+        ChecksContext.Equal("翻页片段: 按 maxComments 截断", 1, capped.Count);
+
+        ChecksContext.Equal(
+            "翻页片段: total_count 解析",
+            136,
+            SteamWorkshopItemPageParser.ParseCommentTotal("{\"total_count\":136,\"success\":true}"));
+        ChecksContext.Equal(
+            "翻页片段: 无 total_count 返回 0",
+            0,
+            SteamWorkshopItemPageParser.ParseCommentTotal("{\"success\":true}"));
+        ChecksContext.Equal("翻页片段: total_count 空输入返回 0", 0, SteamWorkshopItemPageParser.ParseCommentTotal(null));
     }
 }

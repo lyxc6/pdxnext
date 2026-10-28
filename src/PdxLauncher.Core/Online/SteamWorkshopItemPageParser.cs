@@ -48,7 +48,7 @@ public static class SteamWorkshopItemPageParser
         var authorUrl = ExtractAuthorUrl(html);
         var descriptionHtml = ExtractDescription(html);
         var images = ExtractImages(descriptionHtml);
-        var comments = ExtractComments(html);
+        var comments = ParseComments(html);
         var totalComments = ExtractTotalComments(html);
 
         if (authorName is null && descriptionHtml is null && comments.Count == 0)
@@ -162,14 +162,27 @@ public static class SteamWorkshopItemPageParser
         return urls;
     }
 
-    private static List<SteamWorkshopComment> ExtractComments(string html)
+    /// <summary>
+    /// 解析一段包含评论块的 HTML，取前 <paramref name="maxComments"/> 条。
+    /// <para>
+    /// 物品页内嵌的评论与翻页接口（<c>/comment/PublishedFile_Public/render/…</c>）返回的
+    /// <c>comments_html</c> 结构完全同构，所以两边共用这一份解析。
+    /// </para>
+    /// </summary>
+    /// <param name="html">含评论块的 HTML（也可以是整页 HTML）。</param>
+    /// <param name="maxComments">最多取多少条。</param>
+    public static IReadOnlyList<SteamWorkshopComment> ParseComments(string? html, int maxComments = MaxComments)
     {
-        var comments = new List<SteamWorkshopComment>();
-        var container = IndexOf(html, "_posts\">");
-        var searchFrom = container < 0 ? 0 : container;
-        var marker = "class=\"commentthread_comment ";
+        if (string.IsNullOrWhiteSpace(html) || maxComments <= 0)
+        {
+            return [];
+        }
 
-        while (comments.Count < MaxComments)
+        var comments = new List<SteamWorkshopComment>();
+        var marker = "class=\"commentthread_comment ";
+        var searchFrom = 0;
+
+        while (comments.Count < maxComments)
         {
             var start = IndexOf(html, marker, searchFrom);
             if (start < 0)
@@ -188,7 +201,24 @@ public static class SteamWorkshopItemPageParser
             }
         }
 
+        if (comments.Count > maxComments)
+        {
+            comments.RemoveRange(maxComments, comments.Count - maxComments);
+        }
+
         return comments;
+    }
+
+    /// <summary>从评论接口返回的 JSON 里取出评论总数（<c>"total_count":N</c>）。</summary>
+    /// <param name="json">评论接口 JSON。</param>
+    public static int ParseCommentTotal(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return 0;
+        }
+
+        return ExtractTotalComments(json);
     }
 
     private static IEnumerable<SteamWorkshopComment> ParseComment(string html, int start, int end)

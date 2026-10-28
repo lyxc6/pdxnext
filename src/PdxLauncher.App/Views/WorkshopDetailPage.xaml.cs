@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -39,11 +39,20 @@ public sealed partial class WorkshopDetailPage : Page
                 AppServices.FileSystem,
                 AppServices.Assets,
                 AppServices.WorkshopInfo),
+            new WorkshopSubscriptionService(
+                AppServices.PdxMods,
+                AppServices.Account,
+                AppServices.FileSystem,
+                AppServices.DataRoot,
+                AppServices.Logger),
             AppServices.Logger);
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
+
+    /// <summary>当前页面的取消令牌（跑在 LoadAsync / 翻页 / 订阅里）。</summary>
+    private CancellationToken CurrentToken => _lifetime?.Token ?? CancellationToken.None;
 
     /// <summary>详情页视图模型。</summary>
     public WorkshopDetailViewModel ViewModel => _viewModel;
@@ -170,6 +179,71 @@ public sealed partial class WorkshopDetailPage : Page
         {
             ShellLauncher.TryOpenUrl(comment.AuthorProfileUrl, "创意工坊评论作者");
         }
+    }
+
+    /// <summary>订阅 / 取消订阅（先弹二次确认，避免误点）。</summary>
+    private async void OnSubscribeClick(object sender, RoutedEventArgs e)
+    {
+        if (!_viewModel.CanToggleSubscription)
+        {
+            return;
+        }
+
+        var subscribe = !_viewModel.IsInstalled;
+        var action = subscribe ? L.WorkshopDetailSubscribe : L.WorkshopDetailUnsubscribe;
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = action,
+            Content = new TextBlock
+            {
+                Text = L.WorkshopDetailSubscribePlaysetHint,
+                TextWrapping = TextWrapping.Wrap,
+            },
+            PrimaryButtonText = action,
+            CloseButtonText = L.CommonCancel,
+            DefaultButton = ContentDialogButton.Close,
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        var result = await _viewModel.ToggleSubscriptionAsync(subscribe, CurrentToken);
+        _viewModel.StatusText = result.IsSuccess
+            ? (subscribe ? L.WorkshopDetailSubscribeOk : L.WorkshopDetailUnsubscribeOk)
+            : L.T(
+                subscribe ? Keys.WorkshopDetailSubscribeFailed : Keys.WorkshopDetailUnsubscribeFailed,
+                result.ErrorMessage ?? string.Empty);
+    }
+
+    /// <summary>Steam：订阅其实要在 Steam 客户端里完成，这里只负责把页面递过去。</summary>
+    private void OnSubscribeSteamClick(object sender, RoutedEventArgs e)
+    {
+        ShellLauncher.TryOpenSteam(_viewModel.SteamUrl, "创意工坊详情（订阅）");
+    }
+
+    /// <summary>评论翻上一页。</summary>
+    private async void OnCommentsPrevClick(object sender, RoutedEventArgs e)
+    {
+        if (!_viewModel.CanCommentsPrev)
+        {
+            return;
+        }
+
+        await _viewModel.LoadCommentsPageAsync(_viewModel.CommentsPage - 1, CurrentToken);
+    }
+
+    /// <summary>评论翻下一页。</summary>
+    private async void OnCommentsNextClick(object sender, RoutedEventArgs e)
+    {
+        if (!_viewModel.CanCommentsNext)
+        {
+            return;
+        }
+
+        await _viewModel.LoadCommentsPageAsync(_viewModel.CommentsPage + 1, CurrentToken);
     }
 
     /// <summary>正文里的链接（Markdown / HTML 都有）。</summary>

@@ -115,3 +115,30 @@ public sealed record PdxModsPage(
     /// <summary>是否还有下一页。</summary>
     public bool HasMore => (Page + 1) * PageSize < TotalCount;
 }
+
+/// <summary>
+/// 账号在 PDX 侧的播放集（API 里叫 activation set）。
+/// <para>
+/// 订阅登记在播放集上（<c>activationSetId</c>），所以「某个 mod 是否已订阅」要先确定用哪个播放集。
+/// </para>
+/// </summary>
+/// <param name="Id">播放集 id（订阅接口的 <c>activationSetId</c>）。</param>
+/// <param name="Name">显示名。</param>
+/// <param name="GameName">所属游戏（平台 id，形如 <c>cities_skylines_2</c>）。</param>
+/// <param name="ModCount">其中 mod 数（服务端有时不给，为 null）。</param>
+public sealed record PdxPlaySet(
+    long Id,
+    string Name,
+    string? GameName,
+    int? ModCount);
+
+/// <summary>播放集里的一条 mod（用于判断「已订阅/已启用」）。</summary>
+/// <param name="ModId">平台 mod id（字符串形式，便于与搜索/详情对齐）。</param>
+/// <param name="Name">显示名。</param>
+/// <param name="Version">登记的版本号。</param>
+/// <param name="Enabled">在播放集里是否启用。</param>
+public sealed record PdxPlaySetMod(
+    string ModId,
+    string? Name,
+    int? Version,
+    bool Enabled);

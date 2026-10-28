@@ -21,6 +21,15 @@ public static class OnlineHosts
     /// <summary>Steam 用户内容 CDN（mods.thumbnailUrl 指向的 mod 缩略图）。</summary>
     public const string SteamUserContentHost = "images.steamusercontent.com";
 
+    /// <summary>
+    /// Imgur 图床：Steam 创意工坊的简介配图大量放在这里（作者手写 BBCode 的 <c>[img]</c>），
+    /// 不通融就只剩占位图标。只放行这两个精确主机，不做子域通配。
+    /// </summary>
+    public const string ImgurHost = "imgur.com";
+
+    /// <summary>Imgur 图片直链主机（实际图片都在 <c>i.imgur.com</c>）。</summary>
+    public const string ImgurImagesHost = "i.imgur.com";
+
     /// <summary>PDX Mods 内容 CDN（mod 封面、repository 文件与安装包都从这里取）。</summary>
     public const string ModsContentHost = "modscontent.paradox-interactive.com";
 
@@ -45,6 +54,14 @@ public static class OnlineHosts
     /// <summary>Steam 创意工坊物品页（作者主页、描述配图与评论区都在这份 HTML 里）。</summary>
     public static Uri SteamCommunityItemEndpoint { get; } = new("https://steamcommunity.com/sharedfiles/filedetails/");
 
+    /// <summary>
+    /// Steam 创意工坊评论翻页接口的前缀：<c>…/comment/PublishedFile_Public/render/{作者}/{文件}/</c>。
+    /// <para>物品页只内嵌首屏评论，翻页由页面脚本请求这个地址，返回 JSON 里的 <c>comments_html</c>。</para>
+    /// </summary>
+    public static Uri SteamCommunityCommentEndpoint { get; } =
+        new("https://steamcommunity.com/comment/PublishedFile_Public/render/");
+
+
     /// <summary>Steam 商店 appdetails（<c>filters=categories</c> 用来判定有没有创意工坊）。</summary>
     public static Uri SteamAppDetailsEndpoint { get; } = new("https://store.steampowered.com/api/appdetails");
 
@@ -59,6 +76,8 @@ public static class OnlineHosts
         || string.Equals(host, SteamStoreHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, BrazeImagesHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamUserContentHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, ImgurHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, ImgurImagesHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, ModsContentHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, ModsWebHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamCommunityHost, StringComparison.OrdinalIgnoreCase)

@@ -22,12 +22,16 @@ public interface IPdxHttpTransport
     /// </param>
     /// <param name="jsonBody">请求正文；为 null 时不发正文。</param>
     /// <param name="cancellationToken">取消令牌。</param>
+    /// <param name="headers">
+    /// 额外请求头（可为 null）。订阅接口要求 <c>X-Accept-Version: 2</c>，缺了会被服务端按旧版本处理。
+    /// </param>
     Task<PdxHttpResponse> SendAsync(
         string method,
         Uri uri,
         string? authorizationJson,
         string? jsonBody,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? headers = null);
 }
 
 /// <summary>一次 PDX 请求的结果（不含异常语义）。</summary>

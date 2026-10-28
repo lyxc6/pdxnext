@@ -72,7 +72,8 @@ public sealed class PdxHttpTransport : IPdxHttpTransport, IDisposable
         Uri uri,
         string? authorizationJson,
         string? jsonBody,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? headers = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(method);
 
@@ -86,6 +87,14 @@ public sealed class PdxHttpTransport : IPdxHttpTransport, IDisposable
         if (authorizationJson is not null)
         {
             request.Headers.TryAddWithoutValidation("Authorization", authorizationJson);
+        }
+
+        if (headers is not null)
+        {
+            foreach (var pair in headers)
+            {
+                request.Headers.TryAddWithoutValidation(pair.Key, pair.Value);
+            }
         }
 
         if (jsonBody is not null)

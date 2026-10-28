@@ -363,6 +363,11 @@ public static class SteamWorkshopApiChecks
         ChecksContext.Check("白名单：伪造子域不允许", !OnlineHosts.IsAllowedHost("evil.steamcommunity.com"));
         ChecksContext.Check("白名单：后缀域名不允许", !OnlineHosts.IsAllowedHost("steamcommunity.com.evil.test"));
 
+        // Steam 创意工坊的简介配图大量走 Imgur，这两个主机必须放行，但只放行精确主机。
+        ChecksContext.Check("白名单：i.imgur.com 允许（工坊简介配图）", OnlineHosts.IsAllowedHost("i.imgur.com"));
+        ChecksContext.Check("白名单：imgur.com 允许", OnlineHosts.IsAllowedHost("imgur.com"));
+        ChecksContext.Check("白名单：imgur 子域不额外放行", !OnlineHosts.IsAllowedHost("evil.imgur.com"));
+
         // PostFormAsync 也必须过同一道白名单门：越界在发请求前就抛。
         var fetcher = new HttpFetcher(new NullLogger());
         try

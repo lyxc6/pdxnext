@@ -3205,3 +3205,67 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
   为绕开它，冒烟时临时加过一个 `PDX_UI_OPEN_FIRST_MOD=1` 的自动开详情钩子，验证完已删除，
   最终 diff 只剩 3 个文件（截图 VM、详情页 XAML、详情页后置代码）。
 - 内联 `FlipView` 高度写死 360；窗口很矮时大图会挤压缩略图条，暂不处理。
+
+## 0.41 2026-10-28：创意工坊详情页改为 Steam 物品页式布局 + 评论翻页看全部 + 真 PDX 订阅
+
+**背景**
+
+- 详情子页此前是「一列卡片」：概览 → 简介 → 图片 → 依赖 → 更新日志 → 外链 → 评论，
+  图片在中间、订阅无处可放，和用户熟悉的 Steam 物品页差距大。
+- 评论只取物品页首屏 10 条（`SteamWorkshopItemPageParser.MaxComments`），136 条评论的 mod 只能看到 10 条，
+  没有「翻页」入口，用户明确要求「显示所有评论，并且采用 Steam 的评论区切换」。
+- 订阅按钮只是打开 Steam/网页，用户要求「去接真正的 PDX 订阅 API」。
+
+**改法**
+
+1. **布局重排**（`src/PdxLauncher.App/Views/WorkshopDetailPage.xaml` 整份重写，560 行）：
+   页头（返回 / 标题 / 作者超链接 / 浏览器 / Steam）→ 图片区卡（内联 FlipView 360 高 + 计数 + 缩略图条）
+   → 两列行（左 280px「订阅」卡、右「*」「信息」卡：评分/订阅/收藏/浏览/体积/更新于/发布于/标签）
+   → 读取中 / 失败 / 缓存兜底 → 描述（`MarkdownView`）→ 依赖 → 更新日志 → 外链 → 评论区（含分页）。
+   窗口窄时不做自适应状态机，固定 `280/*`。
+2. **评论翻页**（Core）：`SteamWorkshopItemPageParser.ExtractComments` 抽成
+   `public static ParseComments(html, maxComments)`（翻页接口的 `comments_html` 是裸片段，去掉「只在 `_posts">` 后找」的限定），
+   新增 `ParseCommentTotal(json)`；`SteamWorkshopClient.GetCommentsAsync(creatorSteamId, fileId, start, count, ct)`
+   打 `https://steamcommunity.com/comment/PublishedFile_Public/render/{作者}/{文件}/?start=&count=`，
+   `count` 夹到 1..50，读 JSON 的 `comments_html` 与 `total_count`；`SteamWorkshopCommentPage` 承载结果。
+   App 侧每页 15 条，`btnCommentsPrev`/`btnCommentsNext` + 「第 n / N 页 · 共 M 条」。
+3. **真 PDX 订阅**（Core + App）：
+   `X-Accept-Version: 2` 头 + `POST /mods/installed`（`{activationSetId, mods:[{id,version?}]}`）、
+   `DELETE /mods/installed?activationSetId=&modId=`、`GET /mods/sets/list/{game}?includeShared=false`、`POST /mods/sets`；
+   为让 `PdxHttpTransport.SendAsync` 能带头，给接口加了可选 `headers` 参数（既有实现方不用改签名）。
+   `WorkshopSubscriptionService` 负责「找/建 PdxNext 播放集 → 缓存到 `data/pdx-playset.json` → 查/改订阅状态」，
+   未登录时按钮禁用并提示去账号页，点击先弹 `ContentDialog` 二次确认（确认按钮文案随订阅/退订变化）。
+4. **Imgur 白名单**（Core）：Steam 工坊简介配图大量是作者手写 `[img]` 指向 `i.imgur.com`，
+   原来被 `OnlineHosts` 拦掉、图区只剩占位图标。现在精确放行 `imgur.com` 与 `i.imgur.com`（不做子域通配）。
+5. **i18n**：两语言 `workshop.json` 各加 15 键（订阅/信息/评论分页），删掉不再引用的 `workshop.commentsMore`；
+   `gen-i18n` 后 678 键。
+
+**自检**
+
+- `bash tools/build-app.sh -v q` → 0 警告 0 错误；`检查类: 36，失败: 0`（新增 `WorkshopSubscriptionChecks`，
+  `WorkshopRichTextChecks` 增补 `ParseComments` / `ParseCommentTotal`；`SteamWorkshopApiChecks` 增补 Imgur 白名单 3 条）。
+
+**实测**（Release exe，2026-10-28 19:0x–19:2x）
+
+- CS2 / Paradox Mods（`Unified Icon Library`）：图片区在最上（1/3 计数 + 缩略图条），
+  左「订阅」卡显示「登录 Paradox 账号后才能订阅」（本机未登录，按钮禁用），右「信息」卡
+  「5 分（5459 人评分） · 1,389,600 订阅 · 体积 1 MB · 更新于 2026/5/2 19:23」，往下是 Markdown 简介与相关链接。
+  截图 `ui-test-artifacts/workshop-layout/{01-detail-top,02-detail-bottom}.png`。
+- CK3 / Steam 创意工坊（`Renovatio`）：页头作者是 Steam 个人页链接，「在 Steam 中订阅」按钮，
+  信息卡「5 分（266 人评分） · 7,715 订阅 · 收藏 1,341 · 浏览 61,122 · 体积 2.2 GB」；
+  评论区首屏渲染正常（作者超链接 + 时间 + 正文），底部分页「第 1 / 9 页 · 共 121 条」，
+  `invoke btnCommentsNext` → 「2 / 9 页」，`invoke btnCommentsPrev` → 回到「1 / 9 页」。
+  截图 `ui-test-artifacts/workshop-steam3/{01-comments-page1,02-comments-page2}.png`、
+  Imgur 放行后 `ui-test-artifacts/workshop-steam4/00-no-rows.png`（大图与缩略图都出图）。
+
+**踩坑 / 边界**
+
+- 用脚本按行号搬 XAML 块（图片区上移 + 概览卡换成两列）会踩第一个 `</Border>` 匹配到内层封面 Border 的坑，
+  搬完能编译但**运行时版式错乱**（卡片互相重叠、底/边框丢失）。教训：这种重排直接整份重写，
+  不要用行号切片拼 XML。
+- 订阅写接口需要登录，本机 `data/pdx-session.json` 不存在，所以「真订阅」只到「按钮禁用 + 提示登录」这一层，
+  改法与请求体由 `WorkshopSubscriptionChecks` 的假 transport 断言（URL/方法/`X-Accept-Version`/body/未登录不发请求）；
+  真机联调需要在已登录环境点一次。
+- Steam 侧没有依赖数据（`GetPublishedFileDetails` 无依赖字段、物品页也没有依赖标记），依赖卡只对 PDX 显示。
+- UI 自动化仍受前台限制：`winapp ui click/focus` 要求窗口在前台，`invoke` 不需要；
+  行点击靠临时 `PDX_UI_OPEN_FIRST_MOD=1` 钩子自动打开首行详情，验证完已删除。
