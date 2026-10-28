@@ -602,4 +602,86 @@ GET https://store.steampowered.com/api/appdetails?appids=<appId>&filters=categor
 
 ### 18.4 白名单
 
-`OnlineHosts` 里新增两个精确主机（禁子域）：`steamcommunity.com`、`api.steampowered.com`。`images.steamusercontent.com`（封面图 CDN）与 `store.steampowered.com` 原本就在。`XamlImage` 只认本地文件，封面仍要先经 `AssetDownloader` 落到 `data\workshop-covers\`。
+`OnlineHosts` 里新增两个精确主机（禁子域）：`steamcommunity.com`、`api.steampowered.com`。`images.steamusercontent.com`（封面图 CDN）与 `store.steampowered.com` 原本就在。`XamlImage` 只认本地文件，封面仍要先经 `AssetDownloader` 落到 `data\workshop-info\covers\`（见 §19）。
+
+## 19. 创意工坊信息缓存（`data\workshop-info\`）
+
+给创意工坊列表/详情做「同一 id 复用」的本地缓存。实现：`src/PdxLauncher.Core/Online/WorkshopInfoCache.cs`。
+
+### 19.1 目录
+
+```
+data\workshop-info\
+  workshop-info.json        # 索引（原子写）
+  covers\steam\<id>.<ext>   # Steam 封面
+  covers\pdx\<id>.<ext>     # PDX 封面
+```
+
+### 19.2 索引
+
+```json
+{
+  "entries": {
+    "steam:2216623537": {
+      "source": "steam",
+      "id": "2216623537",
+      "gameId": "ck3",
+      "name": "Renovatio",
+      "author": "76561198145098971",
+      "rating": 5.0,
+      "ratingsTotal": 266,
+      "subscriptions": 7664,
+      "updatedUtc": "2026-10-05T00:00:00+00:00",
+      "sizeBytes": 2372600000,
+      "coverUrl": "https://images.steamusercontent.com/...",
+      "coverFileName": "steam\\2216623537.jpg",
+      "coverFetchedUtc": "2026-10-28T05:10:00+00:00",
+      "detailText": null,
+      "detailScreenshots": null,
+      "detailFetchedUtc": null,
+      "fetchedUtc": "2026-10-28T05:10:00+00:00"
+    }
+  }
+}
+```
+
+- 键是 `source:id`；`source` 取 `steam` / `pdx`（大小写不敏感，统一小写落盘）。
+- 写入是「合并」语义：`Upsert` 用非空新值覆盖，旧的非空字段保留（列表只刷到部分字段也不会把详情/封面信息抹掉）。
+- 序列化参数与 `ModThumbnailCache` 一致：`WriteIndented` + `camelCase` + `WhenWritingNull` + `UnsafeRelaxedJsonEscaping`，走 `IFileSystem.WriteAllTextAtomic`。
+- 索引损坏（JSON 坏 / IO 失败）记 Warn 并当作空索引，下次写入重建，不阻塞页面。
+
+### 19.3 生命周期
+
+| 内容 | 复用条件 |
+| --- | --- |
+| 列表条目字段 | 永久（每次列表请求 upsert 覆盖） |
+| 封面文件 | 文件存在即复用（`TryGetCachedCover` 返回绝对路径，交给 `XamlImage`） |
+| 详情（长描述/截图） | `detailFetchedUtc` 在 7 天内 |
+| 断网回退 | 列表请求失败时 `Snapshot(source, gameId)` 按 `updatedUtc` 降序回填 |
+
+清空：设置 → 缓存 → 「创意工坊 mod 信息」→ `WorkshopInfoCache.Clear()`（删索引 + 目录，`Count` 归零）。
+
+### 19.4 与 Steam 列表参数的关系
+
+排序/时间范围只影响请求 URL，不写进缓存键。「最热门 + 30 天」和「最新更新」看到过的同一 id 共用一条缓存记录。
+
+### 19.5 列表页缓存（只在内存，不落盘）
+
+翻页要快，靠的是进程内的一层「整页」缓存，**磁盘上没有对应文件**：
+
+| 项 | 说明 |
+|---|---|
+| 类型 | `PdxLauncher.Core.Online.WorkshopPageCache`（单例，挂在 `AppServices.WorkshopPages`） |
+| 键 | `来源|游戏ID|搜索词|排序|时间范围天数或 `-`|页码(0 起)`，例如 `steam|ck3||Trend|30|0` |
+| 值 | 该页的 `WorkshopInfoCacheEntry` 快照数组 + `totalCount` + `totalPages` + `fetchedUtc` |
+| 新鲜期 | `DefaultTtl = 5 分钟`；过期条目仍会立刻显示，同时后台静默刷新 |
+| 容量 | 无上限（每页 24–30 条，几百页也只有几十 MB 上限内的字符串引用），换游戏 / 清缓存时 `Clear()` |
+| 生命周期 | 进程内；重启后回到「重新抓第一页」 |
+
+覆盖规则：同一键重复 `Set` 直接覆盖；`IsFresh` 只看 `fetchedUtc`，与 `WorkshopInfoCache` 的 7 天详情 TTL / 封面 TTL 互相独立。
+
+### 19.6 封面并发与批量落盘
+
+- 图片并发上限 6（`SemaphoreSlim(6)`）；同一页里已经命中磁盘的封面不再请求。
+- `WorkshopInfoCache` 的写盘是「标脏 + 显式 `Flush`」：条目的 `Upsert`/`SetCover`/`SetDetail` 只改内存，全部封面处理完后一次 `Flush()`，避免一页 30 次原子写索引。
+- 进程退出 / 设置页清缓存 / 下次查询结束都会 `Flush`，不丢数据。

@@ -30,7 +30,7 @@ NETREF = r"C:/Program Files/dotnet/packs/Microsoft.NETCore.App.Ref/10.0.13/ref/n
 # .NET SDK 自带的分析器（源生成器）：[GeneratedRegex] 必须有 regex 生成器才会生成实现部件。
 NETREF_ANALYZERS = os.path.join(os.path.dirname(os.path.dirname(NETREF)), "analyzers", "dotnet", "cs")
 REGEX_GENERATOR = os.path.join(NETREF_ANALYZERS, "System.Text.RegularExpressions.Generator.dll")
-NUGET = r"C:/Users/17147/.nuget/packages"
+NUGET = os.environ.get("NUGET_PACKAGES") or os.path.join(os.path.expanduser("~"), ".nuget", "packages")
 XAMLCOMPILER = os.path.join(NUGET, "microsoft.windowsappsdk.winui/2.3.9/tools/net472/XamlCompiler.exe")
 MT = os.path.join(NUGET, "microsoft.windows.sdk.buildtools/10.0.28000.2705/bin/10.0.28000.0/x64/mt.exe")
 APPSDK_INC = os.path.join(NUGET, "microsoft.windowsappsdk.foundation/2.3.12/include")

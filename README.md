@@ -5,7 +5,13 @@
 
 > **交接与任务拆分见 [docs/HANDOFF.md](docs/HANDOFF.md)** —— 当前进度、环境限制、待办任务（T1–T8）都在里面。
 
-官方启动器路径（保持只读，绝不写入）：`C:\Users\17147\AppData\Local\Programs\Paradox Interactive\launcher`。
+> **⚠ 使用范围**：个人自用工具，不随包分发游戏本体或 DLC 内容，也不提供任何绕过购买的下载源。
+> 仓库里的「补丁素材」（`src\PdxLauncher.Core\Patch\Assets\`）是第三方 Steamworks 代理 DLL
+> （CreamAPI 4.x）与配套 ini，来源见该目录的 `README.md`，仅供本机离线研究与已安装内容的整理；
+> 是否使用及由此产生的后果由使用者自行承担。自有代码按 MIT 许可（见 `LICENSE`），
+> **第三方素材不在 MIT 覆盖范围内**，版权归原作者。
+
+官方启动器路径（保持只读，绝不写入）：`%LOCALAPPDATA%\Programs\Paradox Interactive\launcher`。
 
 ---
 
@@ -15,9 +21,27 @@
 
 - **.NET SDK 10**（实测 10.0.402，`dotnet --version` 可查）。不需要 Visual Studio，不需要装
   Windows App SDK Runtime，也不需要联网——`NuGet.config` 里用 `<packageSources><clear /></packageSources>`，
-  全部包走本机缓存 `C:\Users\17147\.nuget\packages`（23 个包，含 `Microsoft.WindowsAppSDK 2.5.1` /
+  全部包走本机缓存 `%USERPROFILE%\.nuget\packages`（23 个包，含 `Microsoft.WindowsAppSDK 2.5.1` /
   `Microsoft.WindowsAppSDK.WinUI 2.3.9` / `CommunityToolkit.Mvvm 8.4.2`）。缓存里缺包时构建直接失败。
 - **运行端什么都不用装**，见下面「自包含」。
+
+#### 从仓库克隆后第一次构建
+
+`NuGet.config` 里是 `<clear />`（一个包源都没有），所以包必须**事先躺在本机缓存里**。克隆后先确认：
+
+```bat
+dir "%USERPROFILE%\.nuget\packages\microsoft.windowsappsdk"      :: 应有 2.5.1
+dir "%USERPROFILE%\.nuget\packages\microsoft.windowsappsdk.winui" :: 应有 2.3.9
+dir "%USERPROFILE%\.nuget\packages\communitytoolkit.mvvm"         :: 应有 8.4.2
+build.cmd
+```
+
+缺包时构建会直接失败（没有联网还原的退路）。临时要联网还原的话，把 `NuGet.config` 里的
+`<clear />` 换成 `<add key="nuget.org" value="https://api.nuget.org/v3/index.json" />`，
+拿到包之后改回来——`<clear />` 是故意的，本项目构建期一次网络请求都不发。
+
+包缓存默认在 `%USERPROFILE%\.nuget\packages`，设了环境变量 `NUGET_PACKAGES` 时以环境变量为准
+（`tools\manual-build.py` 与 `tools\package-app.py` 读的是同一个变量，不写死路径）。
 
 ### 日常命令
 
@@ -193,6 +217,28 @@ gameId 一律取自 JSON 里的 `gameId` 字段，**不看文件夹名**；同�
 
 **不传 session token**——那是官方启动器跟 Paradox 服务端通信用的，离线复刻不需要。
 
+### 补丁（DLC 解锁 / 一键移除）
+设置 → 高级里有「一键打补丁」和「移除补丁」：给**当前选中的游戏**换上 CreamAPI loader（`steam_api64.dll` /
+`steam_api.dll`）并生成配套 `cream_api.ini`，让已装但未购买的 DLC 能在离线 / 正版联机下被游戏识别。
+**不碰 DLC 内容文件**（`game\dlc\*` 一个字节都不写）——解锁只发生在 loader 与 ini 这一层。
+
+- **备份与还原**：打补丁前把**目标游戏自己**的 `steam_api*.dll` 原子备份成同目录的 `<名字>_o.dll`，
+  再写入 loader；「移除补丁」= 把 `_o` 移回原名 + 删掉带 `; PdxNext 自动生成` 标记的 `cream_api.ini`。
+  整合包里自带的 `steam_api64_o.dll` **不会**被拷给别的游戏（各游戏原版 dll 版本不同，直接拷会把游戏弄坏）。
+- **状态判定**（设置页实时显示，`Inspect` 只读）：原版 / 已打补丁 / 被别的工具打过 / **被 Steam 更新覆盖**
+  （文件回到原版但 `_o` 还在，可一键重打）/ 未找到 api 文件 / 缺少 appId 无法打补丁。
+- **目标目录**：CS2 在 `Cities2_Data\Plugins\x86_64\`；其余游戏按「exe 所在目录 → 安装根目录 →
+  `binaries\`」找第一个含 `steam_api64.dll` / `steam_api.dll` 的目录（两个都在就都处理）；
+  CK3 / EU5 / Imperator / Victoria 3 实际落在 `binaries\`，CS1 / CK2 / EU4 / HOI4 / Stellaris 落在根目录。
+- **appId** 取自 `launcher-settings.json` / `appmanifest` 的 Steam appId，独立安装时回退到
+  `src\PdxLauncher.Core\Online\GameSteamAppIds.cs` 的内置表（名单见该文件）。
+- **补丁素材**：`steam_api.dll`、`steam_api64.dll`、`cream_api.ini` 内嵌在 `PdxLauncher.Core.dll` 里
+  （`src\PdxLauncher.Core\Patch\Assets\`，来源见该目录 README，仅个人离线研究用）；
+  程序目录下的 `data\patch\assets\` 可整体覆盖同名文件，整合包更新只要丢文件进去、不用重编译。
+  打过的游戏记在 `data\patch\state.json`，素材目录用「打开素材目录」按钮直达。
+- **边界**：只改 `steam_api*` 与 `cream_api.ini`；游戏运行中 / 目录只读时操作失败并给原因，不动已备份的原文件；
+  不改官方 Paradox 启动器目录；不联网；不做「全部游戏一起打」的批量按钮。
+
 ### 主题
 读游戏安装目录里的 `theme-settings.json`（`relativePath` / `color` / `font` 等键），
 在本地渲染成 WinUI `SolidColorBrush` / `FontFamily` 应用到整个窗口。
@@ -286,8 +332,8 @@ scripts/
 Directory.Build.props          :: 统一可空/语言版本/告警策略
 NuGet.config                   :: <clear/>，全离线
 src/
-  PdxLauncher.Core/            :: 111 个 .cs，无任何 WinUI 依赖，可单测
-    Abstractions/              :: 18 个接口（IGameCatalog / IPlaySetRepository / IGameLauncher / INewsFeedService ...）
+  PdxLauncher.Core/            :: 151 个 .cs，无任何 WinUI 依赖，可单测
+    Abstractions/              :: 22 个接口（IGameCatalog / IPlaySetRepository / IGameLauncher / INewsFeedService ...）
     Contracts/                 :: 不可变 record 数据模型
     Games/                     :: Steam 库探测、launcher-settings 解析、游戏目录展开
     Steam/                     :: registry + libraryfolders.vdf（Valve KeyValues 解析）
@@ -298,13 +344,14 @@ src/
     Themes/                    :: 主题 JSON 解析 + HSL/RGB 颜色
     Online/                    :: GraphQL 元数据、素材下载、代理（三模式解析 / 系统代理 / 环境变量）、DLC 简介、官方公告
     Parsing/                   :: Clausewitz 与 Valve KeyValues 解析器
-  PdxLauncher.App/             :: 53 个 .cs + 9 个 .xaml，WinUI 3 层
+    Patch/                     :: 补丁素材（内嵌 loader + cream_api.ini）、目标目录判定、打补丁 / 还原
+  PdxLauncher.App/             :: 69 个 .cs + 11 个 .xaml，WinUI 3 层
     Assets/                    :: AppIcon.ico（9 帧 16→256）+ 8 张模板同名 PNG，全部由 tools/gen-app-icon.py 生成
     Views/                     :: GameLibraryPage / HomePage / ModsPage（播放集） / ModLibraryPage（Mod库） / DlcPage / SettingsPage
-    ViewModels/                :: 11 个 VM（全部不含 Microsoft.UI.Xaml 类型）
+    ViewModels/                :: 16 个 VM（全部不含 Microsoft.UI.Xaml 类型）
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
 tests/
-  PdxLauncher.Checks/          :: 16 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 28 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
@@ -327,7 +374,7 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**183 个 .cs + 9 个 .xaml**，0 编译告警（2026-10-27 14:40 实测：Core 111 / App 53+9 / Checks 19 —— Checks 的 19 个 .cs 里是 16 个检查类 + Program + ChecksContext + GlobalUsings）。
+**260 个 .cs + 11 个 .xaml**（不含 `obj/` 生成物；2026-10-28 实测：Core 151 / App 69+11 / Imaging 9 / Checks 31 —— Checks 的 31 个文件是 28 个检查类 + Program + ChecksContext + GlobalUsings）。
 
 ---
 
@@ -337,7 +384,7 @@ tools/
 dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 16，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
+输出 `检查类: 28，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
 launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取
 （mods 全量、size / subscribedDate 解析、播放集归属、requiredVersion 兼容判断）、创意工坊 id 解析、启动参数拼装、路径大小写不敏感处理；
 以及联网子系统：域名白名单与 magic bytes 判型（含 GIF）、素材下载与原子改名、主题补丁合并、
@@ -347,7 +394,10 @@ DLC 简介的 TTL / 负缓存 / 失败退避、官方公告的 JSON 解析（时
 `ProxyOverride` → 正则 → `WebProxy.IsBypassed`、带账号密码时解析成 `NetworkCredential`；
 以及应用图标：ICO 容器（保留区 / 类型 / 9 帧 / 偏移不重叠且末帧正好收尾）、帧尺寸集合与 32 位色深、
 <128 走 BMP 且 ≥128 走 PNG、32px 帧的金色占比与圆角透明、8 张模板同名 PNG 的魔数与 IHDR 尺寸、
-csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cmd 的 `Assets\AppIcon.ico` 校验三处接入点。
+csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cmd 的 `Assets\AppIcon.ico` 校验三处接入点；
+以及补丁：内嵌 loader / ini 的字节数与 sha256、x86-only / x64-only 的目标目录选择、打补丁后的备份字节与 ini 内容
+（appId 改写、`[dlc]` 保留、PdxNext 标记）、清单落盘与幂等重打、还原后原字节恢复且 `_o` 与 ini 消失、
+旧手工补丁与 Steam 覆盖两种状态的可还原性判定、缺 appId 时拒绝、目标文件被占用时不破坏原文件。
 
 ---
 
@@ -364,6 +414,9 @@ csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cm
 | 主题素材缓存 | `data\theme-cache\` | 同上（TTL 5 天） |
 | 官方公告缓存 | `data\news-cache\` | 同上（TTL 6 小时） |
 | Mod 缩略图缓存 | `data\mod-cache\` | 同上（保留天数可配，默认 30 天） |
+| 补丁素材（外部覆盖） | `data\patch\assets\` | 同上（可选；同名文件优先于内嵌素材） |
+| 补丁清单 | `data\patch\state.json` | 同上（记录打过补丁的游戏与备份路径） |
+| 游戏安装目录的 `steam_api*.dll` / `cream_api.ini` | 各游戏安装目录 | **只在用户点「一键打补丁 / 移除补丁」时写**，原文件备份为同目录 `*_o.dll` |
 | 本启动器日志 | `data\logs\pdxnext.log` | 同上 |
 
 本启动器和官方启动器可以共存，随便来回切，互不影响。

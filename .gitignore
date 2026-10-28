@@ -39,3 +39,13 @@ __pycache__/
 # 编辑器
 .idea/
 .vscode/
+
+# agent 工作区（含链接 worktree，动辄数百 MB；不能靠 .agents/worktrees/.gitignore 挡，
+# 那是本机产物、不会进仓）
+.agents/
+
+# 临时核对目录与备份文件
+*.tmpverify/
+*.tmp
+*.orig
+*.rej

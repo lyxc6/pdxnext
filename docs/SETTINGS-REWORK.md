@@ -57,6 +57,15 @@ Page
   `navSettingsPaths`、`navSettingsOnline`、`navSettingsCache`、`navSettingsAdvanced`。
   原有 39 个 AutomationId 全部保留原值。
 
+### 高级节：补丁区（2026-10-28）
+`secAdvanced` 内部顺序改为：补丁标题 → 「补丁状态」卡（`txtPatchStatus` + `txtPatchDetail`）→
+「一键打补丁」卡（`btnApplyPatch` / `btnRemovePatch` / `btnOpenPatchAssets` 横排）→ 补丁说明 →
+危险区标题 → 原有危险区（签名开关 / 重新生成 / 最近签名）。4 个新 AutomationId 与原 34 个
+advanced 节 AutomationId 并存；补丁区只在选中游戏后可操作（`CanApplyPatch` / `CanRemovePatch`
+由 `GamePatchReport` 决定，`IsBusy` 期间全部置灰），未选游戏时状态文案为
+`settings.patch.state.noGame`。状态文案键在 `ViewModel.RefreshPatchState()` 里按 `GamePatchStatus`
+选 `settings.patch.state.*`，语言切换经 `Relocalize()` 重算。
+
 ## 三个「设置一变就跳」的问题及修法
 
 1. **改完选项整页跳一下 / 滚动条闪现**

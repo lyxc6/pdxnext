@@ -2840,3 +2840,151 @@ $h = New-Object IntPtr[] 1; $ids = New-Object uint32[] 1
   - EU4 → `source=Steam 创意工坊`（`04-workshop-steam-eu4.png`）——修正前这里是 Paradox Mods
   - 账号页新版式（`05-account.png`）、设置页停在「缓存」且左栏高亮同步（`06-settings.png`）
 - `settings.json` 实测落盘：`lastGameId=eu4`、`lastGameInstallRoot=F:\SteamLibrary\steamapps\common\Europa Universalis IV`、`lastSettingsSection=4`、`windowX/Y=380`。
+
+## 16. 补丁：一键打补丁 / 移除补丁（2026-10-28）
+
+### 16.1 需求与三条已定决策
+
+用户要求：设置 → 高级页加「一键补丁」和「移除补丁恢复正常游戏」，并让这套补丁思路适用于**所有** P 社游戏。
+落地前已定（用户选择）：
+
+1. 补丁文件**内嵌进启动器**，另留外部覆盖目录（发布自包含，新整合包丢文件即可，不必重编译）。
+2. 只给**当前选中的游戏**打，不做「全部已安装游戏」批量按钮。
+3. 只做**解锁层**，不碰 DLC 内容文件（实测 V3 的 `game\dlc` 与整合包同名目录 diff 为空；移除补丁只还原 DLL/ini）。
+
+### 16.2 核心实现（`src/PdxLauncher.Core/Patch/`）
+
+- `Assets/`：`steam_api.dll`(737280B, x86)、`steam_api64.dll`(834560B, x64)、`cream_api.ini`(26608B, 490 条 DLC)，
+  由 `PdxLauncher.Core.csproj` 以 `EmbeddedResource` + `LogicalName=PdxLauncher.Patch.*` 打进 DLL；字节数与 sha256 记在
+  `Assets/README.md` 与 `DlcPatchChecks` 的常量里（换素材必须同时改两处）。
+- `PatchAssets`：外部目录 `data\patch\assets\` 同名文件优先（loader 按架构单独回退，ini 独立回退），否则用内嵌资源；
+  `UsesExternalAssets` 只反映「这次实际用了外部文件」。
+- `GamePatchProfiles`：CS2 特例 `Cities2_Data\Plugins\x86_64\`；其余按 `exe 目录 → InstallRoot → InstallRoot\binaries`
+  找第一个含 `steam_api64.dll` / `steam_api.dll` 的目录，x64 优先，两者都在就都处理（这是「通用于所有 P 社游戏」的唯一判定点，
+  新增游戏只要落在这几种布局里就不用改代码）。
+- `GamePatchService`：`Inspect / Apply / Revert` 同步、不碰 UI，全部文件操作走 `IFileSystem`（新增 `Move` 支持覆盖改名）。
+  - **Apply 的关键取舍**：先把**目标游戏当前真实的** `steam_api*.dll` 备份成同目录 `<name>_o.dll`，再写 loader。
+    整合包自带的 `steam_api64_o.dll` 是某款游戏的旧版本（实测 289568B，与 V3 的 298384B 不同），**绝不能跨游戏直接拷**，
+    否则「移除补丁」会把不匹配的 dll 还原回去、游戏起不来。
+  - ini 由模板生成：只改 `[steam]` 的 `appid =`，保留 `orgapi/orgapi64`、`language = schinese`、`unlockall = false` 与全部 490 条 `[dlc]`，
+    头部插 `; PdxNext 自动生成 …` 标记（Revert 只删带标记的 ini，用户自备的 ini 不碰）。
+  - 清单 `data\patch\state.json`（`WriteAllTextAtomic`）记录 `gameId / installRoot / apiFile / backupFile / loaderSha256 / appliedUtc`。
+  - 失败（只读、被占用、素材缺失）不抛异常，写进 `GamePatchReport.Detail` + 日志；原文件在写 loader 之前已备份完，
+    写失败也不会丢原版。
+- 状态机 `GamePatchStatus`：`Unsupported`（无 appId / 素材缺失）、`NotDetected`、`Vanilla`、`Patched`（loader + `_o` + 标记 ini 齐全）、
+  `PatchedOther`（loader 不匹配或缺 `_o`；有 `_o` 时仍允许 Revert）、`SteamOverwrote`（api 回到原版但 `_o` 还在 ⇒ 显示「被 Steam 更新覆盖」并允许重打）。
+- appId 解析顺序：`GameInstallation.SteamAppId`（来自 appmanifest）→ `GameSteamAppIds.TryGet`。本轮给该表补了
+  `imperator_rome 859580`、`ck2 203770`、`victoria2 42960`（原本 9 条，现 12 条）。
+
+### 16.3 外壳接线
+
+- `AppServices`：新增 `IGamePatchService GamePatch`，`Initialize(...)` 在 `steamWorkshop` 之后多一个参数；
+  `App.xaml.cs` 用 `PdxDataRoot.Directory` 拼出素材目录与清单路径后构造。
+- `SettingsViewModel`：`PatchStatusText / PatchDetailText / HasPatchDetail / HasPatchInfo / CanApplyPatch / CanRemovePatch`、
+  `RefreshPatchState()`（`LoadAsync` 两条出口、`RefreshAfterGameRefresh`、`Relocalize` 都调用）、
+  `ApplyPatchAsync / RemovePatchAsync`（`IsBusy` + `Task.Run`，`IsBusy` 的 setter 同时通知两个按钮可用性）。
+  状态文案按 `GamePatchStatus` 映射 `settings.patch.state.*`，细节行拼「目录 / appId / 素材来源 / 失败原因」。
+- `SettingsPage`：`secAdvanced` 内、危险区之前插入 4 个 AutomationId：`txtPatchStatus`、`txtPatchDetail`、
+  `btnApplyPatch`（Accent）、`btnRemovePatch`、`btnOpenPatchAssets`；前两个按钮先弹 `ContentDialog`（默认按钮是「取消」）。
+- i18n：`tools/i18n/*/settings.json` 228 → 257 键（`settings.patch.*` 29 个），`python tools/gen-i18n.py` → 615 键。
+
+### 16.4 构建链修正（本次一起修的）
+
+`tools/manual-build.py` 之前只编 Core，`checks` 模式缺 Imaging 引用与两个链接源文件，`app` 模式也不支持资源：
+新增 `build_imaging()`；`build_checks(core, imaging)` 补 `PlaySetEditor.cs` / `PositionInput.cs` 与 `-analyzer:RegexGenerator`；
+`compile_library(..., resources=)` 支持 `-resource:<path>,<logicalName>`，`build_core()` 传入三个内嵌素材。
+（`dotnet build` 在本机沙箱仍会因禁用管道在 Csc 阶段失败，手工链是唯一可靠路径。）
+
+### 16.5 验收
+
+- `python tools/manual-build.py app` → `BUILD OK`（pass1 23 个 codegen、csc 0 错误、pass2 11 个 xbf，含新 SettingsPage.xbf）。
+- `python tools/manual-build.py checks` → `检查类: 28，失败: 0，断言失败总数: 0`（新增 `DlcPatchChecks` 覆盖：
+  内嵌素材 sha256/字节数、x86/x64 目录选择、备份字节、ini appId 与标记、清单与幂等重打、还原后字节与文件清理、
+  旧手工补丁与 Steam 覆盖态的可还原性、缺 appId 拒绝、目标被占用时不破坏原文件）。
+- 未做真机点按验证：本轮只验证编译与自检；真机需先退出游戏，再在设置 → 高级里对一款已装游戏打/移除。
+
+## 17. 创意工坊：Steam 式排序 + mod 信息缓存（2026-10-28）
+
+用户两句话：「创意工坊的排序改下，参考下 steam 自己的方式」「能给 mod 提供缓存吗，识别到是同一个 id，调用缓存的信息」。本节是速查。
+
+### 17.1 排序：照 Steam 网页的语义
+
+Steam 网页把排序分成三块：排序顺序 + 时间范围 + 分类筛选。时间范围**只在「最热门 / 最受好评」下出现**，其他排序 Steam 自己就忽略它。我们照抄这个语义：
+
+| 排序档位（UI） | `browsesort` | 带时间范围 |
+| --- | --- | --- |
+| 最热门（默认） | `trend` | 是 |
+| 最受好评 | `toprated` | 是 |
+| 最近发行 | `mostrecent` | 否 |
+| 最新更新 | `mostupdated` | 否 |
+| 不重复订阅者总计 | `mostsubscribed` | 否 |
+| （有关键词时）搜索 | `textsearch` + `searchtext=` | 否 |
+
+时间范围下拉 7 档：今天 / 1 周 / 30 天（默认）/ 3 个月 / 6 个月 / 1 年 / 发布至今，对应 `&days=1|7|30|90|180|365|0`。
+
+- `WorkshopViewModel.ShowTimeRange` **必须按当前排序判断**（`IsTimeRangeSort()` 查 `Keys.WorkshopSortTrend`/`Keys.WorkshopSortTopRated`），只判断来源会把「最新更新 + 6 个月」这种无效组合露出来。真机验证：切到「最新更新」后 `cmbWorkshopTimeRange` 从 UIA 树里消失。
+- PDX 侧对应三档：最热门 `Popularity` / 最新更新 `Updated` / 评分 `Rating`，没有时间范围。
+- `src/PdxLauncher.Core/Online/SteamWorkshopClient.cs` 的 `BuildBrowseUri` 只在**没有关键词**且 `Days` 有值时追加 `days`；关键词搜索时 Steam 固定 `textsearch`，多传 `days` 无效。
+
+### 17.2 缓存：按「来源 + id」复用
+
+用户诉求原话是「识别到是同一个 id，调用缓存的信息」。落地为 `src/PdxLauncher.Core/Online/WorkshopInfoCache.cs` + `WorkshopInfoCacheEntry.cs`：
+
+- 位置 `data\workshop-info\`：索引 `workshop-info.json` + `covers\<steam|pdx>\<id>.<ext>`。
+- 键 `source:id`（`steam:2216623537`、`pdx:1234`），同一 id 在 Steam/PDX 两边不串味。
+- 列表每条 `RecordSteamItem` / `RecordPdxItem` 都 upsert（保留旧字段，新值覆盖非空字段）；封面命中 `TryGetCachedCover` 直接绑本地路径，不再发请求。
+- 详情页 7 天内复用（`IsDetailFresh` + `SetDetail`），过期才重新拉。
+- 查询失败时走 `ShowFailureOrCache`：`Snapshot(source, gameId)` 取该游戏缓存列表回填，状态栏提示「网络不可用，显示缓存中的 N 个结果」。
+- 设置页缓存卡片从 5 张变 6 张（`cacheRowWorkshopTitle/Desc`），清空走 `AppServices.WorkshopInfo.Clear()` + `CacheStorage.Clear(..., WorkshopCacheRoot)`。
+
+### 17.3 踩坑记录
+
+1. **封面根重复**：`WorkshopViewModel` 原本把封面下到 `AppServices.WorkshopCoverRoot`（`data\workshop-covers`），而缓存类自己的 `CoverRoot` 是 `data\workshop-info\covers`。命中缓存时拿的是后者的路径，导致「下载过的封面还是空白」。现在统一用 `_info.CoverRoot`，`WorkshopCoverRoot` 已删。
+2. **旧 exe 骗人**：真机脚本启动的是 `bin\x64\Release\...\win-x64\PdxLauncher.App.exe`，而构建产物同时存在于 `bin\Release\...`。第一轮看到排序只有 3 档，其实是旧 exe —— 先比对 exe 与 `PdxLauncher.App.dll` 的时间戳，再用 UI 树确认。排查时临时加的「排序档位重建」日志帮了大忙（`source=Steam, count=5, first=最热门`），验证完已删。
+3. **`total_count` 不随筛选变化**（Steam 行为）：时间范围切到 1 周后状态栏仍显示 17,718（总条数），切「最新更新」也一样；判断筛选是否生效要看列表内容而不是计数。
+4. **`star_rating = -1` 表示无人评分**：行里要过滤 `StarRating > 0 && TotalVotes > 0`，否则会出现「-1 分」。
+
+### 17.4 验收
+
+- `dotnet build "PdxLauncher.sln" -c Release` → 0 警告 0 错误；`python tools/gen-i18n.py` → 629 键；`PdxLauncher.Checks.exe` → **检查类 29 / 失败 0**（新增 `WorkshopInfoCacheChecks`：键、合并、持久化、封面命中、详情 TTL、快照排序、清空、坏索引降级）。
+- 真机（`pwsh ui-test-artifacts/workshop/workshop-sort-shot.ps1`，CK3）：
+  - 排序下拉 5 档、时间范围下拉 7 档，默认「最热门 + 30 天」（`07-sort-default.png`、`08-sort-menu.png`、`10-timerange-menu.png`）
+  - 选「最受好评」→ 时间范围仍在（`09-sort-toprated.png`）；选「1 周」→ 生效（`11-timerange-week.png`）；选「最新更新」→ 时间范围下拉消失（`12-sort-updated.png`）
+  - 第二轮启动时 86 条缓存 + 85 个封面文件命中，列表封面全部直出（`08-sort-menu.png` 里可见）
+- 数据格式见 `docs/DATA-FORMATS.md` §19。
+
+### 17.5 翻页性能：内存页缓存 + 封面并发 + 进度反馈（2026-10-28）
+
+用户反馈：第一页 → 第二页 → 回第一页，第一页要重新等好几秒；第二页内容也慢。
+
+**根因（四条叠在一起）**
+
+1. 没有任何页面级缓存：每次翻页都重抓 Steam 那份 1–3 MB 的 SSR 页面，且先 `Rows.Clear()` 再重建 30 行 —— 屏幕先空白、再逐行出现。
+2. `WorkshopInfoCache.Upsert` / `SetCover` 以前每条都同步全量写一次索引 JSON：一页 30 条 = 30 次原子写。
+3. 封面在列表出来后仍逐个 `await`，一页最坏 30 × 1.5 s。
+4. 翻页期间只有工具条一个小小的 ProgressRing，列表区没有进度感。
+
+**改法**
+
+- 新增 `PdxLauncher.Core.Online.WorkshopPageCache`（只在内存，重启即失效）：键 = `来源|游戏|搜索词|排序|时间范围|页码`，值 = 该页条目快照（`WorkshopInfoCacheEntry` 列表）+ 总条数 + 总页数 + 抓取时刻；`DefaultTtl = 5 分钟`。
+- `WorkshopViewModel.QueryAsync(force)`：`force=false` 且命中缓存 → 立刻 `ApplyCachedPage` 出列表并显示「已加载 N 个结果（来自缓存）」；缓存不新鲜时再**后台静默刷新**（`RefreshSilentlyAsync`，不清空列表、失败不报错）。翻页 / 换排序 / 换时间范围 / 改关键词 → `force=true`。
+- `WorkshopInfoCache` 改成「标脏 + 显式 `Flush()`」：`Upsert` / `SetCover` / `SetDetail` 只改内存并置 `_dirty`，`FillCoversAsync` 全部封面落地后统一 Flush 一次（`QuerySteamAsync` / `QueryPdxAsync` 末尾也 Flush）。
+- 封面：`SemaphoreSlim(6)` 并发下载，收集到列表后再统一落盘；命中磁盘封面的行直接绑定路径，不再下载。
+- 进度反馈：列表顶部 `ProgressBar`（`barWorkshopLoading`，绑 `IsBusy`）+ 状态栏右侧「封面 12/30」（`txtWorkshopCoverProgress`，绑 `ShowCoverProgress` / `CoverProgressText`），全部封面完成后自动隐藏。
+- 翻页时 `CancelCoverFill()` 取消上一页未下完的封面；`RaiseDerived()` 里同步 `HasPrevPage` / `HasNextPage` / `PageText` / `CountText` / `ShowTimeRange`。
+
+**实测（CK3，591 页，本机 20 Mbps）**
+
+| 场景 | 改前 | 改后 |
+|---|---|---|
+| 第一页首次 | 8–12 s（空白等待后逐行出现） | 5.2 s（立即出列表 + 封面 15 张并发补齐，状态栏有进度） |
+| 第一页 → 第二页（首次） | 6–9 s | 0.22 s（网络快时）/ 缓存命中后 0.23 s |
+| 回第一页 | 5–8 s（重抓网络） | **0.23 s**（内存页缓存，状态栏「来自缓存」） |
+| 再去第二页 | 6–9 s | 0.23 s |
+
+脚本：`pwsh ui-test-artifacts/workshop/workshop-page-shot.ps1`（`13-page1.png`、`14-page2.png`、`15-page1-back.png`、`16-page2-cached.png`）。注意脚本里比对页码只能比数字（控制台按 GBK 解码 winapp 输出，中文会变乱码）。
+
+**踩坑补充**
+
+5. **`WorkshopPageCache.Key` 与 `WorkshopInfoCache.Key` 不要混用**：前者是「一页」，后者是「一条」。名字像、参数不同，混掉会让翻页永远不命中。
+6. **封面进度先于完成**：`_coverTotal` 要在 `Rows` 建完、开始下载前设置，否则第一帧看不到进度；`HasCover` 变化必须 `OnPropertyChanged`，否则绑定的 `XamlVisibility` 不会刷新。

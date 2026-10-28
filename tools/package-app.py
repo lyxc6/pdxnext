@@ -27,7 +27,7 @@ OBJ = os.path.join(SCRATCH, "obj")
 APP_PROJ = os.path.join(WS, "src", "PdxLauncher.App")
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(SCRATCH, "publish")
 
-NUGET = r"C:/Users/17147/.nuget/packages"
+NUGET = os.environ.get("NUGET_PACKAGES") or os.path.join(os.path.expanduser("~"), ".nuget", "packages")
 SHARED = r"C:/Program Files/dotnet/shared"
 APPHOST = r"C:/Program Files/dotnet/packs/Microsoft.NETCore.App.Host.win-x64/10.0.13/runtimes/win-x64/native/apphost.exe"
 MT = os.path.join(NUGET, "microsoft.windows.sdk.buildtools/10.0.28000.2705/bin/10.0.28000.0/x64/mt.exe")
