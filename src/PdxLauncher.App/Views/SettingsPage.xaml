@@ -164,22 +164,6 @@
 
                         <TextBlock Text="{x:Bind L.SettingsSectionInterface, Mode=OneWay}" Style="{StaticResource SettingsSubsectionTitleStyle}" />
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsSteamSubscribeOn, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglSteamWorkshopSubscribe"
-                                              AutomationProperties.Name="{x:Bind L.SettingsSteamSubscribeOn, Mode=OneWay}"
-                                              IsOn="{x:Bind ViewModel.SteamSubscribeEnabled, Mode=TwoWay}" />
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
-
-                        <controls:SettingsValueCard Header="{x:Bind L.SettingsSteamSubscribeOn, Mode=OneWay}"
-                                                    Value="{x:Bind ViewModel.SteamApiStatusText, Mode=OneWay}"
-                                                    ValueAutomationId="txtSteamApiStatus"
-                                                    ValueAutomationName="{x:Bind L.SettingsSteamSubscribeOn, Mode=OneWay}"
-                                                    ShowToolTip="True" />
-
-                        <TextBlock Text="{x:Bind L.SettingsSteamSubscribeHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
-
                         <controls:SettingsCard Header="{x:Bind L.SettingsInterfaceLanguage, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
                                 <ComboBox AutomationProperties.AutomationId="cmbUiLanguage"
@@ -380,6 +364,22 @@
                                                     ValueAutomationName="{x:Bind L.SettingsProxyCurrentName, Mode=OneWay}" />
 
                         <TextBlock Text="{x:Bind L.SettingsProxyHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsSteamSubscribeOn, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ToggleSwitch AutomationProperties.AutomationId="tglSteamWorkshopSubscribe"
+                                              AutomationProperties.Name="{x:Bind L.SettingsSteamSubscribeOn, Mode=OneWay}"
+                                              IsOn="{x:Bind ViewModel.SteamSubscribeEnabled, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsSteamApiHeader, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.SteamApiStatusText, Mode=OneWay}"
+                                                    ValueAutomationId="txtSteamApiStatus"
+                                                    ValueAutomationName="{x:Bind L.SettingsSteamApiHeader, Mode=OneWay}"
+                                                    ShowToolTip="True" />
+
+                        <TextBlock Text="{x:Bind L.SettingsSteamSubscribeHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
 
                     </StackPanel>
 

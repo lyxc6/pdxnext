@@ -3445,8 +3445,9 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
    可点性绑 `CanToggleSteamSubscription`，订阅中单独一个 ProgressRing，已订阅显示强调色徽标，
    下方给「直连可用 / 未启用 / 不可用原因」提示；`OnSubscribeSteamClick` 在直连可用时走
    ContentDialog 二次确认 → 真订阅；直连不可用仍退回打开 Steam 页面。离开页面 `Dispose` 桥（关 Steamworks）。
-9. 设置：`SettingsViewModel.SteamSubscribeEnabled`（默认关的实验开关）+ `RefreshSteamApiStatus()`
-   （设置项里显示解析到的 DLL 路径或前两条候选）；`AppSettings.SteamWorkshopSubscribeEnabled`
+9. 设置：开关与检测状态放在 **设置 → 联网 →「网络代理」下方**（这是联网行为，不塞进「界面」小节）；
+   `SettingsViewModel.SteamSubscribeEnabled`（默认关的实验开关）+ `RefreshSteamApiStatus()`
+   （状态卡标题是 `steam_api64.dll`，值显示「已找到 …」或「没找到 + 前两条候选」）；`AppSettings.SteamWorkshopSubscribeEnabled`
    /`SteamApiDllPath`（后者 v1 不在 UI 暴露，可手写 settings.json）。
 10. i18n：`workshop.json` 各 +4（`detailSteamSubscribeHintOn/Off`、`detailSteamSubscribeConfirm`
     /`detailSteamUnsubscribeConfirm`），`settings.json` 各 +6（`steamSubscribeOn/Hint/StatusOn/StatusOff`、

@@ -540,6 +540,7 @@ public sealed partial class Localizer
         ["settings.status.openedDataDir"] = "已打开数据目录：{0}",
         ["settings.status.saveFailed"] = "保存设置失败：{0}",
         ["settings.status.selectGameFirst"] = "请先在游戏库里选择一款游戏",
+        ["settings.steamApiHeader"] = "steam_api64.dll",
         ["settings.steamApiMissing"] = "未找到 steam_api64.dll：{0}",
         ["settings.steamApiReady"] = "已找到 steam_api64.dll",
         ["settings.steamSubscribeHint"] = "开启后，创意工坊详情页的「在 Steam 中订阅」按钮会直接调用 Steam 客户端完成订阅 / 取消订阅；关闭时只会在 Steam 客户端里打开该 mod 页面。需要 steam_api64.dll（放在程序目录或游戏目录）。",
@@ -1239,6 +1240,7 @@ public sealed partial class Localizer
         ["settings.status.openedDataDir"] = "Opened the data folder: {0}",
         ["settings.status.saveFailed"] = "Could not save settings: {0}",
         ["settings.status.selectGameFirst"] = "Pick a game in the library first",
+        ["settings.steamApiHeader"] = "steam_api64.dll",
         ["settings.steamApiMissing"] = "steam_api64.dll not found: {0}",
         ["settings.steamApiReady"] = "steam_api64.dll found",
         ["settings.steamSubscribeHint"] = "When on, the Subscribe button on a Workshop detail page subscribes or unsubscribes through the Steam client. When off, it only opens the item in the Steam client. Requires steam_api64.dll next to the launcher or in the game folder.",
@@ -1938,6 +1940,7 @@ public sealed partial class Localizer
         ("settings.status.openedDataDir", "SettingsStatusOpenedDataDir"),
         ("settings.status.saveFailed", "SettingsStatusSaveFailed"),
         ("settings.status.selectGameFirst", "SettingsStatusSelectGameFirst"),
+        ("settings.steamApiHeader", "SettingsSteamApiHeader"),
         ("settings.steamApiMissing", "SettingsSteamApiMissing"),
         ("settings.steamApiReady", "SettingsSteamApiReady"),
         ("settings.steamSubscribeHint", "SettingsSteamSubscribeHint"),
@@ -2635,6 +2638,7 @@ public sealed partial class Localizer
     public string SettingsStatusOpenedDataDir => Format("settings.status.openedDataDir");
     public string SettingsStatusSaveFailed => Format("settings.status.saveFailed");
     public string SettingsStatusSelectGameFirst => Format("settings.status.selectGameFirst");
+    public string SettingsSteamApiHeader => Format("settings.steamApiHeader");
     public string SettingsSteamApiMissing => Format("settings.steamApiMissing");
     public string SettingsSteamApiReady => Format("settings.steamApiReady");
     public string SettingsSteamSubscribeHint => Format("settings.steamSubscribeHint");
@@ -3335,6 +3339,7 @@ internal static class Keys
     public const string SettingsStatusOpenedDataDir = "settings.status.openedDataDir";
     public const string SettingsStatusSaveFailed = "settings.status.saveFailed";
     public const string SettingsStatusSelectGameFirst = "settings.status.selectGameFirst";
+    public const string SettingsSteamApiHeader = "settings.steamApiHeader";
     public const string SettingsSteamApiMissing = "settings.steamApiMissing";
     public const string SettingsSteamApiReady = "settings.steamApiReady";
     public const string SettingsSteamSubscribeHint = "settings.steamSubscribeHint";
