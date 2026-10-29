@@ -11,7 +11,7 @@
 ## 0. 一句话现状
 
 启动器外壳与主页已从「照官方 Paradox 启动器截图逐像素自绘」**改成 WinUI 3 标准控件 UI**（用户明确要求），
-Release **0 警告 0 错误**，自检 **20 个检查类 / 0 失败**（2026-10-27 18:40 实测；本轮新增 `DiscoveryCacheChecks` / `CatalogCacheChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
+Release **0 警告 0 错误**，自检 **37 个检查类 / 0 失败**（2026-10-28 19:30 实测；本轮新增 `AccountChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
 **2026-10-26 已完成：窗口置顶开关（§0.2）+ 整窗背景「方案 B」（§0.3）**——游戏主题背景图现在连标题栏条和左侧
 NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统一纱 + 卡片/列表玻璃底衬），主页那条 260 高、被裁掉一半的
 主题横幅已删除。剩下的活：Light / HighContrast 真机切主题跑一遍（§0.3 唯一视觉盲区）、真机复验 settings.json 与置顶持久化、
@@ -78,11 +78,181 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 
 **2026-10-28 03:10 追加：Mod 库的「在线（PDX Mods）」视图按用户要求整体回退，功能搬进左栏独立「创意工坊」页 —— 它按当前游戏单一来源渲染（CS2 → Paradox Mods，CK3/V3 等有 Steam 工坊的 → Steam 创意工坊），不做页签切换；Paradox 登录同时从设置页分节搬成左栏独立「账号」页，并且启动时就恢复会话（原来只有进设置页才恢复）；顺手补上「记忆上次选中的游戏」（`settings.json` 新增 `lastGameId` / `lastGameInstallRoot`），见 §0.26。**
 
+**2026-10-28 19:30 追加：「Paradox 账号无法登录」查明**不是**协议/网络问题，而是账号页一个鸡生蛋死锁 —— 邮箱框的 `IsEnabled` 绑在 `CanSignIn` 上，而 `CanSignIn` 要求「邮箱非空」，于是邮箱框把自己禁用了，用户连邮箱都输不进去，请求从未发出（所以日志里一条 `pdx-login-*` 都没有）。顺带挖出第二个缺陷：凭据错误的错误码是 `pdx-login-unauthorized`，而归类只匹配 `pdx-unauthorized`，界面把原始码直接显示给用户（「登录失败：pdx-login-unauthorized」），用户根本看不出是密码错了。两者都已修 + 新增 `AccountChecks`，见 §0.28。**
+
 **2026-10-28 03:40 追加：EU5 mod 封面「16/22 不显示」查明是两个缺陷叠加 —— ① 解析器只扫 mod 根目录、从不进 `.metadata\`（EU5 的封面全在那里）；② metadata.json 的键读成了 `thumbnail`，真键是 `picture`。修好后真机 22/22 全部成像（16 张来自 `.metadata`），老游戏零影响，见 §0.27。**
 
 **2026-10-29 07:20 追加：Mod 库每行加第四个按钮「打开详情页」，复用创意工坊那个详情子页 —— 行先翻译成 `ModWorkshopRef`（平台 + 编号），`WorkshopRowViewModel.FromLibrary` 造详情行；解析不出编号（本地 mod）就置灰并把原因写进 tooltip。详情子页的「返回」不再写死回创意工坊：发起方经 `WorkshopDetailNavigationRequest.ReturnTag` 说回来处，从 Mod 库进来按钮显示「返回 Mod 库」，见 §0.46。**
 
-## 0.27 最新一轮（2026-10-28 03:33–03:40）：EU5 mod 封面 16/22 缺图 —— `.metadata` 布局 + metadata.json `picture` 键
+## 0.28 最新一轮（2026-10-28 18:50–19:30）：Paradox 账号无法登录 —— 邮箱框自己禁用自己
+
+### 0.28.1 用户诉求
+
+> 「给我把 paradox 账号登录修好，目前无法登录账号」
+
+### 0.28.2 先排除的不是这个（避免下次重新怀疑一遍）
+
+协议层**没有问题**，证据链完整，不用再查：
+
+1. **官方 asar 逐字比对**（本机 `launcher-v2.2026.13`，`C:\Users\17147\AppData\Local\Programs\Paradox Interactive\launcher\launcher-v2.2026.13\resources\app.asar`，29,170,265 B）：
+   `OFe="64DC4DC6508F4A9D823179D4D99DB4EE"`（盐）、
+   `RFe=(t,e)=>JSON.stringify({hawk:{email:t,"sha256(password+salt)":…}})`（头形状）、
+   `Z3=t=>JSON.stringify({session:{token:t}})`、`NFe=t=>JSON.stringify({renewal:{token:t}})`、
+   `Fme="https://api.paradox-interactive.com/accounts/sessions/launcher-v2"`。
+   我们的 `PdxPassword.Salt` / `HeaderKeyName` / `PdxAccountClient.SessionEndpoint` / `SessionHeader` / 续期形状全部逐字一致。
+2. **现网实测**：`curl -X PUT` 到该端点，header 放 hawk(email + 全零哈希)、空 body → **HTTP 401**，
+   body `{"result":"Failure","errorCode":"not-authorized","errorMessage":"Not authorized","detail":{}}`。
+   带不带 `rememberMe` 字段结果完全一样 → 端点可达、形状被接受，只判凭据错。
+   （附带结论：我们多发的 `rememberMe` 是多余的 —— 官方只在**本地**决定是否落盘 refresh token，不参与请求；但无害，故保留不动。）
+3. **运行时日志**：`data/logs/pdxnext.log` 里 `PDX 请求失败` / `Paradox 登录` / `pdx-login-*` **一条都没有** ——
+   这本身就是关键证据：请求根本没发出，所以问题在 UI 层，不在网络层。
+
+### 0.28.3 根因一：邮箱框的 `IsEnabled` 绑在 `CanSignIn` 上（死锁）
+
+```csharp
+// 改前 AccountViewModel
+public bool CanSignIn => !IsBusy && !IsSignedIn && !string.IsNullOrWhiteSpace(Email);
+```
+
+`Email` 初值是 `string.Empty`，没有任何预填（全仓没有「记住上次邮箱」的逻辑）。而
+`src/PdxLauncher.App/Views/AccountPage.xaml` 里 **4 个控件**共用这一个属性：
+
+| 行 | 控件 | 改前 |
+| --- | --- | --- |
+| 115 | `EmailBox`（`txtAccountEmail`） | `IsEnabled="{x:Bind ViewModel.CanSignIn}"` |
+| 127 | `PasswordBoxControl`（`txtAccountPassword`） | 同上 |
+| 139 | `swAccountRemember` | 同上 |
+| 149 | `btnAccountSignIn` | 同上 |
+
+于是：邮箱空 → `CanSignIn=false` → **邮箱框自己被禁用** → 用户无法输入邮箱 → 永远为空。
+身份卡上那个「登录」按钮（`btnAccountPrimary`）只做 `expAccountSignIn.IsExpanded = true; EmailBox.Focus(...)`，
+焦点落到禁用控件上会静默失败 —— 用户观感就是「点了没反应」。
+
+真机 UIA 实测（改前，`winapp ui inspect nav -a PdxLauncher.App`）：
+
+```
+txtAccountEmail    Edit   "邮箱"      [disabled]
+txtAccountPassword Edit   "密码"      [disabled]
+swAccountRemember  Button "保持登录" [off] [disabled]
+btnAccountSignIn   Button "登录"      [disabled]
+btnAccountPrimary  Button "登录"                ← 这个可点，但它只展开 + Focus
+```
+
+这个死锁从 0.23.4 批次（`git show 592729a~1:src/PdxLauncher.App/Views/AccountPage.xaml`）起就存在，
+不是 592729a 账号页改版引入的。
+
+### 0.28.4 修法：把「能不能改输入」与「能不能提交」拆开
+
+新增纯 C# 判定类 `src/PdxLauncher.App/Services/AccountFormState.cs`：
+
+```csharp
+public static bool CanEditCredentials(bool isBusy, bool isSignedIn) => !isBusy && !isSignedIn;
+public static bool CanSubmit(bool isBusy, bool isSignedIn, string? email)
+    => CanEditCredentials(isBusy, isSignedIn) && !string.IsNullOrWhiteSpace(email);
+```
+
+`AccountViewModel` 由此拆成两个属性（`CanSignIn` 保留原名，只给按钮用）：
+
+```csharp
+public bool CanEditCredentials => AccountFormState.CanEditCredentials(IsBusy, IsSignedIn);
+public bool CanSignIn => AccountFormState.CanSubmit(IsBusy, IsSignedIn, Email);
+```
+
+XAML 三处（115 / 127 / 139）改绑 `CanEditCredentials`，按钮 149 仍绑 `CanSignIn`；
+`RaiseAccountProps()` 里补 `OnPropertyChanged(nameof(CanEditCredentials));`。
+生成物 `obj/x64/Release/…/Views/AccountPage.g.cs:636-647` 的 `Update_ViewModel_CanEditCredentials`
+同时设置 obj12/obj13/obj14 的 `IsEnabled`，与 XAML 行号 134/121/109 对应，确认绑定生效。
+
+### 0.28.5 根因二：凭据错的错误码没被认出来
+
+`PdxAccountClient` 返回 **`pdx-login-unauthorized`**（续期是 `pdx-refresh-unauthorized`），
+而 `AccountViewModel.DescribeAccountError` 只匹配 `pdx-unauthorized` / `401` / `403`：
+
+```csharp
+if (code.Contains("pdx-unauthorized", …) || code.Contains("401", …) || code.Contains("403", …))
+```
+
+→ 落到最后的 `return code;`，界面**直接把内部码显示给用户**。真机实测（改前）：
+
+```
+txtAccountStatusBar Text "登录失败：pdx-login-unauthorized"
+```
+
+用户当然看不出「是我密码打错了」。同类漏判还有网络：客户端给的是 `pdx-login-network`，归类写的是 `pdx-network`。
+
+修法：把归类抽成 `src/PdxLauncher.App/Services/AccountErrorText.cs`
+（`AccountErrorCategory { BadCredentials, Network, Other }`），按**词根**而非精确串判断
+（`Contains("unauthorized")` / `Contains("network")` / `Contains("timeout")`），
+`DescribeAccountError` 改成对它 switch。改后真机：
+
+```
+txtAccountStatusBar Text "登录失败：邮箱或密码不正确。"
+```
+
+### 0.28.6 顺手修的两处
+
+- **失败日志缺失**：`PdxAccountClient` 非 401 分支原来完全不记日志，响应 body 也不落盘 ——
+  排障时看不到服务端的 `errorCode`。现在 401/403 与非 2xx 都记
+  `Paradox 登录被拒：HTTP <code> <body 前 200 字>`（`BodySnippet`，空 body 记 `<empty>`；续期对应 `Paradox 续期被拒/失败`）。
+  **只记响应，不记请求** —— 请求头里是密码哈希与会话令牌。
+- **「保持登录」文案在说谎**：`account.rememberHint` 承诺「不勾选则只在本次运行有效」，
+  但 `AccountService.SignInAsync` 原来无条件 `_store.Save(session)`。现在按 `rememberMe` 分支：
+  勾了 `Save`，没勾 `Clear`（顺手删掉上次留下的会话文件，否则重启后 `RestoreAsync` 又会把它恢复出来）。
+
+### 0.28.7 改了哪些文件
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.App/Services/AccountFormState.cs` | **新增**，可编辑/可提交判定 |
+| `src/PdxLauncher.App/Services/AccountErrorText.cs` | **新增**，错误码归类 |
+| `src/PdxLauncher.App/ViewModels/AccountViewModel.cs` | `CanEditCredentials` 拆分；`RaiseAccountProps` 补通知；`DescribeAccountError` 改用归类 |
+| `src/PdxLauncher.App/Views/AccountPage.xaml` | 115 / 127 / 139 改绑 `CanEditCredentials` |
+| `src/PdxLauncher.Core/Accounts/PdxAccountClient.cs` | 失败日志 + `BodySnippet`；错误码/ErrorKind 不变 |
+| `src/PdxLauncher.App/Services/AccountService.cs` | `SignInAsync` 按 `rememberMe` 决定 Save/Clear |
+| `tests/PdxLauncher.Checks/AccountChecks.cs` | **新增**，61 条断言 |
+| `tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj` | 新增 3 条 `<Compile Include>` 链接（`AccountService` / `AccountFormState` / `AccountErrorText`） |
+| `README.md` | 计数与覆盖说明同步 |
+
+`AccountChecks` 钉住的口径：密码哈希三条向量（python `hashlib` 独立验算，避免「照抄实现」式自证）、
+盐与头键名与官方逐字一致、`PUT` + 端点 + 空 body、邮箱去空格且头里不含明文密码、
+401→`Unauthorized` / 500→`Io` / 网络异常→`pdx-login-network` 的映射、`session` 嵌套与顶层扁平两种响应形状、
+缺 token 判失败、落盘策略（不勾不落盘 / 勾了落盘并能读回 / 改回不勾会清旧文件），
+以及两条回归钉：**可编辑性与邮箱无关**、**`pdx-login-unauthorized` 必须归到凭据错**。
+
+### 0.28.8 验证（全部实际执行）
+
+- 构建：`bash tools/build-app.sh -p:Platform=x64` → **0 警告 0 错误**；
+  产物 `src/PdxLauncher.App/bin/x64/Release/net10.0-windows10.0.26100.0/win-x64/`（`PdxLauncher.App.dll` 时间戳新鲜）。
+- 自检：`dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"` →
+  **`检查类: 37，失败: 0，断言失败总数: 0`**（连跑 3 次稳定）。
+- 真机 UIA 端到端（改后，`winapp ui`）：
+  1. 进账号页：`txtAccountEmail` / `txtAccountPassword` / `swAccountRemember` **均不带 `[disabled]`**，
+     `btnAccountSignIn` 仍 `[disabled]`（邮箱空）—— 死锁已解，同时按钮仍受「必填」约束。
+  2. `set-value` 填邮箱 + 密码 → 登录按钮解除禁用。
+  3. `invoke btnAccountSignIn` → 日志新增三行，证明整链打通：
+     ```
+     [WARN] PDX 请求失败：PUT /accounts/sessions/launcher-v2 → HTTP 401
+     [WARN] Paradox 登录被拒：HTTP 401 {"result":"Failure","errorCode":"not-authorized",…}
+     [WARN] Paradox 账号操作失败：pdx-login-unauthorized
+     ```
+     界面 `txtAccountStatusBar` = `登录失败：邮箱或密码不正确。`
+  4. 清空邮箱 → 三个输入控件仍可用、登录按钮恢复 `[disabled]`。
+  5. `invoke btnAccountPrimary` → `get-focused` 返回 `Edit 邮箱`，焦点修复。
+  6. 失败登录后 `data/pdx-session.json` **不存在**（不落盘）。
+
+### 0.28.9 未做 / 已知边界
+
+- **没有真实可用的 Paradox 账号做成功登录验证**（手上只有错误凭据）。所以「凭据正确时能拿到 token 并落盘」
+  这条只由 `AccountChecks` 的 fake 传输覆盖，**没有走真网**。下次拿到账号请补这一次真机验证，
+  重点看两件事：响应里 `session.token` 是否在、`displayName` 是否取到。
+- `PdxAccountClient` 发的头里仍带多余的 `rememberMe`（官方 asar 的登录头里没有）。实测无害，暂不动。
+- 不做邮箱预填（计划评审时明确排除：会引入「记住上次邮箱」的持久化，超出本次范围）。
+- `AccountService.RestoreAsync` 续期失败仍静默 `_store.Clear()`，行为不变（刻意选的：冷启动不该因会话过期弹窗）。
+- 官方启动器另有 `/accounts/auth` 与 Steam / Microsoft / Epic 三条第三方登录路径，当前只实现了邮箱密码一条，
+  不在本轮范围。
+- 工作区里若干创意工坊/在线相关的未提交改动与本轮无关，未触碰。
+
+## 0.27 上一轮（2026-10-28 03:33–03:40）：EU5 mod 封面 16/22 缺图 —— `.metadata` 布局 + metadata.json `picture` 键
 
 ### 0.27.1 用户诉求
 

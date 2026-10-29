@@ -112,7 +112,7 @@
                                      Width="320"
                                      PlaceholderText="{x:Bind L.AccountEmailPlaceholder, Mode=OneWay}"
                                      Text="{x:Bind ViewModel.Email, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     IsEnabled="{x:Bind ViewModel.CanSignIn, Mode=OneWay}" />
+                                     IsEnabled="{x:Bind ViewModel.CanEditCredentials, Mode=OneWay}" />
                         </controls:SettingsCard.ActionContent>
                     </controls:SettingsCard>
 
@@ -124,7 +124,7 @@
                                          Width="320"
                                          PlaceholderText="{x:Bind L.AccountPasswordPlaceholder, Mode=OneWay}"
                                          PasswordRevealMode="Peek"
-                                         IsEnabled="{x:Bind ViewModel.CanSignIn, Mode=OneWay}" />
+                                         IsEnabled="{x:Bind ViewModel.CanEditCredentials, Mode=OneWay}" />
                         </controls:SettingsCard.ActionContent>
                     </controls:SettingsCard>
 
@@ -136,7 +136,7 @@
                                           OnContent="{x:Bind L.CommonOn, Mode=OneWay}"
                                           OffContent="{x:Bind L.CommonOff, Mode=OneWay}"
                                           IsOn="{x:Bind ViewModel.Remember, Mode=TwoWay}"
-                                          IsEnabled="{x:Bind ViewModel.CanSignIn, Mode=OneWay}" />
+                                          IsEnabled="{x:Bind ViewModel.CanEditCredentials, Mode=OneWay}" />
                         </controls:SettingsCard.ActionContent>
                     </controls:SettingsCard>
 

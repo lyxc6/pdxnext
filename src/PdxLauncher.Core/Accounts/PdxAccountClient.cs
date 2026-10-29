@@ -94,12 +94,16 @@ public sealed class PdxAccountClient
 
         if (response.StatusCode is 401 or 403)
         {
-            // 不区分「邮箱不存在」与「密码错误」，避免账号枚举。
+            // 不区分「邮箱不存在」与「密码错误」，避免账号枚举；日志里留状态码便于排障。
+            _logger.Warn("Paradox 登录被拒：HTTP " + response.StatusCode.ToString(CultureInfo.InvariantCulture) + " " + BodySnippet(response.Body));
             return AppResult<PdxSession>.Fail(ErrorKind.Unauthorized, "pdx-login-unauthorized");
         }
 
         if (!response.IsSuccess)
         {
+            // 服务端的 errorCode 是唯一能区分「参数被拒 / 账号被锁 / 服务故障」的线索，
+            // 不记日志的话界面上只剩一个 pdx-login-failed:xxx，等于没法排障。
+            _logger.Warn("Paradox 登录失败：HTTP " + response.StatusCode.ToString(CultureInfo.InvariantCulture) + " " + BodySnippet(response.Body));
             return AppResult<PdxSession>.Fail(ErrorKind.Io, "pdx-login-failed:" + response.StatusCode.ToString(CultureInfo.InvariantCulture));
         }
 
@@ -135,11 +139,13 @@ public sealed class PdxAccountClient
 
         if (response.StatusCode is 401 or 403)
         {
+            _logger.Warn("Paradox 续期被拒：HTTP " + response.StatusCode.ToString(CultureInfo.InvariantCulture) + " " + BodySnippet(response.Body));
             return AppResult<PdxSession>.Fail(ErrorKind.Unauthorized, "pdx-refresh-unauthorized");
         }
 
         if (!response.IsSuccess)
         {
+            _logger.Warn("Paradox 续期失败：HTTP " + response.StatusCode.ToString(CultureInfo.InvariantCulture) + " " + BodySnippet(response.Body));
             return AppResult<PdxSession>.Fail(ErrorKind.Io, "pdx-refresh-failed:" + response.StatusCode.ToString(CultureInfo.InvariantCulture));
         }
 
@@ -211,6 +217,22 @@ public sealed class PdxAccountClient
         var displayName = FindString(root, "displayName", "display_name", "username") ?? email;
         return AppResult<PdxSession>.Ok(
             new PdxSession(token, refresh, userId, email, displayName, _clock.UtcNow));
+    }
+
+    /// <summary>
+    /// 取响应正文的一小段写进日志。<b>只用于响应</b>：请求侧的头里含密码哈希与会话令牌，绝不落日志。
+    /// 服务端的 <c>errorCode</c>（如 <c>not-authorized</c>、<c>invalid-credentials</c>）是区分
+    /// 「密码错」「账号被锁」「服务端故障」的唯一线索，没有它，界面上只剩一个 <c>pdx-login-failed:500</c>。
+    /// </summary>
+    private static string BodySnippet(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return "<empty>";
+        }
+
+        var flattened = body.Replace('\r', ' ').Replace('\n', ' ').Replace('\t', ' ').Trim();
+        return flattened.Length <= 200 ? flattened : flattened[..200] + "…";
     }
 
     private static string? FindString(JsonObject? node, params string[] names)

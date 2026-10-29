@@ -122,7 +122,17 @@ public sealed class AccountService
             }
 
             _session = session;
-            _store.Save(session);
+            if (rememberMe)
+            {
+                _store.Save(session);
+            }
+            else
+            {
+                // 不勾「保持登录」就只在本次运行有效（与 account.rememberHint 的承诺一致）：
+                // 顺手删掉上一次留下的会话文件，否则重启后仍会被 RestoreAsync 恢复出来。
+                _store.Clear();
+            }
+
             RaiseChanged();
             _logger.Info("Paradox 登录成功（" + session.Email + "）。");
             return result;

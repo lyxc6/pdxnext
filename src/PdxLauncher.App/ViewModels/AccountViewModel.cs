@@ -61,8 +61,15 @@ public sealed partial class AccountViewModel : LocalizedObservableObject
     /// <summary>已登录。</summary>
     public bool IsSignedIn => AppServices.IsInitialized && AppServices.Account.IsSignedIn;
 
-    /// <summary>能否提交登录：未在忙、未登录、邮箱非空。</summary>
-    public bool CanSignIn => !IsBusy && !IsSignedIn && !string.IsNullOrWhiteSpace(Email);
+    /// <summary>
+    /// 输入控件（邮箱框 / 密码框 / 保持登录）是否可用：未在忙、未登录。
+    /// 与 <see cref="CanSignIn"/> 分开是因为邮箱初值为空 —— 若输入框也绑 <see cref="CanSignIn"/>，
+    /// 邮箱框会在启动时禁用自己，用户根本没有地方输入邮箱（曾经的「点了没反应」根因）。
+    /// </summary>
+    public bool CanEditCredentials => AccountFormState.CanEditCredentials(IsBusy, IsSignedIn);
+
+    /// <summary>能否提交登录：可编辑输入，且邮箱非空。</summary>
+    public bool CanSignIn => AccountFormState.CanSubmit(IsBusy, IsSignedIn, Email);
 
     /// <summary>没登录时显示登录表单。</summary>
     public bool ShowSignInPanel => !IsSignedIn;
@@ -208,6 +215,7 @@ public sealed partial class AccountViewModel : LocalizedObservableObject
     public void RaiseAccountProps()    {
         OnPropertyChanged(nameof(IsBusy));
         OnPropertyChanged(nameof(IsSignedIn));
+        OnPropertyChanged(nameof(CanEditCredentials));
         OnPropertyChanged(nameof(CanSignIn));
         OnPropertyChanged(nameof(ShowSignInPanel));
         OnPropertyChanged(nameof(ShowSignedInPanel));
@@ -227,20 +235,13 @@ public sealed partial class AccountViewModel : LocalizedObservableObject
             AppServices.Logger.Warn("Paradox 账号操作失败：" + code);
         }
 
-        if (code.Contains("pdx-unauthorized", StringComparison.Ordinal)
-            || code.Contains("401", StringComparison.Ordinal)
-            || code.Contains("403", StringComparison.Ordinal))
+        // 归类放在 AccountErrorText 里（纯 C#，可自检），免得再漏掉 login/refresh 前缀的差异。
+        return AccountErrorText.Describe(code) switch
         {
-            return T(Keys.AccountErrorBadCredentials);
-        }
-
-        if (code.Contains("timeout", StringComparison.OrdinalIgnoreCase)
-            || code.Contains("pdx-network", StringComparison.OrdinalIgnoreCase))
-        {
-            return T(Keys.AccountErrorNetwork);
-        }
-
-        return code;
+            AccountErrorCategory.BadCredentials => T(Keys.AccountErrorBadCredentials),
+            AccountErrorCategory.Network => T(Keys.AccountErrorNetwork),
+            _ => code,
+        };
     }
 
     /// <summary>记下状态键、参数与级别，切语言后能按新语言重建同一句。</summary>

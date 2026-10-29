@@ -29,5 +29,24 @@
       所以口径要由 WorkshopTextChecks 钉住。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\WorkshopText.cs" Link="Linked\WorkshopText.cs" />
+    <!--
+      会话状态机（登录 / 续期 / 登出 / 落盘时机）本身不碰任何 UI 类型，
+      只用 Core 的 IAppLogger / PdxSessionStore / IClock / PdxAccountClient，
+      所以可以原样链接进来。它的「不勾保持登录就不落盘」和「登出清内存」是文案承诺，
+      漏了不会崩、只会让用户以为登录状态记不住，必须由 AccountChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\AccountService.cs" Link="Linked\AccountService.cs" />
+    <!--
+      登录表单的可编辑/可提交判定。它存在的唯一理由就是修「邮箱框自己禁用自己」的死锁，
+      而这个死锁在真机上表现为「点了登录没反应」，编译器与人工点测都容易漏，
+      所以判定逻辑必须留在能被自检链接的纯 C# 里。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\AccountFormState.cs" Link="Linked\AccountFormState.cs" />
+    <!--
+      错误码归类。曾经漏判过一次：客户端发 pdx-login-unauthorized，归类只认 pdx-unauthorized，
+      于是「密码错」被当成未知错误，界面把原始码直接显示给用户看。
+      这种错不会崩，只在真机上表现为「登录坏了」，所以口径要能被 AccountChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\AccountErrorText.cs" Link="Linked\AccountErrorText.cs" />
   </ItemGroup>
 </Project>
