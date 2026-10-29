@@ -337,7 +337,7 @@ scripts/
 Directory.Build.props          :: 统一可空/语言版本/告警策略
 NuGet.config                   :: <clear/>，全离线
 src/
-  PdxLauncher.Core/            :: 151 个 .cs，无任何 WinUI 依赖，可单测
+  PdxLauncher.Core/            :: 165 个 .cs，无任何 WinUI 依赖，可单测
     Abstractions/              :: 22 个接口（IGameCatalog / IPlaySetRepository / IGameLauncher / INewsFeedService ...）
     Contracts/                 :: 不可变 record 数据模型
     Games/                     :: Steam 库探测、launcher-settings 解析、游戏目录展开
@@ -350,13 +350,13 @@ src/
     Online/                    :: GraphQL 元数据、素材下载、代理（三模式解析 / 系统代理 / 环境变量）、DLC 简介、官方公告
     Parsing/                   :: Clausewitz 与 Valve KeyValues 解析器
     Patch/                     :: 补丁素材（内嵌 loader + cream_api.ini）、目标目录判定、打补丁 / 还原
-  PdxLauncher.App/             :: 69 个 .cs + 11 个 .xaml，WinUI 3 层
+  PdxLauncher.App/             :: 86 个 .cs + 13 个 .xaml，WinUI 3 层
     Assets/                    :: AppIcon.ico（9 帧 16→256）+ 8 张模板同名 PNG，全部由 tools/gen-app-icon.py 生成
     Views/                     :: GameLibraryPage / HomePage / ModsPage（播放集） / ModLibraryPage（Mod库） / DlcPage / SettingsPage
     ViewModels/                :: 16 个 VM（全部不含 Microsoft.UI.Xaml 类型）
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
 tests/
-  PdxLauncher.Checks/          :: 28 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 40 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
@@ -379,7 +379,7 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**260 个 .cs + 11 个 .xaml**（不含 `obj/` 生成物；2026-10-28 实测：Core 151 / App 69+11 / Imaging 9 / Checks 31 —— Checks 的 31 个文件是 28 个检查类 + Program + ChecksContext + GlobalUsings）。
+**303 个 .cs + 13 个 .xaml**（不含 `obj/` 生成物；2026-10-29 实测：Core 165 / App 86+13 / Imaging 9 / Checks 43 —— Checks 的 43 个文件是 40 个检查类 + Program + ChecksContext + GlobalUsings）。
 
 ---
 
@@ -389,7 +389,7 @@ tools/
 dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 28，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
+输出 `检查类: 40，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
 launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取
 （mods 全量、size / subscribedDate 解析、播放集归属、requiredVersion 兼容判断）、创意工坊 id 解析、启动参数拼装、路径大小写不敏感处理；
 以及联网子系统：域名白名单与 magic bytes 判型（含 GIF）、素材下载与原子改名、主题补丁合并、
@@ -402,7 +402,12 @@ DLC 简介的 TTL / 负缓存 / 失败退避、官方公告的 JSON 解析（时
 csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cmd 的 `Assets\AppIcon.ico` 校验三处接入点；
 以及补丁：内嵌 loader / ini 的字节数与 sha256、x86-only / x64-only 的目标目录选择、打补丁后的备份字节与 ini 内容
 （appId 改写、`[dlc]` 保留、PdxNext 标记）、清单落盘与幂等重打、还原后原字节恢复且 `_o` 与 ini 消失、
-旧手工补丁与 Steam 覆盖两种状态的可还原性判定、缺 appId 时拒绝、目标文件被占用时不破坏原文件。
+旧手工补丁与 Steam 覆盖两种状态的可还原性判定、缺 appId 时拒绝、目标文件被占用时不破坏原文件；
+以及 Paradox 账号登录：密码哈希向量（含空密码与特殊字符）、盐与头键名与官方启动器逐字一致、
+`PUT /accounts/sessions/launcher-v2` 的头形状与空 body、邮箱去空格且头里不含明文密码、
+401/500/网络异常到错误码的映射、`session` 嵌套与顶层扁平两种响应形状、缺 token 判失败、
+「不勾保持登录不落盘 / 勾了才落盘并能读回 / 改回不勾会清掉旧文件」，以及登录表单
+「可编辑性与邮箱无关、可提交性＝可编辑且邮箱非空」这条死锁回归钉子。
 
 ---
 
