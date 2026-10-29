@@ -932,11 +932,17 @@ public static class PlaysetChecks
         else
         {
             var mods = repository.GetPlaySetModsAsync(game, irony.Id, CancellationToken.None).GetAwaiter().GetResult();
-            ChecksContext.Equal("CK3 IronyModManager mod 行数", 5, mods.Count);
-            ChecksContext.Equal("CK3 IronyModManager 启用 mod 数", 4, mods.Count(mod => mod.Enabled));
-            ChecksContext.Check("CK3 IronyModManager 恰好 1 行未启用", mods.Count(mod => !mod.Enabled) == 1);
-            ChecksContext.Check("CK3 IronyModManager 名称含中文", mods.Any(mod => mod.Name.Contains("LYXC的更多游戏规则", StringComparison.Ordinal)));
-            ChecksContext.Check("CK3 IronyModManager 存在未启用行 甜蜜约会", mods.Any(mod => !mod.Enabled && mod.Name == "甜蜜约会"));
+            var ironyEnabled = mods.Count(mod => mod.Enabled);
+            Console.WriteLine(
+                "  info CK3 IronyModManager mod 行数 " + mods.Count.ToString(CultureInfo.InvariantCulture)
+                + "，启用 " + ironyEnabled.ToString(CultureInfo.InvariantCulture)
+                + " / 未启用 " + (mods.Count - ironyEnabled).ToString(CultureInfo.InvariantCulture) + "（用户在官方启动器可随时改，只锁结构与解码）");
+            ChecksContext.Check("CK3 IronyModManager 至少 1 行 mod", mods.Count >= 1, mods.Count.ToString(CultureInfo.InvariantCulture));
+            ChecksContext.Check("CK3 IronyModManager 至少 1 行启用", ironyEnabled >= 1, ironyEnabled.ToString(CultureInfo.InvariantCulture));
+            ChecksContext.Check(
+                "CK3 IronyModManager 名称全部非空且至少 1 行为非 ASCII（验证 UTF-8 解码）",
+                mods.All(mod => !string.IsNullOrWhiteSpace(mod.Name)) && mods.Any(mod => mod.Name.Any(ch => ch > 127)));
+            ChecksContext.Check("CK3 IronyModManager 存在「甜蜜约会」行（验证中文解码）", mods.Any(mod => mod.Name == "甜蜜约会"));
             ChecksContext.Check("CK3 IronyModManager ArchivePath 全为 null", mods.All(mod => mod.ArchivePath is null));
             ChecksContext.Check("CK3 IronyModManager RequiredVersion 全为 1.20.*", mods.All(mod => mod.RequiredVersion == "1.20.*"));
             ChecksContext.Check(
@@ -945,7 +951,10 @@ public static class PlaysetChecks
                 string.Join(", ", mods.Select(mod => mod.Name + "=" + (mod.ThumbnailPath ?? "<null>"))));
 
             var dlcs = repository.GetPlaySetDlcsAsync(game, irony.Id, CancellationToken.None).GetAwaiter().GetResult();
-            ChecksContext.Equal("CK3 IronyModManager DLC 行数为 0（dlc_load.json disabled 为空）", 0, dlcs.Count);
+            // 行数取决于官方 dlc_load.json，用户开关 DLC 就会变：只锁 id 的形状。
+            Console.WriteLine("  info CK3 IronyModManager DLC 行数 " + dlcs.Count.ToString(CultureInfo.InvariantCulture) + "（随官方 dlc_load.json 变动）");
+            ChecksContext.Check("CK3 IronyModManager DLC id 全部非空", dlcs.All(dlc => !string.IsNullOrWhiteSpace(dlc.DlcId)));
+            ChecksContext.Check("CK3 IronyModManager DLC id 唯一", dlcs.Select(dlc => dlc.DlcId).Distinct().Count() == dlcs.Count);
         }
 
         var older = playsets.FirstOrDefault(playSet => string.Equals(playSet.Name, "1.18", StringComparison.Ordinal));
@@ -956,17 +965,22 @@ public static class PlaysetChecks
         else
         {
             var olderDlcs = repository.GetPlaySetDlcsAsync(game, older.Id, CancellationToken.None).GetAwaiter().GetResult();
-            // 行数随官方新增 DLC 增长（本机 22 → 25），只锁下限与「全部启用」。
+            // 行数随官方新增 DLC 增长（本机 22 → 25），启用态也会被官方改写：只锁下限与「至少一个可用」。
             ChecksContext.Check(
                 "CK3 播放集 1.18 的 DLC 行数 >= 22",
                 olderDlcs.Count >= 22,
                 olderDlcs.Count.ToString(CultureInfo.InvariantCulture));
-            ChecksContext.Equal("CK3 播放集 1.18 全部 DLC 启用", olderDlcs.Count, olderDlcs.Count(dlc => dlc.Enabled));
+            var olderEnabled = olderDlcs.Count(dlc => dlc.Enabled);
+            Console.WriteLine(
+                "  info CK3 播放集 1.18 的 DLC 启用 " + olderEnabled.ToString(CultureInfo.InvariantCulture)
+                + "/" + olderDlcs.Count.ToString(CultureInfo.InvariantCulture) + "（官方可改写启用态，不锁具体值）");
+            ChecksContext.Check("CK3 播放集 1.18 至少 1 个 DLC 启用", olderEnabled >= 1, olderEnabled.ToString(CultureInfo.InvariantCulture));
         }
 
         var catalog = new DlcCatalog(fs, logger);
         var dlcsAll = catalog.DiscoverAsync(game, CancellationToken.None).GetAwaiter().GetResult();
-        ChecksContext.Equal("CK3 递归 *.dlc 数量", 25, dlcsAll.Count);
+        Console.WriteLine("  info CK3 递归 *.dlc 数量 " + dlcsAll.Count.ToString(CultureInfo.InvariantCulture) + "（官方持续新增 DLC，只锁下限）");
+        ChecksContext.Check("CK3 递归 *.dlc 数量 >= 25", dlcsAll.Count >= 25, dlcsAll.Count.ToString(CultureInfo.InvariantCulture));
         CheckDlcShape("CK3", dlcsAll);
         CheckDlcAnchor(
             "CK3",
@@ -1028,29 +1042,39 @@ public static class PlaysetChecks
         var md5Before = ChecksContext.Md5(fs.ReadAllBytes(dbPath));
         var repository = new PlaySetRepository(fs, logger, clock);
 
+        // 与 CK3 段同一原则：真机断言只锁结构，不锁本机数据。launcher-v2.sqlite 由官方启动器
+        // 随时改写（本机 2026-10-29 实测已变成「1 个播放集 / 24 行 mod / 仅 1 行启用」），
+        // 把数量、名称、启用态写死只会随用户操作漂移，红的是断言而不是代码。
         var playsets = repository.GetPlaySetsAsync(game, CancellationToken.None).GetAwaiter().GetResult();
-        ChecksContext.Equal("V3 playsets 数量", 1, playsets.Count);
-        if (playsets.Count == 1)
-        {
-            ChecksContext.Equal("V3 唯一播放集名称", "1", playsets[0].Name);
-            ChecksContext.Check("V3 唯一播放集处于激活状态", playsets[0].IsActive);
-        }
+        ChecksContext.Check("V3 至少有 1 个播放集", playsets.Count >= 1, playsets.Count.ToString(CultureInfo.InvariantCulture));
+        ChecksContext.Check("V3 播放集名称全部非空", playsets.All(playSet => !string.IsNullOrWhiteSpace(playSet.Name)));
+        ChecksContext.Check("V3 播放集 Id 唯一", playsets.Select(playSet => playSet.Id).Distinct().Count() == playsets.Count);
+        ChecksContext.Check("V3 至多 1 个播放集处于激活状态", playsets.Count(playSet => playSet.IsActive) <= 1);
 
         var active = repository.GetActivePlaySetAsync(game, CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Check("V3 存在激活播放集", active is not null);
         if (active is not null)
         {
+            ChecksContext.Check("V3 激活播放集与列表里的激活项一致", playsets.Any(playSet => playSet.Id == active.Id && playSet.IsActive));
+            ChecksContext.Check("V3 激活播放集名称非空", !string.IsNullOrWhiteSpace(active.Name));
             var mods = repository.GetPlaySetModsAsync(game, active.Id, CancellationToken.None).GetAwaiter().GetResult();
-            Console.WriteLine("  info V3 激活播放集 mod 行数 " + mods.Count.ToString(CultureInfo.InvariantCulture) + "（文档记录 22，官方启动器持续写入，允许 >= 22）");
+            var enabledMods = mods.Count(mod => mod.Enabled);
+            Console.WriteLine(
+                "  info V3 激活播放集 mod 行数 " + mods.Count.ToString(CultureInfo.InvariantCulture)
+                + "，启用 " + enabledMods.ToString(CultureInfo.InvariantCulture)
+                + " / 未启用 " + (mods.Count - enabledMods).ToString(CultureInfo.InvariantCulture)
+                + "（官方启动器随时改写启用态，本段只锁结构与下限）");
             ChecksContext.Check("V3 激活播放集 mod 行数 >= 22", mods.Count >= 22, mods.Count.ToString(CultureInfo.InvariantCulture));
-            ChecksContext.Check("V3 激活播放集全部启用", mods.All(mod => mod.Enabled));
+            // 官方启动器会把 mod 整批关掉（本机 2026-10-29 就只剩 1 行启用），「全部启用」不是不变量；
+            // 能锁的是「至少还有一行启用」——全关意味着我方与官方两侧都读不到可启动内容。
+            ChecksContext.Check("V3 激活播放集至少 1 行启用", enabledMods >= 1, enabledMods.ToString(CultureInfo.InvariantCulture));
             ChecksContext.Check("V3 激活播放集 Position 连续 0..n-1", mods.Select((mod, index) => mod.Position == index).All(flag => flag));
             ChecksContext.Check("V3 激活播放集名称全部非空", mods.All(mod => !string.IsNullOrWhiteSpace(mod.Name)));
             ChecksContext.Check("V3 激活播放集 Status 全为 ready_to_play", mods.All(mod => mod.Status == "ready_to_play"));
 
             // --- Mod 库：mods 表全部行 + 播放集归属（只读）---
             var library = repository.GetModLibraryAsync(game, CancellationToken.None).GetAwaiter().GetResult();
-            Console.WriteLine("  info V3 Mod 库行数 " + library.Count.ToString(CultureInfo.InvariantCulture) + "（mods 表 64 行）");
+            Console.WriteLine("  info V3 Mod 库行数 " + library.Count.ToString(CultureInfo.InvariantCulture) + "（mods 表全量，行数随订阅变动）");
             ChecksContext.Check("V3 Mod 库行数 >= 60", library.Count >= 60, library.Count.ToString(CultureInfo.InvariantCulture));
             ChecksContext.Check("V3 Mod 库名称全部非空", library.All(entry => !string.IsNullOrWhiteSpace(entry.Name)));
             ChecksContext.Check("V3 Mod 库按名称升序（OrdinalIgnoreCase）", IsSortedByName(library));
@@ -1078,12 +1102,15 @@ public static class PlaysetChecks
             ChecksContext.Check("V3 Mod 库非归属行 PlaySetIds 为空", library.Where(entry => !entry.IsInPlaySet).All(entry => entry.PlaySetIds.Count == 0));
 
             var dlcs = repository.GetPlaySetDlcsAsync(game, active.Id, CancellationToken.None).GetAwaiter().GetResult();
-            ChecksContext.Equal("V3 激活播放集 DLC 行数为 0", 0, dlcs.Count);
+            Console.WriteLine("  info V3 激活播放集 DLC 行数 " + dlcs.Count.ToString(CultureInfo.InvariantCulture) + "（官方侧可能开始写 DLC 开关，不锁具体行数）");
+            ChecksContext.Check("V3 激活播放集 DLC id 全部非空", dlcs.All(dlc => !string.IsNullOrWhiteSpace(dlc.DlcId)));
+            ChecksContext.Check("V3 激活播放集 DLC id 唯一", dlcs.Select(dlc => dlc.DlcId).Distinct().Count() == dlcs.Count);
         }
 
         var catalog = new DlcCatalog(fs, logger);
         var dlcsAll = catalog.DiscoverAsync(game, CancellationToken.None).GetAwaiter().GetResult();
-        ChecksContext.Equal("V3 递归 *.dlc.json 数量", 17, dlcsAll.Count);
+        Console.WriteLine("  info V3 递归 *.dlc.json 数量 " + dlcsAll.Count.ToString(CultureInfo.InvariantCulture) + "（官方持续新增 DLC，只锁下限）");
+        ChecksContext.Check("V3 递归 *.dlc.json 数量 >= 17", dlcsAll.Count >= 17, dlcsAll.Count.ToString(CultureInfo.InvariantCulture));
         CheckDlcShape("V3", dlcsAll);
         CheckDlcAnchor(
             "V3",
@@ -1095,12 +1122,12 @@ public static class PlaysetChecks
 
         var modCatalog = new ModCatalog(fs, logger);
         var allMods = modCatalog.DiscoverAllAsync(game, CancellationToken.None).GetAwaiter().GetResult();
-        Console.WriteLine("  info V3 合并后 mod 总数 " + allMods.Count.ToString(CultureInfo.InvariantCulture) + "（实测 64 = workshop 63 + 本地 1）");
+        Console.WriteLine("  info V3 合并后 mod 总数 " + allMods.Count.ToString(CultureInfo.InvariantCulture) + "（workshop + 本地合并，数量随订阅变动）");
         ChecksContext.Check("V3 合并后 mod 总数 >= 60", allMods.Count >= 60, allMods.Count.ToString(CultureInfo.InvariantCulture));
         CheckModShape("V3", allMods);
         ChecksContext.Check("V3 全部 mod 的 GameRegistryId 为空串（只有 metadata.json）", allMods.All(mod => mod.GameRegistryId.Length == 0));
         var v3Thumbs = allMods.Count(mod => !string.IsNullOrEmpty(mod.ThumbnailPath));
-        Console.WriteLine("  info V3 mod 缩略图可解析 " + v3Thumbs.ToString(CultureInfo.InvariantCulture) + "/" + allMods.Count.ToString(CultureInfo.InvariantCulture) + "（实测 62）");
+        Console.WriteLine("  info V3 mod 缩略图可解析 " + v3Thumbs.ToString(CultureInfo.InvariantCulture) + "/" + allMods.Count.ToString(CultureInfo.InvariantCulture) + "（随 workshop 下载状态变动）");
         ChecksContext.Check("V3 mod 缩略图可解析数 >= 55", v3Thumbs >= 55, v3Thumbs.ToString(CultureInfo.InvariantCulture));
 
         var md5After = ChecksContext.Md5(fs.ReadAllBytes(dbPath));
@@ -1133,27 +1160,43 @@ public static class PlaysetChecks
         var repository = new PlaySetRepository(fs, logger, clock);
 
         var playsets = repository.GetPlaySetsAsync(game, CancellationToken.None).GetAwaiter().GetResult();
-        ChecksContext.Equal("Stellaris playsets 数量", 5, playsets.Count);
-        if (playsets.Count == 5)
+        // 播放集由官方启动器随时增删改；这里只锁结构与「首个播放集仍按 createdOn 排序在首位」。
+        ChecksContext.Check("Stellaris 至少有 3 个播放集", playsets.Count >= 3, playsets.Count.ToString(CultureInfo.InvariantCulture));
+        ChecksContext.Check("Stellaris 至多 1 个播放集处于激活状态", playsets.Count(item => item.IsActive) <= 1);
+        ChecksContext.Check("Stellaris 播放集名称全部非空", playsets.All(item => !string.IsNullOrWhiteSpace(item.Name)));
+        ChecksContext.Equal("Stellaris 第 1 个播放集", "Initial playset", playsets[0].Name);
+        if (playsets.Count >= 5)
         {
-            ChecksContext.Equal("Stellaris 第 1 个播放集", "Initial playset", playsets[0].Name);
-            ChecksContext.Equal("Stellaris 第 5 个播放集", "IronyModManager", playsets[4].Name);
-            ChecksContext.Check("Stellaris 只有最后一个播放集激活", playsets.Count(item => item.IsActive) == 1 && playsets[4].IsActive);
+            ChecksContext.Equal("Stellaris 第 5 个播放集（IronyModManager）", "IronyModManager", playsets[4].Name);
         }
 
         var active = repository.GetActivePlaySetAsync(game, CancellationToken.None).GetAwaiter().GetResult();
-        ChecksContext.Equal("Stellaris 激活播放集名称", "IronyModManager", active?.Name ?? "<null>");
-        ChecksContext.Equal(
-            "Stellaris 激活播放集 Id",
-            Guid.Parse("853346c4-20df-4f25-8ded-77b2cdf06153"),
-            active?.Id ?? Guid.Empty);
-
+        ChecksContext.Check("Stellaris 存在激活播放集", active is not null);
         if (active is not null)
         {
+            ChecksContext.Check("Stellaris 激活播放集与列表里的激活项一致", playsets.Any(item => item.Id == active.Id && item.IsActive));
+
+            // 记录中的激活集是 IronyModManager（id 853346c4-…）；官方启动器可随时切换激活集，
+            // 切换后只保留结构断言，锚点值降级为 info，不再把用户操作记成失败。
+            var isIrony = string.Equals(active.Name, "IronyModManager", StringComparison.Ordinal);
+            if (isIrony)
+            {
+                ChecksContext.Equal("Stellaris 激活播放集 Id", Guid.Parse("853346c4-20df-4f25-8ded-77b2cdf06153"), active.Id);
+            }
+            else
+            {
+                Console.WriteLine("  info Stellaris 激活播放集已改为「" + active.Name + "」，跳过 IronyModManager 专属锚点");
+            }
+
             var mods = repository.GetPlaySetModsAsync(game, active.Id, CancellationToken.None).GetAwaiter().GetResult();
-            ChecksContext.Equal("Stellaris 激活播放集 mod 行数", 13, mods.Count);
-            ChecksContext.Check("Stellaris 激活播放集全部启用", mods.All(mod => mod.Enabled));
-            ChecksContext.Check("Stellaris 激活播放集 Position 连续 0..12", mods.Select((mod, index) => mod.Position == index).All(flag => flag));
+            var enabledStellaris = mods.Count(mod => mod.Enabled);
+            Console.WriteLine(
+                "  info Stellaris 激活播放集 mod 行数 " + mods.Count.ToString(CultureInfo.InvariantCulture)
+                + "，启用 " + enabledStellaris.ToString(CultureInfo.InvariantCulture)
+                + "/" + mods.Count.ToString(CultureInfo.InvariantCulture) + "（官方启动器可改写，只锁结构与下限）");
+            ChecksContext.Check("Stellaris 激活播放集 mod 行数 >= 11", mods.Count >= 11, mods.Count.ToString(CultureInfo.InvariantCulture));
+            ChecksContext.Check("Stellaris 激活播放集至少 1 行启用", enabledStellaris >= 1, enabledStellaris.ToString(CultureInfo.InvariantCulture));
+            ChecksContext.Check("Stellaris 激活播放集 Position 连续 0..n-1", mods.Select((mod, index) => mod.Position == index).All(flag => flag));
             ChecksContext.Check(
                 "Stellaris 激活播放集 GameRegistryId 全为 mod/*.mod（12 个 ugc_ + 1 个本地 District 中文 mod）",
                 mods.All(mod => mod.GameRegistryId.StartsWith("mod/", StringComparison.Ordinal) && mod.GameRegistryId.EndsWith(".mod", StringComparison.Ordinal)));
@@ -1183,19 +1226,22 @@ public static class PlaysetChecks
 
         var catalog = new DlcCatalog(fs, logger);
         var dlcsAll = catalog.DiscoverAsync(game, CancellationToken.None).GetAwaiter().GetResult();
-        ChecksContext.Equal("Stellaris 递归 *.dlc 数量", 31, dlcsAll.Count);
+        Console.WriteLine("  info Stellaris 递归 *.dlc 数量 " + dlcsAll.Count.ToString(CultureInfo.InvariantCulture) + "（官方持续新增 DLC，只锁下限）");
+        ChecksContext.Check("Stellaris 递归 *.dlc 数量 >= 31", dlcsAll.Count >= 31, dlcsAll.Count.ToString(CultureInfo.InvariantCulture));
         // 真机：31 个 .dlc 里有 4 个 pops_id 是空字符串（合法，官方 getDlcId 会退化为 filePath）。
         CheckDlcShape("Stellaris", dlcsAll, requireUniquePopsId: false, expectedEmptyPopsId: 4);
         var emptyPopsDlcs = dlcsAll.Where(dlc => string.IsNullOrWhiteSpace(dlc.PopsId)).ToList();
+        // 只要求记录中的 4 个仍在集合里（用 filePath 当 id 兜底），官方新增空 pops_id 的 DLC 不记为失败。
+        var emptyPopsFiles = emptyPopsDlcs.Select(dlc => dlc.FilePathRelativeToDlcPath.Replace('\\', '/')).ToHashSet(StringComparer.Ordinal);
         ChecksContext.Check(
-            "Stellaris pops_id 为空的 4 个 DLC 的 FilePathRelativeToDlcPath 与真机一致",
-            emptyPopsDlcs.Select(dlc => dlc.FilePathRelativeToDlcPath.Replace('\\', '/')).OrderBy(item => item, StringComparer.Ordinal).SequenceEqual(new[]
+            "Stellaris pops_id 为空的 DLC 的 FilePathRelativeToDlcPath 与真机记录一致（记录中的 4 个都还在）",
+            new[]
             {
                 "dlc/dlc030_paragon/dlc030.dlc",
                 "dlc/dlc031_astral_planes/dlc031.dlc",
                 "dlc/dlc035_rick_the_cube/dlc035.dlc",
                 "dlc/dlc039_stargazer/dlc039.dlc",
-            }),
+            }.All(expected => emptyPopsFiles.Contains(expected)),
             string.Join(", ", emptyPopsDlcs.Select(dlc => dlc.FilePathRelativeToDlcPath)));
         ChecksContext.Check(
             "Stellaris pops_id 为空的 DLC 的 DisplayName 全部非空（Galactic Paragons / Astral Planes / Rick The Cube / Stargazer）",
@@ -1213,7 +1259,8 @@ public static class PlaysetChecks
 
         var modCatalog = new ModCatalog(fs, logger);
         var allMods = modCatalog.DiscoverAllAsync(game, CancellationToken.None).GetAwaiter().GetResult();
-        ChecksContext.Equal("Stellaris 合并后 mod 总数（磁盘 .mod 313 = sqlite 313）", 313, allMods.Count);
+        Console.WriteLine("  info Stellaris 合并后 mod 总数 " + allMods.Count.ToString(CultureInfo.InvariantCulture) + "（磁盘 .mod 与 sqlite 合并，数量随订阅变动）");
+        ChecksContext.Check("Stellaris 合并后 mod 总数 >= 250", allMods.Count >= 250, allMods.Count.ToString(CultureInfo.InvariantCulture));
         CheckModShape("Stellaris", allMods);
         ChecksContext.Check(
             "Stellaris 全部 mod 的 GameRegistryId 形如 mod/*.mod",
@@ -1238,8 +1285,15 @@ public static class PlaysetChecks
         int expectedEmptyPopsId = 0)
     {
         var emptyPopsIdCount = dlcs.Count(dlc => string.IsNullOrWhiteSpace(dlc.PopsId));
-        ChecksContext.Equal(label + "：DLC PopsId 为空的个数（空是合法的，官方用 filePath 兜底）", expectedEmptyPopsId, emptyPopsIdCount);
-        ChecksContext.Equal(label + "：DLC PopsId 非空的个数", dlcs.Count - expectedEmptyPopsId, dlcs.Count - emptyPopsIdCount);
+        // 官方新增 DLC 可能带来新的空 pops_id（或把旧的补上），只锁下限与「还有非空行」。
+        ChecksContext.Check(
+            label + "：DLC PopsId 为空的个数 >= " + expectedEmptyPopsId.ToString(CultureInfo.InvariantCulture) + "（空是合法的，官方用 filePath 兜底）",
+            emptyPopsIdCount >= expectedEmptyPopsId,
+            emptyPopsIdCount.ToString(CultureInfo.InvariantCulture));
+        ChecksContext.Check(
+            label + "：DLC PopsId 非空的个数 > 0",
+            dlcs.Count - emptyPopsIdCount > 0,
+            (dlcs.Count - emptyPopsIdCount).ToString(CultureInfo.InvariantCulture));
         if (expectedEmptyPopsId > 0)
         {
             var emptyOnes = dlcs.Where(dlc => string.IsNullOrWhiteSpace(dlc.PopsId)).ToList();

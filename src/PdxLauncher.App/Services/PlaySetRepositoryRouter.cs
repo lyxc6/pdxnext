@@ -1,6 +1,8 @@
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Playsets;
 using PdxLauncher.Core.Playsets.Json;
+using PdxLauncher.Core.Playsets.PlaysetConfig;
 
 namespace PdxLauncher.App.Services;
 
@@ -19,6 +21,8 @@ public sealed class PlaySetRepositoryRouter : IPlaySetRepository
     private readonly IPlaySetRepository _sqlite;
     private readonly IPlaySetRepository _playsetsJson;
     private readonly IPlaySetRepository _playsetConfig;
+    private readonly IFileSystem _fileSystem;
+    private readonly IAppLogger _logger;
 
     /// <summary>
     /// 创建路由。
@@ -26,18 +30,26 @@ public sealed class PlaySetRepositoryRouter : IPlaySetRepository
     /// <param name="sqlite">launcher-v2.sqlite 实现（EU4/CK3/Vic3 等）。</param>
     /// <param name="playsetsJson">playsets.json 实现（EU5）。</param>
     /// <param name="playsetConfig">playset_config.json 实现（CS2）。</param>
+    /// <param name="fileSystem">用于判定「官方是否换了存储文件」。</param>
+    /// <param name="logger">兜底命中时留一条 Warn。</param>
     public PlaySetRepositoryRouter(
         IPlaySetRepository sqlite,
         IPlaySetRepository playsetsJson,
-        IPlaySetRepository playsetConfig)
+        IPlaySetRepository playsetConfig,
+        IFileSystem fileSystem,
+        IAppLogger logger)
     {
         ArgumentNullException.ThrowIfNull(sqlite);
         ArgumentNullException.ThrowIfNull(playsetsJson);
         ArgumentNullException.ThrowIfNull(playsetConfig);
+        ArgumentNullException.ThrowIfNull(fileSystem);
+        ArgumentNullException.ThrowIfNull(logger);
 
         _sqlite = sqlite;
         _playsetsJson = playsetsJson;
         _playsetConfig = playsetConfig;
+        _fileSystem = fileSystem;
+        _logger = logger;
     }
 
     /// <summary>按格式挑实现。</summary>
@@ -48,8 +60,39 @@ public sealed class PlaySetRepositoryRouter : IPlaySetRepository
         {
             LoadFileFormat.PlaysetsJsonV1 => _playsetsJson,
             LoadFileFormat.PlaysetConfigV1 => _playsetConfig,
-            _ => _sqlite,
+            _ => ResolveSqliteOrFallback(game),
         };
+    }
+
+    /// <summary>
+    /// 官方把某个 sqlite 游戏迁到新存储格式时，不能让播放集页静默空白：
+    /// 数据库文件不存在、而官方 JSON 文档在，就临时按 JSON 读，并留一条 Warn 方便日后定位。
+    /// 数据库存在但缺表仍走 sqlite（读空 + Warn），不静默改判格式——那会把「空库」误当成「换格式」。
+    /// </summary>
+    private IPlaySetRepository ResolveSqliteOrFallback(GameInstallation game)
+    {
+        if (_fileSystem.FileExists(PlaySetRepository.GetDatabasePath(game)))
+        {
+            return _sqlite;
+        }
+
+        var playsetsJsonPath = Path.Combine(game.GameDataDir, PlaysetsJsonDocument.FileName);
+        if (_fileSystem.FileExists(playsetsJsonPath))
+        {
+            _logger.Warn("未找到 launcher-v2.sqlite，但存在 " + playsetsJsonPath
+                + "，按 playsets.json 兜底读取（gameId=" + game.GameId + "）");
+            return _playsetsJson;
+        }
+
+        var playsetConfigPath = PlaysetConfigPaths.GetConfigPath(game);
+        if (_fileSystem.FileExists(playsetConfigPath))
+        {
+            _logger.Warn("未找到 launcher-v2.sqlite，但存在 " + playsetConfigPath
+                + "，按 playset_config.json 兜底读取（gameId=" + game.GameId + "）");
+            return _playsetConfig;
+        }
+
+        return _sqlite;
     }
 
     /// <inheritdoc />

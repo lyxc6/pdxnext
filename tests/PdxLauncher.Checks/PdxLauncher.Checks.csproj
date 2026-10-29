@@ -24,6 +24,12 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\PositionInput.cs" Link="Linked\PositionInput.cs" />
     <!--
+      播放集存储格式路由：官方若把某个 sqlite 游戏迁到 JSON 存储（launcher-v2.sqlite 消失），这里的兜底
+      决定播放集页是「还能读出来」还是「静默空白」。它只依赖 Core 的 IPlaySetRepository / IFileSystem /
+      IAppLogger 与各仓储的路径常量，因此可以原样链接进来，由 PlaySetGuardChecks 用临时目录钉住各落点。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\PlaySetRepositoryRouter.cs" Link="Linked\PlaySetRepositoryRouter.cs" />
+    <!--
       工坊详情的正文清洗（BBCode/HTML/Markdown 剥离、片段拼接、时间格式化）同样只依赖 System.*，
       可以原样链接进来。它决定详情子页上长描述长什么样：漏剥一个标记，界面上就直接露出来，
       所以口径要由 WorkshopTextChecks 钉住。

@@ -117,8 +117,10 @@ DLC 列表**不来自 sqlite**（CK3 的 dlc 表 0 行）——必须扫盘。
 
 读取真值：
 - CK3：3 个 playset —— 23f455bd-37a2-48de-8ce8-f816b79fe541("1.18",0)、4ffda78b-5b4c-4e2c-ae08-50540585db24("1.20",0)、4ffbbec6-db91-4126-9086-15e6fb1e013e("IronyModManager",**isActive=1**)；激活 playset 5 行（position 0..4，启用 4 个）。
-- V3：1 个 playset bc73b308-3180-48a6-9c0f-3c3b92153c25("1",active=1)，23 行全启用（2026-10 实测；官方启动器会继续追加）。
+- V3：1 个 playset bc73b308-3180-48a6-9c0f-3c3b92153c25("1",active=1)，**24 行、仅 1 行启用（23 行未启用）**（2026-10-29 02:33 实测：官方启动器/V3 侧整批关掉了 mod；此前记录的「23 行全启用」同样只是当时的快照）。
 - Stellaris：5 个 playset，激活 853346c4-…("IronyModManager")，13 行全启用。
+
+**上面三条是历史快照，不是契约。** launcher-v2.sqlite 归官方启动器所有：增删播放集、切换激活集、开关 mod/DLC 随时发生（本项目因此把真机自检改成「只锁结构 + 下限」）。代码与测试都不得依赖具体行数、播放集名称或启用态；唯一例外是写回时的「前后指纹一致」校验（见 `PlaySetEditor.VerifySqliteStoreAsync`）。
 
 映射规则（官方行为）：
 playsets WHERE isActive=1 → playsets_mods ORDER BY position ASC（enabled=1 才算）→ mods.gameRegistryId 即 enabled_mods；
@@ -128,11 +130,11 @@ CK3 的 playsets_dlcs 为空 ⇒ disabled_dlcs: []，与真机文件一致。
 
 ### Mod 库（mods 表全量，只读）
 
-官方启动器左侧「MOD 库」的数量徽标 = `SELECT COUNT(*) FROM mods`（V3 实测 64），列表就是 mods 表全表。
+官方启动器左侧「MOD 库」的数量徽标 = `SELECT COUNT(*) FROM mods`（V3 实测 65，随订阅变动），列表就是 mods 表全表。
 
 - 读取列：id、displayName（`name` 常为 NULL，展示名回退链 displayName → name → dirPath 目录名）、dirPath、archivePath、gameRegistryId、thumbnailPath、requiredVersion、status、source、size、subscribedDate。**不要写死列清单**：不同游戏/版本的库缺列（例如旧库没有 name/size/subscribedDate），用 `SELECT *` 按列名取、缺列当 null。
 - size 是**字节数**（INTEGER）；subscribedDate 是 **unix 秒**（个别写法是毫秒，>1e11 按毫秒解）。实测：size=1034853 / subscribedDate=1766506698 → 官方 UI 显示 "1010.6KB"、"2025/08/04"（本地时区）。
-- 「在 N 个播放集中」= playsets_mods 中该 modId 出现的不同 playsetId 数（V3：23 行全部属于唯一的播放集 "1"）。
+- 「在 N 个播放集中」= playsets_mods 中该 modId 出现的不同 playsetId 数（V3：24 行全部属于唯一的播放集 "1"）。
   不属于任何播放集时这段文案为空串（原来每行都打印「没有在播放集中」，387 行里绝大多数如此，纯噪音）。
 - 支持版本 = `mods.requiredVersion`（CK3 实测形如 `1.19.*` / `1.20.*` / `1.*.*`），来源是 .mod 的
   `supported_version` 或 metadata.json 的 `supported_game_version`。界面原样显示为「支持版本 1.19.*」，

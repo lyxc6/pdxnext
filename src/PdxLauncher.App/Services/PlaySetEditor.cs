@@ -517,6 +517,52 @@ public sealed class PlaySetEditor
     }
 
     /// <summary>
+    /// 播放集 mod 行的指纹：只取「ModId + 启用态 + 顺序」，与名称、缩略图等派生字段无关。
+    /// 用来判断两次读取之间官方启动器是否改写过同一个播放集。
+    /// </summary>
+    public static string DescribePlaySetMods(IReadOnlyList<PlaySetMod> mods)
+    {
+        ArgumentNullException.ThrowIfNull(mods);
+        return string.Join(
+            ';',
+            mods.OrderBy(static mod => mod.Position)
+                .Select(static mod => mod.ModId.ToString("N") + (mod.Enabled ? ":1" : ":0")));
+    }
+
+    /// <summary>
+    /// 库内现状是否已与调用方持有的指纹不同（说明官方启动器在这期间写过同一个播放集）。
+    /// 只读；读失败视为「无法判定」，返回 false 让调用方继续保存——不因检测本身挡住用户。
+    /// </summary>
+    public async Task<bool> HasPlaySetDriftedAsync(
+        GameInstallation game,
+        Guid playSetId,
+        string expectedFingerprint,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(expectedFingerprint);
+
+        IReadOnlyList<PlaySetMod> current;
+        try
+        {
+            current = await _playSets
+                .GetPlaySetModsAsync(game, playSetId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("比对播放集现状失败，按「无法判定」放行保存（playSetId=" + playSetId.ToString("N") + "）：" + ex.Message);
+            return false;
+        }
+
+        return !string.Equals(DescribePlaySetMods(current), expectedFingerprint, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 保存后回读 sqlite 仓储，比对「写进去的」与「读出来的」是否一致。
     /// 只比能稳定复现的字段：mod 的 id / 启用态 / 顺序，DLC 的 id / 启用态。
     /// 名称、缩略图等来自 mods 表或磁盘扫描的派生字段不比，避免把环境差异当成保存失败。

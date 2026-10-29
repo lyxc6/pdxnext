@@ -31,6 +31,13 @@ public sealed class ModsViewModel : LocalizedObservableObject
     private string _searchText = string.Empty;
     private PlaySet? _selectedPlaySet;
     private IReadOnlyList<PlaySetMod> _allMods = Array.Empty<PlaySetMod>();
+
+    /// <summary>
+    /// 当前播放集「加载时」的库内指纹（ModId + 启用态 + 顺序）。保存前与库内现状比对，
+    /// 用来发现官方启动器是否在这期间改写过同一个播放集——写库是「DELETE 全表 + 逐行 INSERT」，
+    /// 直接用旧内存落盘会把官方的改动整份盖掉。null 表示还没有基线（首次加载 / 读取失败），此时不拦截。
+    /// </summary>
+    private string? _modsBaseline;
     private ModLibrarySnapshot _librarySnapshot = ModLibrarySnapshot.Empty;
     private Dictionary<Guid, ModLibraryEntry> _entryByModId = new();
 
@@ -228,6 +235,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
             PlaySets.Clear();
             Mods.Clear();
             _allMods = Array.Empty<PlaySetMod>();
+            _modsBaseline = null;
             _librarySnapshot = ModLibrarySnapshot.Empty;
             _entryByModId = new Dictionary<Guid, ModLibraryEntry>();
             SelectedPlaySet = null;
@@ -243,6 +251,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
             PlaySets.Clear();
             Mods.Clear();
             _allMods = Array.Empty<PlaySetMod>();
+            _modsBaseline = null;
             _librarySnapshot = ModLibrarySnapshot.Empty;
             _entryByModId = new Dictionary<Guid, ModLibraryEntry>();
             SelectedPlaySet = null;
@@ -328,6 +337,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
         if (Game is null || playSet is null)
         {
             _allMods = Array.Empty<PlaySetMod>();
+            _modsBaseline = null;
             RebuildVisibleMods();
             return;
         }
@@ -341,6 +351,9 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
             _allMods = PlaySetEditor.Renumber(
                 saved.OrderBy(static m => m.Position).ToList());
+
+            // 记下这一份「库内现状」，保存前用它确认官方启动器没在这期间动过同一个播放集。
+            _modsBaseline = PlaySetEditor.DescribePlaySetMods(_allMods);
 
             // DDS 缩略图先转成 PNG，行里才是真实封面而不是占位图。
             await AppServices.ImageArt
@@ -374,6 +387,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
             _logger.Error("读取播放集 mod 失败（playSetId=" + playSet.Id.ToString("N") + "）", ex);
             StatusMessage = T(Keys.ModsStatusReadModsFailed, ex.Message);
             _allMods = Array.Empty<PlaySetMod>();
+            _modsBaseline = null;
             RebuildVisibleMods();
         }
         finally
@@ -1094,6 +1108,14 @@ public sealed class ModsViewModel : LocalizedObservableObject
             var shouldWriteLoadFile = writeLoadFile
                 ?? PlaySets.Any(p => p.Id == playSet.Id && p.IsActive);
 
+            // 官方启动器可能在我们加载之后改写过同一个播放集（关 mod、加 mod、换顺序）。
+            // 写库是「DELETE 全表 + 逐行 INSERT」，直接用旧内存落盘会把官方改动整份盖掉；
+            // 因此先比对库内现状：变了就放弃这次保存并重新加载，让用户在新的现状上再改一次。
+            if (!await ConfirmNoExternalChangeAsync(game, playSet, cancellationToken).ConfigureAwait(true))
+            {
+                return false;
+            }
+
             var savedDlcs = await AppServices.PlaySets
                 .GetPlaySetDlcsAsync(game, playSet.Id, cancellationToken)
                 .ConfigureAwait(true);
@@ -1118,6 +1140,9 @@ public sealed class ModsViewModel : LocalizedObservableObject
                 : T(Keys.ModsStatusAutoSaveSavedTo, playSet.Name);
             _logger.Info("ModsPage 自动保存成功（gameId=" + game.GameId + "，playSetId=" + playSet.Id.ToString("N")
                 + "，写加载文件=" + shouldWriteLoadFile + "）");
+
+            // 保存成功后库内就是这份内容，基线跟着前移，否则下一次保存会被自己刚才的写入判成「漂移」。
+            _modsBaseline = PlaySetEditor.DescribePlaySetMods(_allMods);
             return true;
         }
         catch (OperationCanceledException)
@@ -1134,6 +1159,39 @@ public sealed class ModsViewModel : LocalizedObservableObject
         {
             _saveGate.Release();
         }
+    }
+
+    /// <summary>
+    /// 保存前确认官方启动器没有在页面加载后改写同一个播放集。
+    /// 返回 false 表示已放弃本次保存并重新加载了当前播放集。
+    /// 只对「自己写 sqlite 行」的游戏生效（EU5 playsets.json / CS2 playset_config.json 是整份文档原子替换，
+    /// 不存在逐行覆盖别人的问题）；没有基线（首次加载、读取失败）或比对读失败时一律放行，不因检测本身挡住用户。
+    /// </summary>
+    private async Task<bool> ConfirmNoExternalChangeAsync(
+        GameInstallation game,
+        PlaySet playSet,
+        CancellationToken cancellationToken)
+    {
+        var baseline = _modsBaseline;
+        if (baseline is null || !game.WritesLoadFile)
+        {
+            return true;
+        }
+
+        var drifted = await _editor
+            .HasPlaySetDriftedAsync(game, playSet.Id, baseline, cancellationToken)
+            .ConfigureAwait(true);
+        if (!drifted)
+        {
+            return true;
+        }
+
+        _logger.Warn("检测到官方启动器改写了播放集，放弃本次保存并重新加载（gameId=" + game.GameId
+            + "，playSetId=" + playSet.Id.ToString("N") + "）");
+        await SelectPlaySetAsync(playSet, cancellationToken).ConfigureAwait(true);
+        // 重载成功会把状态栏改成「已加载 N 个播放集」，所以提示放在重载之后。
+        StatusMessage = T(Keys.ModsStatusExternalChange);
+        return false;
     }
 
     private void RaiseCounts()

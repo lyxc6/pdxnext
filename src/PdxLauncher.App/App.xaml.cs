@@ -103,10 +103,12 @@ public partial class App : Application
 
         // EU5 不写 launcher-v2.sqlite，只认文档目录下的 playsets.json；CS2 则是 .cache\Mods\playset_config.json；
         // 其余游戏仍用 sqlite。判定收敛在路由里（GameInstallation.Format），上层服务不需要知道格式差异。
+        // 传 fileSystem 是为了兜底：官方哪天把某个 sqlite 游戏迁到 JSON 存储，数据库文件消失时按 JSON 读，
+        // 而不是让播放集页静默空白。
         var sqlitePlaySets = new PlaySetRepository(fileSystem, logger, clock, modThumbnails);
         var jsonPlaySets = new PlaysetsJsonRepository(fileSystem, logger, clausewitzMods, dlcs);
         var playsetConfig = new PlaysetConfigRepository(fileSystem, logger, clock);
-        var playSets = new PlaySetRepositoryRouter(sqlitePlaySets, jsonPlaySets, playsetConfig);
+        var playSets = new PlaySetRepositoryRouter(sqlitePlaySets, jsonPlaySets, playsetConfig, fileSystem, logger);
         var loadFiles = new LoadFileWriter(fileSystem, logger);
         var processLauncher = new ProcessLauncher(logger);
         var launcher = new GameLauncher(processLauncher, fileSystem, logger);

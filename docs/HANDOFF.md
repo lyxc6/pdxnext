@@ -3543,6 +3543,7 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
   「V3 激活播放集全部启用」——本机 V3 播放集现在是 24 行且至少一行未启用（官方启动器/V3 侧改动）。
   用 `git stash` 暂存本次改动后复跑，该断言同样失败（`断言失败总数: 1`），确认与本次改动无关；
   另两个 `FAIL ... (Run 返回 1)` 是它把全局计数带下去的连锁。
+  **该失败已在 §0.44 处理**（根因是断言把真机数据写死，不是代码坏）。
 
 **实测（Release exe，UI 自动化）**
 
@@ -3558,6 +3559,57 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
 - 顺序问题：数组顺序与页面顺序可能不同，**以 `highlight_screenshot_<id>` 的页面顺序为准**。
 - 只有视频（`highlight_movie`）没有截图的 mod → `ScreenshotUrls` 为空 → 退回 `preview_url`。
 - 页面改版导致抓不到时同样静默退回封面，不抛异常、不留空卡。
+
+## 0.44 2026-10-29：官方启动器改写播放集不再记为失败（保存前防覆盖 + 存储格式兜底）
+
+**触发**：全量自检唯一一条真失败是 `PlaysetChecks` 真机 Victoria 3 断言「V3 激活播放集全部启用」。
+
+**实测（只读查本机库）**
+
+- `%USERPROFILE%\Documents\Paradox Interactive\Victoria 3\launcher-v2.sqlite`：1 个播放集「1」（id `bc73b308-3180-48a6-9c0f-3c3b92153c25`，isActive=1），`playsets_mods` **24 行、仅 1 行启用**（position 0 = `喜儿修改器`），`mods` 表 **65 行**。
+- 同目录 `content_load.json` = `{"enabledUGC":[],"disabledDLC":[],"enabledMods":[]}`；两文件 mtime 均 `2026-10-29 02:33:10`。
+- `data/logs/pdxnext.log` 里没有 V3「已备份数据库」记录，目录下也没有 `launcher-v2.sqlite.pdxnext.bak` → 这次改动是官方启动器/V3 侧写的，不是本项目写的。
+- 结论：**不是「官方一改就不能用」**。红的是断言把真机数据当契约（文档记 22 行全启用，实际 24 行仅 1 启用）。真实软肋只有两条，本次一并堵上（见 C / D）。
+
+**影响矩阵（官方以后再改会发生什么）**
+
+| 官方改动 | 读 | 写 | 结论 |
+| --- | --- | --- | --- |
+| 增删播放集、切换激活集 | 正常 | 正常 | 无影响；自检只锁结构 |
+| 关/开 mod（含整批关掉） | 正常 | 正常 | 无影响；自检只锁「至少 1 行启用」 |
+| 关/开 DLC、新增 DLC 文件 | 正常 | 正常 | 无影响；DLC 与 mod 数量只锁下限 |
+| 官方正在写库（锁库） | 降级为空 + Warn | 备份失败即中止并报错 | 可恢复：重试 |
+| `playsets` / `playsets_mods` 表列变更 | 读兜底（缺列当 null）+ Warn | 写入失败回滚 + 备份 | 需按新列适配 |
+| 换成 playsets.json / playset_config.json | 路由兜底到对应实现 + Warn（D） | 同上 | 播放集页不再静默空白 |
+| 页面加载后、保存前官方改了同一个播放集 | 正常 | **不再覆盖**：放弃本次保存并自动重载（C） | 官方数据不丢 |
+
+**B. 文档**：`docs/DATA-FORMATS.md` 第 4 节把 CK3/V3/Stellaris 三行改成「历史快照，不是契约」，写明 V3 现为 24 行 / 仅 1 行启用、mods 表 65 行、归属 24 行。
+
+**A. 自检去脆（`tests/PdxLauncher.Checks/PlaysetChecks.cs`）**：沿用文件里 CK3 段已确立的「只锁结构 + 下限」范式，把真机数据从断言里拿掉：
+
+- V3 播放集：`playsets 数量 == 1` / 名称 == `"1"` / `playsets[0].IsActive` 三条删除，改为 `>= 1` 个、名称非空、Id 唯一、至多 1 个激活、激活项与列表一致。
+- V3 mods：`全部启用` → `至少 1 行启用` + info 打印「24 行，启用 1 / 未启用 23」；保留 `>= 22`、Position 连续、Status 全 ready_to_play、名称非空、归属行数一致。
+- V3 DLC 行数 `== 0` → info + DLC id 非空/唯一（官方开始写 DLC 开关时不红）。
+- DLC 数量 17 / 25 / 31、mod 总数 64 / 313 的 `Equal` 改为 `>=` + 实测值 info；CK3 1.18「全部 DLC 启用」→「至少 1 个启用」。
+- Stellaris 段同类放松：5 个播放集 → `>= 3`（第 5 个名字仍在 `Count >= 5` 时断言）；激活集若已不是 IronyModManager，只留结构断言、guid 锚点降级为 info；mod 行数 13 → `>= 11`、「全部启用」→「至少 1 行启用」。
+- `CheckDlcShape` 的 pops_id 空/非空个数从 `Equal` 改为下限 + 「非空行 > 0」；Stellaris 4 个已知空 pops_id 文件的 `SequenceEqual` 改为「记录中的 4 个都还在集合里」。
+- 新增 `tests/PdxLauncher.Checks/PlaySetGuardChecks.cs`：钉 C/D 的口径（指纹语义、漂移判定含坏库、路由兜底四个落点）；`PdxLauncher.Checks.csproj` 把 `PlaySetRepositoryRouter.cs` 源码链接进来（与 PlaySetEditor 同一手法：App 是 WinExe + windows TFM，引用不了）。
+
+**C. 保存前防覆盖**：`ModsViewModel.SelectPlaySetAsync` 加载成功后记基线 `_modsBaseline = PlaySetEditor.DescribePlaySetMods(_allMods)`（ModId + 启用态 + 按 position 排序的指纹；名称/缩略图/版本等派生字段不参与）。`SaveAsync` 写库前走 `ConfirmNoExternalChangeAsync` → `PlaySetEditor.HasPlaySetDriftedAsync` 读库比对：不一致就**不写 sqlite、不写加载文件**，状态栏提示「官方启动器已改动该播放集，已重新加载（本次修改未保存）」并重载该播放集；保存成功后基线前移，避免被自己刚才的写入判成漂移。范围：只对写 sqlite 行的游戏生效（EU5/CS2 是整份 JSON 原子替换，不存在逐行覆盖）；没有基线（首次加载/读取失败）时放行。新增 i18n 键 `mods.status.externalChange`（zh/en），重跑 `python tools/gen-i18n.py`。
+
+**D. 存储格式兜底**：`PlaySetRepositoryRouter` 注入 `IFileSystem` + `IAppLogger`；sqlite 分支在 `launcher-v2.sqlite` 不存在时探测 `playsets.json` → `playset_config.json`，命中即用对应实现并记 Warn；数据库存在就仍走 sqlite（「空库」不等于「换格式」）。`App.xaml.cs` 构造处补传 `fileSystem, logger`。
+
+**边界 / 踩坑**
+
+- `IFileSystem` 没有文件时间戳 API（只有存在/大小/读写/枚举），所以「官方改过没有」只能比**内容指纹**，不能靠 mtime。
+- 仓储只读路径把 `SqliteException` / `IOException` / `UnauthorizedAccessException` 都吞成「空结果 + Warn」，所以坏库/锁库在漂移检测眼里表现为「读到空 → 判为改动」，结果是**放弃保存**而不是覆盖——比「读失败就放行」更保守，符合「宁可不存，不可盖掉官方数据」。
+- 不要把「无基线（null）」与「基线为空串」混为一谈：前者放行，后者参与比较。
+- 真机断言放松时必须保留结构侧真断言（Id 唯一、Position 连续、归属一致、只读 md5 不变），否则等于把自检删掉。
+
+**自检**
+
+- `dotnet build PdxLauncher.sln -c Debug -m:1` → 0 警告 0 错误。
+- `dotnet tests\PdxLauncher.Checks\bin\Debug\net10.0\PdxLauncher.Checks.dll` → `检查类: 38，失败: 0，断言失败总数: 0`；V3 真机段打印「24 行，启用 1 / 未启用 23」且全部 ok；`V3 只读读取未修改 launcher-v2.sqlite` md5 前后一致（`e8a639ca42072da1015488ff5b770e0f`）。
 
 ## 0.45 2026-10-29：创意工坊详情页可以真的订阅 Steam 工坊（直连 Steamworks）
 
