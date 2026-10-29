@@ -702,6 +702,8 @@ public sealed partial class Localizer
         ["workshop.statusOffline"] = "网络不可用，显示缓存中的 {0} 个结果",
         ["workshop.statusParseFailed"] = "Steam 页面结构解析失败，暂时无法显示列表",
         ["workshop.subscriptions"] = "{0} 订阅",
+        ["workshop.throttlePaused"] = "Steam 提示请求过多，已暂停请求约 {0} 分钟，恢复后会自动继续",
+        ["workshop.throttleRetryIn"] = "Steam 提示请求过多，请约 {0} 分钟后重试",
         ["workshop.timeAll"] = "发布至今",
         ["workshop.timeHalfYear"] = "6 个月",
         ["workshop.timeMonth"] = "30 天",
@@ -1405,6 +1407,8 @@ public sealed partial class Localizer
         ["workshop.statusOffline"] = "Network unavailable, showing {0} cached results",
         ["workshop.statusParseFailed"] = "Steam page structure could not be parsed; the list is unavailable",
         ["workshop.subscriptions"] = "{0} subscriptions",
+        ["workshop.throttlePaused"] = "Steam reports too many requests — pausing requests for about {0} minute(s); they resume automatically",
+        ["workshop.throttleRetryIn"] = "Steam reports too many requests — please retry in about {0} minute(s)",
         ["workshop.timeAll"] = "All time",
         ["workshop.timeHalfYear"] = "6 months",
         ["workshop.timeMonth"] = "30 days",
@@ -2108,6 +2112,8 @@ public sealed partial class Localizer
         ("workshop.statusOffline", "WorkshopStatusOffline"),
         ("workshop.statusParseFailed", "WorkshopStatusParseFailed"),
         ("workshop.subscriptions", "WorkshopSubscriptions"),
+        ("workshop.throttlePaused", "WorkshopThrottlePaused"),
+        ("workshop.throttleRetryIn", "WorkshopThrottleRetryIn"),
         ("workshop.timeAll", "WorkshopTimeAll"),
         ("workshop.timeHalfYear", "WorkshopTimeHalfYear"),
         ("workshop.timeMonth", "WorkshopTimeMonth"),
@@ -2809,6 +2815,8 @@ public sealed partial class Localizer
     public string WorkshopStatusOffline => Format("workshop.statusOffline");
     public string WorkshopStatusParseFailed => Format("workshop.statusParseFailed");
     public string WorkshopSubscriptions => Format("workshop.subscriptions");
+    public string WorkshopThrottlePaused => Format("workshop.throttlePaused");
+    public string WorkshopThrottleRetryIn => Format("workshop.throttleRetryIn");
     public string WorkshopTimeAll => Format("workshop.timeAll");
     public string WorkshopTimeHalfYear => Format("workshop.timeHalfYear");
     public string WorkshopTimeMonth => Format("workshop.timeMonth");
@@ -3513,6 +3521,8 @@ internal static class Keys
     public const string WorkshopStatusOffline = "workshop.statusOffline";
     public const string WorkshopStatusParseFailed = "workshop.statusParseFailed";
     public const string WorkshopSubscriptions = "workshop.subscriptions";
+    public const string WorkshopThrottlePaused = "workshop.throttlePaused";
+    public const string WorkshopThrottleRetryIn = "workshop.throttleRetryIn";
     public const string WorkshopTimeAll = "workshop.timeAll";
     public const string WorkshopTimeHalfYear = "workshop.timeHalfYear";
     public const string WorkshopTimeMonth = "workshop.timeMonth";

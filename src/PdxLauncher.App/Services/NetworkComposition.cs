@@ -1,4 +1,4 @@
-﻿namespace PdxLauncher.App.Services;
+namespace PdxLauncher.App.Services;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Accounts;
@@ -14,6 +14,10 @@ using PdxLauncher.Core.Online;
 /// <param name="SteamWorkshop">Steam 创意工坊客户端（列表 / 详情 / 能力探测）；匿名 keyless。</param>
 /// <param name="WorkshopInfo">创意工坊 mod 信息缓存（同一 id 的元数据 / 封面 / 详情复用）。</param>
 /// <param name="WorkshopPages">创意工坊列表页的内存缓存（翻回看过的页不必重抓 SSR 页面）。</param>
+/// <param name="Throttle">
+/// 出口闸门：按 host 限并发/间隔，被 429 后进入冷却。与 <paramref name="Http"/> 一一对应
+/// （闸门只装在普通 HTTP 上；PDX 传输有自己的节奏，且从来没有被 Steam 限流过）。
+/// </param>
 internal sealed record NetworkServices(
     HttpFetcher Http,
     PdxHttpTransport PdxHttp,
@@ -22,6 +26,8 @@ internal sealed record NetworkServices(
     SteamWorkshopClient SteamWorkshop,
     WorkshopInfoCache WorkshopInfo,
     WorkshopPageCache WorkshopPages,
+    SteamItemPageCache WorkshopItemPages,
+    RequestThrottle Throttle,
     MetadataClient Metadata,
     AssetDownloader Assets,
     ThemeResolver Themes,
@@ -48,7 +54,11 @@ internal static class NetworkComposition
         ArgumentNullException.ThrowIfNull(settings);
 
         var proxy = ProxyResolver.Resolve(settings, logger);
-        var http = new HttpFetcher(logger, proxy);
+
+        // 出口闸门必须先于所有联网服务建好：HttpFetcher 构造时就把它接上，
+        // 之后每个服务共享同一个 HttpFetcher，自然共享同一份冷却状态。
+        var throttle = new RequestThrottle(logger, clock);
+        var http = new HttpFetcher(logger, proxy, null, throttle);
 
         // PDX 平台（登录 + mods）用的是 PUT/DELETE + JSON 认证头，IHttpFetcher 表达不了；
         // 单独一条传输，但共用同一份代理决策，代理改了两条一起换。
@@ -65,6 +75,14 @@ internal static class NetworkComposition
         // 工坊 mod 信息缓存：按「来源 + id」存元数据与详情，封面文件落在同一个目录下。
         var workshopPages = new WorkshopPageCache(clock);
         var workshopInfo = new WorkshopInfoCache(
+            fileSystem,
+            logger,
+            clock,
+            AppServices.WorkshopCacheRoot);
+
+        // 条目页解析结果缓存：整个流程里最大的响应是 1–3 MB 的 item HTML，
+        // 存下解析结果后同一个 mod 重开不再抓页面（详情页一条请求就能出全部内容）。
+        var workshopItemPages = new SteamItemPageCache(
             fileSystem,
             logger,
             clock,
@@ -93,6 +111,8 @@ internal static class NetworkComposition
             steamWorkshop,
             workshopInfo,
             workshopPages,
+            workshopItemPages,
+            throttle,
             metadata,
             assets,
             themes,

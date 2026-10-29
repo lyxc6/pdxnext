@@ -41,6 +41,12 @@ public sealed class SteamWorkshopClient
     /// <summary>appId → 有没有创意工坊。Steam 分类几乎不变，进程内缓存足够。</summary>
     private readonly ConcurrentDictionary<int, bool> _workshopProbes = new();
 
+    /// <summary>
+    /// 在途请求合并：同一个 URI 同时被两个调用点需要时（详情页与列表页、连点两次）只发一次。
+    /// 只合并「进行中」的请求，不做结果缓存——缓存由上层各 cache 负责。
+    /// </summary>
+    private readonly RequestCoalescer _coalesce;
+
     /// <summary>创建客户端。</summary>
     /// <param name="http">HTTP 抽象（与其它联网服务共用同一个 HttpFetcher，代理重建时一起换）。</param>
     /// <param name="logger">日志。</param>
@@ -50,6 +56,7 @@ public sealed class SteamWorkshopClient
         ArgumentNullException.ThrowIfNull(logger);
         _http = http;
         _logger = logger;
+        _coalesce = new RequestCoalescer(logger);
     }
 
     /// <summary>拼列表页 URI（纯函数，自检直接覆盖）。页码对外从 0 开始，对 Steam 从 1 开始。</summary>
@@ -88,13 +95,23 @@ public sealed class SteamWorkshopClient
     /// <param name="appId">Steam appid。</param>
     /// <param name="query">查询条件。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    public async Task<AppResult<SteamWorkshopPage>> BrowseAsync(
+    public Task<AppResult<SteamWorkshopPage>> BrowseAsync(
         int appId,
         SteamWorkshopQuery query,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(query);
 
+        // key 用完整的列表 URI：翻页、换排序、换关键词都是不同请求，绝不能并成一个。
+        var key = "browse:" + appId.ToString(CultureInfo.InvariantCulture) + "|" + BuildBrowseUri(appId, query).AbsoluteUri;
+        return _coalesce.RunAsync(key, ct => BrowseCoreAsync(appId, query, ct), cancellationToken);
+    }
+
+    private async Task<AppResult<SteamWorkshopPage>> BrowseCoreAsync(
+        int appId,
+        SteamWorkshopQuery query,
+        CancellationToken cancellationToken)
+    {
         var page = Math.Max(query.Page, 0);
         var pageSize = Math.Clamp(query.PageSize, 1, MaxPageSize);
 
@@ -125,12 +142,22 @@ public sealed class SteamWorkshopClient
     /// <summary>取单个条目的完整描述。</summary>
     /// <param name="publishedFileId">Steam 已发布文件 id。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    public async Task<AppResult<SteamWorkshopItemDetail>> GetDetailAsync(
+    public Task<AppResult<SteamWorkshopItemDetail>> GetDetailAsync(
         string publishedFileId,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(publishedFileId);
 
+        return _coalesce.RunAsync(
+            "detail:" + publishedFileId,
+            ct => GetDetailCoreAsync(publishedFileId, ct),
+            cancellationToken);
+    }
+
+    private async Task<AppResult<SteamWorkshopItemDetail>> GetDetailCoreAsync(
+        string publishedFileId,
+        CancellationToken cancellationToken)
+    {
         var body = "itemcount=1&publishedfileids[0]=" + Uri.EscapeDataString(publishedFileId);
 
         try
@@ -168,12 +195,22 @@ public sealed class SteamWorkshopClient
     /// </summary>
     /// <param name="publishedFileId">Steam 已发布文件 id。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    public async Task<AppResult<SteamWorkshopItemPage>> GetItemPageAsync(
+    public Task<AppResult<SteamWorkshopItemPage>> GetItemPageAsync(
         string publishedFileId,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(publishedFileId);
 
+        return _coalesce.RunAsync(
+            "item:" + publishedFileId,
+            ct => GetItemPageCoreAsync(publishedFileId, ct),
+            cancellationToken);
+    }
+
+    private async Task<AppResult<SteamWorkshopItemPage>> GetItemPageCoreAsync(
+        string publishedFileId,
+        CancellationToken cancellationToken)
+    {
         var uri = new Uri(
             OnlineHosts.SteamCommunityItemEndpoint,
             "?id=" + Uri.EscapeDataString(publishedFileId));
@@ -213,7 +250,7 @@ public sealed class SteamWorkshopClient
     /// <param name="start">起始偏移（0 基）。</param>
     /// <param name="count">本页条数（服务端上限 50）。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    public async Task<AppResult<SteamWorkshopCommentPage>> GetCommentsAsync(
+    public Task<AppResult<SteamWorkshopCommentPage>> GetCommentsAsync(
         string creatorSteamId,
         string publishedFileId,
         int start,
@@ -223,6 +260,22 @@ public sealed class SteamWorkshopClient
         ArgumentException.ThrowIfNullOrWhiteSpace(creatorSteamId);
         ArgumentException.ThrowIfNullOrWhiteSpace(publishedFileId);
 
+        var key = "comments:" + creatorSteamId + "|" + publishedFileId
+                  + "|" + Math.Max(0, start).ToString(CultureInfo.InvariantCulture)
+                  + "|" + Math.Clamp(count, 1, MaxPageSize).ToString(CultureInfo.InvariantCulture);
+        return _coalesce.RunAsync(
+            key,
+            ct => GetCommentsCoreAsync(creatorSteamId, publishedFileId, start, count, ct),
+            cancellationToken);
+    }
+
+    private async Task<AppResult<SteamWorkshopCommentPage>> GetCommentsCoreAsync(
+        string creatorSteamId,
+        string publishedFileId,
+        int start,
+        int count,
+        CancellationToken cancellationToken)
+    {
         var safeStart = Math.Max(0, start);
         var safeCount = Math.Clamp(count, 1, MaxPageSize);
 

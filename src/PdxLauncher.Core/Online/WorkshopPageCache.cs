@@ -12,8 +12,20 @@ using PdxLauncher.Core.Abstractions;
 /// </summary>
 public sealed class WorkshopPageCache
 {
-    /// <summary>默认新鲜期；过期后条目仍可立刻显示，只是会触发后台静默刷新。</summary>
-    public static readonly TimeSpan DefaultTtl = TimeSpan.FromMinutes(5);
+    /// <summary>
+    /// 默认新鲜期；过期后条目仍可立刻显示，只是会触发后台静默刷新。
+    /// <para>
+    /// 原来只有 5 分钟：用户翻两页再翻回来就会又抓一次 SSR 页（每页 1–3 MB），
+    /// 是列表侧最容易堆请求的地方。15 分钟足够覆盖一次「浏览一会儿」的会话。
+    /// </para>
+    /// </summary>
+    public static readonly TimeSpan DefaultTtl = TimeSpan.FromMinutes(15);
+
+    /// <summary>保留期：超过这个时间的页直接丢弃（过期页仍可先显示，但不能无限堆在内存里）。</summary>
+    public static readonly TimeSpan Retention = TimeSpan.FromHours(2);
+
+    /// <summary>最多保留的页数；超出后按抓取时间淘汰最旧的。</summary>
+    public const int MaxPages = 120;
 
     private readonly IClock _clock;
     private readonly object _gate = new();
@@ -30,11 +42,16 @@ public sealed class WorkshopPageCache
     /// <param name="TotalCount">该筛选下的总条数。</param>
     /// <param name="TotalPages">总页数。</param>
     /// <param name="FetchedUtc">抓取时刻。</param>
+    /// <param name="LastAttemptUtc">
+    /// 最近一次「试着取这页」的时刻（含失败的静默刷新）。静默刷新按它节流，
+    /// 避免过期页在每次进入页面时都重抓一遍。
+    /// </param>
     public sealed record Page(
         IReadOnlyList<WorkshopInfoCacheEntry> Items,
         int TotalCount,
         int TotalPages,
-        DateTimeOffset FetchedUtc);
+        DateTimeOffset FetchedUtc,
+        DateTimeOffset LastAttemptUtc = default);
 
     /// <summary>缓存里的页数。</summary>
     public int Count
@@ -91,7 +108,20 @@ public sealed class WorkshopPageCache
 
         lock (_gate)
         {
-            return _pages.TryGetValue(key, out page!);
+            if (!_pages.TryGetValue(key, out var found))
+            {
+                return false;
+            }
+
+            // 超过保留期就当作没有：过期页只是「先显示、后台刷新」，不是永久缓存。
+            if (_clock.UtcNow - found.FetchedUtc > Retention)
+            {
+                _pages.Remove(key);
+                return false;
+            }
+
+            page = found;
+            return true;
         }
     }
 
@@ -116,13 +146,65 @@ public sealed class WorkshopPageCache
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         ArgumentNullException.ThrowIfNull(items);
 
+        var now = _clock.UtcNow;
         lock (_gate)
         {
-            _pages[key] = new Page([.. items], totalCount, totalPages, _clock.UtcNow);
+            _pages[key] = new Page([.. items], totalCount, totalPages, now, now);
+            EvictOverflowLocked();
         }
     }
 
-    /// <summary>清空（换游戏或切换来源时调用，避免旧游戏的页被复用）。</summary>
+    /// <summary>记一次「已尝试刷新这页」，用于静默刷新的节流判断。</summary>
+    /// <param name="key">页键。</param>
+    public void MarkAttempt(string key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            if (_pages.TryGetValue(key, out var page))
+            {
+                _pages[key] = page with { LastAttemptUtc = _clock.UtcNow };
+            }
+        }
+    }
+
+    /// <summary>距上次尝试是否已经超过 <paramref name="minInterval"/>（静默刷新据此节流）。</summary>
+    /// <param name="page">页快照。</param>
+    /// <param name="minInterval">两次尝试之间的最小间隔。</param>
+    public bool CanReattempt(Page page, TimeSpan minInterval)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        return page.LastAttemptUtc == default
+               || _clock.UtcNow - page.LastAttemptUtc >= minInterval;
+    }
+
+    /// <summary>超出页数上限时淘汰最旧的页。</summary>
+    private void EvictOverflowLocked()
+    {
+        if (_pages.Count <= MaxPages)
+        {
+            return;
+        }
+
+        var overflow = _pages.Count - MaxPages;
+        foreach (var key in _pages
+                     .OrderBy(pair => pair.Value.FetchedUtc)
+                     .Take(overflow)
+                     .Select(pair => pair.Key)
+                     .ToList())
+        {
+            _pages.Remove(key);
+        }
+    }
+
+    /// <summary>
+    /// 清空。页键里已经带了来源/游戏/筛选条件，正常情况下不需要手动清；
+    /// 保留它是给「清缓存」这类显式动作用的。
+    /// </summary>
     public void Clear()
     {
         lock (_gate)

@@ -3691,11 +3691,8 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
 - 日志：`已写入 steam_appid.txt：1158310` → `Steamworks 已初始化（appid=1158310，dll=…\steam_api64.dll）`
   → `Steam 订阅状态（Steamworks）：订阅=否 安装=否 下载中=否 acf=无`。
 - 界面：订阅卡提示「已开启直连订阅：按钮会直接调 Steam 客户端订阅 / 取消订阅。」，按钮文案「订阅」可点。
-- **真机直连实测（2026-10-29 14:21，CK3 appid 1158310，工坊物品 3579037811「移除属性上限 Remove Skills Cap」，2.1 KB）**：
-  点「取消订阅」→ 12 秒内按钮翻成「订阅」、状态文案「已取消订阅」，acf 的 `WorkshopItemDetails` 条目消失
-  （`WorkshopItemsInstalled` 仍在，符合 Valve 文档「退出游戏后才移除」）；随后点「订阅」把这条订阅加回去，
-  按钮翻回「取消订阅」、acf 两处条目恢复。日志：`14:21:29 已取消订阅 Steam 工坊物品：3579037811`、
-  `14:22:13 已订阅 Steam 工坊物品：3579037811`。截图：`ui-test-artifacts/workshop-steam-sub/{05-before-unsub,06-after-unsub,07-resubscribed}.png`。
+- **未真实点下订阅**：那会往用户 Steam 账号里真加一条订阅并开始下载内容，属于对用户账号的写操作，
+  留待用户在场时点一次确认（代码路径与状态回读都已就绪）。
 
 **踩坑 / 边界**
 
@@ -3888,7 +3885,8 @@ item，缺失时该行自动省略。作者名会被物品页 `page.AuthorName` 
   现行缓存不被误删）与 `WorkshopImageCacheChecks`（3 组：截图名是 URL 哈希、
   封面已记同 URL 时复用不下载、旧命名不算命中）。
 - `检查类: 44，失败: 0`（原 41 + 本次新增 3 类：`LegacyCacheCleanerChecks`、
-  `WorkshopImageCacheChecks`、`WorkshopGalleryLayoutChecks`）。
+  `WorkshopImageCacheChecks`、`WorkshopGalleryLayoutChecks`）。工作区里并行的在建改动
+  （`RequestCoalescerChecks` / `RequestThrottleChecks` / `SteamItemPageCacheChecks`）落地后为 47，同样全绿。
 - `bash tools/build-app.sh -v q` 0 警告 0 错误。
 
 **磁盘清理（已执行）**
@@ -3913,6 +3911,10 @@ item，缺失时该行自动省略。作者名会被物品页 `page.AuthorName` 
 - `grep` 输出含中文时会被当成二进制（`Binary file (standard input) matches`），
   要看内容得用 `sed -n '/=== X ===/,/^$/p'` 或加 `PYTHONIOENCODING=utf-8`。
 - 所有统计用 python heredoc 纯内存跑完，不落临时文件（当时文件策略还是 read-only）。
+- 跑全量自检时撞上 `WorkshopPageCacheChecks`「页面缓存：超过 5 分钟失效」红：
+  工作区里 `WorkshopPageCache.DefaultTtl` 已被改成 15 分钟（还多了 `Retention` / `MaxPages`），
+  而那条断言把 5 分钟写死了。已改成按 `WorkshopPageCache.DefaultTtl` 现算——
+  TTL 本来就会按实测调，写死等于每次调参都埋一颗雷。
 
 ## 0.49 2026-10-29：详情页图片区按窗口自适应（查看器 1x 不再裁掉大半张图）
 
@@ -3966,6 +3968,90 @@ item，缺失时该行自动省略。作者名会被物品页 `page.AuthorName` 
 - 主工作区这一刻 App/Release 构建是红的——并发会话正在改 `RequestThrottle.cs`、`WorkshopViewModel.cs`、
   `WorkshopPageCache.cs`（缺 `SteamCommunityHost`、`Keys.WorkshopThrottlePaused` 等），与本次改动无关，
   所以改用 `git worktree` 在干净 HEAD 上验证。
-- 跑全量自检时唯一失败是他们的 `WorkshopPageCacheChecks`「页面缓存：超过 5 分钟失效」，
-  同属未提交的在建改动；`WorkshopGalleryLayoutChecks` 全绿。
+- 跑全量自检时唯一失败是 `WorkshopPageCacheChecks`「页面缓存：超过 5 分钟失效」，
+  属未提交的在建改动（`DefaultTtl` 已从 5 分钟改成 15 分钟），与本次改动无关。
+  该断言随后已改成按 `WorkshopPageCache.DefaultTtl` 现算（见 §0.48 踩坑），现全绿。
 
+
+## 0.50 2026-10-29：创意工坊请求闸门 / 在途去重 / 物品页缓存（治「您最近作出的请求太多了」）
+
+### 起因
+
+用户在 Steam 创意工坊页看到官方限流页：
+
+> 抱歉！处理您的请求时遇到错误：您最近作出的请求太多了。请稍候，然后重试。
+
+当时的请求预算（实测口径，均为「用户点一下」触发的量）：
+
+| 操作 | 改造前 | 改造后 |
+| --- | --- | --- |
+| 进创意工坊页（首次） | 1 次 `workshop/browse`（1–3 MB SSR）+ ≤30 张封面 | 同左（封面并发 4、间隔 100 ms） |
+| 5 分钟后再进同一页 | 缓存 + 静默再抓一次 | 缓存 + **≥2 分钟**才补一次 |
+| 换游戏再换回来 | `_pages.Clear()` 把**所有游戏**的页缓存清空 → 重新抓 | 0 请求（页键已带来源/游戏/筛选） |
+| 首次打开某个 mod 详情 | 3 次：`GetPublishedFileDetails` + 物品页 HTML + **评论第 1 页（冗余）** | 1 次（仅物品页；详情 7 天缓存，评论首屏复用物品页内嵌） |
+| 12 小时内重开同一 mod | 仍抓物品页 | **0 次**（物品页解析结果落盘） |
+| 被限流（429）后 | 继续按原节奏发，图片还会 ×3 重试 | 该 host 进入冷却，本地直接拒绝，图片不再重试 |
+
+### 三层改造
+
+1. **出口闸门（P0）** —— `src/PdxLauncher.Core/Online/RequestThrottle.cs`，挂在唯一的出口
+   `HttpFetcher` 上，按 host 记并发上限、最小间隔、冷却：
+   - `steamcommunity.com`：2 并发 / 1000 ms 间隔 / 无 `Retry-After` 时冷却 15 分钟 / 上限 60 分钟；
+   - `images.steamusercontent.com`：4 / 100 ms / 5 分钟 / 30 分钟；
+   - `api.steampowered.com`、`store.steampowered.com`：2 / 250 ms / 5 分钟 / 30 分钟；
+   - 其余（PDX、Braze 等）：4 / 不限 / 5 分钟 / 30 分钟。
+   `HttpFetcher` 只对**已配置的 host** 加闸，未配置的沿用旧路径；非 2xx 且 `HttpThrottleHeaders.IsThrottleStatus`
+   （429，或 503 带 `Retry-After`）时 `ReportThrottled` 并抛 `SteamThrottleException`，`Retry-After`
+   秒数与 HTTP-date 两种写法都解析、夹到 1 小时以内。连续被限流冷却翻倍（1<<min(n-1,4)），封顶 `MaxCooldown`。
+   **闸门只管「发出请求到拿到响应头」这一段**，响应体流式读取期间名额已让出——图片下载不会被 180 秒总超时卡住，
+   这一点写进了 `HttpFetcher` 的类注释。
+2. **在途去重（P1）** —— `src/PdxLauncher.Core/Online/RequestCoalescer.cs`。同一键在途时复用同一个
+   `TaskCompletionSource`，后到者只记一条 Info「请求合并」并等同一个结果；失败/取消广播给所有等待者。
+   `SteamWorkshopClient` 的四个入口分别用 `browse:{appid}|{uri}`、`detail:{id}`、`item:{id}`、
+   `comments:{id}|{start}|{count}`；`WorkshopImageCache` 用 `cover:{key}|{url}`、`shot:{key}|{url}`。
+   只合并**在途**，不做结果缓存（结果缓存是 P2 的事）。
+3. **结果缓存（P2）** ——
+   - `src/PdxLauncher.Core/Online/SteamItemPageCache.cs`：物品页 HTML 的**解析结果**落盘到
+     `workshop-info/workshop-pages.json`（`version: 1`），TTL 12 小时、最多 400 条、单条序列化超过 512 KB
+     只留内存副本（索引不膨胀）。索引损坏/读不出按空缓存处理，写入走 `WriteAllTextAtomic`。
+     `WorkshopDetailSource.GetSteamItemPageAsync` 改成「缓存→联网→失败时退回旧副本」，
+     退回时日志 `物品页使用缓存：{id}（请求失败，改用旧副本）`。
+   - 评论首屏：物品页已经内嵌前 10 条，详情页不再额外请求第 1 页；只有内嵌为空或物品页拿不到时才回退到
+     `comment/PublishedFile_Public/render/`。翻页语义改成按「当前已展示的起点 + 条数」推进
+     （`_commentsShownStart` / `_commentsShownCount`），内嵌 10 条与接口 15 条不会错位。
+   - 列表页缓存：`WorkshopPageCache.DefaultTtl` 5 → **15 分钟**，新增 `Retention = 2 小时`（过期仍先显示）、
+     `MaxPages = 120`（按 `FetchedUtc` 淘汰）、`LastAttemptUtc` + `CanReattempt`（同一页 2 分钟内不重复静默刷新）；
+     `WorkshopViewModel.LoadAsync` 删掉 `_pages.Clear()`，换游戏不再清空别人的页。
+4. **失败放大（P3）** —— `AssetDownloader` 对 `SteamThrottleException` 立即放弃（不重试、不等待、清 `.part`），
+   其它瞬时失败仍是 500 ms / 1500 ms 三次；`WorkshopViewModel.RefreshAsync` 在冷却期直接给提示不发请求；
+   限流文案走 `Keys.WorkshopThrottlePaused`（列表页状态栏）与 `Keys.WorkshopThrottleRetryIn`（详情页错误区），
+   都在 `tools/i18n/{zh-CN,en-US}/workshop.json` 里，`python tools/gen-i18n.py` 重新生成 `Strings.g.cs`。
+   **没有改 XAML**：两条文案都写进已有的 `StatusMessage` / `ErrorText` 绑定，避开 WMC9999。
+
+### 自检
+
+- `tests/PdxLauncher.Checks/RequestThrottleChecks.cs`：`Retry-After` 秒数/HTTP-date/超限夹取/非法值、
+  429 与 503 的判定、冷却期拒绝且不消耗等待（注入 delay 计数）、连续触发翻倍与封顶、`ReportSuccess` 归零、
+  并发上限（第 3 个在排队、释放后进）、最小间隔（只等一次、时长≈间隔）、统计计数。
+- `tests/PdxLauncher.Checks/RequestCoalescerChecks.cs`：同键只跑一次、不同键不合并、异常广播、
+  完成后条目清理且同名键可重新开始。
+- `tests/PdxLauncher.Checks/SteamItemPageCacheChecks.cs`：落盘往返（含评论字段）、12 小时 TTL、
+  400 条容量淘汰最旧、>512 KB 不落盘、损坏索引按空缓存、`Restore` 映射。
+- `build-debug.cmd` 全绿：检查类 47、断言失败 0；`python tools/gen-i18n.py --check` 通过。
+
+### 实测验收（Debug exe，手工）
+
+- 同一 mod 连开两次详情：第二次日志 `物品页使用缓存：…` 且 `steamcommunity.com` 计数为 0。
+- 翻页/换筛选再翻回来：命中页缓存，不重复 `browse`。
+- 游戏 A → 游戏 B → 游戏 A：A 的列表直接铺上，不重新抓。
+- 手动刷新一次：日志 `本次刷新请求数：steamcommunity.com=1 …`（RefreshAsync 里按 host 统计差值）。
+- 人为把 `Retry-After` 打成 120 秒：单条 Warn + 状态栏「已暂停约 2 分钟」，冷却期内点刷新不再发请求。
+
+### 限制 / 未覆盖
+
+- 冷却只在进程内有效，重启后清零；没有落盘断路器。
+- 「在浏览器打开」按钮走的是系统浏览器，不受闸门约束，但仍占用同一 IP 的配额（README 已注明）。
+- `WorkshopDetailSource` 的「联网失败退回旧副本」分支没有自检：它在 App 层，构造要带
+  `AccountService` / `IPlaySetRepository`，没法像 `WorkshopImageCache` 那样整文件链接进检查工程；
+  这一分支目前只靠日志与手工验收。
+- 非目标：批量 `GetPublishedFileDetails`、图片懒加载、设置页的请求计数器都未做。

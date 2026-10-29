@@ -325,8 +325,9 @@ normalizedMachineId = MachineGuid（HKLM\SOFTWARE\Microsoft\Cryptography\Machine
   `<exe 目录>\data-root.txt`（文件里写一行绝对路径，逃生口）→ `<exe 目录>\data` →
   `<exe 目录>\..\PdxNext-data`（程序目录不可写时）；全不可写仍返回 `<exe 目录>\data`，
   由上层降级（日志退化成 Debug.WriteLine），**绝不回退 C 盘**。
-- 布局：`data\settings.json`、`data\logs\pdxnext.log`、`data\theme-cache\`、`data\news-cache\`、`data\mod-cache\`、`data\image-cache\`、`data\workshop-covers\`、`data\dlc-descriptions.json`。
-- `data\workshop-covers\` 是「创意工坊」页的封面缓存：`steam\{publishedfileid}.{png|jpg}` 与 `pdx\{modId}.{png|jpg}` 两棵子树，由 `AppServices.WorkshopCoverRoot` 给出根目录；页面只认本地路径（`XamlImage.FromPath`），下载失败就留占位图标。
+- 布局：`data\settings.json`、`data\logs\pdxnext.log`、`data\theme-cache\`、`data\news-cache\`、`data\mod-cache\`、`data\image-cache\`、`data\workshop-info\`、`data\dlc-descriptions.json`。
+- `data\workshop-info\` 是「创意工坊」页的信息与图片缓存（索引 + 封面 + 详情截图，见 §19）；页面只认本地路径（`XamlImage.FromPath`），下载失败就留占位图标。
+- **已废弃、启动时自动清理**：`data\workshop-covers\`（旧封面根，改路径后遗留）与 `data\online-mod-covers\`（已回退的 Mod 库在线视图遗留），以及工坊详情 `shots\` 下 `shot_NN` 形式的旧命名截图。清理由 `src/PdxLauncher.Core/Storage/LegacyCacheCleaner.cs` 在 `App.xaml.cs` 的 `ComposeServices` 里跑一遍（幂等、失败只记 Warn），见 §19.7。
 - `settings.json` 里与游戏选择有关的两项（2026-10-28 新增，向后兼容，缺省即走默认规则）：`lastGameId`（如 `"ck3"`）、`lastGameInstallRoot`（安装根绝对路径，游戏搬库后仍能认回）。写入时机只有「用户切游戏」，由 `AppServices.SelectGame` 调 `SaveSettingsDeferred()`；启动时 `GameSelection.Select(games, lastGameId, lastGameInstallRoot)` 按「双命中 → 仅 gameId → 仅安装路径 → 可管理内容 → 可支持 → 第一项」的顺序挑。
 - 迁移：首次启动若目标 `data` 里既没有 `settings.json` 也没有 `.migrated-from-localappdata`，
   就把旧 `%LOCALAPPDATA%\PdxNext` 的 settings / dlc-descriptions / theme-cache / news-cache / mod-cache
@@ -604,7 +605,7 @@ GET https://store.steampowered.com/api/appdetails?appids=<appId>&filters=categor
 
 ### 18.4 白名单
 
-`OnlineHosts` 里新增两个精确主机（禁子域）：`steamcommunity.com`、`api.steampowered.com`。`images.steamusercontent.com`（封面图 CDN）与 `store.steampowered.com` 原本就在。`XamlImage` 只认本地文件，封面仍要先经 `AssetDownloader` 落到 `data\workshop-info\covers\`（见 §19）。
+`OnlineHosts` 里新增两个精确主机（禁子域）：`steamcommunity.com`、`api.steampowered.com`。`images.steamusercontent.com`（封面图 CDN）与 `store.steampowered.com` 原本就在。`XamlImage` 只认本地文件，封面仍要先经 `AssetDownloader` 落到 `data\workshop-info\steam\` 或 `data\workshop-info\pdx\`（见 §19）。
 
 ## 19. 创意工坊信息缓存（`data\workshop-info\`）
 
@@ -614,10 +615,15 @@ GET https://store.steampowered.com/api/appdetails?appids=<appId>&filters=categor
 
 ```
 data\workshop-info\
-  workshop-info.json        # 索引（原子写）
-  covers\steam\<id>.<ext>   # Steam 封面
-  covers\pdx\<id>.<ext>     # PDX 封面
+  workshop-info.json                     # 索引（原子写）
+  steam\<id>.<ext>                       # Steam 封面
+  pdx\<id>.<ext>                         # PDX 封面
+  shots\steam_<id>\shot_<fnv>.{png|jpg|gif}   # 详情截图（正文配图与顶部图片墙共用）
 ```
+
+封面文件名是 `{来源}/{id}`（不含扩展名，扩展名由 `AssetDownloader` 按 magic bytes 决定）；
+截图文件名是 `shot_` + **URL 的 FNV-1a 32 位哈希**（8 位小写 hex），不是列表序号——
+同一张图在顶部图片墙和正文里因此指向同一个文件，也不会因为「上次这一序号是别的图」而串图。
 
 ### 19.2 索引
 
@@ -687,3 +693,26 @@ data\workshop-info\
 - 图片并发上限 6（`SemaphoreSlim(6)`）；同一页里已经命中磁盘的封面不再请求。
 - `WorkshopInfoCache` 的写盘是「标脏 + 显式 `Flush`」：条目的 `Upsert`/`SetCover`/`SetDetail` 只改内存，全部封面处理完后一次 `Flush()`，避免一页 30 次原子写索引。
 - 进程退出 / 设置页清缓存 / 下次查询结束都会 `Flush`，不丢数据。
+
+### 19.7 同一张图只存一份
+
+三条规则，实现分别在 `WorkshopInfoCache.TryGetCachedCoverForUrl` 与 `WorkshopImageCache.EnsureScreenshotAsync`：
+
+| 场景 | 规则 |
+| --- | --- |
+| 封面与截图是同一个 URL | 截图先问 `TryGetCachedCoverForUrl(key, url)`：命中就直接复用封面文件，不再往 `shots\` 下载第二份。Steam 详情页画廊首图常常就是封面本身，实测这类重复占 1.78 MB |
+| 同一 URL 出现多次 | 文件名是 URL 哈希，天然幂等 |
+| 内容相同但 URL 不同（不同 mod 复用了同一张图） | **不去重**：URL 里带 `ugc/<数字>/<hash>` 路径段，同一张图换 mod 也会换 URL，按 URL 寻址的缓存无法识别 |
+
+### 19.8 遗留缓存清理
+
+改过路径 / 改过命名之后留下的旧文件没有任何入口能删（设置页的缓存卡片只指向现行路径，「清空全部缓存」也只遍历这几行），所以启动时由 `src/PdxLauncher.Core/Storage/LegacyCacheCleaner.cs` 跑一遍：
+
+| 目标 | 由来 |
+| --- | --- |
+| `data\workshop-covers\` | 创意工坊页早期封面根；2026-10-28 改成统一用 `WorkshopInfoCache.CoverRoot` 后废弃 |
+| `data\online-mod-covers\` | 已整体回退的「Mod 库在线视图」封面根 |
+| `workshop-info\shots\*_<id>\shot_NN.*` | 截图命名从序号改成 URL 哈希后留下的死文件 |
+
+判定口径：旧命名固定是 `shot_` + 两位数字 + `.`，新命名是 `shot_` + 8 位小写 hex，按「点号落在下标 7」区分。
+清理是幂等的：没有可删的东西时不做任何 IO；单项失败只记 Warn 并继续，绝不抛给调用方。

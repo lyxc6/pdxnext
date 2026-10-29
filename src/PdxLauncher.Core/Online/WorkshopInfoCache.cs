@@ -174,6 +174,44 @@ public sealed class WorkshopInfoCache
         return true;
     }
 
+    /// <summary>
+    /// 该条目已缓存的封面<b>就是</b>给定 URL 时，返回封面绝对路径；否则返回 false。
+    /// <para>
+    /// 用在「同一张图不该存两份」的判定上：Steam 详情页画廊首图常常就是封面本身，
+    /// 命中这里就不必再往截图目录里下载一遍。
+    /// </para>
+    /// </summary>
+    /// <param name="key">缓存键（<see cref="Key"/>）。</param>
+    /// <param name="url">待判定的图片地址。</param>
+    /// <param name="fullPath">封面文件的绝对路径。</param>
+    public bool TryGetCachedCoverForUrl(string key, string url, out string fullPath)
+    {
+        fullPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+
+        if (!TryGet(key, out var entry) || string.IsNullOrWhiteSpace(entry.CoverFileName))
+        {
+            return false;
+        }
+
+        if (!string.Equals(entry.CoverUrl, url, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var candidate = Path.Combine(_cacheRoot, entry.CoverFileName);
+        if (!_fileSystem.FileExists(candidate))
+        {
+            return false;
+        }
+
+        fullPath = candidate;
+        return true;
+    }
+
     /// <summary>该条目的列表元数据是否在 TTL 内。</summary>
     public bool IsFresh(WorkshopInfoCacheEntry entry, TimeSpan ttl)
     {

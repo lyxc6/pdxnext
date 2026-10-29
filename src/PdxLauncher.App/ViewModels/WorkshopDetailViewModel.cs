@@ -182,6 +182,16 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     [ObservableProperty]
     private int _commentsPage = 1;
 
+    /// <summary>当前显示的这批评论在整串评论里的起始偏移（0 基）。</summary>
+    /// <remarks>
+    /// 首屏不一定从 0 开始按整页对齐：物品页内嵌的首屏是 10 条，而翻页接口一页 15 条。
+    /// 翻页按「已显示到哪儿」往后接，才不会重复或漏掉中间那几条。
+    /// </remarks>
+    private int _commentsShownStart;
+
+    /// <summary>当前显示的这批评论条数。</summary>
+    private int _commentsShownCount;
+
     /// <summary>评论区的一句状态说明（翻页失败、拿不到作者、没有可显示的评论），空串表示没有。</summary>
     [ObservableProperty]
     private string _commentsStatusText = string.Empty;
@@ -352,10 +362,14 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     public bool HasCommentsPageText => !string.IsNullOrWhiteSpace(CommentsPageText);
 
     /// <summary>能不能翻上一页。</summary>
-    public bool CanCommentsPrev => HasCommentsPaging && CommentsPage > 1 && !IsLoadingComments;
+    public bool CanCommentsPrev => HasCommentsPaging && _commentsShownStart > 0 && !IsLoadingComments;
 
-    /// <summary>能不能翻下一页（加载中禁点，避免连点重复请求）。</summary>
-    public bool CanCommentsNext => HasCommentsPaging && CommentsPage < CommentsPageCount && !IsLoadingComments;
+    /// <summary>
+    /// 能不能翻下一页（加载中禁点，避免连点重复请求）。
+    /// <para>判据是「已显示到哪儿」而不是页号：首屏内嵌 10 条、接口一页 15 条，两者不对齐。</para>
+    /// </summary>
+    public bool CanCommentsNext =>
+        HasCommentsPaging && _commentsShownStart + _commentsShownCount < CommentsTotal && !IsLoadingComments;
 
     /// <summary>这张卡是不是 PDX 的订阅卡（Steam 走「在 Steam 中订阅」）。</summary>
     public bool CanSubscribe => Row?.Source == WorkshopSource.Pdx;
@@ -464,7 +478,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         catch (Exception ex)
         {
             _logger.Error("创意工坊详情加载异常: " + row.Id, ex);
-            Fail(ex.Message);
+            Fail(DescribeLoadFailure(ex));
         }
         finally
         {
@@ -533,7 +547,14 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         }
 
         var target = Math.Max(1, page);
-        var start = (target - 1) * CommentsPageSize;
+
+        // 起点按「已显示到哪儿」推算，而不是页号 × 页大小：物品页内嵌首屏只有 10 条，
+        // 整页对齐会跳过第 11–15 条（翻页接口和物品页的分页尺寸本来就不一样）。
+        var start = target > CommentsPage
+            ? _commentsShownStart + _commentsShownCount
+            : target < CommentsPage
+                ? Math.Max(0, _commentsShownStart - CommentsPageSize)
+                : _commentsShownStart;
         if (CommentsTotal > 0 && start >= CommentsTotal)
         {
             return;
@@ -550,7 +571,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
             if (result is { IsSuccess: true, Value: { } pageData })
             {
-                ApplyCommentPage(pageData, target);
+                ApplyCommentPage(pageData, target, start);
                 CommentsStatusText = string.Empty;
             }
             else
@@ -896,8 +917,15 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         // 翻页接口要的是作者 SteamID64，取不到就只能显示物品页内嵌的那十条。
         ResolveCommentOwner(row, detail, page);
 
-        // 首屏评论：有作者 SteamID 就走翻页接口（能拿到全部页），失败再退回物品页内嵌的十条。
-        if (_steamCreatorId is not null)
+        // 首屏评论：物品页本身已经内嵌了前十条，直接用它，不再额外打一次评论接口
+        // （这一条以前是「详情页三条请求里唯一冗余的那条」）。只有内嵌评论为空、或物品页
+        // 整体不可用时，才回退到翻页接口。
+        if (page is { Comments.Count: > 0 } embedded && _steamCreatorId is not null)
+        {
+            ApplyComments(embedded);
+            CommentsStatusText = string.Empty;
+        }
+        else if (_steamCreatorId is not null)
         {
             await LoadCommentsPageAsync(1, cancellationToken).ConfigureAwait(true);
 
@@ -1086,6 +1114,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
         CommentsTotal = page.TotalComments > 0 ? page.TotalComments : Comments.Count;
         CommentsPage = 1;
+        _commentsShownStart = 0;
+        _commentsShownCount = Comments.Count;
 
         CommentsSummary = Comments.Count > 0
             ? T(Keys.WorkshopCommentsCount, CommentsTotal)
@@ -1093,7 +1123,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     }
 
     /// <summary>把翻页接口返回的一页评论换成界面上的列表。</summary>
-    private void ApplyCommentPage(SteamWorkshopCommentPage page, int requestedPage)
+    /// <param name="page">接口返回的一页评论。</param>
+    /// <param name="requestedPage">界面上的页号（用于页码文案）。</param>
+    /// <param name="requestedStart">本次请求的起始偏移（接口没回 start 时用它记账）。</param>
+    private void ApplyCommentPage(SteamWorkshopCommentPage page, int requestedPage, int requestedStart)
     {
         Comments.Clear();
 
@@ -1108,6 +1141,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         }
 
         CommentsPage = Math.Max(1, requestedPage);
+        _commentsShownStart = Math.Max(0, requestedStart);
+        _commentsShownCount = page.Comments.Count;
         CommentsSummary = CommentsTotal > 0
             ? T(Keys.WorkshopCommentsCount, CommentsTotal)
             : string.Empty;
@@ -1142,6 +1177,28 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         ApplyDescription(MarkdownParser.Parse(cached));
         CachedHint = T(Keys.WorkshopDetailCached);
         IsLoaded = true;
+    }
+
+    /// <summary>
+    /// 加载失败的原因文案。被 Steam 限流时给出「请约 N 分钟后重试」，
+    /// 而不是把「HTTP 429（被限流）」这种内部措辞直接甩给用户。
+    /// </summary>
+    private static string DescribeLoadFailure(Exception exception)
+    {
+        if (exception is not SteamThrottleException throttle)
+        {
+            return exception.Message;
+        }
+
+        var remaining = throttle.RetryAfter ?? TimeSpan.Zero;
+        if (remaining <= TimeSpan.Zero
+            && AppServices.HttpThrottle.TryGetCooldown("steamcommunity.com", out var untilUtc))
+        {
+            remaining = untilUtc - DateTimeOffset.UtcNow;
+        }
+
+        var minutes = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
+        return T(Keys.WorkshopThrottleRetryIn, minutes);
     }
 
     /// <summary>失败落点：错误提示 + 保证「重试」能重来。</summary>

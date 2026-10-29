@@ -42,6 +42,12 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
 
     private readonly IAppLogger _logger;
 
+    /// <summary>
+    /// 出口闸门（按 host 限并发/间隔、429 冷却）。为 null 表示不设闸门——只有自检里的假连接池
+    /// 需要这个形态；应用侧一律由 NetworkComposition 注入同一个实例。
+    /// </summary>
+    private readonly RequestThrottle? _throttle;
+
     private readonly TimeSpan _totalTimeout;
 
     /// <summary>已换下来、等下次换池或 Dispose 时释放的连接池。</summary>
@@ -52,12 +58,24 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
     /// <summary>当前连接池；由 <see cref="UseProxy"/> 原子替换，读侧一律 <c>Volatile.Read</c>。</summary>
     private HttpClient _client;
 
-    public HttpFetcher(IAppLogger logger, IWebProxy? proxy = null, TimeSpan? totalTimeout = null)
+    /// <param name="logger">日志出口。</param>
+    /// <param name="proxy">代理；null 表示直连。</param>
+    /// <param name="totalTimeout">整请求超时；null 用 <see cref="DefaultTotalTimeout"/>。</param>
+    /// <param name="throttle">
+    /// 出口闸门；null 表示不限流。应用里由 NetworkComposition 传入共享实例，
+    /// 参数放最后是为了不打断既有的 <c>new HttpFetcher(logger)</c> 调用点。
+    /// </param>
+    public HttpFetcher(
+        IAppLogger logger,
+        IWebProxy? proxy = null,
+        TimeSpan? totalTimeout = null,
+        RequestThrottle? throttle = null)
     {
         ArgumentNullException.ThrowIfNull(logger);
 
         _logger = logger;
         _totalTimeout = totalTimeout ?? DefaultTotalTimeout;
+        _throttle = throttle;
         _client = BuildClient(proxy, _totalTimeout);
     }
 
@@ -90,15 +108,33 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
         ArgumentNullException.ThrowIfNull(uri);
         EnsureAllowed(uri);
 
-        var response = await Volatile.Read(ref _client)
-            .GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-            .ConfigureAwait(false);
+        var slot = await AcquireSlotAsync(uri, cancellationToken).ConfigureAwait(false);
+        HttpResponseMessage response;
+        try
+        {
+            response = await Volatile.Read(ref _client)
+                .GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            slot?.Dispose();
+            throw;
+        }
+
         if (!response.IsSuccessStatusCode)
         {
-            var status = (int)response.StatusCode;
+            var failure = ClassifyFailure(uri, response);
             response.Dispose();
-            throw new HttpRequestException("HTTP " + status + " " + uri);
+            slot?.Dispose();
+            throw failure;
         }
+
+        _throttle?.ReportSuccess(uri.Host);
+
+        // 闸门只覆盖到「拿到响应头」：接下来的流式读取可能持续几十秒（慢速代理实测 ~10 KB/s），
+        // 不应该继续占着并发名额。
+        slot?.Dispose();
 
         try
         {
@@ -118,17 +154,26 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
         ArgumentNullException.ThrowIfNull(jsonBody);
         EnsureAllowed(uri);
 
-        using var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
-        using var response = await Volatile.Read(ref _client)
-            .PostAsync(uri, content, cancellationToken)
-            .ConfigureAwait(false);
-        var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
+        var slot = await AcquireSlotAsync(uri, cancellationToken).ConfigureAwait(false);
+        try
         {
-            throw new HttpRequestException("HTTP " + (int)response.StatusCode + " " + uri);
-        }
+            using var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+            using var response = await Volatile.Read(ref _client)
+                .PostAsync(uri, content, cancellationToken)
+                .ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw ClassifyFailure(uri, response);
+            }
 
-        return text;
+            var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            _throttle?.ReportSuccess(uri.Host);
+            return text;
+        }
+        finally
+        {
+            slot?.Dispose();
+        }
     }
 
     public async Task<string> PostFormAsync(Uri uri, string formBody, CancellationToken cancellationToken)
@@ -137,17 +182,53 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
         ArgumentNullException.ThrowIfNull(formBody);
         EnsureAllowed(uri);
 
-        using var content = new StringContent(formBody, Encoding.UTF8, "application/x-www-form-urlencoded");
-        using var response = await Volatile.Read(ref _client)
-            .PostAsync(uri, content, cancellationToken)
-            .ConfigureAwait(false);
-        var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
+        var slot = await AcquireSlotAsync(uri, cancellationToken).ConfigureAwait(false);
+        try
         {
-            throw new HttpRequestException("HTTP " + (int)response.StatusCode + " " + uri);
+            using var content = new StringContent(formBody, Encoding.UTF8, "application/x-www-form-urlencoded");
+            using var response = await Volatile.Read(ref _client)
+                .PostAsync(uri, content, cancellationToken)
+                .ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw ClassifyFailure(uri, response);
+            }
+
+            var text = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            _throttle?.ReportSuccess(uri.Host);
+            return text;
+        }
+        finally
+        {
+            slot?.Dispose();
+        }
+    }
+
+    /// <summary>向闸门申请一个请求名额；没配闸门时返回 null。</summary>
+    private async Task<IDisposable?> AcquireSlotAsync(Uri uri, CancellationToken cancellationToken) =>
+        _throttle is null
+            ? null
+            : await _throttle.AcquireAsync(uri.Host, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// 把非 2xx 响应翻译成异常：被限流时登记冷却并抛 <see cref="SteamThrottleException"/>，
+    /// 其余仍是原来的 <see cref="HttpRequestException"/>（调用方既有的错误处理不必改）。
+    /// </summary>
+    private HttpRequestException ClassifyFailure(Uri uri, HttpResponseMessage response)
+    {
+        var status = (int)response.StatusCode;
+        if (_throttle is not null && HttpThrottleHeaders.IsThrottleStatus(status, response.Headers))
+        {
+            var retryAfter = HttpThrottleHeaders.ReadRetryAfter(response.Headers, _throttle.Clock);
+            _throttle.ReportThrottled(uri.Host, retryAfter);
+            return new SteamThrottleException(
+                uri.Host,
+                retryAfter,
+                rejectedByCooldown: false,
+                "HTTP " + status + "（被限流）" + uri);
         }
 
-        return text;
+        return new HttpRequestException("HTTP " + status + " " + uri);
     }
 
     /// <summary>

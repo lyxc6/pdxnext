@@ -82,15 +82,23 @@ public static class WorkshopPageCacheChecks
 
         ChecksContext.Check("页面缓存：刚存算新鲜", cache.TryGet(key, out var fresh) && cache.IsFresh(fresh));
 
-        clock.Advance(TimeSpan.FromMinutes(4));
-        ChecksContext.Check("页面缓存：4 分钟后仍新鲜", cache.TryGet(key, out var later) && cache.IsFresh(later));
+        // 断言按 DefaultTtl 现算，而不是把「5 分钟」写死：这个常量本来就会按实测调整
+        // （5 分钟 → 15 分钟那次改动就曾让写死的断言红掉），写死等于给每次调参埋一颗雷。
+        clock.Advance(WorkshopPageCache.DefaultTtl - TimeSpan.FromMinutes(1));
+        ChecksContext.Check(
+            "页面缓存：TTL 内仍新鲜",
+            cache.TryGet(key, out var later) && cache.IsFresh(later));
 
         clock.Advance(TimeSpan.FromMinutes(2));
-        ChecksContext.Check("页面缓存：超过 5 分钟失效", cache.TryGet(key, out var stale) && !cache.IsFresh(stale));
+        ChecksContext.Check(
+            "页面缓存：超过 TTL 失效",
+            cache.TryGet(key, out var stale) && !cache.IsFresh(stale));
 
         ChecksContext.Check(
-            "页面缓存：自定义新鲜期覆盖",
-            cache.TryGet(key, out var custom) && cache.IsFresh(custom, TimeSpan.FromMinutes(10)));
+            "页面缓存：自定义新鲜期覆盖默认值",
+            cache.TryGet(key, out var custom)
+            && cache.IsFresh(custom, WorkshopPageCache.DefaultTtl * 2)
+            && !cache.IsFresh(custom));
     }
 
     private static void CheckOverwrite(MutableClock clock)

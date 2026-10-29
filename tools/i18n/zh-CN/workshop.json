@@ -100,6 +100,8 @@
   "workshop.statusOffline": "网络不可用，显示缓存中的 {0} 个结果",
   "workshop.statusParseFailed": "Steam 页面结构解析失败，暂时无法显示列表",
   "workshop.subscriptions": "{0} 订阅",
+  "workshop.throttlePaused": "Steam 提示请求过多，已暂停请求约 {0} 分钟，恢复后会自动继续",
+  "workshop.throttleRetryIn": "Steam 提示请求过多，请约 {0} 分钟后重试",
   "workshop.timeAll": "发布至今",
   "workshop.timeHalfYear": "6 个月",
   "workshop.timeMonth": "30 天",

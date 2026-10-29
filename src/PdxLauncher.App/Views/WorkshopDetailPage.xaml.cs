@@ -47,6 +47,7 @@ public sealed partial class WorkshopDetailPage : Page
                 AppServices.PdxMods,
                 AppServices.Account,
                 AppServices.WorkshopInfo,
+                AppServices.WorkshopItemPages,
                 AppServices.PlaySets,
                 AppServices.Logger),
             new WorkshopImageCache(

@@ -21,6 +21,7 @@ public sealed class WorkshopDetailSource
     private readonly PdxModsClient _pdx;
     private readonly AccountService _account;
     private readonly WorkshopInfoCache _info;
+    private readonly SteamItemPageCache _itemPages;
     private readonly IPlaySetRepository _playSets;
     private readonly IAppLogger _logger;
 
@@ -29,6 +30,7 @@ public sealed class WorkshopDetailSource
     /// <param name="pdx">PDX Mods 客户端。</param>
     /// <param name="account">账号服务（PDX 详情要带登录态）。</param>
     /// <param name="info">工坊信息缓存。</param>
+    /// <param name="itemPages">条目页（HTML 解析结果）持久缓存。</param>
     /// <param name="playSets">播放集仓储（依赖检查要读本机 mod 库）。</param>
     /// <param name="logger">日志。</param>
     public WorkshopDetailSource(
@@ -36,6 +38,7 @@ public sealed class WorkshopDetailSource
         PdxModsClient pdx,
         AccountService account,
         WorkshopInfoCache info,
+        SteamItemPageCache itemPages,
         IPlaySetRepository playSets,
         IAppLogger logger)
     {
@@ -43,6 +46,7 @@ public sealed class WorkshopDetailSource
         _pdx = pdx;
         _account = account;
         _info = info;
+        _itemPages = itemPages;
         _playSets = playSets;
         _logger = logger;
     }
@@ -110,13 +114,47 @@ public sealed class WorkshopDetailSource
         return result;
     }
 
-    /// <summary>取 Steam 物品页补充信息（作者主页、描述配图、首屏评论）；失败由调用方静默降级。</summary>
+    /// <summary>
+    /// 取 Steam 物品页补充信息（作者主页、描述配图、首屏评论）：缓存 → 远端 → 写回缓存。
+    /// <para>
+    /// 这是整个流程里最大的一个响应（1–3 MB HTML），所以在 TTL 内重开同一个 mod 直接复用解析结果；
+    /// 请求失败时若有旧副本就降级用它（断网仍能看到作者、画廊与首屏评论），由调用方决定怎么提示。
+    /// </para>
+    /// </summary>
     /// <param name="id">工坊条目 id。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    public Task<AppResult<SteamWorkshopItemPage>> GetSteamItemPageAsync(
+    public async Task<AppResult<SteamWorkshopItemPage>> GetSteamItemPageAsync(
         string id,
-        CancellationToken cancellationToken) =>
-        _steam.GetItemPageAsync(id, cancellationToken);
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        CachedSteamItemPage? cached = null;
+        if (_itemPages.TryGet(id, out var hit))
+        {
+            cached = hit;
+        }
+
+        if (cached is not null && _itemPages.IsFresh(cached))
+        {
+            return AppResult<SteamWorkshopItemPage>.Ok(SteamItemPageCache.Restore(cached));
+        }
+
+        var result = await _steam.GetItemPageAsync(id, cancellationToken).ConfigureAwait(true);
+        if (result is { IsSuccess: true, Value: { } page })
+        {
+            _itemPages.Set(id, page);
+            return result;
+        }
+
+        if (cached is not null)
+        {
+            _logger.Info("物品页使用缓存：" + id + "（请求失败，改用旧副本）");
+            return AppResult<SteamWorkshopItemPage>.Ok(SteamItemPageCache.Restore(cached));
+        }
+
+        return result;
+    }
 
     /// <summary>取一页 Steam 评论（翻页接口）。</summary>
     /// <param name="creatorSteamId">条目作者 SteamID64。</param>

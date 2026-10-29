@@ -100,6 +100,8 @@
   "workshop.statusOffline": "Network unavailable, showing {0} cached results",
   "workshop.statusParseFailed": "Steam page structure could not be parsed; the list is unavailable",
   "workshop.subscriptions": "{0} subscriptions",
+  "workshop.throttlePaused": "Steam reports too many requests — pausing requests for about {0} minute(s); they resume automatically",
+  "workshop.throttleRetryIn": "Steam reports too many requests — please retry in about {0} minute(s)",
   "workshop.timeAll": "All time",
   "workshop.timeHalfYear": "6 months",
   "workshop.timeMonth": "30 days",

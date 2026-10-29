@@ -37,6 +37,12 @@
     <Compile Include="..\..\src\PdxLauncher.App\Services\WorkshopText.cs" Link="Linked\WorkshopText.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\WorkshopGalleryLayout.cs" Link="Linked\WorkshopGalleryLayout.cs" />
     <!--
+      工坊图片落地规则（封面/截图的文件名、以及「同一张图只存一份」的复用判定）同样不碰 UI 类型，
+      只用 Core 的 IFileSystem / IAssetDownloader / WorkshopInfoCache，可以原样链接进来。
+      它决定磁盘上会不会多出同一张图的第二份，只能靠 WorkshopImageCacheChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\WorkshopImageCache.cs" Link="Linked\WorkshopImageCache.cs" />
+    <!--
       会话状态机（登录 / 续期 / 登出 / 落盘时机）本身不碰任何 UI 类型，
       只用 Core 的 IAppLogger / PdxSessionStore / IClock / PdxAccountClient，
       所以可以原样链接进来。它的「不勾保持登录就不落盘」和「登出清内存」是文案承诺，

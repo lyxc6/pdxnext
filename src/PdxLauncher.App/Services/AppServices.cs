@@ -1,4 +1,4 @@
-﻿namespace PdxLauncher.App.Services;
+namespace PdxLauncher.App.Services;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Accounts;
@@ -67,6 +67,15 @@ public static class AppServices
 
     /// <summary>创意工坊列表页的内存缓存（翻页复用，不落盘）。</summary>
     public static WorkshopPageCache WorkshopPages { get; private set; } = null!;
+
+    /// <summary>创意工坊条目页（HTML 解析结果）持久缓存：同一个 mod 在 TTL 内重开不再抓页面。</summary>
+    public static SteamItemPageCache WorkshopItemPages { get; private set; } = null!;
+
+    /// <summary>
+    /// 出口闸门（按 host 限并发/间隔 + 被 429 后冷却）。
+    /// 界面靠它判断「现在是不是在冷却」，从而显示「已暂停 N 分钟」而不是反复撞墙。
+    /// </summary>
+    public static RequestThrottle HttpThrottle { get; private set; } = null!;
 
     /// <summary>游戏目录补丁（一键打补丁 / 移除补丁）。只在用户点按钮时读写游戏目录，不做任何自动变更。</summary>
     public static IGamePatchService GamePatch { get; private set; } = null!;
@@ -137,6 +146,8 @@ public static class AppServices
         SteamWorkshopClient steamWorkshop,
         WorkshopInfoCache workshopInfo,
         WorkshopPageCache workshopPages,
+        SteamItemPageCache workshopItemPages,
+        RequestThrottle httpThrottle,
         IGamePatchService gamePatch,
         AppSettingsStore settingsStore,
         IReadOnlyList<GameInstallation> games,
@@ -164,6 +175,8 @@ public static class AppServices
         ArgumentNullException.ThrowIfNull(steamWorkshop);
         ArgumentNullException.ThrowIfNull(workshopInfo);
         ArgumentNullException.ThrowIfNull(workshopPages);
+        ArgumentNullException.ThrowIfNull(workshopItemPages);
+        ArgumentNullException.ThrowIfNull(httpThrottle);
         ArgumentNullException.ThrowIfNull(gamePatch);
         ArgumentNullException.ThrowIfNull(settingsStore);
         ArgumentNullException.ThrowIfNull(games);
@@ -190,6 +203,8 @@ public static class AppServices
         SteamWorkshop = steamWorkshop;
         WorkshopInfo = workshopInfo;
         WorkshopPages = workshopPages;
+        WorkshopItemPages = workshopItemPages;
+        HttpThrottle = httpThrottle;
         GamePatch = gamePatch;
         SettingsStore = settingsStore;
         _networkLink = networkLink;

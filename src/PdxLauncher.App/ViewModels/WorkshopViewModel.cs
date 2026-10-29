@@ -32,6 +32,9 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>PDX Mods 每页条数。</summary>
     private const int PdxPageSize = 24;
 
+    /// <summary>创意工坊所在的 host：限流冷却按 host 记账，提示文案要查它。</summary>
+    private const string SteamCommunityHost = "steamcommunity.com";
+
     /// <summary>Steam 每页条数。</summary>
     private const int SteamPageSize = SteamWorkshopClient.DefaultPageSize;
 
@@ -76,6 +79,11 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// 不设上限时页面会长时间停在「正在判断…」，所以只等 5 秒，超时按 Paradox Mods 处理。
     /// </summary>
     private static readonly TimeSpan WorkshopProbeTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// 过期页静默刷新的最小间隔：同一页两分钟内只补一次，来回切页不会把请求翻倍。
+    /// </summary>
+    private static readonly TimeSpan SilentRefreshMinInterval = TimeSpan.FromMinutes(2);
 
     private readonly SteamWorkshopClient _steam;
     private readonly PdxModsClient _pdx;
@@ -262,7 +270,9 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _totalPages = 0;
         CancelCoverFill();
         Rows.Clear();
-        _pages.Clear();
+
+        // 不再清空整页缓存：页键里已经带了来源/游戏/筛选条件，换游戏换回来时
+        // 上一轮的列表可以直接铺上，省掉一次 1–3 MB 的 SSR 页面请求。
         Source = WorkshopSource.None;
 
         if (game is null)
@@ -311,10 +321,89 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>刷新当前页。</summary>
-    public Task RefreshAsync() => HasGame
-        ? QueryAsync(CancellationToken.None, force: true)
-        : LoadAsync(Game, CancellationToken.None);
+    /// <summary>
+    /// 刷新当前页。Steam 侧处于限流冷却时直接给出提示，不再发请求——
+    /// 冷却期内点刷新只会让封禁更久。
+    /// </summary>
+    public async Task RefreshAsync()
+    {
+        if (!HasGame)
+        {
+            await LoadAsync(Game, CancellationToken.None).ConfigureAwait(true);
+            return;
+        }
+
+        if (Source == WorkshopSource.Steam && TryGetCooldown(out var remaining))
+        {
+            StatusMessage = DescribeCooldown(remaining);
+            RaiseDerived();
+            return;
+        }
+
+        var before = AppServices.HttpThrottle.Snapshot();
+        await QueryAsync(CancellationToken.None, force: true).ConfigureAwait(true);
+        var after = AppServices.HttpThrottle.Snapshot();
+        _logger.Info("本次刷新请求数：" + DescribeRequestDelta(before, after));
+    }
+
+    /// <summary>Steam 侧当前是否还在限流冷却中。</summary>
+    private static bool TryGetCooldown(out TimeSpan remaining)
+    {
+        if (AppServices.HttpThrottle.TryGetCooldown(SteamCommunityHost, out var untilUtc))
+        {
+            remaining = untilUtc - DateTimeOffset.UtcNow;
+            if (remaining > TimeSpan.Zero)
+            {
+                return true;
+            }
+        }
+
+        remaining = TimeSpan.Zero;
+        return false;
+    }
+
+    /// <summary>把冷却剩余时间写成「已暂停 N 分钟」的提示。</summary>
+    private string DescribeCooldown(TimeSpan remaining)
+    {
+        var minutes = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
+        return T(Keys.WorkshopThrottlePaused, minutes);
+    }
+
+    /// <summary>把查询异常翻成状态栏文案：限流单独说清楚，其余沿用失败文案。</summary>
+    private string DescribeFailure(Exception exception)
+    {
+        if (exception is SteamThrottleException throttle)
+        {
+            var remaining = throttle.RetryAfter ?? TimeSpan.Zero;
+            if (remaining <= TimeSpan.Zero && TryGetCooldown(out var cooldown))
+            {
+                remaining = cooldown;
+            }
+
+            return DescribeCooldown(remaining);
+        }
+
+        return T(Keys.WorkshopStatusFailed, exception.Message);
+    }
+
+    /// <summary>刷新前后按 host 比较请求数，写进日志作为请求预算的验收证据。</summary>
+    private static string DescribeRequestDelta(
+        IReadOnlyDictionary<string, HostStats> before,
+        IReadOnlyDictionary<string, HostStats> after)
+    {
+        var parts = new List<string>();
+        foreach (var (host, stat) in after.OrderByDescending(pair => pair.Value.Total))
+        {
+            before.TryGetValue(host, out var previous);
+            var delta = stat.Total - (previous?.Total ?? 0);
+            if (delta > 0)
+            {
+                parts.Add(host + "=" + delta);
+            }
+        }
+
+        return parts.Count == 0 ? "0" : string.Join(" ", parts);
+    }
 
     /// <summary>供页面写入一次性状态提示（例如「已在浏览器中打开」）。</summary>
     /// <param name="message">状态栏文案。</param>
@@ -407,8 +496,10 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             RaiseDerived();
 
             // 过期的页仍然先显示，再悄悄刷新一次；用户不必盯着转圈。
-            if (!_pages.IsFresh(cached))
+            // 同一页两分钟内只补一次，否则来回切页会重复打同一个地址。
+            if (!_pages.IsFresh(cached) && _pages.CanReattempt(cached, SilentRefreshMinInterval))
             {
+                _pages.MarkAttempt(key);
                 _ = RefreshSilentlyAsync(key, cancellationToken);
             }
 
@@ -437,7 +528,10 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         catch (Exception ex)
         {
             IsLoaded = true;
-            ShowFailureOrCache(Source, ex.Message);
+            ShowFailureOrCache(
+                Source,
+                ex.Message,
+                ex is SteamThrottleException ? DescribeFailure(ex) : null);
             _logger.Error("创意工坊查询失败（game=" + _gameId + "）", ex);
             RaiseDerived();
         }
@@ -694,7 +788,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// </summary>
     /// <param name="source">当前来源。</param>
     /// <param name="reason">失败原因（用于日志/兜底文案）。</param>
-    private void ShowFailureOrCache(WorkshopSource source, string reason)
+    /// <param name="statusOverride">限流等特殊情况下的状态栏文案；null 表示用通用失败文案。</param>
+    private void ShowFailureOrCache(WorkshopSource source, string reason, string? statusOverride = null)
     {
         var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
         var entries = _info.Snapshot(source, _gameId);
@@ -721,7 +816,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             return;
         }
 
-        StatusMessage = T(Keys.WorkshopStatusFailed, reason);
+        StatusMessage = statusOverride ?? T(Keys.WorkshopStatusFailed, reason);
     }
 
     /// <summary>

@@ -11,8 +11,14 @@ using PdxLauncher.Core.Online;
 /// 创意工坊详情的图片落地：封面与截图都放进 <see cref="WorkshopInfoCache.CoverRoot"/> 下，
 /// 已存在就直接复用，不重复下载。列表页与详情子页共用这一处规则，路径才不会各写一套。
 /// <para>
-/// 封面沿用缓存条目里的记账（<c>SetCover</c> / <c>TryGetCachedCover</c>），
-/// 截图没有缓存字段，按「来源_<c>id</c>」建子目录、文件名 <c>shot_NN</c>，靠枚举同名前缀复认。
+/// 封面沿用缓存条目里的记账（<c>SetCover</c> / <c>TryGetCachedCover</c>），文件名是
+/// <c>{来源}/{id}</c>；截图没有缓存字段，按「来源_<c>id</c>」建子目录、文件名
+/// <c>shot_{URL 的 FNV-1a 32 位哈希}</c>，靠枚举同名前缀复认。
+/// </para>
+/// <para>
+/// <b>同一个 URL 只落一份</b>：Steam 详情页的「画廊首图」经常就是封面本身，而顶部图片区
+/// 与正文配图都走 <see cref="EnsureScreenshotAsync"/>。所以下载前先问一句「这个 URL 是不是
+/// 已经在封面槽位里」——是就直接复用封面路径，不再往 <c>shots\</c> 里存第二份。
 /// </para>
 /// </summary>
 public sealed class WorkshopImageCache
@@ -23,6 +29,12 @@ public sealed class WorkshopImageCache
     private readonly IFileSystem _files;
     private readonly IAssetDownloader _assets;
     private readonly WorkshopInfoCache _info;
+
+    /// <summary>
+    /// 同一张图并发落地时只下载一次。实测触发点：详情页顶部图片墙与正文配图
+    /// （<see cref="EnsureScreenshotAsync"/>）会同时请求同一 URL，两个任务抢着写同一个 <c>.part</c>。
+    /// </summary>
+    private readonly RequestCoalescer _coalesce = new();
 
     /// <summary>构造。</summary>
     /// <param name="files">文件系统抽象。</param>
@@ -54,7 +66,7 @@ public sealed class WorkshopImageCache
     /// <param name="id">工坊条目 id。</param>
     /// <param name="url">封面地址；为空直接返回 null。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    public async Task<string?> EnsureCoverAsync(
+    public Task<string?> EnsureCoverAsync(
         WorkshopSource source,
         string id,
         string? url,
@@ -62,9 +74,19 @@ public sealed class WorkshopImageCache
     {
         if (string.IsNullOrWhiteSpace(url))
         {
-            return null;
+            return Task.FromResult<string?>(null);
         }
 
+        var key = "cover:" + WorkshopInfoCache.Key(source, id) + "|" + url;
+        return _coalesce.RunAsync(key, ct => EnsureCoverCoreAsync(source, id, url, ct), cancellationToken);
+    }
+
+    private async Task<string?> EnsureCoverCoreAsync(
+        WorkshopSource source,
+        string id,
+        string url,
+        CancellationToken cancellationToken)
+    {
         var cached = GetCachedCover(source, id);
         if (cached is not null)
         {
@@ -94,8 +116,12 @@ public sealed class WorkshopImageCache
     /// <remarks>
     /// 文件名按 URL 哈希生成（不是列表序号）：同一张图在顶部图片墙和正文里指的是同一个文件，
     /// 也不会因为「上次这一序号是别的图」而显示成旧图。
+    /// <para>
+    /// 下载前先查「这条记录的封面是不是就是这个 URL」：是就直接用封面那份，不再存第二份。
+    /// Steam 画廊首图与封面同图的情况实测占多数，这一步把 <c>shots\</c> 里的重复整份省掉。
+    /// </para>
     /// </remarks>
-    public async Task<string?> EnsureScreenshotAsync(
+    public Task<string?> EnsureScreenshotAsync(
         WorkshopSource source,
         string id,
         string url,
@@ -103,7 +129,23 @@ public sealed class WorkshopImageCache
     {
         if (string.IsNullOrWhiteSpace(url))
         {
-            return null;
+            return Task.FromResult<string?>(null);
+        }
+
+        var key = "shot:" + WorkshopInfoCache.Key(source, id) + "|" + url;
+        return _coalesce.RunAsync(key, ct => EnsureScreenshotCoreAsync(source, id, url, ct), cancellationToken);
+    }
+
+    private async Task<string?> EnsureScreenshotCoreAsync(
+        WorkshopSource source,
+        string id,
+        string url,
+        CancellationToken cancellationToken)
+    {
+        var key = WorkshopInfoCache.Key(source, id);
+        if (_info.TryGetCachedCoverForUrl(key, url, out var coverPath))
+        {
+            return coverPath;
         }
 
         var directory = ShotsDirectory(source, id);

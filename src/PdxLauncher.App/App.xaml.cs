@@ -18,6 +18,7 @@ using PdxLauncher.Core.Playsets;
 using PdxLauncher.Core.Playsets.Json;
 using PdxLauncher.Core.Playsets.PlaysetConfig;
 using PdxLauncher.Core.Signatures;
+using PdxLauncher.Core.Storage;
 
 /// <summary>
 /// 应用入口。启动阶段只做三件事：手工装配服务、创建主窗口、激活窗口。
@@ -78,6 +79,23 @@ public partial class App : Application
         if (migration.Migrated)
         {
             logger.Info("旧数据目录已迁移：" + migration.FilesCopied + " 个文件 / " + migration.BytesCopied + " B");
+        }
+
+        // 清掉「改过路径 / 改过命名」之后留下的旧缓存：data\workshop-covers\、data\online-mod-covers\
+        // 与工坊详情 shots\ 下 shot_NN 形式的旧截图。这三处当前代码已经完全不引用，但设置页的
+        // 缓存卡片也只认现行路径，没有任何入口能删它们，所以放在启动阶段跑一遍（幂等，无货可删就什么都不做）。
+        var legacyCleanup = new LegacyCacheCleaner(
+            fileSystem,
+            logger,
+            AppServices.DataRoot,
+            AppServices.WorkshopCacheRoot).Run();
+        if (legacyCleanup.HasWork)
+        {
+            logger.Info(
+                "已清理遗留缓存："
+                + legacyCleanup.Directories + " 个目录 / "
+                + legacyCleanup.Files + " 个文件 / "
+                + legacyCleanup.Bytes + " B");
         }
 
         // 先读设置，代理模式与地址来自 settings.json；AppServices.Initialize 内部会再读一次（幂等）。
@@ -149,6 +167,8 @@ public partial class App : Application
             network.SteamWorkshop,
             network.WorkshopInfo,
             network.WorkshopPages,
+            network.WorkshopItemPages,
+            network.Throttle,
             gamePatch,
             settingsStore,
             Array.Empty<GameInstallation>(),

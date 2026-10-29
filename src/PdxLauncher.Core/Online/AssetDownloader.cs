@@ -78,6 +78,14 @@ public sealed class AssetDownloader : IAssetDownloader, IDisposable
                     return await DownloadCoreAsync(uri, targetPathWithoutExtension, partPath, cancellationToken)
                         .ConfigureAwait(false);
                 }
+                catch (SteamThrottleException ex)
+                {
+                    // 被限流时重试只会把同一张图再打三次、让冷却更长：
+                    // 立刻放弃，交给缓存里的旧图或占位图。
+                    _logger.Warn("素材下载被限流，不再重试: " + ex.Message + " (" + uri + ")");
+                    TryDeletePart(partPath);
+                    return null;
+                }
                 catch (TransientDownloadException ex)
                 {
                     if (attempt >= MaxAttempts)
@@ -211,6 +219,12 @@ public sealed class AssetDownloader : IAssetDownloader, IDisposable
             // 交给 DownloadAsync 重试，重试用尽才保留旧图。
             TryDeletePart(partPath);
             throw new TransientDownloadException("素材下载超时: " + ex.Message, ex);
+        }
+        catch (SteamThrottleException)
+        {
+            // 限流不是瞬时故障：原样上抛给 DownloadAsync 立即放弃，不走重试。
+            TryDeletePart(partPath);
+            throw;
         }
         catch (HttpRequestException ex)
         {
