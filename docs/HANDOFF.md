@@ -3469,8 +3469,11 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
 - 日志：`已写入 steam_appid.txt：1158310` → `Steamworks 已初始化（appid=1158310，dll=…\steam_api64.dll）`
   → `Steam 订阅状态（Steamworks）：订阅=否 安装=否 下载中=否 acf=无`。
 - 界面：订阅卡提示「已开启直连订阅：按钮会直接调 Steam 客户端订阅 / 取消订阅。」，按钮文案「订阅」可点。
-- **未真实点下订阅**：那会往用户 Steam 账号里真加一条订阅并开始下载内容，属于对用户账号的写操作，
-  留待用户在场时点一次确认（代码路径与状态回读都已就绪）。
+- **真机直连实测（2026-10-29 14:21，CK3 appid 1158310，工坊物品 3579037811「移除属性上限 Remove Skills Cap」，2.1 KB）**：
+  点「取消订阅」→ 12 秒内按钮翻成「订阅」、状态文案「已取消订阅」，acf 的 `WorkshopItemDetails` 条目消失
+  （`WorkshopItemsInstalled` 仍在，符合 Valve 文档「退出游戏后才移除」）；随后点「订阅」把这条订阅加回去，
+  按钮翻回「取消订阅」、acf 两处条目恢复。日志：`14:21:29 已取消订阅 Steam 工坊物品：3579037811`、
+  `14:22:13 已订阅 Steam 工坊物品：3579037811`。截图：`ui-test-artifacts/workshop-steam-sub/{05-before-unsub,06-after-unsub,07-resubscribed}.png`。
 
 **踩坑 / 边界**
 
