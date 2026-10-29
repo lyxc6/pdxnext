@@ -3691,8 +3691,12 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
 - 日志：`已写入 steam_appid.txt：1158310` → `Steamworks 已初始化（appid=1158310，dll=…\steam_api64.dll）`
   → `Steam 订阅状态（Steamworks）：订阅=否 安装=否 下载中=否 acf=无`。
 - 界面：订阅卡提示「已开启直连订阅：按钮会直接调 Steam 客户端订阅 / 取消订阅。」，按钮文案「订阅」可点。
-- **未真实点下订阅**：那会往用户 Steam 账号里真加一条订阅并开始下载内容，属于对用户账号的写操作，
-  留待用户在场时点一次确认（代码路径与状态回读都已就绪）。
+- **真机直连实测（2026-10-29 14:21，CK3 appid 1158310，工坊物品 3579037811「移除属性上限 Remove Skills Cap」，2.1 KB）**：
+  点「取消订阅」→ 12 秒内按钮翻成「订阅」、状态文案「已取消订阅」，acf 的 `WorkshopItemDetails` 条目消失
+  （`WorkshopItemsInstalled` 仍在，符合 Valve 文档「退出游戏后才移除」）；随后点「订阅」把这条订阅加回去，
+  按钮翻回「取消订阅」、acf 两处条目恢复。日志：`14:21:29 已取消订阅 Steam 工坊物品：3579037811`、
+  `14:22:13 已订阅 Steam 工坊物品：3579037811`。截图：`ui-test-artifacts/workshop-steam-sub/{05-before-unsub,06-after-unsub,07-resubscribed}.png`。
+  更大体积的物品（点了会立刻开始下载）仍建议用户在场时再点一次确认。
 
 **踩坑 / 边界**
 
@@ -3965,9 +3969,10 @@ item，缺失时该行自动省略。作者名会被物品页 `page.AuthorName` 
 - `winapp ui click` 需要窗口在前台（常被全屏游戏占用），`invoke` 不需要；但缩略图 `invoke` 只切内联页、
   不会开浮层，所以冒烟在 worktree 里临时加了 `PDX_UI_OPEN_MOD_ID` / `PDX_UI_OPEN_VIEWER` 两个环境变量钩子，
   验完删除（主仓库 `WorkshopPage.xaml.cs` 无改动）。
-- 主工作区这一刻 App/Release 构建是红的——并发会话正在改 `RequestThrottle.cs`、`WorkshopViewModel.cs`、
+- 做这一节时主工作区 App/Release 构建是红的——并发会话正在改 `RequestThrottle.cs`、`WorkshopViewModel.cs`、
   `WorkshopPageCache.cs`（缺 `SteamCommunityHost`、`Keys.WorkshopThrottlePaused` 等），与本次改动无关，
-  所以改用 `git worktree` 在干净 HEAD 上验证。
+  所以改用 `git worktree` 在干净 HEAD 上验证；那批改动随后在 §0.50 一并合入，**主工作区构建已回绿**
+  （`bash tools/build-app.sh -v q` 0/0、检查类 47、失败 0）。
 - 跑全量自检时唯一失败是 `WorkshopPageCacheChecks`「页面缓存：超过 5 分钟失效」，
   属未提交的在建改动（`DefaultTtl` 已从 5 分钟改成 15 分钟），与本次改动无关。
   该断言随后已改成按 `WorkshopPageCache.DefaultTtl` 现算（见 §0.48 踩坑），现全绿。
@@ -4055,3 +4060,9 @@ item，缺失时该行自动省略。作者名会被物品页 `page.AuthorName` 
   `AccountService` / `IPlaySetRepository`，没法像 `WorkshopImageCache` 那样整文件链接进检查工程；
   这一分支目前只靠日志与手工验收。
 - 非目标：批量 `GetPublishedFileDetails`、图片懒加载、设置页的请求计数器都未做。
+
+### 附注：小节号重复
+
+`## 0.18`（设置页缓存接管 / EU4 发灰）与 `## 0.3`（播放集激活 / 整窗背景）各出现过两次，
+是当时手写小节号撞号留下的历史遗留；README 与本文多处按 `§0.18` / `§0.3` 交叉引用，
+重编号会把那些引用一并带偏，故维持原样，只在此说明。

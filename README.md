@@ -375,13 +375,13 @@ src/
     Online/                    :: GraphQL 元数据、素材下载、代理（三模式解析 / 系统代理 / 环境变量）、DLC 简介、官方公告
     Parsing/                   :: Clausewitz 与 Valve KeyValues 解析器
     Patch/                     :: 补丁素材（内嵌 loader + cream_api.ini）、目标目录判定、打补丁 / 还原
-  PdxLauncher.App/             :: 86 个 .cs + 13 个 .xaml，WinUI 3 层
+  PdxLauncher.App/             :: 87 个 .cs + 13 个 .xaml，WinUI 3 层
     Assets/                    :: AppIcon.ico（9 帧 16→256）+ 8 张模板同名 PNG，全部由 tools/gen-app-icon.py 生成
     Views/                     :: GameLibraryPage / HomePage / ModsPage（播放集） / ModLibraryPage（Mod库） / DlcPage / SettingsPage
     ViewModels/                :: 16 个 VM（全部不含 Microsoft.UI.Xaml 类型）
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
 tests/
-  PdxLauncher.Checks/          :: 40 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 47 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
@@ -404,7 +404,7 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**303 个 .cs + 13 个 .xaml**（不含 `obj/` 生成物；2026-10-29 实测：Core 165 / App 86+13 / Imaging 9 / Checks 43 —— Checks 的 43 个文件是 40 个检查类 + Program + ChecksContext + GlobalUsings）。
+**317 个 .cs + 13 个 .xaml**（不含 `obj/` 生成物；2026-10-29 实测：Core 171 / App 87+13 / Imaging 9 / Checks 50 —— Checks 的 50 个文件是 47 个检查类 + Program + ChecksContext + GlobalUsings）。
 
 ---
 
@@ -414,7 +414,7 @@ tools/
 dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 40，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
+输出 `检查类: 47，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
 launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取
 （mods 全量、size / subscribedDate 解析、播放集归属、requiredVersion 兼容判断）、创意工坊 id 解析、启动参数拼装、路径大小写不敏感处理；
 以及联网子系统：域名白名单与 magic bytes 判型（含 GIF）、素材下载与原子改名、主题补丁合并、
