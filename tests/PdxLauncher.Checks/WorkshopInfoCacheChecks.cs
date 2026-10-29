@@ -27,6 +27,7 @@ public static class WorkshopInfoCacheChecks
             CheckPersistence(fileSystem, root, clock, logger);
             CheckCover(fileSystem, root, clock, logger);
             CheckDetailTtl(fileSystem, root, clock, logger);
+            CheckDetailMeta(fileSystem, root, clock, logger);
             CheckSnapshot(fileSystem, root, clock, logger);
             CheckClear(fileSystem, root, clock, logger);
             CheckCorruptedIndex(fileSystem, root, clock, logger);
@@ -215,10 +216,82 @@ public static class WorkshopInfoCacheChecks
             cache.IsDetailFresh(stale, TimeSpan.FromDays(30)));
     }
 
-    private static void CheckSnapshot(
+    /// <summary>详情元数据（作者 SteamID / 标签 / 浏览数 / 累计订阅）要能落盘再读回，缺字段的旧索引也不能炸。</summary>
+    private static void CheckDetailMeta(
         IFileSystem fileSystem,
         string root,
-        IClock clock,
+        MutableClock clock,
+        IAppLogger logger)
+    {
+        var metaRoot = Path.Combine(root, "meta");
+        var cache = new WorkshopInfoCache(fileSystem, logger, clock, metaRoot);
+        cache.Upsert(new WorkshopInfoCacheEntry { Source = "steam", Id = "500", Name = "Meta" });
+
+        cache.SetDetail(
+            "steam:500",
+            "描述",
+            null,
+            creatorSteamId: "76561198145098971",
+            tags: ["Gameplay"],
+            views: 4321,
+            lifetimeSubscriptions: 99);
+
+        ChecksContext.Check(
+            "缓存：详情元数据写回后能读回",
+            cache.TryGet("steam:500", out var stored) &&
+            stored.CreatorSteamId == "76561198145098971" &&
+            stored.Tags is { Count: 1 } &&
+            stored.Tags[0] == "Gameplay" &&
+            stored.Views == 4321 &&
+            stored.LifetimeSubscriptions == 99);
+
+        // 之后一次没有元数据的 SetDetail（等价于 PDX 详情）不能把这些值洗掉。
+        cache.SetDetail("steam:500", "描述2", null);
+        ChecksContext.Check(
+            "缓存：缺元数据的写入保留旧值",
+            cache.TryGet("steam:500", out var kept) &&
+            kept.CreatorSteamId == "76561198145098971" &&
+            kept.Views == 4321);
+
+        // 旧版索引文件里没有这些键：读出来是 null/0，不能因为反序列化不认字段就整份丢弃。
+        var legacyRoot = Path.Combine(root, "legacy-meta");
+        fileSystem.EnsureDirectory(legacyRoot);
+        fileSystem.WriteAllTextAtomic(
+            fileSystem.Combine(legacyRoot, WorkshopInfoCache.IndexFileName),
+            """
+            {
+              "entries": {
+                "steam:600": {
+                  "source": "steam",
+                  "id": "600",
+                  "name": "Legacy",
+                  "author": "76561198000000009",
+                  "detailText": "旧正文"
+                }
+              }
+            }
+            """);
+
+        var legacy = new WorkshopInfoCache(fileSystem, logger, clock, legacyRoot);
+        ChecksContext.Check(
+            "缓存：旧索引仍能读出条目",
+            legacy.TryGet("steam:600", out var old) &&
+            old.DetailText == "旧正文" &&
+            old.CreatorSteamId is null &&
+            old.Views is null);
+
+        // 旧条目靠 Author 兜底还原出作者 id，评论翻页才不会失效。
+        ChecksContext.Equal(
+            "缓存：旧条目还原出作者 id",
+            "76561198000000009",
+            legacy.TryGet("steam:600", out var forRestore)
+                ? SteamWorkshopDetailCache.Restore(forRestore, forRestore.Id, "兜底").CreatorSteamId
+                : null);
+    }
+
+    private static void CheckSnapshot(
+        IFileSystem fileSystem,
+        string root,        IClock clock,
         IAppLogger logger)
     {
         // 用独立子目录，免得被前面几组写进同一索引的条目干扰。

@@ -226,7 +226,21 @@ public sealed class WorkshopInfoCache
     }
 
     /// <summary>记录详情抓取结果。</summary>
-    public void SetDetail(string key, string? text, IReadOnlyList<string>? screenshots)
+    /// <param name="key">缓存键（<see cref="Key"/>）。</param>
+    /// <param name="text">详情正文；null 表示这次没拿到正文。</param>
+    /// <param name="screenshots">详情里的截图地址（PDX 有，Steam 通常为空）。</param>
+    /// <param name="creatorSteamId">作者 SteamID64（Steam 详情才有）；空白表示这次没拿到，保留旧值。</param>
+    /// <param name="tags">标签（Steam 详情才有）；空表示保留旧值。</param>
+    /// <param name="views">浏览数（Steam 详情才有）；0 表示保留旧值。</param>
+    /// <param name="lifetimeSubscriptions">累计订阅数（Steam 详情才有）；0 表示保留旧值。</param>
+    public void SetDetail(
+        string key,
+        string? text,
+        IReadOnlyList<string>? screenshots,
+        string? creatorSteamId = null,
+        IReadOnlyList<string>? tags = null,
+        long views = 0,
+        long lifetimeSubscriptions = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
 
@@ -240,6 +254,29 @@ public sealed class WorkshopInfoCache
 
             target.DetailText = text;
             target.DetailScreenshots = screenshots is { Count: > 0 } ? [.. screenshots] : null;
+
+            // 追加的元数据只在这次真拿到时才覆盖：PDX 详情没有这些字段，
+            // 传默认值会把 Steam 那条已经存下的作者/标签洗掉（同一 key 不会跨来源，但保持「缺就不写」更稳）。
+            if (!string.IsNullOrWhiteSpace(creatorSteamId))
+            {
+                target.CreatorSteamId = creatorSteamId;
+            }
+
+            if (tags is { Count: > 0 })
+            {
+                target.Tags = [.. tags];
+            }
+
+            if (views > 0)
+            {
+                target.Views = views;
+            }
+
+            if (lifetimeSubscriptions > 0)
+            {
+                target.LifetimeSubscriptions = lifetimeSubscriptions;
+            }
+
             target.DetailFetchedUtc = _clock.UtcNow;
         }
 
@@ -348,6 +385,10 @@ public sealed class WorkshopInfoCache
         DetailScreenshots = source.DetailScreenshots is null ? null : [.. source.DetailScreenshots],
         DetailFetchedUtc = source.DetailFetchedUtc,
         FetchedUtc = source.FetchedUtc,
+        CreatorSteamId = source.CreatorSteamId,
+        Tags = source.Tags is null ? null : [.. source.Tags],
+        Views = source.Views,
+        LifetimeSubscriptions = source.LifetimeSubscriptions,
     };
 
     private static Dictionary<string, WorkshopInfoCacheEntry> Load(

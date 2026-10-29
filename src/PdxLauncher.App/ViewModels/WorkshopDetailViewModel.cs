@@ -182,6 +182,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     [ObservableProperty]
     private int _commentsPage = 1;
 
+    /// <summary>评论区的一句状态说明（翻页失败、拿不到作者、没有可显示的评论），空串表示没有。</summary>
+    [ObservableProperty]
+    private string _commentsStatusText = string.Empty;
+
     /// <summary>订阅操作的即时反馈（成功/失败文案），空串表示没有。</summary>
     [ObservableProperty]
     private string _statusText = string.Empty;
@@ -292,6 +296,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>是否有评论摘要。</summary>
     public bool HasCommentsSummary => !string.IsNullOrWhiteSpace(CommentsSummary);
 
+    /// <summary>评论区的一句状态说明（翻页失败、拿不到作者、没有可显示的评论）。</summary>
+    public bool HasCommentsStatusText => !string.IsNullOrWhiteSpace(CommentsStatusText);
+
     /// <summary>是否有发布时间。</summary>
     public bool HasCreated => !string.IsNullOrWhiteSpace(CreatedText);
 
@@ -325,8 +332,12 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         ? T(Keys.WorkshopDetailBackLibrary)
         : T(Keys.WorkshopDetailBack);
 
-    /// <summary>评论总数超过一页才显示分页控件。</summary>
-    public bool HasCommentsPaging => ShowCommentsSection && CommentsTotal > CommentsPageSize;
+    /// <summary>
+    /// 评论总数超过一页、而且拿到了作者 SteamID 才显示分页控件。
+    /// <para>拿不到作者 id 时翻页接口根本没法请求，宁可不显示，也不要摆一个点了没反应的按钮。</para>
+    /// </summary>
+    public bool HasCommentsPaging =>
+        ShowCommentsSection && CommentsTotal > CommentsPageSize && !string.IsNullOrWhiteSpace(_steamCreatorId);
 
     /// <summary>评论总页数（至少 1）。</summary>
     public int CommentsPageCount =>
@@ -341,10 +352,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     public bool HasCommentsPageText => !string.IsNullOrWhiteSpace(CommentsPageText);
 
     /// <summary>能不能翻上一页。</summary>
-    public bool CanCommentsPrev => HasCommentsPaging && CommentsPage > 1;
+    public bool CanCommentsPrev => HasCommentsPaging && CommentsPage > 1 && !IsLoadingComments;
 
-    /// <summary>能不能翻下一页。</summary>
-    public bool CanCommentsNext => HasCommentsPaging && CommentsPage < CommentsPageCount;
+    /// <summary>能不能翻下一页（加载中禁点，避免连点重复请求）。</summary>
+    public bool CanCommentsNext => HasCommentsPaging && CommentsPage < CommentsPageCount && !IsLoadingComments;
 
     /// <summary>这张卡是不是 PDX 的订阅卡（Steam 走「在 Steam 中订阅」）。</summary>
     public bool CanSubscribe => Row?.Source == WorkshopSource.Pdx;
@@ -470,6 +481,45 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         Row is null ? Task.CompletedTask : LoadAsync(Row, cancellationToken, _returnTag);
 
     /// <summary>
+    /// 解析评论翻页要用的作者 SteamID64：详情 → 列表行 → 物品页作者主页地址，逐级兜底。
+    /// <para>
+    /// 详情走缓存时 <c>CreatorSteamId</c> 可能为空（老缓存文件里没有这个键，见 §0.47），
+    /// 而翻页接口必须要有它；所以再退两级：创意工坊列表行本身带着作者 SteamID，
+    /// 物品页的作者块也能解析出数字 id（自定义主页地址解析不出来，那就认命，隐藏分页条）。
+    /// </para>
+    /// </summary>
+    /// <param name="row">当前行。</param>
+    /// <param name="detail">Steam 详情。</param>
+    /// <param name="page">物品页（可能没拿到）。</param>
+    private void ResolveCommentOwner(
+        WorkshopRowViewModel row,
+        SteamWorkshopItemDetail detail,
+        SteamWorkshopItemPage? page)
+    {
+        _steamCreatorId = null;
+
+        if (!string.IsNullOrWhiteSpace(detail.CreatorSteamId))
+        {
+            _steamCreatorId = detail.CreatorSteamId;
+            return;
+        }
+
+        if (WorkshopText.TryParseSteamId(row.SteamItem?.AuthorSteamId, out var fromRow))
+        {
+            _steamCreatorId = fromRow;
+            return;
+        }
+
+        if (WorkshopText.TryParseSteamId(page?.AuthorProfileUrl, out var fromPage))
+        {
+            _steamCreatorId = fromPage;
+            return;
+        }
+
+        _logger.Info("Steam 详情拿不到作者 SteamID，评论只显示物品页内嵌的十条: " + row.Id);
+    }
+
+    /// <summary>
     /// 载入某一页评论（Steam 走翻页接口）。
     /// <para>作者 SteamID 还没拿到、或来源不是 Steam 时直接返回（首屏评论已经渲染过了）。</para>
     /// </summary>
@@ -501,10 +551,12 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             if (result is { IsSuccess: true, Value: { } pageData })
             {
                 ApplyCommentPage(pageData, target);
+                CommentsStatusText = string.Empty;
             }
             else
             {
                 _logger.Info("Steam 评论翻页失败，保留当前页: " + row.Id + " page=" + target);
+                CommentsStatusText = T(Keys.WorkshopCommentsFailed, Comments.Count);
             }
         }
         catch (OperationCanceledException)
@@ -514,6 +566,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         catch (Exception ex)
         {
             _logger.Warn("Steam 评论翻页异常: " + ex.Message);
+            CommentsStatusText = T(Keys.WorkshopCommentsFailed, Comments.Count);
         }
         finally
         {
@@ -757,6 +810,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         IsSubscribing = false;
         CommentsTotal = 0;
         CommentsPage = 1;
+        CommentsStatusText = string.Empty;
         _steamCreatorId = null;
         _inlineImages.Clear();
         IsSteamSubscribed = false;
@@ -805,7 +859,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         MetaText = BuildSteamMeta(item, detail);
         AuthorProfileUrl = detail.CreatorProfileUrl;
         TagsText = BuildSteamTags(detail, item);
-        _steamCreatorId = string.IsNullOrWhiteSpace(detail.CreatorSteamId) ? null : detail.CreatorSteamId;
+        CommentsStatusText = string.Empty;
 
         // 缓存命中的 CreatedUtc 是「抓取时间」，不是发布时间，所以只认列表条目里的真实值。
         CreatedText = item is { } steamItem && steamItem.CreatedUtc > DateTimeOffset.UnixEpoch
@@ -839,14 +893,41 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             CommentsSummary = string.Empty;
         }
 
-        // 首屏评论：有作者 SteamID 就走翻页接口（能拿到全部页），否则退回物品页内嵌的十条。
+        // 翻页接口要的是作者 SteamID64，取不到就只能显示物品页内嵌的那十条。
+        ResolveCommentOwner(row, detail, page);
+
+        // 首屏评论：有作者 SteamID 就走翻页接口（能拿到全部页），失败再退回物品页内嵌的十条。
         if (_steamCreatorId is not null)
         {
             await LoadCommentsPageAsync(1, cancellationToken).ConfigureAwait(true);
+
+            if (Comments.Count == 0)
+            {
+                if (page is not null)
+                {
+                    ApplyComments(page);
+                }
+
+                // 物品页自己就说「一条评论都没有」时，说「没有评论」比说「加载失败」准确；
+                // 关闭了评论的 mod（接口回 success:false）走的就是这条。
+                var closed = page is { Comments.Count: 0 } && page.TotalComments <= 0;
+                CommentsStatusText = closed
+                    ? T(Keys.WorkshopCommentsClosed)
+                    : T(Keys.WorkshopCommentsFailed, Comments.Count);
+            }
         }
         else if (page is not null)
         {
             ApplyComments(page);
+
+            // 有内嵌评论说明这个 mod 只是没拿到作者 id；一条都没有才是真的没有评论。
+            CommentsStatusText = Comments.Count > 0
+                ? T(Keys.WorkshopCommentsUnavailable)
+                : T(Keys.WorkshopCommentsClosed);
+        }
+        else
+        {
+            CommentsStatusText = T(Keys.WorkshopCommentsUnavailable);
         }
 
         // 描述优先用物品页的 HTML（有排版），退到接口给的 BBCode 纯文本。
@@ -1282,6 +1363,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(ShowNoComments));
         OnPropertyChanged(nameof(ShowCommentsSection));
         OnPropertyChanged(nameof(HasCommentsSummary));
+        OnPropertyChanged(nameof(HasCommentsStatusText));
         OnPropertyChanged(nameof(HasCreated));
         OnPropertyChanged(nameof(HasCachedHint));
         OnPropertyChanged(nameof(ShowInstalled));
@@ -1343,7 +1425,14 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(ShowNoComments));
     }
 
-    partial void OnIsLoadingCommentsChanged(bool value) => OnPropertyChanged(nameof(ShowNoComments));
+    partial void OnIsLoadingCommentsChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowNoComments));
+
+        // 加载中禁点分页按钮，避免连点重复请求。
+        OnPropertyChanged(nameof(CanCommentsPrev));
+        OnPropertyChanged(nameof(CanCommentsNext));
+    }
 
     partial void OnIsSubscribingChanged(bool value)
     {
@@ -1382,6 +1471,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     partial void OnDependencySummaryChanged(string value) => OnPropertyChanged(nameof(HasDependencySummary));
 
     partial void OnCommentsSummaryChanged(string value) => OnPropertyChanged(nameof(HasCommentsSummary));
+
+    partial void OnCommentsStatusTextChanged(string value) => OnPropertyChanged(nameof(HasCommentsStatusText));
 
     partial void OnIsSteamSubscribingChanged(bool value)
     {

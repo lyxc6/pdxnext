@@ -602,10 +602,13 @@ public sealed partial class Localizer
         ["shell.support.managedByGame"] = "该游戏的模组与 DLC 由游戏本体管理（游戏内 MOD 菜单 / Steam 创意工坊），本启动器不接管",
         ["shell.version"] = "版本 {0}",
         ["workshop.author"] = "作者 {0}",
+        ["workshop.commentsClosed"] = "这个 mod 没有可显示的评论",
         ["workshop.commentsCount"] = "共 {0} 条评论",
+        ["workshop.commentsFailed"] = "评论加载失败，当前显示已抓到的 {0} 条",
         ["workshop.commentsNext"] = "下一页",
         ["workshop.commentsPage"] = "第 {0} / {1} 页 · 共 {2} 条",
         ["workshop.commentsPrev"] = "上一页",
+        ["workshop.commentsUnavailable"] = "没拿到作者信息，暂时无法翻页；可点「在 Steam 上查看全部讨论」",
         ["workshop.countText"] = "{0} 个结果",
         ["workshop.coverProgress"] = "封面 {0}/{1}",
         ["workshop.dependencyDisabled"] = "已安装未启用",
@@ -1302,10 +1305,13 @@ public sealed partial class Localizer
         ["shell.support.managedByGame"] = "This game manages its own mods and DLC (in-game MOD menu / Steam Workshop); this launcher does not",
         ["shell.version"] = "Version {0}",
         ["workshop.author"] = "by {0}",
+        ["workshop.commentsClosed"] = "This item has no comments",
         ["workshop.commentsCount"] = "{0} comments",
+        ["workshop.commentsFailed"] = "Comments failed to load; showing {0} fetched",
         ["workshop.commentsNext"] = "Next page",
         ["workshop.commentsPage"] = "Page {0} of {1} · {2} comments",
         ["workshop.commentsPrev"] = "Previous page",
+        ["workshop.commentsUnavailable"] = "Author info unavailable, paging is disabled; open the discussion on Steam instead",
         ["workshop.countText"] = "{0} results",
         ["workshop.coverProgress"] = "Covers {0}/{1}",
         ["workshop.dependencyDisabled"] = "Installed, disabled",
@@ -2002,10 +2008,13 @@ public sealed partial class Localizer
         ("shell.support.managedByGame", "ShellSupportManagedByGame"),
         ("shell.version", "ShellVersion"),
         ("workshop.author", "WorkshopAuthor"),
+        ("workshop.commentsClosed", "WorkshopCommentsClosed"),
         ("workshop.commentsCount", "WorkshopCommentsCount"),
+        ("workshop.commentsFailed", "WorkshopCommentsFailed"),
         ("workshop.commentsNext", "WorkshopCommentsNext"),
         ("workshop.commentsPage", "WorkshopCommentsPage"),
         ("workshop.commentsPrev", "WorkshopCommentsPrev"),
+        ("workshop.commentsUnavailable", "WorkshopCommentsUnavailable"),
         ("workshop.countText", "WorkshopCountText"),
         ("workshop.coverProgress", "WorkshopCoverProgress"),
         ("workshop.dependencyDisabled", "WorkshopDependencyDisabled"),
@@ -2700,10 +2709,13 @@ public sealed partial class Localizer
     public string ShellSupportManagedByGame => Format("shell.support.managedByGame");
     public string ShellVersion => Format("shell.version");
     public string WorkshopAuthor => Format("workshop.author");
+    public string WorkshopCommentsClosed => Format("workshop.commentsClosed");
     public string WorkshopCommentsCount => Format("workshop.commentsCount");
+    public string WorkshopCommentsFailed => Format("workshop.commentsFailed");
     public string WorkshopCommentsNext => Format("workshop.commentsNext");
     public string WorkshopCommentsPage => Format("workshop.commentsPage");
     public string WorkshopCommentsPrev => Format("workshop.commentsPrev");
+    public string WorkshopCommentsUnavailable => Format("workshop.commentsUnavailable");
     public string WorkshopCountText => Format("workshop.countText");
     public string WorkshopCoverProgress => Format("workshop.coverProgress");
     public string WorkshopDependencyDisabled => Format("workshop.dependencyDisabled");
@@ -3401,10 +3413,13 @@ internal static class Keys
     public const string ShellSupportManagedByGame = "shell.support.managedByGame";
     public const string ShellVersion = "shell.version";
     public const string WorkshopAuthor = "workshop.author";
+    public const string WorkshopCommentsClosed = "workshop.commentsClosed";
     public const string WorkshopCommentsCount = "workshop.commentsCount";
+    public const string WorkshopCommentsFailed = "workshop.commentsFailed";
     public const string WorkshopCommentsNext = "workshop.commentsNext";
     public const string WorkshopCommentsPage = "workshop.commentsPage";
     public const string WorkshopCommentsPrev = "workshop.commentsPrev";
+    public const string WorkshopCommentsUnavailable = "workshop.commentsUnavailable";
     public const string WorkshopCountText = "workshop.countText";
     public const string WorkshopCoverProgress = "workshop.coverProgress";
     public const string WorkshopDependencyDisabled = "workshop.dependencyDisabled";

@@ -59,4 +59,21 @@ public sealed class WorkshopInfoCacheEntry
 
     /// <summary>列表元数据的抓取时间（UTC），用作 TTL 判定。</summary>
     public DateTimeOffset? FetchedUtc { get; set; }
+
+    /// <summary>
+    /// 详情里的作者 SteamID64（Steam 详情才有）。评论翻页要用它当 owner id。
+    /// <para>
+    /// 不复用 <see cref="Author"/>：那个字段是给列表副标题用的，PDX 行放的是用户名，语义不纯。
+    /// </para>
+    /// </summary>
+    public string? CreatorSteamId { get; set; }
+
+    /// <summary>详情里的标签（Steam 详情才有）。</summary>
+    public List<string>? Tags { get; set; }
+
+    /// <summary>详情里的浏览数（Steam 详情才有）。</summary>
+    public long? Views { get; set; }
+
+    /// <summary>详情里的累计订阅数 lifetime_subscriptions（Steam 详情才有）。</summary>
+    public long? LifetimeSubscriptions { get; set; }
 }

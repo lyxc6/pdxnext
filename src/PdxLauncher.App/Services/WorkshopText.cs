@@ -121,4 +121,78 @@ public static class WorkshopText
 
         return stamp.ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
     }
+
+    /// <summary>
+    /// 从 Steam 主页地址里取出 SteamID64（评论翻页接口要的是纯数字 owner id）。
+    /// <para>
+    /// 只认 <c>steamcommunity.com/profiles/&lt;数字&gt;</c>；自定义地址 <c>/id/&lt;名字&gt;</c> 拿不到数字 id，
+    /// 直接返回 false —— 调用方据此隐藏分页条，而不是留一个点了没反应的按钮。
+    /// </para>
+    /// </summary>
+    /// <param name="profileUrl">作者主页地址，或直接是一串 SteamID64。</param>
+    /// <param name="steamId">解析出的 SteamID64。</param>
+    public static bool TryParseSteamId(string? profileUrl, out string steamId)
+    {
+        steamId = string.Empty;
+        if (string.IsNullOrWhiteSpace(profileUrl))
+        {
+            return false;
+        }
+
+        var text = profileUrl.Trim();
+
+        // 也接受直接传进来的 17 位数字（缓存里 Author 字段就是这种形态）。
+        if (IsSteamId(text))
+        {
+            steamId = text;
+            return true;
+        }
+
+        const string Marker = "/profiles/";
+        var index = text.IndexOf(Marker, StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        var start = index + Marker.Length;
+        var end = start;
+        while (end < text.Length && char.IsAsciiDigit(text[end]))
+        {
+            end++;
+        }
+
+        if (end == start)
+        {
+            return false;
+        }
+
+        var candidate = text[start..end];
+        if (!IsSteamId(candidate))
+        {
+            return false;
+        }
+
+        steamId = candidate;
+        return true;
+    }
+
+    /// <summary>SteamID64 是 17 位数字（账号本体），这里只按形态判断。</summary>
+    private static bool IsSteamId(string value)
+    {
+        if (value.Length is < 16 or > 20)
+        {
+            return false;
+        }
+
+        foreach (var ch in value)
+        {
+            if (!char.IsAsciiDigit(ch))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }

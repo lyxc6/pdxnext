@@ -1,9 +1,12 @@
 {
   "workshop.author": "作者 {0}",
+  "workshop.commentsClosed": "这个 mod 没有可显示的评论",
   "workshop.commentsCount": "共 {0} 条评论",
+  "workshop.commentsFailed": "评论加载失败，当前显示已抓到的 {0} 条",
   "workshop.commentsNext": "下一页",
   "workshop.commentsPage": "第 {0} / {1} 页 · 共 {2} 条",
   "workshop.commentsPrev": "上一页",
+  "workshop.commentsUnavailable": "没拿到作者信息，暂时无法翻页；可点「在 Steam 上查看全部讨论」",
   "workshop.countText": "{0} 个结果",
   "workshop.coverProgress": "封面 {0}/{1}",
   "workshop.dependencyDisabled": "已安装未启用",

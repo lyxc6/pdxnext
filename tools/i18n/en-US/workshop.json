@@ -1,9 +1,12 @@
 {
   "workshop.author": "by {0}",
+  "workshop.commentsClosed": "This item has no comments",
   "workshop.commentsCount": "{0} comments",
+  "workshop.commentsFailed": "Comments failed to load; showing {0} fetched",
   "workshop.commentsNext": "Next page",
   "workshop.commentsPage": "Page {0} of {1} · {2} comments",
   "workshop.commentsPrev": "Previous page",
+  "workshop.commentsUnavailable": "Author info unavailable, paging is disabled; open the discussion on Steam instead",
   "workshop.countText": "{0} results",
   "workshop.coverProgress": "Covers {0}/{1}",
   "workshop.dependencyDisabled": "Installed, disabled",

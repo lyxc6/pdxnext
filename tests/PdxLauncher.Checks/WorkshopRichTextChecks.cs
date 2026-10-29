@@ -1,5 +1,6 @@
 namespace PdxLauncher.Checks;
 
+using PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Text;
@@ -28,6 +29,7 @@ public static class WorkshopRichTextChecks
         CheckItemPage();
         CheckItemPageScreenshots();
         CheckCommentPaging();
+        CheckSteamIdParsing();
         return ChecksContext.Failures - before;
     }
 
@@ -325,5 +327,38 @@ public static class WorkshopRichTextChecks
             0,
             SteamWorkshopItemPageParser.ParseCommentTotal("{\"success\":true}"));
         ChecksContext.Equal("翻页片段: total_count 空输入返回 0", 0, SteamWorkshopItemPageParser.ParseCommentTotal(null));
+    }
+
+    /// <summary>
+    /// 作者 SteamID 解析：评论翻页接口只认纯数字 owner id，主页地址要能抽出 id，自定义地址要老实失败。
+    /// </summary>
+    private static void CheckSteamIdParsing()
+    {
+        ChecksContext.Equal(
+            "作者 id: profiles 地址",
+            "76561198145098971",
+            WorkshopText.TryParseSteamId("https://steamcommunity.com/profiles/76561198145098971", out var fromProfiles)
+                ? fromProfiles
+                : null);
+        ChecksContext.Equal(
+            "作者 id: 纯数字直接用",
+            "76561198145098971",
+            WorkshopText.TryParseSteamId("76561198145098971", out var raw) ? raw : null);
+        ChecksContext.Equal(
+            "作者 id: 带查询串也能取",
+            "76561198145098971",
+            WorkshopText.TryParseSteamId("https://steamcommunity.com/profiles/76561198145098971?l=schinese", out var withQuery)
+                ? withQuery
+                : null);
+        ChecksContext.Equal(
+            "作者 id: 自定义地址解析不出来",
+            false,
+            WorkshopText.TryParseSteamId("https://steamcommunity.com/id/anumari", out _));
+        ChecksContext.Equal("作者 id: null 返回 false", false, WorkshopText.TryParseSteamId(null, out _));
+        ChecksContext.Equal("作者 id: 空白返回 false", false, WorkshopText.TryParseSteamId("   ", out _));
+        ChecksContext.Equal(
+            "作者 id: 位数不对的拒绝",
+            false,
+            WorkshopText.TryParseSteamId("https://steamcommunity.com/profiles/1234", out _));
     }
 }

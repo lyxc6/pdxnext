@@ -546,6 +546,12 @@
                                        TextWrapping="Wrap"
                                        AutomationProperties.AutomationId="txtWorkshopCommentsSummary"
                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasCommentsSummary), Mode=OneWay}" />
+                            <TextBlock Text="{x:Bind ViewModel.CommentsStatusText, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       AutomationProperties.AutomationId="txtWorkshopCommentsStatus"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasCommentsStatusText), Mode=OneWay}" />
                             <TextBlock Text="{x:Bind L.WorkshopDetailNoComments, Mode=OneWay}"
                                        Style="{StaticResource CaptionTextBlockStyle}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"

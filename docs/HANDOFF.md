@@ -3795,3 +3795,54 @@ item，缺失时该行自动省略。作者名会被物品页 `page.AuthorName` 
   之上的，README/HANDOFF/Strings.g.cs/Checks.csproj/PlaysetChecks.cs/settings.json 等文件里 §0.44 的
   hunk **未提交、留在工作区**，README 与 HANDOFF 用 hunk 级 `git apply --cached` 只取本轮改动。
 - 从 Mod 库进详情页时 Steam 直连订阅（§0.45）照常可用 —— 两个功能是同一页面上正交的。
+
+## 0.47 2026-10-29：修「评论翻不动页」——详情缓存丢掉了作者 SteamID64
+
+**症状**
+
+- Steam mod 详情页的评论只有第一屏，「第 1 / N 页」的分页按钮点了没反应（有时连按钮都不出现）。
+
+**根因**
+
+- `WorkshopDetailSource.GetSteamDetailAsync` 命中缓存时用 8 个位置参数重建 `SteamWorkshopItemDetail`，
+  末尾那个 `null` 其实是 `Filename`：`CreatorSteamId`/`Tags`/`Views`/`LifetimeSubscriptions` 全落默认值。
+- VM 里 `_steamCreatorId` 因此为空，`LoadCommentsPageAsync` 的守卫 `IsNullOrWhiteSpace(_steamCreatorId)`
+  直接 return —— 既不翻页也不提示；顺带作者链接变灰、标签/浏览/收藏也一起没了。
+- 只有「第一次打开（走远端）」正常，第二次以后（走缓存）静默失效，所以看着像「有时好有时坏」。
+
+**改法**
+
+1. `WorkshopInfoCacheEntry` 增 `CreatorSteamId`/`Tags`/`Views`/`LifetimeSubscriptions`；`WorkshopInfoCache.SetDetail`
+   加同名可选参数，**只在真拿到值时才覆盖**（PDX 写正文不会把 Steam 那份元数据洗成空）。
+2. `WorkshopInfoCache.Clone` 补上这四个字段 —— 不补等于白存（`TryGet`/`Snapshot` 都走 Clone，自检抓出来的）。
+3. 新增 `SteamWorkshopDetailCache.Restore(entry, id, fallbackName)` 统一「缓存 → 详情」的还原：作者取
+   `CreatorSteamId`，空则退回 `Author`（旧缓存没有新键，但 Steam 行的 `Author` 本来就是 SteamID64）。
+4. VM 的作者 id 改成三级兜底 `ResolveCommentOwner`：详情 → `row.SteamItem?.AuthorSteamId` → 物品页
+   `AuthorProfileUrl`（`WorkshopText.TryParseSteamId` 只认 `/profiles/<数字>` 与裸数字，`/id/<名字>` 不认）。
+5. 失败可见化：`CommentsStatusText` + 页面上的 `txtWorkshopCommentsStatus`。「物品页 0 条且 total_count ≤ 0」
+   判「这个 mod 没有可显示的评论」，其余判「评论加载失败，当前显示已抓到的 N 条」，没作者 id 时提示
+   「没拿到作者信息，暂时无法翻页」。`HasCommentsPaging` 也要求有作者 id，不再摆一个死按钮。
+
+**自检**
+
+- `WorkshopCommentPagingChecks`（新）：新缓存原样带出作者/标签/浏览/订阅、旧缓存靠 `Author` 补作者 id、
+  两者都没有时为空。
+- `WorkshopRichTextChecks.CheckSteamIdParsing`：profiles 地址 / 裸数字 / 带查询串 / `/id/名字` / 空值 / 位数不足。
+- `WorkshopInfoCacheChecks.CheckDetailMeta`：写回读、缺元数据不洗旧值、**手写旧版索引仍能读**（向后兼容）。
+- `bash tools/build-app.sh -v q` 0 警告 0 错误；`dotnet build PdxLauncher.sln -c Debug -m:1` 0/0；
+  `检查类: 41，失败: 0`。
+
+**实测（真机 UIA，CK3）**
+
+- 缓存命中路径的 `Renovatio`（3798537678，缓存里只有 `author=76561198145098971`）：详情页打开后点下一页
+  → 「第 2 / 9 页 · 共 122 条」→ 再点 → 「3 / 9」。
+  截图：`ui-test-artifacts/workshop-comments/{01-page1,02-page2,03-page3}.png`。
+- 关闭了评论的 `LotR: Realms in Exile`（2291024373）：显示「这个 mod 没有可显示的评论」
+  （`ui-test-artifacts/workshop-comments/04-nocomment.png`）。
+
+**踩坑 / 边界**
+
+- 旧缓存条目其实一直存着作者 id（`WorkshopViewModel` 抓列表时写的 `Author = item.AuthorSteamId`），
+  所以这次不用清缓存重抓，旧索引也能直接修好。
+- 给 UI 自动化用的临时钩子（`PDX_UI_OPEN_MOD_ID` / `PDX_UI_SEARCH`）验证完已 `git checkout` 撤掉，未入库。
+- 从 Mod 库进详情页（§0.46）走的是同一条缓存路径，这次一并修好。

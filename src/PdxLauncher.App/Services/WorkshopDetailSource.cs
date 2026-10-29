@@ -64,21 +64,23 @@ public sealed class WorkshopDetailSource
             _info.IsDetailFresh(cached) &&
             !string.IsNullOrWhiteSpace(cached.DetailText))
         {
-            return AppResult<SteamWorkshopItemDetail>.Ok(new SteamWorkshopItemDetail(
-                id,
-                cached.Name ?? fallbackName,
-                cached.DetailText!,
-                cached.CoverUrl,
-                cached.SizeBytes ?? 0,
-                cached.FetchedUtc ?? DateTimeOffset.UtcNow,
-                cached.UpdatedUtc ?? DateTimeOffset.UtcNow,
-                null));
+            // 还原逻辑统一放在 SteamWorkshopDetailCache 里：这里以前漏了作者/标签/浏览数，
+            // 命中缓存后评论翻页与作者链接就一起失效了。
+            return AppResult<SteamWorkshopItemDetail>.Ok(
+                SteamWorkshopDetailCache.Restore(cached, id, fallbackName));
         }
 
         var result = await _steam.GetDetailAsync(id, cancellationToken).ConfigureAwait(true);
         if (result is { IsSuccess: true, Value: { } detail })
         {
-            _info.SetDetail(cacheKey, detail.Description, null);
+            _info.SetDetail(
+                cacheKey,
+                detail.Description,
+                null,
+                detail.CreatorSteamId,
+                detail.TagList,
+                detail.Views,
+                detail.LifetimeSubscriptions);
         }
 
         return result;
