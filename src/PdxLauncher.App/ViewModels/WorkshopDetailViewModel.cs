@@ -409,8 +409,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     public bool HasSteamUnavailableReason =>
         ShowSteamSubscribeButton && !string.IsNullOrWhiteSpace(SteamUnavailableReason);
 
-    /// <summary>Steam 订阅状态已确认时显示「已订阅」徽标。</summary>
-    public bool ShowSteamSubscribeState => ShowSteamSubscribeButton && IsSteamStateKnown;
+    /// <summary>只在「已确认且确实订阅着」时显示「已订阅」徽标，别把「未订阅」也标成已订阅。</summary>
+    public bool ShowSteamSubscribeState => ShowSteamSubscribeButton && IsSteamStateKnown && IsSteamSubscribed;
 
     /// <summary>加载指定行；重复调用会先清空上一次的内容。</summary>
     /// <param name="row">创意工坊列表行。</param>

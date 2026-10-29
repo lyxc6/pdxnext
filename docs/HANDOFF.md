@@ -3474,6 +3474,8 @@ Steam 侧除了描述什么都没有；图片只有一张封面；作者只是�
 
 **踩坑 / 边界**
 
+- 「已订阅」徽标最初判的是 `ShowSteamSubscribeButton && IsSteamStateKnown`——只要状态读到了就亮，
+  于是「确认未订阅」也被标成已订阅（第一版截图里就能看到）。现在要求 `IsSteamSubscribed` 也为真。
 - `SteamAPI_Init` 在 1.65 不存在 → 任何直接 P/Invoke 老符号的封装（含 Steamworks.NET）都会
   `EntryPointNotFoundException`。用 `InitFlat` + `SteamUGC_v021`。
 - `SetDllImportResolver` 每个程序集只能设一次，第二次抛 `InvalidOperationException`；DLL 路径变了要
