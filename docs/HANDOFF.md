@@ -3846,3 +3846,126 @@ item，缺失时该行自动省略。作者名会被物品页 `page.AuthorName` 
   所以这次不用清缓存重抓，旧索引也能直接修好。
 - 给 UI 自动化用的临时钩子（`PDX_UI_OPEN_MOD_ID` / `PDX_UI_SEARCH`）验证完已 `git checkout` 撤掉，未入库。
 - 从 Mod 库进详情页（§0.46）走的是同一条缓存路径，这次一并修好。
+
+---
+
+## 0.48 2026-10-29：清掉「改路径/改命名后没删旧文件」留下的 47 MB 重复缓存
+
+**起因**
+
+用户问「是什么代码导致图片重复存储」。查下来发现：**当前代码没有在重复下载**，
+37 MB 是三次改动留下的遗留物，另外 ~4 MB 是「同一张图被两个不同的键各存一份」。
+
+| 成因 | 体量 | 由来 |
+| --- | --- | --- |
+| `data\workshop-covers\` | 27.03 MB / 85 文件 | 早期工坊封面根；改成统一用 `WorkshopInfoCache.CoverRoot` 后废弃（d88eb7a 引入，b62ceb6 删掉 `AppServices.WorkshopCoverRoot`） |
+| `data\online-mod-covers\` | 9.12 MB / 72 文件 | 已整体回退的「Mod 库在线视图」封面根 |
+| `workshop-info\shots\*_<id>\shot_NN.*` | 9.41 MB / 25 文件 | 截图命名从「列表序号」改成「URL 哈希」（f1e6b90），旧序号文件没人删 |
+| 封面 ↔ 截图同图 | 1.78 MB / 5 文件 | Steam 画廊首图就是封面本身，`EnsureScreenshotAsync` 又存一份 |
+| 同图不同键 | 0.34 MB / 8 组 | `mod-cache` 按 mod GUID、`workshop-info` 按 `来源:id`，两条链路的 URL 还不一样 |
+
+**关键前提**：这些文件**没有任何入口能删**。`SettingsViewModel` 注册的 6 张缓存卡片只指向
+现行路径（theme / news / modThumbnails / dlcDescriptions / images / workshopInfo），
+`ClearAllCachesAsync` 遍历的就是这几行，所以「清除全部缓存」也碰不到那两个遗留目录。
+
+**改动**
+
+- 新增 `src/PdxLauncher.Core/Storage/LegacyCacheCleaner.cs` + `LegacyCacheCleanupResult.cs`：
+  启动时删两个废弃目录，再遍历 `shots\` 删 `shot_NN` 命中的旧命名文件。
+  判定口径按「点号落在下标 7」（旧 `shot_NN.ext`）vs 下标 12（新 `shot_<8hex>.ext`）。
+  幂等：没货可删时不碰磁盘；单项失败只记 Warn，绝不抛给调用方。
+- `WorkshopInfoCache` 新增 `TryGetCachedCoverForUrl(key, url, out fullPath)`：
+  问「这条记录的封面是不是就这个 URL」。
+- `WorkshopImageCache.EnsureScreenshotAsync` 在下载前先问上一句，命中就直接返回封面路径——
+  同一张图不再落第二份。
+- `App.xaml.cs` 的 `ComposeServices` 里紧跟 `DataRootMigrator.Migrate()` 之后跑一次清理
+  （设置页没有入口，只能放启动阶段），有货才记一条 Info。
+- 顺手修了 `WorkshopImageCache` 类注释里过期一年的「文件名 shot_NN，靠枚举同名前缀复认」。
+
+**自检**
+
+- 新增 `LegacyCacheCleanerChecks`（4 组：无货可删是 no-op、两个遗留目录、只删旧命名、
+  现行缓存不被误删）与 `WorkshopImageCacheChecks`（3 组：截图名是 URL 哈希、
+  封面已记同 URL 时复用不下载、旧命名不算命中）。
+- `检查类: 44，失败: 0`（原 41 + 本次新增 3 类：`LegacyCacheCleanerChecks`、
+  `WorkshopImageCacheChecks`、`WorkshopGalleryLayoutChecks`）。
+- `bash tools/build-app.sh -v q` 0 警告 0 错误。
+
+**磁盘清理（已执行）**
+
+真机数据根 `data\`：203,003,888 B / 580 文件 → **146.26 MB / 393 文件**，删掉 187 文件 47.34 MB。
+清理后 `workshop-info` 271 文件 99.73 MB、`theme-cache` 45 文件 38.28 MB、
+`mod-cache` 54 文件 3.69 MB、`news-cache` 10 文件 3.07 MB、`image-cache` 3 文件 0.94 MB。
+
+**故意没做的**
+
+- 剩余 11 组 1.038 MB 同图仍留着：8 组是 `mod-cache` 与 `workshop-info\pdx` 同一 mod 的两张封面
+  （mod 库取 `.../content/covers/cover_15.jpg`、工坊取 `.../content/cover.jpg`，**URL 不同**），
+  3 组是不同 id 的 Steam 封面内容相同但 `ugc/<数字>/` 路径段不同。
+  按 URL 寻址的缓存识别不了这种情况，要去重必须改成内容哈希寻址——那是另一件事，没做。
+- `WorkshopInfoCache` 仍没有 Prune/容量上限，只有 `Clear()` 和 `Flush()`。
+  工坊缓存会一直涨（现在是 99.73 MB），要控体积得单独加保留期。
+- 封面没做重编码：198 张 Steam 封面按 160–360 px 渲染，却存着 512×512 的 PNG（80.9 MB）。
+  改成 256–512 px JPEG 能省 90% 以上，但会影响画质，需要单独决定。
+
+**踩坑**
+
+- `grep` 输出含中文时会被当成二进制（`Binary file (standard input) matches`），
+  要看内容得用 `sed -n '/=== X ===/,/^$/p'` 或加 `PYTHONIOENCODING=utf-8`。
+- 所有统计用 python heredoc 纯内存跑完，不落临时文件（当时文件策略还是 read-only）。
+
+## 0.49 2026-10-29：详情页图片区按窗口自适应（查看器 1x 不再裁掉大半张图）
+
+### 背景
+工坊详情页点开截图后，浮层查看器里只看到图片左上角一块：窗口明明比图片小，
+却既不平铺也不居中，1x 还不能拖动。用户原话是「查看图片详情的时候能根据窗口大小显示吗，
+现在窗口比图片小，有点怪」。
+
+### 根因
+`WorkshopDetailPage.xaml` 的查看器是 `<ScrollViewer ZoomMode="Enabled">` 里塞一张
+`<Image Stretch="Uniform" />`。开了缩放后 ScrollViewer 按**内容自身期望尺寸**测量，
+而工坊画廊取的是 `imw=5000` 原图（0.43 起从 `#highlight_player_area` 抠出来的），
+于是图片槽位就是 5000px——`Stretch="Uniform"` 只是在这个巨大槽位里等比，等于没缩放。
+更糟的是 `ApplyZoom` 在 1x 时把两个 `ScrollMode` 设成 `Disabled`，所以 1x 既看不全也拖不动。
+
+内联图区则是写死的 `Height="360"`：640 高的窗口里它吃掉一整屏的一大半，很挤；
+1600 高的窗口里又只占上半截，下面一片空。
+
+### 改法
+1. 新增 `src/PdxLauncher.App/Services/WorkshopGalleryLayout.cs`（纯 `System` 数学，可被检查工程链接）：
+   - `InlineGalleryHeight(pageHeight)` → `Clamp(pageHeight * 0.45, 160, 420)`，量不到高度时回退 360；
+   - `ViewerContent(overlayWidth, overlayHeight, headerHeight)` → 各减去留白（16×2）与顶部计数栏，
+     低于 `ViewerMinSide`（120）一律抬到 120，避免把图压成 0 尺寸。
+2. `WorkshopScreenshotViewModel` 增 `ViewerMaxWidth`/`ViewerMaxHeight`（默认 `PositiveInfinity`，
+   即「还没算过」时保持原样）+ `ApplyViewerSize(w, h)`。
+3. `WorkshopDetailPage.xaml`：查看器里的 `Image` 改绑 `MaxWidth/MaxHeight` 到上面两个属性并居中，
+   留白收到 `ScrollViewer.Padding="16"`；根 `Grid` 与 `ImageOverlay` 各挂 `SizeChanged`。
+4. `WorkshopDetailPage.xaml.cs`：
+   - `UpdateGalleryLayout(width, height)` 写内联图区高度；浮层开着时顺带重算查看器尺寸；
+   - `ApplyViewerSize()` 取 `ImageOverlay` 实际尺寸与 `RowDefinitions[0].ActualHeight`，算好后写给每张截图；
+   - `OpenViewer` 在 `Visibility=Visible` **之后**才用 `DispatcherQueue.TryEnqueue` 计算——
+     折叠状态下 `ActualWidth` 是 0，先算会把图压没；
+   - 翻页（`OnGallerySelectionChanged`）后再补算一次，新页的容器是刚实体化的。
+
+### 自检
+新增 `tests/PdxLauncher.Checks/WorkshopGalleryLayoutChecks.cs`（12 条）：内联高度四档
+（640→288 / 800→360 / 1200→420 上限 / 200→160 下限）、查看器两档整算
+（1600×1000+68 头 → 1568×900、1040×600+68 → 1008×500）、无头栏 568、
+0/NaN/过小窗口一律退到 120、内联 0/NaN → 360。
+`PdxLauncher.Checks.csproj` 增加对应的 `<Compile … Link="Linked\WorkshopGalleryLayout.cs" />`。
+
+### 实测（Debug exe，CK3 `Renovatio` 7 图，隔离 worktree 里跑的）
+- 1040×640：查看器里整张图完整可见、垂直居中、上下留黑边；右上「1 / 7」与关闭按钮正常；内联图区 288 DIP。
+- 1600×1000：同样完整居中；内联图区吃到 420 DIP 上限。
+- 截图：`ui-test-artifacts/workshop-imgviewer/{01-inline-inline-1040x640,01-inline-inline-1600x1000,02-viewer-1040x640,02-viewer-1600x1000}.png`。
+
+### 踩坑
+- `winapp ui click` 需要窗口在前台（常被全屏游戏占用），`invoke` 不需要；但缩略图 `invoke` 只切内联页、
+  不会开浮层，所以冒烟在 worktree 里临时加了 `PDX_UI_OPEN_MOD_ID` / `PDX_UI_OPEN_VIEWER` 两个环境变量钩子，
+  验完删除（主仓库 `WorkshopPage.xaml.cs` 无改动）。
+- 主工作区这一刻 App/Release 构建是红的——并发会话正在改 `RequestThrottle.cs`、`WorkshopViewModel.cs`、
+  `WorkshopPageCache.cs`（缺 `SteamCommunityHost`、`Keys.WorkshopThrottlePaused` 等），与本次改动无关，
+  所以改用 `git worktree` 在干净 HEAD 上验证。
+- 跑全量自检时唯一失败是他们的 `WorkshopPageCacheChecks`「页面缓存：超过 5 分钟失效」，
+  同属未提交的在建改动；`WorkshopGalleryLayoutChecks` 全绿。
+

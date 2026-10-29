@@ -35,6 +35,7 @@
       所以口径要由 WorkshopTextChecks 钉住。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\WorkshopText.cs" Link="Linked\WorkshopText.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\WorkshopGalleryLayout.cs" Link="Linked\WorkshopGalleryLayout.cs" />
     <!--
       会话状态机（登录 / 续期 / 登出 / 落盘时机）本身不碰任何 UI 类型，
       只用 Core 的 IAppLogger / PdxSessionStore / IClock / PdxAccountClient，

@@ -14,7 +14,7 @@
         → 描述（Markdown）→ 依赖 → 更新日志 → 外链 → 评论区（Steam 可翻页看全部评论）。
         左栏选中项保持进入前的那一页，页头的返回按钮退回发起方（创意工坊列表或 Mod 库）。
     -->
-    <Grid>
+    <Grid x:Name="RootLayout" SizeChanged="OnPageSizeChanged">
         <Grid Padding="16" RowSpacing="12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -629,6 +629,7 @@
         <Grid x:Name="ImageOverlay"
               Visibility="Collapsed"
               Background="#D9000000"
+              SizeChanged="OnViewerSizeChanged"
               AutomationProperties.AutomationId="overlayWorkshopImages">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
@@ -672,15 +673,24 @@
                         <ScrollViewer ZoomMode="Enabled"
                                       MinZoomFactor="1"
                                       MaxZoomFactor="4"
+                                      Padding="16"
                                       HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Auto"
                                       HorizontalScrollMode="Disabled"
                                       VerticalScrollMode="Disabled"
                                       DoubleTapped="OnViewerDoubleTapped"
                                       PointerWheelChanged="OnViewerPointerWheelChanged">
+                            <!--
+                                缩放开启后 ScrollViewer 按内容自身尺寸测量，工坊画廊给的是 imw=5000 的原图，
+                                不限制就会被裁掉一大块（1x 也不能拖）。MaxWidth/MaxHeight 由页面按浮层尺寸算好，
+                                1x 刚好整张放进窗口，放大后才滚动。
+                            -->
                             <Image Source="{x:Bind svc:XamlImage.FromPath(Path), Mode=OneWay}"
                                    Stretch="Uniform"
-                                   Margin="16" />
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   MaxWidth="{x:Bind ViewerMaxWidth, Mode=OneWay}"
+                                   MaxHeight="{x:Bind ViewerMaxHeight, Mode=OneWay}" />
                         </ScrollViewer>
                     </DataTemplate>
                 </FlipView.ItemTemplate>

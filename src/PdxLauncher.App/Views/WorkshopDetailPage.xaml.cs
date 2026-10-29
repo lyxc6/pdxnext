@@ -165,6 +165,7 @@ public sealed partial class WorkshopDetailPage : Page
             return;
         }
 
+        UpdateGalleryLayout(ActualWidth, ActualHeight);
         await RunAsync(_row);
     }
 
@@ -442,6 +443,9 @@ public sealed partial class WorkshopDetailPage : Page
         SyncCurrentShot(target);
 
         ImageOverlay.Visibility = Visibility.Visible;
+
+        // 折叠状态下浮层没有实际尺寸，必须等这一帧布局跑完再算，否则会把图压成 0。
+        DispatcherQueue.TryEnqueue(ApplyViewerSize);
         FlipWorkshopViewer.Focus(FocusState.Programmatic);
     }
 
@@ -468,6 +472,9 @@ public sealed partial class WorkshopDetailPage : Page
         var index = FlipWorkshopViewer.SelectedIndex;
         UpdateCounter(index);
         SyncCurrentShot(index);
+
+        // 翻到新的一页时容器是刚实体化的，Max 宽高要再写一次。
+        DispatcherQueue.TryEnqueue(ApplyViewerSize);
     }
 
     /// <summary>浮层里双击：在 1x 与 2x 之间切换。</summary>
@@ -513,7 +520,49 @@ public sealed partial class WorkshopDetailPage : Page
         viewer.ChangeView(null, null, zoom, disableAnimation: true);
     }
 
-    /// <summary>把「当前张」标记写到截图行上（缩略图条靠它画描边）。</summary>
+    /// <summary>页面尺寸变化：内联图区高度随窗口走，浮层开着时同时重算图片可用区域。</summary>
+    private void OnPageSizeChanged(object sender, SizeChangedEventArgs e) =>
+        UpdateGalleryLayout(e.NewSize.Width, e.NewSize.Height);
+
+    private void OnViewerSizeChanged(object sender, SizeChangedEventArgs e) => ApplyViewerSize();
+
+    private void UpdateGalleryLayout(double width, double height)
+    {
+        if (height > 0)
+        {
+            FlipWorkshopScreenshots.Height = WorkshopGalleryLayout.InlineGalleryHeight(height);
+        }
+
+        if (ImageOverlay.Visibility == Visibility.Visible)
+        {
+            ApplyViewerSize();
+        }
+    }
+
+    /// <summary>把「1x 刚好放进浮层」的可用宽高写进每张截图，模板靠 x:Bind 拿到。</summary>
+    private void ApplyViewerSize()
+    {
+        if (ImageOverlay.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        var headerHeight = ImageOverlay.RowDefinitions.Count > 0
+            ? ImageOverlay.RowDefinitions[0].ActualHeight
+            : 0;
+
+        var (width, height) = WorkshopGalleryLayout.ViewerContent(
+            ImageOverlay.ActualWidth,
+            ImageOverlay.ActualHeight,
+            headerHeight);
+
+        foreach (var shot in _viewModel.Screenshots)
+        {
+            shot.ApplyViewerSize(width, height);
+        }
+    }
+
+    /// <summary>把「当前张」标记写到截图行上（缩略图条靠它描边）。</summary>
     private void SyncCurrentShot(int index)
     {
         for (var i = 0; i < _viewModel.Screenshots.Count; i++)
