@@ -196,6 +196,20 @@ public static class OnlineChecks
         var ttf = new byte[] { 0x00, 0x01, 0x00, 0x00, 0x00, 0x0C, 0x00, 0x80 };
         ChecksContext.Equal("magic: TTF", AssetFileType.Ttf, AssetFileTypeDetector.Detect(ttf));
 
+        // 回归：官方主题里 cities_skylines 的 buttonFont、eu4 的 appTaskbarIcon 是 OTTO
+        // （CFF 轮廓的 OpenType）。只认 00 01 00 00 会让这两款游戏的字体永远下不来。
+        var otto = System.Text.Encoding.ASCII.GetBytes("OTTO\\x00\\x0C\\x00\\x80\\x00\\x03");
+        ChecksContext.Equal("magic: OTTO（CFF OpenType）", AssetFileType.Ttf, AssetFileTypeDetector.Detect(otto));
+        ChecksContext.Equal("扩展名: OTTO 落到 .ttf", ".ttf", AssetFileTypeDetector.GetExtension(AssetFileType.Ttf));
+
+        var trueType = System.Text.Encoding.ASCII.GetBytes("true\\x00\\x0C\\x00\\x80\\x00\\x03");
+        ChecksContext.Equal("magic: 'true'（老 TrueType）", AssetFileType.Ttf, AssetFileTypeDetector.Detect(trueType));
+
+        // 回归：官方主题里 eu4 的 appTaskbarIcon 是 370 KB 的 6 帧 Windows ICO。
+        var ico = new byte[] { 0x00, 0x00, 0x01, 0x00, 0x06, 0x00, 0x10, 0x10, 0x00, 0x00 };
+        ChecksContext.Equal("magic: ICO", AssetFileType.Ico, AssetFileTypeDetector.Detect(ico));
+        ChecksContext.Equal("扩展名: ICO", ".ico", AssetFileTypeDetector.GetExtension(AssetFileType.Ico));
+
         var woff = System.Text.Encoding.ASCII.GetBytes("wOFF\x00\x01\x00\x00");
         ChecksContext.Equal("magic: WOFF", AssetFileType.Woff, AssetFileTypeDetector.Detect(woff));
 
@@ -216,7 +230,7 @@ public static class OnlineChecks
         ChecksContext.Equal("扩展名: TTF", ".ttf", AssetFileTypeDetector.GetExtension(AssetFileType.Ttf));
         ChecksContext.Equal("扩展名: 未知为空", string.Empty, AssetFileTypeDetector.GetExtension(AssetFileType.Unknown));
 
-        ChecksContext.Equal("1 KB 阈值", 1024, AssetFileTypeDetector.MinimumFileBytes);
+        ChecksContext.Equal("256 B 阈值", 256, AssetFileTypeDetector.MinimumFileBytes);
         ChecksContext.Equal("40 MB 阈值", 40 * 1024 * 1024, AssetFileTypeDetector.MaximumFileBytes);
         ChecksContext.Equal("TTL 5 天毫秒数", 432_000_000L, ThemeResolver.CacheTtlMilliseconds);
         ChecksContext.Equal("失败短重试 10 分钟毫秒数", 600_000L, ThemeResolver.RefreshRetryDelayMilliseconds);
@@ -368,8 +382,26 @@ public static class OnlineChecks
                 smallButtonPath is not null && fs.FileExists(smallButtonPath));
         }
 
-        // 小于 1 KB：拒绝并清理 .part。
-        var smallBytes = new byte[512];
+        // 回归：cities_skylines-buttonBackgroundImage 只有 361 B（IHDR 8×50 + 单个 IDAT + IEND）。
+        // 旧的 1 KB 下限让它永远被拒，于是 CS1 的主题刷新停在「部分失败」并每 10 分钟重试。
+        var cs1ButtonBytes = BuildAsset(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, 361);
+        var cs1ButtonFetcher = new FakeHttpFetcher(streamFactory: _ => new SyntheticStream(cs1ButtonBytes));
+        using (var cs1ButtonDownloader = new AssetDownloader(cs1ButtonFetcher, logger, fs))
+        {
+            var cs1ButtonPath = cs1ButtonDownloader.DownloadAsync(
+                    "https://metadata-assets.paradox-interactive.com/cities_skylines/button-background-image-5348087304343fa041c8",
+                    Path.Combine(dir, "cs1-button"),
+                    CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+            ChecksContext.Equal<string?>("361 B 的 CS1 按钮背景图被接受", ".png", Path.GetExtension(cs1ButtonPath ?? string.Empty));
+            ChecksContext.Check(
+                "361 B 的 CS1 按钮背景图落盘",
+                cs1ButtonPath is not null && fs.FileExists(cs1ButtonPath));
+        }
+
+        // 小于 256 B：拒绝并清理 .part。
+        var smallBytes = new byte[200];
         smallBytes[0] = 0x89;
         smallBytes[1] = 0x50;
         smallBytes[2] = 0x4E;
@@ -384,8 +416,8 @@ public static class OnlineChecks
                     CancellationToken.None)
                 .GetAwaiter()
                 .GetResult();
-            ChecksContext.Check("小于 1 KB 被拒绝", small is null);
-            ChecksContext.Check("小于 1 KB 清理了 .part", !fs.FileExists(smallTarget + AssetDownloader.PartSuffix));
+            ChecksContext.Check("小于 256 B 被拒绝", small is null);
+            ChecksContext.Check("小于 256 B 清理了 .part", !fs.FileExists(smallTarget + AssetDownloader.PartSuffix));
         }
 
         // 超过 40 MB：边下边判，超限即中止并清理 .part（流是合成的，不占 40 MB 内存）。

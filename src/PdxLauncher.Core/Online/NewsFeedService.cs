@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Games;
 using PdxLauncher.Core.Storage;
 
 /// <summary>
@@ -52,6 +53,8 @@ public sealed class NewsFeedService : INewsFeedService
     private readonly IAssetDownloader _assets;
     private readonly IClock _clock;
     private readonly IAppLogger _logger;
+    private readonly string _cacheRoot;
+    private readonly IDocumentFile _cacheDocument;
     private readonly SemaphoreSlim _batchLock = new(1, 1);
 
     private CacheDocument? _cache;
@@ -69,7 +72,8 @@ public sealed class NewsFeedService : INewsFeedService
         IAssetDownloader assets,
         IClock clock,
         IAppLogger logger,
-        string cacheRoot)
+        string cacheRoot,
+        IDocumentFile? cacheDocument = null)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(http);
@@ -83,12 +87,16 @@ public sealed class NewsFeedService : INewsFeedService
         _assets = assets;
         _clock = clock;
         _logger = logger;
-        CachePath = Path.Combine(cacheRoot, CacheFileName);
+        _cacheRoot = cacheRoot;
+        _cacheDocument = cacheDocument ?? new FileDocumentFile(fileSystem, Path.Combine(cacheRoot, CacheFileName));
         ImagesDirectory = Path.Combine(cacheRoot, ImagesFolderName);
     }
 
-    /// <inheritdoc />
-    public string CachePath { get; }
+    /// <summary>缓存索引的旧文件路径（索引已搬进自有库，图片仍在这里）。</summary>
+    public string CachePath => Path.Combine(_cacheRoot, CacheFileName);
+
+    /// <summary>缓存索引落点（<c>db:cache:news-cards</c> 或旧文件），设置页展示用。</summary>
+    public string CacheLocation => _cacheDocument.DisplayPath;
 
     /// <summary>公告图缓存目录。</summary>
     private string ImagesDirectory { get; }
@@ -99,7 +107,7 @@ public sealed class NewsFeedService : INewsFeedService
         _cache = null;
         try
         {
-            CacheStorage.Clear(_fileSystem, CachePath);
+            _cacheDocument.Delete();
             CacheStorage.Clear(_fileSystem, ImagesDirectory);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -123,7 +131,7 @@ public sealed class NewsFeedService : INewsFeedService
         {
             var cache = LoadCache();
             var now = _clock.UtcNow;
-            cache.Entries.TryGetValue(game.GameId, out var entry);
+            cache.Entries.TryGetValue(NewsGameId(game), out var entry);
             var cached = BuildFeed(entry);
 
             if (!allowOnline)
@@ -169,7 +177,7 @@ public sealed class NewsFeedService : INewsFeedService
                         LastImageFailureUtc = now,
                         Items = fetched.Items,
                     };
-                    cache.Entries[game.GameId] = partial;
+                    cache.Entries[NewsGameId(game)] = partial;
                     SaveCache(cache);
                     _logger.Info("官方公告：图片未取到（" + fetched.Items.Count.ToString(CultureInfo.InvariantCulture)
                         + " 张卡里 " + CountMissingImages(fetched.Items).ToString(CultureInfo.InvariantCulture)
@@ -183,7 +191,7 @@ public sealed class NewsFeedService : INewsFeedService
                     FetchedUtc = now,
                     Items = fetched.Items,
                 };
-                cache.Entries[game.GameId] = updated;
+                cache.Entries[NewsGameId(game)] = updated;
                 SaveCache(cache);
                 return BuildFeed(updated);
             }
@@ -196,7 +204,7 @@ public sealed class NewsFeedService : INewsFeedService
                     FetchedUtc = now,
                     Items = new List<CacheItem>(),
                 };
-                cache.Entries[game.GameId] = empty;
+                cache.Entries[NewsGameId(game)] = empty;
                 SaveCache(cache);
                 return NewsFeed.Empty;
             }
@@ -209,7 +217,7 @@ public sealed class NewsFeedService : INewsFeedService
                 or UnauthorizedAccessException or OperationCanceledException)
             {
                 _logger.Warn("官方公告：联网获取失败，沿用上次内容（gameId=" + game.GameId + "）：" + exception.Message);
-                cache.Entries[game.GameId] = new CacheEntry
+                cache.Entries[NewsGameId(game)] = new CacheEntry
                 {
                     FetchedUtc = entry?.FetchedUtc ?? default,
                     LastFailureUtc = _clock.UtcNow,
@@ -230,7 +238,7 @@ public sealed class NewsFeedService : INewsFeedService
     private async Task<FetchResult> FetchAsync(GameInstallation game, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var uri = new Uri(
-            string.Format(CultureInfo.InvariantCulture, ContentCardsEndpointFormat, game.GameId),
+            string.Format(CultureInfo.InvariantCulture, ContentCardsEndpointFormat, NewsGameId(game)),
             UriKind.Absolute);
         if (!OnlineHosts.IsAllowed(uri))
         {
@@ -562,6 +570,12 @@ public sealed class NewsFeedService : INewsFeedService
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    /// <summary>
+    /// 公告接口与缓存键用的 gameId。CS1 是唯一需要反向归一的一款：
+    /// 本启动器内部用正名 <c>cities_skylines</c>，而 Braze 只认官方启动器写的 <c>cities_v2</c>。
+    /// </summary>
+    private static string NewsGameId(GameInstallation game) => KnownGames.GetNewsFeedGameId(game.GameId);
+
     /// <summary>下载一张公告图；失败只丢图，不影响卡片。</summary>
     /// <returns>本地路径；以及是否因超时而失败（超时按「图片域不可达」处理）。</returns>
     private async Task<ImageDownload> DownloadImageAsync(string? url, CancellationToken cancellationToken)
@@ -680,9 +694,9 @@ public sealed class NewsFeedService : INewsFeedService
 
         try
         {
-            if (_fileSystem.FileExists(CachePath))
+            var json = _cacheDocument.ReadText();
+            if (json is not null)
             {
-                var json = _fileSystem.ReadAllText(CachePath);
                 var document = JsonSerializer.Deserialize<CacheDocument>(json, JsonOptions);
                 if (document is { Version: CacheVersion, Entries: not null })
                 {
@@ -690,7 +704,7 @@ public sealed class NewsFeedService : INewsFeedService
                     return _cache;
                 }
 
-                _logger.Warn("官方公告缓存版本不匹配，已忽略并重建：" + CachePath);
+                _logger.Warn("官方公告缓存版本不匹配，已忽略并重建：" + _cacheDocument.DisplayPath);
             }
         }
         catch (JsonException exception)
@@ -714,9 +728,11 @@ public sealed class NewsFeedService : INewsFeedService
     {
         try
         {
-            _fileSystem.EnsureDirectory(Path.GetDirectoryName(CachePath) ?? ".");
             var json = JsonSerializer.Serialize(cache, JsonOptions);
-            _fileSystem.WriteAllTextAtomic(CachePath, json);
+            if (!_cacheDocument.WriteText(json))
+            {
+                _logger.Warn("官方公告缓存写入失败：" + _cacheDocument.DisplayPath);
+            }
         }
         catch (IOException exception)
         {

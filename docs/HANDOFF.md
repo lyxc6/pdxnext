@@ -11,7 +11,7 @@
 ## 0. 一句话现状
 
 启动器外壳与主页已从「照官方 Paradox 启动器截图逐像素自绘」**改成 WinUI 3 标准控件 UI**（用户明确要求），
-Release **0 警告 0 错误**，自检 **37 个检查类 / 0 失败**（2026-10-28 19:30 实测；本轮新增 `AccountChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
+Release **0 警告 0 错误**，自检 **55 个检查类 / 0 失败**（2026-10-30 实测；最近一轮新增 `ModLibraryWarningChecks`；此前还有 `PdxDatabaseChecks`、`JsonDocumentStoreChecks`、`OwnPlaysetRepositoryChecks`、`LauncherDbProjectionChecks`、`ModPathChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
 **2026-10-26 已完成：窗口置顶开关（§0.2）+ 整窗背景「方案 B」（§0.3）**——游戏主题背景图现在连标题栏条和左侧
 NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统一纱 + 卡片/列表玻璃底衬），主页那条 260 高、被裁掉一半的
 主题横幅已删除。剩下的活：Light / HighContrast 真机切主题跑一遍（§0.3 唯一视觉盲区）、真机复验 settings.json 与置顶持久化、
@@ -37,6 +37,76 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-10-27 14:50 追加：设置页「内容和滚动条重叠」已修 —— 根因是 WinUI 3 的滚动条是**浮层**，贴着 `ScrollViewer` 右边缘画在卡片描边/圆角上；现给滚动内容与状态栏各留 14 DIP 右侧通道，滚动条改落在通道里。真机三态截图 + 像素测量见 §0.16。**
 **2026-10-27 15:10 追加：设置页左侧分节导航从「纯文字 ListView」换成官方 `NavigationView`（带 `SymbolIcon`）—— 选中指示条到文字的间距从 ≈8 DIP 变成 ≈41 DIP，见 §0.17。**
 **2026-10-27 15:30 追加：设置页「缓存」分类接管「数据 / Mod 缩略图」两块（联网分类只剩代理），并做了一轮设置代码去重，见 §0.18。**
+**2026-10-29 20:20 追加：自有 SQLite 事实源落地（`data\pdxnext.sqlite`）+ 官方库双向投射 + settings/session/六份缓存索引全部入库 + mod 来源徽标与筛选 + 加载文件跳过规则与路径修复，见 §0.29。**
+**2026-10-29 22:20 追加：播放集页的「添加模组」多选对话框已改成独立子页（`AddModsPage`，左栏选中态停在「播放集」），候选列表带搜索 / 勾选 / 计数，返回后由播放集页统一写库并自动保存，见 §0.52。**
+**2026-10-30 08:30 追加：Cities: Skylines 1 从「未适配」变「仅启动」——根因是官方启动器给它写的 `gameId` 是 `cities_v2`，而所有 id 表只认 `cities_skylines`；现按「发现阶段归一 + 公告接口反向特例」处理，补丁链路顺带打通（独立安装也能拿到 appId 255710），见 §0.54。**
+
+## 0.29 最新一轮（2026-10-29 03:00–20:20）：自有 SQLite 事实源 + 来源徽标 + 修本地 mod 加载
+
+> 用户诉求原话（两条，前后相接）：
+> ① 「目前mod库和播放集无法区分本地mod和订阅mod，而且本地mod发生了无法加载的问题」
+> ② 「是否能软件维护自己正确的SQLite数据，用正确的数据来更改p社启动器，毕竟有时候user会没装p社启动器；顺便将项目的各个数据能否整理进sql里」
+
+### 两个 bug 的真机根因（先查证再动手）
+
+1. **分不清本地 / 订阅**：契约层就没这个字段。`PlaySetMod` 只有 11 个字段，播放集页那条 SQL
+   （`PlaySetRepository.GetPlaySetModsAsync`）也**没查 `m.source` 与 `m.steamId`**，所以即使库里有来源，
+   播放集页也拿不到。Mod 库页的 `ModLibraryEntry.Source` 有值但**从来没人显示**（`IsLocalOnly` 是死代码）。
+2. **本地 mod 进游戏不生效**：Victoria 3 **无法加载任何路径含非 ASCII 字符的 mod**（Vic3 wiki "Mod structure" +
+   Paradox 官方论坛 2024-04-21 同题帖）。该机本地 mod 目录是 `…\Victoria 3\mod\更改虚空造物`（中文目录名），
+   `content_load.json` 里写得完全正确、游戏日志里**一个字都不报**，就是不加载。CK3 / Stellaris 没这个限制
+   （它们的本地 mod 也是中文目录名，照常加载 —— 现场对比确认）。
+   顺带查出第二条独立缺陷：订阅的 `喜儿修改器`（`4b02923b-…`）在官方库里 `dirPath` / `archivePath` /
+   `gameRegistryId` **全是 NULL**，所以它虽然是「启用」状态，写加载文件时被静默丢弃。
+
+### 做了什么（按 Phase）
+
+- **Phase 0 自有库地基**（`src/PdxLauncher.Core/Storage/`）：`PdxDatabase`（8 张表 + `meta.schema_version` +
+  迁移前备份 + 打开失败改名 `.corrupt-<ms>` 后重建）、`IJsonDocumentStore` / `SqliteJsonDocumentStore`
+  （settings / session 走单行表，其余走 `documents` 键空间）、`LegacyJsonImporter`（把 `data\*.json` 入库，
+  原文件改名 `.migrated.bak` 留档）、`DocumentFile.cs`（`IDocumentFile` / `StoreDocumentFile` / `FileDocumentFile`）。
+- **Phase 1 播放集 / Mod 库入库 + 官方库投射**：`OwnDatabasePlaySetRepository`（`IPlaySetRepository` 11 方法全按
+  `gameId` 隔离）、`OwnModStore`、`PlaySetRepository.UpdateModRowsAsync` / `UpsertPlaySetsAsync`（回写官方库，
+  路径列用 `COALESCE(?, 列)` 不覆盖已有值）、`LauncherDbProjector`（`imported:` / `projected:` /
+  `pending-projection:` 三个 meta 标记）、`PlaySetRepositoryRouter` 改造（官方库在 ⇒ 读写主库 + 镜像；
+  官方库不在 ⇒ 只写自有库，**绝不创建 `launcher-v2.sqlite`**）。
+- **Phase 2 来源 + 加载规则 + 路径修复**：`ModOrigin` / `ModOrigins`（`source` 为唯一权威，**不能只看
+  `steamId` 是否为空** —— 真机 CK3 有一条 `source=local` 却带 `steamId` 的行）、`ModCatalog` 三路扫描都带来源、
+  两页的来源徽标、Mod 库页「全部/本地/订阅」筛选、`ModLoadRules.DescribeSkipKey`（六种跳过原因）、
+  `PlaySetEditor.BuildLoadFileContent` 改返回 `LoadFilePlan(Content, Skipped)` 并记 Warn、
+  `GamePathRules.RequiresAsciiPaths`（目前只有 victoria3）、`ModPathRepairer`（补路径 / 改名为
+  `mod_<id 前 8>` / 撞名 `_2` / 写库失败移回原处）、`IFileSystem.MoveDirectory`、播放集页「修复 mod 路径」
+  与 `ModPathRepairDialog`。
+- **Phase 3 数据入库**：settings、session、六份缓存索引（`cache:workshop-info` / `workshop-pages` /
+  `news-cards` / `dlc-descriptions` / `mod-thumbnails` / `theme-assets:<gameId>`）全部改走 `IDocumentFile`，
+  磁盘只留图片；`CacheStorage.Measure/Clear` 支持「库键 + 目录」合并计量；设置页缓存面板显示库键。
+- **Phase 4 验证**：新增五个检查类；`LoadFileChecks` 增 `CheckLoadFilePlan`；三份文档更新。
+
+### 修掉的真缺陷（不是新功能，是旧代码 bug）
+
+- `PlaySetRepository.GetPlaySetModsAsync` 缺 `m.steamId` / `m.source` 两列（老库缺列时不硬写）。
+- `OwnDatabasePlaySetRepository.GetPlaySetModsAsync` 同样漏了 `source`，且构造 `PlaySetMod` 时漏传 `Source`。
+- `LauncherDbProjector.ProjectAsync` 把 `ModLibraryEntry` 转 `PlaySetMod` 时丢了来源，回写会把来源写没。
+- `tests/PdxLauncher.Checks/WorkshopInfoCacheChecks.cs` 与 `WorkshopPageCacheChecks.cs` 返回的是**全局**失败数
+  （`ChecksContext.Failures == 0`），任何一个别的类失败都会把它们也标红 —— 改成比对进入时的计数。
+
+### 验收
+
+- `dotnet build PdxLauncher.sln -c Release --no-incremental` → 0 警告 0 错误。
+- `tests/PdxLauncher.Checks.exe` → `检查类: 54，失败: 0，断言失败总数: 0`。
+- `python tools/gen-i18n.py --check` → 文案源合法，727 个键，生成物已是最新。
+
+### 限制 / 未覆盖
+
+- **settings / session / 缓存是「一整段 JSON 一行」**，不是拆成列（读取方本来就是整份加载→整份写回，
+  拆列要重写 `AppSettings` 40+ 字段，风险收益不成立）。领域数据（mods / playsets）才是真关系表。
+- **真机落地已执行（2026-10-29 20:28）**：用一次性探针 `.scratch/modprobe/`（不进构建，`.scratch/` 已在
+  `.gitignore`）在用户机器上实跑 `ModPathRepairer`：`喜儿修改器` 补上
+  `dirPath=D:\app\Steam\steamapps\workshop\content\529340\3717461054`、`mod\更改虚空造物` 改名
+  `mod\mod_978102dc` 并同步写回官方库；`content_load.json` 从 3 条（299 B）变 4 条（369 B），四条路径全 ASCII。
+  ⇒ 官方库缺路径与 V3 非 ASCII 两个根因都已在真机消掉，剩游戏内确认。
+- 父目录含非 ASCII（如 `C:\Users\张三\…`）时**不自动改名**，只给 `mods.warnNonAsciiParent` 提示。
+- CS2（`playset_config.json`）与 EU5（`playsets.json`）只做来源徽标，不参与官方库投射（它们本来就没有 sqlite）。
 
 ## 0.18 最新一轮（2026-10-27 15:30）：设置页缓存接管「数据 / Mod 缩略图」，并做一轮去重
 
@@ -4066,3 +4136,451 @@ item，缺失时该行自动省略。作者名会被物品页 `page.AuthorName` 
 `## 0.18`（设置页缓存接管 / EU4 发灰）与 `## 0.3`（播放集激活 / 整窗背景）各出现过两次，
 是当时手写小节号撞号留下的历史遗留；README 与本文多处按 `§0.18` / `§0.3` 交叉引用，
 重编号会把那些引用一并带偏，故维持原样，只在此说明。
+
+
+## 0.51 2026-10-29：订阅的创意工坊 mod「无法解析」——把 metadata.json 的 id 当成工坊 id
+
+### 起因
+
+用户给了订阅目录 `D:\app\Steam\steamapps\workshop\content\529340\3742679779`（Victoria 3，`Daoyu Cheat (1.13 Community Port) 刀鱼作弊`），
+说「有些订阅 mod 无法解析」。真机 UIA dump（`.scratch/modlib-uia.txt`，07:15，`版本 1.13.11 (Matcha)`）
+坐实了症状：该行 `modLibraryRow_9fe65f9f6bb53d0022ebce4c16e5ee3f` 落进「兼容性警告」组，
+**三个按钮全是 disabled**，详情页 tooltip 写着「这个 mod 没有工坊详情页（本地 mod）」——
+它是订阅的工坊 mod，却被当成纯本地 mod。其余 51 行四个按钮都可用。
+
+### 根因
+
+1. **`metadata.json` 的 `id` 不是创意工坊 id。** 官方启动器把两者分开存：`mods.steamId` = 数字工坊 id，
+   `mods.metadataId` = `metadata.json` 的 `id`（真机可证：`2882576273 / weiqingyu1982@126.com`、
+   `3472248460 / tech.res`、`3385002128 / com.github.Victoria-3-Modding-Co-op.Community-Mod-Framework`）。
+   我们（`ModCatalog.AddMetadataMod`）直接拿 `id` 当 steamId，空值才退到工坊目录名；
+   V3 的 65 个订阅里 **11 个** `id` 是 PDX 风格串，于是 `SteamWorkshop.GetWorkshopId`
+   （只认纯 ASCII 数字）返回 null → `ModWorkshopRef.Resolve` 落到 `SourceLocal` → 三按钮全灰。
+2. **合并时扫描值反过来盖掉库里的数字 id**（`ModCatalog.Compose` 原 `record?.SteamId ?? sqlite?.SteamId`），
+   所以那 11 个**已登记**的 mod 在播放集页也拿不到工坊按钮——不只是 3742679779。
+3. **未登记行被硬编码成 `source:"local"`**（`ModLibraryService.LoadAsync`），文案因此说「本地 mod」。
+4. **未登记行不能加入播放集**（`ModsViewModel.GetAddCandidateModsAsync` 整条跳过 `IsUnregistered`），
+   因为它没有 `mods.id` 这个外键。而 3742679779 恰好是唯一一行「磁盘上有、官方库里没有」的订阅 mod。
+
+### 改动
+
+- `src/PdxLauncher.Core/Playsets/ModCatalog.cs`
+  - `AddMetadataMod(...)` 增 `bool isWorkshopRoot`（`ScanMetadataFiles` 对工坊目录传 true、
+    `<gameDataDir>\mod\<dir>` 传 false），新 `ResolveSteamId(...)`：工坊目录 → 目录名是数字就用它，
+    否则 `metadata.json` 的 `id` 是数字就用它，两者都不是则 null（并留一条 Warn）；本地 mod 目录
+    **不拿目录名编造工坊 id**。
+  - `Compose` 的 steamId 改「数字优先」：`DigitsOrNull(record) ?? DigitsOrNull(sqlite) ?? 原值`。
+- `src/PdxLauncher.Core/Playsets/SteamWorkshop.cs`：`IsAllDigits` 从 private 提成 `internal`（同程序集复用）。
+- `src/PdxLauncher.Core/Playsets/PlaySetRepository.cs`：`SavePlaySetModsAsync` 在同一个 `BEGIN IMMEDIATE`
+  事务（仍只有一次 `.pdxnext.bak` 备份）里先 `EnsureModsRegistered(...)`——给「磁盘上有内容、库里没有该 id」
+  的 mod 补登记一行 `mods`：`id` 用扫描出的确定性 GUID（重扫不变）、`steamId` 只写数字工坊 id、`source`
+  有工坊 id 记 `steam` 否则 `local`、`status` 空或 `missing` 记 `ready_to_play`。列按 `PRAGMA table_info`
+  与目标表求交集（各游戏/老版本 `mods` 表列不同），`INSERT OR IGNORE`，单行失败只 Warn 不拖垮整次保存。
+- `src/PdxLauncher.App/Services/ModLibraryService.cs`：未登记行的 `Source` 按能否解析出工坊 id 决定。
+- `src/PdxLauncher.App/ViewModels/ModLibraryRowViewModel.cs`：未登记 + 工坊来源改用新文案；
+  `ModsViewModel.GetAddCandidateModsAsync` 不再跳过未登记行（保存时补登记）。
+
+### 自检
+
+- 新增 `tests/PdxLauncher.Checks/ModCatalogChecks.cs`（4 例）：工坊目录名优先 / `metadata id` 兜底 /
+  本地 mod 不编造工坊 id / 合并时数字 steamId 优先（且 ModId 不变）。
+- 新增 `tests/PdxLauncher.Checks/ModRegistrationChecks.cs`（4 例）：补登记未登记的工坊 mod / 幂等 /
+  内容不存在不登记 / 窄 `mods` 表（无 `steamId` 列）不报错。`PlaysetChecks.CreateGame`、`CreateTempRoot`、
+  `TryDelete` 由 private 提成 internal 供复用。
+- `build-debug.cmd` 全绿：检查类 47 → **49**、断言失败 0；`build.cmd`（Release）同样 49/0；
+  `python tools/gen-i18n.py --check` 通过（702 键）。
+- 新文案 `modlib.warningUnregisteredWorkshop`：zh「创意工坊订阅的 mod，官方 mod 库中还没有登记（加入播放集时会自动补登记）」，
+  en 同步；`Strings.g.cs` 由 `tools/gen-i18n.py` 重新生成。
+
+### 实测验收（Release exe + 真机数据）
+
+- 全量扫描探针（`.scratch/wsid-probe`，一次性）：65 个工坊目录 → **65 个数字工坊 id、无法解析 0 个**；
+  刀鱼作弊 `SteamId=3742679779`、工坊页 `…?id=3742679779`，`ModId` 仍是
+  `9fe65f9f-6bb5-3d00-22eb-ce4c16e5ee3f`（与修复前同一行，未产生重复行）。
+  该机另有 1 个真本地 mod（`<docs>\mod\更改虚空造物`），解析不出工坊 id 是对的。
+  探针在真实库的 `File.Copy` 副本上先跑通「补登记 + `playsets_mods` + 备份」。
+- 修复后 Mod 库：同一行四个按钮全部 enabled（`打开详情页 / 打开本地文件夹 / 在 Steam 中打开 / 在浏览器中打开`），
+  行 HelpText 变成新文案「创意工坊订阅的 mod，官方 mod 库中还没有登记（加入播放集时会自动补登记）」。
+- 真机加一次：播放集页「添加模组」→ 选刀鱼作弊 →「添加」，自动保存后
+  `launcher-v2.sqlite` 的 `mods` 65 → 66 行（`id=9fe65f9f…`、`steamId=3742679779`、`source=steam`、
+  `status=ready_to_play`、`dirPath=…\3742679779`、`requiredVersion=1.13.*`），`playsets_mods` 25 → 26 行
+  （position 25、enabled 1），`launcher-v2.sqlite.pdxnext.bak` 时间戳刷新，
+  `content_load.json` 的 `enabledMods` 多出该目录。重开 Mod 库该行不再有未登记警示（HelpText 为空），
+  行数仍 52，其余 5 条「版本不兼容」警示不变——回归未见变化。
+
+### 限制 / 未覆盖
+
+- **可能双行**：官方启动器之后自己登记同一个 mod 时会再插一行（同 dirPath、不同 id）。我们只在
+  `mods` 里找不到该 id 时补登记，且写入前有 `.pdxnext.bak` 可回退。
+- **不回填**已有行的空 `dirPath`：如 `喜儿修改器`（`4b02923b-…`，`dirPath` 为 NULL）在播放集里启用也不会进
+  `content_load.json`——这是本次之前就有的行为，留给官方启动器下次扫描自愈。
+- 不写 `metadataId` / `metadataVersion` / `size` / `subscribedDate` / `thumbnailUrl`：补登记行只保证
+  「能被自己的界面认出来 + 能进播放集」，官方库需要的完整元数据仍以官方启动器扫描为准。
+- CS2 的 pdx-mods（`PlaysetsJsonRepository` + `ModWorkshopRef.ResolvePdx`）未动：JSON 仲裁路径本就不产生
+  `IsUnregistered` 行。
+- `.scratch/wsid-probe`、`.scratch/wsid-uia*.ps1`、`.scratch/wsid-add*.ps1` 是一次性验收脚本，没有进构建。
+
+
+## 0.52 2026-10-29：播放集页「添加模组」弹窗改成独立页面
+
+### 起因
+
+用户原话：「播放集页面的添加mod弹窗改成添加页面」。
+
+原实现是播放集页工具条上那个 AccentButton「添加模组」点开后弹出的 `ContentDialog`：
+面板在代码里现搭（一个 `TextBox` 搜索 + 一个 `SelectionMode=Multiple` 的 `ListView`），
+底部只有「添加 / 取消」两个按钮。问题有三：
+
+1. **弹窗装不下候选列表。** 弹窗高度有限，mod 库几十条时只能看到一屏多一点；
+   搜索框与列表都是 `MinWidth 420`，在窄窗口里弹窗本身就被挤出可视区。
+2. **写回路径脆弱。** 弹窗关闭时才把选中项交给 `ModsViewModel.AddMods`，
+   而 `AddMods` 触发的是 fire-and-forget 的自动保存；一旦中途页面被重载
+   （`ModsPage` 是 `NavigationCacheMode="Required"`，返回时 `Loaded` 会重跑
+   `LoadAsync → SelectPlaySetAsync`，从库里重读 `_allMods`），刚加进去的 mod 会被覆盖掉。
+3. **页面职责混在 code-behind 里。** 候选筛选、选中集合、恢复选中态这些逻辑全写在
+   `ModsPage.xaml.cs` 的一个方法里，嵌套的 `AddModOption` 也只是给 `ListView` 包一层显示文本。
+
+### 根因
+
+弹窗本质上已经是「一个页面」了：自带标题、搜索、列表、空态、底部操作条，还需要在
+`ContentDialog` 里手工维护 `selected` 集合与 `restoringSelection` 标志来抵消
+`ItemsSource` 重设导致的选中丢失。塞进 `ContentDialog` 只会让这些复杂度变多，而不是变少。
+
+### 改动
+
+**新增文件**
+
+- `src/PdxLauncher.App/ViewModels/AddModsNavigationRequest.cs`：子页入参
+  `public sealed record AddModsNavigationRequest(Guid PlaySetId, string PlaySetName, string? GameId, string? ReturnTag);`
+- `src/PdxLauncher.App/ViewModels/AddModsNavigationResult.cs`：子页出参
+  `public sealed record AddModsNavigationResult(Guid PlaySetId, IReadOnlyList<ModLibraryEntry> Entries);`
+- `src/PdxLauncher.App/ViewModels/AddModsViewModel.cs`：候选加载 / 搜索过滤 / 选中计数 / 状态文案。
+- `src/PdxLauncher.App/ViewModels/AddModRowViewModel.cs`：候选行（缩略图、名称、来源徽标、大小 + 注册 ID）。
+- `src/PdxLauncher.App/Views/AddModsPage.xaml` + `.xaml.cs`：子页本体，**不设** `NavigationCacheMode`
+  （每次进入都是干净实例），自带 `_lifetime`（`Loaded` 重建 / `Unloaded` 取消）。
+
+**导航接线**
+
+- `NavigationService`：新增 `public const string AddModsTag = "addmods";`，
+  `TypeNames` 里加 `[AddModsTag] = "PdxLauncher.App.Views.AddModsPage",`。
+  注意 `Navigate` 在 `parameter == null` 时会跳过同 tag 导航，所以这个子页**必须**带参数进入。
+- `MainWindow.xaml.cs`：新增 `_modsPage` / `_addModsPage` 两个字段（`AttachPageEvents` 里 detach + 置 null，
+  `OnWindowClosed` 里同样 detach）；`NavigateToAddMods` 走 `_navigation.Navigate(AddModsTag, request)`
+  且**故意不同步左栏选中项**（子页没有左栏菜单项，选中态应停在「播放集」，
+  与 `NavigateToWorkshopDetail` 同一套做法）；`OnAddModsSelected` 回
+  `_navigation.Navigate(PlaySetsTag, result)` 并同步左栏；`UpdateContentNavState` 的
+  「内容不可管理就回主页」名单里也加上了 `AddModsTag`。
+- `ModsPage.xaml.cs`：新增 `public event EventHandler<AddModsNavigationRequest>? AddModsRequested;`，
+  `OnAddModsClick` 改成「没选播放集就提示，否则抛事件让 MainWindow 去导航」；
+  `OnNavigatedTo` 接住 `AddModsNavigationResult` 存进 `_pendingAddResult`；
+  `OnLoaded` 里 `await ReloadAsync()` **之后**再 `await ApplyPendingAddsAsync()`。
+
+**关键约束：写回必须在 reload 之后。** `ModsPage` 是 `NavigationCacheMode="Required"`，
+返回时 `Loaded` 会重跑 `LoadAsync → SelectPlaySetAsync`，而 `SelectPlaySetAsync` 用
+`PlaySetEditor.Renumber(saved…)` 把 `_allMods` 整个替换成库里的内容；
+自动保存又是 fire-and-forget、在真正写库那一刻才读 `_allMods`。
+所以子页**不**直接写库，只把勾选结果交回；由播放集页在 reload 完成后统一
+`SelectPlaySetAsync(目标集)`（目标集不同时先切过去）+ `AddMods(entries)`，
+随后 `RequestAutoSave()` 照旧触发。目标播放集已不存在时，提示
+`mods.addPage.targetMissing` 并且一个字节都不写。
+
+**删除**
+
+- `ModsViewModel.GetAddCandidateModsAsync`（原本是「弹窗候选」专用）：子页改用
+  `ModLibraryService.LoadAsync` + `IPlaySetRepository.GetPlaySetModsAsync` 自己取候选并排除已在集内的。
+- `ModsPage.xaml.cs` 里 `OnAddModsClick` 的整段弹窗代码与嵌套 `private sealed class AddModOption`。
+- 5 个只为弹窗存在的文案键：`mods.addDialog.add` / `mods.addDialog.listName` /
+  `mods.addDialog.searchName` / `mods.addDialog.searchPlaceholder` / `mods.dialog.noAddableMods`。
+
+**文案**
+
+新增 13 个 `mods.addPage.*` 键（zh-CN / en-US 同步）：`title` / `target`（带 `{0}` 播放集名）/
+`searchPlaceholder` / `searchName` / `listName` / `empty` / `noMatch` / `hint` / `add` / `back` /
+`selectedCount`（带 `{0}`）/ `candidateCount`（带 `{0}`）/ `targetMissing`。
+`Strings.g.cs` 由 `python tools/gen-i18n.py` 重新生成（735 键），`--check` 通过。
+
+**新页面的 AutomationId（便于 UIA 验收）**
+
+`btnAddModsBack`、`txtAddModsTitle`、`txtAddModsTarget`、`txtAddModsSearch`、
+`lstAddModsCandidates`、`txtAddModsEmpty`、`txtAddModsNoMatch`、`txtAddModsCandidateCount`、
+`txtAddModsStatus`、`txtAddModsSelectedCount`、`btnAddModsCancel`、`btnAddModsConfirm`、`ringAddModsBusy`；
+候选行 `addModCandidate_<modIdN>`，勾选框 `addModCandidateCheck_<modIdN>`。
+
+### 自检
+
+- `dotnet build "PdxLauncher.sln" -c Release -m:1` → **0 警告 0 错误**。
+- `dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"` →
+  **检查类: 54，失败: 0，断言失败总数: 0**。
+- `python tools/gen-i18n.py --check` 通过（735 键）。
+- `tests/PdxLauncher.Checks/ModPathChecks.cs` 的 `CheckKeysExist()` 追加了 13 个
+  `mods.addPage.*` 键的双语存在性断言（检查类数量仍是 54，README 计数不变）。
+
+### 预期验收路径（本轮只跑了编译 + 自检，界面行为按代码路径推导，未做真机 UIA 点击回归）
+
+- 播放集页点「添加模组」→ 进入独立子页，**左栏选中态仍停在「播放集」**；
+  页头是返回按钮 + 「添加模组」+ 目标播放集名，下面是搜索框与「共 N 个可添加的 mod」，
+  再下面是可勾选列表（缩略图 / 名称 / 来源徽标 / 大小 + 注册 ID），底部是「已选 N 个 mod」与「取消 / 添加」。
+- 搜索按名称 / 注册 ID 过滤，勾选状态在过滤前后保持；「取消」或返回箭头都不改任何东西。
+- 点「添加」回到播放集页：mod 追加到列表末尾、默认启用，状态栏显示「已添加 N 个 mod（自动保存中）」，
+  随后自动保存落库（`playsets_mods` 多出对应行）。
+- 空态（mod 库里没有可加的）与搜索无结果分别显示 `txtAddModsEmpty` / `txtAddModsNoMatch`。
+- 目标播放集在子页打开期间被删除：返回时提示 `mods.addPage.targetMissing`，播放集内容不变。
+
+### 限制 / 未覆盖
+
+- **没有做真机 UIA 自动化回归**：本轮只跑了编译与 54 个自检类，界面行为是按代码路径推演的，
+  未用 `winapp ui` 跑一遍真实点击流程（§0.52 的「实测验收」条目待补 UIA dump）。
+- **子页是独立实例**（没有 `NavigationCacheMode`）：每次进入都会重新读 mod 库，
+  mod 很多时有一次可感知的加载；这是为了避免缓存实例与 `SelectedPlaySet` 状态打架。
+- **候选仍受「当前游戏」限制**：没有选中游戏时子页显示「请先选择游戏」并给出空列表。
+- 未覆盖的场景：子页打开期间切换游戏（`CurrentGameChanged`）——子页不会自动跟随刷新，
+  关闭重开即可。
+- `mods.status.readLibraryFailed` 仍被新子页复用（读候选失败时的状态文案）；
+  `mods.status.noModsAdded` 仍由 `ModsViewModel.AddMods` 使用（一个都没加上时的提示），两者都没删。
+
+## 0.53 2026-10-30：Mod 库页三角提示改成「版本支持」口径
+
+### 起因
+
+用户原话：「mod 库页面的感叹号报错应该是版本支持报错，你现在的报错还以为是 mod 不行呢」。
+
+原实现里三角提示的三种来源都写成了「mod 有问题」的口气：
+
+- `modlib.warningStatus` = 「状态异常：{0}」——读起来像 mod 装坏了；
+- `modlib.warningOutdated` = 「可能不兼容当前游戏版本（要求 {0}，当前 {1}）」——直接下「不兼容」的判断；
+- 未登记类提示虽然说明事实（本地磁盘 / 工坊订阅、官方库里没登记），但整段仍以「异常」收尾。
+
+用户的要求是：三角只讲**版本支持**——这个 mod 声明支持哪个版本、和当前游戏版本对不对得上。
+
+### 根因
+
+1. **文案口径**：三句文案写死了否定判断（状态异常 / 不兼容），而登记情况与 `mods.status` 本来只是
+   「这个 mod 在官方库里是什么状态」的**事实**，不是 mod 的问题。
+2. **判定与文案耦合**：`ModLibraryRowViewModel.BuildWarning`（App 层）里同时写着「判什么」和「怎么说」，
+   判定逻辑没法被自检覆盖（App 是 WinExe + windows TFM，`PdxLauncher.Checks` 引用不了）。
+3. 官方库里 `mods.status` 恒为 `ready_to_play`（CK3 382 / Stellaris 313 / V3 66 全量实测），
+   「状态异常」这条文案在官方 sqlite 路径上基本不会触发；用户真正看到的三角来自**版本分支**
+   （V3 上 6 行：`1.12.*`×4、`1.11.*`×1、`1.9.*`×1 对游戏 `1.13.11 (Matcha)`），文案却写着「可能不兼容」。
+
+### 改动
+
+**新增文件**
+
+- `src/PdxLauncher.Core/Playsets/ModLibraryWarning.cs`：三角提示的**唯一判定点**（Core，可被自检直接覆盖）。
+  - `enum ModWarningKind { None, Unregistered, UnregisteredWorkshop, Status, VersionBelow }`
+  - `enum ModVersionSupport { Undeclared, DeclaredUnknownGame, NotBelow, Below }`
+  - `public sealed record ModWarningInfo(ModWarningKind Kind, ModVersionSupport VersionSupport, string RequiredVersion, string GameVersion, string Status)`，
+    带 `HasTriangle` / `VersionKey` / `ConclusionKey` / `NoteKey` / `VersionArgumentCount` / `NoteArgumentCount`。
+  - `public static class ModLibraryWarnings`：`Resolve(ModLibraryEntry entry, string? gameVersion)`、
+    `ClassifyVersionSupport(string? requiredVersion, string? gameVersion)`、`ReadyStatus = "ready_to_play"`，
+    以及 9 个文案键常量（`NameKey`、`KeyVersionUndeclared` / `KeyVersionDeclaredUnknownGame` / `KeyVersionDeclared` /
+    `KeyVersionNotBelow` / `KeyVersionBelow`、`KeyUnregistered` / `KeyUnregisteredWorkshop` / `KeyStatus`）。
+  - 判定优先级不变：**未登记（本地 / 工坊按 `SteamWorkshop.GetWorkshopId` 区分）→ status ≠ ready_to_play → 声明版本低于当前游戏版本**。
+  - 版本对照沿用 `ModVersion` 的 major.minor 口径（**判定口径本身没改**，只换了说法）。
+- `tests/PdxLauncher.Checks/ModLibraryWarningChecks.cs`：新检查类，覆盖未登记 / 状态 / 版本低于 / 版本不低于 /
+  未声明 / 游戏版本未知，以及 9 个文案键在 zh-CN 与 en-US 两份 `modlib.json` 里都存在。
+
+**Core 工具方法**
+
+- `src/PdxLauncher.Core/Playsets/ModVersion.cs`：新增 `public static int? CompareMajorMinor(string? requiredVersion, string? gameVersion)`
+  （任一边读不出两段数字返回 null，否则 -1 / 0 / 1），`IsOutdated` 改写为 `=> CompareMajorMinor(requiredVersion, gameVersion) < 0;`（行为等价）。
+
+**文案**
+
+- `tools/i18n/zh-CN/modlib.json` + `en-US/modlib.json`：
+  - 删除 `modlib.warningOutdated`；
+  - `modlib.warningName`：兼容性警告 → **版本支持提示**（en：`Version support`）；
+  - `modlib.warningStatus`：状态异常：{0} → **官方库中的状态：{0}。**；
+  - `modlib.warningUnregistered` / `warningUnregisteredWorkshop` 改成中性陈述句；
+  - 新增 5 键 `modlib.versionSupport.undeclared` / `.declaredUnknownGame`（1 参数）/ `.declared`（2 参数）/ `.notBelow` / `.below`。
+  - 键数 735 → **739**；`src/PdxLauncher.App/Localization/Strings.g.cs` 由 `python tools/gen-i18n.py` 重新生成（生成物不手改）。
+
+**界面**
+
+- `src/PdxLauncher.App/ViewModels/ModLibraryRowViewModel.cs`：删掉本地 `ReadyStatus` 常量，`BuildWarning` 改成
+  「版本说明句 + 对照结论句 + 补充说明句」三段拼接（`string.Join(' ', parts)`），判定交给 `ModLibraryWarnings.Resolve`；
+  `HasWarning` / `WarningText` 的注释改成「版本支持提示」口径。
+- `src/PdxLauncher.App/Views/ModLibraryPage.xaml`：文件头注释同步改口径（三角的三种来源写清楚，文案只讲版本支持）。
+
+**文档**
+
+- `README.md`：Mod 库页说明改成「本地 mod / 库里状态不是 ready_to_play 的 mod / 声明的支持版本低于当前游戏版本的 mod 带三角提示标记，
+  提示只讲版本支持」；检查类计数 54 → **55**，文件计数 342 → **344 个 .cs + 14 个 .xaml**（Core 184 / App 93+14 / Imaging 9 / Checks 58）。
+- `docs/DATA-FORMATS.md`：Mod 库小节补「三角提示的三种来源（判定优先级）」与「提示文案只讲版本支持」的说明。
+- `docs/HANDOFF.md`：文件头自检计数 54 → **55**。
+
+### 自检
+
+- `python tools/gen-i18n.py` + `--check` → **739 键**，退出码 0。
+- `dotnet build "PdxLauncher.sln" -c Release -m:1` → **0 警告 0 错误**（构建前 `taskkill /F /IM PdxLauncher.App.exe`）。
+- `dotnet "tests\\PdxLauncher.Checks\\bin\\Release\\net10.0\\PdxLauncher.Checks.dll"` →
+  **检查类: 55，失败: 0，断言失败总数: 0**。
+- 新检查类在第一轮跑出过 5 条断言失败，暴露了一个真 bug：`ModLibraryWarnings.Resolve` 在没有三角时返回
+  `ModWarningInfo.None with { ... }`，把已经算好的版本对照结论覆盖成了 `Undeclared`
+  （「声明版本不低于当前版本」被说成「没有声明版本」）。已改为统一 `return new ModWarningInfo(kind, support, required, game, status);`。
+  另有 1 条是自检自身写错（把 `Ready_To_Play` 当成状态异常，实际按大小写不敏感比较它等于 `ready_to_play`），已改成断言 `MISSING` 才是状态类。
+
+### 预期验收路径（本轮只跑了编译 + 自检，界面文案按代码路径推导，未做真机 UIA 点击回归）
+
+- Mod 库页某行声明 `1.12.*`、游戏版本 `1.13.11 (Matcha)`：悬停三角提示 =
+  「该 mod 声明支持版本 1.12.*；当前游戏版本 1.13.11 (Matcha)。 声明的版本低于当前游戏版本。」
+- 某行声明 `1.13.*`（不低于当前版本）：不挂三角；库里状态不是 `ready_to_play` 时才挂三角，
+  提示 = 「该 mod 声明支持版本 1.13.*；当前游戏版本 1.13.11 (Matcha)。 声明的版本不低于当前游戏版本。 官方库中的状态：missing。」
+- 本地磁盘 mod（官方库没登记、也没声明版本）：提示 = 「该 mod 没有声明支持的游戏版本。 该 mod 来自本地磁盘，官方 mod 库中还没有登记。」
+- 创意工坊订阅但官方库没登记（声明 `1.12.*`）：提示 = 「该 mod 声明支持版本 1.12.*；当前游戏版本 1.13.11 (Matcha)。 声明的版本低于当前游戏版本。 该 mod 来自创意工坊订阅，官方 mod 库中还没有登记（加入播放集时会自动补登记）。」
+  （多句之间用一个空格拼接，英文同理。）
+- 行尾「支持版本 1.12.*」那一栏仍照旧显示，不受影响。
+
+### 限制 / 未覆盖
+
+- **没有做真机 UIA 自动化回归**：本轮只跑了编译与 55 个自检类，三角提示的最终渲染文本未在真机上逐字核对
+  （Mod 库页的 UIA 访问此前就没打通，见 §0.52 的同款限制）。
+- **判定口径没有动**：`ModVersion` 仍只比较 major.minor，且 Paradox 的 `requiredVersion` 语义其实是「最低支持版本」，
+  所以 CK3 上 `1.19.*` 对 `1.20.1.2` 会被判成「低于」（实测 382 行里 156 行）。这是本轮**刻意不改**的部分
+  （用户拍板「不改判定，只改文案」），要修得单独开一轮。
+- 播放集页那套「这一行为什么不会被加载」的提示（`ModLoadRules.DescribeSkipKey` → `ModsViewModel`）与本轮的三角无关，没有动。
+- 「三角只讲版本支持」意味着**不再有任何「这个 mod 装不了」的判断**：磁盘目录缺失、mod 文件损坏这类问题仍然只体现在状态栏与行尾按钮置灰上。
+
+## 0.54 2026-10-30：Cities: Skylines 1 从「未适配」→「仅启动」+ 补丁链路打通
+
+### 起因
+
+用户原话（两句，中间隔了一轮）：
+① 「怎么城市天际线一没有适配，还有补丁能解开它的DLC吗」
+② 「那处理下 DLC 解锁补丁和适配问题」
+
+### 根因（全部真机实测）
+
+- `F:\SteamLibrary\steamapps\common\Cities_Skylines\launcher-settings.json` 写的是 `"gameId": "cities_v2"`，
+  而仓库所有 id 表（`KnownGames.DisplayNames` / `FullSupport` / `LaunchOnly`、`GameSteamAppIds.Known`、
+  `SteamWorkshopGames.Known`）只登记 `cities_skylines` ⇒ `KnownGames.GetSupport` 返回 `Unsupported`，
+  卡片角标就是「未适配」。
+- Paradox 元数据 GraphQL（`POST https://api.paradox-interactive.com/metadata/graphql`，变量类型必须是 `[ID]`）：
+  `["cities_v2"]` → `{"data":{"games":[]}}`；`["cities_skylines"]` → 正常返回 CS1 记录。
+  所以远程主题一直刷不出来，日志里反复是「元数据未返回该游戏，跳过主题刷新: cities_v2」。
+- **公告接口方向相反**：`GET .../communication/braze/contentcards/cities_v2` → 3307 B / 3 张卡；
+  `.../contentcards/cities_skylines` → `{}`。归一不能一刀切，否则 CS1 的公告全没。
+- 补丁本来就该能用：`steam_api64.dll`（239184 B，PE machine 0x8664）就在安装根，`Cities.exe` 无 SteamStub/DRM，
+  `ColossalNative.dll` 是运行时 `LoadLibrary("steam_api64.dll")` 动态加载（不在导入表）⇒ 放 loader + `cream_api.ini` 即生效。
+  Steam 安装靠 `appmanifest_255710.acf` 就能拿到 appId；**独立安装**原本拿不到 ⇒ 补丁报「无 appId」。
+- CS1 本体**不读任何加载文件**：全安装 229 个 dll/exe + 64 个 >60 MB 大文件流式扫
+  `content_load` / `enabledMods` / `disabledDLC` / `enabledUGC` / `dlc_signature` / `Addons` **全 0 命中**；
+  `launcher-v2` 字样只出现在 `dowser.exe`（官方 Go 引导器）。mod 由游戏内 Colossal Mods Domain 加载
+  （`Files\Mods\` + 工坊目录 `content\255710\<id>\`，开关存游戏自己的 `.cgs`），DLC 归属纯靠 Steam 授权，
+  安装目录里没有任何 `.dlc` 文件 ⇒ 与 Prison Architect 同理，**只能「仅启动」，不能设 Full**。
+
+### 改动
+
+**Core（`src/PdxLauncher.Core/`）**
+
+- `Games/KnownGames.cs`
+  - 新增 `private static readonly Dictionary<string,string> IdentityAliases`（OrdinalIgnoreCase），目前只有
+    `["cities_v2"] = "cities_skylines"`，带 XML doc 说明「官方启动器的内部编号 vs 服务端 id」。
+  - `DisplayNames` 别名区补 `["cities_v2"] = "Cities: Skylines"`（兜底展示名，不隐含支持等级）。
+  - `LaunchOnly` 补 `"cities_skylines"`，doc 里写清 CS1 的理由（与 PA 的 schema 理由不同）。
+  - 新增 `public static string CanonicalizeGameId(string? gameId)`：空 / 空白 → `string.Empty`，命中别名 → 正名，否则原样。
+  - 新增 `public static string GetNewsFeedGameId(string? gameId)`：归一后若为 `cities_skylines` → 返回 `"cities_v2"`，
+    否则返回正名。**全仓库唯一的反向特例**，只给 Braze 公告用。
+  - `IsKnown` / `GetDisplayName` / `GetSupport` 内部先 `CanonicalizeGameId` 再查表。
+- `Games/GameCatalog.cs`：`DiscoverOneAsync` / `TryAddInstallation` / `BuildInstallation` /
+  `BuildDetectedInstallation` / `TryAddDetectedInstallation` 全部先归一，
+  `seenGameIds` 与写进 `GameInstallation.GameId` 的都用正名（否则支持等级、appId 映射、工坊来源、远程主题全部落空）。
+- `Configuration/GameSelection.cs`：新增 `using PdxLauncher.Core.Games;`，`Select` 里把 `lastGameId` 先归一
+  —— 老设置里存的是 `cities_v2`，不归一就选不中。
+- `Online/GameSteamAppIds.cs` / `Online/SteamWorkshopGames.cs`：`TryGet` 内先归一（于是 `cities_v2` 也能查到 255710 / 有工坊）。
+- `Online/NewsFeedService.cs`：新增 `private static string NewsGameId(GameInstallation game) => KnownGames.GetNewsFeedGameId(game.GameId);`，
+  `FetchAsync` 的 URL 与**4 处缓存写键**（partial / updated / 404-empty / failure）全部改用它；
+  日志里仍打印 `game.GameId`（排障时看归一后的 id 更有用）。
+
+**App**：**零改动**。补丁 UI、工坊页、主页提示都没有按支持等级 gating 的代码
+（`WorkshopViewModel` 在「仅启动」+ 能解析 appId 时本来就会继续查；`MainWindow.UpdateContentNavState` 只按
+`SupportsContentManagement` 隐藏导航项，这正是「仅启动」该有的表现）。
+
+**测试（`tests/PdxLauncher.Checks/`，检查类数量不变，仍 55 个）**
+
+- 新增 fixture `tests/fixtures/cities_skylines/launcher-settings.json`（真机原文，`gameId: cities_v2`，无 `dlcPath`）。
+- `GamesChecks.cs`：`CheckLauncherSettings` 加 CS1 fixture 断言（原始 id 保持 `cities_v2`、Format、`%LOCALAPPDATA%` 展开、
+  缺 `dlcPath` 时兜底到 settings 目录）；`CheckSyntheticLibrary` 加一份 CS1 安装（断言收录 4 个游戏、
+  `cities_skylines` 是 LaunchOnly / IsSupported=true / SupportsContentManagement=false、
+  `DiscoverOneAsync("cities_v2")` 能命中）；`CheckSupportTiers` 加 CS1 支持等级与 `CanonicalizeGameId` /
+  `GetNewsFeedGameId` 的全套断言；`CheckRealMachine` 把 `cities_skylines` 加进 `requiredIds`，
+  并断言真机 Support=LaunchOnly / SteamAppId=255710 / exePath 以 `Cities.exe` 结尾 / 主题来自 InstallDir。
+- `GameSteamAppIdsChecks.cs`：`cities_v2` → 255710，且 `WorkshopSourceChooser.ResolveAppId(null, "cities_v2")` = 255710。
+- `SteamWorkshopGamesChecks.cs`：`cities_v2` 与 `cities_skylines` 同答案。
+- `GameSelectionChecks.cs`：老设置里的 `cities_v2` 能选中 `cities_skylines`（双命中 / 仅 gameId 两种路径）。
+- `DlcPatchChecks.cs`：新增 `CheckCitiesSkylines1Layout`（`appId: null` 的 CS1 独立安装 → Vanilla + appId 255710 +
+  目标目录是安装根 → 打补丁 → ini 里 `appid = 255710` / 保留 `orgapi64` / 含 Cities Skylines 区块 → 还原字节一致）。
+- `NewsFeedChecks.cs`：新增 `CheckGameIdAlias`（URL 必须是 `contentcards/cities_v2`、缓存键是 `cities_v2`、
+  缓存里不出现 `cities_skylines`、原始 id 与归一 id 共用同一份缓存且不重复请求）。
+
+**文档**：`README.md`（支持等级表 + 「仅启动」两款的理由 + 归一说明 + 补丁不受支持等级限制）、
+`docs/DATA-FORMATS.md`（§0 真机表加 CS1 行、§5 补 CS1 的 mod 形态、新增 §11.1）、`docs/HANDOFF.md`（本节）。
+
+### 验证（本轮实跑）
+
+- `dotnet build tests\PdxLauncher.Checks\PdxLauncher.Checks.csproj -c Release -m:1` → **0 警告 0 错误**。
+- `dotnet tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll` → **检查类: 55，失败: 0，断言失败总数: 0**。
+  真机段实测打印：`真机: 发现 cities_skylines（原始 id cities_v2 已归一）`、`CS1 Support=LaunchOnly`、
+  `CS1 SteamAppId 255710`、`CS1 主题来自 LauncherAssets [InstallDir]`。
+- **`build.cmd` 首轮失败**：`PdxLauncher.App`（PID 29224）当时正开着，锁住
+  `src\PdxLauncher.App\bin\x64\Release\...\PdxLauncher.Core.dll`，MSB3027/MSB3021 复制失败。
+  关掉窗口后重跑即 **0 个警告 / 0 个错误 / 检查类: 55，失败: 0**（App 工程本身零改动）。
+
+### 明确非目标 / 未做
+
+- **没改 `cream_api.ini`**：CS1 区块 94 条已覆盖商店 79 个已发售 DLC，只缺 4771370（Holiday Getaways）、
+  4771380（Mansions & Manors）、4771390（Blueprint Beats）三条 `release_date: "Coming soon"` 的未发售条目。
+  加它们会连带改 `Assets/README.md` 的字节/sha256 表与 `DlcPatchChecks.ExpectedIniSha256`，收益为零，故不动。
+- **没有在真机上点「打补丁」**：按计划这一步要等用户点头。补丁只会备份 `steam_api64_o.dll` 再写 loader，可一键移除。
+- **没为「仅启动」游戏放开工坊 / 播放集 / DLC 导航**：`SupportsContentManagement` 仍只对 Full 为真，
+  `WorkshopViewModel` 内部虽能查，但入口不显示。要不要给 CS1 单独开一个「只读工坊浏览」是独立议题。
+- **`eu4` 仍是「未适配」**：本轮只处理 CS1；EU4 的 `launcher-settings.json` 用的是 `eu4` 这个已登记 id 之外的写法，
+  要单独查。
+
+
+### 顺带修掉的两个素材判定缺口（同一轮，非计划内）
+
+CS1 的远端主题第一次真正被抓取，暴露了 `AssetDownloader` 的两处硬判定：
+
+- **`cities_skylines-button-background-image` 只有 361 B**（IHDR 8×50 + sRGB/gAMA/pHYs/tIME + 单个 IDAT + IEND，
+  结构完整），被 `MinimumFileBytes = 1024` 判成坏文件。阈值一路 4 KB → 1 KB → **256 B**，
+  日志文案也从「素材小于 1 KB」改成「素材小于 256 B」（不再用整数除法打印，避免四舍五入歧义）。
+- **`cities_skylines-button-font-path` 是 `OTTO`**（CFF 轮廓的 OpenType，69,808 B），
+  而 `AssetFileTypeDetector.Detect` 只认 `00 01 00 00`。补上 `OTTO` 与 `true` 两个分支，都归到 `AssetFileType.Ttf`（扩展名 `.ttf`）。
+- 同一轮还补了 **`00 00 01 00` → `AssetFileType.Ico`（新枚举值 8，扩展名 `.ico`）**：
+  `eu4-launcher-app-taskbar-icon` 是 370,070 B 的 6 帧 Windows ICO，日志里从 2026-10-27 起累计 42 次
+  「素材 magic bytes 无法识别」全是它。
+
+这三处不修的后果是同一个：`ThemeResolver.RefreshAsync` 里 `succeeded < remote.Count` 恒成立，
+于是 `lastCheckedUtc` 永不推进、`retryAfterUtc` 每 10 分钟被改写一次——CS1 与 EU4 的主题会永远重复下载。
+修完实测：`cities_skylines` 5/5、`eu4` 6/6，两个索引的 `lastCheckedUtc` 都已落地、`retryAfterUtc` 清空。
+
+`OnlineChecks.CheckAssetFileTypeDetection` 相应加了 `OTTO` / `true` / `ICO` 三个判型用例、
+`GetExtension(AssetFileType.Ico)` 断言，以及「361 B 的 CS1 按钮背景图被接受并落盘」的回归用例；
+「小于 1 KB 被拒绝」改成「小于 256 B 被拒绝」（样本 512 B → 200 B）。
+`docs/DATA-FORMATS.md` §7 的 magic/阈值那句话同步改写。
+
+### 真机复核（2026-10-30 08:52）
+
+| 项 | 结果 |
+| --- | --- |
+| `build.cmd` | 0 个警告 / 0 个错误 / 检查类: 55，失败: 0 |
+| `python tools\gen-i18n.py --check` | 739 键通过 |
+| 日志 `cities_v2` 出现次数（重启后） | 0 |
+| `cities_skylines` 主题 | 5/5 素材落盘，`lastCheckedUtc` 已写，`retryAfterUtc` 空 |
+| `eu4` 主题 | 6/6 素材落盘（含 370 KB ICO），`retryAfterUtc` 空 |
+| 真机 `F:\...\Cities_Skylines\` | 仍是原版 `steam_api64.dll`（239,184 B），无 `cream_api.ini`、无 `_o.dll`、无 `data\patch\state.json` |
+
+构建过程中遇到过一次 `CSC error CS2012`（`obj\...\PdxLauncher.App.dll` 被 `VBCSCompiler` 或
+`Microsoft.UI.Xaml.Markup.Compiler` 占用）：`dotnet build-server shutdown` + `taskkill /IM VBCSCompiler.exe /F` 后重跑即通过，
+与本轮改动无关。
+### 预期验收路径（界面未做 UIA 回归）
+
+- 游戏库卡片：Cities: Skylines 角标 = 「仅启动」（`library.badge.launchOnly`），不再是「未适配」。
+- 主页：选中 CS1 时播放集下拉隐藏，改显示 `home.supportNotice.launchOnly` 那句
+  「{0} 只能启动：模组与 DLC 由游戏本体管理（游戏内 MOD 菜单 / Steam 创意工坊），本启动器不读写它的数据。」
+- 设置 → 高级：补丁卡片显示「原版」，详情里 appId = 255710；点「一键打补丁」→ 已打补丁；「移除补丁」→ 字节还原。
+- 日志：不再出现「元数据未返回该游戏，跳过主题刷新: cities_v2」；改为主题缓存更新成功，
+  `data\theme-cache\cities_skylines-*` 出现（旧的 `cities_v2-*` 若存在会变成孤儿文件，可手删）。
+- 公告：CS1 仍显示 3 张官方公告卡（走 `cities_v2` URL）。
+

@@ -7,6 +7,8 @@ using PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.LoadFiles;
+using PdxLauncher.Core.Playsets;
 
 /// <summary>
 /// 「播放集」页的视图模型：播放集列表 + 当前播放集已保存的 mod 行 + 搜索 + 启用/禁用/排序/增删。
@@ -19,6 +21,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
 {
     private readonly PlaySetEditor _editor;
     private readonly ModLibraryService _modLibrary;
+    private readonly ModPathRepairer _pathRepairer;
     private readonly IAppLogger _logger;
 
     /// <summary>自动保存串行门：一次只允许一个保存流程写 sqlite / 加载文件。</summary>
@@ -50,14 +53,20 @@ public sealed class ModsViewModel : LocalizedObservableObject
     /// <summary>正在运行的自动保存循环；为 null 或已完成时才允许启动新循环。</summary>
     private Task? _autoSaveTask;
 
-    public ModsViewModel(PlaySetEditor editor, ModLibraryService modLibrary, IAppLogger logger)
+    public ModsViewModel(
+        PlaySetEditor editor,
+        ModLibraryService modLibrary,
+        ModPathRepairer pathRepairer,
+        IAppLogger logger)
     {
         ArgumentNullException.ThrowIfNull(editor);
         ArgumentNullException.ThrowIfNull(modLibrary);
+        ArgumentNullException.ThrowIfNull(pathRepairer);
         ArgumentNullException.ThrowIfNull(logger);
 
         _editor = editor;
         _modLibrary = modLibrary;
+        _pathRepairer = pathRepairer;
         _logger = logger;
     }
 
@@ -398,58 +407,6 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
     // ------------------------------------------------------------ 添加 / 移除
 
-    /// <summary>
-    /// 「添加模组」对话框的候选：mod 库里、非本地磁盘扫描项、且尚未加入当前播放集的 mod。
-    /// </summary>
-    public async Task<IReadOnlyList<ModLibraryEntry>> GetAddCandidateModsAsync(CancellationToken cancellationToken)
-    {
-        if (Game is null)
-        {
-            StatusMessage = T(Keys.ModsStatusSelectGameFirst);
-            return Array.Empty<ModLibraryEntry>();
-        }
-
-        IsBusy = true;
-        try
-        {
-            _librarySnapshot = await _modLibrary
-                .LoadAsync(Game, cancellationToken)
-                .ConfigureAwait(true);
-            _entryByModId = BuildEntryMap(_librarySnapshot);
-
-            var currentIds = _allMods.Select(static m => m.ModId).ToHashSet();
-            var candidates = new List<ModLibraryEntry>();
-            foreach (var entry in _librarySnapshot.Mods)
-            {
-                // 只排除「磁盘上有、库里没登记」的 mod：它们没有 mods.id 对应的外键，写不进 playsets_mods。
-                // 官方登记的本地 mod（source=local）可以正常加入播放集。
-                if (entry.IsUnregistered || currentIds.Contains(entry.ModId))
-                {
-                    continue;
-                }
-
-                candidates.Add(entry);
-            }
-
-            return candidates;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.Error("读取 mod 库失败（gameId=" + Game.GameId + "）", ex);
-            StatusMessage = T(Keys.ModsStatusReadLibraryFailed, ex.Message);
-            return Array.Empty<ModLibraryEntry>();
-        }
-        finally
-        {
-            IsBusy = false;
-            RaiseCounts();
-        }
-    }
-
     /// <summary>把 mod 库里的条目追加到当前播放集（默认启用，排在末尾，随后自动保存）。</summary>
     public void AddMods(IEnumerable<ModLibraryEntry> entries)
     {
@@ -531,9 +488,37 @@ public sealed class ModsViewModel : LocalizedObservableObject
                 OnRowMove,
                 OnRowRemove,
                 ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize));
+            var origin = ModOrigins.Normalize(
+                mod.Source ?? (_entryByModId.TryGetValue(mod.ModId, out var known) ? known.Source : null),
+                mod.SteamId);
+
+            string? warningKey = null;
+            if (_game is not null)
+            {
+                // 存在性检查在这里做（ModLoadRules 本身是纯函数）：路径写进加载文件但磁盘上没有，
+                // 游戏同样会静默忽略，属于同一类「启用了却没生效」。
+                warningKey = ModLoadRules.DescribeSkipKey(
+                    _game,
+                    mod,
+                    AppServices.FileSystem.DirectoryExists,
+                    AppServices.FileSystem.FileExists);
+            }
+
             if (_entryByModId.TryGetValue(mod.ModId, out var entry))
             {
-                row.SetDetails(FormatSize(entry.SizeBytes));
+                row.SetDetails(
+                    FormatSize(entry.SizeBytes),
+                    T(ModOrigins.DescribeKey(origin)),
+                    origin == ModOrigin.Local,
+                    warningKey is null ? null : T(warningKey));
+            }
+            else
+            {
+                row.SetDetails(
+                    null,
+                    T(ModOrigins.DescribeKey(origin)),
+                    origin == ModOrigin.Local,
+                    warningKey is null ? null : T(warningKey));
             }
 
             row.TotalCount = filtered.Count;
@@ -988,6 +973,80 @@ public sealed class ModsViewModel : LocalizedObservableObject
         {
             _logger.Error("激活播放集失败（playSetId=" + playSet.Id.ToString("N") + "）", ex);
             StatusMessage = T(Keys.ModsStatusActivateFailed, ex.Message);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// 扫一遍当前游戏的 Mod，找出能自动修的路径问题：订阅 mod 缺路径（按工坊目录补）、
+    /// 本地 mod 路径含非 ASCII（游戏加载不了，改成 mod_&lt;id 前 8 位&gt;）。
+    /// 只诊断不落盘 —— 由界面确认后再调 <see cref="ApplyPathRepairsAsync"/>。
+    /// </summary>
+    public async Task<IReadOnlyList<ModPathRepair>> FindPathRepairsAsync(CancellationToken cancellationToken)
+    {
+        if (Game is not { } game || IsBusy)
+        {
+            return Array.Empty<ModPathRepair>();
+        }
+
+        IsBusy = true;
+        try
+        {
+            return await _pathRepairer.FindAsync(game, cancellationToken).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("扫描 mod 路径问题失败（gameId=" + game.GameId + "）", ex);
+            StatusMessage = T(Keys.ModsRepairFailed, ex.Message);
+            return Array.Empty<ModPathRepair>();
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>执行用户确认过的修复项：先改目录名再写库，然后刷新当前播放集并把加载文件重写一遍。</summary>
+    public async Task ApplyPathRepairsAsync(IReadOnlyList<ModPathRepair> repairs, CancellationToken cancellationToken)
+    {
+        if (Game is not { } game || repairs.Count == 0)
+        {
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            await FlushPendingAutoSaveAsync(cancellationToken).ConfigureAwait(true);
+
+            var applied = await _pathRepairer.ApplyAsync(game, repairs, cancellationToken).ConfigureAwait(true);
+            if (!applied.IsSuccess)
+            {
+                StatusMessage = T(Keys.ModsRepairFailed, applied.ErrorMessage ?? T(Keys.ModsRepairNothing));
+                return;
+            }
+
+            // 改名/补路径之后磁盘事实变了：重载当前播放集，再补一次保存好让加载文件跟上。
+            var current = SelectedPlaySet;
+            await SelectPlaySetAsync(current, cancellationToken).ConfigureAwait(true);
+            await SaveAsync(cancellationToken, writeLoadFile: true).ConfigureAwait(true);
+            StatusMessage = T(Keys.ModsRepairDone, applied.Value);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("修复 mod 路径失败（gameId=" + game.GameId + "）", ex);
+            StatusMessage = T(Keys.ModsRepairFailed, ex.Message);
         }
         finally
         {

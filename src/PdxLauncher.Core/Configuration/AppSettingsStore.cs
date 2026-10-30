@@ -4,11 +4,13 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Storage;
 
 /// <summary>
-/// AppSettings 的读写。文件位于程序目录下的 data\settings.json；
+/// AppSettings 的读写。正式落点是自有库 <c>pdxnext.sqlite</c> 的 <c>settings</c> 表（键 <c>settings</c>）；
+/// 旧的 <c>data\settings.json</c> 只在导入/自检路径上使用（见 <see cref="IDocumentFile"/>）。
 /// 旧位置 %LOCALAPPDATA%\PdxNext 只由 <see cref="DataRootMigrator"/> 读取一次用于迁移。
-/// 读取容错：文件缺失/损坏一律返回默认值并记日志，绝不抛异常。
+/// 读取容错：文档缺失/损坏一律返回默认值并记日志，绝不抛异常。
 /// <para>
 /// 写入分两条路：<see cref="Save"/> 立即落盘并返回结果（关闭窗口、改代理这类必须确定生效的场合），
 /// <see cref="SaveDeferred"/> 只登记「待写」并在 <see cref="DeferredSaveDelayMilliseconds"/> 后合并成一次写
@@ -29,9 +31,8 @@ public sealed class AppSettingsStore : IDisposable
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    private readonly IFileSystem _fs;
+    private readonly IDocumentFile _document;
     private readonly IAppLogger _logger;
-    private readonly string _path;
     private readonly object _gate = new();
     private readonly Timer _deferredTimer;
 
@@ -41,18 +42,31 @@ public sealed class AppSettingsStore : IDisposable
 
     private bool _disposed;
 
+    /// <summary>自检/兼容用：设置存在一个 JSON 文件里（旧布局）。</summary>
     public AppSettingsStore(IFileSystem fs, IAppLogger logger, string settingsPath)
+        : this(new FileDocumentFile(fs, settingsPath), logger)
     {
-        ArgumentNullException.ThrowIfNull(fs);
+    }
+
+    /// <summary>正式路径：设置作为一份文档存在自有库里。</summary>
+    public AppSettingsStore(IJsonDocumentStore documents, IAppLogger logger)
+        : this(new StoreDocumentFile(documents, JsonDocumentKeys.Settings), logger)
+    {
+    }
+
+    /// <summary>直接给一个文档落点（库或文件）。</summary>
+    public AppSettingsStore(IDocumentFile document, IAppLogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(logger);
-        ArgumentException.ThrowIfNullOrWhiteSpace(settingsPath);
-        _fs = fs;
+
+        _document = document;
         _logger = logger;
-        _path = settingsPath;
         _deferredTimer = new Timer(OnDeferredTimerElapsed, null, Timeout.Infinite, Timeout.Infinite);
     }
 
-    public string SettingsPath => _path;
+    /// <summary>当前设置的落点（<c>db:settings</c> 或文件绝对路径），排障用。</summary>
+    public string SettingsPath => _document.DisplayPath;
 
     public static string DefaultPath => Path.Combine(PdxDataRoot.Directory, "settings.json");
 
@@ -74,12 +88,12 @@ public sealed class AppSettingsStore : IDisposable
         {
             try
             {
-                if (!_fs.FileExists(_path))
+                var json = _document.ReadText();
+                if (json is null)
                 {
                     return new AppSettings();
                 }
 
-                var json = _fs.ReadAllText(_path);
                 return JsonSerializer.Deserialize<AppSettings>(json, Options) ?? new AppSettings();
             }
             catch (JsonException ex)
@@ -187,8 +201,12 @@ public sealed class AppSettingsStore : IDisposable
         try
         {
             var json = JsonSerializer.Serialize(settings, Options);
-            _fs.EnsureDirectory(Path.GetDirectoryName(_path) ?? ".");
-            _fs.WriteAllTextAtomic(_path, json);
+            if (!_document.WriteText(json))
+            {
+                _logger.Error("settings 写入失败（落点=" + _document.DisplayPath + "）");
+                return AppResult<bool>.Fail(ErrorKind.Io, "settings-write:" + _document.DisplayPath);
+            }
+
             return AppResult<bool>.Ok(true);
         }
         catch (IOException ex)

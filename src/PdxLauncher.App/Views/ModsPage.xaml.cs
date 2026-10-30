@@ -5,10 +5,12 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Navigation;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Playsets;
 using Windows.System;
 
 /// <summary>
@@ -29,6 +31,12 @@ public sealed partial class ModsPage : Page
     /// <summary>当前正在编辑位次的行；null 表示没有行处于编辑态。同一时刻只允许一行。</summary>
     private ModRowViewModel? _editingRow;
 
+    /// <summary>
+    /// 从「添加模组」子页带回来的选择结果；null 表示这次回来没有要添加的东西。
+    /// 必须在页面重载完成之后再写入，否则重载会用数据库里的内容覆盖掉刚加的 mod。
+    /// </summary>
+    private AddModsNavigationResult? _pendingAddResult;
+
     public ModsPage()
     {
         InitializeComponent();
@@ -36,6 +44,11 @@ public sealed partial class ModsPage : Page
         _viewModel = new ModsViewModel(
             new PlaySetEditor(AppServices.PlaySets, AppServices.LoadFiles, AppServices.Logger),
             new ModLibraryService(AppServices.PlaySets, AppServices.Mods, AppServices.Logger),
+            new ModPathRepairer(
+                AppServices.FileSystem,
+                AppServices.PlaySets,
+                AppServices.Mods,
+                AppServices.Logger),
             AppServices.Logger);
 
         Loaded += OnLoaded;
@@ -46,6 +59,20 @@ public sealed partial class ModsPage : Page
 
     /// <summary>XAML 的文案入口：<c>{x:Bind L.SomeKey, Mode=OneWay}</c>。</summary>
     public Localizer L => Localizer.Instance;
+
+    /// <summary>要求打开「添加模组」子页（页面自己不持导航职责）。</summary>
+    public event EventHandler<AddModsNavigationRequest>? AddModsRequested;
+
+    /// <summary>从子页回来时带着导航参数（这里只关心添加结果）。</summary>
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+
+        if (e.Parameter is AddModsNavigationResult result)
+        {
+            _pendingAddResult = result;
+        }
+    }
 
     // ------------------------------------------------------------ 生命周期
 
@@ -71,6 +98,7 @@ public sealed partial class ModsPage : Page
             }
 
             await ReloadAsync().ConfigureAwait(true);
+            await ApplyPendingAddsAsync().ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -296,12 +324,13 @@ public sealed partial class ModsPage : Page
 
     // ------------------------------------------------------------ mod 操作
 
-    /// <summary>「添加模组」：从 mod 库候选里多选，加入当前播放集（自动保存）。</summary>
+    /// <summary>「添加模组」：打开子页，从 mod 库候选里多选，加入当前播放集（自动保存）。</summary>
     private async void OnAddModsClick(object sender, RoutedEventArgs e)
     {
         try
         {
-            if (_viewModel.SelectedPlaySet is null)
+            var playSet = _viewModel.SelectedPlaySet;
+            if (playSet is null)
             {
                 await ShowMessageAsync(
                     Localizer.Instance.ModsToolbarAddMods,
@@ -309,127 +338,68 @@ public sealed partial class ModsPage : Page
                 return;
             }
 
-            var candidates = await _viewModel
-                .GetAddCandidateModsAsync(_lifetime.Token)
-                .ConfigureAwait(true);
-            if (candidates.Count == 0)
-            {
-                await ShowMessageAsync(
-                    Localizer.Instance.ModsToolbarAddMods,
-                    Localizer.Instance.ModsDialogNoAddableMods).ConfigureAwait(true);
-                return;
-            }
-
-            var options = new List<AddModOption>(candidates.Count);
-            foreach (var entry in candidates)
-            {
-                options.Add(new AddModOption(entry));
-            }
-
-            var selected = new HashSet<AddModOption>();
-            var restoringSelection = false;
-
-            var search = new TextBox
-            {
-                PlaceholderText = Localizer.Instance.ModsAddDialogSearchPlaceholder,
-                MinWidth = 420,
-            };
-            AutomationProperties.SetAutomationId(search, "txtAddModsSearch");
-            AutomationProperties.SetName(search, Localizer.Instance.ModsAddDialogSearchName);
-
-            var list = new ListView
-            {
-                SelectionMode = ListViewSelectionMode.Multiple,
-                MinWidth = 420,
-                MinHeight = 220,
-                MaxHeight = 360,
-                ItemsSource = options,
-            };
-            AutomationProperties.SetAutomationId(list, "lstAddModsCandidates");
-            AutomationProperties.SetName(list, Localizer.Instance.ModsAddDialogListName);
-
-            list.SelectionChanged += (_, _) =>
-            {
-                if (restoringSelection)
-                {
-                    return;
-                }
-
-                selected.Clear();
-                foreach (var item in list.SelectedItems.OfType<AddModOption>())
-                {
-                    selected.Add(item);
-                }
-            };
-
-            search.TextChanged += (_, _) =>
-            {
-                var query = (search.Text ?? string.Empty).Trim();
-                var next = query.Length == 0
-                    ? options
-                    : options.FindAll(option => option.Matches(query));
-
-                restoringSelection = true;
-                try
-                {
-                    list.ItemsSource = next;
-                    foreach (var option in next)
-                    {
-                        if (selected.Contains(option))
-                        {
-                            list.SelectedItems.Add(option);
-                        }
-                    }
-                }
-                finally
-                {
-                    restoringSelection = false;
-                }
-            };
-
-            var panel = new Grid
-            {
-                RowSpacing = 8,
-                MinWidth = 420,
-            };
-            panel.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-            Grid.SetRow(search, 0);
-            Grid.SetRow(list, 1);
-            panel.Children.Add(search);
-            panel.Children.Add(list);
-
-            var dialog = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = Localizer.Instance.ModsToolbarAddMods,
-                Content = panel,
-                PrimaryButtonText = Localizer.Instance.ModsAddDialogAdd,
-                CloseButtonText = Localizer.Instance.CommonCancel,
-                DefaultButton = ContentDialogButton.Primary,
-            };
-
-            var result = await dialog.ShowAsync();
-            if (result != ContentDialogResult.Primary)
-            {
-                return;
-            }
-
-            var chosen = new List<ModLibraryEntry>(selected.Count);
-            foreach (var option in selected)
-            {
-                chosen.Add(option.Entry);
-            }
-
-            _viewModel.AddMods(chosen);
-        }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
-        {
-            // 页面关闭导致的取消，忽略。
+            AddModsRequested?.Invoke(
+                this,
+                new AddModsNavigationRequest(
+                    playSet.Id,
+                    playSet.Name,
+                    AppServices.CurrentGame?.GameId,
+                    NavigationService.PlaySetsTag));
         }
         catch (Exception ex)
         {
-            AppServices.Logger.Error("ModsPage 添加模组失败", ex);
+            AppServices.Logger.Error("ModsPage 打开添加模组页失败", ex);
+            await ShowMessageAsync(Localizer.Instance.ModsStatusAddModsFailedTitle, ex.Message).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// 应用从「添加模组」子页带回来的选择结果。
+    /// </summary>
+    /// <remarks>
+    /// 必须在重载完成之后调用：重载会用数据库里的内容重建播放集 mod 列表，
+    /// 提前写入的 mod 会被覆盖掉。
+    /// </remarks>
+    private async Task ApplyPendingAddsAsync()
+    {
+        var result = _pendingAddResult;
+        if (result is null)
+        {
+            return;
+        }
+
+        _pendingAddResult = null;
+
+        try
+        {
+            if (result.Entries.Count == 0)
+            {
+                return;
+            }
+
+            var target = _viewModel.PlaySets.FirstOrDefault(playSet => playSet.Id == result.PlaySetId);
+            if (target is null)
+            {
+                await ShowMessageAsync(
+                    Localizer.Instance.ModsToolbarAddMods,
+                    Localizer.Instance.ModsAddPageTargetMissing).ConfigureAwait(true);
+                return;
+            }
+
+            if (_viewModel.SelectedPlaySet?.Id != target.Id)
+            {
+                await _viewModel.SelectPlaySetAsync(target, _lifetime.Token).ConfigureAwait(true);
+            }
+
+            _viewModel.AddMods(result.Entries);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面已关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 应用添加模组结果失败", ex);
             await ShowMessageAsync(Localizer.Instance.ModsStatusAddModsFailedTitle, ex.Message).ConfigureAwait(true);
         }
     }
@@ -666,6 +636,35 @@ public sealed partial class ModsPage : Page
         }
     }
 
+    /// <summary>
+    /// 「修复 mod 路径」：先扫出可修项（订阅 mod 缺路径 / 本地 mod 路径含非 ASCII），
+    /// 让用户逐项确认并就地改名，再落实并把加载文件重写一遍。
+    /// </summary>
+    private async void OnRepairModPathsClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var repairs = await ViewModel.FindPathRepairsAsync(CancellationToken.None);
+            if (repairs.Count == 0)
+            {
+                await ShowMessageAsync(Localizer.Instance.ModsRepairName, Localizer.Instance.ModsRepairNothing);
+                return;
+            }
+
+            var confirmed = await ModPathRepairDialog.ShowAsync(XamlRoot, repairs);
+            if (confirmed.Count == 0)
+            {
+                return;
+            }
+
+            await ViewModel.ApplyPathRepairsAsync(confirmed, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 修复 mod 路径失败", ex);
+        }
+    }
+
     // ------------------------------------------------------------ 对话框
 
     private async Task<string?> PromptForNameAsync(string title, string placeholder, string initial)
@@ -720,31 +719,4 @@ public sealed partial class ModsPage : Page
         }
     }
 
-    /// <summary>「添加模组」对话框里的一行：包一层显示文本，避免 ListView 直接显示 record 的 ToString。</summary>
-    private sealed class AddModOption
-    {
-        public AddModOption(ModLibraryEntry entry)
-        {
-            ArgumentNullException.ThrowIfNull(entry);
-            Entry = entry;
-
-            var size = ModsViewModel.FormatSize(entry.SizeBytes);
-            Display = string.IsNullOrWhiteSpace(size)
-                ? entry.Name
-                : entry.Name + "  ·  " + size;
-        }
-
-        public ModLibraryEntry Entry { get; }
-
-        public string Display { get; }
-
-        /// <summary>按名称 / 注册 id 过滤（大小不参与匹配，避免输入 "1" 命中一堆行）。</summary>
-        public bool Matches(string query)
-        {
-            return Entry.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
-                || Entry.GameRegistryId.Contains(query, StringComparison.OrdinalIgnoreCase);
-        }
-
-        public override string ToString() => Display;
-    }
 }

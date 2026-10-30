@@ -1,6 +1,7 @@
 namespace PdxLauncher.Core.Configuration;
 
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Games;
 
 /// <summary>
 /// 「启动时选哪款游戏」的纯函数。抽到 Core 是为了能离线自检
@@ -27,6 +28,9 @@ public static class GameSelection
         {
             return null;
         }
+
+        // 记忆里存的可能是官方启动器的别名（CS1 = cities_v2），安装项上已经是正名。
+        lastGameId = KnownGames.CanonicalizeGameId(lastGameId);
 
         if (!string.IsNullOrWhiteSpace(lastGameId))
         {

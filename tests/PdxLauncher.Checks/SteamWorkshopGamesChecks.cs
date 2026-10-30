@@ -78,6 +78,12 @@ public static class SteamWorkshopGamesChecks
             SteamWorkshopGames.TryGet("surviving_mars"),
             SteamWorkshopGames.TryGet("surviving_mars_relaunched"));
 
+        // Cities: Skylines 1 的官方启动器 id 是 cities_v2，归一后与正名同答案。
+        ChecksContext.Equal("别名 cities_v2 = cities_skylines",
+            SteamWorkshopGames.TryGet("cities_skylines"),
+            SteamWorkshopGames.TryGet("cities_v2"));
+        ChecksContext.Equal("别名 cities_v2 也有 Steam 工坊", true, SteamWorkshopGames.TryGet("cities_v2"));
+
         // 大小写不敏感（安装目录/启动器设置里的 gameId 大小写并不统一）。
         ChecksContext.Equal("大写 CK3 也认", true, SteamWorkshopGames.TryGet("CK3"));
         ChecksContext.Equal("混合大小写 CS2 也认", false, SteamWorkshopGames.TryGet("Cities_Skylines_2"));

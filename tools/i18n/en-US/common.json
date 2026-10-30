@@ -28,5 +28,7 @@
   "common.notSet": "Not set",
   "common.selectPlaceholder": "Select…",
   "common.daysCount": "{0} days",
-  "common.filesCount": "{0} files"
+  "common.filesCount": "{0} files",
+  "common.sourceLocal": "Local",
+  "common.sourceSubscribed": "Subscribed"
 }

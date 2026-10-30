@@ -40,8 +40,17 @@
   "modlib.supportedVersion": "Supported version {0}",
   "modlib.supportedVersionName": "Supported game version",
   "modlib.title": "Mod Library",
-  "modlib.warningName": "Compatibility warning",
-  "modlib.warningOutdated": "May be incompatible with this game version (requires {0}, current {1})",
-  "modlib.warningStatus": "Unexpected status: {0}",
-  "modlib.warningUnregistered": "Mod found on disk but not registered in the official mod library"
+  "modlib.versionSupport.undeclared": "This mod does not declare a supported game version.",
+  "modlib.versionSupport.declaredUnknownGame": "This mod declares version {0}; the current game version is unknown.",
+  "modlib.versionSupport.declared": "This mod declares version {0}; the current game version is {1}.",
+  "modlib.versionSupport.notBelow": "The declared version is not lower than the current game version.",
+  "modlib.versionSupport.below": "The declared version is lower than the current game version.",
+  "modlib.warningName": "Version support",
+  "modlib.warningStatus": "Status in the official library: {0}.",
+  "modlib.warningUnregistered": "This mod comes from the local disk and is not registered in the official mod library.",
+  "modlib.warningUnregisteredWorkshop": "This mod is subscribed on the Workshop but is not registered in the official mod library yet (adding it to a play set registers it).",
+  "modlib.sourceFilterName": "Source",
+  "modlib.sourceFilterAll": "All sources",
+  "modlib.sourceFilterLocal": "Local only",
+  "modlib.sourceFilterSubscribed": "Subscribed only"
 }

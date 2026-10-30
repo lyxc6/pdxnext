@@ -28,7 +28,27 @@ public interface IPlaySetRepository
         Guid playSetId,
         CancellationToken cancellationToken);
 
-    /// <summary>写播放集的 mod 行。失败时返回 <see cref="ErrorKind.Io"/> / <see cref="ErrorKind.NotFound"/>。</summary>
+    /// <summary>
+    /// 写播放集的 mod 行。失败时返回 <see cref="ErrorKind.Io"/> / <see cref="ErrorKind.NotFound"/>。
+    /// <para>
+    /// SQLite 实现会顺带把「磁盘上有内容但 <c>mods</c> 表里还没有行」的 mod 补登记进官方库（同一个事务、同一次备份），
+    /// 否则 <c>playsets_mods</c> 会留下悬空外键，刚订阅的工坊 mod 在游戏里读不出来。
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// 就地修正一条 mod 的路径（只改路径列，不动播放集顺序与启停）。
+    /// <para>
+    /// 用于「官方库里的行丢了 dirPath/archivePath」或「本地 mod 目录名改成 ASCII」这类修复：
+    /// 加载文件是按行里的路径写的，路径错了就等于游戏里没有这个 mod。
+    /// </para>
+    /// </summary>
+    Task<AppResult<bool>> UpdateModPathsAsync(
+        GameInstallation game,
+        Guid modId,
+        string? dirPath,
+        string? archivePath,
+        CancellationToken cancellationToken);
+
     Task<AppResult<bool>> SavePlaySetModsAsync(
         GameInstallation game,
         Guid playSetId,

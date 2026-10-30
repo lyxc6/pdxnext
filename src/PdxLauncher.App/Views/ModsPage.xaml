@@ -117,6 +117,13 @@
                             ToolTipService.ToolTip="{x:Bind L.ModsHeaderDisableAll, Mode=OneWay}"
                             AutomationProperties.AutomationId="btnDisableAllMods"
                             AutomationProperties.Name="{x:Bind L.ModsHeaderDisableAllName, Mode=OneWay}" />
+
+                    <Button Content="{x:Bind L.ModsRepairName, Mode=OneWay}"
+                            Click="OnRepairModPathsClick"
+                            IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind L.ModsRepairName, Mode=OneWay}"
+                            AutomationProperties.AutomationId="btnRepairModPaths"
+                            AutomationProperties.Name="{x:Bind L.ModsRepairName, Mode=OneWay}" />
                 </StackPanel>
 
                 <TextBox Grid.Column="1"
@@ -212,9 +219,38 @@
 
                                 <!-- 名称 + 副标题（大小 / 注册 id） -->
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
-                                    <TextBlock Text="{x:Bind Name, Mode=OneTime}"
-                                               Style="{StaticResource BodyStrongTextBlockStyle}"
-                                               TextTrimming="CharacterEllipsis" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="{x:Bind Name, Mode=OneTime}"
+                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <!-- 来源徽标：本地 / 订阅，与 Mod 库页同一套画刷。 -->
+                                        <Border VerticalAlignment="Center"
+                                                Padding="6,1"
+                                                CornerRadius="4"
+                                                Background="{ThemeResource PdxOriginLocalBackgroundBrush}"
+                                                Visibility="{x:Bind svc:XamlVisibility.FromBool(IsLocalOrigin), Mode=OneWay}">
+                                            <TextBlock Text="{x:Bind OriginText, Mode=OneWay}"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource PdxOriginLocalForegroundBrush}" />
+                                        </Border>
+                                        <Border VerticalAlignment="Center"
+                                                Padding="6,1"
+                                                CornerRadius="4"
+                                                Background="{ThemeResource PdxOriginSubscribedBackgroundBrush}"
+                                                Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(IsLocalOrigin), Mode=OneWay}">
+                                            <TextBlock Text="{x:Bind OriginText, Mode=OneWay}"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource PdxOriginSubscribedForegroundBrush}" />
+                                        </Border>
+                                        <!-- 加载警告：这一行在写加载文件时会被跳过（或只是提示），原因挂在提示里。 -->
+                                        <FontIcon Glyph="&#xE7BA;"
+                                                  FontSize="12"
+                                                  VerticalAlignment="Center"
+                                                  IsTabStop="False"
+                                                  Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                  Visibility="{x:Bind svc:XamlVisibility.FromBool(HasWarning), Mode=OneWay}"
+                                                  ToolTipService.ToolTip="{x:Bind WarningText, Mode=OneWay}" />
+                                    </StackPanel>
                                     <TextBlock Text="{x:Bind Subtitle, Mode=OneWay}"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"

@@ -168,7 +168,11 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
                     RequiredVersion: Read(values, "supported_version"),
                     ThumbnailPath: null,
                     Status: null,
-                    Picture: Read(values, "picture")));
+                    Picture: Read(values, "picture"),
+                    // .mod 里带 remote_file_id 的是工坊订阅；没带的是用户自己放的本地 mod。
+                    Source: string.IsNullOrWhiteSpace(Read(values, "remote_file_id"))
+                        ? ModOrigins.LocalSource
+                        : ModOrigins.SteamSource));
             }
             catch (IOException exception)
             {
@@ -194,7 +198,7 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
             foreach (var modDirectory in _fileSystem.EnumerateDirectories(workshopDirectory))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                AddMetadataMod(game, modDirectory, discovered);
+                AddMetadataMod(game, modDirectory, discovered, isWorkshopRoot: true);
             }
         }
 
@@ -205,12 +209,23 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
             foreach (var modDirectory in _fileSystem.EnumerateDirectories(localModRoot))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                AddMetadataMod(game, modDirectory, discovered);
+                AddMetadataMod(game, modDirectory, discovered, isWorkshopRoot: false);
             }
         }
     }
 
-    private void AddMetadataMod(GameInstallation game, string modDirectory, List<ModRecord> discovered)
+    /// <summary>
+    /// 把一个带 .metadata/metadata.json 的 mod 目录解析成 <see cref="ModRecord"/>。
+    /// </summary>
+    /// <param name="game">游戏安装信息。</param>
+    /// <param name="modDirectory">mod 目录（workshop 的 content/&lt;appid&gt;/&lt;modId&gt; 或 &lt;gameDataDir&gt;\mod\&lt;dir&gt;）。</param>
+    /// <param name="discovered">结果收集列表。</param>
+    /// <param name="isWorkshopRoot">该目录是否位于 Steam 创意工坊的 content 目录下。</param>
+    private void AddMetadataMod(
+        GameInstallation game,
+        string modDirectory,
+        List<ModRecord> discovered,
+        bool isWorkshopRoot)
     {
         var metadataPath = Path.Combine(modDirectory, MetadataDirectoryName, MetadataFileName);
         if (!_fileSystem.FileExists(metadataPath))
@@ -236,12 +251,7 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
                 name = _fileSystem.GetFileName(modDirectory);
             }
 
-            var steamId = ReadJsonProperty(root, "id");
-            if (string.IsNullOrWhiteSpace(steamId))
-            {
-                // id 为空时用 workshop 目录名（就是 Steam 创意工坊 id）兜底。
-                steamId = _fileSystem.GetFileName(modDirectory);
-            }
+            var steamId = ResolveSteamId(ReadJsonProperty(root, "id"), modDirectory, isWorkshopRoot, metadataPath);
 
             discovered.Add(new ModRecord(
                 Name: name,
@@ -257,7 +267,9 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
                 Picture: FirstNonEmptyOrNull(
                     ReadJsonProperty(root, "picture"),
                     ReadJsonProperty(root, "thumbnail"),
-                    null)?.Trim()));
+                    null)?.Trim(),
+                // metadata.json 里没有来源字段：位置就是来源（工坊 content 目录 vs 本地 mod 目录）。
+                Source: isWorkshopRoot ? ModOrigins.SteamSource : ModOrigins.LocalSource));
         }
         catch (JsonException exception)
         {
@@ -271,6 +283,44 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
         {
             _logger.Warn("读取 mod metadata.json 无权限，已跳过：" + metadataPath + "：" + exception.Message);
         }
+    }
+
+    /// <summary>
+    /// 解析 mod 的创意工坊 id（纯 ASCII 数字）。
+    /// <para>
+    /// metadata.json 的 <c>"id"</c> <b>不是</b>创意工坊 id：官方启动器把它写在 <c>mods.metadataId</c> 里，
+    /// 真机有 "akagilnc@gmail.com-daoyu-cheat-113"、"tech.res"、"ecchi_redux" 这类 PDX 侧 id。
+    /// 工坊 id 只有一个可靠来源：工坊目录名（workshop/content/&lt;appid&gt;/&lt;workshopId&gt;）；
+    /// 其次才是本身恰好是纯数字的 metadata id（解压安装的工坊副本）。
+    /// 本地 mod 目录（&lt;gameDataDir&gt;\mod\&lt;dir&gt;）不拿目录名编造工坊 id。
+    /// </para>
+    /// </summary>
+    private string? ResolveSteamId(
+        string? metadataId,
+        string modDirectory,
+        bool isWorkshopRoot,
+        string metadataPath)
+    {
+        var fromMetadata = SteamWorkshop.IsAllDigits(metadataId?.Trim()) ? metadataId!.Trim() : null;
+        if (!isWorkshopRoot)
+        {
+            // 本地 mod 只有「metadata id 本身是数字」时才可能是工坊 id。
+            return fromMetadata;
+        }
+
+        var folderName = _fileSystem.GetFileName(modDirectory)?.Trim();
+        if (SteamWorkshop.IsAllDigits(folderName))
+        {
+            return folderName;
+        }
+
+        if (fromMetadata is null)
+        {
+            // 目录名与 metadata id 都不是数字：这个 mod 拿不到创意工坊页，记一条 Warn 便于真机排障。
+            _logger.Warn("工坊 mod 目录名与 metadata id 都不是数字，无法确定创意工坊 id：" + metadataPath);
+        }
+
+        return fromMetadata;
     }
 
     /// <summary>
@@ -355,7 +405,7 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
             using var connection = SqliteConnection.OpenReadOnly(databasePath);
             var rows = connection.Query(
                 "SELECT id, displayName, dirPath, archivePath, gameRegistryId, steamId, thumbnailPath, " +
-                "requiredVersion, status FROM mods");
+                "requiredVersion, status, source FROM mods");
 
             var result = new List<ModRecord>(rows.Count);
             foreach (var row in rows)
@@ -370,7 +420,8 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
                     RequiredVersion: PlaySetRepository.ReadString(row, "requiredVersion"),
                     ThumbnailPath: PlaySetRepository.ReadNullableString(row, "thumbnailPath"),
                     Status: PlaySetRepository.ReadNullableString(row, "status"),
-                    Picture: null) with
+                    Picture: null,
+                    Source: PlaySetRepository.ReadNullableString(row, "source")) with
                 {
                     ModId = string.IsNullOrEmpty(id) ? null : Guid.TryParse(id, out var parsed) ? parsed : null,
                 });
@@ -436,9 +487,13 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
         var requiredVersion = FirstNonEmpty(record?.RequiredVersion, sqlite?.RequiredVersion, string.Empty);
         var modId = sqlite?.ModId ?? CreateDeterministicModId(registryId, dirPath, archivePath, name);
 
-        // .mod 描述文件里的 remote_file_id 与 metadata.json 里的 id 都是创意工坊 id，优先用扫描值；
-        // mods.steamId 作为兜底（有些 mod 没有描述文件，只有数据库登记）。
-        var steamId = FirstNonEmptyOrNull(record?.SteamId, sqlite?.SteamId, null);
+        // .mod 的 remote_file_id 与 metadata.json 的 id 里都可能带创意工坊 id，但 metadata.json 的 id
+        // 常是 PDX 侧 id 串（"tech.res"、"akagilnc@gmail.com-daoyu-cheat-113"）：只有纯数字才是工坊 id，
+        // 必须让库里的数字 steamId 顶上去，否则已登记的 mod 在播放集页也会丢掉工坊按钮。
+        var steamId = FirstNonEmptyOrNull(
+            DigitsOrNull(record?.SteamId),
+            DigitsOrNull(sqlite?.SteamId),
+            FirstNonEmptyOrNull(record?.SteamId, sqlite?.SteamId, null));
 
         return new PlaySetMod(
             ModId: modId,
@@ -453,7 +508,11 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
             // IPlaySetRepository.GetPlaySetModsAsync 获取。
             Enabled: true,
             Position: position,
-            SteamId: steamId);
+            SteamId: steamId,
+            // 两边哪边有 source 用哪边；都没有（纯磁盘扫描）就按有没有工坊 id 判。
+            Source: ModOrigins.Normalize(FirstNonEmptyOrNull(record?.Source, sqlite?.Source, null), steamId) == ModOrigin.Subscribed
+                ? ModOrigins.SteamSource
+                : ModOrigins.LocalSource);
     }
 
     /// <summary>
@@ -513,6 +572,16 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
 
     private static string NormalizeSteam(string? steamId) => string.IsNullOrWhiteSpace(steamId) ? string.Empty : steamId.Trim();
 
+    /// <summary>
+    /// 只有纯 ASCII 数字才是创意工坊 id。PDX 侧 id（"tech.res"、"…@126.com"）不参与工坊地址拼装，
+    /// 但可能被其它调用方当普通字符串用，所以 <see cref="Compose"/> 里仍保留原始值兜底。
+    /// </summary>
+    private static string? DigitsOrNull(string? value)
+    {
+        var trimmed = value?.Trim();
+        return SteamWorkshop.IsAllDigits(trimmed) ? trimmed : null;
+    }
+
     private static string FirstNonEmpty(string? first, string? second, string? third)
     {
         if (!string.IsNullOrWhiteSpace(first))
@@ -571,7 +640,8 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
         string? RequiredVersion,
         string? ThumbnailPath,
         string? Status,
-        string? Picture)
+        string? Picture,
+        string? Source = null)
     {
         /// <summary>sqlite 行的主键；磁盘扫描得到的记录为 null。</summary>
         public Guid? ModId { get; init; }

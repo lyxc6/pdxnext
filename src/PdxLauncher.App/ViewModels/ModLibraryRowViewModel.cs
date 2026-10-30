@@ -17,10 +17,7 @@ using PdxLauncher.Core.Playsets;
 /// </summary>
 public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
 {
-    /// <summary>mods.status 判为正常时的取值。</summary>
-    private const string ReadyStatus = "ready_to_play";
-
-    /// <summary>当前游戏版本（用于判断版本是否可能过旧）；未知时为 null。</summary>
+    /// <summary>当前游戏版本（与 mod 声明的支持版本对照）；未知时为 null。</summary>
     private readonly string? _gameVersion;
 
     /// <summary>缩略图路径；没有缩略图时为 null。联网补全后由 <see cref="ModLibraryViewModel"/> 更新。</summary>
@@ -67,6 +64,18 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
     public string SubscribedText => Entry.SubscribedOn is { } subscribedOn
         ? T(Keys.ModlibSubscribedOn, subscribedOn.ToLocalTime().ToString("yyyy/MM/dd", CultureInfo.InvariantCulture))
         : string.Empty;
+
+    /// <summary>来源：本地 / 订阅。徽标与「来源」筛选都只看它。</summary>
+    public ModOrigin Origin => Entry.Origin;
+
+    /// <summary>来源徽标文案：本地 / 订阅。</summary>
+    public string OriginText => T(ModOrigins.DescribeKey(Entry.Origin));
+
+    /// <summary>是不是本地 mod（XAML 用不同底色区分）。</summary>
+    public bool IsLocalOrigin => Entry.Origin == ModOrigin.Local;
+
+    /// <summary>是不是订阅 mod。</summary>
+    public bool IsSubscribedOrigin => Entry.Origin == ModOrigin.Subscribed;
 
     /// <summary>副标题：大小与订阅日期用「 · 」拼接，任一段为空则自动省略，不留孤立分隔符。</summary>
     public string SubtitleText => string.Join(
@@ -115,10 +124,10 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
     public bool HasLocalContent
         => !string.IsNullOrWhiteSpace(Entry.DirPath) || !string.IsNullOrWhiteSpace(Entry.ArchivePath);
 
-    /// <summary>是否需要警示图标：磁盘未登记、状态异常或版本可能不兼容。</summary>
+    /// <summary>是否需要版本支持提示：登记情况、库里状态或声明的支持版本对不上。</summary>
     public bool HasWarning => WarningText.Length != 0;
 
-    /// <summary>警示说明（同时作为 ToolTip 文案）；无警示时为空串。</summary>
+    /// <summary>版本支持提示（同时作为 ToolTip 文案）；没有问题时为空串。</summary>
     public string WarningText => BuildWarning(Entry, _gameVersion);
 
     /// <summary>行的自动化 Id（每个 mod 唯一，供 UI 测试定位）。</summary>
@@ -142,25 +151,43 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
     partial void OnThumbnailPathChanged(string? value) => OnPropertyChanged(nameof(HasThumbnail));
 
     /// <summary>
-    /// 警示文案：优先级为「磁盘未登记 → 状态异常 → 版本可能过旧」，对应原版启动器同一个三角图标。
+    /// 版本支持提示：三角只讲「这个 mod 声明支持哪个版本、和当前游戏版本对不对得上」，
+    /// 登记情况与库里状态作为补充说明跟在后面，不写「异常 / 不兼容」这类判断。
+    /// 判定在 <see cref="ModLibraryWarnings"/>（Core，可被自检覆盖），优先级仍是
+    /// 「磁盘未登记 → 库里状态 ≠ ready_to_play → 声明版本低于当前游戏版本」。
     /// 没有问题时返回空串。
     /// </summary>
     /// <param name="entry">mod 行数据。</param>
-    /// <param name="gameVersion">当前游戏版本（用于比较 requiredVersion）；未知时传 null。</param>
+    /// <param name="gameVersion">当前游戏版本（用于对照 requiredVersion）；未知时传 null。</param>
     private static string BuildWarning(ModLibraryEntry entry, string? gameVersion)
     {
-        if (entry.IsUnregistered)
+        var info = ModLibraryWarnings.Resolve(entry, gameVersion);
+        if (!info.HasTriangle)
         {
-            return T(Keys.ModlibWarningUnregistered);
+            return string.Empty;
         }
 
-        if (!string.Equals(entry.Status, ReadyStatus, StringComparison.OrdinalIgnoreCase))
+        var parts = new List<string>(3);
+        if (info.VersionKey is { } versionKey)
         {
-            return T(Keys.ModlibWarningStatus, entry.Status);
+            parts.Add(info.VersionArgumentCount switch
+            {
+                2 => T(versionKey, info.RequiredVersion, info.GameVersion),
+                1 => T(versionKey, info.RequiredVersion),
+                _ => T(versionKey),
+            });
         }
 
-        return ModVersion.IsOutdated(entry.RequiredVersion, gameVersion)
-            ? T(Keys.ModlibWarningOutdated, entry.RequiredVersion, gameVersion)
-            : string.Empty;
+        if (info.ConclusionKey is { } conclusionKey)
+        {
+            parts.Add(T(conclusionKey));
+        }
+
+        if (info.NoteKey is { } noteKey)
+        {
+            parts.Add(info.NoteArgumentCount == 1 ? T(noteKey, info.Status) : T(noteKey));
+        }
+
+        return parts.Count == 0 ? string.Empty : string.Join(' ', parts);
     }
 }

@@ -40,6 +40,7 @@ public static class NewsFeedChecks
             CheckImageFailureRetry(fs, tempRoot);
             CheckImageFastFailure(fs, tempRoot);
             CheckCacheRoundTrip(fs, tempRoot);
+            CheckGameIdAlias(fs, tempRoot);
         }
         finally
         {
@@ -265,6 +266,50 @@ public static class NewsFeedChecks
     }
 
     // ------------------------------------------------------------ 关闭联网
+
+    // ------------------------------------------------------------ gameId 归一
+
+    /// <summary>
+    /// Cities: Skylines 1 的公告接口只认官方启动器的原始 id（cities_v2），
+    /// 而安装项上的 gameId 已被归一到 cities_skylines。这条自检把两个方向都钉死：
+    /// 请求 URL 必须是 cities_v2，缓存键必须跟着走（否则换 id 后会重复抓）。
+    /// </summary>
+    private static void CheckGameIdAlias(IFileSystem fs, string tempRoot)
+    {
+        var json = LoadJson(fs, Ck3Fixture);
+        var cacheRoot = Sub(fs, tempRoot, "alias");
+
+        var http = new FakeHttpFetcher(_ => JsonStream(json));
+        var service = new NewsFeedService(
+            fs,
+            http,
+            new FakeAssetDownloader(fs),
+            new FakeClock(Now),
+            new RecordingLogger(),
+            cacheRoot);
+
+        var feed = Fetch(service, "cities_skylines");
+        ChecksContext.Equal("CS1 公告解析出 3 张", 3, feed.Items.Count);
+        ChecksContext.Equal("CS1 公告请求 1 次", 1, http.GetCallCount);
+        ChecksContext.Equal(
+            "CS1 公告 URL 用官方原始 id",
+            "https://api.paradox-interactive.com/communication/braze/contentcards/cities_v2",
+            http.LastUri?.ToString() ?? "<null>");
+
+        var cacheText = fs.ReadAllText(Path.Combine(cacheRoot, "news-cards.json"));
+        ChecksContext.Check(
+            "CS1 公告缓存键是原始 id",
+            cacheText.Contains("\"cities_v2\"", StringComparison.Ordinal),
+            cacheText.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        ChecksContext.Check(
+            "CS1 公告缓存里不出现归一后的 id",
+            !cacheText.Contains("\"cities_skylines\"", StringComparison.Ordinal));
+
+        // 换 id 后仍命中同一份缓存，不再发请求。
+        var again = Fetch(service, "cities_v2");
+        ChecksContext.Equal("原始 id 与归一 id 共用同一份缓存", 3, again.Items.Count);
+        ChecksContext.Equal("共用缓存时不重复请求", 1, http.GetCallCount);
+    }
 
     private static void CheckOffline(IFileSystem fs, string tempRoot)
     {

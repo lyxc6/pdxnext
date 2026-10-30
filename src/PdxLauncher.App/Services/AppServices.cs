@@ -7,6 +7,7 @@ using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Patch;
+using PdxLauncher.Core.Storage;
 /// <summary>
 /// 应用级服务定位器。WinUI 的 Frame.Navigate 只支持无参构造，所以页面统一从这里取依赖。
 /// 由 App.xaml.cs 在启动时 <see cref="Initialize"/> 一次性装配；之后只读。
@@ -77,6 +78,11 @@ public static class AppServices
     /// </summary>
     public static RequestThrottle HttpThrottle { get; private set; } = null!;
 
+    /// <summary>
+    /// 翻译协调器：把当前设置与界面语言翻译成一次翻译任务（引擎选择、目标语言、缓存都在这里收口）。
+    /// </summary>
+    public static TranslationCoordinator Translation { get; private set; } = null!;
+
     /// <summary>游戏目录补丁（一键打补丁 / 移除补丁）。只在用户点按钮时读写游戏目录，不做任何自动变更。</summary>
     public static IGamePatchService GamePatch { get; private set; } = null!;
 
@@ -114,6 +120,12 @@ public static class AppServices
     /// <summary>冷启动阶段已发现的所有游戏。</summary>
     public static IReadOnlyList<GameInstallation> Games { get; private set; } = Array.Empty<GameInstallation>();
 
+    /// <summary>本启动器自己的 SQLite 库（唯一事实源；官方库缺席时开发播放集与 Mod 库的唯一来源）。</summary>
+    public static PdxDatabase Database { get; private set; } = null!;
+
+    /// <summary>整份 JSON 文档存储（设置、登录态、各缓存索引都落在 <see cref="Database"/> 里）。</summary>
+    public static IJsonDocumentStore Documents { get; private set; } = null!;
+
     public static bool IsInitialized { get; private set; }
 
     /// <summary>
@@ -148,8 +160,11 @@ public static class AppServices
         WorkshopPageCache workshopPages,
         SteamItemPageCache workshopItemPages,
         RequestThrottle httpThrottle,
+        TranslationCoordinator translation,
         IGamePatchService gamePatch,
         AppSettingsStore settingsStore,
+        PdxDatabase database,
+        IJsonDocumentStore documents,
         IReadOnlyList<GameInstallation> games,
         NetworkLink? networkLink = null)
     {
@@ -177,8 +192,11 @@ public static class AppServices
         ArgumentNullException.ThrowIfNull(workshopPages);
         ArgumentNullException.ThrowIfNull(workshopItemPages);
         ArgumentNullException.ThrowIfNull(httpThrottle);
+        ArgumentNullException.ThrowIfNull(translation);
         ArgumentNullException.ThrowIfNull(gamePatch);
         ArgumentNullException.ThrowIfNull(settingsStore);
+        ArgumentNullException.ThrowIfNull(database);
+        ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(games);
 
         FileSystem = fileSystem;
@@ -205,8 +223,11 @@ public static class AppServices
         WorkshopPages = workshopPages;
         WorkshopItemPages = workshopItemPages;
         HttpThrottle = httpThrottle;
+        Translation = translation;
         GamePatch = gamePatch;
         SettingsStore = settingsStore;
+        Database = database;
+        Documents = documents;
         _networkLink = networkLink;
         Settings = settingsStore.Load();
         Games = games;
@@ -330,6 +351,7 @@ public static class AppServices
             var proxy = ProxyResolver.Resolve(Settings, Logger);
             _networkLink.Http.UseProxy(proxy);
             _networkLink.PdxHttp.UseProxy(proxy);
+            _networkLink.TranslationHttp.UseProxy(proxy);
             Logger.Info("已按新代理设置重建联网连接池");
             return NetworkRebuildResult.Ok;
         }

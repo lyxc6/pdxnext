@@ -112,6 +112,23 @@ public static class OnlineHosts
         }
     }
 
+    /// <summary>
+    /// 授权用户自填的接口地址：只取其中的主机名做精确匹配，不放行子域。
+    /// </summary>
+    /// <param name="baseUrl">用户填的接口地址（可以带协议与路径）。</param>
+    /// <returns>成功授权返回 true；地址为空或解析不出主机名返回 false。</returns>
+    public static bool AuthorizeBaseUrl(string? baseUrl)
+    {
+        var host = NormalizeHost(baseUrl);
+        if (host is null)
+        {
+            return false;
+        }
+
+        AuthorizedHosts[host] = byte.MaxValue;
+        return true;
+    }
+
     /// <summary>撤销之前授权的主机。</summary>
     /// <param name="host">主机名。</param>
     public static void RevokeHost(string? host)
@@ -132,6 +149,7 @@ public static class OnlineHosts
     }
 
     /// <summary>把用户填的主机名收拾成规范形式；非法输入返回 null。</summary>
+    /// <param name="host">主机名或完整地址。</param>
     private static string? NormalizeHost(string? host)
     {
         var trimmed = host?.Trim();

@@ -101,9 +101,10 @@ public sealed class GameCatalog : IGameCatalog
     public Task<GameInstallation?> DiscoverOneAsync(string gameId, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(gameId);
+        var wanted = KnownGames.CanonicalizeGameId(gameId);
         foreach (var installation in Discover(cancellationToken))
         {
-            if (string.Equals(installation.GameId, gameId, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(installation.GameId, wanted, StringComparison.OrdinalIgnoreCase))
             {
                 return Task.FromResult<GameInstallation?>(installation);
             }
@@ -233,9 +234,12 @@ public sealed class GameCatalog : IGameCatalog
         List<GameInstallation> results,
         HashSet<string> seenGameIds)
     {
-        if (!seenGameIds.Add(settings.GameId))
+        // 去重键用正名：同一个游戏在 Steam 库与独立库里可能写不同的官方 id（CS1 写 cities_v2），
+        // 不归一就会同时收进两份，后面的选择器与补丁状态都会对不上。
+        var canonicalId = KnownGames.CanonicalizeGameId(settings.GameId);
+        if (!seenGameIds.Add(canonicalId))
         {
-            _logger.Info("重复的 gameId 安装，保留先发现的: " + settings.GameId + " @ " + installRoot);
+            _logger.Info("重复的 gameId 安装，保留先发现的: " + canonicalId + " @ " + installRoot);
             return;
         }
 
@@ -258,14 +262,15 @@ public sealed class GameCatalog : IGameCatalog
             return;
         }
 
-        if (!seenGameIds.Add(detected.GameId))
+        var canonicalId = KnownGames.CanonicalizeGameId(detected.GameId);
+        if (!seenGameIds.Add(canonicalId))
         {
-            _logger.Info("重复的 gameId 安装，保留先发现的: " + detected.GameId + " @ " + installRoot);
+            _logger.Info("重复的 gameId 安装，保留先发现的: " + canonicalId + " @ " + installRoot);
             return;
         }
 
         _logger.Info(
-            "按安装特征识别（目录内无 launcher-settings.json）: " + detected.GameId + " @ " + installRoot);
+            "按安装特征识别（目录内无 launcher-settings.json）: " + canonicalId + " @ " + installRoot);
         results.Add(BuildDetectedInstallation(detected, installRoot, manifest));
     }
 
@@ -302,7 +307,7 @@ public sealed class GameCatalog : IGameCatalog
         }
 
         return new GameInstallation(
-            detected.GameId,
+            KnownGames.CanonicalizeGameId(detected.GameId),
             detected.DisplayName,
             Version: string.Empty,
             installRoot,
@@ -336,15 +341,18 @@ public sealed class GameCatalog : IGameCatalog
 
     private GameInstallation BuildInstallation(LauncherSettings settings, string installRoot, AppManifest? manifest)
     {
-        var support = KnownGames.GetSupport(settings.GameId);
+        // launcher-settings.json 里写的是官方启动器的 id（CS1 = cities_v2），本启动器一律用正名，
+        // 否则支持等级、appId 映射、创意工坊来源、元数据主题都会落空。
+        var gameId = KnownGames.CanonicalizeGameId(settings.GameId);
+        var support = KnownGames.GetSupport(gameId);
         var displayName = string.IsNullOrWhiteSpace(settings.DisplayName)
-            ? KnownGames.GetDisplayName(settings.GameId) ?? settings.GameId
+            ? KnownGames.GetDisplayName(gameId) ?? gameId
             : settings.DisplayName;
 
         var theme = _themeReader.Read(installRoot, settings.ThemeFile);
 
         return new GameInstallation(
-            settings.GameId,
+            gameId,
             displayName,
             settings.Version,
             installRoot,

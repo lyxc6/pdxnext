@@ -40,8 +40,17 @@
   "modlib.supportedVersion": "支持版本 {0}",
   "modlib.supportedVersionName": "支持的游戏版本",
   "modlib.title": "Mod 库",
-  "modlib.warningName": "兼容性警告",
-  "modlib.warningOutdated": "可能不兼容当前游戏版本（要求 {0}，当前 {1}）",
-  "modlib.warningStatus": "状态异常：{0}",
-  "modlib.warningUnregistered": "本地磁盘上的 mod，官方 mod 库中没有登记"
+  "modlib.versionSupport.undeclared": "该 mod 没有声明支持的游戏版本。",
+  "modlib.versionSupport.declaredUnknownGame": "该 mod 声明支持版本 {0}，当前游戏版本未知。",
+  "modlib.versionSupport.declared": "该 mod 声明支持版本 {0}；当前游戏版本 {1}。",
+  "modlib.versionSupport.notBelow": "声明的版本不低于当前游戏版本。",
+  "modlib.versionSupport.below": "声明的版本低于当前游戏版本。",
+  "modlib.warningName": "版本支持提示",
+  "modlib.warningStatus": "官方库中的状态：{0}。",
+  "modlib.warningUnregistered": "该 mod 来自本地磁盘，官方 mod 库中还没有登记。",
+  "modlib.warningUnregisteredWorkshop": "该 mod 来自创意工坊订阅，官方 mod 库中还没有登记（加入播放集时会自动补登记）。",
+  "modlib.sourceFilterName": "来源",
+  "modlib.sourceFilterAll": "全部来源",
+  "modlib.sourceFilterLocal": "仅本地",
+  "modlib.sourceFilterSubscribed": "仅订阅"
 }

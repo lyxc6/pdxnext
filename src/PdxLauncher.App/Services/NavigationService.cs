@@ -29,6 +29,9 @@ public sealed class NavigationService
     /// <summary>创意工坊 mod 详情子页的导航 Tag（不是左栏菜单项；靠参数指定是哪个 mod）。</summary>
     public const string WorkshopDetailTag = "workshopdetail";
 
+    /// <summary>「添加模组」子页的导航 Tag（不是左栏菜单项；靠参数指定目标播放集）。</summary>
+    public const string AddModsTag = "addmods";
+
     /// <summary>DLC 页的导航 Tag。</summary>
     public const string DlcTag = "dlc";
 
@@ -46,6 +49,7 @@ public sealed class NavigationService
         [ModLibraryTag] = "PdxLauncher.App.Views.ModLibraryPage",
         [WorkshopTag] = "PdxLauncher.App.Views.WorkshopPage",
         [WorkshopDetailTag] = "PdxLauncher.App.Views.WorkshopDetailPage",
+        [AddModsTag] = "PdxLauncher.App.Views.AddModsPage",
         [DlcTag] = "PdxLauncher.App.Views.DlcPage",
         [AccountTag] = "PdxLauncher.App.Views.AccountPage",
         [SettingsTag] = "PdxLauncher.App.Views.SettingsPage",

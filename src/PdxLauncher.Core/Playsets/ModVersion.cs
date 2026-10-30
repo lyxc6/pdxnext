@@ -62,28 +62,42 @@ public static class ModVersion
     }
 
     /// <summary>
+    /// 比较 requiredVersion 与游戏版本的 major.minor：mod 声明更低返回 -1，相等返回 0，更高返回 1；
+    /// 任意一边解析不出两段数字时返回 null（无法比较）。
+    /// </summary>
+    /// <param name="requiredVersion">mods.requiredVersion（可能带 "*"）；空串表示未声明。</param>
+    /// <param name="gameVersion">当前游戏版本，例如 "1.13.11 (Matcha)"。</param>
+    public static int? CompareMajorMinor(string? requiredVersion, string? gameVersion)
+    {
+        if (!TryReadMajorMinor(requiredVersion, out var requiredMajor, out var requiredMinor))
+        {
+            return null;
+        }
+
+        if (!TryReadMajorMinor(gameVersion, out var gameMajor, out var gameMinor))
+        {
+            return null;
+        }
+
+        if (requiredMajor != gameMajor)
+        {
+            return requiredMajor < gameMajor ? -1 : 1;
+        }
+
+        if (requiredMinor != gameMinor)
+        {
+            return requiredMinor < gameMinor ? -1 : 1;
+        }
+
+        return 0;
+    }
+
+    /// <summary>
     /// mod 要求的版本是否低于当前游戏版本（只比 major.minor）。
     /// 任意一边解析不出两段数字时**不**判定过旧，避免把没有 requiredVersion 的 mod 全标成警告。
     /// </summary>
     /// <param name="requiredVersion">mods.requiredVersion（可能带 "*"）；空串表示未声明。</param>
     /// <param name="gameVersion">当前游戏版本，例如 "1.13.11 (Matcha)"。</param>
     public static bool IsOutdated(string? requiredVersion, string? gameVersion)
-    {
-        if (!TryReadMajorMinor(requiredVersion, out var requiredMajor, out var requiredMinor))
-        {
-            return false;
-        }
-
-        if (!TryReadMajorMinor(gameVersion, out var gameMajor, out var gameMinor))
-        {
-            return false;
-        }
-
-        if (requiredMajor != gameMajor)
-        {
-            return requiredMajor < gameMajor;
-        }
-
-        return requiredMinor < gameMinor;
-    }
+        => CompareMajorMinor(requiredVersion, gameVersion) < 0;
 }

@@ -151,4 +151,18 @@ public sealed class FileSystem : Abstractions.IFileSystem
 
         File.Move(source, destination, overwrite);
     }
+
+    public void MoveDirectory(string source, string destination)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(destination);
+
+        var directory = Path.GetDirectoryName(Path.GetFullPath(destination));
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        Directory.Move(source, destination);
+    }
 }

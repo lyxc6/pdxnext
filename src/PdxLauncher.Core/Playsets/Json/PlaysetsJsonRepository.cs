@@ -305,6 +305,18 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
     }
 
     /// <inheritdoc />
+    /// <inheritdoc />
+    /// <remarks>
+    /// EU5 的播放集是 playsets.json 整份文档，mod 的来源与路径由文档自身表达，没有可单独修的「路径列」。
+    /// </remarks>
+    public Task<AppResult<bool>> UpdateModPathsAsync(
+        GameInstallation game,
+        Guid modId,
+        string? dirPath,
+        string? archivePath,
+        CancellationToken cancellationToken)
+        => Task.FromResult(AppResult<bool>.Fail(ErrorKind.Unsupported, "unsupported-format:playsets-json"));
+
     public async Task<AppResult<bool>> SavePlaySetModsAsync(
         GameInstallation game,
         Guid playSetId,

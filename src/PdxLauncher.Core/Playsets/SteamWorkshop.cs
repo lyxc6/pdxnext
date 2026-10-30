@@ -73,7 +73,11 @@ public static class SteamWorkshop
         return end > start ? gameRegistryId[start..end] : null;
     }
 
-    private static bool IsAllDigits(string? value)
+    /// <summary>
+    /// 是否全是 ASCII 数字（0-9）。创意工坊 id 的判定标准，mod 目录扫描也复用它——
+    /// 只认 0-9，别用 <c>char.IsDigit</c>（全角数字拼出来的地址打不开）。
+    /// </summary>
+    internal static bool IsAllDigits(string? value)
     {
         if (string.IsNullOrEmpty(value))
         {

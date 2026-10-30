@@ -122,6 +122,28 @@ public static class GameSelectionChecks
             "空串记忆项不参与匹配",
             "victoria3",
             GameSelection.Select(games, string.Empty, string.Empty)?.GameId);
+
+        // 老设置里存的是官方启动器的原始 id（CS1 = cities_v2），安装项上已经是正名。
+        var withCs1 = new[]
+        {
+            Create("ck3", @"D:\\Games\\CK3", GameSupport.Full),
+            Create("cities_skylines", @"D:\\Games\\Cities Skylines", GameSupport.LaunchOnly),
+        };
+
+        ChecksContext.Equal(
+            "记忆里是官方原始 id cities_v2 也能命中正名安装项",
+            "cities_skylines",
+            GameSelection.Select(withCs1, "cities_v2", null)?.GameId);
+
+        ChecksContext.Equal(
+            "原始 id + 安装根都匹配时也命中",
+            "cities_skylines",
+            GameSelection.Select(withCs1, "cities_v2", @"D:\\Games\\Cities Skylines")?.GameId);
+
+        ChecksContext.Equal(
+            "原始 id 匹配不到安装根时按 gameId 命中",
+            "cities_skylines",
+            GameSelection.Select(withCs1, "cities_v2", @"E:\\Moved\\Cities Skylines")?.GameId);
     }
 
     private static GameInstallation Create(string gameId, string installRoot, GameSupport support)

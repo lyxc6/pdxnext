@@ -207,6 +207,29 @@ public sealed partial class ModLibraryPage : Page
         }
     }
 
+    /// <summary>来源下拉框选择变化：写回 ViewModel 触发重新过滤。</summary>
+    private void OnSourceFilterChanged(object sender, SelectionChangedEventArgs e)
+    {
+        try
+        {
+            if (sender is not ComboBox box || box.SelectedItem is not string mode)
+            {
+                return;
+            }
+
+            if (string.Equals(mode, _viewModel.SelectedSourceFilter, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _viewModel.SelectedSourceFilter = mode;
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModLibraryPage 切换来源筛选失败", ex);
+        }
+    }
+
     /// <summary>行尾「打开本地文件夹」：目录型 mod 打开目录，压缩包型 mod 定位到压缩包。</summary>
     private void OnOpenFolderClick(object sender, RoutedEventArgs e)
     {

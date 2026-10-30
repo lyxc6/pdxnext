@@ -98,13 +98,22 @@ public partial class App : Application
                 + legacyCleanup.Bytes + " B");
         }
 
+        // 自有库先立起来：它是本启动器唯一的事实源（设置、登录态、缓存索引、mod 库与播放集），
+        // 官方 launcher-v2.sqlite 缺席时更是唯一数据源。建库失败后续各服务各自降级，不阻断启动。
+        var database = new PdxDatabase(fileSystem, logger, PdxDatabase.GetDefaultPath());
+        var documents = new SqliteJsonDocumentStore(database, logger, clock);
+
+        // 「数据全部入库」之前遗留的整份 JSON（settings.json / pdx-session.json / 6 份缓存索引）搬进库，
+        // 原文件改名成 *.migrated.bak 留档；重复执行什么也不做。
+        new LegacyJsonImporter(database, fileSystem, documents, logger).Import(AppServices.DataRoot);
+
         // 先读设置，代理模式与地址来自 settings.json；AppServices.Initialize 内部会再读一次（幂等）。
-        var settingsStore = new AppSettingsStore(fileSystem, logger, AppSettingsStore.DefaultPath);
+        var settingsStore = new AppSettingsStore(documents, logger);
         var settings = settingsStore.Load();
 
         // 联网链路（HttpFetcher → 元数据 / 素材 / 主题 / DLC 简介）集中在 NetworkComposition，
         // 设置页改代理后只换连接池、不换服务对象（见 AppServices.TryRebuildNetworkServices）。
-        var network = NetworkComposition.Create(fileSystem, logger, clock, settings);
+        var network = NetworkComposition.Create(fileSystem, logger, clock, settings, documents);
 
         var gameCatalog = new GameCatalog(fileSystem, logger);
 
@@ -126,7 +135,19 @@ public partial class App : Application
         var sqlitePlaySets = new PlaySetRepository(fileSystem, logger, clock, modThumbnails);
         var jsonPlaySets = new PlaysetsJsonRepository(fileSystem, logger, clausewitzMods, dlcs);
         var playsetConfig = new PlaysetConfigRepository(fileSystem, logger, clock);
-        var playSets = new PlaySetRepositoryRouter(sqlitePlaySets, jsonPlaySets, playsetConfig, fileSystem, logger);
+
+        // 自有库（data\pdxnext.sqlite）：官方 launcher-v2.sqlite 不在时接管 sqlite 格式的游戏，
+        // 在的时候由 LauncherDbProjector 两边同步（读官方、写官方后镜像一份进自有库）。
+        var ownPlaySets = new OwnDatabasePlaySetRepository(database, logger, clock);
+        var projector = new LauncherDbProjector(fileSystem, sqlitePlaySets, ownPlaySets, database, logger);
+        var playSets = new PlaySetRepositoryRouter(
+            sqlitePlaySets,
+            jsonPlaySets,
+            playsetConfig,
+            fileSystem,
+            logger,
+            ownPlaySets,
+            projector);
         var loadFiles = new LoadFileWriter(fileSystem, logger);
         var processLauncher = new ProcessLauncher(logger);
         var launcher = new GameLauncher(processLauncher, fileSystem, logger);
@@ -138,9 +159,15 @@ public partial class App : Application
         var gamePatch = new GamePatchService(
             fileSystem, logger, patchAssets, Path.Combine(PdxDataRoot.Directory, "patch", "state.json"));
 
+        // 翻译协调器：引擎随设置临时构建，这里只持传输、缓存与「设置变了就作废在途批次」的状态。
+        var translation = new TranslationCoordinator(
+            network.TranslationTransport,
+            network.TranslationCache,
+            logger);
+
         // Paradox 账号：会话落盘（DPAPI 保护）与登录客户端分开，代理重建时只换客户端。
         var secretProtector = new DpapiSecretProtector(logger);
-        var sessionStore = new PdxSessionStore(fileSystem, logger, secretProtector);
+        var sessionStore = new PdxSessionStore(documents, logger, secretProtector);
         var account = new AccountService(logger, sessionStore, clock, network.Account);
 
         // 最后一个参数先给空列表：窗口先出来，游戏发现由 GameDiscovery 在 UI 就绪后补。
@@ -169,10 +196,13 @@ public partial class App : Application
             network.WorkshopPages,
             network.WorkshopItemPages,
             network.Throttle,
+            translation,
             gamePatch,
             settingsStore,
+            database,
+            documents,
             Array.Empty<GameInstallation>(),
-            new NetworkLink(network.Http, network.PdxHttp));
+            new NetworkLink(network.Http, network.PdxHttp, network.TranslationTransport));
 
         logger.Info("服务装配完成");
 

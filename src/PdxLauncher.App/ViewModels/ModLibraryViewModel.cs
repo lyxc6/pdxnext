@@ -8,6 +8,7 @@ using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Playsets;
 
 /// <summary>
 /// Mod 库页的视图模型：把当前游戏的全部 mod（mods 表 + 磁盘本地 mod）整理成行，
@@ -24,6 +25,16 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         Keys.ModlibSortByName,
         Keys.ModlibSortBySize,
         Keys.ModlibSortBySubscribed,
+    ];
+
+    /// <summary>
+    /// 「来源」筛选的键：全部 / 本地 / 订阅。与排序一样，下拉框显示文案、选中项也存文案。
+    /// </summary>
+    private static readonly string[] SourceFilterKeys =
+    [
+        Keys.ModlibSourceFilterAll,
+        Keys.ModlibSourceFilterLocal,
+        Keys.ModlibSourceFilterSubscribed,
     ];
 
     private readonly ModLibraryService _service;
@@ -67,6 +78,14 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     [ObservableProperty]
     private IReadOnlyList<string> _sortModes = [];
 
+    /// <summary>来源筛选的选项（全部 / 本地 / 订阅）。</summary>
+    [ObservableProperty]
+    private IReadOnlyList<string> _sourceFilterModes = [];
+
+    /// <summary>当前来源筛选，取值来自 <see cref="SourceFilterModes"/>。</summary>
+    [ObservableProperty]
+    private string _selectedSourceFilter = string.Empty;
+
     public ModLibraryViewModel(ModLibraryService service, IModThumbnailService thumbnails, IAppLogger logger)
     {
         ArgumentNullException.ThrowIfNull(service);
@@ -79,6 +98,8 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
 
         SortModes = BuildSortModes();
         _selectedSortMode = SortModes[0];
+        SourceFilterModes = BuildSourceFilterModes();
+        _selectedSourceFilter = SourceFilterModes[0];
     }
 
     /// <summary>当前可见的 mod 行（已按搜索词过滤、按排序方式排序）。</summary>
@@ -241,12 +262,15 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     protected override void Relocalize()
     {
         var sortKey = ResolveSortKey();
+        var sourceFilterKey = ResolveSourceFilterKey();
         SortModes = BuildSortModes();
+        SourceFilterModes = BuildSourceFilterModes();
 
         _isRelocalizing = true;
         try
         {
             SelectedSortMode = T(sortKey);
+            SelectedSourceFilter = T(sourceFilterKey);
         }
         finally
         {
@@ -255,6 +279,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
 
         // 新旧语言的文案可能恰好相同，那样上面的赋值不会变更，仍需通知一次让下拉框重新选中。
         OnPropertyChanged(nameof(SelectedSortMode));
+        OnPropertyChanged(nameof(SelectedSourceFilter));
 
         // 状态栏平时存的是已拼好的文案（行操作还会临时覆盖成动作结果），切语言后按状态重算。
         StatusMessage = BuildCurrentStatusMessage();
@@ -277,8 +302,54 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         RebuildRows();
     }
 
+    /// <summary>来源筛选变化：只需重建行，不用重新加载。</summary>
+    partial void OnSelectedSourceFilterChanged(string value)
+    {
+        if (_isRelocalizing)
+        {
+            return;
+        }
+
+        RebuildRows();
+    }
+
     /// <summary>按当前语言生成排序下拉框的选项。</summary>
     private static IReadOnlyList<string> BuildSortModes() => SortKeys.Select(static key => T(key)).ToArray();
+
+    /// <summary>按当前语言生成来源筛选的选项。</summary>
+    private static IReadOnlyList<string> BuildSourceFilterModes() =>
+        SourceFilterKeys.Select(static key => T(key)).ToArray();
+
+    /// <summary>选中项对应的来源筛选键（对不上时回落到「全部」）。</summary>
+    private string ResolveSourceFilterKey()
+    {
+        foreach (var key in SourceFilterKeys)
+        {
+            if (string.Equals(T(key), SelectedSourceFilter, StringComparison.Ordinal))
+            {
+                return key;
+            }
+        }
+
+        return SourceFilterKeys[0];
+    }
+
+    /// <summary>按来源筛选键过滤。</summary>
+    private bool MatchesOrigin(ModLibraryEntry entry)
+    {
+        var key = ResolveSourceFilterKey();
+        if (string.Equals(key, Keys.ModlibSourceFilterLocal, StringComparison.Ordinal))
+        {
+            return entry.Origin == ModOrigin.Local;
+        }
+
+        if (string.Equals(key, Keys.ModlibSourceFilterSubscribed, StringComparison.Ordinal))
+        {
+            return entry.Origin == ModOrigin.Subscribed;
+        }
+
+        return true;
+    }
 
     /// <summary>
     /// 选中项对应的排序方式键。选中项可能是语言切换前的旧文案，
@@ -325,8 +396,8 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
 
         var query = SearchText.Trim();
         IReadOnlyList<ModLibraryEntry> filtered = query.Length == 0
-            ? _snapshot.Mods
-            : _snapshot.Mods.Where(entry => MatchesSearch(entry, query)).ToList();
+            ? _snapshot.Mods.Where(MatchesOrigin).ToList()
+            : _snapshot.Mods.Where(entry => MatchesSearch(entry, query) && MatchesOrigin(entry)).ToList();
 
         // 行 VM 需要游戏版本判断 requiredVersion 是否过旧；Game 在此路径上必然非 null。
         var gameVersion = Game?.Version;

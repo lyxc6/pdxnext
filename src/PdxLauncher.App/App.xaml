@@ -52,6 +52,11 @@
                     <SolidColorBrush x:Key="PdxOverlayTextBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="PdxCardHoverTintBrush" Color="#14FFFFFF" />
                     <SolidColorBrush x:Key="PdxCardHoverStrokeBrush" Color="#8CFFFFFF" />
+                    <!-- Mod 来源徽标：本地 / 订阅。三套主题各一份，换主题时底色自动跟着走。 -->
+                    <SolidColorBrush x:Key="PdxOriginLocalBackgroundBrush" Color="#332F9E5A" />
+                    <SolidColorBrush x:Key="PdxOriginLocalForegroundBrush" Color="#FF8FD9AC" />
+                    <SolidColorBrush x:Key="PdxOriginSubscribedBackgroundBrush" Color="#334C8DFF" />
+                    <SolidColorBrush x:Key="PdxOriginSubscribedForegroundBrush" Color="#FFA8C8FF" />
 
                     <StaticResource x:Key="NavigationViewDefaultPaneBackground" ResourceKey="PdxPaneGlassBrush" />
                     <StaticResource x:Key="NavigationViewExpandedPaneBackground" ResourceKey="PdxPaneGlassBrush" />
@@ -80,6 +85,11 @@
                     <SolidColorBrush x:Key="PdxOverlayTextBrush" Color="#FF1A1A1A" />
                     <SolidColorBrush x:Key="PdxCardHoverTintBrush" Color="#0D000000" />
                     <SolidColorBrush x:Key="PdxCardHoverStrokeBrush" Color="#66000000" />
+                    <!-- Mod 来源徽标：本地 / 订阅。三套主题各一份，换主题时底色自动跟着走。 -->
+                    <SolidColorBrush x:Key="PdxOriginLocalBackgroundBrush" Color="#332F9E5A" />
+                    <SolidColorBrush x:Key="PdxOriginLocalForegroundBrush" Color="#FF1F6B3B" />
+                    <SolidColorBrush x:Key="PdxOriginSubscribedBackgroundBrush" Color="#334C8DFF" />
+                    <SolidColorBrush x:Key="PdxOriginSubscribedForegroundBrush" Color="#FF1B4E9E" />
 
                     <StaticResource x:Key="NavigationViewDefaultPaneBackground" ResourceKey="PdxPaneGlassBrush" />
                     <StaticResource x:Key="NavigationViewExpandedPaneBackground" ResourceKey="PdxPaneGlassBrush" />
@@ -101,6 +111,11 @@
                     <SolidColorBrush x:Key="PdxOverlayTextBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="PdxCardHoverTintBrush" Color="#33FFFFFF" />
                     <SolidColorBrush x:Key="PdxCardHoverStrokeBrush" Color="#FFFFFFFF" />
+                    <!-- Mod 来源徽标：本地 / 订阅。三套主题各一份，换主题时底色自动跟着走。 -->
+                    <SolidColorBrush x:Key="PdxOriginLocalBackgroundBrush" Color="#FF000000" />
+                    <SolidColorBrush x:Key="PdxOriginLocalForegroundBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="PdxOriginSubscribedBackgroundBrush" Color="#FF000000" />
+                    <SolidColorBrush x:Key="PdxOriginSubscribedForegroundBrush" Color="#FFFFFFFF" />
 
                     <StaticResource x:Key="NavigationViewDefaultPaneBackground" ResourceKey="PdxPaneGlassBrush" />
                     <StaticResource x:Key="NavigationViewExpandedPaneBackground" ResourceKey="PdxPaneGlassBrush" />

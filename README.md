@@ -163,8 +163,18 @@ gameId 一律取自 JSON 里的 `gameId` 字段，**不看文件夹名**；同�
 | 等级 | 本机实测游戏 | 启动器负责 |
 | --- | --- | --- |
 | 完整适配 | Crusader Kings III、Victoria 3、Stellaris | 启动 + 播放集 / Mod 库 / DLC + 加载文件 |
-| 仅启动 | Prison Architect（老 schema，formatVersion 语义不同） | 只负责拉起 exe（--launched-from-launcher）；模组与 DLC 由游戏本体管理，启动器不读不写它的任何数据 |
+| 仅启动 | Prison Architect（老 schema，formatVersion 语义不同）、Cities: Skylines（本体不读加载文件） | 只负责拉起 exe（--launched-from-launcher）；模组与 DLC 由游戏本体管理，启动器不读不写它的任何数据 |
 | 未适配 | 未登记 gameId 的目录 | 只展示，卡片标「未适配」 |
+
+「仅启动」这两款各有各的理由：Prison Architect 的 `formatVersion` 语义和别的游戏不同（老 schema），
+Cities: Skylines 则是**本体根本不读任何加载文件**——它的 mod 由游戏内 Colossal Mods Domain 枚举
+`Addons\Mods` 和 Steam 工坊目录加载，开关状态存在自己的 `.cgs` 设置里；DLC 归属纯靠 Steam 授权，
+安装目录里没有 `.dlc` 文件。所以对它们只做「启动」：不读 sqlite、不扫 DLC 目录、不写加载文件。
+
+官方启动器给 Cities: Skylines 写的 `gameId` 是 **`cities_v2`**，而 Paradox 元数据 API、Steam appId
+映射表、创意工坊表只认 **`cities_skylines`**。启动器在**发现阶段**就把 `cities_v2` 归一到
+`cities_skylines`（`KnownGames.CanonicalizeGameId`），支持等级、appId 映射、工坊来源、远程主题
+因此都能命中；只有**公告接口**反过来只认原始 id，由 `KnownGames.GetNewsFeedGameId` 单独兜住。
 
 ### 加载文件（启动器唯一必须写对的东西）
 
@@ -178,29 +188,43 @@ gameId 一律取自 JSON 里的 `gameId` 字段，**不看文件夹名**；同�
 游戏自己读这个文件，启动器**不写** `playsets.json` / `game_data.json` / `continue_game.json`。
 
 ### 播放集 / Mod / DLC
-直接读写各游戏游戏数据目录下的 `launcher-v2.sqlite`（knex schema：`mods`、`playsets`、
-`playsets_mods`、`playsets_dlcs`、`key_value_pairs`），用 **P/Invoke `winsqlite3.dll`**，
-不依赖任何 NuGet sqlite 包（本项目全离线构建）。
+**事实源是本启动器自己的 sqlite**（程序目录下 `data\pdxnext.sqlite`，表结构见
+`docs\DATA-FORMATS.md` 第 20 节）；官方 `launcher-v2.sqlite`（knex schema：`mods`、`playsets`、
+`playsets_mods`、`playsets_dlcs`、`key_value_pairs`）只在**存在时**当读源与回写目标。
+两者之间靠 `LauncherDbProjector` 双向同步：官方库在 ⇒ 读前导入、写后回写；官方库不在 ⇒
+照常读写自有库，**绝不创建 `launcher-v2.sqlite`**，等它下次出现再补投射。
+底层同样用 **P/Invoke `winsqlite3.dll`**，不依赖任何 NuGet sqlite 包（本项目全离线构建）。
 
 - 播放集页：**两种显示方式**，在「设置 → 界面 → 播放集页面显示方式」切换（存 `data\settings.json`（程序目录下）
   的 `playSetPageDisplayMode`，默认 `officialLauncher`）：
   - `officialLauncher`（原版启动器布局）：顶部**只有一行**工具条——播放集下拉（**只切换查看/编辑目标，不改变激活状态**，
     选中项显示集名与「● 激活」标记）+ 新建 / 重命名 / 删除 ｜ 分隔线 ｜「激活播放集」（把当前选中的播放集写成游戏激活集，
-    激活后按钮变「已激活」并置灰）+「启用全部」「禁用全部」｜ 中＝搜索框，右＝「添加模组」多选对话框（候选来自 Mod 库）；
+    激活后按钮变「已激活」并置灰）+「启用全部」「禁用全部」｜ 中＝搜索框，右＝「添加模组」（打开独立子页，候选来自 Mod 库）；
     原先第二行的「当前播放集名 / 计数 / 已激活：X」摘要已删除，这些信息改由下拉框选中项与状态栏承载；
     下方**只显示该播放集的 mod**：逐项启用禁用、上下移动排序（上移/下移一位）、**点行首序号直接输入目标位次**（回车生效，
     Esc 或点别处取消，其余行依次顺移而非互换；**输入的数字大于总行数时视为置底**，不会报错；
     搜索状态下位次编辑与上下移动一并置灰）、从播放集移除。
+    「添加模组」现在是一个**独立子页**（左栏没有它的菜单项，选中态停在「播放集」）：
+    顶部是返回按钮 + 标题 + 目标播放集名，下面是搜索框与候选计数，再下面是可勾选的候选列表
+    （候选来自 Mod 库，已在该播放集里的不会出现；每行带缩略图、名称、来源徽标与大小/注册 ID），
+    底部是「已选 N 个 mod」与「取消 / 添加」。勾选后点「添加」会回到播放集页并把 mod 追加进去
+    （默认启用、排在末尾，随后自动保存）；点「取消」或返回则什么都不改。
+    每行名称后带**来源徽标**（本地 / 订阅），进游戏时会被跳过的行另有一个警告图标，悬停看原因
+    （缺路径 / 缺注册名 / 缺压缩包 / 路径不存在 / 路径含非 ASCII）。工具条上的「修复 mod 路径」
+    会扫出可修的项：缺路径的按工坊编号补上、本地 mod 目录名含非 ASCII 且该游戏不支持时改成
+    `mod_<id 前 8 位>`（撞名自动 `_2`/`_3`），改名成功才写库，写库失败会把目录移回原处。
     所有改动**自动保存到 sqlite**（`playsets_mods` / `playsets_dlcs`，写完回读比对）；**只有当前播放集是激活集时才写游戏加载文件**，
     编辑未激活集时状态栏会提示「未激活，游戏加载文件未改动」。**没有**「保存」「保存并启动」按钮。
     删除：删非激活集不改变游戏配置；删激活集时先激活接替者、再删除并写入接替者的加载文件；只剩一个激活集时拒绝删除。
   - `placeholder`（留空）：整页只显示占位提示，回设置页切回即可恢复原版布局。
-- Mod 库页：只读展示 `mods` 表全量（即官方启动器的「MOD 库」），每行显示缩略图、名称、大小、
-  订阅日期、mod **自己声明的支持版本**（`requiredVersion`，即 .mod 的 `supported_version` /
+- Mod 库页：只读展示 mod 全量（自有库的 `mods` 表，官方库在时由官方库导入），每行显示缩略图、名称、
+  **来源徽标**（本地 / 订阅）、大小、订阅日期、mod **自己声明的支持版本**（`requiredVersion`，即 .mod 的 `supported_version` /
   metadata.json 的 `supported_game_version`，原样显示不做换算）、以及「在 N 个播放集中」（不在任何播放集时不占位）；
-  本地 mod / 状态异常有警告标记；行尾**四个图标按钮**分别是打开工坊详情页（复用创意工坊那个详情子页）、
+  本地 mod、官方库里状态不是 `ready_to_play` 的 mod、以及**声明的支持版本低于当前游戏版本**的 mod
+  带三角提示标记，提示只讲「这个 mod 声明支持哪个版本、和当前游戏版本对不对得上」（登记情况与库里的状态作为补充说明）；
+  行尾**四个图标按钮**分别是打开工坊详情页（复用创意工坊那个详情子页）、
   打开本地文件夹、在 Steam 中打开、在浏览器中打开（拿不到目录或工坊编号时对应按钮置灰）；支持搜索（名称 / 注册 ID / 目录）、
-  按名称 / 大小 / 订阅时间排序、刷新；数量徽标 = `SELECT COUNT(*) FROM mods`。
+  **按来源筛选（全部 / 本地 / 订阅）**、按名称 / 大小 / 订阅时间排序、刷新；数量徽标 = 当前筛选下的行数。
   行操作的地址由 `SteamWorkshop` 拼装：创意工坊 id 优先取 `mods.steamId`，为空时回退从
   `mod/ugc_<id>.mod` 解析；打开动作是 `Process.Start` + `UseShellExecute`（资源管理器 / `steam://` / https），
   不经 `IFileSystem`，也不受 `OnlineHosts` 白名单约束（那是本进程 HTTP 的白名单）。
@@ -212,6 +236,11 @@ gameId 一律取自 JSON 里的 `gameId` 字段，**不看文件夹名**；同�
 - DLC 页：纵向列表，**左侧固定 208×117 缩略图，右侧标题 + 两行简介**（文字再长也不会把图片压小，超出两行省略、鼠标悬停看全文），逐项启用禁用，写 `playsets_dlcs` 并同步加载文件。简介优先用本地描述（Victoria 3 的 `.dlc.json` 自带 `description`），CK3 / Stellaris 的 `.dlc` 没有简介字段，联网时按 Steam appid 查商店简介补全并缓存 7 天（设置页可关）
 
 播放集 / Mod 库 / DLC 三页**只对「完整适配」的游戏生效**；选中「仅启动」的游戏时，左侧这三项置灰、左栏底部常驻一行说明（禁用的导航项收不到指针事件，所以不用悬停提示），主页的播放集下拉隐藏、改显示一行「由游戏本体管理」的说明，不会去读它的 sqlite，也不会扫 DLC 目录。
+
+**补丁（DLC 解锁）不受支持等级限制**：它只依赖「安装根能找到 `steam_api64.dll` / `steam_api.dll`」和「能解析出 Steam appId」两件事，
+所以「仅启动」的游戏照样能打——Cities: Skylines 的 `steam_api64.dll` 就在安装根，`Cities.exe` 没有 SteamStub 之类的壳，
+`ColossalNative.dll` 是运行时 `LoadLibrary("steam_api64.dll")` 动态加载（不在导入表里），所以把 CreamAPI 的 loader + `cream_api.ini` 放进去即可生效。
+独立安装（没有 `appmanifest`）时 appId 从 `GameSteamAppIds` 映射表拿，`cities_skylines` 登记的是 255710。
 
 ### 启动游戏
 `Process.Start` 直接拉 `exePath`，**cwd = 游戏 exe 所在目录**，`UseShellExecute=false`，
@@ -262,6 +291,7 @@ CK3 是深炭纹理 + 米色字、Victoria 3 是紫红大理石 + 金珠边框 +
 
 ### 界面
 `TitleBar` + `NavigationView` + `Frame`，6 个页面：游戏库 / 当前游戏 / 播放集 / Mod库 / DLC / 设置。
+另外有两个不带左栏菜单项的子页：创意工坊详情页、**「添加模组」子页**（从播放集页进入，左栏选中态停在「播放集」）。
 全中文，跟随系统亮/暗主题，卡片式游戏库。
 
 当前游戏页的布局对齐官方 Paradox 启动器：居中字标 → 「继续」（左）+「开始游戏」（右）→ 播放集选择器 →
@@ -362,30 +392,31 @@ scripts/
 Directory.Build.props          :: 统一可空/语言版本/告警策略
 NuGet.config                   :: <clear/>，全离线
 src/
-  PdxLauncher.Core/            :: 165 个 .cs，无任何 WinUI 依赖，可单测
-    Abstractions/              :: 22 个接口（IGameCatalog / IPlaySetRepository / IGameLauncher / INewsFeedService ...）
+  PdxLauncher.Core/            :: 183 个 .cs，无任何 WinUI 依赖，可单测
+    Abstractions/              :: 接口（IGameCatalog / IPlaySetRepository / IGameLauncher / INewsFeedService ...）
     Contracts/                 :: 不可变 record 数据模型
-    Games/                     :: Steam 库探测、launcher-settings 解析、游戏目录展开
+    Games/                     :: Steam 库探测、launcher-settings 解析、游戏目录展开、路径规则（V3 非 ASCII）
     Steam/                     :: registry + libraryfolders.vdf（Valve KeyValues 解析）
-    Playsets/                  :: winsqlite3 P/Invoke + 播放集仓库
-    LoadFiles/                 :: 两套加载文件格式的写入与回读比对
+    Playsets/                  :: winsqlite3 P/Invoke + 官方库仓储 + 自有库仓储 + 双向投射 + mod 来源/路径修复
+    Storage/                   :: 自有库 pdxnext.sqlite、JSON 文档存储、遗留 JSON 入库、缓存计量与清理
+    LoadFiles/                 :: 两套加载文件格式的写入与回读比对 + mod 跳过规则
     Launching/                 :: 进程启动、continue_game.json 读取
     Signatures/                :: dlc_signature 重算（默认关闭）
     Themes/                    :: 主题 JSON 解析 + HSL/RGB 颜色
     Online/                    :: GraphQL 元数据、素材下载、代理（三模式解析 / 系统代理 / 环境变量）、DLC 简介、官方公告
     Parsing/                   :: Clausewitz 与 Valve KeyValues 解析器
     Patch/                     :: 补丁素材（内嵌 loader + cream_api.ini）、目标目录判定、打补丁 / 还原
-  PdxLauncher.App/             :: 87 个 .cs + 13 个 .xaml，WinUI 3 层
+  PdxLauncher.App/             :: 93 个 .cs + 14 个 .xaml，WinUI 3 层
     Assets/                    :: AppIcon.ico（9 帧 16→256）+ 8 张模板同名 PNG，全部由 tools/gen-app-icon.py 生成
-    Views/                     :: GameLibraryPage / HomePage / ModsPage（播放集） / ModLibraryPage（Mod库） / DlcPage / SettingsPage
-    ViewModels/                :: 16 个 VM（全部不含 Microsoft.UI.Xaml 类型）
+    Views/                     :: GameLibraryPage / HomePage / ModsPage（播放集） / ModLibraryPage（Mod库） / DlcPage / SettingsPage / WorkshopDetailPage（工坊详情子页） / AddModsPage（添加模组子页）
+    ViewModels/                :: VM（全部不含 Microsoft.UI.Xaml 类型）
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
 tests/
-  PdxLauncher.Checks/          :: 47 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 55 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
-  DATA-FORMATS.md              :: 所有数据格式的真机实测记录（262 行）
+  DATA-FORMATS.md              :: 所有数据格式的真机实测记录（含自有库表字典，见第 20 节）
   app-icon.png                 :: 应用图标接触表（深/浅底，16→256，由生成器写出）
   screenshot-home.png          :: 当前游戏（整窗主题背景）
   screenshot-library.png       :: 游戏库
@@ -404,7 +435,7 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**317 个 .cs + 13 个 .xaml**（不含 `obj/` 生成物；2026-10-29 实测：Core 171 / App 87+13 / Imaging 9 / Checks 50 —— Checks 的 50 个文件是 47 个检查类 + Program + ChecksContext + GlobalUsings）。
+**344 个 .cs + 14 个 .xaml**（不含 `obj/` 生成物；2026-10-30 实测：Core 184 / App 93+14 / Imaging 9 / Checks 58 —— Checks 的 58 个文件是 55 个检查类 + Program + ChecksContext + GlobalUsings）。
 
 ---
 
@@ -414,9 +445,13 @@ tools/
 dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 47，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
+输出 `检查类: 55，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
 launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取
 （mods 全量、size / subscribedDate 解析、播放集归属、requiredVersion 兼容判断）、创意工坊 id 解析、启动参数拼装、路径大小写不敏感处理；
+自有库 `pdxnext.sqlite`（建表幂等 / schema 版本 / 事务回滚 / 损坏自愈 / `documents` 键空间与前缀统计）、
+官方库双向投射（导入带来源与工坊 id、投射回写新行、**官方库缺席时绝不创建 `launcher-v2.sqlite`**、pending 补投）、
+mod 来源归一（`source=local` 带工坊 id 仍算本地）、加载文件跳过规则（六种 key + 四套格式）、
+路径修复（补路径 / 改名为 ASCII / 撞名 `_2` / 父目录非 ASCII 只提示 / 回滚）；
 以及联网子系统：域名白名单与 magic bytes 判型（含 GIF）、素材下载与原子改名、主题补丁合并、
 DLC 简介的 TTL / 负缓存 / 失败退避、官方公告的 JSON 解析（时间窗与 weight）、404 负缓存、离线不联网、6 小时 TTL、30 分钟失败退避、图片落盘与复用、缓存往返；
 以及网络代理：三模式归一化与旧配置迁移、手动地址补 scheme / 去引号 / 拒绝 SOCKS 与非 http、
@@ -442,13 +477,14 @@ csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cm
 | --- | --- | --- |
 | 官方启动器目录 | `%LOCALAPPDATA%\Programs\Paradox Interactive\launcher` | **只读，永不写入** |
 | 官方 userSettings.json | 同上 | **只读** |
-| 游戏数据目录 | `%USERPROFILE%\Documents\Paradox Interactive\<游戏>` | 读写（写 sqlite + 加载文件） |
+| 游戏数据目录 | `%USERPROFILE%\Documents\Paradox Interactive\<游戏>` | 官方库在时读写它 + 加载文件；**不会创建 `launcher-v2.sqlite`** |
 | 本启动器自己的数据 | `<PdxNext 程序目录>\data\`（**不写 %LOCALAPPDATA%**） | 全部自己的 |
-| 启动器设置 | `data\settings.json`（含 `playSetPageDisplayMode` / `modThumbnailSize` / `modThumbnailCacheDays` 等） | 同上 |
-| DLC 简介缓存 | `data\dlc-descriptions.json` | 同上（TTL 7 天） |
-| 主题素材缓存 | `data\theme-cache\` | 同上（TTL 5 天） |
-| 官方公告缓存 | `data\news-cache\` | 同上（TTL 6 小时） |
-| Mod 缩略图缓存 | `data\mod-cache\` | 同上（保留天数可配，默认 30 天） |
+| 自有数据库 | `data\pdxnext.sqlite`（播放集 / mod / settings / session / 六份缓存索引） | 同上 |
+| 启动器设置 | 库内 `settings` 键（原 `data\settings.json`，已入库） | 同上 |
+| DLC 简介缓存 | 库内 `cache:dlc-descriptions` 键 | 同上（TTL 7 天） |
+| 主题素材缓存 | 库内 `cache:theme-assets:<gameId>` + 图片 `data\theme-cache\` | 同上（TTL 5 天） |
+| 官方公告缓存 | 库内 `cache:news-cards` + 图片 `data\news-cache\` | 同上（TTL 6 小时） |
+| Mod 缩略图缓存 | 库内 `cache:mod-thumbnails` + 图片 `data\mod-cache\` | 同上（保留天数可配，默认 30 天） |
 | 补丁素材（外部覆盖） | `data\patch\assets\` | 同上（可选；同名文件优先于内嵌素材） |
 | 补丁清单 | `data\patch\state.json` | 同上（记录打过补丁的游戏与备份路径） |
 | 游戏安装目录的 `steam_api*.dll` / `cream_api.ini` | 各游戏安装目录 | **只在用户点「一键打补丁 / 移除补丁」时写**，原文件备份为同目录 `*_o.dll` |
@@ -460,9 +496,12 @@ csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cm
 `<exe 目录>\..\PdxNext-data`（程序目录不可写时），**任何情况下都不回退到 C 盘**。
 首次启动会把旧的 `%LOCALAPPDATA%\PdxNext` 内容**复制**过来（`DataRootMigrator`：
 settings.json / dlc-descriptions.json / theme-cache / news-cache / mod-cache，不搬 logs、永不删源、
-以 `.migrated-from-localappdata` 标记保证幂等）；设置页「数据目录」卡片可以打开该目录或
+以 `.migrated-from-localappdata` 标记保证幂等）；随后 `LegacyJsonImporter` 把这些 JSON 写进
+`pdxnext.sqlite` 并把原文件改名成 `<名>.migrated.bak` 留档。设置页「数据目录」卡片可以打开该目录或
 删掉旧的 C 盘副本。`publish.cmd` 覆盖 `dist\PdxNext` 前会把 `data` 搬到
 `dist\PdxNext.__data__`、发布完搬回，所以重新发布不会吞掉设置与缓存。
+`pdxnext.sqlite` 打不开或建表失败时会被改名成 `pdxnext.sqlite.corrupt-<毫秒>` 留档并重建空库，
+宁可丢缓存也不让程序起不来。
 
 ---
 
@@ -482,6 +521,10 @@ settings.json / dlc-descriptions.json / theme-cache / news-cache / mod-cache，�
 6. 游戏本体启动依赖 Steam 运行中（Steam DRM）；这不是启动器能绕过的。
 7. **代理只支持 HTTP / HTTPS**：.NET 的 `SocketsHttpHandler` 不能走 SOCKS，所以系统里配了 SOCKS 代理时会直连并提示原因；
    PAC 自动代理脚本也不执行（检测到 `AutoConfigURL` 就按直连处理，不会去抓脚本）。需要代理的场合请填 HTTP 代理地址。
+8. **Victoria 3 不能加载路径含非 ASCII 的 mod**：这是游戏本体的限制（Vic3 wiki "Mod structure" + Paradox 官方论坛同题帖），
+   `content_load.json` 里写得再对也不生效，且游戏日志不报任何错。启动器会在播放集页给出警告，
+   并可用「修复 mod 路径」把本地 mod 目录改成 `mod_<id 前 8 位>`。父目录含非 ASCII（如 `C:\Users\张三\…`）时
+   不自动改名，只提示——那种情况得改 `launcher-settings.json` 的 `gameDataPath`。CK3 / Stellaris / EU4 无此限制。
 
 ---
 
@@ -495,8 +538,14 @@ settings.json / dlc-descriptions.json / theme-cache / news-cache / mod-cache，�
 **找不到游戏** → 确认游戏装在某个 Steam 库里，或在官方启动器的独立库路径里，且安装目录下真有
 `launcher-settings.json`。改完路径点右上角「刷新」；日志里会打印扫描结果（`游戏发现完成，共 N 个`）。
 
-**Mod 列表为空** → 确认游戏数据目录下有 `launcher-v2.sqlite`（至少用官方启动器成功启动过一次游戏）。
-若是 Prison Architect，这是预期行为：它是「仅启动」等级，左侧播放集 / Mod 库 / DLC 本来就置灰。
+**Mod 列表为空** → 现在的读源是 `data\pdxnext.sqlite`：首次启动会从游戏数据目录下的
+`launcher-v2.sqlite` 导入（至少用任一启动器成功启动过一次游戏才会有它）；没有官方库也能用自有库，
+但两者都没数据就是空的。若是 Prison Architect，这是预期行为：它是「仅启动」等级，
+左侧播放集 / Mod 库 / DLC 本来就置灰。
+
+**某个 mod 勾了但进游戏没生效** → 播放集页那一行的警告图标会说明原因（缺路径 / 缺注册名 /
+路径不存在 / 路径含非 ASCII）。Victoria 3 的非 ASCII 路径限制见第 6 节第 8 条，点工具条上的
+「修复 mod 路径」可以自动改目录名与补路径。
 
 **写完加载文件游戏没生效** → 游戏启动时会重写这个文件；确认启动前 launcher 已完全退出
 （本启动器是保存即写、写完只回读，不会在游戏启动后继续持有）。

@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="PdxLauncher.App.Views.AddModsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:svc="using:PdxLauncher.App.Services"
+    xmlns:vm="using:PdxLauncher.App.ViewModels"
+    Background="{ThemeResource PdxPageVeilBrush}">
+
+    <!--
+        「添加模组」子页：从 mod 库里挑还没进当前播放集的 mod，多选后交回播放集页。
+        页面自己不写库：勾选结果通过 ModsSelected 事件交回发起方（播放集页），
+        由它在自己的上下文里追加并自动保存。
+        左栏没有这个页面的菜单项，所以选中态停在「播放集」。
+        所有交互控件都带 AutomationProperties.AutomationId，便于 UI 自动化与无障碍。
+    -->
+    <Grid Padding="16" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- 页头：返回 + 标题 + 目标播放集 -->
+        <Grid Grid.Row="0" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="btnAddModsBack"
+                    Width="36"
+                    Height="36"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    Click="OnBackClick"
+                    ToolTipService.ToolTip="{x:Bind ViewModel.BackText, Mode=OneWay}"
+                    AutomationProperties.AutomationId="btnAddModsBack"
+                    AutomationProperties.Name="{x:Bind ViewModel.BackText, Mode=OneWay}">
+                <FontIcon Glyph="&#xE72B;" FontSize="14" />
+            </Button>
+
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                <TextBlock Text="{x:Bind ViewModel.Title, Mode=OneWay}"
+                           Style="{StaticResource SubtitleTextBlockStyle}"
+                           AutomationProperties.AutomationId="txtAddModsTitle"
+                           AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}" />
+                <TextBlock Text="{x:Bind ViewModel.TargetText, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           AutomationProperties.AutomationId="txtAddModsTarget"
+                           AutomationProperties.Name="{x:Bind ViewModel.TargetText, Mode=OneWay}" />
+            </StackPanel>
+
+            <ProgressRing Grid.Column="2"
+                          Width="20"
+                          Height="20"
+                          VerticalAlignment="Center"
+                          IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                          AutomationProperties.AutomationId="ringAddModsBusy"
+                          AutomationProperties.Name="{x:Bind L.CommonLoading, Mode=OneWay}" />
+        </Grid>
+
+        <!-- 工具条：搜索 + 候选计数 -->
+        <Grid Grid.Row="1" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox x:Name="SearchBox"
+                     MinWidth="160"
+                     MaxWidth="320"
+                     HorizontalAlignment="Left"
+                     VerticalAlignment="Center"
+                     PlaceholderText="{x:Bind ViewModel.SearchPlaceholder, Mode=OneWay}"
+                     Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
+                     TextChanged="OnSearchTextChanged"
+                     AutomationProperties.AutomationId="txtAddModsSearch"
+                     AutomationProperties.Name="{x:Bind ViewModel.SearchName, Mode=OneWay}" />
+
+            <TextBlock Grid.Column="1"
+                       VerticalAlignment="Center"
+                       Text="{x:Bind ViewModel.CandidateCountText, Mode=OneWay}"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       AutomationProperties.AutomationId="txtAddModsCandidateCount"
+                       AutomationProperties.Name="{x:Bind ViewModel.CandidateCountText, Mode=OneWay}" />
+        </Grid>
+
+        <!-- 主体：候选列表 + 空状态 -->
+        <Grid Grid.Row="2">
+            <!-- 列表底衬：半透明玻璃面，压住整窗背景图保证行文字对比度 -->
+            <Border Background="{ThemeResource PdxCardGlassBrush}" CornerRadius="8" />
+
+            <ListView x:Name="CandidateList"
+                      ItemsSource="{x:Bind ViewModel.Rows, Mode=OneWay}"
+                      SelectionMode="None"
+                      AutomationProperties.AutomationId="lstAddModsCandidates"
+                      AutomationProperties.Name="{x:Bind ViewModel.ListName, Mode=OneWay}">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:AddModRowViewModel">
+                        <Grid ColumnSpacing="10"
+                              Padding="4,6"
+                              AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
+                              AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 勾选框：勾中的 mod 会被加入播放集 -->
+                            <CheckBox Grid.Column="0"
+                                      VerticalAlignment="Center"
+                                      IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                                      AutomationProperties.AutomationId="{x:Bind CheckAutomationId, Mode=OneTime}"
+                                      AutomationProperties.Name="{x:Bind Name, Mode=OneTime}" />
+
+                            <!-- 缩略图 -->
+                            <Border Grid.Column="1"
+                                    Width="{x:Bind ThumbnailSize, Mode=OneTime}"
+                                    Height="{x:Bind ThumbnailSize, Mode=OneTime}"
+                                    CornerRadius="6"
+                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1">
+                                <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath), Mode=OneWay}"
+                                       Stretch="Uniform" />
+                            </Border>
+
+                            <!-- 名称 + 副标题（大小 / 注册 id） -->
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="{x:Bind Name, Mode=OneTime}"
+                                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <!-- 来源徽标：本地 / 订阅，与 Mod 库页同一套画刷。 -->
+                                    <Border VerticalAlignment="Center"
+                                            Padding="6,1"
+                                            CornerRadius="4"
+                                            Background="{ThemeResource PdxOriginLocalBackgroundBrush}"
+                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(IsLocalOrigin), Mode=OneWay}">
+                                        <TextBlock Text="{x:Bind OriginText, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource PdxOriginLocalForegroundBrush}" />
+                                    </Border>
+                                    <Border VerticalAlignment="Center"
+                                            Padding="6,1"
+                                            CornerRadius="4"
+                                            Background="{ThemeResource PdxOriginSubscribedBackgroundBrush}"
+                                            Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(IsLocalOrigin), Mode=OneWay}">
+                                        <TextBlock Text="{x:Bind OriginText, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource PdxOriginSubscribedForegroundBrush}" />
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Text="{x:Bind SubtitleText, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <!-- 空状态：mod 库里没有可加的 mod -->
+            <StackPanel VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        Spacing="6"
+                        IsHitTestVisible="False"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowEmptyState), Mode=OneWay}">
+                <FontIcon Glyph="&#xE8B7;"
+                          FontSize="28"
+                          HorizontalAlignment="Center"
+                          Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                <TextBlock Text="{x:Bind ViewModel.EmptyText, Mode=OneWay}"
+                           HorizontalAlignment="Center"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           AutomationProperties.AutomationId="txtAddModsEmpty"
+                           AutomationProperties.Name="{x:Bind ViewModel.EmptyText, Mode=OneWay}" />
+            </StackPanel>
+
+            <!-- 搜索无结果 -->
+            <StackPanel VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        Spacing="6"
+                        IsHitTestVisible="False"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowNoMatch), Mode=OneWay}">
+                <FontIcon Glyph="&#xE721;"
+                          FontSize="24"
+                          HorizontalAlignment="Center"
+                          Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                <TextBlock Text="{x:Bind ViewModel.NoMatchText, Mode=OneWay}"
+                           HorizontalAlignment="Center"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           AutomationProperties.AutomationId="txtAddModsNoMatch"
+                           AutomationProperties.Name="{x:Bind ViewModel.NoMatchText, Mode=OneWay}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- 底栏：提示 + 已选计数 + 状态 + 按钮 -->
+        <Border Grid.Row="3"
+                Padding="10,6"
+                CornerRadius="6"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1">
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Spacing="2">
+                    <TextBlock Text="{x:Bind ViewModel.HintText, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap" />
+                    <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               AutomationProperties.LiveSetting="Assertive"
+                               AutomationProperties.AutomationId="txtAddModsStatus"
+                               AutomationProperties.Name="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" />
+                </StackPanel>
+
+                <TextBlock Grid.Column="1"
+                           VerticalAlignment="Center"
+                           Text="{x:Bind ViewModel.SelectedCountText, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           AutomationProperties.AutomationId="txtAddModsSelectedCount"
+                           AutomationProperties.Name="{x:Bind ViewModel.SelectedCountText, Mode=OneWay}" />
+
+                <Button Grid.Column="2"
+                        VerticalAlignment="Center"
+                        Content="{x:Bind L.CommonCancel, Mode=OneWay}"
+                        Click="OnCancelClick"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.BackText, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnAddModsCancel"
+                        AutomationProperties.Name="{x:Bind L.CommonCancel, Mode=OneWay}" />
+
+                <Button Grid.Column="3"
+                        VerticalAlignment="Center"
+                        Content="{x:Bind ViewModel.AddText, Mode=OneWay}"
+                        Style="{StaticResource AccentButtonStyle}"
+                        IsEnabled="{x:Bind ViewModel.HasSelection, Mode=OneWay}"
+                        Click="OnConfirmClick"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.AddText, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnAddModsConfirm"
+                        AutomationProperties.Name="{x:Bind ViewModel.AddText, Mode=OneWay}" />
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

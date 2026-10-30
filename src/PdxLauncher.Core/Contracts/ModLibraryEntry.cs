@@ -52,5 +52,12 @@ public sealed record ModLibraryEntry(
     /// 这类 mod 仍在官方 mod 库内、要显示大小/订阅/播放集归属，也能加进播放集，
     /// 与 <see cref="IsUnregistered"/> 的「只有磁盘、库里没登记」是两回事。
     /// </summary>
-    public bool IsLocalOnly => string.Equals(Source, "local", StringComparison.OrdinalIgnoreCase);
+    public bool IsLocalOnly => Origin == PdxLauncher.Core.Playsets.ModOrigin.Local;
+
+    /// <summary>来源归一后的结果：本地 / 订阅。徽标与筛选都只看它。</summary>
+    public PdxLauncher.Core.Playsets.ModOrigin Origin =>
+        PdxLauncher.Core.Playsets.ModOrigins.Normalize(Source, SteamId);
+
+    /// <summary>是不是订阅来的 mod（工坊 / Paradox 渠道）。</summary>
+    public bool IsSubscribed => Origin == PdxLauncher.Core.Playsets.ModOrigin.Subscribed;
 }

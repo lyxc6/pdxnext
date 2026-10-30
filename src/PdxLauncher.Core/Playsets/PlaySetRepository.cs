@@ -128,9 +128,24 @@ public sealed class PlaySetRepository : IPlaySetRepository
             (connection, ct) =>
             {
                 ct.ThrowIfCancellationRequested();
+
+                // source / steamId 是「本地还是订阅」的唯一依据，必须一起读出来；老库没有这两列时
+                // 只能退回 SELECT 里的其余列（缺列时 SqliteConnection 直接报错，不能硬写）。
+                var columns = ReadTableColumns(connection, "mods");
+                var extras = string.Empty;
+                if (columns.Contains("steamId"))
+                {
+                    extras += ", m.steamId";
+                }
+
+                if (columns.Contains("source"))
+                {
+                    extras += ", m.source";
+                }
+
                 var rows = connection.Query(
                     "SELECT pm.position, pm.enabled, m.id, m.displayName, m.dirPath, m.archivePath, " +
-                    "m.gameRegistryId, m.thumbnailPath, m.requiredVersion, m.status FROM playsets_mods pm " +
+                    "m.gameRegistryId, m.thumbnailPath, m.requiredVersion, m.status" + extras + " FROM playsets_mods pm " +
                     "JOIN mods m ON m.id = pm.modId WHERE pm.playSetId = ? ORDER BY pm.position ASC",
                     playSetId.ToString("D"));
 
@@ -154,7 +169,9 @@ public sealed class PlaySetRepository : IPlaySetRepository
                         ReadString(row, "requiredVersion"),
                         ReadString(row, "status"),
                         ReadBoolean(row, "enabled"),
-                        ReadInt32(row, "position")));
+                        ReadInt32(row, "position"),
+                        ReadNullableString(row, "steamId"),
+                        ReadNullableString(row, "source")));
                 }
 
                 return (IReadOnlyList<PlaySetMod>)result;
@@ -289,6 +306,12 @@ public sealed class PlaySetRepository : IPlaySetRepository
             (connection, ct) =>
             {
                 ct.ThrowIfCancellationRequested();
+
+                // 刚订阅、官方启动器还没扫描到的工坊 mod（以及手放进 mod 目录的本地 mod）在 mods 表里没有行。
+                // 不补登记就写 playsets_mods，等于插一条悬空外键：游戏与官方启动器都认不出这个 mod。
+                // 补登记与播放集写入放在同一个事务里，共享这一次 .pdxnext.bak 备份，失败一起回滚。
+                EnsureModsRegistered(connection, mods);
+
                 connection.Execute("DELETE FROM playsets_mods WHERE playsetId = ?", playSetId.ToString("D"));
                 var position = 0;
                 foreach (var mod in mods)
@@ -308,6 +331,152 @@ public sealed class PlaySetRepository : IPlaySetRepository
             },
             cancellationToken);
     }
+
+    /// <summary>
+    /// 给 <c>mods</c> 表里还没有行的 mod 补登记：只补缺的 id、只补磁盘上确实有内容的、幂等。
+    /// <para>
+    /// 官方启动器只登记它自己扫描到的 mod，刚订阅的工坊 mod 与手动放进 mod 目录的本地 mod 在 <c>mods</c>
+    /// 里都没有行。直接写 <c>playsets_mods</c> 会留下悬空外键，游戏读不出这个 mod，所以先补登记。
+    /// 各游戏、各版本的 <c>mods</c> 表列不一样（老库与本工程的窄表夹具都是如此），因此按实际表结构取交集。
+    /// </para>
+    /// </summary>
+    private void EnsureModsRegistered(SqliteConnection connection, IReadOnlyList<PlaySetMod> mods)
+    {
+        if (mods.Count == 0 || !connection.TableExists("mods"))
+        {
+            return;
+        }
+
+        var columns = ReadTableColumns(connection, "mods");
+        if (columns.Count == 0 || !columns.Contains("id"))
+        {
+            return;
+        }
+
+        var knownIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in connection.Query("SELECT id FROM mods"))
+        {
+            var id = ReadNullableString(row, "id");
+            if (!string.IsNullOrEmpty(id))
+            {
+                knownIds.Add(id);
+            }
+        }
+
+        var registered = 0;
+        foreach (var mod in mods)
+        {
+            // 已经在库里的 mod（knownIds.Add 返回 false）什么都不用做。
+            if (mod.ModId == Guid.Empty || !knownIds.Add(mod.ModId.ToString("D")))
+            {
+                continue;
+            }
+
+            // 磁盘上已经没有内容的行不登记：那种 mod 本来也启用不了，别往官方库里塞脏行。
+            if (!HasRegisteredContent(mod))
+            {
+                continue;
+            }
+
+            if (InsertModRow(connection, columns, mod))
+            {
+                registered++;
+            }
+        }
+
+        if (registered > 0)
+        {
+            _logger.Info("补登记 " + registered.ToString(CultureInfo.InvariantCulture) + " 个未在官方 mod 库登记的 mod");
+        }
+    }
+
+    /// <summary>插入一行 <c>mods</c>；表结构里没有对应列时自动跳过该列，插入失败只记 Warn，不打断保存。</summary>
+    private bool InsertModRow(SqliteConnection connection, HashSet<string> columns, PlaySetMod mod)
+    {
+        var workshopId = SteamWorkshop.GetWorkshopId(mod.SteamId, mod.GameRegistryId);
+
+        // status 是 NOT NULL：磁盘上内容在、但库里记着 missing 的行要按可用状态写。
+        var status = string.IsNullOrWhiteSpace(mod.Status) || string.Equals(mod.Status, "missing", StringComparison.OrdinalIgnoreCase)
+            ? "ready_to_play"
+            : mod.Status;
+
+        var values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["id"] = mod.ModId.ToString("D"),
+            ["steamId"] = workshopId,
+            ["gameRegistryId"] = mod.GameRegistryId ?? string.Empty,
+            ["displayName"] = mod.Name,
+            ["dirPath"] = NullIfBlank(mod.DirPath),
+            ["archivePath"] = NullIfBlank(mod.ArchivePath),
+            ["requiredVersion"] = NullIfBlank(mod.RequiredVersion),
+            ["status"] = status,
+            // 官方启动器的 source 就这两个取值：创意工坊订阅 vs 本地 mod 目录。
+            ["source"] = workshopId is null ? "local" : "steam",
+        };
+
+        var names = new List<string>(values.Count);
+        var placeholders = new List<string>(values.Count);
+        var parameters = new List<object?>(values.Count);
+        foreach (var pair in values)
+        {
+            if (!columns.Contains(pair.Key))
+            {
+                continue;
+            }
+
+            names.Add(pair.Key);
+            placeholders.Add("?");
+            parameters.Add(pair.Value);
+        }
+
+        if (names.Count == 0)
+        {
+            return false;
+        }
+
+        var sql = "INSERT OR IGNORE INTO mods (" + string.Join(", ", names) + ") VALUES (" +
+                  string.Join(", ", placeholders) + ")";
+        try
+        {
+            connection.Execute(sql, parameters.ToArray());
+            return true;
+        }
+        catch (SqliteException exception)
+        {
+            // 某个游戏的 mods 表可能有我们没覆盖的 NOT NULL 列：登记失败不该让整次保存失败，
+            // 退回旧行为（只写 playsets_mods）并留下日志。
+            _logger.Warn("补登记 mod 失败（" + mod.Name + "）：" + exception.Message);
+            return false;
+        }
+    }
+
+    /// <summary>读表的实际列名。<paramref name="tableName"/> 是内部常量，不拼接外部输入。</summary>
+    private static HashSet<string> ReadTableColumns(SqliteConnection connection, string tableName)
+    {
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in connection.Query("PRAGMA table_info(" + tableName + ")"))
+        {
+            if (row.TryGetValue("name", out var value) && value is string name && name.Length > 0)
+            {
+                columns.Add(name);
+            }
+        }
+
+        return columns;
+    }
+
+    /// <summary>磁盘上是否真的有这个 mod 的内容（目录或归档文件）；没有就不值得登记。</summary>
+    private bool HasRegisteredContent(PlaySetMod mod)
+    {
+        if (!string.IsNullOrWhiteSpace(mod.DirPath) && _fileSystem.DirectoryExists(mod.DirPath))
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(mod.ArchivePath) && _fileSystem.FileExists(mod.ArchivePath);
+    }
+
+    private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
     /// <inheritdoc />
     public Task<AppResult<bool>> SavePlaySetDlcsAsync(
@@ -475,6 +644,263 @@ public sealed class PlaySetRepository : IPlaySetRepository
                     : AppResult<bool>.Fail(ErrorKind.NotFound, "playSet-not-found:" + id);
             },
             cancellationToken);
+    }
+
+    /// <summary>
+    /// 改写官方库里已存在的 <c>mods</c> 行（自有库往官方库投射时用）。
+    /// <para>
+    /// 与 <see cref="EnsureModsRegistered"/> 互补：那个只补缺行、从不改旧行，所以官方库把
+    /// <c>dirPath</c> 写成 NULL 之后永远修不回来；这个专门修旧行，且只改「我们有值」的列
+    /// （<c>COALESCE(新值, 旧值)</c>），不会用空值覆盖官方已有的正确数据。
+    /// </para>
+    /// </summary>
+    /// <inheritdoc />
+    public Task<AppResult<bool>> UpdateModPathsAsync(
+        GameInstallation game,
+        Guid modId,
+        string? dirPath,
+        string? archivePath,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+
+        if (modId == Guid.Empty)
+        {
+            return Task.FromResult(AppResult<bool>.Fail(ErrorKind.Invalid, "mod-id-empty"));
+        }
+
+        return WriteAsync<bool>(
+            game,
+            "修正 mod 路径",
+            (connection, ct) =>
+            {
+                if (!connection.TableExists("mods"))
+                {
+                    return AppResult<bool>.Fail(ErrorKind.NotFound, "table-not-found:mods");
+                }
+
+                var columns = ReadTableColumns(connection, "mods");
+                var sets = new List<string>(2);
+                var parameters = new List<object?>(3);
+
+                // 只写非空的入参：拿不到新值的那一列保持官方原样（COALESCE 语义由这里保证）。
+                if (!string.IsNullOrWhiteSpace(dirPath) && columns.Contains("dirPath"))
+                {
+                    sets.Add("dirPath = ?");
+                    parameters.Add(dirPath);
+                }
+
+                if (!string.IsNullOrWhiteSpace(archivePath) && columns.Contains("archivePath"))
+                {
+                    sets.Add("archivePath = ?");
+                    parameters.Add(archivePath);
+                }
+
+                if (sets.Count == 0)
+                {
+                    return AppResult<bool>.Ok(false);
+                }
+
+                ct.ThrowIfCancellationRequested();
+                parameters.Add(modId.ToString("D"));
+                var affected = connection.Execute(
+                    "UPDATE mods SET " + string.Join(", ", sets) + " WHERE id = ?",
+                    parameters.ToArray());
+
+                if (affected > 0)
+                {
+                    _logger.Info("修正官方 mod 库路径（gameId=" + game.GameId + "，modId=" + modId.ToString("N") + "）");
+                }
+
+                return AppResult<bool>.Ok(affected > 0);
+            },
+            cancellationToken);
+    }
+
+    public Task<AppResult<int>> UpdateModRowsAsync(
+        GameInstallation game,
+        IReadOnlyList<PlaySetMod> mods,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(mods);
+        return WriteAsync<int>(
+            game,
+            "回写 mod 行",
+            (connection, ct) =>
+            {
+                if (mods.Count == 0 || !connection.TableExists("mods"))
+                {
+                    return AppResult<int>.Ok(0);
+                }
+
+                var columns = ReadTableColumns(connection, "mods");
+                if (columns.Count == 0 || !columns.Contains("id"))
+                {
+                    return AppResult<int>.Ok(0);
+                }
+
+                var updated = 0;
+                foreach (var mod in mods)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (mod.ModId == Guid.Empty)
+                    {
+                        continue;
+                    }
+
+                    var sets = new List<string>(8);
+                    var parameters = new List<object?>(9);
+                    AddSet(sets, parameters, columns, "displayName", mod.Name);
+                    AddSet(sets, parameters, columns, "dirPath", NullIfBlank(mod.DirPath));
+                    AddSet(sets, parameters, columns, "archivePath", NullIfBlank(mod.ArchivePath));
+                    AddSet(sets, parameters, columns, "gameRegistryId", NullIfBlank(mod.GameRegistryId));
+                    AddSet(sets, parameters, columns, "requiredVersion", NullIfBlank(mod.RequiredVersion));
+                    AddSet(sets, parameters, columns, "steamId", SteamWorkshop.GetWorkshopId(mod.SteamId, mod.GameRegistryId));
+                    if (!string.IsNullOrWhiteSpace(mod.Status))
+                    {
+                        AddSet(sets, parameters, columns, "status", mod.Status);
+                    }
+
+                    // source 只在「我们确定它是订阅」时才写：本地判定不许把官方的 steam 行改成 local。
+                    var workshopId = SteamWorkshop.GetWorkshopId(mod.SteamId, mod.GameRegistryId);
+                    if (workshopId is not null)
+                    {
+                        AddSet(sets, parameters, columns, "source", "steam");
+                    }
+
+                    if (sets.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    parameters.Add(mod.ModId.ToString("D"));
+                    updated += connection.Execute(
+                        "UPDATE mods SET " + string.Join(", ", sets) + " WHERE id = ?",
+                        parameters.ToArray());
+                }
+
+                if (updated > 0)
+                {
+                    _logger.Info("回写官方 mod 库 " + updated.ToString(CultureInfo.InvariantCulture) + " 行（" + game.GameId + "）");
+                }
+
+                return AppResult<int>.Ok(updated);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// 把播放集名单补进官方库：缺的插、有的改名字、活动标记按名单对齐。
+    /// 不改动 <c>playsets_mods</c> / <c>playsets_dlcs</c>（那两张表由各自的保存方法负责）。
+    /// </summary>
+    public Task<AppResult<int>> UpsertPlaySetsAsync(
+        GameInstallation game,
+        IReadOnlyList<PlaySet> playSets,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(playSets);
+        return WriteAsync<int>(
+            game,
+            "回写播放集名单",
+            (connection, ct) =>
+            {
+                if (playSets.Count == 0 || !connection.TableExists("playsets"))
+                {
+                    return AppResult<int>.Ok(0);
+                }
+
+                var columns = ReadTableColumns(connection, "playsets");
+                if (columns.Count == 0 || !columns.Contains("id"))
+                {
+                    return AppResult<int>.Ok(0);
+                }
+
+                var createdOn = _clock.UtcNow.ToUnixTimeMilliseconds();
+                var inserted = 0;
+                Guid? activeId = null;
+                foreach (var playSet in playSets)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    if (playSet.Id == Guid.Empty)
+                    {
+                        continue;
+                    }
+
+                    var id = playSet.Id.ToString("D");
+                    if (playSet.IsActive)
+                    {
+                        activeId = playSet.Id;
+                    }
+
+                    var changed = connection.Execute("UPDATE playsets SET name = ? WHERE id = ?", playSet.Name, id);
+                    if (changed > 0)
+                    {
+                        continue;
+                    }
+
+                    var names = new List<string> { "id", "name", "isActive", "createdOn" };
+                    var values = new List<object?> { id, playSet.Name, 0, createdOn };
+                    var filteredNames = new List<string>(names.Count);
+                    var filteredValues = new List<object?>(names.Count);
+                    for (var index = 0; index < names.Count; index++)
+                    {
+                        if (!columns.Contains(names[index]))
+                        {
+                            continue;
+                        }
+
+                        filteredNames.Add(names[index]);
+                        filteredValues.Add(values[index]);
+                    }
+
+                    try
+                    {
+                        connection.Execute(
+                            "INSERT INTO playsets (" + string.Join(", ", filteredNames) + ") VALUES (" +
+                            string.Join(", ", filteredNames.Select(_ => "?")) + ")",
+                            filteredValues.ToArray());
+                        inserted++;
+                    }
+                    catch (SqliteException exception)
+                    {
+                        // 老库的 playsets 可能有我们没覆盖的 NOT NULL 列：插不进去只 Warn，不让整次投射失败。
+                        _logger.Warn("补登记播放集失败（" + playSet.Name + "）：" + exception.Message);
+                    }
+                }
+
+                if (activeId is not null && columns.Contains("isActive"))
+                {
+                    connection.Execute("UPDATE playsets SET isActive = 0 WHERE isActive = 1");
+                    connection.Execute("UPDATE playsets SET isActive = 1 WHERE id = ?", activeId.Value.ToString("D"));
+                }
+
+                if (inserted > 0)
+                {
+                    _logger.Info("补登记播放集 " + inserted.ToString(CultureInfo.InvariantCulture) + " 个（" + game.GameId + "）");
+                }
+
+                return AppResult<int>.Ok(inserted);
+            },
+            cancellationToken);
+    }
+
+    /// <summary>拼一段 <c>列 = COALESCE(?, 列)</c>（有新值才写，空值保留旧值）。</summary>
+    private static void AddSet(
+        List<string> sets,
+        List<object?> parameters,
+        HashSet<string> columns,
+        string column,
+        object? value)
+    {
+        if (!columns.Contains(column))
+        {
+            return;
+        }
+
+        sets.Add(value is null ? column + " = COALESCE(?, " + column + ")" : column + " = ?");
+        parameters.Add(value);
     }
 
     private Task<T> ReadAsync<T>(

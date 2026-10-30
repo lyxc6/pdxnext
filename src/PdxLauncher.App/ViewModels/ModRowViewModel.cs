@@ -22,6 +22,10 @@ public sealed class ModRowViewModel : LocalizedObservableObject
     private int _position;
     private string? _sizeText;
     private string _status;
+    private string? _source;
+    private string? _originText;
+    private bool _isLocalOrigin;
+    private string? _warningText;
 
     /// <summary>可见列表总行数（1 起口径），默认 0 表示尚未由列表写入。</summary>
     private int _totalCount;
@@ -50,6 +54,7 @@ public sealed class ModRowViewModel : LocalizedObservableObject
         ThumbnailPath = mod.ThumbnailPath;
         RequiredVersion = mod.RequiredVersion;
         SteamId = mod.SteamId;
+        _source = mod.Source;
         _status = mod.Status;
         _isEnabled = mod.Enabled;
         _position = mod.Position;
@@ -223,10 +228,69 @@ public sealed class ModRowViewModel : LocalizedObservableObject
         set => SetProperty(ref _status, value);
     }
 
-    /// <summary>用 mod 库里的信息补全行细节（目前只有大小，未知则传 null）。</summary>
-    public void SetDetails(string? sizeText)
+    /// <summary>
+    /// 用 mod 库里的信息补全行细节：大小、来源徽标、加载警告。未知就传 null。
+    /// </summary>
+    /// <param name="sizeText">已格式化的大小文案。</param>
+    /// <param name="originText">已翻译的来源文案（本地 / 订阅）。</param>
+    /// <param name="warningText">已翻译的警告文案（这一行会被加载文件跳过 / 游戏读不到）。</param>
+    public void SetDetails(
+        string? sizeText,
+        string? originText = null,
+        bool isLocalOrigin = false,
+        string? warningText = null)
     {
         SizeText = string.IsNullOrWhiteSpace(sizeText) ? null : sizeText;
+        IsLocalOrigin = isLocalOrigin;
+        OriginText = originText;
+        WarningText = warningText;
+    }
+
+    /// <summary>来源徽标文案（本地 / 订阅）；拿不到来源时为空，界面不显示徽标。</summary>
+    public string? OriginText
+    {
+        get => _originText;
+        private set
+        {
+            if (SetProperty(ref _originText, value))
+            {
+                OnPropertyChanged(nameof(HasOrigin));
+                OnPropertyChanged(nameof(IsLocalOrigin));
+            }
+        }
+    }
+
+    /// <summary>是否有来源徽标。</summary>
+    public bool HasOrigin => !string.IsNullOrWhiteSpace(_originText);
+
+    /// <summary>是不是本地 mod（XAML 用不同底色区分）。</summary>
+    public bool IsLocalOrigin
+    {
+        get => _isLocalOrigin;
+        private set => SetProperty(ref _isLocalOrigin, value);
+    }
+
+    /// <summary>这一行为什么不会被加载（空串表示没问题）。</summary>
+    public string? WarningText
+    {
+        get => _warningText;
+        private set
+        {
+            if (SetProperty(ref _warningText, value))
+            {
+                OnPropertyChanged(nameof(HasWarning));
+            }
+        }
+    }
+
+    /// <summary>是否有加载警告。</summary>
+    public bool HasWarning => !string.IsNullOrWhiteSpace(_warningText);
+
+    /// <summary>来源原始值（local / steam / …），导出时原样带走。</summary>
+    public string? Source
+    {
+        get => _source;
+        private set => SetProperty(ref _source, value);
     }
 
     /// <summary>导出成 Core 契约（保存用）。</summary>
@@ -241,5 +305,6 @@ public sealed class ModRowViewModel : LocalizedObservableObject
         Status,
         IsEnabled,
         Position,
-        SteamId);
+        SteamId,
+        Source);
 }

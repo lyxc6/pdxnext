@@ -18,7 +18,7 @@ public enum AssetFileType
     /// <summary>SVG（文本，头部含 &lt;svg）。</summary>
     Svg = 3,
 
-    /// <summary>TTF，magic 00 01 00 00。</summary>
+    /// <summary>字体：TrueType 00 01 00 00、OpenType-CFF "OTTO"、老 TrueType "true"。</summary>
     Ttf = 4,
 
     /// <summary>WOFF，magic wOFF。</summary>
@@ -29,4 +29,7 @@ public enum AssetFileType
 
     /// <summary>GIF，magic GIF8（官方公告图常用 GIF）。</summary>
     Gif = 7,
+
+    /// <summary>Windows 图标，magic 00 00 01 00（官方主题的 appTaskbarIcon）。</summary>
+    Ico = 8,
 }

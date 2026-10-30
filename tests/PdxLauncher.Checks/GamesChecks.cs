@@ -3,6 +3,7 @@ namespace PdxLauncher.Checks;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Games;
+using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Parsing;
 using PdxLauncher.Core.Steam;
 using PdxLauncher.Core.Themes;
@@ -278,6 +279,35 @@ public static class GamesChecks
             ChecksContext.Check("prison_architect 无 displayName 时回退目录名", !string.IsNullOrWhiteSpace(pa.DisplayName), pa.DisplayName);
         }
 
+        // Cities: Skylines 1：读取层必须保持官方原始 id（cities_v2），归一只发生在发现阶段。
+        var cs1 = reader.ReadFile(ChecksContext.FixturePath("cities_skylines/launcher-settings.json"));
+        ChecksContext.Check("cities_skylines launcher-settings 解析成功", cs1 is not null);
+        if (cs1 is not null)
+        {
+            ChecksContext.Equal("cities_skylines fixture 的原始 gameId 保持 cities_v2", "cities_v2", cs1.GameId);
+            ChecksContext.Equal("cities_skylines formatVersion", 1.0, cs1.FormatVersion);
+            ChecksContext.Equal("cities_skylines Format", LoadFileFormat.ContentLoadV1, cs1.Format);
+            ChecksContext.Equal("cities_skylines displayName", "Cities: Skylines", cs1.DisplayName);
+            ChecksContext.Check(
+                "cities_skylines exePath 以 Cities.exe 结尾",
+                Norm(cs1.ExePath).EndsWith("Cities.exe", StringComparison.OrdinalIgnoreCase),
+                cs1.ExePath);
+            ChecksContext.Check(
+                "cities_skylines gameDataDir 展开 %LOCALAPPDATA%",
+                Norm(cs1.GameDataDir).EndsWith("Colossal Order/Cities_Skylines", StringComparison.OrdinalIgnoreCase),
+                cs1.GameDataDir);
+            // 真机 launcher-settings.json 没有 dlcPath，读取层按 "./" 兜底到 settings 目录。
+            var cs1SettingsDir =
+                Path.GetDirectoryName(ChecksContext.FixturePath("cities_skylines/launcher-settings.json")) ?? string.Empty;
+            ChecksContext.Check(
+                "cities_skylines 缺 dlcPath → 默认 ./ 相对 settings 目录",
+                string.Equals(
+                    Norm(cs1.DlcPath).TrimEnd('/'),
+                    Norm(cs1SettingsDir).TrimEnd('/'),
+                    StringComparison.OrdinalIgnoreCase),
+                cs1.DlcPath);
+        }
+
         // 注意：fixtures 把 launcher-settings.json 直接放在 fixtures/<gameId>/ 下，
         // 是真实 <root>\launcher\ 布局的扁平化表示，所以这里不对 InstallRoot 断言；
         // 三种布局约定（根 / launcher / Launcher）的 InstallRoot 推导由 CheckSyntheticLayout 覆盖。
@@ -551,6 +581,14 @@ public static class GamesChecks
             var noSettingsRoot = Path.Combine(common, "Empty Game Dir");
             fs.EnsureDirectory(noSettingsRoot);
 
+            // Cities: Skylines 1 真机布局：launcher-settings.json 直接放在安装根，gameId 写 cities_v2。
+            var cs1Root = Path.Combine(common, "Cities Skylines");
+            var cs1Assets = Path.Combine(cs1Root, "LauncherAssets");
+            fs.EnsureDirectory(cs1Assets);
+            fs.WriteAllTextAtomic(
+                Path.Combine(cs1Root, "launcher-settings.json"),
+                fs.ReadAllText(ChecksContext.FixturePath("cities_skylines/launcher-settings.json")));
+
             var nl = Environment.NewLine;
             fs.WriteAllTextAtomic(
                 Path.Combine(steamApps, "appmanifest_1158310.acf"),
@@ -609,10 +647,10 @@ public static class GamesChecks
                 themeReader,
                 new[] { tempRoot });
             var games = catalog.Discover(CancellationToken.None);
-            ChecksContext.Equal("合成库: 收录游戏数量（3 个）", 3, games.Count);
+            ChecksContext.Equal("合成库: 收录游戏数量（4 个）", 4, games.Count);
             ChecksContext.Equal(
                 "合成库: gameId 集合",
-                "ck3,prison_architect_pc_console,some_other_game",
+                "cities_skylines,ck3,prison_architect_pc_console,some_other_game",
                 string.Join(",", games.Select(static g => g.GameId).OrderBy(static id => id, StringComparer.Ordinal)));
             var game = games.FirstOrDefault(static g => g.GameId == "ck3");
             ChecksContext.Check("合成库: 找到 ck3", game is not null);
@@ -640,6 +678,23 @@ public static class GamesChecks
                 ChecksContext.Equal("合成库: PA ExeArgs", "--launched-from-launcher", string.Join(" ", paGame.ExeArgs));
             }
 
+            // Cities: Skylines 1：原始 id cities_v2 归一成 cities_skylines，支持等级「仅启动」。
+            var cs1Game = games.FirstOrDefault(static g => g.GameId == "cities_skylines");
+            ChecksContext.Check("合成库: 找到 cities_skylines（原始 id 已归一）", cs1Game is not null);
+            if (cs1Game is not null)
+            {
+                ChecksContext.Equal("合成库: CS1 Support", GameSupport.LaunchOnly, cs1Game.Support);
+                ChecksContext.Equal("合成库: CS1 IsSupported", true, cs1Game.IsSupported);
+                ChecksContext.Equal("合成库: CS1 SupportsContentManagement", false, cs1Game.SupportsContentManagement);
+                ChecksContext.Equal("合成库: CS1 DisplayName", "Cities: Skylines", cs1Game.DisplayName);
+                ChecksContext.Equal("合成库: CS1 Format", LoadFileFormat.ContentLoadV1, cs1Game.Format);
+                ChecksContext.Equal("合成库: CS1 无 appmanifest → SteamAppId 为 null", (int?)null, cs1Game.SteamAppId);
+                ChecksContext.Check(
+                    "合成库: CS1 InstallRoot 就是安装根（没有 launcher 子目录）",
+                    string.Equals(Norm(cs1Game.InstallRoot), Norm(cs1Root), StringComparison.OrdinalIgnoreCase),
+                    cs1Game.InstallRoot);
+            }
+
             // 未登记的 gameId 也会收录（能显示、能启动），但支持等级是 Unsupported。
             var unknownGame = games.FirstOrDefault(static g => g.GameId == "some_other_game");
             ChecksContext.Check("合成库: 找到 some_other_game", unknownGame is not null);
@@ -652,6 +707,11 @@ public static class GamesChecks
 
             var one = catalog.DiscoverOneAsync("CK3", CancellationToken.None).GetAwaiter().GetResult();
             ChecksContext.Check("合成库: DiscoverOneAsync 忽略大小写", one is not null && one.GameId == "ck3");
+            var cs1ByRawId = catalog.DiscoverOneAsync("cities_v2", CancellationToken.None).GetAwaiter().GetResult();
+            ChecksContext.Check(
+                "合成库: DiscoverOneAsync 用官方原始 id 也能命中",
+                cs1ByRawId is not null && cs1ByRawId.GameId == "cities_skylines",
+                cs1ByRawId?.GameId ?? "<null>");
             var none = catalog.DiscoverOneAsync("eu5", CancellationToken.None).GetAwaiter().GetResult();
             ChecksContext.Check("合成库: DiscoverOneAsync 未安装返回 null", none is null);
         }
@@ -1037,6 +1097,29 @@ public static class GamesChecks
         ChecksContext.Equal("支持等级: IsKnown(PA)", true, KnownGames.IsKnown("prison_architect_pc_console"));
         ChecksContext.Equal("支持等级: 官方 id prison_architect 仍是 Unsupported", GameSupport.Unsupported, KnownGames.GetSupport("prison_architect"));
         ChecksContext.Equal("支持等级: ck2 仍是 Unsupported", GameSupport.Unsupported, KnownGames.GetSupport("ck2"));
+
+        // Cities: Skylines 1：官方启动器写 cities_v2，本启动器归一到 cities_skylines 后是「仅启动」。
+        ChecksContext.Equal("支持等级: cities_skylines", GameSupport.LaunchOnly, KnownGames.GetSupport("cities_skylines"));
+        ChecksContext.Equal("支持等级: 官方 id cities_v2 归一后同答案", GameSupport.LaunchOnly, KnownGames.GetSupport("cities_v2"));
+        ChecksContext.Equal("支持等级: CS1 大小写不敏感", GameSupport.LaunchOnly, KnownGames.GetSupport("Cities_V2"));
+        ChecksContext.Equal("支持等级: IsFullySupported(CS1)", false, KnownGames.IsFullySupported("cities_skylines"));
+        ChecksContext.Equal("支持等级: IsKnown(cities_v2)", true, KnownGames.IsKnown("cities_v2"));
+
+        // 身份归一：只折别名，不折未登记的 id，也不改支持等级的来源。
+        ChecksContext.Equal("归一: cities_v2 → cities_skylines", "cities_skylines", KnownGames.CanonicalizeGameId("cities_v2"));
+        ChecksContext.Equal("归一: 正名原样返回", "cities_skylines", KnownGames.CanonicalizeGameId("cities_skylines"));
+        ChecksContext.Equal("归一: 大小写不敏感", "cities_skylines", KnownGames.CanonicalizeGameId("CITIES_V2"));
+        ChecksContext.Equal("归一: 未登记 id 原样返回", "ck3", KnownGames.CanonicalizeGameId("ck3"));
+        ChecksContext.Equal("归一: null → 空串", string.Empty, KnownGames.CanonicalizeGameId(null));
+        ChecksContext.Equal("归一: 空白 → 空串", string.Empty, KnownGames.CanonicalizeGameId("   "));
+        ChecksContext.Equal("归一: PA 别名仍不是支持等级来源", GameSupport.Unsupported, KnownGames.GetSupport("prison_architect"));
+
+        // 公告接口的反向特例：只有 CS1 要发原始 id，其余原样。
+        ChecksContext.Equal("公告 id: CS1 用原始 id", "cities_v2", KnownGames.GetNewsFeedGameId("cities_skylines"));
+        ChecksContext.Equal("公告 id: 已是原始 id 时保持", "cities_v2", KnownGames.GetNewsFeedGameId("cities_v2"));
+        ChecksContext.Equal("公告 id: 其它游戏原样", "ck3", KnownGames.GetNewsFeedGameId("ck3"));
+        ChecksContext.Equal("公告 id: null → 空串", string.Empty, KnownGames.GetNewsFeedGameId(null));
+
         ChecksContext.Equal("展示名: 别名 infinite", "Star Trek: Infinite", KnownGames.GetDisplayName("infinite"));
         ChecksContext.Equal("展示名: 别名 prison_architect", "Prison Architect", KnownGames.GetDisplayName("prison_architect"));
         ChecksContext.Equal("展示名: 未登记 gameId 返回 null", (string?)null, KnownGames.GetDisplayName("some_other_game"));
@@ -1093,7 +1176,7 @@ public static class GamesChecks
         // 本机游戏会随用户在 Steam 装上/首次运行新游戏而变化（官方启动器会在游戏目录写
         // launcher-settings.json），所以这里只断言「已知这几款必须在」而不是锁死总数。
         ChecksContext.Check("真机: 至少发现 5 个游戏", games.Count >= 5, games.Count.ToString(System.Globalization.CultureInfo.InvariantCulture));
-        var requiredIds = new[] { "ck3", "hoi4", "prison_architect_pc_console", "stellaris", "victoria3" };
+        var requiredIds = new[] { "ck3", "hoi4", "prison_architect_pc_console", "stellaris", "victoria3", "cities_skylines" };
         var missing = requiredIds.Where(id => !ids.Contains(id, StringComparer.Ordinal)).ToArray();
         ChecksContext.Check(
             "真机: 必需 gameId 都在",
@@ -1208,6 +1291,31 @@ public static class GamesChecks
             ChecksContext.Equal("真机: PA 主题色 #474747", "#474747", pa.Theme.ButtonTextColor);
             ChecksContext.Equal("真机: PA SteamAppId", (int?)233450, pa.SteamAppId);
         }
+
+        // Cities: Skylines 1：真机 launcher-settings.json 写的是 cities_v2，归一后必须是「仅启动」，
+        // 且 SteamAppId 仍然来自 appmanifest_255710.acf。
+        var cs1 = games.FirstOrDefault(g => g.GameId == "cities_skylines");
+        ChecksContext.Check("真机: 发现 cities_skylines（原始 id cities_v2 已归一）", cs1 is not null);
+        if (cs1 is not null)
+        {
+            ChecksContext.Equal("真机: CS1 Support=LaunchOnly", GameSupport.LaunchOnly, cs1.Support);
+            ChecksContext.Equal("真机: CS1 IsSupported=true", true, cs1.IsSupported);
+            ChecksContext.Equal("真机: CS1 SupportsContentManagement=false", false, cs1.SupportsContentManagement);
+            ChecksContext.Equal("真机: CS1 Format", LoadFileFormat.ContentLoadV1, cs1.Format);
+            ChecksContext.Equal("真机: CS1 SteamAppId", (int?)255710, cs1.SteamAppId);
+            ChecksContext.Check(
+                "真机: CS1 exePath 以 Cities.exe 结尾",
+                Norm(cs1.ExePath).EndsWith("Cities.exe", StringComparison.OrdinalIgnoreCase),
+                cs1.ExePath);
+            ChecksContext.Check(
+                "真机: CS1 主题来自 LauncherAssets",
+                cs1.Theme.Source == ThemeAssetSource.InstallDir,
+                cs1.Theme.Source.ToString());
+        }
+
+        // 补丁链路：CS1 的 appId 不靠安装目录 appmanifest 也能查出来（独立安装同样能打补丁）。
+        ChecksContext.Equal("真机: CS1 appId 映射（补丁用）", true, GameSteamAppIds.TryGet("cities_skylines", out var cs1AppId));
+        ChecksContext.Equal("真机: CS1 appId 映射值", 255710, cs1AppId);
     }
 
     // ---------------------------------------------------------------- 工具

@@ -4,6 +4,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Storage;
 
 /// <summary>
 /// 创意工坊条目页（HTML）解析结果的持久缓存：索引 <c>workshop-pages.json</c>，按 publishedfileid 存
@@ -43,6 +44,7 @@ public sealed class SteamItemPageCache
     private readonly IAppLogger _logger;
     private readonly IClock _clock;
     private readonly string _cacheRoot;
+    private readonly IDocumentFile _indexDocument;
     private readonly object _gate = new();
     private readonly Dictionary<string, CachedSteamItemPage> _entries;
 
@@ -54,7 +56,12 @@ public sealed class SteamItemPageCache
     /// <param name="logger">日志。</param>
     /// <param name="clock">时钟（TTL 判定与新鲜度记账）。</param>
     /// <param name="cacheRoot">缓存根目录（与创意工坊信息缓存同根，清缓存时一起删掉）。</param>
-    public SteamItemPageCache(IFileSystem fileSystem, IAppLogger logger, IClock clock, string cacheRoot)
+    public SteamItemPageCache(
+        IFileSystem fileSystem,
+        IAppLogger logger,
+        IClock clock,
+        string cacheRoot,
+        IDocumentFile? indexDocument = null)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(logger);
@@ -64,14 +71,18 @@ public sealed class SteamItemPageCache
         _logger = logger;
         _clock = clock;
         _cacheRoot = cacheRoot;
-        _entries = Load(fileSystem, logger, IndexPath);
+        _indexDocument = indexDocument ?? new FileDocumentFile(fileSystem, IndexPath);
+        _entries = Load(_indexDocument, logger);
     }
 
     /// <summary>缓存根目录。</summary>
     public string CacheRoot => _cacheRoot;
 
-    /// <summary>索引文件绝对路径。</summary>
+    /// <summary>索引的旧文件路径（索引已搬进自有库，图片/封面仍在缓存根下）。</summary>
     public string IndexPath => Path.Combine(_cacheRoot, IndexFileName);
+
+    /// <summary>索引落点（库键或旧文件）。</summary>
+    public string IndexLocation => _indexDocument.DisplayPath;
 
     /// <summary>索引里的条目数。</summary>
     public int Count
@@ -164,10 +175,7 @@ public sealed class SteamItemPageCache
 
         try
         {
-            if (_fileSystem.FileExists(IndexPath))
-            {
-                _fileSystem.Delete(IndexPath);
-            }
+            _indexDocument.Delete();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -205,8 +213,10 @@ public sealed class SteamItemPageCache
 
         try
         {
-            _fileSystem.EnsureDirectory(_cacheRoot);
-            _fileSystem.WriteAllTextAtomic(IndexPath, JsonSerializer.Serialize(snapshot, Options));
+            if (!_indexDocument.WriteText(JsonSerializer.Serialize(snapshot, Options)))
+            {
+                _logger.Warn("创意工坊条目页缓存索引写入失败：" + _indexDocument.DisplayPath);
+            }
         }
         catch (Exception exception) when (exception is IOException
                                               or UnauthorizedAccessException
@@ -268,19 +278,18 @@ public sealed class SteamItemPageCache
     };
 
     private static Dictionary<string, CachedSteamItemPage> Load(
-        IFileSystem fileSystem,
-        IAppLogger logger,
-        string path)
+        IDocumentFile document,
+        IAppLogger logger)
     {
         var entries = new Dictionary<string, CachedSteamItemPage>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            if (!fileSystem.FileExists(path))
+            var json = document.ReadText();
+            if (json is null)
             {
                 return entries;
             }
 
-            var json = fileSystem.ReadAllText(path);
             var file = JsonSerializer.Deserialize<IndexFile>(json, Options);
             if (file?.Entries is null)
             {

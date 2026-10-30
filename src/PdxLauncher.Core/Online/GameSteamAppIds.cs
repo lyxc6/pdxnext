@@ -36,7 +36,9 @@ public static class GameSteamAppIds
     /// <returns>映射表里有这个游戏时为 true。</returns>
     public static bool TryGet(string? gameId, out int appId)
     {
-        if (!string.IsNullOrWhiteSpace(gameId) && Known.TryGetValue(gameId, out var found))
+        // 官方启动器的别名（CS1 = cities_v2）也要能查到，否则独立安装会退成「无法打补丁」。
+        var canonical = Games.KnownGames.CanonicalizeGameId(gameId);
+        if (!string.IsNullOrWhiteSpace(canonical) && Known.TryGetValue(canonical, out var found))
         {
             appId = found;
             return true;

@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Storage;
 
 /// <summary>
 /// <see cref="IDlcDescriptionService"/> 实现：Steam 商店的 appdetails 接口 + 本地 JSON 缓存。
@@ -41,6 +42,8 @@ public sealed class DlcDescriptionService : IDlcDescriptionService
     private readonly IHttpFetcher _http;
     private readonly IClock _clock;
     private readonly IAppLogger _logger;
+    private readonly string _cacheRoot;
+    private readonly IDocumentFile _cacheDocument;
     private readonly SemaphoreSlim _batchLock = new(1, 1);
 
     private CacheDocument? _cache;
@@ -54,7 +57,13 @@ public sealed class DlcDescriptionService : IDlcDescriptionService
     /// <param name="clock">时钟（缓存过期判断）。</param>
     /// <param name="logger">日志。</param>
     /// <param name="cacheRoot">缓存目录（通常是 %LOCALAPPDATA%\PdxNext）。</param>
-    public DlcDescriptionService(IFileSystem fileSystem, IHttpFetcher http, IClock clock, IAppLogger logger, string cacheRoot)
+    public DlcDescriptionService(
+        IFileSystem fileSystem,
+        IHttpFetcher http,
+        IClock clock,
+        IAppLogger logger,
+        string cacheRoot,
+        IDocumentFile? cacheDocument = null)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(http);
@@ -66,11 +75,15 @@ public sealed class DlcDescriptionService : IDlcDescriptionService
         _http = http;
         _clock = clock;
         _logger = logger;
-        CachePath = Path.Combine(cacheRoot, CacheFileName);
+        _cacheRoot = cacheRoot;
+        _cacheDocument = cacheDocument ?? new FileDocumentFile(fileSystem, Path.Combine(cacheRoot, CacheFileName));
     }
 
-    /// <inheritdoc />
-    public string CachePath { get; }
+    /// <summary>缓存索引的旧文件路径（索引已搬进自有库）。</summary>
+    public string CachePath => Path.Combine(_cacheRoot, CacheFileName);
+
+    /// <summary>缓存索引落点（<c>db:cache:dlc-descriptions</c> 或旧文件），设置页展示用。</summary>
+    public string CacheLocation => _cacheDocument.DisplayPath;
 
     /// <inheritdoc />
     public async Task<IReadOnlyDictionary<string, string>> GetDescriptionsAsync(
@@ -210,10 +223,7 @@ public sealed class DlcDescriptionService : IDlcDescriptionService
         _migratedCache = false;
         try
         {
-            if (_fileSystem.FileExists(CachePath))
-            {
-                _fileSystem.Delete(CachePath);
-            }
+            _cacheDocument.Delete();
         }
         catch (IOException exception)
         {
@@ -502,9 +512,9 @@ public sealed class DlcDescriptionService : IDlcDescriptionService
 
         try
         {
-            if (_fileSystem.FileExists(CachePath))
+            var json = _cacheDocument.ReadText();
+            if (json is not null)
             {
-                var json = _fileSystem.ReadAllText(CachePath);
                 var document = JsonSerializer.Deserialize<CacheDocument>(json, JsonOptions);
                 if (document is not null && document.Version is > 0 and <= CacheVersion)
                 {
@@ -513,7 +523,7 @@ public sealed class DlcDescriptionService : IDlcDescriptionService
                     return _cache;
                 }
 
-                _logger.Warn("DLC 简介缓存版本不匹配，已忽略并重建：" + CachePath);
+                _logger.Warn("DLC 简介缓存版本不匹配，已忽略并重建：" + _cacheDocument.DisplayPath);
             }
         }
         catch (JsonException exception)
@@ -538,9 +548,11 @@ public sealed class DlcDescriptionService : IDlcDescriptionService
         try
         {
             cache.Version = CacheVersion;
-            _fileSystem.EnsureDirectory(Path.GetDirectoryName(CachePath) ?? ".");
             var json = JsonSerializer.Serialize(cache, JsonOptions);
-            _fileSystem.WriteAllTextAtomic(CachePath, json);
+            if (!_cacheDocument.WriteText(json))
+            {
+                _logger.Warn("DLC 简介缓存写入失败：" + _cacheDocument.DisplayPath);
+            }
             _migratedCache = false;
         }
         catch (IOException exception)

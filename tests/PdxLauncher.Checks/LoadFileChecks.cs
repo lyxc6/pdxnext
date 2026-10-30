@@ -1,6 +1,7 @@
 namespace PdxLauncher.Checks;
 
 using System.Text;
+using PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Launching;
@@ -58,6 +59,7 @@ public static class LoadFileChecks
         CheckGoldenFiles(fs, logger);
         CheckV0RoundTrip(fs, logger);
         CheckV1_1ModGrouping(fs, logger);
+        CheckLoadFilePlan(fs, logger);
         CheckWriteBackupAndAtomic(fs, logger);
         CheckReadTolerance(fs, logger);
         CheckGameLauncher(fs, logger);
@@ -268,6 +270,105 @@ public static class LoadFileChecks
             CleanupTempRoot(fs, tempRoot);
         }
     }
+
+    // ---------------------------------------------------------------- 跳过规则
+
+    /// <summary>
+    /// <see cref="PlaySetEditor.BuildLoadFileContent"/> 现在返回「内容 + 被跳过的行」。
+    /// <para>
+    /// 跳过本身是各格式的固有局限（V0 只认 registryId、V1/V1.1 只认 archivePath 或 dirPath），
+    /// 以前静默发生、玩家只看到「启用了但游戏里没有」。这里钉住两件事：
+    /// <list type="number">
+    /// <item>不满足条件的行确实被跳过，并且出现在 <c>Skipped</c> 里。</item>
+    /// <item>满足条件的行照样进内容，跳过判定没有改变输出（V1.1 仍是先 dirPath 组、后 archivePath 组）。</item>
+    /// </list>
+    /// </para>
+    /// </summary>
+    private static void CheckLoadFilePlan(IFileSystem fs, IAppLogger logger)
+    {
+        Console.WriteLine("[LoadFileChecks] 加载文件跳过规则（LoadFilePlan）");
+
+        var tempRoot = NewTempRoot("plan");
+        try
+        {
+            var gameDataDir = fs.Combine(tempRoot, "data");
+            fs.EnsureDirectory(gameDataDir);
+
+            // V0（CK3）：没有 gameRegistryId 的行写不进去。
+            var v0Game = MakeGame(LoadFileFormat.DlcLoadV0, gameDataDir);
+            var v0Mods = new List<PlaySetMod>
+            {
+                MakeMod("mod/a.mod", @"C:\mods\a", null, enabled: true),
+                MakeMod(string.Empty, @"C:\mods\b", null, enabled: true),
+                MakeMod("mod/c.mod", @"C:\mods\c", null, enabled: false),
+            };
+            var v0Plan = PlaySetEditor.BuildLoadFileContent(v0Game, v0Mods, [], []);
+            ChecksContext.Equal("V0 只写有 registryId 的行", 1, v0Plan.Content.EnabledModRegistryIds.Count);
+            ChecksContext.Equal("V0 的 registryId", "mod/a.mod", v0Plan.Content.EnabledModRegistryIds[0]);
+            ChecksContext.Equal("V0 跳过 1 行", 1, v0Plan.Skipped.Count);
+            ChecksContext.Equal("V0 跳过的是缺 registryId 那行", @"C:\mods\b", v0Plan.Skipped[0].DirPath);
+            ChecksContext.Check("停用的行不算被跳过", !v0Plan.Skipped.Any(m => m.Name == "mod_c"));
+
+            // V1（只认 archivePath）：目录型本地 mod 会被丢掉。
+            var v1Game = MakeGame(LoadFileFormat.ContentLoadV1, gameDataDir);
+            var v1Mods = new List<PlaySetMod>
+            {
+                MakeMod("mod/a.mod", @"C:\mods\dir_a", null, enabled: true),
+                MakeMod("mod/b.mod", null, @"C:\mods\pack_b.zip", enabled: true),
+            };
+            var v1Plan = PlaySetEditor.BuildLoadFileContent(v1Game, v1Mods, [], []);
+            ChecksContext.Equal("V1 只写压缩包型", 1, v1Plan.Content.EnabledModArchivePaths.Count);
+            ChecksContext.Equal("V1 的压缩包路径", @"C:\mods\pack_b.zip", v1Plan.Content.EnabledModArchivePaths[0]);
+            ChecksContext.Equal("V1 跳过 1 行", 1, v1Plan.Skipped.Count);
+            ChecksContext.Equal("V1 跳过的是目录型", @"C:\mods\dir_a", v1Plan.Skipped[0].DirPath);
+
+            // V1.1（V3）：两种都能表达，但路径全空的行仍写不出来。
+            var v11Game = MakeGame(LoadFileFormat.ContentLoadV1_1, gameDataDir, gameId: "victoria3");
+            var v11Mods = new List<PlaySetMod>
+            {
+                MakeMod(string.Empty, @"C:\mods\dir_c", null, enabled: true),
+                MakeMod(string.Empty, null, @"C:\mods\pack_d.zip", enabled: true),
+                MakeMod(string.Empty, null, null, enabled: true),
+            };
+            var v11Plan = PlaySetEditor.BuildLoadFileContent(v11Game, v11Mods, [], []);
+            ChecksContext.Equal("V1.1 目录型进 dirPaths", 1, v11Plan.Content.EnabledModDirPaths.Count);
+            ChecksContext.Equal("V1.1 压缩包型进 archivePaths", 1, v11Plan.Content.EnabledModArchivePaths.Count);
+            ChecksContext.Equal("V1.1 仍然 enabledUGC 为空", 0, v11Plan.Content.EnabledUgcPaths.Count);
+            ChecksContext.Equal("V1.1 跳过 1 行（无路径）", 1, v11Plan.Skipped.Count);
+            ChecksContext.Equal("V1.1 跳过的是无路径那行", "mod_missing", v11Plan.Skipped[0].Name);
+
+            // 顺序：先 dirPath 组，再 archivePath 组（两组拼接，不是全局排序）。
+            var json = new LoadFileWriter(fs, logger).Serialize(v11Game, v11Plan.Content);
+            ChecksContext.Check(
+                "V1.1 序列化里 dirPaths 在 archivePaths 之前",
+                json.IndexOf(@"dir_c", StringComparison.Ordinal) < json.IndexOf(@"pack_d.zip", StringComparison.Ordinal),
+                json);
+
+            // CS2 没有加载文件：既不写内容也不报跳过。
+            var cs2Game = MakeGame(LoadFileFormat.PlaysetConfigV1, gameDataDir, gameId: "cities_skylines_2");
+            var cs2Plan = PlaySetEditor.BuildLoadFileContent(cs2Game, v11Mods, [], []);
+            ChecksContext.Equal("CS2 不写任何内容", 0, cs2Plan.Content.EnabledModDirPaths.Count + cs2Plan.Content.EnabledModArchivePaths.Count);
+            ChecksContext.Equal("CS2 也不报跳过", 0, cs2Plan.Skipped.Count);
+        }
+        finally
+        {
+            CleanupTempRoot(fs, tempRoot);
+        }
+    }
+
+    /// <summary>造一行播放集 mod（自检专用，字段够用即可）。</summary>
+    private static PlaySetMod MakeMod(string registryId, string? dirPath, string? archivePath, bool enabled) =>
+        new(
+            ModId: Guid.NewGuid(),
+            Name: dirPath is null && archivePath is null ? "mod_missing" : "mod_" + (registryId.Length + (dirPath?.Length ?? 0)),
+            DirPath: dirPath ?? string.Empty,
+            ArchivePath: archivePath,
+            GameRegistryId: registryId,
+            ThumbnailPath: null,
+            RequiredVersion: string.Empty,
+            Status: "ready_to_play",
+            Enabled: enabled,
+            Position: 0);
 
     // ---------------------------------------------------------------- 写入/读取容错
 
@@ -701,9 +802,9 @@ public static class LoadFileChecks
 
     // ---------------------------------------------------------------- 工具
 
-    private static GameInstallation MakeGame(LoadFileFormat format, string gameDataDir) =>
+    private static GameInstallation MakeGame(LoadFileFormat format, string gameDataDir, string gameId = "ck3") =>
         new(
-            GameId: "ck3",
+            GameId: gameId,
             DisplayName: "Crusader Kings III",
             Version: "1.20.1.2",
             InstallRoot: @"C:\Games\Crusader Kings III",

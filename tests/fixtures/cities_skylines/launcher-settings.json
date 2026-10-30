@@ -1,0 +1,13 @@
+{
+	"formatVersion": 1,
+	"distPlatform": "steam",
+	"gameId": "cities_v2",
+	"displayName": "Cities: Skylines",
+	"exePath": "Cities.exe",
+	"gameDataPath": "%LOCALAPPDATA%/Colossal Order/Cities_Skylines",
+	"version": "1.21.1-f9",
+	"themeFile": "LauncherAssets/theme-settings.json",
+	"browserDlcUrl": "https://store.steampowered.com/dlc/255710",
+	"steamWorkshopDisabled": true,
+	"steamModsMigrationDisabled": true
+}

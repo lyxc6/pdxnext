@@ -48,6 +48,12 @@ public static class GameSteamAppIdsChecks
         ChecksContext.Equal("EU4 的 appId", 236850, upper);
         ChecksContext.Check("大小写不敏感（Stellaris）", GameSteamAppIds.TryGet("Stellaris", out var mixed));
         ChecksContext.Equal("Stellaris 的 appId", 281990, mixed);
+
+        // CS1 的官方启动器 id 是 cities_v2，归一后必须查到 255710，
+        // 否则独立安装（没有 appmanifest）会退成「无法打补丁」。
+        ChecksContext.Check("官方 id cities_v2 命中映射表", GameSteamAppIds.TryGet("cities_v2", out var cs1Alias));
+        ChecksContext.Equal("cities_v2 的 appId", 255710, cs1Alias);
+        ChecksContext.Equal("CS1 独立安装也能解析 appId", (int?)255710, WorkshopSourceChooser.ResolveAppId(null, "cities_v2"));
     }
 
     private static void CheckUnknownGames()

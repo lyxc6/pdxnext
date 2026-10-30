@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Storage;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 
@@ -66,6 +67,7 @@ public sealed class ThemeResolver : IThemeResolver
     private readonly string _cacheRoot;
     private readonly ISteamCoverUrlResolver? _steamCovers;
     private readonly IBundledThemeSource? _bundled;
+    private readonly Func<string, IDocumentFile> _indexDocument;
 
     public ThemeResolver(
         IFileSystem fs,
@@ -75,7 +77,8 @@ public sealed class ThemeResolver : IThemeResolver
         IAssetDownloader assets,
         string? cacheRoot = null,
         ISteamCoverUrlResolver? steamCovers = null,
-        IBundledThemeSource? bundled = null)
+        IBundledThemeSource? bundled = null,
+        Func<string, IDocumentFile>? indexDocument = null)
     {
         ArgumentNullException.ThrowIfNull(fs);
         ArgumentNullException.ThrowIfNull(clock);
@@ -90,6 +93,7 @@ public sealed class ThemeResolver : IThemeResolver
         _cacheRoot = string.IsNullOrWhiteSpace(cacheRoot) ? DefaultCacheRoot : cacheRoot;
         _steamCovers = steamCovers;
         _bundled = bundled;
+        _indexDocument = indexDocument ?? (gameId => new FileDocumentFile(fs, IndexPath(gameId)));
     }
 
     /// <summary>默认缓存根目录：程序目录\data\theme-cache（绝不写 P 社目录，也不写 C 盘）。</summary>
@@ -319,7 +323,7 @@ public sealed class ThemeResolver : IThemeResolver
             return result;
         }
 
-        var index = AssetIndex.Load(_fs, _logger, IndexPath(gameId));
+        var index = AssetIndex.Load(_indexDocument(gameId), _logger);
         foreach (var key in OverridableKeys)
         {
             var entry = index.Find(key);
@@ -339,6 +343,9 @@ public sealed class ThemeResolver : IThemeResolver
     }
 
     /// <summary>索引路径固定 &lt;cacheRoot&gt;\&lt;gameId&gt;.assets.json。</summary>
+    /// <summary>索引落点（库里是 <c>cache:theme-assets:&lt;gameId&gt;</c>，旧布局是文件）。</summary>
+    public string IndexLocation(string gameId) => _indexDocument(gameId).DisplayPath;
+
     public string IndexPath(string gameId) =>
         _fs.Combine(_cacheRoot, gameId + ".assets.json");
 
@@ -353,7 +360,7 @@ public sealed class ThemeResolver : IThemeResolver
             return null;
         }
 
-        var index = AssetIndex.Load(_fs, _logger, IndexPath(gameId));
+        var index = AssetIndex.Load(_indexDocument(gameId), _logger);
         return index.LastCheckedUtc;
     }
 
@@ -451,7 +458,7 @@ public sealed class ThemeResolver : IThemeResolver
     /// </summary>
     private bool IsCacheStale(string gameId)
     {
-        var index = AssetIndex.Load(_fs, _logger, IndexPath(gameId));
+        var index = AssetIndex.Load(_indexDocument(gameId), _logger);
         var lastChecked = index.LastCheckedUtc;
         if (lastChecked is null || lastChecked.Value == default(DateTimeOffset))
         {
@@ -485,7 +492,7 @@ public sealed class ThemeResolver : IThemeResolver
         var metadataList = await _metadata
             .GetMetadataAsync(new[] { gameId }, cancellationToken)
             .ConfigureAwait(false);
-        var index = AssetIndex.Load(_fs, _logger, IndexPath(gameId));
+        var index = AssetIndex.Load(_indexDocument(gameId), _logger);
 
         if (metadataList.Count == 0)
         {
@@ -537,7 +544,7 @@ public sealed class ThemeResolver : IThemeResolver
             // 关键：有素材失败时**不**推进 lastCheckedUtc（它只代表「全部就绪」的那次检查），
             // 改记 10 分钟后的短重试。否则一次网络抖动就能把该游戏主题锁死 5 天。
             index.RetryAfterUtc = _clock.UtcNow.AddMilliseconds(RefreshRetryDelayMilliseconds);
-            index.Save(_fs, _logger, IndexPath(gameId));
+            index.Save(_indexDocument(gameId), _logger);
             _logger.Warn(
                 "主题刷新部分失败: " + gameId + "，成功 " + succeeded + "/" + remote.Count
                 + " 项，" + (RefreshRetryDelayMilliseconds / 60_000) + " 分钟后重试");
@@ -546,7 +553,7 @@ public sealed class ThemeResolver : IThemeResolver
 
         index.LastCheckedUtc = _clock.UtcNow;
         index.RetryAfterUtc = null;
-        index.Save(_fs, _logger, IndexPath(gameId));
+        index.Save(_indexDocument(gameId), _logger);
         _logger.Info("主题缓存已更新: " + gameId + "，素材 " + remote.Count + " 项");
     }
 

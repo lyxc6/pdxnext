@@ -5,6 +5,8 @@ using PdxLauncher.Core.Accounts;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Online.Translation;
+using PdxLauncher.Core.Storage;
 
 /// <summary>一组共享同一个 <see cref="HttpFetcher"/> 的联网服务。</summary>
 /// <param name="Http">连接池属主；重建代理时必须 Dispose 旧的。</param>
@@ -18,6 +20,9 @@ using PdxLauncher.Core.Online;
 /// 出口闸门：按 host 限并发/间隔，被 429 后进入冷却。与 <paramref name="Http"/> 一一对应
 /// （闸门只装在普通 HTTP 上；PDX 传输有自己的节奏，且从来没有被 Steam 限流过）。
 /// </param>
+/// <param name="ModThumbnails">mod 缩略图服务。</param>
+/// <param name="TranslationTransport">翻译专用传输（要带自定义认证头，不走普通 <see cref="HttpFetcher"/>）。</param>
+/// <param name="TranslationCache">译文缓存（按「引擎 + 目标语言 + 原文」存）。</param>
 internal sealed record NetworkServices(
     HttpFetcher Http,
     PdxHttpTransport PdxHttp,
@@ -33,7 +38,9 @@ internal sealed record NetworkServices(
     ThemeResolver Themes,
     DlcDescriptionService Descriptions,
     NewsFeedService NewsFeed,
-    IModThumbnailService ModThumbnails);
+    IModThumbnailService ModThumbnails,
+    TranslationHttpTransport TranslationTransport,
+    TranslationCache TranslationCache);
 
 /// <summary>
 /// 联网服务的装配点。集中在一处的原因：设置页改代理地址后要整条链路重建
@@ -46,12 +53,14 @@ internal static class NetworkComposition
         IFileSystem fileSystem,
         IAppLogger logger,
         IClock clock,
-        AppSettings settings)
+        AppSettings settings,
+        IJsonDocumentStore documents)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(documents);
 
         var proxy = ProxyResolver.Resolve(settings, logger);
 
@@ -78,7 +87,8 @@ internal static class NetworkComposition
             fileSystem,
             logger,
             clock,
-            AppServices.WorkshopCacheRoot);
+            AppServices.WorkshopCacheRoot,
+            new StoreDocumentFile(documents, JsonDocumentKeys.WorkshopInfo));
 
         // 条目页解析结果缓存：整个流程里最大的响应是 1–3 MB 的 item HTML，
         // 存下解析结果后同一个 mod 重开不再抓页面（详情页一条请求就能出全部内容）。
@@ -86,7 +96,8 @@ internal static class NetworkComposition
             fileSystem,
             logger,
             clock,
-            AppServices.WorkshopCacheRoot);
+            AppServices.WorkshopCacheRoot,
+            new StoreDocumentFile(documents, JsonDocumentKeys.WorkshopPages));
 
         var metadata = new MetadataClient(http, logger);
         var assets = new AssetDownloader(http, logger, fileSystem);
@@ -99,10 +110,37 @@ internal static class NetworkComposition
             assets,
             AppServices.ThemeCacheRoot,
             steamCovers,
-            new BundledThemes());
-        var descriptions = new DlcDescriptionService(fileSystem, http, clock, logger, AppServices.DataRoot);
-        var newsFeed = new NewsFeedService(fileSystem, http, assets, clock, logger, AppServices.NewsCacheRoot);
-        var modThumbnails = new ModThumbnailService(fileSystem, assets, clock, logger, AppServices.ModThumbnailCacheRoot);
+            new BundledThemes(),
+            gameId => new StoreDocumentFile(documents, JsonDocumentKeys.ThemeAssets(gameId)));
+        var descriptions = new DlcDescriptionService(
+            fileSystem,
+            http,
+            clock,
+            logger,
+            AppServices.DataRoot,
+            new StoreDocumentFile(documents, JsonDocumentKeys.DlcDescriptions));
+        var newsFeed = new NewsFeedService(
+            fileSystem,
+            http,
+            assets,
+            clock,
+            logger,
+            AppServices.NewsCacheRoot,
+            new StoreDocumentFile(documents, JsonDocumentKeys.NewsCards));
+        var modThumbnails = new ModThumbnailService(
+            fileSystem,
+            assets,
+            clock,
+            logger,
+            AppServices.ModThumbnailCacheRoot,
+            new StoreDocumentFile(documents, JsonDocumentKeys.ModThumbnails));
+
+        // 翻译专用传输：OpenAI 兼容接口要带 Authorization 头，普通 IHttpFetcher 表达不了；
+        // 白名单闸门与其它传输共用（用户自填的主机由 TranslationCoordinator 精确授权）。
+        var translationTransport = new TranslationHttpTransport(logger, proxy);
+
+        // 译文缓存：与引擎无关，跨引擎切换也能复用同一份文档存储。
+        var translationCache = new TranslationCache(documents, clock, logger);
         return new NetworkServices(
             http,
             pdxHttp,
@@ -118,7 +156,9 @@ internal static class NetworkComposition
             themes,
             descriptions,
             newsFeed,
-            modThumbnails);
+            modThumbnails,
+            translationTransport,
+            translationCache);
     }
 }
 
@@ -133,13 +173,15 @@ internal static class NetworkComposition
 /// </summary>
 public sealed class NetworkLink : IDisposable
 {
-    public NetworkLink(HttpFetcher http, PdxHttpTransport pdxHttp)
+    public NetworkLink(HttpFetcher http, PdxHttpTransport pdxHttp, TranslationHttpTransport translationHttp)
     {
         ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(pdxHttp);
+        ArgumentNullException.ThrowIfNull(translationHttp);
 
         Http = http;
         PdxHttp = pdxHttp;
+        TranslationHttp = translationHttp;
     }
 
     /// <summary>普通 HTTP 连接池（Steam 工坊、素材、元数据、新闻等共用）。</summary>
@@ -148,9 +190,12 @@ public sealed class NetworkLink : IDisposable
     /// <summary>PDX 平台专用连接池（登录、Mods 搜索/详情）。</summary>
     public PdxHttpTransport PdxHttp { get; }
 
+    /// <summary>翻译专用连接池（要带 Authorization 头，且走独立的代理设置）。</summary>
+    public TranslationHttpTransport TranslationHttp { get; }
+
     public void Dispose()
     {
-        foreach (var item in new IDisposable[] { Http, PdxHttp })
+        foreach (var item in new IDisposable[] { Http, PdxHttp, TranslationHttp })
         {
             try
             {

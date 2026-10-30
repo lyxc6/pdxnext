@@ -39,10 +39,16 @@ public sealed class ModThumbnailCache
     private readonly IAppLogger _logger;
     private readonly IClock _clock;
     private readonly string _cacheRoot;
+    private readonly IDocumentFile _indexDocument;
     private readonly object _gate = new();
     private readonly Dictionary<string, ModThumbnailCacheEntry> _entries;
 
-    public ModThumbnailCache(IFileSystem fileSystem, IAppLogger logger, IClock clock, string cacheRoot)
+    public ModThumbnailCache(
+        IFileSystem fileSystem,
+        IAppLogger logger,
+        IClock clock,
+        string cacheRoot,
+        IDocumentFile? indexDocument = null)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(logger);
@@ -52,14 +58,18 @@ public sealed class ModThumbnailCache
         _logger = logger;
         _clock = clock;
         _cacheRoot = cacheRoot;
-        _entries = Load(fileSystem, logger, IndexPath);
+        _indexDocument = indexDocument ?? new FileDocumentFile(fileSystem, IndexPath);
+        _entries = Load(_indexDocument, logger);
     }
 
     /// <summary>缓存根目录（图片与索引都在其下）。</summary>
     public string CacheRoot => _cacheRoot;
 
-    /// <summary>索引文件绝对路径。</summary>
+    /// <summary>索引的旧文件路径（图片仍在 <see cref="CacheRoot"/> 下，索引已搬进自有库）。</summary>
     public string IndexPath => Path.Combine(_cacheRoot, IndexFileName);
+
+    /// <summary>索引落点（<c>db:cache:mod-thumbnails</c> 或旧文件）。</summary>
+    public string IndexLocation => _indexDocument.DisplayPath;
 
     /// <summary>某个 mod 图片的落盘路径前缀（下载器会在后面补扩展名）。</summary>
     public string TargetPathWithoutExtension(Guid modId) =>
@@ -78,7 +88,7 @@ public sealed class ModThumbnailCache
 
         try
         {
-            CacheStorage.Clear(_fileSystem, IndexPath);
+            _indexDocument.Delete();
             CacheStorage.Clear(_fileSystem, Path.Combine(_cacheRoot, ImageFolderName));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -269,8 +279,10 @@ public sealed class ModThumbnailCache
 
         try
         {
-            _fileSystem.EnsureDirectory(_cacheRoot);
-            _fileSystem.WriteAllTextAtomic(IndexPath, JsonSerializer.Serialize(snapshot, Options));
+            if (!_indexDocument.WriteText(JsonSerializer.Serialize(snapshot, Options)))
+            {
+                _logger.Warn("mod 缩略图缓存索引写入失败：" + _indexDocument.DisplayPath);
+            }
         }
         catch (Exception exception) when (exception is IOException
                                               or UnauthorizedAccessException
@@ -304,19 +316,19 @@ public sealed class ModThumbnailCache
     private static string Key(Guid modId) => modId.ToString("N");
 
     private static Dictionary<string, ModThumbnailCacheEntry> Load(
-        IFileSystem fileSystem,
-        IAppLogger logger,
-        string path)
+        IDocumentFile document,
+        IAppLogger logger)
     {
         var entries = new Dictionary<string, ModThumbnailCacheEntry>(StringComparer.OrdinalIgnoreCase);
-        if (!fileSystem.FileExists(path))
+        var json = document.ReadText();
+        if (json is null)
         {
             return entries;
         }
 
         try
         {
-            var loaded = JsonSerializer.Deserialize<IndexFile>(fileSystem.ReadAllText(path), Options);
+            var loaded = JsonSerializer.Deserialize<IndexFile>(json, Options);
             if (loaded?.Entries is null)
             {
                 return entries;

@@ -4,6 +4,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Storage;
 
 /// <summary>
 /// 创意工坊 mod 信息缓存：索引 <c>workshop-info.json</c>，按「来源 + id」存列表元数据、封面文件名与详情正文。
@@ -33,13 +34,19 @@ public sealed class WorkshopInfoCache
     private readonly IAppLogger _logger;
     private readonly IClock _clock;
     private readonly string _cacheRoot;
+    private readonly IDocumentFile _indexDocument;
     private readonly object _gate = new();
     private readonly Dictionary<string, WorkshopInfoCacheEntry> _entries;
 
     /// <summary>内存里有未落盘的修改；由 <see cref="Flush"/> 统一写入。</summary>
     private bool _dirty;
 
-    public WorkshopInfoCache(IFileSystem fileSystem, IAppLogger logger, IClock clock, string cacheRoot)
+    public WorkshopInfoCache(
+        IFileSystem fileSystem,
+        IAppLogger logger,
+        IClock clock,
+        string cacheRoot,
+        IDocumentFile? indexDocument = null)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(logger);
@@ -49,14 +56,18 @@ public sealed class WorkshopInfoCache
         _logger = logger;
         _clock = clock;
         _cacheRoot = cacheRoot;
-        _entries = Load(fileSystem, logger, IndexPath);
+        _indexDocument = indexDocument ?? new FileDocumentFile(fileSystem, IndexPath);
+        _entries = Load(_indexDocument, logger);
     }
 
     /// <summary>缓存根目录。</summary>
     public string CacheRoot => _cacheRoot;
 
-    /// <summary>索引文件绝对路径。</summary>
+    /// <summary>索引的旧文件路径（索引已搬进自有库，图片/封面仍在缓存根下）。</summary>
     public string IndexPath => Path.Combine(_cacheRoot, IndexFileName);
+
+    /// <summary>索引落点（库键或旧文件）。</summary>
+    public string IndexLocation => _indexDocument.DisplayPath;
 
     /// <summary>
     /// 封面根目录：与索引同根，清缓存时一起删掉。
@@ -348,10 +359,7 @@ public sealed class WorkshopInfoCache
 
         try
         {
-            if (_fileSystem.FileExists(IndexPath))
-            {
-                _fileSystem.Delete(IndexPath);
-            }
+            _indexDocument.Delete();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -391,8 +399,10 @@ public sealed class WorkshopInfoCache
 
         try
         {
-            _fileSystem.EnsureDirectory(_cacheRoot);
-            _fileSystem.WriteAllTextAtomic(IndexPath, JsonSerializer.Serialize(snapshot, Options));
+            if (!_indexDocument.WriteText(JsonSerializer.Serialize(snapshot, Options)))
+            {
+                _logger.Warn("创意工坊缓存索引写入失败：" + _indexDocument.DisplayPath);
+            }
         }
         catch (Exception exception) when (exception is IOException
                                               or UnauthorizedAccessException
@@ -430,19 +440,18 @@ public sealed class WorkshopInfoCache
     };
 
     private static Dictionary<string, WorkshopInfoCacheEntry> Load(
-        IFileSystem fileSystem,
-        IAppLogger logger,
-        string path)
+        IDocumentFile document,
+        IAppLogger logger)
     {
         var entries = new Dictionary<string, WorkshopInfoCacheEntry>(StringComparer.OrdinalIgnoreCase);
-        if (!fileSystem.FileExists(path))
+        var json = document.ReadText();
+        if (json is null)
         {
             return entries;
         }
-
         try
         {
-            var loaded = JsonSerializer.Deserialize<IndexFile>(fileSystem.ReadAllText(path), Options);
+            var loaded = JsonSerializer.Deserialize<IndexFile>(json, Options);
             if (loaded?.Entries is null)
             {
                 return entries;

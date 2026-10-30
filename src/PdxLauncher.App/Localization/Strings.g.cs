@@ -71,6 +71,8 @@ public sealed partial class Localizer
         ["common.save"] = "保存",
         ["common.search"] = "搜索",
         ["common.selectPlaceholder"] = "请选择",
+        ["common.sourceLocal"] = "本地",
+        ["common.sourceSubscribed"] = "订阅",
         ["common.unknown"] = "未知",
         ["common.yes"] = "是",
         ["dlc.countsText"] = "共 {0} 个 DLC，已启用 {1} 个",
@@ -181,6 +183,10 @@ public sealed partial class Localizer
         ["modlib.sortBySize"] = "大小（大到小）",
         ["modlib.sortBySubscribed"] = "订阅时间（新到旧）",
         ["modlib.sortName"] = "排序方式",
+        ["modlib.sourceFilterAll"] = "全部来源",
+        ["modlib.sourceFilterLocal"] = "仅本地",
+        ["modlib.sourceFilterName"] = "来源",
+        ["modlib.sourceFilterSubscribed"] = "仅订阅",
         ["modlib.statusCannotOpen"] = "无法打开 {0}",
         ["modlib.statusFiltered"] = "显示 {0} / {1} 个 mod",
         ["modlib.statusLoaded"] = "已加载 {0} 个 mod",
@@ -197,16 +203,30 @@ public sealed partial class Localizer
         ["modlib.supportedVersion"] = "支持版本 {0}",
         ["modlib.supportedVersionName"] = "支持的游戏版本",
         ["modlib.title"] = "Mod 库",
-        ["modlib.warningName"] = "兼容性警告",
-        ["modlib.warningOutdated"] = "可能不兼容当前游戏版本（要求 {0}，当前 {1}）",
-        ["modlib.warningStatus"] = "状态异常：{0}",
-        ["modlib.warningUnregistered"] = "本地磁盘上的 mod，官方 mod 库中没有登记",
+        ["modlib.versionSupport.below"] = "声明的版本低于当前游戏版本。",
+        ["modlib.versionSupport.declared"] = "该 mod 声明支持版本 {0}；当前游戏版本 {1}。",
+        ["modlib.versionSupport.declaredUnknownGame"] = "该 mod 声明支持版本 {0}，当前游戏版本未知。",
+        ["modlib.versionSupport.notBelow"] = "声明的版本不低于当前游戏版本。",
+        ["modlib.versionSupport.undeclared"] = "该 mod 没有声明支持的游戏版本。",
+        ["modlib.warningName"] = "版本支持提示",
+        ["modlib.warningStatus"] = "官方库中的状态：{0}。",
+        ["modlib.warningUnregistered"] = "该 mod 来自本地磁盘，官方 mod 库中还没有登记。",
+        ["modlib.warningUnregisteredWorkshop"] = "该 mod 来自创意工坊订阅，官方 mod 库中还没有登记（加入播放集时会自动补登记）。",
         ["mods.activate.button"] = "激活播放集",
         ["mods.activate.buttonApplied"] = "已激活",
-        ["mods.addDialog.add"] = "添加",
-        ["mods.addDialog.listName"] = "可添加的 mod 列表",
-        ["mods.addDialog.searchName"] = "搜索可添加的 mod",
-        ["mods.addDialog.searchPlaceholder"] = "搜索 mod 名称 / 注册 ID",
+        ["mods.addPage.add"] = "添加",
+        ["mods.addPage.back"] = "返回",
+        ["mods.addPage.candidateCount"] = "共 {0} 个可添加的 mod",
+        ["mods.addPage.empty"] = "没有可添加的 mod",
+        ["mods.addPage.hint"] = "勾选要加入当前播放集的 mod，然后点「添加」。",
+        ["mods.addPage.listName"] = "可添加的 mod 列表",
+        ["mods.addPage.noMatch"] = "没有匹配的 mod，换个关键词试试",
+        ["mods.addPage.searchName"] = "搜索可添加的 mod",
+        ["mods.addPage.searchPlaceholder"] = "搜索 mod 名称 / 注册 ID",
+        ["mods.addPage.selectedCount"] = "已选 {0} 个 mod",
+        ["mods.addPage.target"] = "加入播放集「{0}」",
+        ["mods.addPage.targetMissing"] = "目标播放集已不存在，未添加任何 mod",
+        ["mods.addPage.title"] = "添加模组",
         ["mods.dialog.cannotDeleteBody"] = "这是当前唯一的播放集，无法删除。",
         ["mods.dialog.defaultNewName"] = "新播放集",
         ["mods.dialog.deleteBody"] = "确定要删除播放集「{0}」吗？该操作会删除它的 mod 顺序与启用状态记录，且无法撤销。",
@@ -214,7 +234,6 @@ public sealed partial class Localizer
         ["mods.dialog.deleteBodyInactive"] = "该播放集未激活，删除不会改变游戏当前的加载配置。",
         ["mods.dialog.namePlaceholder"] = "播放集名称",
         ["mods.dialog.newNamePlaceholder"] = "新的播放集名称",
-        ["mods.dialog.noAddableMods"] = "没有可添加的 mod",
         ["mods.empty.name"] = "播放集为空提示",
         ["mods.empty.text"] = "该播放集还没有 mod，点「添加模组」加入",
         ["mods.game.none"] = "（未选择游戏）",
@@ -235,6 +254,18 @@ public sealed partial class Localizer
         ["mods.playSet.none"] = "（未选择播放集）",
         ["mods.playSet.switcherName"] = "当前播放集",
         ["mods.playSet.switcherToolTip"] = "切换播放集只切换查看目标，点「激活播放集」后游戏才会使用它",
+        ["mods.repairApply"] = "修复",
+        ["mods.repairCheckName"] = "检查 mod 路径",
+        ["mods.repairDialogBody"] = "下面这些 mod 在游戏里不会生效。确认后会补上缺失的路径、把目录改成 ASCII 名，并写回 mod 库。",
+        ["mods.repairDialogTitle"] = "修复 mod 路径",
+        ["mods.repairDone"] = "已修复 {0} 个 mod 路径",
+        ["mods.repairFailed"] = "修复 mod 路径失败：{0}",
+        ["mods.repairFillHint"] = "补路径",
+        ["mods.repairInvalidName"] = "目录名只能用 ASCII 字母、数字、下划线、点、连字符",
+        ["mods.repairName"] = "修复 mod 路径",
+        ["mods.repairNothing"] = "没有需要修复的 mod 路径",
+        ["mods.repairRenameHint"] = "改目录名",
+        ["mods.repairRenameLabel"] = "新目录名（只能用 ASCII）",
         ["mods.row.moveDown"] = "下移",
         ["mods.row.moveDownToolTip"] = "下移一位",
         ["mods.row.moveUp"] = "上移",
@@ -301,6 +332,13 @@ public sealed partial class Localizer
         ["mods.toolbar.rename"] = "重命名",
         ["mods.toolbar.renameName"] = "重命名播放集",
         ["mods.toolbar.searchPlaceholder"] = "搜索播放集内的 mod",
+        ["mods.warnMissingPath"] = "路径写进了加载文件，但磁盘上找不到这个目录或文件",
+        ["mods.warnName"] = "这条 mod 在游戏里可能不会生效",
+        ["mods.warnNoArchive"] = "这个游戏的加载文件只认压缩包路径，目录型 mod 无法表达",
+        ["mods.warnNoPath"] = "官方 mod 库里这一行没有目录或压缩包路径，加载文件写不进去，游戏里等于没启用",
+        ["mods.warnNoRegistryId"] = "这个游戏的加载文件只认注册 id，而这一行的注册 id 是空的",
+        ["mods.warnNonAsciiParent"] = "上层目录含非 ASCII 字符，只能改游戏的 gameDataPath 才能解决",
+        ["mods.warnNonAsciiPath"] = "这个游戏的加载器不认非 ASCII 路径，中文目录名会被静默忽略",
         ["settings.appData.clearLegacy"] = "清理旧 C 盘数据",
         ["settings.appData.clearLegacyName"] = "清理旧 C 盘数据",
         ["settings.appData.current"] = "当前数据目录",
@@ -776,6 +814,8 @@ public sealed partial class Localizer
         ["common.save"] = "Save",
         ["common.search"] = "Search",
         ["common.selectPlaceholder"] = "Select…",
+        ["common.sourceLocal"] = "Local",
+        ["common.sourceSubscribed"] = "Subscribed",
         ["common.unknown"] = "Unknown",
         ["common.yes"] = "Yes",
         ["dlc.countsText"] = "{0} DLCs in total, {1} enabled",
@@ -886,6 +926,10 @@ public sealed partial class Localizer
         ["modlib.sortBySize"] = "Size (largest first)",
         ["modlib.sortBySubscribed"] = "Subscribed (newest first)",
         ["modlib.sortName"] = "Sort by",
+        ["modlib.sourceFilterAll"] = "All sources",
+        ["modlib.sourceFilterLocal"] = "Local only",
+        ["modlib.sourceFilterName"] = "Source",
+        ["modlib.sourceFilterSubscribed"] = "Subscribed only",
         ["modlib.statusCannotOpen"] = "Cannot open {0}",
         ["modlib.statusFiltered"] = "Showing {0} of {1} mods",
         ["modlib.statusLoaded"] = "Loaded {0} mods",
@@ -902,16 +946,30 @@ public sealed partial class Localizer
         ["modlib.supportedVersion"] = "Supported version {0}",
         ["modlib.supportedVersionName"] = "Supported game version",
         ["modlib.title"] = "Mod Library",
-        ["modlib.warningName"] = "Compatibility warning",
-        ["modlib.warningOutdated"] = "May be incompatible with this game version (requires {0}, current {1})",
-        ["modlib.warningStatus"] = "Unexpected status: {0}",
-        ["modlib.warningUnregistered"] = "Mod found on disk but not registered in the official mod library",
+        ["modlib.versionSupport.below"] = "The declared version is lower than the current game version.",
+        ["modlib.versionSupport.declared"] = "This mod declares version {0}; the current game version is {1}.",
+        ["modlib.versionSupport.declaredUnknownGame"] = "This mod declares version {0}; the current game version is unknown.",
+        ["modlib.versionSupport.notBelow"] = "The declared version is not lower than the current game version.",
+        ["modlib.versionSupport.undeclared"] = "This mod does not declare a supported game version.",
+        ["modlib.warningName"] = "Version support",
+        ["modlib.warningStatus"] = "Status in the official library: {0}.",
+        ["modlib.warningUnregistered"] = "This mod comes from the local disk and is not registered in the official mod library.",
+        ["modlib.warningUnregisteredWorkshop"] = "This mod is subscribed on the Workshop but is not registered in the official mod library yet (adding it to a play set registers it).",
         ["mods.activate.button"] = "Activate Play Set",
         ["mods.activate.buttonApplied"] = "Active",
-        ["mods.addDialog.add"] = "Add",
-        ["mods.addDialog.listName"] = "Addable Mods List",
-        ["mods.addDialog.searchName"] = "Search Addable Mods",
-        ["mods.addDialog.searchPlaceholder"] = "Search mod name / registry ID",
+        ["mods.addPage.add"] = "Add",
+        ["mods.addPage.back"] = "Back",
+        ["mods.addPage.candidateCount"] = "{0} mods can be added",
+        ["mods.addPage.empty"] = "There are no mods to add.",
+        ["mods.addPage.hint"] = "Check the mods to add to this play set, then click Add.",
+        ["mods.addPage.listName"] = "Addable Mods List",
+        ["mods.addPage.noMatch"] = "No mods match. Try another keyword.",
+        ["mods.addPage.searchName"] = "Search Addable Mods",
+        ["mods.addPage.searchPlaceholder"] = "Search mod name / registry ID",
+        ["mods.addPage.selectedCount"] = "{0} mods selected",
+        ["mods.addPage.target"] = "Add to play set “{0}”",
+        ["mods.addPage.targetMissing"] = "The target play set no longer exists, so nothing was added.",
+        ["mods.addPage.title"] = "Add Mods",
         ["mods.dialog.cannotDeleteBody"] = "This is the only play set and cannot be deleted.",
         ["mods.dialog.defaultNewName"] = "New Play Set",
         ["mods.dialog.deleteBody"] = "Delete play set \"{0}\"? Its mod order and enabled state will be removed, and this cannot be undone.",
@@ -919,7 +977,6 @@ public sealed partial class Localizer
         ["mods.dialog.deleteBodyInactive"] = "This play set is not active, so deleting it will not change the game's current load configuration.",
         ["mods.dialog.namePlaceholder"] = "Play Set Name",
         ["mods.dialog.newNamePlaceholder"] = "New Play Set Name",
-        ["mods.dialog.noAddableMods"] = "There are no mods to add.",
         ["mods.empty.name"] = "Empty Play Set Hint",
         ["mods.empty.text"] = "This play set has no mods yet. Click Add Mods to add some.",
         ["mods.game.none"] = "(No game selected)",
@@ -940,6 +997,18 @@ public sealed partial class Localizer
         ["mods.playSet.none"] = "(No play set selected)",
         ["mods.playSet.switcherName"] = "Current Play Set",
         ["mods.playSet.switcherToolTip"] = "Switching play sets only changes what you view; click Activate Play Set to apply it to the game",
+        ["mods.repairApply"] = "Repair",
+        ["mods.repairCheckName"] = "Check mod paths",
+        ["mods.repairDialogBody"] = "The following mods will not load in game. Confirming fills in missing paths, renames folders to ASCII, and writes the result back to the mod library.",
+        ["mods.repairDialogTitle"] = "Repair mod paths",
+        ["mods.repairDone"] = "Repaired {0} mod path(s)",
+        ["mods.repairFailed"] = "Failed to repair mod paths: {0}",
+        ["mods.repairFillHint"] = "Fill path",
+        ["mods.repairInvalidName"] = "Only ASCII letters, digits, underscore, dot and hyphen are allowed",
+        ["mods.repairName"] = "Repair mod paths",
+        ["mods.repairNothing"] = "No mod paths need repairing",
+        ["mods.repairRenameHint"] = "Rename folder",
+        ["mods.repairRenameLabel"] = "New folder name (ASCII only)",
         ["mods.row.moveDown"] = "Move Down",
         ["mods.row.moveDownToolTip"] = "Move down one row",
         ["mods.row.moveUp"] = "Move Up",
@@ -1006,6 +1075,13 @@ public sealed partial class Localizer
         ["mods.toolbar.rename"] = "Rename",
         ["mods.toolbar.renameName"] = "Rename Play Set",
         ["mods.toolbar.searchPlaceholder"] = "Search mods in this play set",
+        ["mods.warnMissingPath"] = "The path is written to the load file, but it does not exist on disk",
+        ["mods.warnName"] = "This mod may not load in game",
+        ["mods.warnNoArchive"] = "This game’s load file only accepts archive paths, so folder mods cannot be listed",
+        ["mods.warnNoPath"] = "This row has no folder or archive path, so it cannot be written to the load file and will not load",
+        ["mods.warnNoRegistryId"] = "This game’s load file only accepts a registry id, and this row has none",
+        ["mods.warnNonAsciiParent"] = "A parent folder contains non-ASCII characters; only changing the game’s gameDataPath will help",
+        ["mods.warnNonAsciiPath"] = "This game cannot load mods from paths containing non-ASCII characters, so this folder name is silently ignored",
         ["settings.appData.clearLegacy"] = "Delete old C: data",
         ["settings.appData.clearLegacyName"] = "Delete old C: data",
         ["settings.appData.current"] = "Current data folder",
@@ -1481,6 +1557,8 @@ public sealed partial class Localizer
         ("common.save", "CommonSave"),
         ("common.search", "CommonSearch"),
         ("common.selectPlaceholder", "CommonSelectPlaceholder"),
+        ("common.sourceLocal", "CommonSourceLocal"),
+        ("common.sourceSubscribed", "CommonSourceSubscribed"),
         ("common.unknown", "CommonUnknown"),
         ("common.yes", "CommonYes"),
         ("dlc.countsText", "DlcCountsText"),
@@ -1591,6 +1669,10 @@ public sealed partial class Localizer
         ("modlib.sortBySize", "ModlibSortBySize"),
         ("modlib.sortBySubscribed", "ModlibSortBySubscribed"),
         ("modlib.sortName", "ModlibSortName"),
+        ("modlib.sourceFilterAll", "ModlibSourceFilterAll"),
+        ("modlib.sourceFilterLocal", "ModlibSourceFilterLocal"),
+        ("modlib.sourceFilterName", "ModlibSourceFilterName"),
+        ("modlib.sourceFilterSubscribed", "ModlibSourceFilterSubscribed"),
         ("modlib.statusCannotOpen", "ModlibStatusCannotOpen"),
         ("modlib.statusFiltered", "ModlibStatusFiltered"),
         ("modlib.statusLoaded", "ModlibStatusLoaded"),
@@ -1607,16 +1689,30 @@ public sealed partial class Localizer
         ("modlib.supportedVersion", "ModlibSupportedVersion"),
         ("modlib.supportedVersionName", "ModlibSupportedVersionName"),
         ("modlib.title", "ModlibTitle"),
+        ("modlib.versionSupport.below", "ModlibVersionSupportBelow"),
+        ("modlib.versionSupport.declared", "ModlibVersionSupportDeclared"),
+        ("modlib.versionSupport.declaredUnknownGame", "ModlibVersionSupportDeclaredUnknownGame"),
+        ("modlib.versionSupport.notBelow", "ModlibVersionSupportNotBelow"),
+        ("modlib.versionSupport.undeclared", "ModlibVersionSupportUndeclared"),
         ("modlib.warningName", "ModlibWarningName"),
-        ("modlib.warningOutdated", "ModlibWarningOutdated"),
         ("modlib.warningStatus", "ModlibWarningStatus"),
         ("modlib.warningUnregistered", "ModlibWarningUnregistered"),
+        ("modlib.warningUnregisteredWorkshop", "ModlibWarningUnregisteredWorkshop"),
         ("mods.activate.button", "ModsActivateButton"),
         ("mods.activate.buttonApplied", "ModsActivateButtonApplied"),
-        ("mods.addDialog.add", "ModsAddDialogAdd"),
-        ("mods.addDialog.listName", "ModsAddDialogListName"),
-        ("mods.addDialog.searchName", "ModsAddDialogSearchName"),
-        ("mods.addDialog.searchPlaceholder", "ModsAddDialogSearchPlaceholder"),
+        ("mods.addPage.add", "ModsAddPageAdd"),
+        ("mods.addPage.back", "ModsAddPageBack"),
+        ("mods.addPage.candidateCount", "ModsAddPageCandidateCount"),
+        ("mods.addPage.empty", "ModsAddPageEmpty"),
+        ("mods.addPage.hint", "ModsAddPageHint"),
+        ("mods.addPage.listName", "ModsAddPageListName"),
+        ("mods.addPage.noMatch", "ModsAddPageNoMatch"),
+        ("mods.addPage.searchName", "ModsAddPageSearchName"),
+        ("mods.addPage.searchPlaceholder", "ModsAddPageSearchPlaceholder"),
+        ("mods.addPage.selectedCount", "ModsAddPageSelectedCount"),
+        ("mods.addPage.target", "ModsAddPageTarget"),
+        ("mods.addPage.targetMissing", "ModsAddPageTargetMissing"),
+        ("mods.addPage.title", "ModsAddPageTitle"),
         ("mods.dialog.cannotDeleteBody", "ModsDialogCannotDeleteBody"),
         ("mods.dialog.defaultNewName", "ModsDialogDefaultNewName"),
         ("mods.dialog.deleteBody", "ModsDialogDeleteBody"),
@@ -1624,7 +1720,6 @@ public sealed partial class Localizer
         ("mods.dialog.deleteBodyInactive", "ModsDialogDeleteBodyInactive"),
         ("mods.dialog.namePlaceholder", "ModsDialogNamePlaceholder"),
         ("mods.dialog.newNamePlaceholder", "ModsDialogNewNamePlaceholder"),
-        ("mods.dialog.noAddableMods", "ModsDialogNoAddableMods"),
         ("mods.empty.name", "ModsEmptyName"),
         ("mods.empty.text", "ModsEmptyText"),
         ("mods.game.none", "ModsGameNone"),
@@ -1645,6 +1740,18 @@ public sealed partial class Localizer
         ("mods.playSet.none", "ModsPlaySetNone"),
         ("mods.playSet.switcherName", "ModsPlaySetSwitcherName"),
         ("mods.playSet.switcherToolTip", "ModsPlaySetSwitcherToolTip"),
+        ("mods.repairApply", "ModsRepairApply"),
+        ("mods.repairCheckName", "ModsRepairCheckName"),
+        ("mods.repairDialogBody", "ModsRepairDialogBody"),
+        ("mods.repairDialogTitle", "ModsRepairDialogTitle"),
+        ("mods.repairDone", "ModsRepairDone"),
+        ("mods.repairFailed", "ModsRepairFailed"),
+        ("mods.repairFillHint", "ModsRepairFillHint"),
+        ("mods.repairInvalidName", "ModsRepairInvalidName"),
+        ("mods.repairName", "ModsRepairName"),
+        ("mods.repairNothing", "ModsRepairNothing"),
+        ("mods.repairRenameHint", "ModsRepairRenameHint"),
+        ("mods.repairRenameLabel", "ModsRepairRenameLabel"),
         ("mods.row.moveDown", "ModsRowMoveDown"),
         ("mods.row.moveDownToolTip", "ModsRowMoveDownToolTip"),
         ("mods.row.moveUp", "ModsRowMoveUp"),
@@ -1711,6 +1818,13 @@ public sealed partial class Localizer
         ("mods.toolbar.rename", "ModsToolbarRename"),
         ("mods.toolbar.renameName", "ModsToolbarRenameName"),
         ("mods.toolbar.searchPlaceholder", "ModsToolbarSearchPlaceholder"),
+        ("mods.warnMissingPath", "ModsWarnMissingPath"),
+        ("mods.warnName", "ModsWarnName"),
+        ("mods.warnNoArchive", "ModsWarnNoArchive"),
+        ("mods.warnNoPath", "ModsWarnNoPath"),
+        ("mods.warnNoRegistryId", "ModsWarnNoRegistryId"),
+        ("mods.warnNonAsciiParent", "ModsWarnNonAsciiParent"),
+        ("mods.warnNonAsciiPath", "ModsWarnNonAsciiPath"),
         ("settings.appData.clearLegacy", "SettingsAppDataClearLegacy"),
         ("settings.appData.clearLegacyName", "SettingsAppDataClearLegacyName"),
         ("settings.appData.current", "SettingsAppDataCurrent"),
@@ -2184,6 +2298,8 @@ public sealed partial class Localizer
     public string CommonSave => Format("common.save");
     public string CommonSearch => Format("common.search");
     public string CommonSelectPlaceholder => Format("common.selectPlaceholder");
+    public string CommonSourceLocal => Format("common.sourceLocal");
+    public string CommonSourceSubscribed => Format("common.sourceSubscribed");
     public string CommonUnknown => Format("common.unknown");
     public string CommonYes => Format("common.yes");
     public string DlcCountsText => Format("dlc.countsText");
@@ -2294,6 +2410,10 @@ public sealed partial class Localizer
     public string ModlibSortBySize => Format("modlib.sortBySize");
     public string ModlibSortBySubscribed => Format("modlib.sortBySubscribed");
     public string ModlibSortName => Format("modlib.sortName");
+    public string ModlibSourceFilterAll => Format("modlib.sourceFilterAll");
+    public string ModlibSourceFilterLocal => Format("modlib.sourceFilterLocal");
+    public string ModlibSourceFilterName => Format("modlib.sourceFilterName");
+    public string ModlibSourceFilterSubscribed => Format("modlib.sourceFilterSubscribed");
     public string ModlibStatusCannotOpen => Format("modlib.statusCannotOpen");
     public string ModlibStatusFiltered => Format("modlib.statusFiltered");
     public string ModlibStatusLoaded => Format("modlib.statusLoaded");
@@ -2310,16 +2430,30 @@ public sealed partial class Localizer
     public string ModlibSupportedVersion => Format("modlib.supportedVersion");
     public string ModlibSupportedVersionName => Format("modlib.supportedVersionName");
     public string ModlibTitle => Format("modlib.title");
+    public string ModlibVersionSupportBelow => Format("modlib.versionSupport.below");
+    public string ModlibVersionSupportDeclared => Format("modlib.versionSupport.declared");
+    public string ModlibVersionSupportDeclaredUnknownGame => Format("modlib.versionSupport.declaredUnknownGame");
+    public string ModlibVersionSupportNotBelow => Format("modlib.versionSupport.notBelow");
+    public string ModlibVersionSupportUndeclared => Format("modlib.versionSupport.undeclared");
     public string ModlibWarningName => Format("modlib.warningName");
-    public string ModlibWarningOutdated => Format("modlib.warningOutdated");
     public string ModlibWarningStatus => Format("modlib.warningStatus");
     public string ModlibWarningUnregistered => Format("modlib.warningUnregistered");
+    public string ModlibWarningUnregisteredWorkshop => Format("modlib.warningUnregisteredWorkshop");
     public string ModsActivateButton => Format("mods.activate.button");
     public string ModsActivateButtonApplied => Format("mods.activate.buttonApplied");
-    public string ModsAddDialogAdd => Format("mods.addDialog.add");
-    public string ModsAddDialogListName => Format("mods.addDialog.listName");
-    public string ModsAddDialogSearchName => Format("mods.addDialog.searchName");
-    public string ModsAddDialogSearchPlaceholder => Format("mods.addDialog.searchPlaceholder");
+    public string ModsAddPageAdd => Format("mods.addPage.add");
+    public string ModsAddPageBack => Format("mods.addPage.back");
+    public string ModsAddPageCandidateCount => Format("mods.addPage.candidateCount");
+    public string ModsAddPageEmpty => Format("mods.addPage.empty");
+    public string ModsAddPageHint => Format("mods.addPage.hint");
+    public string ModsAddPageListName => Format("mods.addPage.listName");
+    public string ModsAddPageNoMatch => Format("mods.addPage.noMatch");
+    public string ModsAddPageSearchName => Format("mods.addPage.searchName");
+    public string ModsAddPageSearchPlaceholder => Format("mods.addPage.searchPlaceholder");
+    public string ModsAddPageSelectedCount => Format("mods.addPage.selectedCount");
+    public string ModsAddPageTarget => Format("mods.addPage.target");
+    public string ModsAddPageTargetMissing => Format("mods.addPage.targetMissing");
+    public string ModsAddPageTitle => Format("mods.addPage.title");
     public string ModsDialogCannotDeleteBody => Format("mods.dialog.cannotDeleteBody");
     public string ModsDialogDefaultNewName => Format("mods.dialog.defaultNewName");
     public string ModsDialogDeleteBody => Format("mods.dialog.deleteBody");
@@ -2327,7 +2461,6 @@ public sealed partial class Localizer
     public string ModsDialogDeleteBodyInactive => Format("mods.dialog.deleteBodyInactive");
     public string ModsDialogNamePlaceholder => Format("mods.dialog.namePlaceholder");
     public string ModsDialogNewNamePlaceholder => Format("mods.dialog.newNamePlaceholder");
-    public string ModsDialogNoAddableMods => Format("mods.dialog.noAddableMods");
     public string ModsEmptyName => Format("mods.empty.name");
     public string ModsEmptyText => Format("mods.empty.text");
     public string ModsGameNone => Format("mods.game.none");
@@ -2348,6 +2481,18 @@ public sealed partial class Localizer
     public string ModsPlaySetNone => Format("mods.playSet.none");
     public string ModsPlaySetSwitcherName => Format("mods.playSet.switcherName");
     public string ModsPlaySetSwitcherToolTip => Format("mods.playSet.switcherToolTip");
+    public string ModsRepairApply => Format("mods.repairApply");
+    public string ModsRepairCheckName => Format("mods.repairCheckName");
+    public string ModsRepairDialogBody => Format("mods.repairDialogBody");
+    public string ModsRepairDialogTitle => Format("mods.repairDialogTitle");
+    public string ModsRepairDone => Format("mods.repairDone");
+    public string ModsRepairFailed => Format("mods.repairFailed");
+    public string ModsRepairFillHint => Format("mods.repairFillHint");
+    public string ModsRepairInvalidName => Format("mods.repairInvalidName");
+    public string ModsRepairName => Format("mods.repairName");
+    public string ModsRepairNothing => Format("mods.repairNothing");
+    public string ModsRepairRenameHint => Format("mods.repairRenameHint");
+    public string ModsRepairRenameLabel => Format("mods.repairRenameLabel");
     public string ModsRowMoveDown => Format("mods.row.moveDown");
     public string ModsRowMoveDownToolTip => Format("mods.row.moveDownToolTip");
     public string ModsRowMoveUp => Format("mods.row.moveUp");
@@ -2414,6 +2559,13 @@ public sealed partial class Localizer
     public string ModsToolbarRename => Format("mods.toolbar.rename");
     public string ModsToolbarRenameName => Format("mods.toolbar.renameName");
     public string ModsToolbarSearchPlaceholder => Format("mods.toolbar.searchPlaceholder");
+    public string ModsWarnMissingPath => Format("mods.warnMissingPath");
+    public string ModsWarnName => Format("mods.warnName");
+    public string ModsWarnNoArchive => Format("mods.warnNoArchive");
+    public string ModsWarnNoPath => Format("mods.warnNoPath");
+    public string ModsWarnNoRegistryId => Format("mods.warnNoRegistryId");
+    public string ModsWarnNonAsciiParent => Format("mods.warnNonAsciiParent");
+    public string ModsWarnNonAsciiPath => Format("mods.warnNonAsciiPath");
     public string SettingsAppDataClearLegacy => Format("settings.appData.clearLegacy");
     public string SettingsAppDataClearLegacyName => Format("settings.appData.clearLegacyName");
     public string SettingsAppDataCurrent => Format("settings.appData.current");
@@ -2890,6 +3042,8 @@ internal static class Keys
     public const string CommonSave = "common.save";
     public const string CommonSearch = "common.search";
     public const string CommonSelectPlaceholder = "common.selectPlaceholder";
+    public const string CommonSourceLocal = "common.sourceLocal";
+    public const string CommonSourceSubscribed = "common.sourceSubscribed";
     public const string CommonUnknown = "common.unknown";
     public const string CommonYes = "common.yes";
     public const string DlcCountsText = "dlc.countsText";
@@ -3000,6 +3154,10 @@ internal static class Keys
     public const string ModlibSortBySize = "modlib.sortBySize";
     public const string ModlibSortBySubscribed = "modlib.sortBySubscribed";
     public const string ModlibSortName = "modlib.sortName";
+    public const string ModlibSourceFilterAll = "modlib.sourceFilterAll";
+    public const string ModlibSourceFilterLocal = "modlib.sourceFilterLocal";
+    public const string ModlibSourceFilterName = "modlib.sourceFilterName";
+    public const string ModlibSourceFilterSubscribed = "modlib.sourceFilterSubscribed";
     public const string ModlibStatusCannotOpen = "modlib.statusCannotOpen";
     public const string ModlibStatusFiltered = "modlib.statusFiltered";
     public const string ModlibStatusLoaded = "modlib.statusLoaded";
@@ -3016,16 +3174,30 @@ internal static class Keys
     public const string ModlibSupportedVersion = "modlib.supportedVersion";
     public const string ModlibSupportedVersionName = "modlib.supportedVersionName";
     public const string ModlibTitle = "modlib.title";
+    public const string ModlibVersionSupportBelow = "modlib.versionSupport.below";
+    public const string ModlibVersionSupportDeclared = "modlib.versionSupport.declared";
+    public const string ModlibVersionSupportDeclaredUnknownGame = "modlib.versionSupport.declaredUnknownGame";
+    public const string ModlibVersionSupportNotBelow = "modlib.versionSupport.notBelow";
+    public const string ModlibVersionSupportUndeclared = "modlib.versionSupport.undeclared";
     public const string ModlibWarningName = "modlib.warningName";
-    public const string ModlibWarningOutdated = "modlib.warningOutdated";
     public const string ModlibWarningStatus = "modlib.warningStatus";
     public const string ModlibWarningUnregistered = "modlib.warningUnregistered";
+    public const string ModlibWarningUnregisteredWorkshop = "modlib.warningUnregisteredWorkshop";
     public const string ModsActivateButton = "mods.activate.button";
     public const string ModsActivateButtonApplied = "mods.activate.buttonApplied";
-    public const string ModsAddDialogAdd = "mods.addDialog.add";
-    public const string ModsAddDialogListName = "mods.addDialog.listName";
-    public const string ModsAddDialogSearchName = "mods.addDialog.searchName";
-    public const string ModsAddDialogSearchPlaceholder = "mods.addDialog.searchPlaceholder";
+    public const string ModsAddPageAdd = "mods.addPage.add";
+    public const string ModsAddPageBack = "mods.addPage.back";
+    public const string ModsAddPageCandidateCount = "mods.addPage.candidateCount";
+    public const string ModsAddPageEmpty = "mods.addPage.empty";
+    public const string ModsAddPageHint = "mods.addPage.hint";
+    public const string ModsAddPageListName = "mods.addPage.listName";
+    public const string ModsAddPageNoMatch = "mods.addPage.noMatch";
+    public const string ModsAddPageSearchName = "mods.addPage.searchName";
+    public const string ModsAddPageSearchPlaceholder = "mods.addPage.searchPlaceholder";
+    public const string ModsAddPageSelectedCount = "mods.addPage.selectedCount";
+    public const string ModsAddPageTarget = "mods.addPage.target";
+    public const string ModsAddPageTargetMissing = "mods.addPage.targetMissing";
+    public const string ModsAddPageTitle = "mods.addPage.title";
     public const string ModsDialogCannotDeleteBody = "mods.dialog.cannotDeleteBody";
     public const string ModsDialogDefaultNewName = "mods.dialog.defaultNewName";
     public const string ModsDialogDeleteBody = "mods.dialog.deleteBody";
@@ -3033,7 +3205,6 @@ internal static class Keys
     public const string ModsDialogDeleteBodyInactive = "mods.dialog.deleteBodyInactive";
     public const string ModsDialogNamePlaceholder = "mods.dialog.namePlaceholder";
     public const string ModsDialogNewNamePlaceholder = "mods.dialog.newNamePlaceholder";
-    public const string ModsDialogNoAddableMods = "mods.dialog.noAddableMods";
     public const string ModsEmptyName = "mods.empty.name";
     public const string ModsEmptyText = "mods.empty.text";
     public const string ModsGameNone = "mods.game.none";
@@ -3054,6 +3225,18 @@ internal static class Keys
     public const string ModsPlaySetNone = "mods.playSet.none";
     public const string ModsPlaySetSwitcherName = "mods.playSet.switcherName";
     public const string ModsPlaySetSwitcherToolTip = "mods.playSet.switcherToolTip";
+    public const string ModsRepairApply = "mods.repairApply";
+    public const string ModsRepairCheckName = "mods.repairCheckName";
+    public const string ModsRepairDialogBody = "mods.repairDialogBody";
+    public const string ModsRepairDialogTitle = "mods.repairDialogTitle";
+    public const string ModsRepairDone = "mods.repairDone";
+    public const string ModsRepairFailed = "mods.repairFailed";
+    public const string ModsRepairFillHint = "mods.repairFillHint";
+    public const string ModsRepairInvalidName = "mods.repairInvalidName";
+    public const string ModsRepairName = "mods.repairName";
+    public const string ModsRepairNothing = "mods.repairNothing";
+    public const string ModsRepairRenameHint = "mods.repairRenameHint";
+    public const string ModsRepairRenameLabel = "mods.repairRenameLabel";
     public const string ModsRowMoveDown = "mods.row.moveDown";
     public const string ModsRowMoveDownToolTip = "mods.row.moveDownToolTip";
     public const string ModsRowMoveUp = "mods.row.moveUp";
@@ -3120,6 +3303,13 @@ internal static class Keys
     public const string ModsToolbarRename = "mods.toolbar.rename";
     public const string ModsToolbarRenameName = "mods.toolbar.renameName";
     public const string ModsToolbarSearchPlaceholder = "mods.toolbar.searchPlaceholder";
+    public const string ModsWarnMissingPath = "mods.warnMissingPath";
+    public const string ModsWarnName = "mods.warnName";
+    public const string ModsWarnNoArchive = "mods.warnNoArchive";
+    public const string ModsWarnNoPath = "mods.warnNoPath";
+    public const string ModsWarnNoRegistryId = "mods.warnNoRegistryId";
+    public const string ModsWarnNonAsciiParent = "mods.warnNonAsciiParent";
+    public const string ModsWarnNonAsciiPath = "mods.warnNonAsciiPath";
     public const string SettingsAppDataClearLegacy = "settings.appData.clearLegacy";
     public const string SettingsAppDataClearLegacyName = "settings.appData.clearLegacyName";
     public const string SettingsAppDataCurrent = "settings.appData.current";

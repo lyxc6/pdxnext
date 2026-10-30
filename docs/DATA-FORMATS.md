@@ -13,14 +13,19 @@ Steam 三个库：D:\app\Steam（"0"）、E:\SteamLibrary（"1"）、F:\SteamLib
 | ck3 | E:\SteamLibrary\steamapps\common\Crusader Kings III | <root>\launcher\launcher-settings.json | 1.20.1.2 (Crozier) | **0** | ../game |
 | stellaris | F:\SteamLibrary\steamapps\common\Stellaris | <root>\launcher-settings.json（**在安装根，无 launcher 目录**） | Cygnus v4.5.2 (9776) | **缺省→0** | 缺省 ./ |
 | prison_architect_pc_console | F:\SteamLibrary\steamapps\common\Prison Architect | <root>\Launcher\launcher-settings.json（**大写 L，非 PDX schema**） | The_Jailhouse_1.02 | 1 | ./ |
+| cities_skylines（JSON 里写 `cities_v2`） | F:\SteamLibrary\steamapps\common\Cities_Skylines | <root>\launcher-settings.json（**在安装根**） | 1.21.1-f9 | 1 | 缺省 ./ |
 
 > 本机游戏数量会漂移：用户在 Steam 上新装/首次运行游戏时，官方启动器会在游戏目录写
 > `launcher-settings.json`，本启动器随即把它收进列表（实测 2026-10-27 从 5 款涨到 7 款，
-> 多出 `eu4` / `cities_v2`，两者都按「未适配」展示）。所以自检只断言「已知这几款必须在」，
+> 多出 `eu4` / `cities_v2`）。所以自检只断言「已知这几款必须在」，
 > 不锁死总数（`tests/PdxLauncher.Checks/GamesChecks.cs`）。
+>
+> `cities_v2` 是 Cities: Skylines 的**官方内部 id**，2026-10-30 起在发现阶段归一到
+> `cities_skylines`（`KnownGames.CanonicalizeGameId`），卡片不再显示「未适配」。
+> `eu4` 仍未登记 ⇒ 仍是「未适配」。
 
 支持等级（`GameSupport`）：victoria3 / ck3 / stellaris = **完整适配**（Full）；
-prison_architect_pc_console = **仅启动**（LaunchOnly，见第 11 节）；未登记的 gameId = **未适配**（Unsupported）。
+prison_architect_pc_console、cities_skylines = **仅启动**（LaunchOnly，见第 11 节）；未登记的 gameId = **未适配**（Unsupported）。
 
 EU5（appid 3450310）**未安装**：只有 Documents 残留（dlc_signature + continue_game.json，无 sqlite），安装目录已删。
 ⇒ 判定"已安装"必须看**安装目录里是否存在 launcher-settings.json**，不能看 Documents 目录。
@@ -139,12 +144,15 @@ CK3 的 playsets_dlcs 为空 ⇒ disabled_dlcs: []，与真机文件一致。
 - 支持版本 = `mods.requiredVersion`（CK3 实测形如 `1.19.*` / `1.20.*` / `1.*.*`），来源是 .mod 的
   `supported_version` 或 metadata.json 的 `supported_game_version`。界面原样显示为「支持版本 1.19.*」，
   不做换算、不补全通配符。
+- 三角提示的三种来源（判定优先级）：未登记的磁盘 mod、status ≠ ready_to_play、requiredVersion 的 major.minor 低于当前游戏版本（只比较 major.minor，例如 V3 的 [1.11] mod 对 1.13 游戏）。
+  **提示文案只讲版本支持**：先说「这个 mod 声明支持哪个版本」，再说对照结论（未声明 / 当前游戏版本未知 / 不低于当前版本 / 低于当前版本），
+  登记情况与库里的原始 status 只作为补充说明，不再表述成「mod 装不了 / 状态异常」。
 - 创意工坊 id（供「在 Steam 中打开」/「在浏览器中打开」）：优先 `mods.steamId`，为空时从 `gameRegistryId`
   解析 `mod/ugc_<id>.mod`（CK3 387 行里 382 行是这种形状）。旧库没有该列时按 null 处理，与「本地 mod 没有
   创意工坊页面」是同一种展示结果，不是错误。地址：`https://steamcommunity.com/sharedfiles/filedetails/?id=<id>`
   与 `steam://url/CommunityFilePage/<id>`。
 - 磁盘扫描（ModCatalog）会合并 workshop 目录里尚未登记进 mods 表的 mod：这类行没有 size/subscribedDate、没有播放集归属，由 `ModLibraryEntry.IsUnregistered` 标记（source 仍是 local，但与数据库里正式登记的 source=local mod 不同——后者仍在官方库里、有大小、能加进播放集），**不能写入 playsets_mods**（外键指向 mods.id）。
-- 列表行的警告三角（对齐官方语义）有三种来源：未登记的磁盘 mod、status ≠ ready_to_play、requiredVersion 的 major.minor 低于当前游戏版本（只比较 major.minor，例如 V3 的 [1.11] mod 对 1.13 游戏）。
+- 列表行的警告三角（对齐官方语义）有三种来源：未登记的磁盘 mod、status ≠ ready_to_play、requiredVersion 的 major.minor 低于当前游戏版本（只比较 major.minor，例如 V3 的 [1.11] mod 对 1.13 游戏）；判定顺序与判定结果见上面的「三角提示的三种来源」。
 - 读取一律只读打开；仓库层在托管侧按名称 OrdinalIgnoreCase 排序（SQLite 的 COLLATE NOCASE 只折叠 ASCII，和 .NET/中文排序不一致）。
 
 ## 5. mod
@@ -162,7 +170,13 @@ CK3 的 playsets_dlcs 为空 ⇒ disabled_dlcs: []，与真机文件一致。
   只补「本地无图且有 thumbnailUrl」的行，关闭开关后**零请求**，只用已落盘的缓存。
 - mods_registry.json（CK3 146,847 B / Stellaris 116,349 B，V3 无）**是只读遗留**：官方新版只读它并在迁移后删除。
 
-Workshop 目录：<steamapps>\workshop\content\<appid> —— 529340=42 项、1158310=384 项、281990=307 项。
+Workshop 目录：<steamapps>\workshop\content\<appid> —— 529340=42 项、1158310=384 项、281990=307 项、255710=85 项。
+
+**Cities: Skylines 的 mod 不走这套**（2026-10-30 实测）：没有 `.mod` 描述符，也没有 `manifest.txt`。
+内置 mod 在 `<root>\Files\Mods\<Name>\`（`Source\<Name>.cs` + 可选已编译 `<Name>.dll`），
+订阅 mod 原样躺在 `<steamapps>\workshop\content\255710\<publishedFileId>\`（85 个目录：45 个含 `.dll`、
+42 个含 `.crp` 资产、2 个重叠、0 个两者皆无），由游戏内 Colossal Mods Domain 枚举加载，
+开关状态存在游戏自己的 `.cgs` 设置里。详见 §11.1。
 
 ## 6. 主题
 
@@ -199,7 +213,7 @@ headers：Content-Type: application/json、User-Agent: ParadoxLauncher/<ver>、x
 TTL **5 天**（432,000,000 ms，与官方 `pve=1e3*60*60*24*5` 一致）；URL 未变且文件存在则跳过下载。扩展名/文件名变化时删除同一键的旧文件。
 下载：流式写 <target>.part → 原子改名；失败/取消删 .part 并保留旧图；并发 2；可取消。
 白名单域名：metadata-assets.paradox-interactive.com、store.steampowered.com、api.paradox-interactive.com、braze-images.com（官方公告图，见 7.3；**只放行主域，子域一律拒绝**）。
-magic：PNG 89 50 4E 47、JPEG FF D8 FF、GIF "GIF8"、SVG 含 "<svg"、TTF 00 01 00 00、WOFF wOFF、WOFF2 wOF2。拒绝 <1 KB 或 >40 MB（阈值取 1 KB 而非 4 KB：官方 cache 实测 ck3-buttonBackgroundImage 只有 3,818 B、stellaris 的 4,495 B，都是合法 PNG）。
+magic：PNG 89 50 4E 47、JPEG FF D8 FF、GIF "GIF8"、SVG 含 "<svg"、字体 00 01 00 00 / "OTTO"（CFF OpenType）/ "true"、WOFF wOFF、WOFF2 wOF2。拒绝 <256 B 或 >40 MB（阈值一路下调：4 KB → 1 KB → 256 B。官方 cache 实测 ck3-buttonBackgroundImage 3,818 B、stellaris 4,495 B、**cities_skylines-buttonBackgroundImage 仅 361 B**（IHDR 8×50 + 单个 IDAT + IEND，结构完整），都是合法 PNG；阈值必须低于 361 B，否则 CS1 的主题刷新永远停在「部分失败」并每 10 分钟重试）。
 
 实测：代理 127.0.0.1:7890 可用，HTTP 200，Content-Length 1851934 恰好等于本机 victoria3-background 字节数；**下载速度 ~10 KB/s**（1.8 MB 约 2 分钟）。
 
@@ -319,20 +333,51 @@ normalizedMachineId = MachineGuid（HKLM\SOFTWARE\Microsoft\Cryptography\Machine
 ⇒ 结论：**只负责启动**。启动器不读它的 sqlite、不写加载文件、不扫 DLC 目录；
 播放集 / Mod / DLC 由游戏本体管理（游戏内 MOD 菜单 / Steam 创意工坊），UI 上对应导航项置灰。
 
+## 11.1 Cities: Skylines（支持等级：仅启动）
+
+本机实测（F:\SteamLibrary\steamapps\common\Cities_Skylines，appid 255710）：
+
+- `launcher-settings.json` **在安装根**（无 `launcher` 子目录）：gameId **`cities_v2`**、formatVersion 1、
+  exePath `Cities.exe`、gameDataPath `%LOCALAPPDATA%/Colossal Order/Cities_Skylines`、
+  themeFile `LauncherAssets/theme-settings.json`、browserDlcUrl `https://store.steampowered.com/dlc/255710`，
+  还带两个启动器专用开关 `steamWorkshopDisabled` / `steamModsMigrationDisabled`（本启动器**不解析**）。
+- **没有 `dlcPath`** ⇒ 读取层按 `"./"` 兜底，DlcPath 落到 settings 所在目录（= 安装根）。
+- 身份归一：官方内部 id 是 `cities_v2`，但 Paradox 元数据 API、`GameSteamAppIds`、`SteamWorkshopGames`
+  都只认 `cities_skylines`。`KnownGames.CanonicalizeGameId` 在发现阶段折过去；
+  **公告接口反过来只认原始 id**（实测 `contentcards/cities_v2` → 3 张卡，`contentcards/cities_skylines` → `{}`），
+  由 `KnownGames.GetNewsFeedGameId` 单独兜住，缓存键也用它。
+- 本体不读加载文件：全安装 229 个 dll/exe + 64 个 >60 MB 大文件流式扫
+  `content_load` / `enabledMods` / `disabledDLC` / `enabledUGC` / `dlc_signature` / `Addons` **全部 0 命中**。
+- 安装目录下**没有** `*.dlc` 文件 ⇒ 扫目录无意义；DLC 归属纯靠 Steam 授权（`ColossalNative.dll` 导出
+  `IsDLCInstalled` / `GetDLCCount` / `IsDlcAvailable` / `RegisterDlcIdMapping`）。
+- mod 由游戏内 **Colossal Mods Domain** 加载（`Cities_Data\Managed\ColossalManaged.dll`）：
+  枚举 `*.dll` 反射找 `IUserMod` / `ILoadingExtension` / `IThreadingExtension` 并实例化，
+  `Source\*.cs` 运行时用 Roslyn 编译；路径是 `Files\Mods\`（内置）与
+  `F:\SteamLibrary\steamapps\workshop\content\255710\<publishedFileId>\`（订阅，**不复制**，
+  通过 `ColossalNative.dll` 的 `Workshop::GetSubscribedItems` / `GetSubscribedItemPath` 走 `ISteamUGC`）。
+  开关状态存在游戏自己的 `modsSettings` / `.cgs` 与 PlayerPrefs 键（`disableMods` / `noWorkshop`）。
+- 补丁可行：`steam_api64.dll`（239184 B，x64）就在安装根，`Cities.exe` 无 SteamStub/DRM，
+  `ColossalNative.dll` 运行时 `LoadLibrary("steam_api64.dll")`（不在导入表）⇒ 放入 loader + `cream_api.ini` 即生效。
+  `cream_api.ini` 的 CS1 区块 94 条已覆盖商店 79 个已发售 DLC，仅缺 4771370/4771380/4771390
+  三个 `release_date: "Coming soon"` 未发售条目。
+
+⇒ 结论：**只负责启动**，理由与 Prison Architect 不同（这里不是 schema 问题，而是本体压根不读加载文件）。
+
 ## 12. 本启动器数据根目录（`PdxDataRoot`）
 
 - 规则：**全部软件数据都在程序目录下**，不写 `%LOCALAPPDATA%`。解析顺序：
   `<exe 目录>\data-root.txt`（文件里写一行绝对路径，逃生口）→ `<exe 目录>\data` →
   `<exe 目录>\..\PdxNext-data`（程序目录不可写时）；全不可写仍返回 `<exe 目录>\data`，
   由上层降级（日志退化成 Debug.WriteLine），**绝不回退 C 盘**。
-- 布局：`data\settings.json`、`data\logs\pdxnext.log`、`data\theme-cache\`、`data\news-cache\`、`data\mod-cache\`、`data\image-cache\`、`data\workshop-info\`、`data\dlc-descriptions.json`。
+- 布局：`data\pdxnext.sqlite`（**自有库，唯一事实源**，见第 20 节；settings / session / 六份缓存索引全在库里）、`data\logs\pdxnext.log`、以及只放图片的目录 `data\theme-cache\`、`data\news-cache\`、`data\mod-cache\`、`data\image-cache\`、`data\workshop-info\`。
 - `data\workshop-info\` 是「创意工坊」页的信息与图片缓存（索引 + 封面 + 详情截图，见 §19）；页面只认本地路径（`XamlImage.FromPath`），下载失败就留占位图标。
 - **已废弃、启动时自动清理**：`data\workshop-covers\`（旧封面根，改路径后遗留）与 `data\online-mod-covers\`（已回退的 Mod 库在线视图遗留），以及工坊详情 `shots\` 下 `shot_NN` 形式的旧命名截图。清理由 `src/PdxLauncher.Core/Storage/LegacyCacheCleaner.cs` 在 `App.xaml.cs` 的 `ComposeServices` 里跑一遍（幂等、失败只记 Warn），见 §19.7。
 - `settings.json` 里与游戏选择有关的两项（2026-10-28 新增，向后兼容，缺省即走默认规则）：`lastGameId`（如 `"ck3"`）、`lastGameInstallRoot`（安装根绝对路径，游戏搬库后仍能认回）。写入时机只有「用户切游戏」，由 `AppServices.SelectGame` 调 `SaveSettingsDeferred()`；启动时 `GameSelection.Select(games, lastGameId, lastGameInstallRoot)` 按「双命中 → 仅 gameId → 仅安装路径 → 可管理内容 → 可支持 → 第一项」的顺序挑。
-- 迁移：首次启动若目标 `data` 里既没有 `settings.json` 也没有 `.migrated-from-localappdata`，
+- 迁移：首次启动若目标 `data` 里既没有 `settings.json`（也没有库内 `settings` 键）也没有 `.migrated-from-localappdata`，
   就把旧 `%LOCALAPPDATA%\PdxNext` 的 settings / dlc-descriptions / theme-cache / news-cache / mod-cache
   **复制**过来（不搬 logs、永不删源、已存在的文件跳过）。设置页「数据目录」卡片显示绝对路径、
   提供「打开目录」与「清理旧 C 盘数据」（只删 `%LOCALAPPDATA%\PdxNext`）。
+- 复制落地后由 `LegacyJsonImporter` 把这些 JSON **入库**并把原文件改名成 `<名>.migrated.bak` 留档（见 §20.4）。
 - 发布：`publish.cmd` 覆盖 `dist\PdxNext` 与暂存目录前都会把 `data` 搬到 `*.__data__`，发布后搬回。
 
 ## 13. 界面档位（背景显示方式 / Mod 缩略图大小）
@@ -395,19 +440,23 @@ Mod 缩略图：`ModThumbnailSizes.Pixels()` 返回 DIP（32 / 48 / 72），XAML
 
 ## 15. 缓存管理与可清理范围
 
-设置页「缓存」卡片列出五行，每行显示 `<占用字节>，<文件数>`、路径与「清空」按钮；标题栏汇总给出总占用，并提供「刷新统计」与「清空全部缓存」。占用是**每次进入设置页/点刷新时现算**（`CacheStorage.Measure` 遍历目录累加 `GetFileSize`），不做后台跟踪。
+设置页「缓存」卡片列出五行，每行显示 `<占用字节>，<文件数>`、路径与「清空」按钮；标题栏汇总给出总占用，并提供「刷新统计」与「清空全部缓存」。占用是**每次进入设置页/点刷新时现算**（`CacheStorage.Measure(fileSystem, documents, key, folderPath)`：库内 JSON 的字节数 + 图片目录递归求和），不做后台跟踪。
 
-| key | 路径 | 清空动作 |
-| --- | --- | --- |
-| `theme` | `data\theme-cache`（元数据下发的背景/字标，见第 7 节） | 删整个目录；下次启动按 TTL 重新拉取 |
-| `news` | `data\news-cache`（Braze 公告 JSON + 公告图） | 删缓存文件与公告图目录，并丢弃内存副本 |
-| `modThumbnails` | `data\mod-cache`（索引 + 缩略图文件） | 清索引表后删索引与图片目录 |
-| `dlcDescriptions` | `data\dlc-descriptions.json`（见 7.2） | 删缓存文件；内存里的负缓存随之失效 |
-| `images` | `data\image-cache`（DDS 转好的 PNG，见第 16 节） | 删整个目录并丢掉内存索引；下次打开 DLC / Mod 页自动重建 |
+索引 JSON 已经搬进自有库（见 §20），磁盘上只留下纯图片，所以每行都是「**库键** + **图片目录**」两段。清空动作先删库键再删目录。
+
+| key | 库键 | 图片目录 | 清空动作 |
+| --- | --- | --- | --- |
+| `theme` | `cache:theme-assets:<gameId>`（每个游戏一条） | `data\theme-cache`（元数据下发的背景/字标，见第 7 节） | 先删全部 `cache:theme-assets:*`，再删整个目录；下次启动按 TTL 重新拉取 |
+| `news` | `cache:news-cards` | `data\news-cache`（公告图） | 删缓存键与公告图目录，并丢弃内存副本 |
+| `modThumbnails` | `cache:mod-thumbnails` | `data\mod-cache`（缩略图文件） | 清索引表后删索引键与图片目录 |
+| `dlcDescriptions` | `cache:dlc-descriptions` | —（无图片） | 删缓存键；内存里的负缓存随之失效 |
+| `images` | —（纯磁盘） | `data\image-cache`（DDS 转好的 PNG，见第 16 节） | 删整个目录并丢掉内存索引；下次打开 DLC / Mod 页自动重建 |
+
+- 创意工坊页另有两条索引（`cache:workshop-info` + `cache:workshop-pages`），归在「清空全部缓存」里一并删，不单独占一行。
 
 - 清理是**尽力而为**：文件被占用/无权限时只写 Warn 日志，界面提示「清理失败」，不会抛到 UI。
 - 清理后立即重算该行与总计；状态栏给出「已清空 <行名>，释放 <大小>」。
-- 「清空全部缓存」需要二次确认（ContentDialog），只删上表五个位置，**不动** `settings.json`、`logs`、游戏安装目录与存档。
+- 「清空全部缓存」需要二次确认（ContentDialog），只删上表五个位置，**不动** `pdxnext.sqlite` 里的 `settings` / `session` / 播放集与 mod 表、`logs`、游戏安装目录与存档。
 - 这五行与「Mod 缩略图缓存天数」「DLC 简介缓存天数」相互独立：清空不会改设置，改设置也不会立刻删已有缓存（过期判定在读取时进行）。
 
 ## 16. DDS 图像（EU5 的 DLC / mod 缩略图）
@@ -716,3 +765,136 @@ data\workshop-info\
 
 判定口径：旧命名固定是 `shot_` + 两位数字 + `.`，新命名是 `shot_` + 8 位小写 hex，按「点号落在下标 7」区分。
 清理是幂等的：没有可删的东西时不做任何 IO；单项失败只记 Warn 并继续，绝不抛给调用方。
+
+## 20. 自有库 `data\pdxnext.sqlite`
+
+**为什么要有**：官方 `launcher-v2.sqlite` 不是我们的文件（改了要备份、字段随版本变、用户可能压根没装 P 社启动器）。
+所以启动器自己维护一份事实源，官方库只在**存在时**作为读源与回写目标。
+
+- 路径：`PdxDatabase.GetDefaultPath()` = `PdxDataRoot.Directory` + `pdxnext.sqlite`（即 `data\pdxnext.sqlite`）。
+- 访问层：`src/PdxLauncher.Core/Playsets/SqliteConnection.cs`（P/Invoke `winsqlite3.dll`，不引 NuGet）。
+- 封装：`src/PdxLauncher.Core/Storage/PdxDatabase.cs`；建表由 `EnsureSchema()` 用
+  `CREATE TABLE IF NOT EXISTS` 幂等完成，版本记在 `meta.schema_version`（当前 `1`）。
+
+### 20.1 表结构（v1）
+
+| 表 | 主键 | 列 |
+| --- | --- | --- |
+| `meta` | `key` | `value` |
+| `settings` | `id`（`CHECK (id = 1)`） | `json`、`updatedAt` |
+| `session` | `id`（`CHECK (id = 1)`） | `json`、`updatedAt` |
+| `documents` | `key` | `json`、`updatedAt` |
+| `mods` | `(gameId, id)` | `displayName`、`dirPath`、`archivePath`、`gameRegistryId`、`steamId`、`source`、`requiredVersion`、`status`、`size`、`subscribedDate`、`thumbnailUrl`、`thumbnailPath`、`tags`、`updatedAt` |
+| `playsets` | `(gameId, id)` | `name`、`isActive`、`loadOrder`、`createdOn`、`updatedOn` |
+| `playsets_mods` | —（`gameId, playsetId, modId` 唯一） | `enabled`、`position` |
+| `playsets_dlcs` | —（`gameId, playsetId, dlcId` 唯一） | `enabled` |
+
+索引：`ix_mods_game`、`ix_playsets_mods(gameId, playsetId, position)`、`ix_playsets_dlcs(gameId, playsetId)`。
+所有领域表都带 `gameId`，一个库服务所有游戏；跨游戏查询一律被 `gameId` 隔开（自检 `OwnPlaysetRepositoryChecks.CheckGameIsolation` 盯着这条）。
+
+`PRAGMA`：`journal_mode=DELETE`（不产生 `-wal` / `-shm` 两个尾巴文件）、`foreign_keys=OFF`（官方库窄表没有外键，
+级联删除由代码显式做）、`busy_timeout=5000`。写一律 `BEGIN IMMEDIATE` + 全局 `SemaphoreSlim` 串行。
+
+### 20.2 为什么 settings / session / 缓存是「一整段 JSON 一行」
+
+读取方本来就是「整份加载 → 内存对象 → 改完整份写回」（`AppSettingsStore`、`PdxSessionStore`、六个缓存服务全是这个形态）。
+拆成列要重写 `AppSettings` 40+ 字段与嵌套 model，风险远大于收益。
+**领域数据（mods / playsets）才用真关系表**，因为要按 `position` 排序、按 `gameId` 过滤、按 `modId` 聚合播放集归属。
+
+`documents` 的键名（`src/PdxLauncher.Core/Storage/IJsonDocumentStore.cs` 的 `JsonDocumentKeys`）：
+
+| 键 | 内容 | 原文件 |
+| --- | --- | --- |
+| `settings` | `AppSettings` | `data\settings.json` |
+| `session` | PDX 账号会话（DPAPI 保护后的密文仍在 JSON 里） | `data\pdx-session.json` |
+| `cache:workshop-info` | 工坊信息索引（见 §19） | `data\workshop-info.json` |
+| `cache:workshop-pages` | 物品页 HTML 缓存索引 | `data\workshop-pages.json` |
+| `cache:news-cards` | Braze 公告 | `data\news-cards.json` |
+| `cache:dlc-descriptions` | DLC 简介（见 §7.2） | `data\dlc-descriptions.json` |
+| `cache:mod-thumbnails` | Mod 缩略图索引 | `data\mod-thumbnails.json` |
+| `cache:theme-assets:<gameId>` | 主题素材索引（每游戏一条） | `data\<gameId>.assets.json` |
+
+磁盘只保留图片本身（`theme-cache\`、`news-cache\`、`mod-cache\`、`workshop-info\`、`image-cache\`），
+索引 JSON 已全部入库。
+
+### 20.3 备份、迁移、自愈
+
+- **迁移前备份**：`EnsureSchema()` 发现库里已有 `schema_version > 0` 且要升版本时，先把整库复制成
+  `pdxnext.sqlite.bak`（失败只 Warn，不阻断启动）。
+- **损坏自愈**：`Open()` 打不开或建表抛 `SqliteException` ⇒ 把库改名为 `pdxnext.sqlite.corrupt-<毫秒>` 留供事后分析，
+  然后重建一份空库并 Warn。**绝不因为库坏了让应用起不来**（自检 `PdxDatabaseChecks.CheckCorruptDatabaseRecovers`）。
+
+### 20.4 遗留 JSON 入库
+
+`src/PdxLauncher.Core/Storage/LegacyJsonImporter.cs` 在启动早期跑一遍（`App.xaml.cs`）：
+
+1. 按 §20.2 的映射把 `data\*.json` 逐个写进库；
+2. 库里**已有该键就不覆盖**（只记 Info），避免把用户新改的设置被旧文件盖掉；
+3. 处理成功后把原文件改名成 `<名>.migrated.bak`（保留不删，便于回退）；
+4. 最后写 `meta.legacy-json-imported = <毫秒>;files=<N>;imported=<M>`。
+
+上一级迁移链是 `DataRootMigrator`（`%LOCALAPPDATA%\PdxNext` → `data\`，只复制不删源），
+再往下才轮到 `LegacyJsonImporter` 入库。两步都幂等。
+
+### 20.5 与官方 `launcher-v2.sqlite` 的双向同步
+
+`src/PdxLauncher.Core/Playsets/LauncherDbProjector.cs` 只治理 sqlite 类格式（`playsets.json` / `playset_config.json` 走原来的仓储，不参与投射）。
+
+| 场景 | 行为 |
+| --- | --- |
+| 官方库**存在** | 读：先按需 `ImportAsync`（官方 → 自有），再从主库读；写：写主库成功后镜像另一侧 |
+| 官方库**不存在** | 只写自有库，并挂 `meta.pending-projection:<gameId>`；**绝不创建 `launcher-v2.sqlite`** |
+
+meta 标记：
+
+| 键 | 含义 |
+| --- | --- |
+| `imported:<gameId>` | 已从官方库导入过；值 = 当时官方库的 mtime（毫秒），mtime 变新就重导 |
+| `projected:<gameId>` | 已把自有库投射回官方库 |
+| `pending-projection:<gameId>` | 官方库缺席时积压的投射任务；官方库下次出现时由 `PrepareForReadAsync` 自动补做 |
+
+投射做四件事：`UpsertPlaySetsAsync`（播放集本体）→ 每集 `SavePlaySetModsAsync` / `SavePlaySetDlcsAsync` →
+`UpdateModRowsAsync`（把路径、显示名、来源回写到 `mods` 表）。`UpdateModRowsAsync` 对**路径类列用 `COALESCE(?, 列)`**，
+空值不覆盖官方已有值；`source` **只在有工坊 id 时才写成 `steam`**，绝不把官方的 steam 行降级成 local。
+
+`src/PdxLauncher.App/Services/PlaySetRepositoryRouter.cs` 是这套策略的唯一入口：
+`For(game)` 决定用哪个仓储，所有读写都包在 `ReadAsync` / `WriteAsync` 里；
+格式分派只发生在路由层，View 与 VM 不许碰格式判断。
+
+### 20.6 加载文件跳过规则（为什么某个 mod 进游戏没生效）
+
+`src/PdxLauncher.Core/LoadFiles/ModLoadRules.cs` 的 `DescribeSkipKey` 是唯一判据，
+`PlaySetEditor.BuildLoadFileContent` 现在返回 `LoadFilePlan(Content, Skipped)`，被跳过的行会同时进日志：
+
+| 键 | 触发条件 | 影响格式 |
+| --- | --- | --- |
+| `mods.warnNoPath` | `dirPath` 与 `archivePath` 都为空（库里就丢了路径） | 全部 |
+| `mods.warnNoRegistryId` | `gameRegistryId` 为空 | formatVersion 0（`dlc_load.json` 的 `enabled_mods` 只认注册名） |
+| `mods.warnNoArchive` | 没有 `archivePath` | formatVersion 1（`content_load.json` 的 `enabledMods` 只收压缩包） |
+| `mods.warnMissingPath` | 路径在磁盘上不存在 | 全部 |
+| `mods.warnNonAsciiPath` | 该游戏不支持非 ASCII 路径，且路径末段含非 ASCII | Victoria 3 |
+| `mods.warnNonAsciiParent` | 同上，但末段是 ASCII、某一级父目录含非 ASCII | Victoria 3 |
+
+停用行、以及 `playset_config.json`（CS2）永远返回 null——CS2 不写加载文件。
+
+### 20.7 Victoria 3 的非 ASCII 路径限制
+
+Victoria 3 **无法加载任何路径里含非 ASCII 字符的 mod**（Vic3 wiki "Mod structure"，Paradox 官方论坛 2024-04-21 同题帖确认）。
+表现是：`content_load.json` 里明明写了这条路径，进游戏后 mod 就是不生效，而且游戏日志里**什么都不报**。
+
+- 判定：`src/PdxLauncher.Core/Games/GamePathRules.cs` 的 `RequiresAsciiPaths(gameId)`，目前只有 `victoria3` 为 `true`。
+- 缓解：播放集页每行出警告；「修复 mod 路径」能自动把本地 mod 目录改成 `mod_<modId 前 8 位>`（撞名自动 `_2`/`_3`），
+  改名成功后才写库，写库失败会把目录移回原处。
+- 如果**父目录**就含非 ASCII（例如 `C:\Users\张三\Documents\...`），启动器不自动改名（那会动用户整个文档库），
+  只出 `mods.warnNonAsciiParent` 提示；解法是改 `launcher-settings.json` 的 `gameDataPath`，
+  或用 `Victoria 3\launcher\launcher-settings.json` 把本地 mod 目录挪到纯 ASCII 路径。
+- CK3 / Stellaris / EU4 没有这个限制，中文目录名的本地 mod 照常加载。
+
+### 20.8 来源（本地 vs 订阅）的判定
+
+`src/PdxLauncher.Core/Playsets/ModOrigin.cs`：
+
+- `source` 列是唯一权威（`local` / `steam` / `paradox` / `pdx_mods`）；`local` ⇒ 本地，其余三种 ⇒ 订阅。
+- **不能只看 `steamId` 是否为空**：真机 CK3 有一条 `source=local` 却带 `steamId=3613769385` 的行（用户手工塞的工坊 mod）。
+- `source` 缺失时退回「有工坊 id ⇒ 订阅，否则本地」。
+- Mod 库页与播放集页都显示来源徽标；Mod 库页另有「全部 / 本地 / 订阅」筛选下拉框。

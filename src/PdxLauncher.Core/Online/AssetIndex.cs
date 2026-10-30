@@ -4,6 +4,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Storage;
 
 /// <summary>
 /// 主题缓存索引，文件名固定 &lt;gameId&gt;.assets.json，位于 ThemeCacheRoot 下。
@@ -41,17 +42,23 @@ public sealed class AssetIndex
     public static AssetIndex Load(IFileSystem fs, IAppLogger logger, string path)
     {
         ArgumentNullException.ThrowIfNull(fs);
-        ArgumentNullException.ThrowIfNull(logger);
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        return Load(new FileDocumentFile(fs, path), logger);
+    }
 
-        if (!fs.FileExists(path))
+    /// <summary>从任意文档落点读取索引（自有库里是 <c>cache:theme-assets:&lt;gameId&gt;</c>）。</summary>
+    public static AssetIndex Load(IDocumentFile document, IAppLogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        var json = document.ReadText();
+        if (json is null)
         {
             return new AssetIndex();
         }
 
         try
         {
-            var json = fs.ReadAllText(path);
             var loaded = JsonSerializer.Deserialize<AssetIndex>(json, Options);
             if (loaded is null)
             {
@@ -99,18 +106,21 @@ public sealed class AssetIndex
     public void Save(IFileSystem fs, IAppLogger logger, string path)
     {
         ArgumentNullException.ThrowIfNull(fs);
+        Save(new FileDocumentFile(fs, path), logger);
+    }
+
+    /// <summary>写到任意文档落点。</summary>
+    public void Save(IDocumentFile document, IAppLogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(logger);
-        ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         try
         {
-            var directory = fs.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(directory))
+            if (!document.WriteText(JsonSerializer.Serialize(this, Options)))
             {
-                fs.EnsureDirectory(directory);
+                logger.Warn("主题缓存索引写入失败: " + document.DisplayPath);
             }
-
-            fs.WriteAllTextAtomic(path, JsonSerializer.Serialize(this, Options));
         }
         catch (IOException ex)
         {

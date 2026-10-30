@@ -66,26 +66,43 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 CacheRowViewModel.ThemeKey,
                 Keys.SettingsCacheRowThemeTitle,
                 Keys.SettingsCacheRowThemeDesc,
-                AppServices.ThemeCacheRoot,
-                () => CacheStorage.Clear(AppServices.FileSystem, AppServices.ThemeCacheRoot)),
+                JsonDocumentKeys.CachePrefix + "theme-assets:*",
+                () =>
+                {
+                    // 主题索引按游戏各一行，逐键删；图片仍是 theme-cache 下的素材文件。
+                    foreach (var key in AppServices.Documents.List(JsonDocumentKeys.CachePrefix + "theme-assets:"))
+                    {
+                        AppServices.Documents.Delete(key);
+                    }
+
+                    CacheStorage.Clear(AppServices.FileSystem, AppServices.ThemeCacheRoot);
+                },
+                JsonDocumentKeys.CachePrefix + "theme-assets:",
+                AppServices.ThemeCacheRoot),
             new(
                 CacheRowViewModel.NewsKey,
                 Keys.SettingsCacheRowNewsTitle,
                 Keys.SettingsCacheRowNewsDesc,
-                AppServices.NewsCacheRoot,
-                AppServices.NewsFeed.ClearCache),
+                JsonDocumentKeys.NewsCards,
+                AppServices.NewsFeed.ClearCache,
+                JsonDocumentKeys.NewsCards,
+                AppServices.NewsCacheRoot),
             new(
                 CacheRowViewModel.ModThumbnailsKey,
                 Keys.SettingsCacheRowModThumbnailsTitle,
                 Keys.SettingsCacheRowModThumbnailsDesc,
-                AppServices.ModThumbnailCacheRoot,
-                () => AppServices.ModThumbnails.Cache.Clear()),
+                JsonDocumentKeys.ModThumbnails,
+                () => AppServices.ModThumbnails.Cache.Clear(),
+                JsonDocumentKeys.ModThumbnails,
+                AppServices.ModThumbnailCacheRoot),
             new(
                 CacheRowViewModel.DlcDescriptionsKey,
                 Keys.SettingsCacheRowDlcDescriptionsTitle,
                 Keys.SettingsCacheRowDlcDescriptionsDesc,
-                AppServices.DlcDescriptions.CachePath,
-                AppServices.DlcDescriptions.ClearCache),
+                JsonDocumentKeys.DlcDescriptions,
+                AppServices.DlcDescriptions.ClearCache,
+                JsonDocumentKeys.DlcDescriptions,
+                null),
             new(
                 CacheRowViewModel.ImagesKey,
                 Keys.SettingsCacheRowImagesTitle,
@@ -100,13 +117,17 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 CacheRowViewModel.WorkshopKey,
                 Keys.SettingsCacheRowWorkshopTitle,
                 Keys.SettingsCacheRowWorkshopDesc,
-                AppServices.WorkshopCacheRoot,
+                JsonDocumentKeys.WorkshopInfo + " / " + JsonDocumentKeys.WorkshopPages,
                 () =>
                 {
                     // 索引在内存里也有一份，删目录后必须一起清掉，否则下次还会报「命中」。
                     AppServices.WorkshopInfo.Clear();
+                    AppServices.Documents.Delete(JsonDocumentKeys.WorkshopInfo);
+                    AppServices.Documents.Delete(JsonDocumentKeys.WorkshopPages);
                     CacheStorage.Clear(AppServices.FileSystem, AppServices.WorkshopCacheRoot);
-                }),
+                },
+                JsonDocumentKeys.WorkshopInfo,
+                AppServices.WorkshopCacheRoot),
         };
     }
 
@@ -1107,7 +1128,11 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 var result = new CacheUsage[rows.Length];
                 for (var index = 0; index < rows.Length; index++)
                 {
-                    result[index] = CacheStorage.Measure(fileSystem, rows[index].Path);
+                    result[index] = CacheStorage.Measure(
+                        fileSystem,
+                        AppServices.Documents,
+                        rows[index].DocumentKey,
+                        rows[index].FolderPath);
                 }
 
                 return result;

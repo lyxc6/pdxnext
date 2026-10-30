@@ -3,6 +3,7 @@ namespace PdxLauncher.Core.Online;
 using System.Globalization;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Storage;
 
 /// <summary>
 /// mod 缩略图补全：照 <see cref="DlcDescriptionService"/> 的「弱依赖联网」形状实现。
@@ -26,7 +27,8 @@ public sealed class ModThumbnailService : IModThumbnailService
         IAssetDownloader assets,
         IClock clock,
         IAppLogger logger,
-        string cacheRoot)
+        string cacheRoot,
+        IDocumentFile? indexDocument = null)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(assets);
@@ -36,7 +38,7 @@ public sealed class ModThumbnailService : IModThumbnailService
         _assets = assets;
         _clock = clock;
         _logger = logger;
-        Cache = new ModThumbnailCache(fileSystem, logger, clock, cacheRoot);
+        Cache = new ModThumbnailCache(fileSystem, logger, clock, cacheRoot, indexDocument);
     }
 
     /// <inheritdoc />

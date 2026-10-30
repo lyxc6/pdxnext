@@ -178,7 +178,7 @@ public sealed class AssetDownloader : IAssetDownloader, IDisposable
             if (total < AssetFileTypeDetector.MinimumFileBytes)
             {
                 _logger.Warn(
-                    "素材小于 " + (AssetFileTypeDetector.MinimumFileBytes / 1024) + " KB，视为坏文件: " + total + " B " + uri);
+                    "素材小于 " + AssetFileTypeDetector.MinimumFileBytes + " B，视为坏文件: " + total + " B " + uri);
                 TryDeletePart(partPath);
                 return null;
             }

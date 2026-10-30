@@ -55,6 +55,12 @@ public sealed partial class MainWindow : Window
     /// <summary>工坊详情子页；离开它就 detach 事件，避免持有已丢弃页面的引用。</summary>
     private WorkshopDetailPage? _workshopDetailPage;
 
+    /// <summary>播放集页；它会请求打开「添加模组」子页。</summary>
+    private ModsPage? _modsPage;
+
+    /// <summary>「添加模组」子页；离开它就 detach 事件，避免持有已丢弃页面的引用。</summary>
+    private AddModsPage? _addModsPage;
+
     private BitmapLoader? _bitmapLoader;
     private CancellationTokenSource? _backdropLifetime;
 
@@ -263,6 +269,19 @@ public sealed partial class MainWindow : Window
             _workshopDetailPage = null;
         }
 
+        if (_modsPage is not null)
+        {
+            _modsPage.AddModsRequested -= OnAddModsRequested;
+            _modsPage = null;
+        }
+
+        if (_addModsPage is not null)
+        {
+            _addModsPage.NavigationRequested -= OnPageNavigationRequested;
+            _addModsPage.ModsSelected -= OnAddModsSelected;
+            _addModsPage = null;
+        }
+
         if (content is GameLibraryPage libraryPage)
         {
             _libraryPage = libraryPage;
@@ -286,6 +305,19 @@ public sealed partial class MainWindow : Window
         {
             _workshopDetailPage = workshopDetailPage;
             workshopDetailPage.NavigationRequested += OnPageNavigationRequested;
+        }
+
+        if (content is ModsPage modsPage)
+        {
+            _modsPage = modsPage;
+            modsPage.AddModsRequested += OnAddModsRequested;
+        }
+
+        if (content is AddModsPage addModsPage)
+        {
+            _addModsPage = addModsPage;
+            addModsPage.NavigationRequested += OnPageNavigationRequested;
+            addModsPage.ModsSelected += OnAddModsSelected;
         }
     }
 
@@ -322,6 +354,52 @@ public sealed partial class MainWindow : Window
             {
                 AppServices.Logger.Error("导航到工坊详情异常: " + request.Row.Id, ex);
             }
+        }
+    }
+
+    /// <summary>
+    /// 播放集页要求打开「添加模组」子页（页面自己不持导航职责）。
+    /// </summary>
+    private void OnAddModsRequested(object? sender, AddModsNavigationRequest request) => NavigateToAddMods(request);
+
+    /// <summary>
+    /// 「添加模组」子页确认了选择：带着结果回到播放集页，由它追加并自动保存。
+    /// </summary>
+    private void OnAddModsSelected(object? sender, AddModsNavigationResult result)
+    {
+        try
+        {
+            // 必须带参数回去：播放集页靠它拿到勾选的 mod。
+            // 左栏选中态同步成「播放集」（本页正是播放集页）。
+            if (!_navigation.Navigate(NavigationService.PlaySetsTag, result))
+            {
+                AppServices.Logger.Warn("带着添加结果回到播放集页失败");
+                return;
+            }
+
+            SyncSelectedNavItem(NavigationService.PlaySetsTag);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("带着添加结果回到播放集页异常", ex);
+        }
+    }
+
+    /// <summary>
+    /// 打开「添加模组」子页；故意不同步左栏选中项（该子页没有对应菜单项，选中态应停在「播放集」）。
+    /// </summary>
+    private void NavigateToAddMods(AddModsNavigationRequest request)
+    {
+        try
+        {
+            if (!_navigation.Navigate(NavigationService.AddModsTag, request))
+            {
+                AppServices.Logger.Warn("导航到添加模组页失败: " + request.PlaySetId.ToString("N"));
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("导航到添加模组页异常: " + request.PlaySetId.ToString("N"), ex);
         }
     }
 
@@ -406,6 +484,19 @@ public sealed partial class MainWindow : Window
                 _workshopDetailPage = null;
             }
 
+            if (_modsPage is not null)
+            {
+                _modsPage.AddModsRequested -= OnAddModsRequested;
+                _modsPage = null;
+            }
+
+            if (_addModsPage is not null)
+            {
+                _addModsPage.NavigationRequested -= OnPageNavigationRequested;
+                _addModsPage.ModsSelected -= OnAddModsSelected;
+                _addModsPage = null;
+            }
+
             if (!AppServices.IsInitialized)
             {
                 return;
@@ -468,6 +559,7 @@ public sealed partial class MainWindow : Window
                     || string.Equals(tag, NavigationService.ModLibraryTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.WorkshopTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.WorkshopDetailTag, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(tag, NavigationService.AddModsTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.DlcTag, StringComparison.OrdinalIgnoreCase)))
             {
                 NavigateTo(NavigationService.HomeTag);

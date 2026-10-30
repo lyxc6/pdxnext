@@ -38,20 +38,30 @@ public sealed class CacheRowViewModel : LocalizedObservableObject
         string titleKey,
         string descriptionKey,
         string path,
-        Action clear)
+        Action clear,
+        string? documentKey = null,
+        string? folderPath = null)
     {
         Key = key;
         _titleKey = titleKey;
         _descriptionKey = descriptionKey;
         Path = path;
         _clear = clear;
+        DocumentKey = documentKey;
+        FolderPath = folderPath;
     }
 
     /// <summary>缓存类别标识，见本类的 *Key 常量。</summary>
     public string Key { get; }
 
-    /// <summary>缓存落盘路径（文件或目录）。</summary>
+    /// <summary>缓存落盘路径（库键或磁盘文件/目录），只用于展示。</summary>
     public string Path { get; }
+
+    /// <summary>自有库里这份索引的键（没有入库的缓存为 null）。</summary>
+    public string? DocumentKey { get; }
+
+    /// <summary>仍在磁盘上的图片目录（索引入库后，图片仍按原布局存放）。</summary>
+    public string? FolderPath { get; }
 
     /// <summary>最近一次统计到的占用。</summary>
     public CacheUsage Usage => _usage;

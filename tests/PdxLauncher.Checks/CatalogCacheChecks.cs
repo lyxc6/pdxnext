@@ -246,6 +246,8 @@ public static class CatalogCacheChecks
 
         public void Move(string source, string destination, bool overwrite) => _inner.Move(source, destination, overwrite);
 
+        public void MoveDirectory(string source, string destination) => _inner.MoveDirectory(source, destination);
+
         private void RecordThread()
         {
             if (_firstReadThreadId == 0)

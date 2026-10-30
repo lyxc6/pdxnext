@@ -3,6 +3,7 @@ namespace PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Dlc;
+using PdxLauncher.Core.LoadFiles;
 
 /// <summary>
 /// 播放集编辑的业务逻辑：排序、启停、与目录合并、加载文件内容映射、保存并校验。
@@ -224,7 +225,17 @@ public sealed class PlaySetEditor
     /// V1/V1_1 只能写 pops_id，空 pops_id 的 DLC 会被跳过（官方 mapPopsId 同样丢弃，不伪造 id）。
     /// </para>
     /// </summary>
-    public static LoadFileContent BuildLoadFileContent(
+    /// <summary>
+    /// 一次「要写进加载文件的内容」加上「被跳过的行」。
+    /// </summary>
+    /// <remarks>
+    /// 跳过是各格式的固有局限（V0 只认 registryId、V1 只认 archivePath），本来就会发生；
+    /// 以前它静默发生，玩家只看到「mod 启用了但游戏里没有」。现在把跳过的行带出来，
+    /// 由 <see cref="SaveAsync"/> 记 Warn、由播放集页在行上显示原因。
+    /// </remarks>
+    public sealed record LoadFilePlan(LoadFileContent Content, IReadOnlyList<PlaySetMod> Skipped);
+
+    public static LoadFilePlan BuildLoadFileContent(
         GameInstallation game,
         IReadOnlyList<PlaySetMod> mods,
         IReadOnlyList<PlaySetDlc> dlcs,
@@ -237,6 +248,16 @@ public sealed class PlaySetEditor
 
         var ordered = Renumber(mods);
         var enabled = ordered.Where(static m => m.Enabled).ToList();
+
+        // 判据统一走 ModLoadRules（纯函数、不碰磁盘），与下面各格式分支的 if 一一对应。
+        var skipped = new List<PlaySetMod>();
+        foreach (var mod in enabled)
+        {
+            if (ModLoadRules.DescribeSkipKey(game, mod) is not null)
+            {
+                skipped.Add(mod);
+            }
+        }
 
         // 注意：这里的 DlcId 是"有效 id"——pops_id 为空的 DLC 存的是 FilePathRelativeToDlcPath（约定，不是 bug），
         // 所以下面与 DlcCatalog.GetEffectiveDlcId(dlc) 对齐，不能直接用 dlc.PopsId 比。
@@ -329,13 +350,15 @@ public sealed class PlaySetEditor
                 break;
         }
 
-        return new LoadFileContent(
-            disabledFilePaths,
-            disabledPopsIds,
-            registryIds,
-            dirPaths,
-            archivePaths,
-            Array.Empty<string>());
+        return new LoadFilePlan(
+            new LoadFileContent(
+                disabledFilePaths,
+                disabledPopsIds,
+                registryIds,
+                dirPaths,
+                archivePaths,
+                Array.Empty<string>()),
+            skipped);
     }
 
     /// <summary>比较"应当写入的内容"与"回读到的内容"，返回差异描述（空表示一致）。</summary>
@@ -425,7 +448,17 @@ public sealed class PlaySetEditor
         // EU5 没有加载文件（播放集/DLC 全在 playsets.json 里），所以即使调用方要求写，也要跳过。
         // 这里统一收口，避免每个调用点各判一次还漏判。
         var writesLoadFile = writeLoadFile && game.WritesLoadFile;
-        var expected = writesLoadFile ? BuildLoadFileContent(game, mods, dlcs, dlcCatalog) : null;
+        var plan = writesLoadFile ? BuildLoadFileContent(game, mods, dlcs, dlcCatalog) : null;
+        var expected = plan?.Content;
+
+        if (plan is { Skipped.Count: > 0 })
+        {
+            // 这些行不会出现在加载文件里，游戏里也就等于没启用。只记 Warn，不拦保存：
+            // 意图（播放集里有这一行）与能力（这个格式写不出来）是两件事，救人一次比拦死一次有用。
+            _logger.Warn(
+                "加载文件跳过 " + plan.Skipped.Count + " 个 mod（gameId=" + game.GameId + "）："
+                + string.Join(", ", plan.Skipped.Select(static m => m.Name + " [" + m.ModId.ToString("N") + "]")));
+        }
 
         // 期望写进 playsets_mods 的行就是这里重排后的顺序（position = 0..n-1），
         // 回读校验必须用同一份列表，否则会把「重排」误判成差异。

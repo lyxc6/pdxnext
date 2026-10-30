@@ -2,6 +2,7 @@ namespace PdxLauncher.App.Services;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Playsets;
 
 /// <summary>
 /// 组装「Mod 库」页的数据：mods 表里的全部 mod（含大小、订阅时间、播放集归属），
@@ -82,6 +83,12 @@ public sealed class ModLibraryService
                 continue;
             }
 
+            // 磁盘上有、官方库里没有：不一定是「本地 mod」——刚订阅的工坊 mod 在官方启动器扫描前就是这样。
+            // 拿得到创意工坊编号就按工坊 mod 展示（详情页/Steam/浏览器三个按钮才亮），否则才当本地 mod。
+            var source = SteamWorkshop.GetWorkshopId(mod.SteamId, mod.GameRegistryId) is null
+                ? ModWorkshopRef.SourceLocal
+                : ModWorkshopRef.SourceSteam;
+
             merged.Add(new ModLibraryEntry(
                 mod.ModId,
                 mod.Name,
@@ -91,7 +98,7 @@ public sealed class ModLibraryService
                 mod.ThumbnailPath,
                 mod.RequiredVersion,
                 mod.Status,
-                "local",
+                source,
                 SizeBytes: null,
                 SubscribedOn: null,
                 Array.Empty<Guid>(),

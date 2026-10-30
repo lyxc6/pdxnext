@@ -5,9 +5,11 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Configuration;
+using PdxLauncher.Core.Storage;
 
 /// <summary>
-/// Paradox 会话的落盘存储，文件为 <c>data\pdx-session.json</c>。
+/// Paradox 会话的落盘存储。正式落点是自有库 <c>pdxnext.sqlite</c> 的 <c>session</c> 表（键 <c>session</c>），
+/// 旧的 <c>data\pdx-session.json</c> 仅用于导入与自检。
 /// <para>
 /// 会话 token 与续期 token 都经 <see cref="ISecretProtector"/> 保护后再写盘
 /// （Windows 上是与当前用户绑定的 DPAPI）；邮箱与显示名是明文，因为它们只用于界面显示。
@@ -20,7 +22,7 @@ using PdxLauncher.Core.Configuration;
 /// </summary>
 public sealed class PdxSessionStore
 {
-    /// <summary>文件名（放在数据根下）。</summary>
+    /// <summary>旧的文件名（放在数据根下），导入与自检用。</summary>
     public const string FileName = "pdx-session.json";
 
     private static readonly JsonSerializerOptions ReadOptions = new()
@@ -28,7 +30,7 @@ public sealed class PdxSessionStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
-    private readonly IFileSystem _fileSystem;
+    private readonly IDocumentFile _document;
     private readonly IAppLogger _logger;
     private readonly ISecretProtector _protector;
 
@@ -42,19 +44,33 @@ public sealed class PdxSessionStore
         IAppLogger logger,
         ISecretProtector protector,
         string? path = null)
+        : this(new FileDocumentFile(fileSystem, path ?? DefaultPath), logger, protector)
     {
-        ArgumentNullException.ThrowIfNull(fileSystem);
+    }
+
+    /// <summary>正式路径：会话作为一份文档存在自有库里。</summary>
+    public PdxSessionStore(
+        IJsonDocumentStore documents,
+        IAppLogger logger,
+        ISecretProtector protector)
+        : this(new StoreDocumentFile(documents, JsonDocumentKeys.Session), logger, protector)
+    {
+    }
+
+    /// <summary>直接给一个文档落点（库或文件）。</summary>
+    public PdxSessionStore(IDocumentFile document, IAppLogger logger, ISecretProtector protector)
+    {
+        ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(protector);
 
-        _fileSystem = fileSystem;
+        _document = document;
         _logger = logger;
         _protector = protector;
-        Path = path ?? DefaultPath;
     }
 
-    /// <summary>会话文件的绝对路径。</summary>
-    public string Path { get; }
+    /// <summary>会话落点（<c>db:session</c> 或文件绝对路径），排障用。</summary>
+    public string Path => _document.DisplayPath;
 
     /// <summary>默认位置：数据根下的 <c>pdx-session.json</c>。</summary>
     public static string DefaultPath => System.IO.Path.Combine(PdxDataRoot.Directory, FileName);
@@ -62,14 +78,14 @@ public sealed class PdxSessionStore
     /// <summary>读回上次保存的会话；没有或解不开返回 null。</summary>
     public PdxSession? Load()
     {
-        if (!_fileSystem.FileExists(Path))
+        var json = _document.ReadText();
+        if (json is null)
         {
             return null;
         }
 
         try
         {
-            var json = _fileSystem.ReadAllText(Path);
             var node = JsonNode.Parse(json) as JsonObject;
             if (node is null)
             {
@@ -132,13 +148,10 @@ public sealed class PdxSessionStore
                 ["obtainedAt"] = session.ObtainedAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
             };
 
-            var directory = System.IO.Path.GetDirectoryName(Path);
-            if (!string.IsNullOrEmpty(directory))
+            if (!_document.WriteText(node.ToJsonString(new JsonSerializerOptions { WriteIndented = true })))
             {
-                _fileSystem.EnsureDirectory(directory);
+                _logger.Error("会话写入失败（落点=" + _document.DisplayPath + "）");
             }
-
-            _fileSystem.WriteAllTextAtomic(Path, node.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         }
         catch (IOException ex)
         {
@@ -155,10 +168,7 @@ public sealed class PdxSessionStore
     {
         try
         {
-            if (_fileSystem.FileExists(Path))
-            {
-                _fileSystem.Delete(Path);
-            }
+            _document.Delete();
         }
         catch (IOException ex)
         {

@@ -3,10 +3,12 @@ namespace PdxLauncher.Core.Online;
 /// <summary>按文件头 magic bytes 判定素材类型（文档 §7 冻结的实测列表）。</summary>
 public static class AssetFileTypeDetector
 {
-    /// <summary>最小合法素材字节数：小于 1 KB 视为坏文件。
+    /// <summary>最小合法素材字节数：小于 256 B 视为坏文件。
     /// 实测官方 cache 里 ck3-buttonBackgroundImage 只有 3,818 B、stellaris 的 4,495 B，
-    /// 都是合法 PNG；阈值必须低于 3,818 B，否则按钮背景图会被误判成坏文件。</summary>
-    public const int MinimumFileBytes = 1024;
+    /// cities_skylines-buttonBackgroundImage 更是只有 361 B（IHDR 8×50、单个 IDAT、IEND 完整），
+    /// 都是合法 PNG；阈值必须低于 361 B，否则按钮背景图会被误判成坏文件，
+    /// 进而让该游戏的主题刷新永远停在「部分失败」并每 10 分钟重试一次。</summary>
+    public const int MinimumFileBytes = 256;
 
     /// <summary>最大合法素材字节数：40 MB（背景图实测 1.8 MB，留足余量）。</summary>
     public const int MaximumFileBytes = 40 * 1024 * 1024;
@@ -34,9 +36,29 @@ public static class AssetFileTypeDetector
                 return AssetFileType.Gif;
             }
 
+            // 0x00010000 = TrueType；OTTO = CFF 轮廓的 OpenType；'true' = 老 TrueType。
+            // 官方主题里 cities_skylines 与 eu4 的 buttonFont / appTaskbarIcon 就是 OTTO，
+            // 只认 0x00010000 会让这两款游戏的字体永远下载不下来。
             if (head[0] == 0x00 && head[1] == 0x01 && head[2] == 0x00 && head[3] == 0x00)
             {
                 return AssetFileType.Ttf;
+            }
+
+            if (head[0] == (byte)'O' && head[1] == (byte)'T' && head[2] == (byte)'T' && head[3] == (byte)'O')
+            {
+                return AssetFileType.Ttf;
+            }
+
+            if (head[0] == (byte)'t' && head[1] == (byte)'r' && head[2] == (byte)'u' && head[3] == (byte)'e')
+            {
+                return AssetFileType.Ttf;
+            }
+
+            // 00 00 01 00 = Windows ICO。官方主题里 eu4 的 appTaskbarIcon 就是 370 KB 的 6 帧 ICO，
+            // 不认它会让 eu4 的主题刷新永远停在「部分失败」并每 10 分钟重试一次。
+            if (head[0] == 0x00 && head[1] == 0x00 && head[2] == 0x01 && head[3] == 0x00)
+            {
+                return AssetFileType.Ico;
             }
 
             if (head[0] == 0x77 && head[1] == 0x4F && head[2] == 0x46 && head[3] == 0x46)
@@ -63,6 +85,7 @@ public static class AssetFileTypeDetector
         AssetFileType.Woff => ".woff",
         AssetFileType.Woff2 => ".woff2",
         AssetFileType.Gif => ".gif",
+        AssetFileType.Ico => ".ico",
         _ => string.Empty,
     };
 

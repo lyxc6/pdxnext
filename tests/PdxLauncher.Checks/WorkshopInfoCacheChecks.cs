@@ -16,6 +16,8 @@ public static class WorkshopInfoCacheChecks
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
 
+        // 只看本组自己新增的失败：别的检查类先失败不该把这一组也拖下水。
+        var before = ChecksContext.Failures;
         var root = Path.Combine(Path.GetTempPath(), "pdx-checks-workshop-" + Guid.NewGuid().ToString("N"));
         var clock = new MutableClock(new DateTimeOffset(2026, 10, 28, 0, 0, 0, TimeSpan.Zero));
         var logger = new NullLogger();
@@ -51,7 +53,7 @@ public static class WorkshopInfoCacheChecks
             }
         }
 
-        return ChecksContext.Failures == 0 ? 0 : 1;
+        return ChecksContext.Failures == before ? 0 : 1;
     }
 
     private static void CheckKeys()

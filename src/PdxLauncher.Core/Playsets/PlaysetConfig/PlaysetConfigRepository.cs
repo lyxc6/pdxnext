@@ -258,6 +258,18 @@ public sealed class PlaysetConfigRepository : IPlaySetRepository
     }
 
     /// <inheritdoc />
+    /// <inheritdoc />
+    /// <remarks>
+    /// CS2 的播放集是 playset_config.json，mod 项只有 source/sourceId，路径由 PDX Mods 目录结构决定，没有可单独修的「路径列」。
+    /// </remarks>
+    public Task<AppResult<bool>> UpdateModPathsAsync(
+        GameInstallation game,
+        Guid modId,
+        string? dirPath,
+        string? archivePath,
+        CancellationToken cancellationToken)
+        => Task.FromResult(AppResult<bool>.Fail(ErrorKind.Unsupported, "unsupported-format:playset-config"));
+
     public Task<AppResult<bool>> SavePlaySetModsAsync(
         GameInstallation game,
         Guid playSetId,

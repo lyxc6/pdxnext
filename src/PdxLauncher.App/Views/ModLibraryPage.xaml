@@ -11,7 +11,8 @@
     <!--
         Mod 库页：列出当前游戏的全部 mod（mods 表 + 磁盘上的本地 mod）。
         每行显示缩略图、名称、大小 / 订阅时间、mod 自己声明的支持版本与播放集归属；
-        本地 mod 与状态异常的 mod 带警示图标。
+        本地 mod、库里状态不是 ready_to_play 的 mod，以及声明的支持版本低于当前游戏版本的 mod
+        带三角提示图标，提示内容只讲「支持哪个版本 / 与当前版本对不对得上」。
         行尾三个图标按钮：打开本地文件夹 / 在 Steam 中打开 / 在浏览器中打开（不可用时置灰）。
         所有交互控件都带 AutomationProperties.AutomationId，便于 UI 自动化与无障碍。
     -->
@@ -27,6 +28,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
@@ -67,7 +69,17 @@
                       AutomationProperties.AutomationId="cmbModLibrarySort"
                       AutomationProperties.Name="{x:Bind L.ModlibSortName, Mode=OneWay}" />
 
-            <ProgressRing Grid.Column="3"
+            <ComboBox Grid.Column="3"
+                      x:Name="SourceBox"
+                      MinWidth="130"
+                      VerticalAlignment="Center"
+                      ItemsSource="{x:Bind ViewModel.SourceFilterModes, Mode=OneWay}"
+                      SelectedItem="{x:Bind ViewModel.SelectedSourceFilter, Mode=OneWay}"
+                      SelectionChanged="OnSourceFilterChanged"
+                      AutomationProperties.AutomationId="cmbModLibrarySource"
+                      AutomationProperties.Name="{x:Bind L.ModlibSourceFilterName, Mode=OneWay}" />
+
+            <ProgressRing Grid.Column="4"
                           Width="20"
                           Height="20"
                           VerticalAlignment="Center"
@@ -75,7 +87,7 @@
                           AutomationProperties.AutomationId="ringModLibraryBusy"
                           AutomationProperties.Name="{x:Bind L.CommonLoading, Mode=OneWay}" />
 
-            <Button Grid.Column="4"
+            <Button Grid.Column="5"
                     VerticalAlignment="Center"
                     Click="OnRefreshClick"
                     AutomationProperties.AutomationId="btnRefreshModLibrary"
@@ -127,9 +139,31 @@
                             </Border>
 
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Text="{x:Bind Name, Mode=OneTime}"
-                                           Style="{StaticResource BodyStrongTextBlockStyle}"
-                                           TextTrimming="CharacterEllipsis" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="{x:Bind Name, Mode=OneTime}"
+                                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <!-- 来源徽标：本地 / 订阅。两个 Border 各自绑一种来源，靠可见性切换，
+                                         比在代码里拼画刷更省事，也天然跟着主题字典走。 -->
+                                    <Border VerticalAlignment="Center"
+                                            Padding="6,1"
+                                            CornerRadius="4"
+                                            Background="{ThemeResource PdxOriginLocalBackgroundBrush}"
+                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(IsLocalOrigin), Mode=OneWay}">
+                                        <TextBlock Text="{x:Bind OriginText, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource PdxOriginLocalForegroundBrush}" />
+                                    </Border>
+                                    <Border VerticalAlignment="Center"
+                                            Padding="6,1"
+                                            CornerRadius="4"
+                                            Background="{ThemeResource PdxOriginSubscribedBackgroundBrush}"
+                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(IsSubscribedOrigin), Mode=OneWay}">
+                                        <TextBlock Text="{x:Bind OriginText, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource PdxOriginSubscribedForegroundBrush}" />
+                                    </Border>
+                                </StackPanel>
                                 <TextBlock Text="{x:Bind SubtitleText, Mode=OneWay}"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"

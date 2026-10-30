@@ -38,6 +38,42 @@ public static class CacheStorage
         return new CacheUsage(bytes, files);
     }
 
+    /// <summary>
+    /// 测量「库内一份文档 + 一个磁盘目录」的合计占用。
+    /// 缓存索引搬进自有库之后，一类缓存往往由「库里一行 JSON + 目录里的图片」两部分组成；
+    /// 分开量再相加，才能让设置页的占用数与清理结果一致。
+    /// </summary>
+    public static CacheUsage Measure(IFileSystem fileSystem, IJsonDocumentStore? documents, string? key, string? folderPath)
+    {
+        ArgumentNullException.ThrowIfNull(fileSystem);
+        var usage = Measure(fileSystem, folderPath ?? string.Empty);
+        if (documents is null || string.IsNullOrWhiteSpace(key))
+        {
+            return usage;
+        }
+
+        var bytes = documents.MeasureBytes(key);
+        if (bytes <= 0)
+        {
+            return usage;
+        }
+
+        // 库里的文档算一个文件；图片目录里的文件数照旧。
+        return new CacheUsage(usage.Bytes + bytes, usage.Files + 1);
+    }
+
+    /// <summary>删掉库内文档，再删磁盘目录；两者都不存在也算成功。</summary>
+    public static void Clear(IFileSystem fileSystem, IJsonDocumentStore? documents, string? key, string? folderPath)
+    {
+        ArgumentNullException.ThrowIfNull(fileSystem);
+        if (documents is not null && !string.IsNullOrWhiteSpace(key))
+        {
+            documents.Delete(key);
+        }
+
+        Clear(fileSystem, folderPath ?? string.Empty);
+    }
+
     /// <summary>删除整个缓存文件或目录（不存在也算成功）；目录是递归删除。</summary>
     public static void Clear(IFileSystem fileSystem, string path)
     {

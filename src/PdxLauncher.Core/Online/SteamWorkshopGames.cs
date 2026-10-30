@@ -89,7 +89,9 @@ public static class SteamWorkshopGames
             return null;
         }
 
-        return Known.TryGetValue(gameId, out var hasWorkshop) ? hasWorkshop : null;
+        // 官方启动器的别名（CS1 = cities_v2）与正名同答案。
+        var canonical = Games.KnownGames.CanonicalizeGameId(gameId);
+        return Known.TryGetValue(canonical, out var hasWorkshop) ? hasWorkshop : null;
     }
 
     /// <summary>全部已登记的 gameId（便于日志与自检，不含顺序语义）。</summary>

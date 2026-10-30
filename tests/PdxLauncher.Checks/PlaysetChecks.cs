@@ -1383,7 +1383,8 @@ public static class PlaysetChecks
         return installations.FirstOrDefault(game => string.Equals(game.GameId, gameId, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static GameInstallation CreateGame(
+    /// <summary>构造一个完整的 GameInstallation（其它自检类复用）。</summary>
+    internal static GameInstallation CreateGame(
         string gameId,
         string installRoot,
         LoadFileFormat format,
@@ -1424,7 +1425,8 @@ public static class PlaysetChecks
             Support: GameSupport.Full);
     }
 
-    private static string CreateTempRoot(IFileSystem fs, string label)
+    /// <summary>在系统临时目录建一个一次性根目录（其它自检类复用）。</summary>
+    internal static string CreateTempRoot(IFileSystem fs, string label)
     {
         var tempRoot = Path.Combine(
             Path.GetTempPath(),
@@ -1433,7 +1435,8 @@ public static class PlaysetChecks
         return tempRoot;
     }
 
-    private static void TryDelete(IFileSystem fs, string path)
+    /// <summary>尽力删除一次性临时目录，失败只打日志（其它自检类复用）。</summary>
+    internal static void TryDelete(IFileSystem fs, string path)
     {
         try
         {

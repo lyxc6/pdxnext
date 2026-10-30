@@ -39,6 +39,7 @@ public static class DlcPatchChecks
             CheckApplyIsIdempotent(fs, logger, root);
             CheckBinariesLayout(fs, logger, root);
             CheckCitiesSkylines2Layout(fs, logger, root);
+            CheckCitiesSkylines1Layout(fs, logger, root);
             CheckForeignPatch(fs, logger, root);
             CheckSteamOverwrote(fs, logger, root);
             CheckUnsupportedWithoutAppId(fs, logger, root);
@@ -194,6 +195,41 @@ public static class DlcPatchChecks
         var report = service.Inspect(install);
         ChecksContext.Equal("CS2 能找到 Plugins 下的 api", GamePatchStatus.Vanilla, report.Status);
         ChecksContext.Equal("CS2 选择 Plugins 目录", plugins, report.ApiDirectory);
+    }
+
+    private static void CheckCitiesSkylines1Layout(IFileSystem fs, IAppLogger logger, string root)
+    {
+        Console.WriteLine("[DlcPatchChecks] CS1 安装根布局（独立安装，无 appId）");
+        // CS1 真机把 steam_api64.dll 直接放在安装根，且没有 Cities2_Data 之类的子目录。
+        // appId 传 null 模拟「独立安装没有 appmanifest」：必须靠 GameSteamAppIds 的映射表拿到 255710。
+        var install = NewInstall(root, "cs1", "cities_skylines", appId: null);
+        var apiPath = Path.Combine(install.InstallRoot, "steam_api64.dll");
+        var backupPath = Path.Combine(install.InstallRoot, "steam_api64_o.dll");
+        var iniPath = Path.Combine(install.InstallRoot, "cream_api.ini");
+        var original = FakeVanillaDll(0x3C, 2048);
+        fs.WriteAllBytesAtomic(apiPath, original);
+
+        var service = NewService(fs, logger, Path.Combine(root, "state-cs1.json"));
+        var before = service.Inspect(install);
+        ChecksContext.Equal("CS1 无 appmanifest 也能识别", GamePatchStatus.Vanilla, before.Status);
+        ChecksContext.Equal<int?>("CS1 appId 来自映射表", 255710, before.SteamAppId);
+        ChecksContext.Equal("CS1 目标目录是安装根", install.InstallRoot, before.ApiDirectory);
+        ChecksContext.Check("CS1 原版可以打补丁", before.CanApply);
+
+        var applied = service.Apply(install);
+        ChecksContext.Equal("CS1 打完补丁状态", GamePatchStatus.Patched, applied.Status);
+        ChecksContext.EqualBytes("CS1 备份是原文件", original, fs.ReadAllBytes(backupPath));
+
+        var ini = fs.ReadAllText(iniPath);
+        ChecksContext.Check("CS1 ini 写入 appid 255710", ini.Contains("appid = 255710", StringComparison.Ordinal));
+        ChecksContext.Check("CS1 ini 保留 orgapi64", ini.Contains("orgapi64 = steam_api64_o.dll", StringComparison.Ordinal));
+        ChecksContext.Check("CS1 ini 带 Cities Skylines 区块", ini.Contains("Cities Skylines", StringComparison.Ordinal));
+
+        var reverted = service.Revert(install);
+        ChecksContext.Equal("CS1 还原后状态", GamePatchStatus.Vanilla, reverted.Status);
+        ChecksContext.EqualBytes("CS1 还原后字节", original, fs.ReadAllBytes(apiPath));
+        ChecksContext.Check("CS1 还原后备份已删除", !fs.FileExists(backupPath));
+        ChecksContext.Check("CS1 还原后 ini 已删除", !fs.FileExists(iniPath));
     }
 
     private static void CheckForeignPatch(IFileSystem fs, IAppLogger logger, string root)
