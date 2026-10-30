@@ -51,6 +51,17 @@ public static class SettingsChecks
             PdxRememberMe = true,
             ProxyMode = ProxyModes.Manual,
             ProxyUrl = "http://127.0.0.1:7890",
+            TranslateEnabled = true,
+            TranslateEngineMode = TranslationEngineModes.Custom,
+            TranslateBaseUrl = "https://api.example.com/v1",
+            TranslateApiKey = "sk-test-key",
+            TranslateModel = "gpt-4o-mini",
+            TranslateTargetLanguage = "en-US",
+            TranslateNamesEnabled = true,
+            TranslateDescriptionEnabled = true,
+            TranslateChangelogEnabled = true,
+            TranslateCommentsEnabled = true,
+            TranslateCacheDays = 30,
         };
 
         using (var store = new AppSettingsStore(fs, new SilentLogger(), path))
@@ -74,6 +85,17 @@ public static class SettingsChecks
             ChecksContext.Check("设置：保持登录往返", loaded.PdxRememberMe);
             ChecksContext.Equal("设置：代理模式往返", ProxyModes.Manual, loaded.ProxyMode);
             ChecksContext.Equal("设置：代理地址往返", "http://127.0.0.1:7890", loaded.ProxyUrl);
+            ChecksContext.Check("设置：翻译开关往返", loaded.TranslateEnabled);
+            ChecksContext.Equal("设置：翻译引擎模式往返", TranslationEngineModes.Custom, loaded.TranslateEngineMode);
+            ChecksContext.Equal("设置：翻译接口地址往返", "https://api.example.com/v1", loaded.TranslateBaseUrl);
+            ChecksContext.Equal("设置：翻译密钥往返", "sk-test-key", loaded.TranslateApiKey);
+            ChecksContext.Equal("设置：翻译模型往返", "gpt-4o-mini", loaded.TranslateModel);
+            ChecksContext.Equal("设置：翻译目标语言往返", "en-US", loaded.TranslateTargetLanguage);
+            ChecksContext.Check("设置：翻译名称开关往返", loaded.TranslateNamesEnabled);
+            ChecksContext.Check("设置：翻译简介开关往返", loaded.TranslateDescriptionEnabled);
+            ChecksContext.Check("设置：翻译更新日志开关往返", loaded.TranslateChangelogEnabled);
+            ChecksContext.Check("设置：翻译评论开关往返", loaded.TranslateCommentsEnabled);
+            ChecksContext.Equal("设置：翻译缓存天数往返", 30, loaded.TranslateCacheDays);
         }
 
         // null 字段按 WhenWritingNull 不写进文件。

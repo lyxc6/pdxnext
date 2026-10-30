@@ -146,4 +146,59 @@ public sealed class AppSettings
 
     /// <summary>主窗口上次的位置（物理像素）。-1 表示还没记过。</summary>
     public int WindowY { get; set; } = -1;
+
+    /// <summary>
+    /// 是否启用翻译（默认开）：开启后工坊列表、详情页简介与更新日志、评论区、
+    /// 本地 Mod 库都会在原文之外附带译文。关闭后完全不发起翻译请求。
+    /// </summary>
+    public bool TranslateEnabled { get; set; } = true;
+
+    /// <summary>
+    /// 翻译引擎的选择方式，取值见 <see cref="TranslationEngineModes"/>；
+    /// null/未知值视为 <see cref="TranslationEngineModes.Auto"/>（优先自填 API，失败回落到内置免费服务）。
+    /// </summary>
+    public string? TranslateEngineMode { get; set; }
+
+    /// <summary>
+    /// 用户自填的 OpenAI 兼容 API 根地址（如 https://api.openai.com/v1）；
+    /// null 表示未配置。主机名需在白名单授权后才允许访问。
+    /// </summary>
+    public string? TranslateBaseUrl { get; set; }
+
+    /// <summary>
+    /// 自填 API 的密钥；null 表示未配置。会以明文形式存在本地 settings.json 里，
+    /// 因此设置页用密码框呈现，日志里绝不打印。
+    /// </summary>
+    public string? TranslateApiKey { get; set; }
+
+    /// <summary>自填 API 使用的模型名；null/空按 <see cref="TranslationModels.Default"/> 处理。</summary>
+    public string? TranslateModel { get; set; }
+
+    /// <summary>
+    /// 译文的目标语言；null/空表示「跟随界面语言」。取值见 <see cref="UiLanguages"/>。
+    /// </summary>
+    public string? TranslateTargetLanguage { get; set; }
+
+    /// <summary>是否翻译 mod 名称（工坊列表行、本地 Mod 库行）；默认开。</summary>
+    public bool TranslateNamesEnabled { get; set; } = true;
+
+    /// <summary>是否翻译 mod 简介（详情页正文）；默认开。</summary>
+    public bool TranslateDescriptionEnabled { get; set; } = true;
+
+    /// <summary>是否翻译 mod 更新日志（详情页）；默认开。</summary>
+    public bool TranslateChangelogEnabled { get; set; } = true;
+
+    /// <summary>是否翻译评论区正文；默认开。</summary>
+    public bool TranslateCommentsEnabled { get; set; } = true;
+
+    private int _translateCacheDays = 30;
+
+    /// <summary>
+    /// 译文缓存保留天数（1–365，默认 30）：超过这个天数的译文会重新向引擎请求。
+    /// </summary>
+    public int TranslateCacheDays
+    {
+        get => _translateCacheDays;
+        set => _translateCacheDays = value < 1 ? 1 : (value > 365 ? 365 : value);
+    }
 }
