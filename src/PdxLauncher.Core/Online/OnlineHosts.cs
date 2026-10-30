@@ -42,6 +42,19 @@ public static class OnlineHosts
     /// <summary>Steam Web API（keyless 的 published file 详情接口）。</summary>
     public const string SteamApiHost = "api.steampowered.com";
 
+    /// <summary>
+    /// 内置免费翻译服务（Google 翻译的公开 Web 接口）。
+    /// 只放行这一个精确主机：用户自填的 API 走「已授权主机」机制，不在这里写死。
+    /// </summary>
+    public const string TranslationHost = "translate.googleapis.com";
+
+    /// <summary>
+    /// 用户自行授权的额外主机（自填 OpenAI 兼容 API 的域名）。
+    /// 授权后按精确主机名放行，仍然不做子域通配。
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> AuthorizedHosts =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>GetMetadata 的 GraphQL 端点（实测匿名可用）。</summary>
     public static Uri MetadataEndpoint { get; } = new("https://api.paradox-interactive.com/metadata/graphql");
 
@@ -81,7 +94,71 @@ public static class OnlineHosts
         || string.Equals(host, ModsContentHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, ModsWebHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamCommunityHost, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(host, SteamApiHost, StringComparison.OrdinalIgnoreCase);
+        || string.Equals(host, SteamApiHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, TranslationHost, StringComparison.OrdinalIgnoreCase)
+        || IsAuthorizedHost(host);
+
+    /// <summary>
+    /// 授权一个额外主机（用户在设置页自填翻译 API 时调用）。
+    /// 只放行精确主机名，不做子域通配；传 null/空白/非法主机一律忽略。
+    /// </summary>
+    /// <param name="host">主机名（不含协议、端口与路径）。</param>
+    public static void AuthorizeHost(string? host)
+    {
+        var normalized = NormalizeHost(host);
+        if (normalized is not null)
+        {
+            AuthorizedHosts[normalized] = byte.MaxValue;
+        }
+    }
+
+    /// <summary>撤销之前授权的主机。</summary>
+    /// <param name="host">主机名。</param>
+    public static void RevokeHost(string? host)
+    {
+        var normalized = NormalizeHost(host);
+        if (normalized is not null)
+        {
+            AuthorizedHosts.TryRemove(normalized, out _);
+        }
+    }
+
+    /// <summary>主机是否已被用户授权。</summary>
+    /// <param name="host">主机名。</param>
+    public static bool IsAuthorizedHost(string? host)
+    {
+        var normalized = NormalizeHost(host);
+        return normalized is not null && AuthorizedHosts.ContainsKey(normalized);
+    }
+
+    /// <summary>把用户填的主机名收拾成规范形式；非法输入返回 null。</summary>
+    private static string? NormalizeHost(string? host)
+    {
+        var trimmed = host?.Trim();
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            return null;
+        }
+
+        // 允许用户直接贴完整地址；只取主机部分。
+        if (trimmed.Contains("://", StringComparison.Ordinal))
+        {
+            if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var parsed))
+            {
+                return null;
+            }
+
+            trimmed = parsed.Host;
+        }
+
+        trimmed = trimmed.Trim().TrimEnd('.');
+        if (trimmed.Length == 0 || trimmed.Contains('/', StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return trimmed;
+    }
 
     /// <summary>绝对 URI 是否可请求：必须是 http/https 且主机在白名单内。</summary>
     public static bool IsAllowed(Uri? uri)
