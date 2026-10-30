@@ -82,6 +82,9 @@ public sealed class TranslationCoordinator : IDisposable
     /// <summary>翻译功能当前是否开启。</summary>
     public bool IsEnabled => CurrentOptions.Enabled;
 
+    /// <summary>清空译文缓存（设置页的「清理缓存」用）；没有缓存时什么都不做。</summary>
+    public void ClearCache() => _cache?.Clear();
+
     /// <summary>
     /// 翻译一段文本；失败或未开启返回 null。
     /// </summary>

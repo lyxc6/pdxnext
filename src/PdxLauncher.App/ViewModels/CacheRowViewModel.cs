@@ -27,6 +27,9 @@ public sealed class CacheRowViewModel : LocalizedObservableObject
     /// <summary>创意工坊 mod 信息缓存（workshop-info 目录：索引 + 封面）。</summary>
     public const string WorkshopKey = "workshopInfo";
 
+    /// <summary>译文缓存（cache:translations 文档键）。</summary>
+    public const string TranslationsKey = "translations";
+
     private readonly string _titleKey;
     private readonly string _descriptionKey;
     private readonly Action _clear;

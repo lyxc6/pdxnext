@@ -161,6 +161,24 @@ public sealed class TranslationCache
         }
     }
 
+    /// <summary>
+    /// 同步清空缓存（设置页的「清理缓存」按钮用：那条路径整体跑在后台线程里）。
+    /// </summary>
+    public void Clear()
+    {
+        _gate.Wait();
+        try
+        {
+            _document = new CacheDocument();
+            _loaded = true;
+            _documents.Delete(DocumentKey);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     /// <summary>缓存键：引擎 + 目标语言 + 原文的哈希。</summary>
     /// <param name="engineId">引擎标识。</param>
     /// <param name="targetLanguage">目标语言。</param>

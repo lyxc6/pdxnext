@@ -57,6 +57,13 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         ModThumbnailSizeCatalog.Resolve(AppServices.Settings.ModThumbnailSize);
     private UiLanguageOption _selectedUiLanguage =
         UiLanguageCatalog.Resolve(AppServices.Settings.UiLanguage);
+    private TranslationEngineOption _selectedTranslationEngine =
+        TranslationEngineCatalog.Resolve(AppServices.Settings.TranslateEngineMode);
+    private TranslationTargetLanguageOption _selectedTranslationLanguage =
+        TranslationTargetLanguageCatalog.Resolve(AppServices.Settings.TranslateTargetLanguage);
+    private string _translateBaseUrl = string.Empty;
+    private string _translateApiKey = string.Empty;
+    private string _translateModel = string.Empty;
 
     public SettingsViewModel()
     {
@@ -128,6 +135,14 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 },
                 JsonDocumentKeys.WorkshopInfo,
                 AppServices.WorkshopCacheRoot),
+            new(
+                CacheRowViewModel.TranslationsKey,
+                Keys.SettingsCacheRowTranslationsTitle,
+                Keys.SettingsCacheRowTranslationsDesc,
+                JsonDocumentKeys.Translations,
+                () => AppServices.Translation.ClearCache(),
+                JsonDocumentKeys.Translations,
+                null),
         };
     }
 
@@ -1313,6 +1328,207 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public string ModThumbnailCacheSummary =>
         T(Keys.SettingsModThumbnailsCount, AppServices.ModThumbnails.Cache.Count);
 
+    // ------------------------------------------------------------ 翻译区
+
+    /// <summary>翻译总开关；关闭后不再发起任何翻译请求，页面上的译文会保留到下次刷新。</summary>
+    public bool TranslateEnabled
+    {
+        get => AppServices.Settings.TranslateEnabled;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.TranslateEnabled,
+            v => AppServices.Settings.TranslateEnabled = v,
+            Keys.SettingsTranslateStatusEnabled,
+            Keys.SettingsTranslateStatusDisabled,
+            afterSave: NotifyTranslationSettingsChanged);
+    }
+
+    /// <summary>可选的翻译引擎模式（自动 / 仅自填接口 / 仅内置免费服务）。</summary>
+    public IReadOnlyList<TranslationEngineOption> TranslationEngineOptions =>
+        TranslationEngineCatalog.All;
+
+    /// <summary>翻译引擎模式；改动立即写 settings.json，并作废在途的翻译请求。</summary>
+    public TranslationEngineOption SelectedTranslationEngine
+    {
+        get => _selectedTranslationEngine;
+        set => ApplyOption(
+            value,
+            _selectedTranslationEngine,
+            Keys.SettingsTranslateStatusEngine,
+            v =>
+            {
+                _selectedTranslationEngine = v;
+                AppServices.Settings.TranslateEngineMode = v.Key;
+            },
+            afterSave: NotifyTranslationSettingsChanged,
+            statusArgs: v => new object?[] { v.Title });
+    }
+
+    /// <summary>可选的译文语言（跟随界面语言 / 简体中文 / English）。</summary>
+    public IReadOnlyList<TranslationTargetLanguageOption> TranslationLanguageOptions =>
+        TranslationTargetLanguageCatalog.All;
+
+    /// <summary>译文语言；留空表示跟随界面语言。</summary>
+    public TranslationTargetLanguageOption SelectedTranslationLanguage
+    {
+        get => _selectedTranslationLanguage;
+        set => ApplyOption(
+            value,
+            _selectedTranslationLanguage,
+            Keys.SettingsTranslateStatusLanguage,
+            v =>
+            {
+                _selectedTranslationLanguage = v;
+                AppServices.Settings.TranslateTargetLanguage = v.Key;
+            },
+            afterSave: NotifyTranslationSettingsChanged,
+            statusArgs: v => new object?[] { v.Title });
+    }
+
+    /// <summary>自填的 OpenAI 兼容接口地址；只保存在本机 settings.json。</summary>
+    public string TranslateBaseUrl
+    {
+        get => _translateBaseUrl;
+        set
+        {
+            if (SetProperty(ref _translateBaseUrl, value))
+            {
+                AppServices.Settings.TranslateBaseUrl = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+                SaveTranslationSettings();
+            }
+        }
+    }
+
+    /// <summary>自填的接口密钥；只保存在本机 settings.json，日志里不打印。</summary>
+    public string TranslateApiKey
+    {
+        get => _translateApiKey;
+        set
+        {
+            if (SetProperty(ref _translateApiKey, value))
+            {
+                AppServices.Settings.TranslateApiKey = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+                SaveTranslationSettings();
+            }
+        }
+    }
+
+    /// <summary>自填接口使用的模型名称；留空时按默认模型处理。</summary>
+    public string TranslateModel
+    {
+        get => _translateModel;
+        set
+        {
+            if (SetProperty(ref _translateModel, value))
+            {
+                AppServices.Settings.TranslateModel = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+                SaveTranslationSettings();
+            }
+        }
+    }
+
+    /// <summary>译文缓存保留天数（1–365 天）。</summary>
+    public string TranslateCacheDaysText
+    {
+        get => AppServices.Settings.TranslateCacheDays.ToString(CultureInfo.InvariantCulture);
+        set
+        {
+            if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var days))
+            {
+                AppServices.Settings.TranslateCacheDays = days;
+                SaveTranslationSettings();
+                SetStatus(Keys.SettingsTranslateStatusCacheDays, AppServices.Settings.TranslateCacheDays);
+            }
+        }
+    }
+
+    /// <summary>是否翻译 Mod 与工坊的名称。</summary>
+    public bool TranslateNamesEnabled
+    {
+        get => AppServices.Settings.TranslateNamesEnabled;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.TranslateNamesEnabled,
+            v => AppServices.Settings.TranslateNamesEnabled = v,
+            Keys.SettingsTranslateStatusScope,
+            Keys.SettingsTranslateStatusScope,
+            afterSave: NotifyTranslationSettingsChanged,
+            statusArgs: new object?[] { T(Keys.SettingsTranslateScopeNames) });
+    }
+
+    /// <summary>是否翻译简介。</summary>
+    public bool TranslateDescriptionEnabled
+    {
+        get => AppServices.Settings.TranslateDescriptionEnabled;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.TranslateDescriptionEnabled,
+            v => AppServices.Settings.TranslateDescriptionEnabled = v,
+            Keys.SettingsTranslateStatusScope,
+            Keys.SettingsTranslateStatusScope,
+            afterSave: NotifyTranslationSettingsChanged,
+            statusArgs: new object?[] { T(Keys.SettingsTranslateScopeDescription) });
+    }
+
+    /// <summary>是否翻译更新日志。</summary>
+    public bool TranslateChangelogEnabled
+    {
+        get => AppServices.Settings.TranslateChangelogEnabled;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.TranslateChangelogEnabled,
+            v => AppServices.Settings.TranslateChangelogEnabled = v,
+            Keys.SettingsTranslateStatusScope,
+            Keys.SettingsTranslateStatusScope,
+            afterSave: NotifyTranslationSettingsChanged,
+            statusArgs: new object?[] { T(Keys.SettingsTranslateScopeChangelog) });
+    }
+
+    /// <summary>是否翻译评论区正文。</summary>
+    public bool TranslateCommentsEnabled
+    {
+        get => AppServices.Settings.TranslateCommentsEnabled;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.TranslateCommentsEnabled,
+            v => AppServices.Settings.TranslateCommentsEnabled = v,
+            Keys.SettingsTranslateStatusScope,
+            Keys.SettingsTranslateStatusScope,
+            afterSave: NotifyTranslationSettingsChanged,
+            statusArgs: new object?[] { T(Keys.SettingsTranslateScopeComments) });
+    }
+
+    /// <summary>翻译相关设置变化后作废在途请求，并让下一次翻译用新配置。</summary>
+    private void NotifyTranslationSettingsChanged()
+    {
+        AppServices.Translation.NotifySettingsChanged();
+    }
+
+    /// <summary>文本框类翻译设置落盘：延迟写盘 + 作废在途请求。</summary>
+    private void SaveTranslationSettings()
+    {
+        PersistSettings();
+        NotifyTranslationSettingsChanged();
+    }
+
+    /// <summary>翻译区的属性通知（语言切换后重建文案）。</summary>
+    private void RaiseTranslationProps()
+    {
+        OnPropertyChanged(nameof(TranslateEnabled));
+        OnPropertyChanged(nameof(TranslationEngineOptions));
+        OnPropertyChanged(nameof(SelectedTranslationEngine));
+        OnPropertyChanged(nameof(TranslationLanguageOptions));
+        OnPropertyChanged(nameof(SelectedTranslationLanguage));
+        OnPropertyChanged(nameof(TranslateBaseUrl));
+        OnPropertyChanged(nameof(TranslateApiKey));
+        OnPropertyChanged(nameof(TranslateModel));
+        OnPropertyChanged(nameof(TranslateCacheDaysText));
+        OnPropertyChanged(nameof(TranslateNamesEnabled));
+        OnPropertyChanged(nameof(TranslateDescriptionEnabled));
+        OnPropertyChanged(nameof(TranslateChangelogEnabled));
+        OnPropertyChanged(nameof(TranslateCommentsEnabled));
+    }
+
     // ------------------------------------------------------------ 内部
 
     /// <summary>语言切换后要把拼好的句子按新语言重建。</summary>
@@ -1322,6 +1538,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(CacheTotalText));
         RefreshAlternativeLabels();
         RefreshPatchState();
+        RaiseTranslationProps();
         if (_statusKey is not null)
         {
             StatusMessage = T(_statusKey, _statusArgs);
@@ -1497,6 +1714,13 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         _selectedDlcDescriptionRetention =
             RetentionDaysCatalog.DlcDescriptions.Resolve(AppServices.Settings.DlcDescriptionCacheDays);
         _selectedUiLanguage = UiLanguageCatalog.Resolve(AppServices.Settings.UiLanguage);
+        _selectedTranslationEngine =
+            TranslationEngineCatalog.Resolve(AppServices.Settings.TranslateEngineMode);
+        _selectedTranslationLanguage =
+            TranslationTargetLanguageCatalog.Resolve(AppServices.Settings.TranslateTargetLanguage);
+        _translateBaseUrl = AppServices.Settings.TranslateBaseUrl ?? string.Empty;
+        _translateApiKey = AppServices.Settings.TranslateApiKey ?? string.Empty;
+        _translateModel = AppServices.Settings.TranslateModel ?? string.Empty;
 
         OnPropertyChanged(nameof(PlaySetDisplayModes));
         OnPropertyChanged(nameof(SelectedPlaySetDisplayMode));
@@ -1510,6 +1734,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(SelectedDlcDescriptionRetention));
         OnPropertyChanged(nameof(LanguageOptions));
         OnPropertyChanged(nameof(SelectedUiLanguage));
+        RaiseTranslationProps();
     }
 
     private void RaiseThemeProps()

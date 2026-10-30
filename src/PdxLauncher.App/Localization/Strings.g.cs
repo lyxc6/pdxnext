@@ -402,6 +402,8 @@ public sealed partial class Localizer
         ["settings.cache.row.news.title"] = "官方公告",
         ["settings.cache.row.theme.desc"] = "联网下发的背景与字标，5 天过期；清除后下次检查时重新下载",
         ["settings.cache.row.theme.title"] = "主题素材",
+        ["settings.cache.row.translations.desc"] = "已翻译的标题、简介与评论；清除后下次显示时会重新向翻译服务请求",
+        ["settings.cache.row.translations.title"] = "译文缓存",
         ["settings.cache.size"] = "{0}，{1} 个文件",
         ["settings.cache.statusCleared"] = "已清除「{0}」缓存（释放 {1}）",
         ["settings.cache.statusClearedAll"] = "已清除全部缓存（释放 {0}）",
@@ -539,6 +541,7 @@ public sealed partial class Localizer
         ["settings.nav.launch"] = "启动",
         ["settings.nav.online"] = "联网",
         ["settings.nav.paths"] = "路径",
+        ["settings.nav.translation"] = "翻译",
         ["settings.patch.apply"] = "一键打补丁",
         ["settings.patch.applyConfirm"] = "打补丁",
         ["settings.patch.applyDialogContent"] = "将把当前游戏的 steam_api 备份成同目录的 *_o.dll，再替换成 loader 并生成 cream_api.ini。\n\n请先退出游戏和 Steam 以外的占用程序；打完补丁后从本启动器启动即可。\n\n确定要打补丁吗？",
@@ -602,6 +605,7 @@ public sealed partial class Localizer
         ["settings.section.online"] = "联网内容",
         ["settings.section.proxy"] = "网络代理",
         ["settings.section.theme"] = "主题",
+        ["settings.section.translation"] = "翻译",
         ["settings.status.dirMissing"] = "{0}不存在：{1}",
         ["settings.status.name"] = "状态",
         ["settings.status.openFailed"] = "打开目录失败：{0}",
@@ -636,6 +640,48 @@ public sealed partial class Localizer
         ["settings.theme.statusOff"] = "已关闭联网主题检查：只使用安装目录与内置占位主题",
         ["settings.theme.statusOn"] = "已开启联网主题检查（TTL 5 天）",
         ["settings.title"] = "设置",
+        ["settings.translate.apiKey"] = "接口密钥",
+        ["settings.translate.apiKeyName"] = "OpenAI 兼容接口密钥",
+        ["settings.translate.baseUrl"] = "接口地址",
+        ["settings.translate.baseUrlName"] = "OpenAI 兼容接口地址",
+        ["settings.translate.baseUrlPlaceholder"] = "https://api.openai.com/v1",
+        ["settings.translate.cacheDays"] = "译文缓存天数",
+        ["settings.translate.cacheDaysName"] = "译文缓存保留天数",
+        ["settings.translate.enabled"] = "启用翻译",
+        ["settings.translate.enabledName"] = "启用翻译",
+        ["settings.translate.engine"] = "翻译引擎",
+        ["settings.translate.engine.auto.desc"] = "优先用下面自填的接口；没配置或调用失败时回落到内置免费服务。",
+        ["settings.translate.engine.auto.title"] = "自动（推荐）",
+        ["settings.translate.engine.builtin.desc"] = "完全不需要配置，直接用内置的公开翻译接口（稳定性取决于该服务）。",
+        ["settings.translate.engine.builtin.title"] = "仅内置免费服务",
+        ["settings.translate.engine.custom.desc"] = "只调用下面自填的接口；没配置或调用失败就是失败，不回落。",
+        ["settings.translate.engine.custom.title"] = "仅自填接口",
+        ["settings.translate.engineName"] = "翻译引擎选择",
+        ["settings.translate.hint"] = "译文与原文同时显示：自填接口的地址与密钥只保存在本机 settings.json 里，日志中不会打印；内置免费服务是第三方公开接口，稳定性不由本启动器保证。",
+        ["settings.translate.language"] = "译文语言",
+        ["settings.translate.language.enUS.desc"] = "无论界面是什么语言，一律译成英文。",
+        ["settings.translate.language.enUS.title"] = "English",
+        ["settings.translate.language.follow.desc"] = "界面是中文就译成中文，界面是英文就译成英文。",
+        ["settings.translate.language.follow.title"] = "跟随界面语言",
+        ["settings.translate.language.zhCN.desc"] = "无论界面是什么语言，一律译成简体中文。",
+        ["settings.translate.language.zhCN.title"] = "简体中文",
+        ["settings.translate.languageName"] = "译文目标语言",
+        ["settings.translate.model"] = "模型名称",
+        ["settings.translate.modelName"] = "翻译使用的模型名称",
+        ["settings.translate.modelPlaceholder"] = "gpt-4o-mini",
+        ["settings.translate.scope"] = "翻译范围",
+        ["settings.translate.scopeChangelog"] = "更新日志",
+        ["settings.translate.scopeComments"] = "评论区",
+        ["settings.translate.scopeDescription"] = "简介",
+        ["settings.translate.scopeName"] = "需要翻译的内容",
+        ["settings.translate.scopeNames"] = "名称",
+        ["settings.translate.statusCacheDays"] = "译文缓存天数已改为 {0} 天",
+        ["settings.translate.statusDisabled"] = "已关闭翻译：不再发起任何翻译请求",
+        ["settings.translate.statusEnabled"] = "已开启翻译：工坊列表、详情页与评论区会在原文之外附带译文",
+        ["settings.translate.statusEndpoint"] = "翻译接口已更新：{0}",
+        ["settings.translate.statusEngine"] = "翻译引擎已改为 {0}",
+        ["settings.translate.statusLanguage"] = "译文语言已改为 {0}",
+        ["settings.translate.statusScope"] = "翻译范围已更新：{0}",
         ["shell.alwaysOnTop.applyFailed"] = "切换窗口置顶失败：{0}",
         ["shell.alwaysOnTop.disable"] = "取消窗口置顶",
         ["shell.alwaysOnTop.disableTooltip"] = "取消置顶（Ctrl+Shift+T）",
@@ -1178,6 +1224,8 @@ public sealed partial class Localizer
         ["settings.cache.row.news.title"] = "Official news",
         ["settings.cache.row.theme.desc"] = "Backgrounds and wordmarks downloaded online; expire after 5 days and are fetched again on the next check",
         ["settings.cache.row.theme.title"] = "Theme assets",
+        ["settings.cache.row.translations.desc"] = "Translated titles, descriptions and comments; cleared entries are requested from the translation service again the next time they are shown",
+        ["settings.cache.row.translations.title"] = "Translations",
         ["settings.cache.size"] = "{0}, {1} files",
         ["settings.cache.statusCleared"] = "Cleared the \"{0}\" cache (freed {1})",
         ["settings.cache.statusClearedAll"] = "Cleared all caches (freed {0})",
@@ -1315,6 +1363,7 @@ public sealed partial class Localizer
         ["settings.nav.launch"] = "Launch",
         ["settings.nav.online"] = "Online",
         ["settings.nav.paths"] = "Paths",
+        ["settings.nav.translation"] = "Translation",
         ["settings.patch.apply"] = "Apply patch",
         ["settings.patch.applyConfirm"] = "Apply",
         ["settings.patch.applyDialogContent"] = "The current steam_api will be backed up next to itself as *_o.dll, replaced by the loader, and cream_api.ini will be generated.\n\nClose the game first. Afterwards, launch it from this launcher.\n\nApply the patch?",
@@ -1378,6 +1427,7 @@ public sealed partial class Localizer
         ["settings.section.online"] = "Online content",
         ["settings.section.proxy"] = "Network proxy",
         ["settings.section.theme"] = "Theme",
+        ["settings.section.translation"] = "Translation",
         ["settings.status.dirMissing"] = "{0} does not exist: {1}",
         ["settings.status.name"] = "Status",
         ["settings.status.openFailed"] = "Could not open the folder: {0}",
@@ -1412,6 +1462,48 @@ public sealed partial class Localizer
         ["settings.theme.statusOff"] = "Theme check off: only the game folder and the built-in placeholder are used",
         ["settings.theme.statusOn"] = "Theme check online (5-day cache)",
         ["settings.title"] = "Settings",
+        ["settings.translate.apiKey"] = "API key",
+        ["settings.translate.apiKeyName"] = "OpenAI-compatible API key",
+        ["settings.translate.baseUrl"] = "API base URL",
+        ["settings.translate.baseUrlName"] = "OpenAI-compatible API base URL",
+        ["settings.translate.baseUrlPlaceholder"] = "https://api.openai.com/v1",
+        ["settings.translate.cacheDays"] = "Translation cache days",
+        ["settings.translate.cacheDaysName"] = "How long translations stay cached",
+        ["settings.translate.enabled"] = "Enable translation",
+        ["settings.translate.enabledName"] = "Enable translation",
+        ["settings.translate.engine"] = "Translation engine",
+        ["settings.translate.engine.auto.desc"] = "Prefer the API configured below; fall back to the built-in free service when it is missing or fails.",
+        ["settings.translate.engine.auto.title"] = "Automatic (recommended)",
+        ["settings.translate.engine.builtin.desc"] = "No configuration needed; uses the built-in public translation service (availability is out of our control).",
+        ["settings.translate.engine.builtin.title"] = "Built-in free service only",
+        ["settings.translate.engine.custom.desc"] = "Only call the API configured below; a missing key or a failed call is a failure, with no fallback.",
+        ["settings.translate.engine.custom.title"] = "Configured API only",
+        ["settings.translate.engineName"] = "Translation engine choice",
+        ["settings.translate.hint"] = "Translations are shown next to the original. The API URL and key are stored in the local settings.json only and are never written to the log; the built-in free service is a third-party public endpoint whose availability is not guaranteed.",
+        ["settings.translate.language"] = "Translation language",
+        ["settings.translate.language.enUS.desc"] = "Always translate into English, whatever the interface language is.",
+        ["settings.translate.language.enUS.title"] = "English",
+        ["settings.translate.language.follow.desc"] = "Chinese interface means Chinese output, English interface means English output.",
+        ["settings.translate.language.follow.title"] = "Follow the interface language",
+        ["settings.translate.language.zhCN.desc"] = "Always translate into Simplified Chinese, whatever the interface language is.",
+        ["settings.translate.language.zhCN.title"] = "简体中文",
+        ["settings.translate.languageName"] = "Target language of translations",
+        ["settings.translate.model"] = "Model",
+        ["settings.translate.modelName"] = "Model used for translation",
+        ["settings.translate.modelPlaceholder"] = "gpt-4o-mini",
+        ["settings.translate.scope"] = "What to translate",
+        ["settings.translate.scopeChangelog"] = "Changelogs",
+        ["settings.translate.scopeComments"] = "Comments",
+        ["settings.translate.scopeDescription"] = "Descriptions",
+        ["settings.translate.scopeName"] = "Content to translate",
+        ["settings.translate.scopeNames"] = "Names",
+        ["settings.translate.statusCacheDays"] = "Translation cache days changed to {0}",
+        ["settings.translate.statusDisabled"] = "Translation disabled: no translation requests are sent",
+        ["settings.translate.statusEnabled"] = "Translation enabled: workshop lists, details and comments show a translation next to the original",
+        ["settings.translate.statusEndpoint"] = "Translation endpoint updated: {0}",
+        ["settings.translate.statusEngine"] = "Translation engine changed to {0}",
+        ["settings.translate.statusLanguage"] = "Translation language changed to {0}",
+        ["settings.translate.statusScope"] = "Translation scope updated: {0}",
         ["shell.alwaysOnTop.applyFailed"] = "Could not change always-on-top: {0}",
         ["shell.alwaysOnTop.disable"] = "Stop Always on Top",
         ["shell.alwaysOnTop.disableTooltip"] = "Stop Always on Top (Ctrl+Shift+T)",
@@ -1954,6 +2046,8 @@ public sealed partial class Localizer
         ("settings.cache.row.news.title", "SettingsCacheRowNewsTitle"),
         ("settings.cache.row.theme.desc", "SettingsCacheRowThemeDesc"),
         ("settings.cache.row.theme.title", "SettingsCacheRowThemeTitle"),
+        ("settings.cache.row.translations.desc", "SettingsCacheRowTranslationsDesc"),
+        ("settings.cache.row.translations.title", "SettingsCacheRowTranslationsTitle"),
         ("settings.cache.size", "SettingsCacheSize"),
         ("settings.cache.statusCleared", "SettingsCacheStatusCleared"),
         ("settings.cache.statusClearedAll", "SettingsCacheStatusClearedAll"),
@@ -2091,6 +2185,7 @@ public sealed partial class Localizer
         ("settings.nav.launch", "SettingsNavLaunch"),
         ("settings.nav.online", "SettingsNavOnline"),
         ("settings.nav.paths", "SettingsNavPaths"),
+        ("settings.nav.translation", "SettingsNavTranslation"),
         ("settings.patch.apply", "SettingsPatchApply"),
         ("settings.patch.applyConfirm", "SettingsPatchApplyConfirm"),
         ("settings.patch.applyDialogContent", "SettingsPatchApplyDialogContent"),
@@ -2154,6 +2249,7 @@ public sealed partial class Localizer
         ("settings.section.online", "SettingsSectionOnline"),
         ("settings.section.proxy", "SettingsSectionProxy"),
         ("settings.section.theme", "SettingsSectionTheme"),
+        ("settings.section.translation", "SettingsSectionTranslation"),
         ("settings.status.dirMissing", "SettingsStatusDirMissing"),
         ("settings.status.name", "SettingsStatusName"),
         ("settings.status.openFailed", "SettingsStatusOpenFailed"),
@@ -2188,6 +2284,48 @@ public sealed partial class Localizer
         ("settings.theme.statusOff", "SettingsThemeStatusOff"),
         ("settings.theme.statusOn", "SettingsThemeStatusOn"),
         ("settings.title", "SettingsTitle"),
+        ("settings.translate.apiKey", "SettingsTranslateApiKey"),
+        ("settings.translate.apiKeyName", "SettingsTranslateApiKeyName"),
+        ("settings.translate.baseUrl", "SettingsTranslateBaseUrl"),
+        ("settings.translate.baseUrlName", "SettingsTranslateBaseUrlName"),
+        ("settings.translate.baseUrlPlaceholder", "SettingsTranslateBaseUrlPlaceholder"),
+        ("settings.translate.cacheDays", "SettingsTranslateCacheDays"),
+        ("settings.translate.cacheDaysName", "SettingsTranslateCacheDaysName"),
+        ("settings.translate.enabled", "SettingsTranslateEnabled"),
+        ("settings.translate.enabledName", "SettingsTranslateEnabledName"),
+        ("settings.translate.engine", "SettingsTranslateEngine"),
+        ("settings.translate.engine.auto.desc", "SettingsTranslateEngineAutoDesc"),
+        ("settings.translate.engine.auto.title", "SettingsTranslateEngineAutoTitle"),
+        ("settings.translate.engine.builtin.desc", "SettingsTranslateEngineBuiltinDesc"),
+        ("settings.translate.engine.builtin.title", "SettingsTranslateEngineBuiltinTitle"),
+        ("settings.translate.engine.custom.desc", "SettingsTranslateEngineCustomDesc"),
+        ("settings.translate.engine.custom.title", "SettingsTranslateEngineCustomTitle"),
+        ("settings.translate.engineName", "SettingsTranslateEngineName"),
+        ("settings.translate.hint", "SettingsTranslateHint"),
+        ("settings.translate.language", "SettingsTranslateLanguage"),
+        ("settings.translate.language.enUS.desc", "SettingsTranslateLanguageEnUSDesc"),
+        ("settings.translate.language.enUS.title", "SettingsTranslateLanguageEnUSTitle"),
+        ("settings.translate.language.follow.desc", "SettingsTranslateLanguageFollowDesc"),
+        ("settings.translate.language.follow.title", "SettingsTranslateLanguageFollowTitle"),
+        ("settings.translate.language.zhCN.desc", "SettingsTranslateLanguageZhCNDesc"),
+        ("settings.translate.language.zhCN.title", "SettingsTranslateLanguageZhCNTitle"),
+        ("settings.translate.languageName", "SettingsTranslateLanguageName"),
+        ("settings.translate.model", "SettingsTranslateModel"),
+        ("settings.translate.modelName", "SettingsTranslateModelName"),
+        ("settings.translate.modelPlaceholder", "SettingsTranslateModelPlaceholder"),
+        ("settings.translate.scope", "SettingsTranslateScope"),
+        ("settings.translate.scopeChangelog", "SettingsTranslateScopeChangelog"),
+        ("settings.translate.scopeComments", "SettingsTranslateScopeComments"),
+        ("settings.translate.scopeDescription", "SettingsTranslateScopeDescription"),
+        ("settings.translate.scopeName", "SettingsTranslateScopeName"),
+        ("settings.translate.scopeNames", "SettingsTranslateScopeNames"),
+        ("settings.translate.statusCacheDays", "SettingsTranslateStatusCacheDays"),
+        ("settings.translate.statusDisabled", "SettingsTranslateStatusDisabled"),
+        ("settings.translate.statusEnabled", "SettingsTranslateStatusEnabled"),
+        ("settings.translate.statusEndpoint", "SettingsTranslateStatusEndpoint"),
+        ("settings.translate.statusEngine", "SettingsTranslateStatusEngine"),
+        ("settings.translate.statusLanguage", "SettingsTranslateStatusLanguage"),
+        ("settings.translate.statusScope", "SettingsTranslateStatusScope"),
         ("shell.alwaysOnTop.applyFailed", "ShellAlwaysOnTopApplyFailed"),
         ("shell.alwaysOnTop.disable", "ShellAlwaysOnTopDisable"),
         ("shell.alwaysOnTop.disableTooltip", "ShellAlwaysOnTopDisableTooltip"),
@@ -2728,6 +2866,8 @@ public sealed partial class Localizer
     public string SettingsCacheRowNewsTitle => Format("settings.cache.row.news.title");
     public string SettingsCacheRowThemeDesc => Format("settings.cache.row.theme.desc");
     public string SettingsCacheRowThemeTitle => Format("settings.cache.row.theme.title");
+    public string SettingsCacheRowTranslationsDesc => Format("settings.cache.row.translations.desc");
+    public string SettingsCacheRowTranslationsTitle => Format("settings.cache.row.translations.title");
     public string SettingsCacheSize => Format("settings.cache.size");
     public string SettingsCacheStatusCleared => Format("settings.cache.statusCleared");
     public string SettingsCacheStatusClearedAll => Format("settings.cache.statusClearedAll");
@@ -2865,6 +3005,7 @@ public sealed partial class Localizer
     public string SettingsNavLaunch => Format("settings.nav.launch");
     public string SettingsNavOnline => Format("settings.nav.online");
     public string SettingsNavPaths => Format("settings.nav.paths");
+    public string SettingsNavTranslation => Format("settings.nav.translation");
     public string SettingsPatchApply => Format("settings.patch.apply");
     public string SettingsPatchApplyConfirm => Format("settings.patch.applyConfirm");
     public string SettingsPatchApplyDialogContent => Format("settings.patch.applyDialogContent");
@@ -2928,6 +3069,7 @@ public sealed partial class Localizer
     public string SettingsSectionOnline => Format("settings.section.online");
     public string SettingsSectionProxy => Format("settings.section.proxy");
     public string SettingsSectionTheme => Format("settings.section.theme");
+    public string SettingsSectionTranslation => Format("settings.section.translation");
     public string SettingsStatusDirMissing => Format("settings.status.dirMissing");
     public string SettingsStatusName => Format("settings.status.name");
     public string SettingsStatusOpenFailed => Format("settings.status.openFailed");
@@ -2962,6 +3104,48 @@ public sealed partial class Localizer
     public string SettingsThemeStatusOff => Format("settings.theme.statusOff");
     public string SettingsThemeStatusOn => Format("settings.theme.statusOn");
     public string SettingsTitle => Format("settings.title");
+    public string SettingsTranslateApiKey => Format("settings.translate.apiKey");
+    public string SettingsTranslateApiKeyName => Format("settings.translate.apiKeyName");
+    public string SettingsTranslateBaseUrl => Format("settings.translate.baseUrl");
+    public string SettingsTranslateBaseUrlName => Format("settings.translate.baseUrlName");
+    public string SettingsTranslateBaseUrlPlaceholder => Format("settings.translate.baseUrlPlaceholder");
+    public string SettingsTranslateCacheDays => Format("settings.translate.cacheDays");
+    public string SettingsTranslateCacheDaysName => Format("settings.translate.cacheDaysName");
+    public string SettingsTranslateEnabled => Format("settings.translate.enabled");
+    public string SettingsTranslateEnabledName => Format("settings.translate.enabledName");
+    public string SettingsTranslateEngine => Format("settings.translate.engine");
+    public string SettingsTranslateEngineAutoDesc => Format("settings.translate.engine.auto.desc");
+    public string SettingsTranslateEngineAutoTitle => Format("settings.translate.engine.auto.title");
+    public string SettingsTranslateEngineBuiltinDesc => Format("settings.translate.engine.builtin.desc");
+    public string SettingsTranslateEngineBuiltinTitle => Format("settings.translate.engine.builtin.title");
+    public string SettingsTranslateEngineCustomDesc => Format("settings.translate.engine.custom.desc");
+    public string SettingsTranslateEngineCustomTitle => Format("settings.translate.engine.custom.title");
+    public string SettingsTranslateEngineName => Format("settings.translate.engineName");
+    public string SettingsTranslateHint => Format("settings.translate.hint");
+    public string SettingsTranslateLanguage => Format("settings.translate.language");
+    public string SettingsTranslateLanguageEnUSDesc => Format("settings.translate.language.enUS.desc");
+    public string SettingsTranslateLanguageEnUSTitle => Format("settings.translate.language.enUS.title");
+    public string SettingsTranslateLanguageFollowDesc => Format("settings.translate.language.follow.desc");
+    public string SettingsTranslateLanguageFollowTitle => Format("settings.translate.language.follow.title");
+    public string SettingsTranslateLanguageZhCNDesc => Format("settings.translate.language.zhCN.desc");
+    public string SettingsTranslateLanguageZhCNTitle => Format("settings.translate.language.zhCN.title");
+    public string SettingsTranslateLanguageName => Format("settings.translate.languageName");
+    public string SettingsTranslateModel => Format("settings.translate.model");
+    public string SettingsTranslateModelName => Format("settings.translate.modelName");
+    public string SettingsTranslateModelPlaceholder => Format("settings.translate.modelPlaceholder");
+    public string SettingsTranslateScope => Format("settings.translate.scope");
+    public string SettingsTranslateScopeChangelog => Format("settings.translate.scopeChangelog");
+    public string SettingsTranslateScopeComments => Format("settings.translate.scopeComments");
+    public string SettingsTranslateScopeDescription => Format("settings.translate.scopeDescription");
+    public string SettingsTranslateScopeName => Format("settings.translate.scopeName");
+    public string SettingsTranslateScopeNames => Format("settings.translate.scopeNames");
+    public string SettingsTranslateStatusCacheDays => Format("settings.translate.statusCacheDays");
+    public string SettingsTranslateStatusDisabled => Format("settings.translate.statusDisabled");
+    public string SettingsTranslateStatusEnabled => Format("settings.translate.statusEnabled");
+    public string SettingsTranslateStatusEndpoint => Format("settings.translate.statusEndpoint");
+    public string SettingsTranslateStatusEngine => Format("settings.translate.statusEngine");
+    public string SettingsTranslateStatusLanguage => Format("settings.translate.statusLanguage");
+    public string SettingsTranslateStatusScope => Format("settings.translate.statusScope");
     public string ShellAlwaysOnTopApplyFailed => Format("shell.alwaysOnTop.applyFailed");
     public string ShellAlwaysOnTopDisable => Format("shell.alwaysOnTop.disable");
     public string ShellAlwaysOnTopDisableTooltip => Format("shell.alwaysOnTop.disableTooltip");
@@ -3505,6 +3689,8 @@ internal static class Keys
     public const string SettingsCacheRowNewsTitle = "settings.cache.row.news.title";
     public const string SettingsCacheRowThemeDesc = "settings.cache.row.theme.desc";
     public const string SettingsCacheRowThemeTitle = "settings.cache.row.theme.title";
+    public const string SettingsCacheRowTranslationsDesc = "settings.cache.row.translations.desc";
+    public const string SettingsCacheRowTranslationsTitle = "settings.cache.row.translations.title";
     public const string SettingsCacheSize = "settings.cache.size";
     public const string SettingsCacheStatusCleared = "settings.cache.statusCleared";
     public const string SettingsCacheStatusClearedAll = "settings.cache.statusClearedAll";
@@ -3642,6 +3828,7 @@ internal static class Keys
     public const string SettingsNavLaunch = "settings.nav.launch";
     public const string SettingsNavOnline = "settings.nav.online";
     public const string SettingsNavPaths = "settings.nav.paths";
+    public const string SettingsNavTranslation = "settings.nav.translation";
     public const string SettingsPatchApply = "settings.patch.apply";
     public const string SettingsPatchApplyConfirm = "settings.patch.applyConfirm";
     public const string SettingsPatchApplyDialogContent = "settings.patch.applyDialogContent";
@@ -3705,6 +3892,7 @@ internal static class Keys
     public const string SettingsSectionOnline = "settings.section.online";
     public const string SettingsSectionProxy = "settings.section.proxy";
     public const string SettingsSectionTheme = "settings.section.theme";
+    public const string SettingsSectionTranslation = "settings.section.translation";
     public const string SettingsStatusDirMissing = "settings.status.dirMissing";
     public const string SettingsStatusName = "settings.status.name";
     public const string SettingsStatusOpenFailed = "settings.status.openFailed";
@@ -3739,6 +3927,48 @@ internal static class Keys
     public const string SettingsThemeStatusOff = "settings.theme.statusOff";
     public const string SettingsThemeStatusOn = "settings.theme.statusOn";
     public const string SettingsTitle = "settings.title";
+    public const string SettingsTranslateApiKey = "settings.translate.apiKey";
+    public const string SettingsTranslateApiKeyName = "settings.translate.apiKeyName";
+    public const string SettingsTranslateBaseUrl = "settings.translate.baseUrl";
+    public const string SettingsTranslateBaseUrlName = "settings.translate.baseUrlName";
+    public const string SettingsTranslateBaseUrlPlaceholder = "settings.translate.baseUrlPlaceholder";
+    public const string SettingsTranslateCacheDays = "settings.translate.cacheDays";
+    public const string SettingsTranslateCacheDaysName = "settings.translate.cacheDaysName";
+    public const string SettingsTranslateEnabled = "settings.translate.enabled";
+    public const string SettingsTranslateEnabledName = "settings.translate.enabledName";
+    public const string SettingsTranslateEngine = "settings.translate.engine";
+    public const string SettingsTranslateEngineAutoDesc = "settings.translate.engine.auto.desc";
+    public const string SettingsTranslateEngineAutoTitle = "settings.translate.engine.auto.title";
+    public const string SettingsTranslateEngineBuiltinDesc = "settings.translate.engine.builtin.desc";
+    public const string SettingsTranslateEngineBuiltinTitle = "settings.translate.engine.builtin.title";
+    public const string SettingsTranslateEngineCustomDesc = "settings.translate.engine.custom.desc";
+    public const string SettingsTranslateEngineCustomTitle = "settings.translate.engine.custom.title";
+    public const string SettingsTranslateEngineName = "settings.translate.engineName";
+    public const string SettingsTranslateHint = "settings.translate.hint";
+    public const string SettingsTranslateLanguage = "settings.translate.language";
+    public const string SettingsTranslateLanguageEnUSDesc = "settings.translate.language.enUS.desc";
+    public const string SettingsTranslateLanguageEnUSTitle = "settings.translate.language.enUS.title";
+    public const string SettingsTranslateLanguageFollowDesc = "settings.translate.language.follow.desc";
+    public const string SettingsTranslateLanguageFollowTitle = "settings.translate.language.follow.title";
+    public const string SettingsTranslateLanguageZhCNDesc = "settings.translate.language.zhCN.desc";
+    public const string SettingsTranslateLanguageZhCNTitle = "settings.translate.language.zhCN.title";
+    public const string SettingsTranslateLanguageName = "settings.translate.languageName";
+    public const string SettingsTranslateModel = "settings.translate.model";
+    public const string SettingsTranslateModelName = "settings.translate.modelName";
+    public const string SettingsTranslateModelPlaceholder = "settings.translate.modelPlaceholder";
+    public const string SettingsTranslateScope = "settings.translate.scope";
+    public const string SettingsTranslateScopeChangelog = "settings.translate.scopeChangelog";
+    public const string SettingsTranslateScopeComments = "settings.translate.scopeComments";
+    public const string SettingsTranslateScopeDescription = "settings.translate.scopeDescription";
+    public const string SettingsTranslateScopeName = "settings.translate.scopeName";
+    public const string SettingsTranslateScopeNames = "settings.translate.scopeNames";
+    public const string SettingsTranslateStatusCacheDays = "settings.translate.statusCacheDays";
+    public const string SettingsTranslateStatusDisabled = "settings.translate.statusDisabled";
+    public const string SettingsTranslateStatusEnabled = "settings.translate.statusEnabled";
+    public const string SettingsTranslateStatusEndpoint = "settings.translate.statusEndpoint";
+    public const string SettingsTranslateStatusEngine = "settings.translate.statusEngine";
+    public const string SettingsTranslateStatusLanguage = "settings.translate.statusLanguage";
+    public const string SettingsTranslateStatusScope = "settings.translate.statusScope";
     public const string ShellAlwaysOnTopApplyFailed = "shell.alwaysOnTop.applyFailed";
     public const string ShellAlwaysOnTopDisable = "shell.alwaysOnTop.disable";
     public const string ShellAlwaysOnTopDisableTooltip = "shell.alwaysOnTop.disableTooltip";

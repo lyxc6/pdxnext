@@ -69,7 +69,8 @@ $sections = @(
   @{ id='navSettingsPaths';      name='paths';      want='txtGameDataPath,btnOpenDataDirectory,txtDlcPath,txtModDir,txtFormatVersion,txtLoadFilePath,txtAppDataDirectory,btnOpenAppDataDirectory,txtLegacyDataDirectory,btnClearLegacyData' },
   @{ id='navSettingsOnline';     name='online';     want='cmbProxyMode,txtProxyUrl,txtProxyStatus' },
   @{ id='navSettingsCache';      name='cache';      want='btnRefreshCache,btnClearAllCaches,tglOnlineDlcDescription,cmbDlcDescriptionRetention,tglOnlineNewsFeed,tglOnlineModThumbnail,cmbModThumbnailRetention,txtModThumbnailCachePath' },
-  @{ id='navSettingsAdvanced';   name='advanced';   want='tglWriteDlcSignature,btnRegenerateDlcSignature' }
+  @{ id='navSettingsAdvanced';   name='advanced';   want='tglWriteDlcSignature,btnRegenerateDlcSignature' },
+  @{ id='navSettingsTranslation'; name='translation'; want='tglTranslateEnabled,cmbTranslateEngineMode,txtTranslateBaseUrl,pwdTranslateApiKey,txtTranslateModel,cmbTranslateTargetLanguage,tglTranslateNames,tglTranslateDescription,tglTranslateChangelog,tglTranslateComments,txtTranslateCacheDays' }
 )
 
 $hwnd = $p.MainWindowHandle

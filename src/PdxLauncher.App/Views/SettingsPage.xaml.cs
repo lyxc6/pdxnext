@@ -157,7 +157,7 @@ public sealed partial class SettingsPage : Page
     {
         var sections = new FrameworkElement?[]
         {
-            secAppearance, secLaunch, secPaths, secOnline, secCache, secAdvanced,
+            secAppearance, secLaunch, secPaths, secOnline, secCache, secAdvanced, secTranslation,
         };
 
         for (var i = 0; i < sections.Length; i++)
