@@ -11,7 +11,7 @@
 ## 0. 一句话现状
 
 启动器外壳与主页已从「照官方 Paradox 启动器截图逐像素自绘」**改成 WinUI 3 标准控件 UI**（用户明确要求），
-Release **0 警告 0 错误**，自检 **55 个检查类 / 0 失败**（2026-10-30 实测；最近一轮新增 `ModLibraryWarningChecks`；此前还有 `PdxDatabaseChecks`、`JsonDocumentStoreChecks`、`OwnPlaysetRepositoryChecks`、`LauncherDbProjectionChecks`、`ModPathChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
+Release **0 警告 0 错误**，自检 **58 个检查类 / 0 失败**（2026-10-30 实测；最近一轮新增 `TranslationChecks`；此前还有 `ConfirmOverlayChecks`、`PdxDatabaseChecks`、`JsonDocumentStoreChecks`、`OwnPlaysetRepositoryChecks`、`LauncherDbProjectionChecks`、`ModPathChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
 **2026-10-26 已完成：窗口置顶开关（§0.2）+ 整窗背景「方案 B」（§0.3）**——游戏主题背景图现在连标题栏条和左侧
 NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统一纱 + 卡片/列表玻璃底衬），主页那条 260 高、被裁掉一半的
 主题横幅已删除。剩下的活：Light / HighContrast 真机切主题跑一遍（§0.3 唯一视觉盲区）、真机复验 settings.json 与置顶持久化、
@@ -4584,3 +4584,79 @@ CS1 的远端主题第一次真正被抓取，暴露了 `AssetDownloader` 的两
   `data\theme-cache\cities_skylines-*` 出现（旧的 `cities_v2-*` 若存在会变成孤儿文件，可手删）。
 - 公告：CS1 仍显示 3 张官方公告卡（走 `cities_v2` URL）。
 
+## 0.56 2026-10-30：设置页新增「翻译」分区（工坊与 Mod 名称 / 简介 / 更新日志 / 评论）
+
+### 起因
+
+用户原话（m00001）：「在设置添加翻译功能，需要给mod的名称、内容、评论区做翻译」。
+
+用户随后拍板四项：
+
+1. **后端两个都要、可切换**：既支持用户自填的 OpenAI 兼容 API（Base URL / API Key / 模型名），
+   也支持内置免费服务兜底；设置页给引擎档位选择。
+2. **目标语言跟随界面语言**（界面中文→译成中文，英文→英文），设置里可覆盖为固定语言。
+3. **范围**：创意工坊列表 + 工坊详情（简介与更新日志）+ 评论区 + 本地 Mod 库。
+4. **呈现**：**原文与译文同时显示**，不是二选一切换。
+
+### 分层
+
+**Core（`src/PdxLauncher.Core/Online/Translation/` + `src/PdxLauncher.Core/Text/MarkdownTranslator.cs`）**
+
+- `ITranslationEngine`：`Id` / `IsConfigured` / `TranslateAsync` / `TranslateBatchAsync`；失败用 null 表示，不抛异常。
+- `OpenAiCompatibleTranslationEngine`：`POST {Base}/chat/completions`，`Authorization: Bearer`，
+  body 带 `model` / `messages` / `temperature=0`；批量用 `\n<<<PDX_SPLIT>>>\n` 分隔，
+  段数与原文数不符就退化成逐条翻译。
+- `FreeTranslationEngine`：公共免费接口，`IsConfigured` 恒 true。
+- `TranslationService`：缓存优先 → 未命中交给引擎；`auto` 模式自填失败项用内置补，
+  `custom` 模式**不回落**，`builtin` 模式只用内置（并发上限 4）。
+- `TranslationCache`：落 `cache:translations` 库键，键 = SHA256(引擎 + 目标语言 + 原文)，TTL 可配，
+  超 5000 条按时间淘汰最旧；写盘失败只记日志。
+- `TranslationOptions.FromSettings(settings, uiLanguage)`：目标语言留空→跟随界面；模型空→默认；
+  引擎模式、缓存天数都归一化，未知值不会让翻译崩掉。
+- `MarkdownTranslator`：保结构翻译（标题层级 / 列表层级与序号 / 链接地址 / 强调样式原样保留；
+  代码块、图片、分隔线不翻译；引用块递归）；连续纯文本合并成一次请求；**译文为空就保留原文**。
+- `TranslationHttpTransport` + `ITranslationTransport`：单开窄接口的原因是 `IHttpFetcher` 只有
+  Get/PostJson/PostForm，没有自定义头入口，改它会连带改 4 个自检 fake。非 2xx 不抛异常。
+
+**App（`src/PdxLauncher.App/`）**
+
+- `Services/TranslationCoordinator.cs`：并发 4；设置变化或界面语言变化时换掉 CTS 作废在途批次；
+  按当前设置临时拼 `TranslationService`；`ClearCache()` 给设置页的「清理缓存」用。
+- `Services/TranslationEngineCatalog.cs` / `TranslationTargetLanguageCatalog.cs`：下拉项范式（Option + Catalog）。
+- ViewModel 侧：`WorkshopRowViewModel` / `ModRowViewModel` / `ModLibraryRowViewModel` 加 `TranslatedName` +
+  `HasTranslatedName`；`WorkshopCommentViewModel` 加 `TranslatedBody` / `TranslatedBodyPlain` / `HasTranslation`；
+  `WorkshopDetailViewModel` 加 `TranslatedDescriptionDocument` / `TranslatedDescriptionText` /
+  `TranslatedChangelogDocument` 与对应派生属性。
+- 触发点：`WorkshopViewModel`（页缓存 / Steam 查询 / PDX 查询 / 失败回落缓存四条铺行路径）、
+  `ModLibraryViewModel.RebuildRows`、`ModsViewModel.RebuildVisibleMods`、
+  `WorkshopDetailViewModel`（简介 / 更新日志 / 评论两处）。
+- XAML：工坊列表页、Mod 库页、播放集 mod 行在原标题下多出一行「译文 …」；
+  工坊详情页的简介卡 / 更新日志卡 / 评论模板各多一块带「译文」小标题的译文块。
+
+**设置页（第 7 个分区，Tag=6，`navSettingsTranslation`）**
+
+- 控件：`tglTranslateEnabled` / `cmbTranslateEngineMode` / `txtTranslateBaseUrl` / `pwdTranslateApiKey` /
+  `txtTranslateModel` / `cmbTranslateTargetLanguage` / `tglTranslateNames` / `tglTranslateDescription` /
+  `tglTranslateChangelog` / `tglTranslateComments` / `txtTranslateCacheDays`；已登记进
+  `scripts/verify-settings-sections.ps1` 的 want 列表。
+- 「缓存」分类多一行「译文缓存」（库键 `cache:translations`），可单独清空。
+
+### 域名口径
+
+内置免费服务的域名进白名单（`OnlineHosts.TranslationHost`）；**自填接口的域名按用户填的地址精确授权**
+（`OnlineHosts.AuthorizeBaseUrl` → 只放行该主机本身，不放行子域）。`TranslationHttpTransport` 与其它传输
+共用同一道闸门：未授权域名抛 `host-not-allowed:<host>`。
+
+### 已知限制
+
+- 内置免费服务依赖第三方公开接口，稳定性不受本项目控制；失败时保留原文并记日志。
+- API Key 明文存在本地 `settings` 文档里（UI 用密码框，日志绝不打印密钥）。
+- 批量翻译靠分隔符协议，模型不遵守就退化成逐条请求（慢一些，但结果正确）。
+- 目标语言只支持中文与英文两种。
+- 代码库里没有真正的 BBCode→Markdown 转换器，BBCode 仍按纯文本降级后按 Markdown 解析。
+
+### 验证
+
+- `dotnet build PdxLauncher.sln -c Release -m:1` → 0 警告 0 错误。
+- 自检 → `检查类: 58，失败: 0，断言失败总数: 0`（新增 `TranslationChecks` 49 条断言）。
+- i18n：`tools/gen-i18n.py` 产出 818 条文案（翻译相关新增 48 键）。

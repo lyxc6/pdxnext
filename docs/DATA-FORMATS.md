@@ -451,6 +451,7 @@ Mod 缩略图：`ModThumbnailSizes.Pixels()` 返回 DIP（32 / 48 / 72），XAML
 | `modThumbnails` | `cache:mod-thumbnails` | `data\mod-cache`（缩略图文件） | 清索引表后删索引键与图片目录 |
 | `dlcDescriptions` | `cache:dlc-descriptions` | —（无图片） | 删缓存键；内存里的负缓存随之失效 |
 | `images` | —（纯磁盘） | `data\image-cache`（DDS 转好的 PNG，见第 16 节） | 删整个目录并丢掉内存索引；下次打开 DLC / Mod 页自动重建 |
+| `translations` | `cache:translations` | —（无图片） | 删缓存键；译文重新拉取 |
 
 - 创意工坊页另有两条索引（`cache:workshop-info` + `cache:workshop-pages`），归在「清空全部缓存」里一并删，不单独占一行。
 
@@ -812,6 +813,7 @@ data\workshop-info\
 | `cache:news-cards` | Braze 公告 | `data\news-cards.json` |
 | `cache:dlc-descriptions` | DLC 简介（见 §7.2） | `data\dlc-descriptions.json` |
 | `cache:mod-thumbnails` | Mod 缩略图索引 | `data\mod-thumbnails.json` |
+| `cache:translations` | 译文缓存（引擎 + 目标语言 + 原文 → 译文） | `data\translations.json` |
 | `cache:theme-assets:<gameId>` | 主题素材索引（每游戏一条） | `data\<gameId>.assets.json` |
 
 磁盘只保留图片本身（`theme-cache\`、`news-cache\`、`mod-cache\`、`workshop-info\`、`image-cache\`），

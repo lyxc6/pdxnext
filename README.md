@@ -380,6 +380,29 @@ BMP/PNG 帧策略、32px 帧的金色占比与圆角透明、8 张 PNG 的魔数
 
 ---
 
+### 翻译（工坊与 Mod 名称 / 简介 / 更新日志 / 评论）
+
+设置页新增独立的「翻译」分类（左栏最下面一项），默认**开启**，覆盖创意工坊列表、PDX Mods 列表、
+Mod 库、播放集里的 mod 行、工坊详情页的简介与更新日志、以及工坊评论区的正文。
+
+- **两个后端可切换**：
+  - 「自填接口」——填 OpenAI 兼容 API 的地址（Base URL）、密钥与模型名，走 `POST {Base}/chat/completions`；
+  - 「内置免费服务」——用公共翻译接口兜底，无需任何配置；
+  - 「自动」是默认档：优先自填，失败或没配齐就回落到内置；「仅自填」失败就是失败（不回落）；「仅内置」只走内置。
+- **目标语言默认跟随界面语言**（界面中文→译成中文，界面英文→译成英文），也可以在设置里固定成中文或英文。
+- **原文与译文同时显示**：列表行在原标题下多出一行「译文 …」，详情页的简介 / 更新日志 / 评论在原文旁边
+  多出一块带「译文」小标题的译文，**不覆盖原文**。
+- 四个范围开关可以分别关掉名称 / 简介 / 更新日志 / 评论的翻译。
+- 译文有本地缓存（`cache:translations` 库键，保留天数可配，默认 30 天），命中缓存就不再发请求；
+  设置页「缓存」分类里多一行「译文缓存」，可单独清空。
+- 翻译是**弱依赖**：请求失败、限流、返回格式不对都只记日志并在界面上保留原文，绝不把内容清空。
+- Markdown 结构在翻译后保持不变：标题层级、列表序号、链接地址、强调样式原样保留，代码块 / 图片 / 分隔线不翻译。
+
+域名口径：内置免费服务的域名在白名单里；**自填接口的域名按用户填的地址精确授权**（只放行该主机本身，
+不放行子域），授权随设置保存，撤销后立刻失效。
+
+---
+
 ## 3. 目录结构
 
 ```
@@ -392,7 +415,7 @@ scripts/
 Directory.Build.props          :: 统一可空/语言版本/告警策略
 NuGet.config                   :: <clear/>，全离线
 src/
-  PdxLauncher.Core/            :: 183 个 .cs，无任何 WinUI 依赖，可单测
+  PdxLauncher.Core/            :: 202 个 .cs，无任何 WinUI 依赖，可单测
     Abstractions/              :: 接口（IGameCatalog / IPlaySetRepository / IGameLauncher / INewsFeedService ...）
     Contracts/                 :: 不可变 record 数据模型
     Games/                     :: Steam 库探测、launcher-settings 解析、游戏目录展开、路径规则（V3 非 ASCII）
@@ -404,15 +427,16 @@ src/
     Signatures/                :: dlc_signature 重算（默认关闭）
     Themes/                    :: 主题 JSON 解析 + HSL/RGB 颜色
     Online/                    :: GraphQL 元数据、素材下载、代理（三模式解析 / 系统代理 / 环境变量）、DLC 简介、官方公告
+    Online/Translation/        :: 翻译引擎（自填 OpenAI 兼容 API + 内置免费服务）、译文缓存、引擎模式回落
     Parsing/                   :: Clausewitz 与 Valve KeyValues 解析器
     Patch/                     :: 补丁素材（内嵌 loader + cream_api.ini）、目标目录判定、打补丁 / 还原
-  PdxLauncher.App/             :: 93 个 .cs + 14 个 .xaml，WinUI 3 层
+  PdxLauncher.App/             :: 100 个 .cs + 16 个 .xaml，WinUI 3 层
     Assets/                    :: AppIcon.ico（9 帧 16→256）+ 8 张模板同名 PNG，全部由 tools/gen-app-icon.py 生成
     Views/                     :: GameLibraryPage / HomePage / ModsPage（播放集） / ModLibraryPage（Mod库） / DlcPage / SettingsPage / WorkshopDetailPage（工坊详情子页） / AddModsPage（添加模组子页）
     ViewModels/                :: VM（全部不含 Microsoft.UI.Xaml 类型）
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
 tests/
-  PdxLauncher.Checks/          :: 55 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 58 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
@@ -435,7 +459,7 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**344 个 .cs + 14 个 .xaml**（不含 `obj/` 生成物；2026-10-30 实测：Core 184 / App 93+14 / Imaging 9 / Checks 58 —— Checks 的 58 个文件是 55 个检查类 + Program + ChecksContext + GlobalUsings）。
+**372 个 .cs + 16 个 .xaml**（不含 `obj/` 生成物；2026-10-30 实测：Core 202 / App 100+16 / Imaging 9 / Checks 61 —— Checks 的 61 个文件是 58 个检查类 + Program + ChecksContext + GlobalUsings）。
 
 ---
 
@@ -445,7 +469,7 @@ tools/
 dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 55，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
+输出 `检查类: 58，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
 launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取
 （mods 全量、size / subscribedDate 解析、播放集归属、requiredVersion 兼容判断）、创意工坊 id 解析、启动参数拼装、路径大小写不敏感处理；
 自有库 `pdxnext.sqlite`（建表幂等 / schema 版本 / 事务回滚 / 损坏自愈 / `documents` 键空间与前缀统计）、
@@ -467,7 +491,11 @@ csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cm
 `PUT /accounts/sessions/launcher-v2` 的头形状与空 body、邮箱去空格且头里不含明文密码、
 401/500/网络异常到错误码的映射、`session` 嵌套与顶层扁平两种响应形状、缺 token 判失败、
 「不勾保持登录不落盘 / 勾了才落盘并能读回 / 改回不勾会清掉旧文件」，以及登录表单
-「可编辑性与邮箱无关、可提交性＝可编辑且邮箱非空」这条死锁回归钉子。
+「可编辑性与邮箱无关、可提交性＝可编辑且邮箱非空」这条死锁回归钉子；
+以及翻译：Markdown 结构保留（标题层级 / 列表序号不变、代码块不译、译文为空保留原文、连续纯文本合并成一次请求）、
+目标语言与引擎模式的归一化、译文缓存的命中 / 过期 / 清空、自动模式自填失败回落内置、
+仅自填模式不回落、仅内置模式不碰自填引擎，以及未授权域名被拦下（`host-not-allowed`）、
+自填接口域名授权后放行且不放行子域、撤销授权后立刻失效。
 
 ---
 
@@ -485,6 +513,7 @@ csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cm
 | 主题素材缓存 | 库内 `cache:theme-assets:<gameId>` + 图片 `data\theme-cache\` | 同上（TTL 5 天） |
 | 官方公告缓存 | 库内 `cache:news-cards` + 图片 `data\news-cache\` | 同上（TTL 6 小时） |
 | Mod 缩略图缓存 | 库内 `cache:mod-thumbnails` + 图片 `data\mod-cache\` | 同上（保留天数可配，默认 30 天） |
+| 译文缓存 | 库内 `cache:translations` 键 | 同上（保留天数可配，默认 30 天） |
 | 补丁素材（外部覆盖） | `data\patch\assets\` | 同上（可选；同名文件优先于内嵌素材） |
 | 补丁清单 | `data\patch\state.json` | 同上（记录打过补丁的游戏与备份路径） |
 | 游戏安装目录的 `steam_api*.dll` / `cream_api.ini` | 各游戏安装目录 | **只在用户点「一键打补丁 / 移除补丁」时写**，原文件备份为同目录 `*_o.dll` |
