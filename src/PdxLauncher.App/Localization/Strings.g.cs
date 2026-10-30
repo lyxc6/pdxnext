@@ -87,6 +87,35 @@ public sealed partial class Localizer
         ["dlc.loadFailed"] = "加载失败：{0}",
         ["dlc.noGameHint"] = "请先在游戏库里选择一款游戏",
         ["dlc.noGameTitle"] = "（未选择游戏）",
+        ["dlc.ownedBadge"] = "已拥有",
+        ["dlc.ownershipChecking"] = "正在查询 Steam 授权…",
+        ["dlc.ownershipDetailApi"] = "探测 DLL：{0}",
+        ["dlc.ownershipDetailAppId"] = "AppID {0}",
+        ["dlc.ownershipDetailOwnerMatch"] = "appmanifest 归属与当前账号一致",
+        ["dlc.ownershipDetailOwnerMismatch"] = "appmanifest 归属为 {0}，与当前账号不一致（其 DisabledDLC 不采用）",
+        ["dlc.ownershipDetailPatchOff"] = "补丁：未加载",
+        ["dlc.ownershipDetailPatchOn"] = "补丁：已加载",
+        ["dlc.ownershipDetailSteamId"] = "SteamID64 {0}",
+        ["dlc.ownershipErrorBusy"] = "Steam 正被其他页面占用，请稍后重试",
+        ["dlc.ownershipErrorInitFailed"] = "Steam 初始化失败（可能未登录）",
+        ["dlc.ownershipErrorNative"] = "Steam 接口调用失败",
+        ["dlc.ownershipErrorNoAppId"] = "无法确定 Steam AppID，跳过授权探测",
+        ["dlc.ownershipErrorNoDll"] = "游戏目录里没有可探测的 steam_api64.dll",
+        ["dlc.ownershipErrorNotWindows"] = "只有 Windows 能查询 Steam 授权",
+        ["dlc.ownershipErrorSteamNotRunning"] = "Steam 客户端没有运行，无法查询授权",
+        ["dlc.ownershipErrorX86"] = "32 位游戏的 steam_api.dll 无法在 64 位进程里查询，暂不支持",
+        ["dlc.ownershipName"] = "Steam 授权状态",
+        ["dlc.ownershipPatchedEffective"] = "补丁已生效：Steam 报告 {0} 个 DLC（{1} 个已拥有），磁盘上的 {2} 个 DLC 全部有授权",
+        ["dlc.ownershipPatchedIncomplete"] = "补丁已加载但没完全生效：磁盘上的 {0} 个 DLC 有 {1} 个拿不到授权（Steam 报告 {2} 个 DLC、{3} 个已拥有）",
+        ["dlc.ownershipRecheck"] = "重新检测",
+        ["dlc.ownershipRecheckFailed"] = "重新检测失败：{0}",
+        ["dlc.ownershipRecheckName"] = "重新检测 Steam 授权",
+        ["dlc.ownershipRowNoSteam"] = "没有 Steam AppID，无法判定授权",
+        ["dlc.ownershipRowToolTip"] = "Steam AppID {0}",
+        ["dlc.ownershipUnavailable"] = "无法判定授权：{0}",
+        ["dlc.ownershipUnknown"] = "授权状态未知",
+        ["dlc.ownershipVanillaAllOwned"] = "未打补丁：磁盘上的 {0} 个 DLC 都有 Steam 授权（Steam 报告 {1} 个 DLC、{2} 个已拥有）",
+        ["dlc.ownershipVanillaPartial"] = "未打补丁：磁盘上的 {0} 个 DLC 有 {1} 个缺 Steam 授权（Steam 报告 {2} 个 DLC、{3} 个已拥有）",
         ["dlc.saveFailed"] = "保存失败：{0}",
         ["dlc.saveFailedShort"] = "保存失败",
         ["dlc.saveName"] = "保存 DLC 状态",
@@ -103,6 +132,8 @@ public sealed partial class Localizer
         ["dlc.statusSkippedSuffix"] = "；{0} 个 DLC 的 pops_id 为空，无法禁用，已跳过",
         ["dlc.toggleToolTip"] = "启用或禁用该 DLC",
         ["dlc.toggleToolTipLocked"] = "该 DLC 无法通过 content_load.json 禁用（pops_id 为空，官方启动器同样会丢弃它）",
+        ["dlc.unknownBadge"] = "授权未知",
+        ["dlc.unownedBadge"] = "未拥有",
         ["home.continue"] = "继续",
         ["home.continueName"] = "继续游戏（读取最近存档）",
         ["home.continueToolTip"] = "继续：{0}（{1}）",
@@ -751,6 +782,8 @@ public sealed partial class Localizer
         ["workshop.timeWeek"] = "1 周",
         ["workshop.timeYear"] = "1 年",
         ["workshop.title"] = "创意工坊",
+        ["workshop.translateLabel"] = "译文",
+        ["workshop.translateOriginalLabel"] = "原文",
         ["workshop.updated"] = "更新于 {0}",
     };
 
@@ -830,6 +863,35 @@ public sealed partial class Localizer
         ["dlc.loadFailed"] = "Failed to load: {0}",
         ["dlc.noGameHint"] = "Select a game in your library first",
         ["dlc.noGameTitle"] = "(No game selected)",
+        ["dlc.ownedBadge"] = "Owned",
+        ["dlc.ownershipChecking"] = "Querying Steam ownership…",
+        ["dlc.ownershipDetailApi"] = "Probed DLL: {0}",
+        ["dlc.ownershipDetailAppId"] = "AppID {0}",
+        ["dlc.ownershipDetailOwnerMatch"] = "appmanifest belongs to the current account",
+        ["dlc.ownershipDetailOwnerMismatch"] = "appmanifest belongs to {0}, not the current account (its DisabledDLC list is ignored)",
+        ["dlc.ownershipDetailPatchOff"] = "Patch: not loaded",
+        ["dlc.ownershipDetailPatchOn"] = "Patch: loaded",
+        ["dlc.ownershipDetailSteamId"] = "SteamID64 {0}",
+        ["dlc.ownershipErrorBusy"] = "Steam is in use by another page, try again shortly",
+        ["dlc.ownershipErrorInitFailed"] = "Steam initialisation failed (not signed in?)",
+        ["dlc.ownershipErrorNative"] = "The Steam API call failed",
+        ["dlc.ownershipErrorNoAppId"] = "Cannot determine the Steam AppID, so the ownership probe was skipped",
+        ["dlc.ownershipErrorNoDll"] = "No probeable steam_api64.dll was found in the game folder",
+        ["dlc.ownershipErrorNotWindows"] = "Steam ownership can only be queried on Windows",
+        ["dlc.ownershipErrorSteamNotRunning"] = "The Steam client is not running, so ownership cannot be queried",
+        ["dlc.ownershipErrorX86"] = "32-bit games use steam_api.dll, which cannot be queried from a 64-bit process",
+        ["dlc.ownershipName"] = "Steam ownership",
+        ["dlc.ownershipPatchedEffective"] = "Patch is active: Steam reports {0} DLCs ({1} owned) and all {2} DLCs on disk are licensed",
+        ["dlc.ownershipPatchedIncomplete"] = "Patch is loaded but not fully effective: {0} DLCs on disk, {1} of them are unlicensed (Steam reports {2} DLCs, {3} owned)",
+        ["dlc.ownershipRecheck"] = "Re-check",
+        ["dlc.ownershipRecheckFailed"] = "Re-check failed: {0}",
+        ["dlc.ownershipRecheckName"] = "Re-check Steam ownership",
+        ["dlc.ownershipRowNoSteam"] = "This DLC has no Steam AppID, so ownership cannot be determined",
+        ["dlc.ownershipRowToolTip"] = "Steam AppID {0}",
+        ["dlc.ownershipUnavailable"] = "Ownership unknown: {0}",
+        ["dlc.ownershipUnknown"] = "Ownership unknown",
+        ["dlc.ownershipVanillaAllOwned"] = "No patch: all {0} DLCs on disk are licensed (Steam reports {1} DLCs, {2} owned)",
+        ["dlc.ownershipVanillaPartial"] = "No patch: {0} DLCs on disk, {1} of them are not licensed (Steam reports {2} DLCs, {3} owned)",
         ["dlc.saveFailed"] = "Save failed: {0}",
         ["dlc.saveFailedShort"] = "Save failed",
         ["dlc.saveName"] = "Save DLC states",
@@ -846,6 +908,8 @@ public sealed partial class Localizer
         ["dlc.statusSkippedSuffix"] = "; {0} DLCs have an empty pops_id and cannot be disabled, so they were skipped",
         ["dlc.toggleToolTip"] = "Enable or disable this DLC",
         ["dlc.toggleToolTipLocked"] = "This DLC cannot be disabled through content_load.json (empty pops_id; the official launcher drops it too)",
+        ["dlc.unknownBadge"] = "Ownership unknown",
+        ["dlc.unownedBadge"] = "Not owned",
         ["home.continue"] = "Continue",
         ["home.continueName"] = "Continue game (loads the latest save)",
         ["home.continueToolTip"] = "Continue: {0} ({1})",
@@ -1494,6 +1558,8 @@ public sealed partial class Localizer
         ["workshop.timeWeek"] = "1 week",
         ["workshop.timeYear"] = "1 year",
         ["workshop.title"] = "Workshop",
+        ["workshop.translateLabel"] = "Translation",
+        ["workshop.translateOriginalLabel"] = "Original",
         ["workshop.updated"] = "Updated {0}",
     };
 
@@ -1573,6 +1639,35 @@ public sealed partial class Localizer
         ("dlc.loadFailed", "DlcLoadFailed"),
         ("dlc.noGameHint", "DlcNoGameHint"),
         ("dlc.noGameTitle", "DlcNoGameTitle"),
+        ("dlc.ownedBadge", "DlcOwnedBadge"),
+        ("dlc.ownershipChecking", "DlcOwnershipChecking"),
+        ("dlc.ownershipDetailApi", "DlcOwnershipDetailApi"),
+        ("dlc.ownershipDetailAppId", "DlcOwnershipDetailAppId"),
+        ("dlc.ownershipDetailOwnerMatch", "DlcOwnershipDetailOwnerMatch"),
+        ("dlc.ownershipDetailOwnerMismatch", "DlcOwnershipDetailOwnerMismatch"),
+        ("dlc.ownershipDetailPatchOff", "DlcOwnershipDetailPatchOff"),
+        ("dlc.ownershipDetailPatchOn", "DlcOwnershipDetailPatchOn"),
+        ("dlc.ownershipDetailSteamId", "DlcOwnershipDetailSteamId"),
+        ("dlc.ownershipErrorBusy", "DlcOwnershipErrorBusy"),
+        ("dlc.ownershipErrorInitFailed", "DlcOwnershipErrorInitFailed"),
+        ("dlc.ownershipErrorNative", "DlcOwnershipErrorNative"),
+        ("dlc.ownershipErrorNoAppId", "DlcOwnershipErrorNoAppId"),
+        ("dlc.ownershipErrorNoDll", "DlcOwnershipErrorNoDll"),
+        ("dlc.ownershipErrorNotWindows", "DlcOwnershipErrorNotWindows"),
+        ("dlc.ownershipErrorSteamNotRunning", "DlcOwnershipErrorSteamNotRunning"),
+        ("dlc.ownershipErrorX86", "DlcOwnershipErrorX86"),
+        ("dlc.ownershipName", "DlcOwnershipName"),
+        ("dlc.ownershipPatchedEffective", "DlcOwnershipPatchedEffective"),
+        ("dlc.ownershipPatchedIncomplete", "DlcOwnershipPatchedIncomplete"),
+        ("dlc.ownershipRecheck", "DlcOwnershipRecheck"),
+        ("dlc.ownershipRecheckFailed", "DlcOwnershipRecheckFailed"),
+        ("dlc.ownershipRecheckName", "DlcOwnershipRecheckName"),
+        ("dlc.ownershipRowNoSteam", "DlcOwnershipRowNoSteam"),
+        ("dlc.ownershipRowToolTip", "DlcOwnershipRowToolTip"),
+        ("dlc.ownershipUnavailable", "DlcOwnershipUnavailable"),
+        ("dlc.ownershipUnknown", "DlcOwnershipUnknown"),
+        ("dlc.ownershipVanillaAllOwned", "DlcOwnershipVanillaAllOwned"),
+        ("dlc.ownershipVanillaPartial", "DlcOwnershipVanillaPartial"),
         ("dlc.saveFailed", "DlcSaveFailed"),
         ("dlc.saveFailedShort", "DlcSaveFailedShort"),
         ("dlc.saveName", "DlcSaveName"),
@@ -1589,6 +1684,8 @@ public sealed partial class Localizer
         ("dlc.statusSkippedSuffix", "DlcStatusSkippedSuffix"),
         ("dlc.toggleToolTip", "DlcToggleToolTip"),
         ("dlc.toggleToolTipLocked", "DlcToggleToolTipLocked"),
+        ("dlc.unknownBadge", "DlcUnknownBadge"),
+        ("dlc.unownedBadge", "DlcUnownedBadge"),
         ("home.continue", "HomeContinue"),
         ("home.continueName", "HomeContinueName"),
         ("home.continueToolTip", "HomeContinueToolTip"),
@@ -2237,6 +2334,8 @@ public sealed partial class Localizer
         ("workshop.timeWeek", "WorkshopTimeWeek"),
         ("workshop.timeYear", "WorkshopTimeYear"),
         ("workshop.title", "WorkshopTitle"),
+        ("workshop.translateLabel", "WorkshopTranslateLabel"),
+        ("workshop.translateOriginalLabel", "WorkshopTranslateOriginalLabel"),
         ("workshop.updated", "WorkshopUpdated"),
     ];
 
@@ -2314,6 +2413,35 @@ public sealed partial class Localizer
     public string DlcLoadFailed => Format("dlc.loadFailed");
     public string DlcNoGameHint => Format("dlc.noGameHint");
     public string DlcNoGameTitle => Format("dlc.noGameTitle");
+    public string DlcOwnedBadge => Format("dlc.ownedBadge");
+    public string DlcOwnershipChecking => Format("dlc.ownershipChecking");
+    public string DlcOwnershipDetailApi => Format("dlc.ownershipDetailApi");
+    public string DlcOwnershipDetailAppId => Format("dlc.ownershipDetailAppId");
+    public string DlcOwnershipDetailOwnerMatch => Format("dlc.ownershipDetailOwnerMatch");
+    public string DlcOwnershipDetailOwnerMismatch => Format("dlc.ownershipDetailOwnerMismatch");
+    public string DlcOwnershipDetailPatchOff => Format("dlc.ownershipDetailPatchOff");
+    public string DlcOwnershipDetailPatchOn => Format("dlc.ownershipDetailPatchOn");
+    public string DlcOwnershipDetailSteamId => Format("dlc.ownershipDetailSteamId");
+    public string DlcOwnershipErrorBusy => Format("dlc.ownershipErrorBusy");
+    public string DlcOwnershipErrorInitFailed => Format("dlc.ownershipErrorInitFailed");
+    public string DlcOwnershipErrorNative => Format("dlc.ownershipErrorNative");
+    public string DlcOwnershipErrorNoAppId => Format("dlc.ownershipErrorNoAppId");
+    public string DlcOwnershipErrorNoDll => Format("dlc.ownershipErrorNoDll");
+    public string DlcOwnershipErrorNotWindows => Format("dlc.ownershipErrorNotWindows");
+    public string DlcOwnershipErrorSteamNotRunning => Format("dlc.ownershipErrorSteamNotRunning");
+    public string DlcOwnershipErrorX86 => Format("dlc.ownershipErrorX86");
+    public string DlcOwnershipName => Format("dlc.ownershipName");
+    public string DlcOwnershipPatchedEffective => Format("dlc.ownershipPatchedEffective");
+    public string DlcOwnershipPatchedIncomplete => Format("dlc.ownershipPatchedIncomplete");
+    public string DlcOwnershipRecheck => Format("dlc.ownershipRecheck");
+    public string DlcOwnershipRecheckFailed => Format("dlc.ownershipRecheckFailed");
+    public string DlcOwnershipRecheckName => Format("dlc.ownershipRecheckName");
+    public string DlcOwnershipRowNoSteam => Format("dlc.ownershipRowNoSteam");
+    public string DlcOwnershipRowToolTip => Format("dlc.ownershipRowToolTip");
+    public string DlcOwnershipUnavailable => Format("dlc.ownershipUnavailable");
+    public string DlcOwnershipUnknown => Format("dlc.ownershipUnknown");
+    public string DlcOwnershipVanillaAllOwned => Format("dlc.ownershipVanillaAllOwned");
+    public string DlcOwnershipVanillaPartial => Format("dlc.ownershipVanillaPartial");
     public string DlcSaveFailed => Format("dlc.saveFailed");
     public string DlcSaveFailedShort => Format("dlc.saveFailedShort");
     public string DlcSaveName => Format("dlc.saveName");
@@ -2330,6 +2458,8 @@ public sealed partial class Localizer
     public string DlcStatusSkippedSuffix => Format("dlc.statusSkippedSuffix");
     public string DlcToggleToolTip => Format("dlc.toggleToolTip");
     public string DlcToggleToolTipLocked => Format("dlc.toggleToolTipLocked");
+    public string DlcUnknownBadge => Format("dlc.unknownBadge");
+    public string DlcUnownedBadge => Format("dlc.unownedBadge");
     public string HomeContinue => Format("home.continue");
     public string HomeContinueName => Format("home.continueName");
     public string HomeContinueToolTip => Format("home.continueToolTip");
@@ -2978,6 +3108,8 @@ public sealed partial class Localizer
     public string WorkshopTimeWeek => Format("workshop.timeWeek");
     public string WorkshopTimeYear => Format("workshop.timeYear");
     public string WorkshopTitle => Format("workshop.title");
+    public string WorkshopTranslateLabel => Format("workshop.translateLabel");
+    public string WorkshopTranslateOriginalLabel => Format("workshop.translateOriginalLabel");
     public string WorkshopUpdated => Format("workshop.updated");
 }
 
@@ -3058,6 +3190,35 @@ internal static class Keys
     public const string DlcLoadFailed = "dlc.loadFailed";
     public const string DlcNoGameHint = "dlc.noGameHint";
     public const string DlcNoGameTitle = "dlc.noGameTitle";
+    public const string DlcOwnedBadge = "dlc.ownedBadge";
+    public const string DlcOwnershipChecking = "dlc.ownershipChecking";
+    public const string DlcOwnershipDetailApi = "dlc.ownershipDetailApi";
+    public const string DlcOwnershipDetailAppId = "dlc.ownershipDetailAppId";
+    public const string DlcOwnershipDetailOwnerMatch = "dlc.ownershipDetailOwnerMatch";
+    public const string DlcOwnershipDetailOwnerMismatch = "dlc.ownershipDetailOwnerMismatch";
+    public const string DlcOwnershipDetailPatchOff = "dlc.ownershipDetailPatchOff";
+    public const string DlcOwnershipDetailPatchOn = "dlc.ownershipDetailPatchOn";
+    public const string DlcOwnershipDetailSteamId = "dlc.ownershipDetailSteamId";
+    public const string DlcOwnershipErrorBusy = "dlc.ownershipErrorBusy";
+    public const string DlcOwnershipErrorInitFailed = "dlc.ownershipErrorInitFailed";
+    public const string DlcOwnershipErrorNative = "dlc.ownershipErrorNative";
+    public const string DlcOwnershipErrorNoAppId = "dlc.ownershipErrorNoAppId";
+    public const string DlcOwnershipErrorNoDll = "dlc.ownershipErrorNoDll";
+    public const string DlcOwnershipErrorNotWindows = "dlc.ownershipErrorNotWindows";
+    public const string DlcOwnershipErrorSteamNotRunning = "dlc.ownershipErrorSteamNotRunning";
+    public const string DlcOwnershipErrorX86 = "dlc.ownershipErrorX86";
+    public const string DlcOwnershipName = "dlc.ownershipName";
+    public const string DlcOwnershipPatchedEffective = "dlc.ownershipPatchedEffective";
+    public const string DlcOwnershipPatchedIncomplete = "dlc.ownershipPatchedIncomplete";
+    public const string DlcOwnershipRecheck = "dlc.ownershipRecheck";
+    public const string DlcOwnershipRecheckFailed = "dlc.ownershipRecheckFailed";
+    public const string DlcOwnershipRecheckName = "dlc.ownershipRecheckName";
+    public const string DlcOwnershipRowNoSteam = "dlc.ownershipRowNoSteam";
+    public const string DlcOwnershipRowToolTip = "dlc.ownershipRowToolTip";
+    public const string DlcOwnershipUnavailable = "dlc.ownershipUnavailable";
+    public const string DlcOwnershipUnknown = "dlc.ownershipUnknown";
+    public const string DlcOwnershipVanillaAllOwned = "dlc.ownershipVanillaAllOwned";
+    public const string DlcOwnershipVanillaPartial = "dlc.ownershipVanillaPartial";
     public const string DlcSaveFailed = "dlc.saveFailed";
     public const string DlcSaveFailedShort = "dlc.saveFailedShort";
     public const string DlcSaveName = "dlc.saveName";
@@ -3074,6 +3235,8 @@ internal static class Keys
     public const string DlcStatusSkippedSuffix = "dlc.statusSkippedSuffix";
     public const string DlcToggleToolTip = "dlc.toggleToolTip";
     public const string DlcToggleToolTipLocked = "dlc.toggleToolTipLocked";
+    public const string DlcUnknownBadge = "dlc.unknownBadge";
+    public const string DlcUnownedBadge = "dlc.unownedBadge";
     public const string HomeContinue = "home.continue";
     public const string HomeContinueName = "home.continueName";
     public const string HomeContinueToolTip = "home.continueToolTip";
@@ -3722,5 +3885,7 @@ internal static class Keys
     public const string WorkshopTimeWeek = "workshop.timeWeek";
     public const string WorkshopTimeYear = "workshop.timeYear";
     public const string WorkshopTitle = "workshop.title";
+    public const string WorkshopTranslateLabel = "workshop.translateLabel";
+    public const string WorkshopTranslateOriginalLabel = "workshop.translateOriginalLabel";
     public const string WorkshopUpdated = "workshop.updated";
 }

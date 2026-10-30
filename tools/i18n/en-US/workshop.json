@@ -111,5 +111,7 @@
   "workshop.timeWeek": "1 week",
   "workshop.timeYear": "1 year",
   "workshop.title": "Workshop",
+  "workshop.translateLabel": "Translation",
+  "workshop.translateOriginalLabel": "Original",
   "workshop.updated": "Updated {0}"
 }

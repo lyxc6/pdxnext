@@ -26,6 +26,7 @@ public sealed class ModRowViewModel : LocalizedObservableObject
     private string? _originText;
     private bool _isLocalOrigin;
     private string? _warningText;
+    private string? _translatedName;
 
     /// <summary>可见列表总行数（1 起口径），默认 0 表示尚未由列表写入。</summary>
     private int _totalCount;
@@ -132,6 +133,26 @@ public sealed class ModRowViewModel : LocalizedObservableObject
     }
 
     public bool HasThumbnail => !string.IsNullOrWhiteSpace(ThumbnailPath);
+
+    /// <summary>译名；没有启用翻译、翻译失败或原文已是目标语言时为 null。</summary>
+    public string? TranslatedName
+    {
+        get => _translatedName;
+        set
+        {
+            if (string.Equals(_translatedName, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _translatedName = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasTranslatedName));
+        }
+    }
+
+    /// <summary>是否有可显示的译名。</summary>
+    public bool HasTranslatedName => !string.IsNullOrWhiteSpace(_translatedName);
 
     /// <summary>启用开关的自动化 Id（每个 mod 唯一，供 UI 测试定位）。</summary>
     public string ToggleAutomationId => "modToggle_" + ModId.ToString("N");

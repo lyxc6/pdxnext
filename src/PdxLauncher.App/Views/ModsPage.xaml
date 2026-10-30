@@ -251,6 +251,15 @@
                                                   Visibility="{x:Bind svc:XamlVisibility.FromBool(HasWarning), Mode=OneWay}"
                                                   ToolTipService.ToolTip="{x:Bind WarningText, Mode=OneWay}" />
                                     </StackPanel>
+                                    <!-- 译名：原文与译文同显，译文在标题下方一行。 -->
+                                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextTrimming="CharacterEllipsis"
+                                               Visibility="{x:Bind svc:XamlVisibility.FromString(TranslatedName), Mode=OneWay}">
+                                        <Run Text="{x:Bind L.WorkshopTranslateLabel, Mode=OneWay}" />
+                                        <Run Text=" " />
+                                        <Run Text="{x:Bind TranslatedName, Mode=OneWay}" />
+                                    </TextBlock>
                                     <TextBlock Text="{x:Bind Subtitle, Mode=OneWay}"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"

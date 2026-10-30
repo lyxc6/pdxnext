@@ -24,6 +24,10 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
     [ObservableProperty]
     private string? _coverPath;
 
+    /// <summary>译名；没有启用翻译、翻译失败或原文已是目标语言时为 null。</summary>
+    [ObservableProperty]
+    private string? _translatedName;
+
     private WorkshopRowViewModel(
         WorkshopSource source,
         string id,
@@ -97,6 +101,9 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
 
     /// <summary>是否有可用封面。</summary>
     public bool HasCover => !string.IsNullOrWhiteSpace(CoverPath);
+
+    /// <summary>是否有可显示的译名。</summary>
+    public bool HasTranslatedName => !string.IsNullOrWhiteSpace(TranslatedName);
 
     /// <summary>封面边长（像素），跟设置里的「Mod 图片大小」三档一致。</summary>
     public double ThumbnailSize { get; }
@@ -337,4 +344,6 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
     }
 
     partial void OnCoverPathChanged(string? value) => OnPropertyChanged(nameof(HasCover));
+
+    partial void OnTranslatedNameChanged(string? value) => OnPropertyChanged(nameof(HasTranslatedName));
 }

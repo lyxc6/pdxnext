@@ -24,6 +24,10 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
     [ObservableProperty]
     private string? _thumbnailPath;
 
+    /// <summary>译名；没有启用翻译、翻译失败或原文已是目标语言时为 null。</summary>
+    [ObservableProperty]
+    private string? _translatedName;
+
     public ModLibraryRowViewModel(
         ModLibraryEntry entry,
         string? gameVersion = null,
@@ -53,6 +57,9 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
 
     /// <summary>是否有可用缩略图（XAML 用它决定显示图片还是占位图标）。</summary>
     public bool HasThumbnail => !string.IsNullOrWhiteSpace(ThumbnailPath);
+
+    /// <summary>是否有可显示的译名。</summary>
+    public bool HasTranslatedName => !string.IsNullOrWhiteSpace(TranslatedName);
 
     /// <summary>缩略图边长（像素）：由设置里的「Mod 图片大小」三档（32 / 48 / 72）决定。</summary>
     public double ThumbnailSize { get; }
@@ -149,6 +156,8 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
     public string WorkshopDetailAutomationId => "modLibraryOpenDetail_" + ModId.ToString("N");
 
     partial void OnThumbnailPathChanged(string? value) => OnPropertyChanged(nameof(HasThumbnail));
+
+    partial void OnTranslatedNameChanged(string? value) => OnPropertyChanged(nameof(HasTranslatedName));
 
     /// <summary>
     /// 版本支持提示：三角只讲「这个 mod 声明支持哪个版本、和当前游戏版本对不对得上」，

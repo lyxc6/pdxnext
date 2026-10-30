@@ -9,6 +9,8 @@ using PdxLauncher.Core.Text;
 /// <summary>Steam 评论区的一条（mod 详情页「讨论」卡）。</summary>
 public sealed class WorkshopCommentViewModel : LocalizedObservableObject
 {
+    private MarkdownDocument? _translatedBody;
+    private string? _translatedBodyPlain;
     /// <summary>构造。</summary>
     /// <param name="index">行号。</param>
     /// <param name="authorName">作者名。</param>
@@ -65,4 +67,40 @@ public sealed class WorkshopCommentViewModel : LocalizedObservableObject
 
     /// <summary>作者按钮的自动化 id。</summary>
     public string AuthorAutomationId => AutomationId + "_author";
+
+    /// <summary>译文正文；没有启用翻译、翻译失败或原文已是目标语言时为 null。</summary>
+    public MarkdownDocument? TranslatedBody
+    {
+        get => _translatedBody;
+        set
+        {
+            if (ReferenceEquals(_translatedBody, value))
+            {
+                return;
+            }
+
+            _translatedBody = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasTranslation));
+        }
+    }
+
+    /// <summary>译文纯文本（无障碍名称用）。</summary>
+    public string? TranslatedBodyPlain
+    {
+        get => _translatedBodyPlain;
+        set
+        {
+            if (string.Equals(_translatedBodyPlain, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _translatedBodyPlain = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>是否有可显示的译文。</summary>
+    public bool HasTranslation => _translatedBody is { IsEmpty: false };
 }

@@ -491,7 +491,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         var key = BuildPageKey();
         if (!force && _pages.TryGet(key, out var cached))
         {
-            ApplyCachedPage(cached);
+            ApplyCachedPage(cached, cancellationToken);
             StatusMessage = T(Keys.WorkshopStatusLoadedCached, _totalCount);
             RaiseDerived();
 
@@ -531,7 +531,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             ShowFailureOrCache(
                 Source,
                 ex.Message,
-                ex is SteamThrottleException ? DescribeFailure(ex) : null);
+                ex is SteamThrottleException ? DescribeFailure(ex) : null,
+                cancellationToken);
             _logger.Error("创意工坊查询失败（game=" + _gameId + "）", ex);
             RaiseDerived();
         }
@@ -558,7 +559,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
     /// <summary>把缓存的一页直接铺到列表上（封面只认磁盘命中，不联网）。</summary>
     /// <param name="page">页快照。</param>
-    private void ApplyCachedPage(WorkshopPageCache.Page page)
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    private void ApplyCachedPage(WorkshopPageCache.Page page, CancellationToken cancellationToken)
     {
         _totalCount = page.TotalCount;
         _totalPages = page.TotalPages;
@@ -577,6 +579,64 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         }
 
         ReplaceRows(rows);
+        StartNameTranslation(rows, cancellationToken);
+    }
+
+    /// <summary>
+    /// 给一行行模型补译名（后台跑，译好一行刷一行）。
+    /// <para>翻译是网络操作，不能挡着列表显示：这里只起一个后台任务，行模型自己接住结果。</para>
+    /// </summary>
+    /// <param name="rows">要翻译的行。</param>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    private void StartNameTranslation(IEnumerable<WorkshopRowViewModel> rows, CancellationToken cancellationToken)
+    {
+        if (!AppServices.Settings.TranslateNamesEnabled || !AppServices.Translation.IsEnabled)
+        {
+            return;
+        }
+
+        var pending = rows.Where(static row => !string.IsNullOrWhiteSpace(row.Name)).ToList();
+        if (pending.Count == 0)
+        {
+            return;
+        }
+
+        _ = TranslateNamesAsync(pending, cancellationToken);
+    }
+
+    /// <summary>逐行翻译标题；每行译完立刻写回行模型。</summary>
+    private async Task TranslateNamesAsync(
+        IReadOnlyList<WorkshopRowViewModel> rows,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            foreach (var row in rows)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                var translated = await AppServices.Translation
+                    .TranslateAsync(row.Name, cancellationToken)
+                    .ConfigureAwait(true);
+                if (translated is null || string.IsNullOrWhiteSpace(translated))
+                {
+                    continue;
+                }
+
+                row.TranslatedName = translated;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面已关闭或设置已变更：这批译文作废，不记错误。
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("创意工坊标题翻译失败：" + ex.Message);
+        }
     }
 
     /// <summary>整体替换列表行；先取消上一轮封面下载，避免旧页任务继续占用带宽。</summary>
@@ -674,7 +734,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
                 WorkshopSource.Steam,
                 result.Kind == ErrorKind.Unsupported
                     ? "steam-workshop-parse"
-                    : result.ErrorMessage ?? "steam-workshop");
+                    : result.ErrorMessage ?? "steam-workshop",
+                cancellationToken: cancellationToken);
             RaiseDerived();
             return;
         }
@@ -705,6 +766,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         }
 
         ReplaceRows(rows);
+        StartNameTranslation(rows, cancellationToken);
         _pages.Set(pageKey, entries, _totalCount, _totalPages);
 
         // 30 条累加后只落盘一次（逐条 Save 会卡在同步 IO 上）。
@@ -742,7 +804,10 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
         if (!result.IsSuccess || result.Value is null)
         {
-            ShowFailureOrCache(WorkshopSource.Pdx, result.ErrorMessage ?? "pdx-mods");
+            ShowFailureOrCache(
+                WorkshopSource.Pdx,
+                result.ErrorMessage ?? "pdx-mods",
+                cancellationToken: cancellationToken);
             RaiseDerived();
             return;
         }
@@ -772,6 +837,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         }
 
         ReplaceRows(rows);
+        StartNameTranslation(rows, cancellationToken);
         _pages.Set(pageKey, entries, _totalCount, _totalPages);
         _info.Flush();
         StatusMessage = rows.Count == 0
@@ -789,7 +855,12 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <param name="source">当前来源。</param>
     /// <param name="reason">失败原因（用于日志/兜底文案）。</param>
     /// <param name="statusOverride">限流等特殊情况下的状态栏文案；null 表示用通用失败文案。</param>
-    private void ShowFailureOrCache(WorkshopSource source, string reason, string? statusOverride = null)
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    private void ShowFailureOrCache(
+        WorkshopSource source,
+        string reason,
+        string? statusOverride = null,
+        CancellationToken cancellationToken = default)
     {
         var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
         var entries = _info.Snapshot(source, _gameId);
@@ -806,6 +877,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         }
 
         ReplaceRows(rows);
+        StartNameTranslation(rows, cancellationToken);
 
         if (rows.Count > 0)
         {

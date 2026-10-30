@@ -114,6 +114,18 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     [ObservableProperty]
     private MarkdownDocument? _changelogDocument;
 
+    /// <summary>简介译文富文本；没有启用翻译或翻译失败时为 null。</summary>
+    [ObservableProperty]
+    private MarkdownDocument? _translatedDescriptionDocument;
+
+    /// <summary>简介译文纯文本（无障碍名称用）。</summary>
+    [ObservableProperty]
+    private string _translatedDescriptionText = string.Empty;
+
+    /// <summary>更新日志译文富文本；没有启用翻译或翻译失败时为 null。</summary>
+    [ObservableProperty]
+    private MarkdownDocument? _translatedChangelogDocument;
+
     /// <summary>标签拼成的单行文本。</summary>
     [ObservableProperty]
     private string _tagsText = string.Empty;
@@ -243,6 +255,12 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     /// <summary>更新日志是否有内容。</summary>
     public bool HasChangelog => ChangelogDocument is { IsEmpty: false };
+
+    /// <summary>是否有可显示的简介译文。</summary>
+    public bool HasTranslatedDescription => TranslatedDescriptionDocument is { IsEmpty: false };
+
+    /// <summary>是否有可显示的更新日志译文。</summary>
+    public bool HasTranslatedChangelog => TranslatedChangelogDocument is { IsEmpty: false };
 
     /// <summary>是否有标签。</summary>
     public bool HasTags => !string.IsNullOrWhiteSpace(TagsText);
@@ -571,7 +589,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
             if (result is { IsSuccess: true, Value: { } pageData })
             {
-                ApplyCommentPage(pageData, target, start);
+                ApplyCommentPage(pageData, target, start, cancellationToken);
                 CommentsStatusText = string.Empty;
             }
             else
@@ -814,7 +832,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         CreatedText = string.Empty;
         DescriptionText = string.Empty;
         DescriptionDocument = null;
+        TranslatedDescriptionText = string.Empty;
+        TranslatedDescriptionDocument = null;
         ChangelogDocument = null;
+        TranslatedChangelogDocument = null;
         TagsText = string.Empty;
         DependencySummary = string.Empty;
         CommentsSummary = string.Empty;
@@ -922,7 +943,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         // 整体不可用时，才回退到翻页接口。
         if (page is { Comments.Count: > 0 } embedded && _steamCreatorId is not null)
         {
-            ApplyComments(embedded);
+            ApplyComments(embedded, cancellationToken);
             CommentsStatusText = string.Empty;
         }
         else if (_steamCreatorId is not null)
@@ -933,7 +954,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             {
                 if (page is not null)
                 {
-                    ApplyComments(page);
+                    ApplyComments(page, cancellationToken);
                 }
 
                 // 物品页自己就说「一条评论都没有」时，说「没有评论」比说「加载失败」准确；
@@ -946,7 +967,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         }
         else if (page is not null)
         {
-            ApplyComments(page);
+            ApplyComments(page, cancellationToken);
 
             // 有内嵌评论说明这个 mod 只是没拿到作者 id；一条都没有才是真的没有评论。
             CommentsStatusText = Comments.Count > 0
@@ -962,7 +983,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         var document = !string.IsNullOrWhiteSpace(descriptionHtml)
             ? HtmlDescriptionParser.Parse(descriptionHtml)
             : MarkdownParser.Parse(WorkshopText.ToPlainText(detail.Description));
-        ApplyDescription(document);
+        ApplyDescription(document, cancellationToken);
 
         // 顶部图片区用物品页官方画廊（#highlight_player_area）里的截图；抓不到时退回预览图。
         // 简介里的 <img> 属于正文，单独下载给正文用，不再铺到顶部。
@@ -1016,8 +1037,13 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             return;
         }
 
-        ApplyDescription(MarkdownParser.Parse(detail.LongDescription));
-        ChangelogDocument = MarkdownParser.Parse(detail.Changelog);
+        ApplyDescription(MarkdownParser.Parse(detail.LongDescription), cancellationToken);
+        var changelog = MarkdownParser.Parse(detail.Changelog);
+        ChangelogDocument = changelog;
+        if (!changelog.IsEmpty)
+        {
+            StartChangelogTranslation(changelog, cancellationToken);
+        }
         MetaText = BuildPdxMeta(detail);
         CreatedText = detail.Summary.CreatedOn is { } created && created > DateTimeOffset.UnixEpoch
             ? T(Keys.WorkshopDetailCreated, WorkshopText.FormatDate(created))
@@ -1051,10 +1077,171 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     }
 
     /// <summary>把 AST 同时存成富文本与纯文本（纯文本供无障碍名与「无简介」判断）。</summary>
-    private void ApplyDescription(MarkdownDocument document)
+    /// <param name="document">解析后的正文。</param>
+    /// <param name="cancellationToken">页面生命周期取消令牌（供后台译文使用）。</param>
+    private void ApplyDescription(MarkdownDocument document, CancellationToken cancellationToken)
     {
         DescriptionDocument = document.IsEmpty ? null : document;
         DescriptionText = document.ToPlainText();
+        TranslatedDescriptionDocument = null;
+        TranslatedDescriptionText = string.Empty;
+
+        if (document.IsEmpty)
+        {
+            return;
+        }
+
+        StartDescriptionTranslation(document, cancellationToken);
+    }
+
+    /// <summary>后台译简介：译文与原文并存，译好再挂上去。</summary>
+    /// <param name="document">原文正文。</param>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    private void StartDescriptionTranslation(MarkdownDocument document, CancellationToken cancellationToken)
+    {
+        if (!AppServices.Settings.TranslateDescriptionEnabled || !AppServices.Translation.IsEnabled)
+        {
+            return;
+        }
+
+        _ = TranslateDescriptionAsync(document, cancellationToken);
+    }
+
+    /// <summary>翻译简介正文并写回译文属性。</summary>
+    private async Task TranslateDescriptionAsync(MarkdownDocument document, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var translated = await AppServices.Translation
+                .TranslateDocumentAsync(document, cancellationToken)
+                .ConfigureAwait(true);
+            if (translated.IsEmpty)
+            {
+                return;
+            }
+
+            var plain = translated.ToPlainText();
+            if (string.Equals(plain, document.ToPlainText(), StringComparison.Ordinal))
+            {
+                // 没翻出不同内容，就不重复显示一遍原文。
+                return;
+            }
+
+            TranslatedDescriptionDocument = translated;
+            TranslatedDescriptionText = plain;
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面已关闭或设置已变更：这批译文作废，不记错误。
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("简介翻译失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>后台译更新日志（只有 PDX 侧才有更新日志）。</summary>
+    /// <param name="document">原文更新日志。</param>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    private void StartChangelogTranslation(MarkdownDocument document, CancellationToken cancellationToken)
+    {
+        if (!AppServices.Settings.TranslateChangelogEnabled || !AppServices.Translation.IsEnabled)
+        {
+            return;
+        }
+
+        _ = TranslateChangelogAsync(document, cancellationToken);
+    }
+
+    /// <summary>翻译更新日志并写回译文属性。</summary>
+    private async Task TranslateChangelogAsync(MarkdownDocument document, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var translated = await AppServices.Translation
+                .TranslateDocumentAsync(document, cancellationToken)
+                .ConfigureAwait(true);
+            if (translated.IsEmpty)
+            {
+                return;
+            }
+
+            if (string.Equals(
+                    translated.ToPlainText(),
+                    document.ToPlainText(),
+                    StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            TranslatedChangelogDocument = translated;
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面已关闭或设置已变更：这批译文作废，不记错误。
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("更新日志翻译失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>后台译评论正文：逐条译，译好一条挂一条。</summary>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    private void StartCommentsTranslation(CancellationToken cancellationToken)
+    {
+        if (!AppServices.Settings.TranslateCommentsEnabled || !AppServices.Translation.IsEnabled)
+        {
+            return;
+        }
+
+        _ = TranslateCommentsAsync(cancellationToken);
+    }
+
+    /// <summary>逐条翻译评论正文。</summary>
+    private async Task TranslateCommentsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            foreach (var comment in Comments)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                if (!comment.HasBody)
+                {
+                    continue;
+                }
+
+                var translated = await AppServices.Translation
+                    .TranslateDocumentAsync(comment.Body, cancellationToken)
+                    .ConfigureAwait(true);
+                if (translated.IsEmpty)
+                {
+                    continue;
+                }
+
+                var plain = translated.ToPlainText();
+                if (string.Equals(plain, comment.BodyPlain, StringComparison.Ordinal))
+                {
+                    // 没翻出不同内容，就不重复显示一遍原文。
+                    continue;
+                }
+
+                comment.TranslatedBody = translated;
+                comment.TranslatedBodyPlain = plain;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面已关闭或设置已变更：这批译文作废，不记错误。
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("评论翻译失败：" + ex.Message);
+        }
     }
 
     /// <summary>图片墙：先按顺序建好行，下载留给 <see cref="DownloadGalleryAsync"/>。</summary>
@@ -1103,7 +1290,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     }
 
     /// <summary>评论区：首屏评论 + 总数提示。</summary>
-    private void ApplyComments(SteamWorkshopItemPage page)
+    /// <param name="page">物品页内嵌评论。</param>
+    /// <param name="cancellationToken">页面生命周期取消令牌（供后台译文使用）。</param>
+    private void ApplyComments(SteamWorkshopItemPage page, CancellationToken cancellationToken = default)
     {
         Comments.Clear();
 
@@ -1120,13 +1309,20 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         CommentsSummary = Comments.Count > 0
             ? T(Keys.WorkshopCommentsCount, CommentsTotal)
             : string.Empty;
+
+        StartCommentsTranslation(cancellationToken);
     }
 
     /// <summary>把翻页接口返回的一页评论换成界面上的列表。</summary>
     /// <param name="page">接口返回的一页评论。</param>
     /// <param name="requestedPage">界面上的页号（用于页码文案）。</param>
     /// <param name="requestedStart">本次请求的起始偏移（接口没回 start 时用它记账）。</param>
-    private void ApplyCommentPage(SteamWorkshopCommentPage page, int requestedPage, int requestedStart)
+    /// <param name="cancellationToken">页面生命周期取消令牌（供后台译文使用）。</param>
+    private void ApplyCommentPage(
+        SteamWorkshopCommentPage page,
+        int requestedPage,
+        int requestedStart,
+        CancellationToken cancellationToken = default)
     {
         Comments.Clear();
 
@@ -1146,6 +1342,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         CommentsSummary = CommentsTotal > 0
             ? T(Keys.WorkshopCommentsCount, CommentsTotal)
             : string.Empty;
+
+        StartCommentsTranslation(cancellationToken);
     }
 
     /// <summary>一条评论 → 行视图模型（正文优先按 HTML 排版解析）。</summary>
@@ -1174,7 +1372,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             return;
         }
 
-        ApplyDescription(MarkdownParser.Parse(cached));
+        ApplyDescription(MarkdownParser.Parse(cached), CancellationToken.None);
         CachedHint = T(Keys.WorkshopDetailCached);
         IsLoaded = true;
     }

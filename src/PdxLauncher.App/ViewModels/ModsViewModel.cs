@@ -347,7 +347,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
         {
             _allMods = Array.Empty<PlaySetMod>();
             _modsBaseline = null;
-            RebuildVisibleMods();
+            RebuildVisibleMods(cancellationToken);
             return;
         }
 
@@ -369,7 +369,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
                 .PrewarmAsync(_allMods.Select(static m => m.ThumbnailPath), cancellationToken)
                 .ConfigureAwait(true);
 
-            RebuildVisibleMods();
+            RebuildVisibleMods(cancellationToken);
 
             // mod 库只用于补全大小与「添加模组」候选；读失败不影响已保存的播放集内容。
             try
@@ -378,7 +378,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
                     .LoadAsync(Game, cancellationToken)
                     .ConfigureAwait(true);
                 _entryByModId = BuildEntryMap(_librarySnapshot);
-                RebuildVisibleMods();
+                RebuildVisibleMods(cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -397,7 +397,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
             StatusMessage = T(Keys.ModsStatusReadModsFailed, ex.Message);
             _allMods = Array.Empty<PlaySetMod>();
             _modsBaseline = null;
-            RebuildVisibleMods();
+            RebuildVisibleMods(cancellationToken);
         }
         finally
         {
@@ -475,7 +475,8 @@ public sealed class ModsViewModel : LocalizedObservableObject
     // ------------------------------------------------------------ 编辑
 
     /// <summary>按搜索词重建可见行；行顺序即 _allMods 中 position 顺序。</summary>
-    private void RebuildVisibleMods()
+    /// <param name="cancellationToken">页面生命周期取消令牌（供后台译名使用）。</param>
+    private void RebuildVisibleMods(CancellationToken cancellationToken = default)
     {
         var filtered = PlaySetEditor.Filter(_allMods, SearchText);
         var canMove = CanMoveMods;
@@ -527,6 +528,62 @@ public sealed class ModsViewModel : LocalizedObservableObject
         }
 
         RaiseCounts();
+        StartNameTranslation(cancellationToken);
+    }
+
+    /// <summary>
+    /// 后台给可见行补译名：翻译是网络操作，不能挡着列表显示。
+    /// </summary>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    private void StartNameTranslation(CancellationToken cancellationToken)
+    {
+        if (!AppServices.Settings.TranslateNamesEnabled || !AppServices.Translation.IsEnabled)
+        {
+            return;
+        }
+
+        var pending = Mods.Where(static row => !string.IsNullOrWhiteSpace(row.Name)).ToList();
+        if (pending.Count == 0)
+        {
+            return;
+        }
+
+        _ = TranslateNamesAsync(pending, cancellationToken);
+    }
+
+    /// <summary>逐行翻译 mod 名称；译好一行刷一行。</summary>
+    private async Task TranslateNamesAsync(
+        IReadOnlyList<ModRowViewModel> rows,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            foreach (var row in rows)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                var translated = await AppServices.Translation
+                    .TranslateAsync(row.Name, cancellationToken)
+                    .ConfigureAwait(true);
+                if (translated is null || string.IsNullOrWhiteSpace(translated))
+                {
+                    continue;
+                }
+
+                row.TranslatedName = translated;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面已关闭或设置已变更：这批译文作废，不记错误。
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("Mod 名称翻译失败：" + ex.Message);
+        }
     }
 
     /// <summary>行内开关变化：同步集合顺序（不重排），刷新计数与状态，并自动保存。</summary>

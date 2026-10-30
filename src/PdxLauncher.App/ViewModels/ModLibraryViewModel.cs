@@ -164,7 +164,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
                 .PrewarmAsync(_snapshot.Mods.Select(static m => m.ThumbnailPath), cancellationToken)
                 .ConfigureAwait(true);
 
-            RebuildRows();
+            RebuildRows(cancellationToken);
             IsLoaded = true;
 
             // 列表先按本地图片显示完整一屏，联网补图在后台继续（不占用 IsBusy）。
@@ -385,7 +385,8 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     }
 
     /// <summary>按当前搜索词与排序方式重建可见行，并更新状态栏文案。</summary>
-    private void RebuildRows()
+    /// <param name="cancellationToken">页面生命周期取消令牌（供后台译名使用）。</param>
+    private void RebuildRows(CancellationToken cancellationToken = default)
     {
         if (!HasGame)
         {
@@ -412,6 +413,63 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
 
         StatusMessage = BuildStatusMessage(query);
         RaiseDerived();
+
+        StartNameTranslation(cancellationToken);
+    }
+
+    /// <summary>
+    /// 后台给可见行补译名：翻译是网络操作，不能挡着列表显示。
+    /// </summary>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    private void StartNameTranslation(CancellationToken cancellationToken)
+    {
+        if (!AppServices.Settings.TranslateNamesEnabled || !AppServices.Translation.IsEnabled)
+        {
+            return;
+        }
+
+        var pending = Mods.Where(static row => !string.IsNullOrWhiteSpace(row.Name)).ToList();
+        if (pending.Count == 0)
+        {
+            return;
+        }
+
+        _ = TranslateNamesAsync(pending, cancellationToken);
+    }
+
+    /// <summary>逐行翻译 mod 名称；译好一行刷一行。</summary>
+    private async Task TranslateNamesAsync(
+        IReadOnlyList<ModLibraryRowViewModel> rows,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            foreach (var row in rows)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                var translated = await AppServices.Translation
+                    .TranslateAsync(row.Name, cancellationToken)
+                    .ConfigureAwait(true);
+                if (translated is null || string.IsNullOrWhiteSpace(translated))
+                {
+                    continue;
+                }
+
+                row.TranslatedName = translated;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面已关闭或设置已变更：这批译文作废，不记错误。
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("Mod 库名称翻译失败：" + ex.Message);
+        }
     }
 
     /// <summary>

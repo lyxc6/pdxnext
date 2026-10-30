@@ -111,5 +111,7 @@
   "workshop.timeWeek": "1 周",
   "workshop.timeYear": "1 年",
   "workshop.title": "创意工坊",
+  "workshop.translateLabel": "译文",
+  "workshop.translateOriginalLabel": "原文",
   "workshop.updated": "更新于 {0}"
 }
