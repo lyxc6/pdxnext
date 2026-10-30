@@ -385,20 +385,26 @@ BMP/PNG 帧策略、32px 帧的金色占比与圆角透明、8 张 PNG 的魔数
 设置页新增独立的「翻译」分类（左栏最下面一项），默认**开启**，覆盖创意工坊列表、PDX Mods 列表、
 Mod 库、播放集里的 mod 行、工坊详情页的简介与更新日志、以及工坊评论区的正文。
 
-- **两个后端可切换**：
+- **四个后端可切换**：
   - 「自填接口」——填 OpenAI 兼容 API 的地址（Base URL）、密钥与模型名，走 `POST {Base}/chat/completions`；
-  - 「内置免费服务」——用公共翻译接口兜底，无需任何配置；
-  - 「自动」是默认档：优先自填，失败或没配齐就回落到内置；「仅自填」失败就是失败（不回落）；「仅内置」只走内置。
+  - 「微软翻译」——填 Azure Translator 的**订阅密钥 + 区域**两个凭据，走
+    `POST https://api.cognitiveservices.azure.com/translator/text/v3/translate?api-version=3.0&to=zh-Hans`
+    （免费层每月 200 万字符；没有免密钥的公开端点，密钥与区域缺一不可）；
+  - 「谷歌云翻译」——填 Google Cloud Translation 的 **API Key**，走
+    `POST https://translation.googleapis.com/language/translate/v2`（免费层每月 50 万字符）；
+  - 「谷歌免费翻译」——用谷歌公开网页接口兜底，**无需任何配置**（非官方公开端点，随时可能变，可用性不保证）；
+  - 「自动」是默认档：按 **自填接口 → 微软 → 谷歌云 → 谷歌免费** 依次尝试，前一个失败或没配齐就回落下一个；
+    「仅自填」「仅微软」「仅谷歌云」「仅谷歌免费」是专档位，**失败就是失败，不回落**。
 - **目标语言默认跟随界面语言**（界面中文→译成中文，界面英文→译成英文），也可以在设置里固定成中文或英文。
-- **原文与译文同时显示**：列表行在原标题下多出一行「译文 …」，详情页的简介 / 更新日志 / 评论在原文旁边
-  多出一块带「译文」小标题的译文，**不覆盖原文**。
+- **原文与译文同时显示**：列表行在原标题下方多出一块**带描边框**的译文，详情页的简介 / 更新日志 / 评论在原文下方
+  多出一块带「译文」小标题的**带描边框**译文，**不覆盖原文**。框内是保留 Markdown 结构的渲染结果。
 - 四个范围开关可以分别关掉名称 / 简介 / 更新日志 / 评论的翻译。
 - 译文有本地缓存（`cache:translations` 库键，保留天数可配，默认 30 天），命中缓存就不再发请求；
   设置页「缓存」分类里多一行「译文缓存」，可单独清空。
 - 翻译是**弱依赖**：请求失败、限流、返回格式不对都只记日志并在界面上保留原文，绝不把内容清空。
 - Markdown 结构在翻译后保持不变：标题层级、列表序号、链接地址、强调样式原样保留，代码块 / 图片 / 分隔线不翻译。
 
-域名口径：内置免费服务的域名在白名单里；**自填接口的域名按用户填的地址精确授权**（只放行该主机本身，
+域名口径：微软翻译、谷歌云翻译与谷歌免费翻译的域名都在白名单里；**自填接口的域名按用户填的地址精确授权**（只放行该主机本身，
 不放行子域），授权随设置保存，撤销后立刻失效。
 
 ---
@@ -415,7 +421,7 @@ scripts/
 Directory.Build.props          :: 统一可空/语言版本/告警策略
 NuGet.config                   :: <clear/>，全离线
 src/
-  PdxLauncher.Core/            :: 202 个 .cs，无任何 WinUI 依赖，可单测
+  PdxLauncher.Core/            :: 205 个 .cs，无任何 WinUI 依赖，可单测
     Abstractions/              :: 接口（IGameCatalog / IPlaySetRepository / IGameLauncher / INewsFeedService ...）
     Contracts/                 :: 不可变 record 数据模型
     Games/                     :: Steam 库探测、launcher-settings 解析、游戏目录展开、路径规则（V3 非 ASCII）
@@ -427,16 +433,16 @@ src/
     Signatures/                :: dlc_signature 重算（默认关闭）
     Themes/                    :: 主题 JSON 解析 + HSL/RGB 颜色
     Online/                    :: GraphQL 元数据、素材下载、代理（三模式解析 / 系统代理 / 环境变量）、DLC 简介、官方公告
-    Online/Translation/        :: 翻译引擎（自填 OpenAI 兼容 API + 内置免费服务）、译文缓存、引擎模式回落
+    Online/Translation/        :: 翻译引擎（自填 OpenAI 兼容 API + 微软 Azure Translator + 谷歌 Cloud Translation + 谷歌公开免费接口）、译文缓存、引擎模式回落
     Parsing/                   :: Clausewitz 与 Valve KeyValues 解析器
     Patch/                     :: 补丁素材（内嵌 loader + cream_api.ini）、目标目录判定、打补丁 / 还原
-  PdxLauncher.App/             :: 100 个 .cs + 16 个 .xaml，WinUI 3 层
+  PdxLauncher.App/             :: 101 个 .cs + 16 个 .xaml，WinUI 3 层
     Assets/                    :: AppIcon.ico（9 帧 16→256）+ 8 张模板同名 PNG，全部由 tools/gen-app-icon.py 生成
     Views/                     :: GameLibraryPage / HomePage / ModsPage（播放集） / ModLibraryPage（Mod库） / DlcPage / SettingsPage / WorkshopDetailPage（工坊详情子页） / AddModsPage（添加模组子页）
     ViewModels/                :: VM（全部不含 Microsoft.UI.Xaml 类型）
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
 tests/
-  PdxLauncher.Checks/          :: 58 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 61 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
@@ -459,7 +465,7 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**372 个 .cs + 16 个 .xaml**（不含 `obj/` 生成物；2026-10-30 实测：Core 202 / App 100+16 / Imaging 9 / Checks 61 —— Checks 的 61 个文件是 58 个检查类 + Program + ChecksContext + GlobalUsings）。
+**379 个 .cs + 16 个 .xaml**（不含 `obj/` 生成物；2026-10-30 实测：Core 205 / App 101+16 / Imaging 9 / Checks 64 —— Checks 的 64 个文件是 61 个检查类 + Program + ChecksContext + GlobalUsings）。
 
 ---
 
@@ -469,7 +475,7 @@ tools/
 dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 58，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
+输出 `检查类: 61，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
 launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取
 （mods 全量、size / subscribedDate 解析、播放集归属、requiredVersion 兼容判断）、创意工坊 id 解析、启动参数拼装、路径大小写不敏感处理；
 自有库 `pdxnext.sqlite`（建表幂等 / schema 版本 / 事务回滚 / 损坏自愈 / `documents` 键空间与前缀统计）、
@@ -495,7 +501,11 @@ csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cm
 以及翻译：Markdown 结构保留（标题层级 / 列表序号不变、代码块不译、译文为空保留原文、连续纯文本合并成一次请求）、
 目标语言与引擎模式的归一化、译文缓存的命中 / 过期 / 清空、自动模式自填失败回落内置、
 仅自填模式不回落、仅内置模式不碰自填引擎，以及未授权域名被拦下（`host-not-allowed`）、
-自填接口域名授权后放行且不放行子域、撤销授权后立刻失效。
+自填接口域名授权后放行且不放行子域、撤销授权后立刻失效；
+以及机翻引擎：档位归一化（`microsoft` / `google-cloud`）、微软翻译的请求形状（`api-version=3.0`、`to=zh-Hans`、
+订阅密钥与区域两个头齐全、正文是 JSON 数组）与译文解析、谷歌云翻译的请求形状（`key` 走查询参数、
+正文含 `q` / `target` / `format`）与译文解析、两者的失败只记状态码且**密钥不写进日志**、
+凭据不全时不发请求，以及自动模式下失败项由下一个引擎补齐而专档位不回落。
 
 ---
 

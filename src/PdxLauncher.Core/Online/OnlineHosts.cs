@@ -49,6 +49,18 @@ public static class OnlineHosts
     public const string TranslationHost = "translate.googleapis.com";
 
     /// <summary>
+    /// 微软 Azure Translator 文本翻译接口（v3）。
+    /// 需要订阅密钥与区域两个凭据，所以单独放行这一个精确主机。
+    /// </summary>
+    public const string MicrosoftTranslatorHost = "api.cognitiveservices.azure.com";
+
+    /// <summary>
+    /// 谷歌云端翻译（Cloud Translation）官方 REST 接口（v2）。
+    /// 与 <see cref="TranslationHost"/>（谷歌公开网页端点、无需密钥）是两个不同主机。
+    /// </summary>
+    public const string GoogleCloudTranslationHost = "translation.googleapis.com";
+
+    /// <summary>
     /// 用户自行授权的额外主机（自填 OpenAI 兼容 API 的域名）。
     /// 授权后按精确主机名放行，仍然不做子域通配。
     /// </summary>
@@ -96,6 +108,8 @@ public static class OnlineHosts
         || string.Equals(host, SteamCommunityHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamApiHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, TranslationHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, MicrosoftTranslatorHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, GoogleCloudTranslationHost, StringComparison.OrdinalIgnoreCase)
         || IsAuthorizedHost(host);
 
     /// <summary>

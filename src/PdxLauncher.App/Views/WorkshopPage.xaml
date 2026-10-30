@@ -200,13 +200,23 @@
                                            Style="{StaticResource BodyStrongTextBlockStyle}"
                                            TextTrimming="CharacterEllipsis" />
                                 <!-- 译文：与原文并存，翻译没开或失败时整块隐藏。 -->
-                                <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           TextTrimming="CharacterEllipsis"
-                                           Visibility="{x:Bind svc:XamlVisibility.FromString(TranslatedName), Mode=OneWay}">
-                                    <Run Text="{x:Bind L.WorkshopTranslateLabel, Mode=OneWay}" />
-                                    <Run Text="{x:Bind TranslatedName, Mode=OneWay}" />
-                                </TextBlock>
+                                <Border Margin="0,6,0,0"
+                                        Padding="6,4"
+                                        CornerRadius="6"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromString(TranslatedName), Mode=OneWay}">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="{x:Bind L.WorkshopTranslateLabel, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="{x:Bind TranslatedName, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </Border>
                                 <TextBlock Text="{x:Bind SubtitleText, Mode=OneWay}"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"

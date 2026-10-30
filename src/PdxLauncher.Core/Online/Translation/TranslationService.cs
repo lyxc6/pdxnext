@@ -8,39 +8,36 @@ using PdxLauncher.Core.Configuration;
 /// <para>
 /// 模式语义：
 /// <list type="bullet">
-/// <item><see cref="TranslationEngineModes.Auto"/>：优先自填引擎；没配置或失败时回落到内置免费服务。</item>
-/// <item><see cref="TranslationEngineModes.Custom"/>：只用自填引擎；失败就是失败，不回落。</item>
-/// <item><see cref="TranslationEngineModes.Builtin"/>：只用内置免费服务。</item>
+/// <item><see cref="TranslationEngineModes.Auto"/>：按列表顺序依次尝试，前面的引擎没配或失败时由后面的补齐。</item>
+/// <item>其余模式（<see cref="TranslationEngineModes.Custom"/>、<see cref="TranslationEngineModes.Builtin"/>、
+/// <see cref="TranslationEngineModes.Microsoft"/>、<see cref="TranslationEngineModes.GoogleCloud"/>）：
+/// 只用列表里的第一个已配置引擎，失败就是失败，不回落。</item>
 /// </list>
-/// 内置免费服务最多同时 4 个请求，免得把公开接口打爆。
+/// 列表里没配好的引擎会被跳过；引擎最多同时 4 个请求，免得把公开接口打爆。
 /// </para>
 /// </summary>
 public sealed class TranslationService
 {
-    /// <summary>内置免费服务的最大并发请求数。</summary>
+    /// <summary>引擎的最大并发请求数。</summary>
     public const int MaxBuiltinConcurrency = 4;
 
-    private readonly ITranslationEngine? _customEngine;
-    private readonly ITranslationEngine? _builtinEngine;
+    private readonly ITranslationEngine[] _engines;
     private readonly TranslationCache? _cache;
     private readonly IAppLogger _logger;
     private readonly SemaphoreSlim _builtinGate = new(MaxBuiltinConcurrency, MaxBuiltinConcurrency);
 
     /// <summary>创建翻译服务。</summary>
-    /// <param name="customEngine">自填引擎；null 表示没有。</param>
-    /// <param name="builtinEngine">内置免费引擎；null 表示没有。</param>
+    /// <param name="engines">引擎列表，顺序即回落优先级；null 或空表示没有可用引擎。</param>
     /// <param name="cache">译文缓存；null 表示不缓存。</param>
     /// <param name="logger">日志。</param>
     public TranslationService(
-        ITranslationEngine? customEngine,
-        ITranslationEngine? builtinEngine,
+        IReadOnlyList<ITranslationEngine>? engines,
         TranslationCache? cache,
         IAppLogger logger)
     {
         ArgumentNullException.ThrowIfNull(logger);
 
-        _customEngine = customEngine;
-        _builtinEngine = builtinEngine;
+        _engines = engines is null ? [] : engines.Where(engine => engine is not null).ToArray();
         _cache = cache;
         _logger = logger;
     }
@@ -128,94 +125,58 @@ public sealed class TranslationService
         CancellationToken cancellationToken)
     {
         var mode = TranslationEngineModes.Normalize(options.EngineMode);
+        var allowFallback = mode == TranslationEngineModes.Auto;
 
-        if (mode == TranslationEngineModes.Builtin)
+        var candidates = _engines.Where(engine => engine.IsConfigured).ToList();
+        if (candidates.Count == 0)
         {
-            return await RunBuiltinAsync(texts, options, cancellationToken).ConfigureAwait(false);
+            _logger.Warn("翻译模式为「" + DescribeMode(mode) + "」，但没有配置完整的可用引擎");
+            return new TranslationOutcome[texts.Count];
         }
 
-        var customAvailable = _customEngine is not null && _customEngine.IsConfigured;
-        if (customAvailable)
+        var outcomes = new TranslationOutcome[texts.Count];
+        var remaining = Enumerable.Range(0, texts.Count).ToList();
+
+        foreach (var engine in candidates)
         {
-            var customOutcomes = await RunCustomAsync(texts, options, cancellationToken).ConfigureAwait(false);
-            if (mode == TranslationEngineModes.Custom)
+            if (remaining.Count == 0 || cancellationToken.IsCancellationRequested)
             {
-                return customOutcomes;
+                break;
             }
 
-            // auto：自填引擎全成功就用它；只要有失败项，就用内置服务补那些。
-            if (customOutcomes.All(item => item.Text is not null))
+            var batch = remaining.Select(index => texts[index]).ToList();
+            var engineOutcomes = await RunEngineAsync(engine, batch, options, cancellationToken).ConfigureAwait(false);
+            var stillMissing = new List<int>();
+            for (var i = 0; i < remaining.Count && i < engineOutcomes.Length; i++)
             {
-                return customOutcomes;
-            }
-
-            var missing = new List<int>();
-            for (var i = 0; i < customOutcomes.Length; i++)
-            {
-                if (customOutcomes[i].Text is null)
+                var outcome = engineOutcomes[i];
+                if (outcome.Text is null)
                 {
-                    missing.Add(i);
+                    stillMissing.Add(remaining[i]);
+                    continue;
                 }
+
+                outcomes[remaining[i]] = outcome;
             }
 
-            var fallbackTexts = missing.Select(index => texts[index]).ToList();
-            var fallbackOutcomes = await RunBuiltinAsync(fallbackTexts, options, cancellationToken).ConfigureAwait(false);
-            for (var i = 0; i < missing.Count && i < fallbackOutcomes.Length; i++)
+            if (!allowFallback)
             {
-                customOutcomes[missing[i]] = fallbackOutcomes[i];
+                break;
             }
 
-            return customOutcomes;
+            remaining = stillMissing;
         }
 
-        if (mode == TranslationEngineModes.Custom)
-        {
-            _logger.Warn("翻译模式为「仅自填 API」，但没有配置完整的接口地址与密钥");
-            return new TranslationOutcome[texts.Count];
-        }
-
-        return await RunBuiltinAsync(texts, options, cancellationToken).ConfigureAwait(false);
+        return outcomes;
     }
 
-    /// <summary>走自填引擎。</summary>
-    private async Task<TranslationOutcome[]> RunCustomAsync(
+    /// <summary>走一个引擎（限并发）。</summary>
+    private async Task<TranslationOutcome[]> RunEngineAsync(
+        ITranslationEngine engine,
         IReadOnlyList<string> texts,
         TranslationOptions options,
         CancellationToken cancellationToken)
     {
-        if (_customEngine is null)
-        {
-            return new TranslationOutcome[texts.Count];
-        }
-
-        try
-        {
-            var results = await _customEngine.TranslateBatchAsync(texts, options.TargetLanguage, cancellationToken)
-                .ConfigureAwait(false);
-            return ToOutcomes(results, _customEngine.Id);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.Warn("自填翻译引擎调用失败：" + ex.Message);
-            return new TranslationOutcome[texts.Count];
-        }
-    }
-
-    /// <summary>走内置免费引擎（限并发）。</summary>
-    private async Task<TranslationOutcome[]> RunBuiltinAsync(
-        IReadOnlyList<string> texts,
-        TranslationOptions options,
-        CancellationToken cancellationToken)
-    {
-        if (_builtinEngine is null)
-        {
-            return new TranslationOutcome[texts.Count];
-        }
-
         try
         {
             await _builtinGate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -227,9 +188,9 @@ public sealed class TranslationService
 
         try
         {
-            var results = await _builtinEngine.TranslateBatchAsync(texts, options.TargetLanguage, cancellationToken)
+            var results = await engine.TranslateBatchAsync(texts, options.TargetLanguage, cancellationToken)
                 .ConfigureAwait(false);
-            return ToOutcomes(results, _builtinEngine.Id);
+            return ToOutcomes(results, engine.Id);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -237,7 +198,7 @@ public sealed class TranslationService
         }
         catch (Exception ex)
         {
-            _logger.Warn("内置翻译引擎调用失败：" + ex.Message);
+            _logger.Warn("翻译引擎「" + engine.Id + "」调用失败：" + ex.Message);
             return new TranslationOutcome[texts.Count];
         }
         finally
@@ -258,7 +219,7 @@ public sealed class TranslationService
         return outcomes;
     }
 
-    /// <summary>查缓存；自填引擎的键优先，其次内置引擎的键。</summary>
+    /// <summary>查缓存；按引擎列表顺序逐个查键。</summary>
     private async Task<string?> TryGetCachedAsync(
         TranslationOptions options,
         string text,
@@ -269,23 +230,12 @@ public sealed class TranslationService
             return null;
         }
 
-        var engineIds = new List<string>();
-        if (_customEngine is not null)
-        {
-            engineIds.Add(_customEngine.Id);
-        }
-
-        if (_builtinEngine is not null)
-        {
-            engineIds.Add(_builtinEngine.Id);
-        }
-
-        foreach (var engineId in engineIds)
+        foreach (var engine in _engines)
         {
             try
             {
                 var cached = await _cache
-                    .TryGetAsync(engineId, options.TargetLanguage, text, options.CacheDays, cancellationToken)
+                    .TryGetAsync(engine.Id, options.TargetLanguage, text, options.CacheDays, cancellationToken)
                     .ConfigureAwait(false);
                 if (!string.IsNullOrEmpty(cached))
                 {
@@ -332,4 +282,14 @@ public sealed class TranslationService
             _logger.Warn("译文缓存写入失败：" + ex.Message);
         }
     }
+
+    /// <summary>模式的人话描述，只用于日志。</summary>
+    private static string DescribeMode(string mode) => mode switch
+    {
+        TranslationEngineModes.Custom => "仅自填 API",
+        TranslationEngineModes.Builtin => "仅内置免费服务",
+        TranslationEngineModes.Microsoft => "仅微软翻译",
+        TranslationEngineModes.GoogleCloud => "仅谷歌云翻译",
+        _ => "自动",
+    };
 }

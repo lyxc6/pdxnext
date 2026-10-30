@@ -16,8 +16,18 @@ public static class TranslationEngineModes
     /// <summary>仅使用内置免费服务：完全不需要用户配置。</summary>
     public const string Builtin = "builtin";
 
+    /// <summary>
+    /// 仅使用微软 Azure Translator：需要订阅密钥与区域两个凭据，失败不回落。
+    /// </summary>
+    public const string Microsoft = "microsoft";
+
+    /// <summary>
+    /// 仅使用谷歌云端翻译（Cloud Translation）：需要 API Key，失败不回落。
+    /// </summary>
+    public const string GoogleCloud = "google-cloud";
+
     /// <summary>全部可选值，顺序即设置页下拉框的顺序。</summary>
-    public static IReadOnlyList<string> All { get; } = [Auto, Custom, Builtin];
+    public static IReadOnlyList<string> All { get; } = [Auto, Custom, Builtin, Microsoft, GoogleCloud];
 
     /// <summary>把设置里的值归一化成合法模式；null / 空白 / 未知值落到 <see cref="Auto"/>。</summary>
     public static string Normalize(string? mode)

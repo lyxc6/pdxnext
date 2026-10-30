@@ -650,13 +650,19 @@ public sealed partial class Localizer
         ["settings.translate.enabled"] = "启用翻译",
         ["settings.translate.enabledName"] = "启用翻译",
         ["settings.translate.engine"] = "翻译引擎",
-        ["settings.translate.engine.auto.desc"] = "优先用下面自填的接口；没配置或调用失败时回落到内置免费服务。",
+        ["settings.translate.engine.auto.desc"] = "优先用下面配置的 OpenAI 兼容接口，其次微软翻译、谷歌云翻译，最后回落到内置免费服务。",
         ["settings.translate.engine.auto.title"] = "自动（推荐）",
-        ["settings.translate.engine.builtin.desc"] = "完全不需要配置，直接用内置的公开翻译接口（稳定性取决于该服务）。",
-        ["settings.translate.engine.builtin.title"] = "仅内置免费服务",
+        ["settings.translate.engine.builtin.desc"] = "使用谷歌翻译的公开网页接口，不需要任何密钥；这是非官方公开端点，随时可能变，可用性不保证。",
+        ["settings.translate.engine.builtin.title"] = "谷歌免费翻译（无需密钥）",
         ["settings.translate.engine.custom.desc"] = "只调用下面自填的接口；没配置或调用失败就是失败，不回落。",
         ["settings.translate.engine.custom.title"] = "仅自填接口",
+        ["settings.translate.engine.googleCloud.desc"] = "调用谷歌云端翻译的官方接口，需要填写 API Key；免费额度每月 50 万字符。",
+        ["settings.translate.engine.googleCloud.title"] = "谷歌云翻译",
+        ["settings.translate.engine.microsoft.desc"] = "调用微软 Azure Translator，需要填写订阅密钥与区域；免费额度每月 200 万字符。",
+        ["settings.translate.engine.microsoft.title"] = "微软翻译",
         ["settings.translate.engineName"] = "翻译引擎选择",
+        ["settings.translate.googleKey"] = "API Key",
+        ["settings.translate.googleKeyName"] = "谷歌云翻译的 API Key",
         ["settings.translate.hint"] = "译文与原文同时显示：自填接口的地址与密钥只保存在本机 settings.json 里，日志中不会打印；内置免费服务是第三方公开接口，稳定性不由本启动器保证。",
         ["settings.translate.language"] = "译文语言",
         ["settings.translate.language.enUS.desc"] = "无论界面是什么语言，一律译成英文。",
@@ -666,6 +672,11 @@ public sealed partial class Localizer
         ["settings.translate.language.zhCN.desc"] = "无论界面是什么语言，一律译成简体中文。",
         ["settings.translate.language.zhCN.title"] = "简体中文",
         ["settings.translate.languageName"] = "译文目标语言",
+        ["settings.translate.microsoftKey"] = "订阅密钥",
+        ["settings.translate.microsoftKeyName"] = "微软翻译的订阅密钥",
+        ["settings.translate.microsoftRegion"] = "资源区域",
+        ["settings.translate.microsoftRegionName"] = "微软翻译资源所在区域",
+        ["settings.translate.microsoftRegionPlaceholder"] = "eastasia",
         ["settings.translate.model"] = "模型名称",
         ["settings.translate.modelName"] = "翻译使用的模型名称",
         ["settings.translate.modelPlaceholder"] = "gpt-4o-mini",
@@ -1472,13 +1483,19 @@ public sealed partial class Localizer
         ["settings.translate.enabled"] = "Enable translation",
         ["settings.translate.enabledName"] = "Enable translation",
         ["settings.translate.engine"] = "Translation engine",
-        ["settings.translate.engine.auto.desc"] = "Prefer the API configured below; fall back to the built-in free service when it is missing or fails.",
+        ["settings.translate.engine.auto.desc"] = "Prefer the OpenAI-compatible API configured below, then Microsoft Translator and Google Cloud Translation, and finally fall back to the built-in free service.",
         ["settings.translate.engine.auto.title"] = "Automatic (recommended)",
-        ["settings.translate.engine.builtin.desc"] = "No configuration needed; uses the built-in public translation service (availability is out of our control).",
-        ["settings.translate.engine.builtin.title"] = "Built-in free service only",
+        ["settings.translate.engine.builtin.desc"] = "Uses the public Google Translate web endpoint; no key is required. It is an unofficial public endpoint and may change at any time, so availability is not guaranteed.",
+        ["settings.translate.engine.builtin.title"] = "Google free translation (no key)",
         ["settings.translate.engine.custom.desc"] = "Only call the API configured below; a missing key or a failed call is a failure, with no fallback.",
         ["settings.translate.engine.custom.title"] = "Configured API only",
+        ["settings.translate.engine.googleCloud.desc"] = "Calls the official Google Cloud Translation API; requires an API key. The free tier allows 500 thousand characters per month.",
+        ["settings.translate.engine.googleCloud.title"] = "Google Cloud Translation",
+        ["settings.translate.engine.microsoft.desc"] = "Calls Microsoft Azure Translator; requires a subscription key and region. The free tier allows 2 million characters per month.",
+        ["settings.translate.engine.microsoft.title"] = "Microsoft Translator",
         ["settings.translate.engineName"] = "Translation engine choice",
+        ["settings.translate.googleKey"] = "API key",
+        ["settings.translate.googleKeyName"] = "Google Cloud Translation API key",
         ["settings.translate.hint"] = "Translations are shown next to the original. The API URL and key are stored in the local settings.json only and are never written to the log; the built-in free service is a third-party public endpoint whose availability is not guaranteed.",
         ["settings.translate.language"] = "Translation language",
         ["settings.translate.language.enUS.desc"] = "Always translate into English, whatever the interface language is.",
@@ -1488,6 +1505,11 @@ public sealed partial class Localizer
         ["settings.translate.language.zhCN.desc"] = "Always translate into Simplified Chinese, whatever the interface language is.",
         ["settings.translate.language.zhCN.title"] = "简体中文",
         ["settings.translate.languageName"] = "Target language of translations",
+        ["settings.translate.microsoftKey"] = "Subscription key",
+        ["settings.translate.microsoftKeyName"] = "Microsoft Translator subscription key",
+        ["settings.translate.microsoftRegion"] = "Resource region",
+        ["settings.translate.microsoftRegionName"] = "Region of the Microsoft Translator resource",
+        ["settings.translate.microsoftRegionPlaceholder"] = "eastasia",
         ["settings.translate.model"] = "Model",
         ["settings.translate.modelName"] = "Model used for translation",
         ["settings.translate.modelPlaceholder"] = "gpt-4o-mini",
@@ -2300,7 +2322,13 @@ public sealed partial class Localizer
         ("settings.translate.engine.builtin.title", "SettingsTranslateEngineBuiltinTitle"),
         ("settings.translate.engine.custom.desc", "SettingsTranslateEngineCustomDesc"),
         ("settings.translate.engine.custom.title", "SettingsTranslateEngineCustomTitle"),
+        ("settings.translate.engine.googleCloud.desc", "SettingsTranslateEngineGoogleCloudDesc"),
+        ("settings.translate.engine.googleCloud.title", "SettingsTranslateEngineGoogleCloudTitle"),
+        ("settings.translate.engine.microsoft.desc", "SettingsTranslateEngineMicrosoftDesc"),
+        ("settings.translate.engine.microsoft.title", "SettingsTranslateEngineMicrosoftTitle"),
         ("settings.translate.engineName", "SettingsTranslateEngineName"),
+        ("settings.translate.googleKey", "SettingsTranslateGoogleKey"),
+        ("settings.translate.googleKeyName", "SettingsTranslateGoogleKeyName"),
         ("settings.translate.hint", "SettingsTranslateHint"),
         ("settings.translate.language", "SettingsTranslateLanguage"),
         ("settings.translate.language.enUS.desc", "SettingsTranslateLanguageEnUSDesc"),
@@ -2310,6 +2338,11 @@ public sealed partial class Localizer
         ("settings.translate.language.zhCN.desc", "SettingsTranslateLanguageZhCNDesc"),
         ("settings.translate.language.zhCN.title", "SettingsTranslateLanguageZhCNTitle"),
         ("settings.translate.languageName", "SettingsTranslateLanguageName"),
+        ("settings.translate.microsoftKey", "SettingsTranslateMicrosoftKey"),
+        ("settings.translate.microsoftKeyName", "SettingsTranslateMicrosoftKeyName"),
+        ("settings.translate.microsoftRegion", "SettingsTranslateMicrosoftRegion"),
+        ("settings.translate.microsoftRegionName", "SettingsTranslateMicrosoftRegionName"),
+        ("settings.translate.microsoftRegionPlaceholder", "SettingsTranslateMicrosoftRegionPlaceholder"),
         ("settings.translate.model", "SettingsTranslateModel"),
         ("settings.translate.modelName", "SettingsTranslateModelName"),
         ("settings.translate.modelPlaceholder", "SettingsTranslateModelPlaceholder"),
@@ -3120,7 +3153,13 @@ public sealed partial class Localizer
     public string SettingsTranslateEngineBuiltinTitle => Format("settings.translate.engine.builtin.title");
     public string SettingsTranslateEngineCustomDesc => Format("settings.translate.engine.custom.desc");
     public string SettingsTranslateEngineCustomTitle => Format("settings.translate.engine.custom.title");
+    public string SettingsTranslateEngineGoogleCloudDesc => Format("settings.translate.engine.googleCloud.desc");
+    public string SettingsTranslateEngineGoogleCloudTitle => Format("settings.translate.engine.googleCloud.title");
+    public string SettingsTranslateEngineMicrosoftDesc => Format("settings.translate.engine.microsoft.desc");
+    public string SettingsTranslateEngineMicrosoftTitle => Format("settings.translate.engine.microsoft.title");
     public string SettingsTranslateEngineName => Format("settings.translate.engineName");
+    public string SettingsTranslateGoogleKey => Format("settings.translate.googleKey");
+    public string SettingsTranslateGoogleKeyName => Format("settings.translate.googleKeyName");
     public string SettingsTranslateHint => Format("settings.translate.hint");
     public string SettingsTranslateLanguage => Format("settings.translate.language");
     public string SettingsTranslateLanguageEnUSDesc => Format("settings.translate.language.enUS.desc");
@@ -3130,6 +3169,11 @@ public sealed partial class Localizer
     public string SettingsTranslateLanguageZhCNDesc => Format("settings.translate.language.zhCN.desc");
     public string SettingsTranslateLanguageZhCNTitle => Format("settings.translate.language.zhCN.title");
     public string SettingsTranslateLanguageName => Format("settings.translate.languageName");
+    public string SettingsTranslateMicrosoftKey => Format("settings.translate.microsoftKey");
+    public string SettingsTranslateMicrosoftKeyName => Format("settings.translate.microsoftKeyName");
+    public string SettingsTranslateMicrosoftRegion => Format("settings.translate.microsoftRegion");
+    public string SettingsTranslateMicrosoftRegionName => Format("settings.translate.microsoftRegionName");
+    public string SettingsTranslateMicrosoftRegionPlaceholder => Format("settings.translate.microsoftRegionPlaceholder");
     public string SettingsTranslateModel => Format("settings.translate.model");
     public string SettingsTranslateModelName => Format("settings.translate.modelName");
     public string SettingsTranslateModelPlaceholder => Format("settings.translate.modelPlaceholder");
@@ -3943,7 +3987,13 @@ internal static class Keys
     public const string SettingsTranslateEngineBuiltinTitle = "settings.translate.engine.builtin.title";
     public const string SettingsTranslateEngineCustomDesc = "settings.translate.engine.custom.desc";
     public const string SettingsTranslateEngineCustomTitle = "settings.translate.engine.custom.title";
+    public const string SettingsTranslateEngineGoogleCloudDesc = "settings.translate.engine.googleCloud.desc";
+    public const string SettingsTranslateEngineGoogleCloudTitle = "settings.translate.engine.googleCloud.title";
+    public const string SettingsTranslateEngineMicrosoftDesc = "settings.translate.engine.microsoft.desc";
+    public const string SettingsTranslateEngineMicrosoftTitle = "settings.translate.engine.microsoft.title";
     public const string SettingsTranslateEngineName = "settings.translate.engineName";
+    public const string SettingsTranslateGoogleKey = "settings.translate.googleKey";
+    public const string SettingsTranslateGoogleKeyName = "settings.translate.googleKeyName";
     public const string SettingsTranslateHint = "settings.translate.hint";
     public const string SettingsTranslateLanguage = "settings.translate.language";
     public const string SettingsTranslateLanguageEnUSDesc = "settings.translate.language.enUS.desc";
@@ -3953,6 +4003,11 @@ internal static class Keys
     public const string SettingsTranslateLanguageZhCNDesc = "settings.translate.language.zhCN.desc";
     public const string SettingsTranslateLanguageZhCNTitle = "settings.translate.language.zhCN.title";
     public const string SettingsTranslateLanguageName = "settings.translate.languageName";
+    public const string SettingsTranslateMicrosoftKey = "settings.translate.microsoftKey";
+    public const string SettingsTranslateMicrosoftKeyName = "settings.translate.microsoftKeyName";
+    public const string SettingsTranslateMicrosoftRegion = "settings.translate.microsoftRegion";
+    public const string SettingsTranslateMicrosoftRegionName = "settings.translate.microsoftRegionName";
+    public const string SettingsTranslateMicrosoftRegionPlaceholder = "settings.translate.microsoftRegionPlaceholder";
     public const string SettingsTranslateModel = "settings.translate.model";
     public const string SettingsTranslateModelName = "settings.translate.modelName";
     public const string SettingsTranslateModelPlaceholder = "settings.translate.modelPlaceholder";

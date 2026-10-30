@@ -175,6 +175,23 @@ public sealed class AppSettings
     public string? TranslateModel { get; set; }
 
     /// <summary>
+    /// 微软 Azure Translator 的订阅密钥；null 表示未配置。
+    /// 会以明文形式存在本地 settings.json 里，因此设置页用密码框呈现，日志里绝不打印。
+    /// </summary>
+    public string? TranslateMicrosoftKey { get; set; }
+
+    /// <summary>
+    /// 微软 Azure Translator 资源所在的区域（如 eastasia、global）；null 表示未配置。
+    /// </summary>
+    public string? TranslateMicrosoftRegion { get; set; }
+
+    /// <summary>
+    /// 谷歌云端翻译（Cloud Translation）的 API Key；null 表示未配置。
+    /// 会以明文形式存在本地 settings.json 里，因此设置页用密码框呈现，日志里绝不打印。
+    /// </summary>
+    public string? TranslateGoogleKey { get; set; }
+
+    /// <summary>
     /// 译文的目标语言；null/空表示「跟随界面语言」。取值见 <see cref="UiLanguages"/>。
     /// </summary>
     public string? TranslateTargetLanguage { get; set; }

@@ -64,6 +64,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     private string _translateBaseUrl = string.Empty;
     private string _translateApiKey = string.Empty;
     private string _translateModel = string.Empty;
+    private string _translateMicrosoftKey = string.Empty;
+    private string _translateMicrosoftRegion = string.Empty;
+    private string _translateGoogleKey = string.Empty;
 
     public SettingsViewModel()
     {
@@ -1359,10 +1362,20 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             {
                 _selectedTranslationEngine = v;
                 AppServices.Settings.TranslateEngineMode = v.Key;
+                RaiseTranslationEngineFieldVisibility();
             },
             afterSave: NotifyTranslationSettingsChanged,
             statusArgs: v => new object?[] { v.Title });
     }
+
+    /// <summary>是否显示自填 OpenAI 兼容接口的三项（地址 / 密钥 / 模型）。</summary>
+    public bool HasOpenAiFields => IsEngineMode(TranslationEngineModes.Auto) || IsEngineMode(TranslationEngineModes.Custom);
+
+    /// <summary>是否显示微软翻译的密钥与区域两项。</summary>
+    public bool HasMicrosoftFields => IsEngineMode(TranslationEngineModes.Auto) || IsEngineMode(TranslationEngineModes.Microsoft);
+
+    /// <summary>是否显示谷歌云翻译的 API Key 一项。</summary>
+    public bool HasGoogleCloudFields => IsEngineMode(TranslationEngineModes.Auto) || IsEngineMode(TranslationEngineModes.GoogleCloud);
 
     /// <summary>可选的译文语言（跟随界面语言 / 简体中文 / English）。</summary>
     public IReadOnlyList<TranslationTargetLanguageOption> TranslationLanguageOptions =>
@@ -1413,6 +1426,21 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
+    /// <summary>当前引擎模式是否与给定模式一致（未知值按「自动」处理）。</summary>
+    private bool IsEngineMode(string mode) =>
+        string.Equals(
+            TranslationEngineModes.Normalize(AppServices.Settings.TranslateEngineMode),
+            mode,
+            StringComparison.Ordinal);
+
+    /// <summary>翻译引擎模式变化后，刷新各凭据输入区的可见性。</summary>
+    private void RaiseTranslationEngineFieldVisibility()
+    {
+        OnPropertyChanged(nameof(HasOpenAiFields));
+        OnPropertyChanged(nameof(HasMicrosoftFields));
+        OnPropertyChanged(nameof(HasGoogleCloudFields));
+    }
+
     /// <summary>自填接口使用的模型名称；留空时按默认模型处理。</summary>
     public string TranslateModel
     {
@@ -1422,6 +1450,48 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             if (SetProperty(ref _translateModel, value))
             {
                 AppServices.Settings.TranslateModel = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+                SaveTranslationSettings();
+            }
+        }
+    }
+
+    /// <summary>微软翻译的订阅密钥；只保存在本机 settings.json，日志里不打印。</summary>
+    public string TranslateMicrosoftKey
+    {
+        get => _translateMicrosoftKey;
+        set
+        {
+            if (SetProperty(ref _translateMicrosoftKey, value))
+            {
+                AppServices.Settings.TranslateMicrosoftKey = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+                SaveTranslationSettings();
+            }
+        }
+    }
+
+    /// <summary>微软翻译资源所在区域（例如 eastasia / global）。</summary>
+    public string TranslateMicrosoftRegion
+    {
+        get => _translateMicrosoftRegion;
+        set
+        {
+            if (SetProperty(ref _translateMicrosoftRegion, value))
+            {
+                AppServices.Settings.TranslateMicrosoftRegion = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+                SaveTranslationSettings();
+            }
+        }
+    }
+
+    /// <summary>谷歌云翻译的 API Key；只保存在本机 settings.json，日志里不打印。</summary>
+    public string TranslateGoogleKey
+    {
+        get => _translateGoogleKey;
+        set
+        {
+            if (SetProperty(ref _translateGoogleKey, value))
+            {
+                AppServices.Settings.TranslateGoogleKey = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
                 SaveTranslationSettings();
             }
         }
@@ -1522,6 +1592,12 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(TranslateBaseUrl));
         OnPropertyChanged(nameof(TranslateApiKey));
         OnPropertyChanged(nameof(TranslateModel));
+        OnPropertyChanged(nameof(TranslateMicrosoftKey));
+        OnPropertyChanged(nameof(TranslateMicrosoftRegion));
+        OnPropertyChanged(nameof(TranslateGoogleKey));
+        OnPropertyChanged(nameof(HasOpenAiFields));
+        OnPropertyChanged(nameof(HasMicrosoftFields));
+        OnPropertyChanged(nameof(HasGoogleCloudFields));
         OnPropertyChanged(nameof(TranslateCacheDaysText));
         OnPropertyChanged(nameof(TranslateNamesEnabled));
         OnPropertyChanged(nameof(TranslateDescriptionEnabled));
@@ -1721,6 +1797,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         _translateBaseUrl = AppServices.Settings.TranslateBaseUrl ?? string.Empty;
         _translateApiKey = AppServices.Settings.TranslateApiKey ?? string.Empty;
         _translateModel = AppServices.Settings.TranslateModel ?? string.Empty;
+        _translateMicrosoftKey = AppServices.Settings.TranslateMicrosoftKey ?? string.Empty;
+        _translateMicrosoftRegion = AppServices.Settings.TranslateMicrosoftRegion ?? string.Empty;
+        _translateGoogleKey = AppServices.Settings.TranslateGoogleKey ?? string.Empty;
 
         OnPropertyChanged(nameof(PlaySetDisplayModes));
         OnPropertyChanged(nameof(SelectedPlaySetDisplayMode));

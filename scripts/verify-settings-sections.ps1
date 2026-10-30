@@ -70,7 +70,7 @@ $sections = @(
   @{ id='navSettingsOnline';     name='online';     want='cmbProxyMode,txtProxyUrl,txtProxyStatus' },
   @{ id='navSettingsCache';      name='cache';      want='btnRefreshCache,btnClearAllCaches,tglOnlineDlcDescription,cmbDlcDescriptionRetention,tglOnlineNewsFeed,tglOnlineModThumbnail,cmbModThumbnailRetention,txtModThumbnailCachePath' },
   @{ id='navSettingsAdvanced';   name='advanced';   want='tglWriteDlcSignature,btnRegenerateDlcSignature' },
-  @{ id='navSettingsTranslation'; name='translation'; want='tglTranslateEnabled,cmbTranslateEngineMode,txtTranslateBaseUrl,pwdTranslateApiKey,txtTranslateModel,cmbTranslateTargetLanguage,tglTranslateNames,tglTranslateDescription,tglTranslateChangelog,tglTranslateComments,txtTranslateCacheDays' }
+  @{ id='navSettingsTranslation'; name='translation'; want='tglTranslateEnabled,cmbTranslateEngineMode,txtTranslateBaseUrl,pwdTranslateApiKey,txtTranslateModel,cmbTranslateTargetLanguage,tglTranslateNames,tglTranslateDescription,tglTranslateChangelog,tglTranslateComments,txtTranslateCacheDays,pwdTranslateMicrosoftKey,txtTranslateMicrosoftRegion,pwdTranslateGoogleKey' }
 )
 
 $hwnd = $p.MainWindowHandle
@@ -113,6 +113,84 @@ function ScrollToBottom {
   return $false
 }
 
+# 下拉当前选中项的显示文本（PdxDropDown 通过 PdxDropDownAutomationPeer 暴露 Selection 模式）。
+function DropDownName([string]$id) {
+  $el = ById $id
+  if (-not $el) { return $null }
+  $sp = $null
+  if ($el.TryGetCurrentPattern([System.Windows.Automation.SelectionPattern]::Pattern, [ref]$sp)) {
+    $cur = $sp.Current.GetSelection()
+    if ($cur -and $cur.Count -gt 0) { return $cur[0].Current.Name }
+  }
+  return $el.Current.Name
+}
+
+# 按下拉列表项的显示文本选中一项；返回是否成功。
+function SelectDropDownByName([string]$id, [string]$name) {
+  $el = ById $id
+  if (-not $el -or [string]::IsNullOrEmpty($name)) { return $false }
+  $ec = $null
+  if ($el.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$ec)) {
+    $ec.Expand()
+    Start-Sleep -Milliseconds 800
+  }
+  $items = $el.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)))
+  $ok = $false
+  foreach ($it in $items) {
+    if ($it.Current.Name -ne $name) { continue }
+    $si = $null
+    if ($it.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$si)) { $si.Select(); $ok = $true }
+    else { $it.SetFocus(); $ok = $true }
+    break
+  }
+  if ($ec) { $ec.Collapse() }
+  Start-Sleep -Milliseconds 500
+  return $ok
+}
+
+# 展开下拉并返回所有选项的显示文本（顺序即选项顺序）。
+function DropDownItems([string]$id) {
+  $el = ById $id
+  if (-not $el) { return @() }
+  $ec = $null
+  if ($el.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$ec)) {
+    $ec.Expand()
+    Start-Sleep -Milliseconds 800
+  }
+  $items = $el.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)))
+  $names = @()
+  foreach ($it in $items) {
+    if ($it.Current.Name) { $names += $it.Current.Name }
+  }
+  if ($ec) { $ec.Collapse() }
+  Start-Sleep -Milliseconds 300
+  return $names
+}
+
+# 按序号选中下拉项；返回是否成功。
+function SelectDropDownIndex([string]$id, [int]$index) {
+  $el = ById $id
+  if (-not $el) { return $false }
+  $ec = $null
+  if ($el.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$ec)) {
+    $ec.Expand()
+    Start-Sleep -Milliseconds 800
+  }
+  $items = $el.FindAll([System.Windows.Automation.TreeScope]::Descendants, (New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::ListItem)))
+  $target = @()
+  foreach ($it in $items) { if ($it.Current.Name) { $target += $it } }
+  $ok = $false
+  if ($target.Count -gt $index) {
+    $pick = $target[$index]
+    $si = $null
+    if ($pick.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$si)) { $si.Select(); $ok = $true }
+    else { $pick.SetFocus(); $ok = $true }
+  }
+  if ($ec) { $ec.Collapse() }
+  Start-Sleep -Milliseconds 600
+  return $ok
+}
+
 $failed = 0
 foreach ($s in $sections) {
   $el = ById $s.id
@@ -125,6 +203,22 @@ foreach ($s in $sections) {
     if ($el.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$inv)) { $inv.Invoke() }
   }
   Start-Sleep -Milliseconds 1200
+
+  # 翻译节的凭据输入区按「翻译引擎」档位显隐（自动档位才同时显示三组），
+  # 因此校验前先把档位切到第一项（自动），校验完再还原用户原本的档位。
+  $restoreEngineIndex = -1
+  if ($s.name -eq 'translation') {
+    $current = DropDownName 'cmbTranslateEngineMode'
+    $names = DropDownItems 'cmbTranslateEngineMode'
+    for ($i = 0; $i -lt $names.Count; $i++) {
+      if ($names[$i] -eq $current) { $restoreEngineIndex = $i; break }
+    }
+    if ($restoreEngineIndex -ne 0) {
+      if (-not (SelectDropDownIndex 'cmbTranslateEngineMode' 0)) { "ENGINE_SELECT_FAILED"; $failed++ }
+      Start-Sleep -Milliseconds 1200
+    }
+  }
+
   $ids = Ids
   $missing = @()
   foreach ($w in $s.want.Split(',')) { if ($ids -notcontains $w) { $missing += $w } }
@@ -135,6 +229,11 @@ foreach ($s in $sections) {
 
   if ($s.name -eq 'cache' -and (ScrollToBottom)) {
     Shot 'settings-cache-bottom'
+  }
+
+  if ($s.name -eq 'translation' -and $restoreEngineIndex -gt 0) {
+    if (-not (SelectDropDownIndex 'cmbTranslateEngineMode' $restoreEngineIndex)) { "ENGINE_RESTORE_FAILED"; $failed++ }
+    Start-Sleep -Milliseconds 800
   }
 }
 

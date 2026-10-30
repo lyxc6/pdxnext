@@ -900,3 +900,36 @@ Victoria 3 **无法加载任何路径里含非 ASCII 字符的 mod**（Vic3 wiki
 - **不能只看 `steamId` 是否为空**：真机 CK3 有一条 `source=local` 却带 `steamId=3613769385` 的行（用户手工塞的工坊 mod）。
 - `source` 缺失时退回「有工坊 id ⇒ 订阅，否则本地」。
 - Mod 库页与播放集页都显示来源徽标；Mod 库页另有「全部 / 本地 / 订阅」筛选下拉框。
+
+---
+
+## 21. 翻译设置（settings 文档里的翻译字段）
+
+翻译相关的设置全部存在**自有库的 `settings` 文档**里（原 `data\settings.json`，已入库，见 §20.2），和别的设置混在同一段 JSON 里。
+
+| 键 | 类型 | 缺省 | 作用 |
+| --- | --- | --- | --- |
+| `translateEnabled` | bool | `true` | 翻译总开关；关掉后所有译文请求都不发 |
+| `translateEngineMode` | string | `auto` | 引擎档位：`auto` / `custom` / `builtin` / `microsoft` / `google-cloud`；不认识的值按 `auto` 处理 |
+| `translateBaseUrl` | string? | `null` | 自填 OpenAI 兼容 API 的地址（仅 `custom` / `auto` 用） |
+| `translateApiKey` | string? | `null` | 自填接口的密钥（仅 `custom` / `auto` 用） |
+| `translateModel` | string? | `null` | 自填接口的模型名（留空则不请求） |
+| `translateMicrosoftKey` | string? | `null` | 微软 Azure Translator 的**订阅密钥**（仅 `microsoft` / `auto` 用） |
+| `translateMicrosoftRegion` | string? | `null` | 微软翻译的**区域**（如 `eastasia` / `global`；与密钥缺一不可） |
+| `translateGoogleKey` | string? | `null` | 谷歌 Cloud Translation 的 **API Key**（仅 `google-cloud` / `auto` 用） |
+| `translateTargetLanguage` | string? | `null` | 目标语言；留空 = 跟随界面语言（界面中文→`zh-CN`，英文→`en-US`） |
+| `translateNamesEnabled` | bool | `true` | 翻译名称（工坊列表 / Mod 库 / 播放集 mod 行） |
+| `translateDescriptionEnabled` | bool | `true` | 翻译简介（工坊详情页） |
+| `translateChangelogEnabled` | bool | `true` | 翻译更新日志（工坊详情页） |
+| `translateCommentsEnabled` | bool | `true` | 翻译评论正文 |
+| `translateCacheDays` | int | `30` | 译文缓存保留天数（1–365），超期在读取时判定 |
+
+- 三种机翻凭据**互不复用**：`translateApiKey` 属于自填接口，`translateMicrosoftKey` 属于微软，
+  `translateGoogleKey` 属于谷歌云。填错地方不会生效，也不会互相顶掉。
+- 微软翻译**必须同时有密钥与区域**（Azure 免费层 F0 每月 200 万字符），没有免密钥的公开端点；
+  谷歌 Cloud Translation v2 需要 API Key（免费层每月 50 万字符）；
+  而档位 `builtin` 用的是谷歌**公开网页端点**（无需任何凭据，非官方端点，随时可能变）。
+- **密钥是明文存在本地 settings 文档里的**（UI 用密码框显示，日志绝不打印密钥）。
+  这台机器上的其它程序如果能读这个库文件，就能读到这些凭据；共享电脑或备份时请留意。
+- 译文本身不落单独文件，缓存在库键 `cache:translations` 里（键 = SHA256(引擎 + 目标语言 + 原文)），
+  见 §15 的「译文缓存」行与 §20.2 的文档键表。

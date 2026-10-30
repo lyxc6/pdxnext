@@ -11,7 +11,7 @@
 ## 0. 一句话现状
 
 启动器外壳与主页已从「照官方 Paradox 启动器截图逐像素自绘」**改成 WinUI 3 标准控件 UI**（用户明确要求），
-Release **0 警告 0 错误**，自检 **58 个检查类 / 0 失败**（2026-10-30 实测；最近一轮新增 `TranslationChecks`；此前还有 `ConfirmOverlayChecks`、`PdxDatabaseChecks`、`JsonDocumentStoreChecks`、`OwnPlaysetRepositoryChecks`、`LauncherDbProjectionChecks`、`ModPathChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
+Release **0 警告 0 错误**，自检 **61 个检查类 / 0 失败**（2026-10-30 实测；最近一轮新增 `TranslationChecks`；此前还有 `ConfirmOverlayChecks`、`PdxDatabaseChecks`、`JsonDocumentStoreChecks`、`OwnPlaysetRepositoryChecks`、`LauncherDbProjectionChecks`、`ModPathChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
 **2026-10-26 已完成：窗口置顶开关（§0.2）+ 整窗背景「方案 B」（§0.3）**——游戏主题背景图现在连标题栏条和左侧
 NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统一纱 + 卡片/列表玻璃底衬），主页那条 260 高、被裁掉一半的
 主题横幅已删除。剩下的活：Light / HighContrast 真机切主题跑一遍（§0.3 唯一视觉盲区）、真机复验 settings.json 与置顶持久化、
@@ -4658,5 +4658,125 @@ CS1 的远端主题第一次真正被抓取，暴露了 `AssetDownloader` 的两
 ### 验证
 
 - `dotnet build PdxLauncher.sln -c Release -m:1` → 0 警告 0 错误。
-- 自检 → `检查类: 58，失败: 0，断言失败总数: 0`（新增 `TranslationChecks` 49 条断言）。
-- i18n：`tools/gen-i18n.py` 产出 818 条文案（翻译相关新增 48 键）。
+- 自检 → `检查类: 61，失败: 0，断言失败总数: 0`（新增 `TranslationChecks` 49 条断言）。
+- i18n：`tools/gen-i18n.py` 产出 836 条文案（翻译相关新增 66 键）。
+
+---
+
+## 0.60 2026-10-30：译文改「带框呈现」+ 接入微软 / 谷歌云机翻引擎
+
+> 用户诉求原话（m01616）：「显示译文参考这种实现；还有能不能添加机翻，比如微软和谷歌翻译」，
+> 并附了一张参考图：原文一段，**下方一个带细描边的方框**里放中文译文。
+
+### 起因与拍板
+
+1. **呈现样式**：译文不再是无边框的一行灰字，而是「原文在上 + 下方带描边框的译文块」，
+   框内仍保留 Markdown 结构渲染（链接、图片回调照旧）。
+2. **新增机翻引擎**：点名要微软与谷歌。调研结论：
+   - **微软 Azure Translator F0 免费层必须同时有订阅密钥 + 区域**（每月 200 万字符，$10/百万字符），
+     端点 `POST https://api.cognitiveservices.azure.com/translator/text/v3/translate?api-version=3.0&to=zh-Hans`，
+     头 `Ocp-Apim-Subscription-Key` + `Ocp-Apim-Subscription-Region`；**没有免密钥的公开端点**。
+   - **谷歌 Cloud Translation v2 需要 API Key**（免费层每月 50 万字符），
+     端点 `POST https://translation.googleapis.com/language/translate/v2`。
+   - 而原先的「内置免费服务」其实就是谷歌的**公开网页端点**（`translate.googleapis.com/translate_a/single`，无需凭据，
+     但非官方、随时可能变）→ 这次把它改名叫「谷歌免费翻译（无需密钥）」，与「谷歌云翻译」区分开，
+     不重复实现同一套东西。
+   - 拍板：机翻专档位**严格不回落**；「自动」档的回落链是
+     **自填 OpenAI → 微软 → 谷歌云 → 谷歌免费**。
+
+### Core（`src/PdxLauncher.Core/`）
+
+- `OnlineHosts`：新增 `MicrosoftTranslatorHost = "api.cognitiveservices.azure.com"` 与
+  `GoogleCloudTranslationHost = "translation.googleapis.com"`，加进 `IsAllowedHost` 串联。
+  注意它与既有的 `TranslationHost = "translate.googleapis.com"`（谷歌公开网页端点）**是两个不同主机**。
+- `Configuration/TranslationEngineModes`：新增 `Microsoft = "microsoft"` / `GoogleCloud = "google-cloud"`；
+  `All` 变为 5 项（auto / custom / builtin / microsoft / google-cloud），`Normalize` 认识新值。
+- `Configuration/AppSettings`：新增 `TranslateMicrosoftKey` / `TranslateMicrosoftRegion` / `TranslateGoogleKey`。
+  **刻意不复用 `TranslateApiKey`** —— 三种凭据分属三个服务，混用会让「这把钥匙属于哪个服务」变得含糊。
+- `Online/Translation/TranslationOptions`：record struct 追加 `MicrosoftKey` / `MicrosoftRegion` / `GoogleKey`；
+  `FromSettings` 归一化（去空白）；新增 `HasMicrosoftConfiguration`（密钥与区域**都**要非空）
+  与 `HasGoogleCloudConfiguration`（密钥非空）。
+- **新建 `Online/Translation/MicrosoftTranslatorEngine.cs`**（269 行）：`EngineId = "microsoft"`；
+  每批上限 100 条 / 50000 字符（官方限制）；请求体是 JSON 数组 `[{"Text":"..."}]`；
+  响应解析 `[{"translations":[{"text":"..."}]}]`；目标语言 `zh-CN → zh-Hans`、`en-US → en`。
+- **新建 `Online/Translation/GoogleCloudTranslationEngine.cs`**（246 行）：`EngineId = "google-cloud"`；
+  每批上限 128 条；`key` 走**查询参数**（不进请求体）；请求体 `{"q":[...],"target":"zh-CN","format":"text"}`；
+  响应解析 `{"data":{"translations":[{"translatedText":"..."}]}}`。
+- 两个引擎共同约定：失败返回 null 不抛异常；日志**只记状态码不记密钥**；批量段数不符退化为逐条；
+  凭据不全时 `IsConfigured` 为 false 且**根本不发请求**。
+- **`Online/Translation/TranslationService` 重写为「引擎列表」**：构造从
+  `(customEngine, builtinEngine, cache, logger)` 改成 `(IReadOnlyList<ITranslationEngine> engines, cache, logger)`，
+  **列表顺序即回落优先级**。`auto` 模式把未解决项交给下一个引擎；非 `auto` 模式跑完第一个即 break（不回落）。
+  缓存键本来就含引擎 id，所以新引擎自动各自独立分区，`TranslationCache` 本身不用改。
+  （内部集合必须用 `TranslationOutcome[]` —— `IReadOnlyList` 的索引器只读，回填不了。）
+
+### App（`src/PdxLauncher.App/`）
+
+- `Services/TranslationCoordinator.CreateService` 按档位拼引擎列表：
+  `auto` = 自填(若配) + 微软(若配) + 谷歌云(若配) + 谷歌免费（永不缺席）；
+  `custom` = 只自填；`builtin` = 只谷歌免费；`microsoft` = 只微软；`google-cloud` = 只谷歌云。
+  → **专档位靠「列表里只放那一个引擎」实现不回落**，而不是在 Service 里判档位。
+- `Services/TranslationEngineCatalog`：`All` 扩为 5 项，`builtin` 的标题改成「谷歌免费翻译（无需密钥）」。
+- `ViewModels/SettingsViewModel`：新增 `TranslateMicrosoftKey` / `TranslateMicrosoftRegion` / `TranslateGoogleKey`
+  三个属性（写回 `AppServices.Settings` 后 `SaveTranslationSettings()`），以及
+  `HasOpenAiFields` / `HasMicrosoftFields` / `HasGoogleCloudFields` 三个可见性属性
+  （按当前档位：`auto` 全显示，专档位只显示自己那组），档位切换时 `RaiseTranslationEngineFieldVisibility()` 发通知。
+- `Views/SettingsPage.xaml`（翻译分区）：Base URL / 密钥 / 模型三张卡片加
+  `Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasOpenAiFields), Mode=OneWay}"`；
+  新增三张卡片 `pwdTranslateMicrosoftKey`（密码框）/ `txtTranslateMicrosoftRegion`（占位 `eastasia`）/
+  `pwdTranslateGoogleKey`（密码框），分别按 `HasMicrosoftFields` / `HasGoogleCloudFields` 显隐。
+  → 引擎档位决定哪些凭据卡片可见，这是**预期行为**，不是布局缺陷。
+
+### 译文边框化（6 处 XAML）
+
+统一外形：`Border{Margin 0,6,0,0（详情页 0,8,0,0）, Padding 6,4（详情页 10）, CornerRadius 6,
+BorderThickness 1, BorderBrush {ThemeResource CardStrokeColorDefaultBrush},
+Background {ThemeResource CardBackgroundFillColorDefaultBrush}}`，内含「译文」标签行（次级色 Caption）
+加译文正文。
+
+- `Views/WorkshopPage.xaml`、`Views/ModsPage.xaml`、`Views/ModLibraryPage.xaml`：列表行的译名，
+  正文单行 + `CharacterEllipsis` 省略。
+- `Views/WorkshopDetailPage.xaml`：简介块、更新日志块、评论模板三处，正文仍是 `ctl:MarkdownView`
+  （保留 `LinkRequested` / `ImageRequested` 回调与 AutomationId
+  `txtWorkshopDetailTranslatedDescription` / `txtWorkshopDetailTranslatedChangelog`）。
+- 可见性条件不变（`HasTranslatedName` / `HasTranslatedDescription` / `HasTranslatedChangelog` / `HasTranslation`）。
+
+### 自检（`tests/PdxLauncher.Checks/TranslationChecks.cs`）
+
+新增 4 个检查方法 + `RecordingTransport` 替身（记录 method/uri/body/headers）：
+
+- `CheckEngineModes`：新档位归一化（含带空格与大小写变体）、`All.Count == 5`、
+  `FromSettings` 对三个凭据去空白、`HasMicrosoftConfiguration` 缺区域时为 false。
+- `CheckMicrosoftTranslatorEngine`：请求形状（`api-version=3.0`、`to=zh-Hans`、两个头齐全、正文是 JSON 数组）、
+  译文解析、英文目标 `to=en`、401 时返回 null 且日志含 `401` **且不含密钥**、缺区域不发请求。
+- `CheckGoogleCloudTranslationEngine`：`key` 走查询参数、POST、正文含 `q` / `target` / `format`、
+  `translatedText` 解析、403 时 null 且日志不含密钥、无密钥不发请求。
+- `CheckMultiEngineFallback`：auto 模式下失败项由下一个引擎补齐、第三个引擎不被打扰；
+  专档位不回落；未配置引擎被跳过。
+- **踩坑**：非 auto 模式下 Service 只跑列表里的第一个引擎，所以「仅内置」档位的测试必须**只把内置引擎放进列表**
+  （测试与 Coordinator 同构），否则会误跑自填引擎而失败。
+
+### 验证脚本（`scripts/verify-settings-sections.ps1`）
+
+- 翻译分区的 want 列表扩到 14 个 AutomationId（新增 `pwdTranslateMicrosoftKey` /
+  `txtTranslateMicrosoftRegion` / `pwdTranslateGoogleKey`）。
+- **新增难点**：凭据卡片按引擎档位显隐，本机档位是 `builtin` 时 6 张卡片 Collapsed，
+  UIA 树里根本没有这些 AutomationId → 固定白名单会误报失败。
+  解法：脚本进入翻译分区后先读当前档位名，切到 `auto` 档（此时三组凭据全部可见），校验完再**还原原档位**。
+  新增辅助函数 `DropDownName` / `DropDownItems` / `SelectDropDownByName` / `SelectDropDownIndex`
+  （操作自绘 `PdxDropDown`：展开 Flyout → 按 Name 找 ListItem → `SelectionItemPattern.Select` → 收起）。
+
+### 已知限制
+
+- 微软翻译**必须**填订阅密钥 + 区域；没有免密钥的公开端点。免费层 200 万字符/月。
+- 谷歌云翻译必须填 API Key；免费层 50 万字符/月。谷歌公开免费端点非官方，可用性不保证。
+- 三种凭据都以**明文**存在本地 settings 文档里（UI 密码框、日志不打印）。
+- 批量翻译仍靠分隔符协议 / 官方批量上限切批，模型不遵守就退化成逐条。
+- 目标语言仍只支持 `zh-CN` 与 `en-US`。
+
+### 验证（本轮实跑）
+
+- `dotnet build PdxLauncher.sln -c Release -m:1` → **0 警告 0 错误**。
+- 自检 → `检查类: 61，失败: 0，断言失败总数: 0`。
+- `python tools/gen-i18n.py --check` → 836 个键（翻译相关新增 18 键）。
+- `scripts/verify-settings-sections.ps1` → 7 节全过（translation count=48 missing=[]，FAILED_SECTIONS=0）。

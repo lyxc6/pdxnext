@@ -10,6 +10,9 @@ using PdxLauncher.Core.Configuration;
 /// <param name="BaseUrl">自填 API 的根地址；null 表示未配置。</param>
 /// <param name="ApiKey">自填 API 的密钥；null 表示未配置。</param>
 /// <param name="Model">自填 API 的模型名；空时用 <see cref="TranslationModels.Default"/>。</param>
+/// <param name="MicrosoftKey">微软 Azure Translator 的订阅密钥；null 表示未配置。</param>
+/// <param name="MicrosoftRegion">微软 Azure Translator 的区域；null 表示未配置。</param>
+/// <param name="GoogleKey">谷歌云端翻译的 API Key；null 表示未配置。</param>
 /// <param name="TargetLanguage">目标语言代码（zh-CN / en-US）。</param>
 /// <param name="CacheDays">译文缓存保留天数。</param>
 public readonly record struct TranslationOptions(
@@ -18,6 +21,9 @@ public readonly record struct TranslationOptions(
     string? BaseUrl,
     string? ApiKey,
     string Model,
+    string? MicrosoftKey,
+    string? MicrosoftRegion,
+    string? GoogleKey,
     string TargetLanguage,
     int CacheDays)
 {
@@ -43,6 +49,9 @@ public readonly record struct TranslationOptions(
                 null,
                 null,
                 TranslationModels.Default,
+                null,
+                null,
+                null,
                 ResolveTargetLanguage(uiLanguage),
                 30);
         }
@@ -61,6 +70,9 @@ public readonly record struct TranslationOptions(
             string.IsNullOrWhiteSpace(settings.TranslateBaseUrl) ? null : settings.TranslateBaseUrl.Trim(),
             string.IsNullOrWhiteSpace(settings.TranslateApiKey) ? null : settings.TranslateApiKey.Trim(),
             model,
+            string.IsNullOrWhiteSpace(settings.TranslateMicrosoftKey) ? null : settings.TranslateMicrosoftKey.Trim(),
+            string.IsNullOrWhiteSpace(settings.TranslateMicrosoftRegion) ? null : settings.TranslateMicrosoftRegion.Trim(),
+            string.IsNullOrWhiteSpace(settings.TranslateGoogleKey) ? null : settings.TranslateGoogleKey.Trim(),
             target,
             Math.Clamp(settings.TranslateCacheDays, 1, 365));
     }
@@ -68,6 +80,14 @@ public readonly record struct TranslationOptions(
     /// <summary>自填引擎是否已经配置齐（地址 + 密钥 + 模型）。</summary>
     public bool HasCustomConfiguration =>
         !string.IsNullOrWhiteSpace(BaseUrl) && !string.IsNullOrWhiteSpace(ApiKey);
+
+    /// <summary>微软引擎是否已经配置齐（订阅密钥 + 区域）。</summary>
+    public bool HasMicrosoftConfiguration =>
+        !string.IsNullOrWhiteSpace(MicrosoftKey) && !string.IsNullOrWhiteSpace(MicrosoftRegion);
+
+    /// <summary>谷歌云端翻译是否已经配置齐（API Key）。</summary>
+    public bool HasGoogleCloudConfiguration =>
+        !string.IsNullOrWhiteSpace(GoogleKey);
 
     /// <summary>
     /// 目标语言归一化：只认 zh-CN 与 en-US，其余按界面语言回落。

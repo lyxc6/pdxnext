@@ -26,6 +26,10 @@ public static class TranslationChecks
             CheckTranslationOptions();
             CheckTranslationCache();
             CheckTranslationService();
+            CheckEngineModes();
+            CheckMicrosoftTranslatorEngine();
+            CheckGoogleCloudTranslationEngine();
+            CheckMultiEngineFallback();
             CheckTransportHostGate();
         }
         finally
@@ -200,7 +204,9 @@ public static class TranslationChecks
 
         var custom = new StubEngine("custom", configured: true, succeed: false);
         var builtin = new StubEngine("builtin", configured: true, succeed: true);
-        var service = new TranslationService(custom, builtin, cache, logger);
+        var service = new TranslationService(new ITranslationEngine[] { custom, builtin }, cache, logger);
+        // 专档位由上层只把对应引擎放进来，测试里同样按档位给不同引擎列表。
+        var builtinService = new TranslationService(new ITranslationEngine[] { builtin }, cache, logger);
 
         var auto = TranslationOptions.FromSettings(
             new AppSettings { TranslateEnabled = true, TranslateEngineMode = TranslationEngineModes.Auto, TranslateBaseUrl = "https://api.example.com", TranslateApiKey = "k" },
@@ -227,7 +233,7 @@ public static class TranslationChecks
         var builtinOnly = TranslationOptions.FromSettings(
             new AppSettings { TranslateEnabled = true, TranslateEngineMode = TranslationEngineModes.Builtin },
             "zh-CN");
-        var builtinResults = service.TranslateAsync(new[] { "c" }, builtinOnly, CancellationToken.None).GetAwaiter().GetResult();
+        var builtinResults = builtinService.TranslateAsync(new[] { "c" }, builtinOnly, CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Equal("仅内置模式用内置引擎翻译", "builtin:c", builtinResults.Count > 0 ? builtinResults[0] ?? string.Empty : string.Empty);
         ChecksContext.Equal("仅内置模式不碰自填引擎", 0, custom.Calls);
 
@@ -241,9 +247,179 @@ public static class TranslationChecks
 
         // 命中缓存不再请求引擎。
         builtin.Calls = 0;
-        var cached = service.TranslateAsync(new[] { "c" }, builtinOnly, CancellationToken.None).GetAwaiter().GetResult();
+        var cached = builtinService.TranslateAsync(new[] { "c" }, builtinOnly, CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Equal("命中缓存返回同一译文", "builtin:c", cached.Count > 0 ? cached[0] ?? string.Empty : string.Empty);
         ChecksContext.Equal("命中缓存不再请求引擎", 0, builtin.Calls);
+    }
+
+    // ---------------------------------------------------------------- 引擎档位
+
+    private static void CheckEngineModes()
+    {
+        ChecksContext.Equal("微软档位归一化", TranslationEngineModes.Microsoft, TranslationEngineModes.Normalize("microsoft"));
+        ChecksContext.Equal("微软档位大小写不敏感", TranslationEngineModes.Microsoft, TranslationEngineModes.Normalize("  MICROSOFT "));
+        ChecksContext.Equal("谷歌云档位归一化", TranslationEngineModes.GoogleCloud, TranslationEngineModes.Normalize("google-cloud"));
+        ChecksContext.Check("档位表含五个选项", TranslationEngineModes.All.Count == 5);
+        ChecksContext.Check("档位表含微软", TranslationEngineModes.All.Contains(TranslationEngineModes.Microsoft));
+        ChecksContext.Check("档位表含谷歌云", TranslationEngineModes.All.Contains(TranslationEngineModes.GoogleCloud));
+
+        var options = TranslationOptions.FromSettings(
+            new AppSettings
+            {
+                TranslateEnabled = true,
+                TranslateEngineMode = TranslationEngineModes.Microsoft,
+                TranslateMicrosoftKey = " ms-key ",
+                TranslateMicrosoftRegion = " eastasia ",
+                TranslateGoogleKey = " g-key ",
+            },
+            "zh-CN");
+        ChecksContext.Check("微软凭据齐备", options.HasMicrosoftConfiguration);
+        ChecksContext.Check("谷歌凭据齐备", options.HasGoogleCloudConfiguration);
+        ChecksContext.Equal("微软密钥去空白", "ms-key", options.MicrosoftKey ?? string.Empty);
+        ChecksContext.Equal("微软区域去空白", "eastasia", options.MicrosoftRegion ?? string.Empty);
+        ChecksContext.Equal("谷歌密钥去空白", "g-key", options.GoogleKey ?? string.Empty);
+
+        // 只填密钥不填区域时，微软不算配置齐备。
+        var half = TranslationOptions.FromSettings(
+            new AppSettings { TranslateEnabled = true, TranslateMicrosoftKey = "k" },
+            "zh-CN");
+        ChecksContext.Check("只填密钥不算微软配置齐备", !half.HasMicrosoftConfiguration);
+    }
+
+    // ---------------------------------------------------------------- 微软机翻
+
+    private static void CheckMicrosoftTranslatorEngine()
+    {
+        var transport = new RecordingTransport("[{\"translations\":[{\"text\":\"你好\"}]}]");
+        var logger = new RecordingLogger();
+        var engine = new MicrosoftTranslatorEngine(transport, logger, "ms-secret", "eastasia");
+
+        ChecksContext.Equal("微软引擎标识", "microsoft", engine.Id);
+        ChecksContext.Check("密钥加区域才算配置好", engine.IsConfigured);
+
+        var translated = engine.TranslateAsync("hello", "zh-CN", CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("微软引擎返回译文", "你好", translated ?? string.Empty);
+
+        var request = transport.Requests.LastOrDefault();
+        ChecksContext.Check("微软引擎发出了请求", request is not null);
+        ChecksContext.Equal("微软接口用 POST", HttpMethod.Post, request?.Method ?? HttpMethod.Get);
+        ChecksContext.Equal("微软接口主机", "api.cognitiveservices.azure.com", request?.Uri.Host ?? string.Empty);
+        ChecksContext.Check("微软接口带 api-version", (request?.Uri.Query ?? string.Empty).Contains("api-version=3.0", StringComparison.Ordinal));
+        ChecksContext.Check("中文目标语言用 zh-Hans", (request?.Uri.Query ?? string.Empty).Contains("to=zh-Hans", StringComparison.Ordinal));
+        ChecksContext.Check("微软请求带订阅密钥头", request?.Headers.ContainsKey("Ocp-Apim-Subscription-Key") == true);
+        ChecksContext.Check("微软请求带区域头", request?.Headers.ContainsKey("Ocp-Apim-Subscription-Region") == true);
+        ChecksContext.Check("微软请求体是数组", (request?.Body ?? string.Empty).TrimStart().StartsWith("[", StringComparison.Ordinal));
+        ChecksContext.Check("微软请求体带 Text 字段", (request?.Body ?? string.Empty).Contains("\"Text\"", StringComparison.Ordinal));
+
+        // 英文目标语言用 en。
+        transport.Responses.Clear();
+        transport.Responses.Add("[{\"translations\":[{\"text\":\"hi\"}]}]");
+        engine.TranslateAsync("hello", "en-US", CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("英文目标语言用 en", (transport.Requests.LastOrDefault()?.Uri.Query ?? string.Empty).Contains("to=en", StringComparison.Ordinal));
+
+        // 失败只记状态码，不把密钥写进日志。
+        transport.Responses.Clear();
+        transport.Responses.Add(string.Empty);
+        transport.StatusCode = 401;
+        var failed = engine.TranslateAsync("hello", "zh-CN", CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("微软接口失败时返回 null", failed is null);
+        ChecksContext.Check("失败日志只记状态码", logger.Warnings.Any(w => w.Contains("401", StringComparison.Ordinal)));
+        ChecksContext.Check("日志不含订阅密钥", !logger.Warnings.Any(w => w.Contains("ms-secret", StringComparison.Ordinal)));
+
+        // 没配齐凭据时不发请求。
+        var unconfigured = new MicrosoftTranslatorEngine(transport, logger, "only-key", null);
+        ChecksContext.Check("缺区域时未配置", !unconfigured.IsConfigured);
+        var before = transport.Requests.Count;
+        var skipped = unconfigured.TranslateAsync("hello", "zh-CN", CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("未配置时返回 null", skipped is null);
+        ChecksContext.Equal("未配置时不发请求", before, transport.Requests.Count);
+    }
+
+    // ---------------------------------------------------------------- 谷歌云机翻
+
+    private static void CheckGoogleCloudTranslationEngine()
+    {
+        var transport = new RecordingTransport("{\"data\":{\"translations\":[{\"translatedText\":\"你好\"}]}}");
+        var logger = new RecordingLogger();
+        var engine = new GoogleCloudTranslationEngine(transport, logger, "g-secret");
+
+        ChecksContext.Equal("谷歌引擎标识", "google-cloud", engine.Id);
+        ChecksContext.Check("有密钥就算配置好", engine.IsConfigured);
+
+        var translated = engine.TranslateAsync("hello", "zh-CN", CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("谷歌引擎返回译文", "你好", translated ?? string.Empty);
+
+        var request = transport.Requests.LastOrDefault();
+        ChecksContext.Check("谷歌引擎发出了请求", request is not null);
+        ChecksContext.Equal("谷歌接口用 POST", HttpMethod.Post, request?.Method ?? HttpMethod.Get);
+        ChecksContext.Equal("谷歌接口主机", "translation.googleapis.com", request?.Uri.Host ?? string.Empty);
+        ChecksContext.Check("谷歌接口带 key 参数", (request?.Uri.Query ?? string.Empty).Contains("key=g-secret", StringComparison.Ordinal));
+        ChecksContext.Check("谷歌请求体带 q 字段", (request?.Body ?? string.Empty).Contains("\"q\"", StringComparison.Ordinal));
+        ChecksContext.Check("谷歌请求体带中文目标语言", (request?.Body ?? string.Empty).Contains("zh-CN", StringComparison.Ordinal));
+        ChecksContext.Check("谷歌请求体带 format", (request?.Body ?? string.Empty).Contains("\"format\"", StringComparison.Ordinal));
+
+        // 英文目标语言。
+        transport.Responses.Clear();
+        transport.Responses.Add("{\"data\":{\"translations\":[{\"translatedText\":\"hi\"}]}}");
+        engine.TranslateAsync("hello", "en-US", CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("谷歌英文目标语言用 en", (transport.Requests.LastOrDefault()?.Body ?? string.Empty).Contains("\"target\":\"en\"", StringComparison.Ordinal));
+
+        // 失败只记状态码，不把密钥写进日志。
+        transport.Responses.Clear();
+        transport.Responses.Add(string.Empty);
+        transport.StatusCode = 403;
+        var failed = engine.TranslateAsync("hello", "zh-CN", CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("谷歌接口失败时返回 null", failed is null);
+        ChecksContext.Check("谷歌失败日志只记状态码", logger.Warnings.Any(w => w.Contains("403", StringComparison.Ordinal)));
+        ChecksContext.Check("谷歌日志不含密钥", !logger.Warnings.Any(w => w.Contains("g-secret", StringComparison.Ordinal)));
+
+        // 没配密钥时不发请求。
+        var unconfigured = new GoogleCloudTranslationEngine(transport, logger, "  ");
+        ChecksContext.Check("没有密钥时未配置", !unconfigured.IsConfigured);
+        var before = transport.Requests.Count;
+        var skipped = unconfigured.TranslateAsync("hello", "zh-CN", CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("谷歌未配置时返回 null", skipped is null);
+        ChecksContext.Equal("谷歌未配置时不发请求", before, transport.Requests.Count);
+    }
+
+    // ---------------------------------------------------------------- 多引擎回落
+
+    private static void CheckMultiEngineFallback()
+    {
+        var logger = new RecordingLogger();
+        var first = new StubEngine("first", configured: true, succeed: false);
+        var second = new StubEngine("second", configured: true, succeed: true);
+        var third = new StubEngine("third", configured: true, succeed: true);
+        var service = new TranslationService(new ITranslationEngine[] { first, second, third }, null, logger);
+
+        var auto = TranslationOptions.FromSettings(
+            new AppSettings { TranslateEnabled = true, TranslateEngineMode = TranslationEngineModes.Auto },
+            "zh-CN");
+        var autoResults = service.TranslateAsync(new[] { "a" }, auto, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("自动模式由第二个引擎补齐", "second:a", autoResults.Count > 0 ? autoResults[0] ?? string.Empty : string.Empty);
+        ChecksContext.Check("自动模式确实调过第一个引擎", first.Calls > 0);
+        ChecksContext.Check("自动模式确实调过第二个引擎", second.Calls > 0);
+        ChecksContext.Equal("成功后不再调后面的引擎", 0, third.Calls);
+
+        // 专档位严格不回落。
+        first.Calls = 0;
+        second.Calls = 0;
+        third.Calls = 0;
+        var microsoftOnly = TranslationOptions.FromSettings(
+            new AppSettings { TranslateEnabled = true, TranslateEngineMode = TranslationEngineModes.Microsoft },
+            "zh-CN");
+        var strictResults = service.TranslateAsync(new[] { "b" }, microsoftOnly, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("专档位失败时返回 null", strictResults.Count > 0 && strictResults[0] is null);
+        ChecksContext.Equal("专档位只调第一个引擎", 1, first.Calls);
+        ChecksContext.Equal("专档位不调后面的引擎", 0, second.Calls + third.Calls);
+
+        // 没配置好的引擎会被跳过。
+        var unconfigured = new StubEngine("unconfigured", configured: false, succeed: true);
+        var configured = new StubEngine("configured", configured: true, succeed: true);
+        var mixed = new TranslationService(new ITranslationEngine[] { unconfigured, configured }, null, logger);
+        var mixedResults = mixed.TranslateAsync(new[] { "c" }, auto, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("跳过未配置的引擎", "configured:c", mixedResults.Count > 0 ? mixedResults[0] ?? string.Empty : string.Empty);
+        ChecksContext.Equal("未配置的引擎没被调用", 0, unconfigured.Calls);
     }
 
     // ---------------------------------------------------------------- 域名闸门
@@ -276,6 +452,64 @@ public static class TranslationChecks
     }
 
     // ---------------------------------------------------------------- 测试替身
+
+    private sealed record RecordedRequest(
+        HttpMethod Method,
+        Uri Uri,
+        string? Body,
+        IReadOnlyDictionary<string, string> Headers);
+
+    /// <summary>假传输：按预设队列返回响应，并记录每次请求。</summary>
+    private sealed class RecordingTransport : ITranslationTransport
+    {
+        private readonly List<string> _responses = new();
+
+        public RecordingTransport(params string[] responses)
+        {
+            _responses.AddRange(responses);
+        }
+
+        public List<RecordedRequest> Requests { get; } = new();
+
+        public List<string> Responses => _responses;
+
+        public int StatusCode { get; set; } = 200;
+
+        public Task<TranslationResponse> SendAsync(
+            HttpMethod method,
+            Uri uri,
+            string? jsonBody,
+            CancellationToken cancellationToken,
+            IReadOnlyDictionary<string, string>? headers = null)
+        {
+            var recorded = new RecordedRequest(
+                method,
+                uri,
+                jsonBody,
+                headers is null
+                    ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                    : new Dictionary<string, string>(headers, StringComparer.OrdinalIgnoreCase));
+            Requests.Add(recorded);
+
+            if (_responses.Count == 0)
+            {
+                return Task.FromResult(TranslationResponse.Failure(StatusCode, "no-response"));
+            }
+
+            var body = _responses.Count > 0 ? _responses[0] : string.Empty;
+            if (_responses.Count > 0)
+            {
+                _responses.RemoveAt(0);
+            }
+
+            if (StatusCode < 200 || StatusCode >= 300)
+            {
+                return Task.FromResult(TranslationResponse.Failure(StatusCode, "http-error"));
+            }
+
+            return Task.FromResult(new TranslationResponse(true, StatusCode, body, string.Empty));
+        }
+    }
 
     private sealed class StubEngine : ITranslationEngine
     {

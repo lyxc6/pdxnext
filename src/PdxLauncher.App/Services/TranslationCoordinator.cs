@@ -199,22 +199,60 @@ public sealed class TranslationCoordinator : IDisposable
         }
     }
 
-    /// <summary>按当前设置临时构建翻译服务（引擎随设置变，不能提前烤好）。</summary>
+    /// <summary>
+    /// 按当前设置临时构建翻译服务（引擎随设置变，不能提前烤好）。
+    /// <para>
+    /// 引擎列表的顺序即回落优先级：「自动」按 自填 API → 微软 → 谷歌云 → 内置免费 依次尝试；
+    /// 其余模式只放对应的引擎，失败不回落。
+    /// </para>
+    /// </summary>
     private TranslationService CreateService(TranslationOptions options)
     {
-        ITranslationEngine? custom = null;
-        if (options.HasCustomConfiguration)
+        var engines = new List<ITranslationEngine>();
+        var mode = TranslationEngineModes.Normalize(options.EngineMode);
+
+        if (mode == TranslationEngineModes.Auto || mode == TranslationEngineModes.Custom)
         {
-            custom = new OpenAiCompatibleTranslationEngine(
-                _transport,
-                _logger,
-                options.BaseUrl,
-                options.ApiKey,
-                options.Model);
+            if (options.HasCustomConfiguration)
+            {
+                engines.Add(new OpenAiCompatibleTranslationEngine(
+                    _transport,
+                    _logger,
+                    options.BaseUrl,
+                    options.ApiKey,
+                    options.Model));
+            }
         }
 
-        var builtin = new FreeTranslationEngine(_transport, _logger);
-        return new TranslationService(custom, builtin, _cache, _logger);
+        if (mode == TranslationEngineModes.Auto || mode == TranslationEngineModes.Microsoft)
+        {
+            if (options.HasMicrosoftConfiguration)
+            {
+                engines.Add(new MicrosoftTranslatorEngine(
+                    _transport,
+                    _logger,
+                    options.MicrosoftKey,
+                    options.MicrosoftRegion));
+            }
+        }
+
+        if (mode == TranslationEngineModes.Auto || mode == TranslationEngineModes.GoogleCloud)
+        {
+            if (options.HasGoogleCloudConfiguration)
+            {
+                engines.Add(new GoogleCloudTranslationEngine(
+                    _transport,
+                    _logger,
+                    options.GoogleKey));
+            }
+        }
+
+        if (mode == TranslationEngineModes.Auto || mode == TranslationEngineModes.Builtin)
+        {
+            engines.Add(new FreeTranslationEngine(_transport, _logger));
+        }
+
+        return new TranslationService(engines, _cache, _logger);
     }
 
     /// <summary>把用户自填的 Base URL 主机加入精确白名单。</summary>

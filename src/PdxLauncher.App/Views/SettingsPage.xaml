@@ -602,7 +602,8 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsTranslateBaseUrl, Mode=OneWay}">
+                        <controls:SettingsCard Header="{x:Bind L.SettingsTranslateBaseUrl, Mode=OneWay}"
+                                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasOpenAiFields), Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
                                 <TextBox AutomationProperties.AutomationId="txtTranslateBaseUrl"
                                          AutomationProperties.Name="{x:Bind L.SettingsTranslateBaseUrlName, Mode=OneWay}"
@@ -612,7 +613,8 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsTranslateApiKey, Mode=OneWay}">
+                        <controls:SettingsCard Header="{x:Bind L.SettingsTranslateApiKey, Mode=OneWay}"
+                                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasOpenAiFields), Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
                                 <PasswordBox AutomationProperties.AutomationId="pwdTranslateApiKey"
                                              AutomationProperties.Name="{x:Bind L.SettingsTranslateApiKeyName, Mode=OneWay}"
@@ -621,13 +623,45 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
-                        <controls:SettingsCard Header="{x:Bind L.SettingsTranslateModel, Mode=OneWay}">
+                        <controls:SettingsCard Header="{x:Bind L.SettingsTranslateModel, Mode=OneWay}"
+                                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasOpenAiFields), Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
                                 <TextBox AutomationProperties.AutomationId="txtTranslateModel"
                                          AutomationProperties.Name="{x:Bind L.SettingsTranslateModelName, Mode=OneWay}"
                                          Width="320"
                                          PlaceholderText="{x:Bind L.SettingsTranslateModelPlaceholder, Mode=OneWay}"
                                          Text="{x:Bind ViewModel.TranslateModel, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsTranslateMicrosoftKey, Mode=OneWay}"
+                                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasMicrosoftFields), Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <PasswordBox AutomationProperties.AutomationId="pwdTranslateMicrosoftKey"
+                                             AutomationProperties.Name="{x:Bind L.SettingsTranslateMicrosoftKeyName, Mode=OneWay}"
+                                             Width="320"
+                                             Password="{x:Bind ViewModel.TranslateMicrosoftKey, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsTranslateMicrosoftRegion, Mode=OneWay}"
+                                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasMicrosoftFields), Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <TextBox AutomationProperties.AutomationId="txtTranslateMicrosoftRegion"
+                                         AutomationProperties.Name="{x:Bind L.SettingsTranslateMicrosoftRegionName, Mode=OneWay}"
+                                         Width="320"
+                                         PlaceholderText="{x:Bind L.SettingsTranslateMicrosoftRegionPlaceholder, Mode=OneWay}"
+                                         Text="{x:Bind ViewModel.TranslateMicrosoftRegion, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsTranslateGoogleKey, Mode=OneWay}"
+                                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasGoogleCloudFields), Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <PasswordBox AutomationProperties.AutomationId="pwdTranslateGoogleKey"
+                                             AutomationProperties.Name="{x:Bind L.SettingsTranslateGoogleKeyName, Mode=OneWay}"
+                                             Width="320"
+                                             Password="{x:Bind ViewModel.TranslateGoogleKey, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
