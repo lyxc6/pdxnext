@@ -6,7 +6,7 @@
     xmlns:svc="using:PdxLauncher.App.Services"
     xmlns:ctl="using:PdxLauncher.App.Controls"
     xmlns:vm="using:PdxLauncher.App.ViewModels"
-    NavigationCacheMode="Required"
+    NavigationCacheMode="Disabled"
     Background="{ThemeResource PdxPageVeilBrush}">
 
     <!--
@@ -199,7 +199,7 @@
                 <Grid Padding="18">
 
                     <!-- 详情 -->
-                    <ScrollViewer Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsDetailPane), Mode=OneWay}">
+                    <ScrollViewer x:Name="DetailPaneScroll" Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsDetailPane), Mode=OneWay}">
                         <StackPanel Spacing="12" MaxWidth="720" HorizontalAlignment="Left">
                             <TextBlock Text="{x:Bind L.ModstudioUnsupportedHint, Mode=OneWay}"
                                        TextWrapping="Wrap"
@@ -279,7 +279,7 @@
                     </ScrollViewer>
 
                     <!-- 新建 -->
-                    <ScrollViewer Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsCreatePane), Mode=OneWay}">
+                    <ScrollViewer x:Name="CreatePaneScroll" Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsCreatePane), Mode=OneWay}">
                         <StackPanel Spacing="8" MaxWidth="560" HorizontalAlignment="Left">
                             <TextBlock Text="{x:Bind L.ModstudioCreateTitle, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
                             <TextBlock Text="{x:Bind L.ModstudioCreateHint, Mode=OneWay}" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -353,7 +353,7 @@
                     </ScrollViewer>
 
                     <!-- 上传 -->
-                    <ScrollViewer Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsUploadPane), Mode=OneWay}">
+                    <ScrollViewer x:Name="UploadPaneScroll" Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsUploadPane), Mode=OneWay}">
                         <StackPanel Spacing="10" MaxWidth="620" HorizontalAlignment="Left">
                             <TextBlock Text="{x:Bind L.ModstudioUploadTitle, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
                             <TextBlock Text="{x:Bind L.ModstudioUploadHint, Mode=OneWay}" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />

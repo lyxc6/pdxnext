@@ -3,6 +3,7 @@ namespace PdxLauncher.App.Views;
 using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Navigation;
 using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
@@ -18,10 +19,13 @@ public sealed partial class ModLibraryPage : Page
 {
     private readonly ModLibraryViewModel _viewModel;
 
-    /// <summary>页面生命周期令牌；NavigationCacheMode=Required 会在返回页面时重建。</summary>
+    /// <summary>页面生命周期令牌；NavigationCacheMode=Disabled 会在每次进入时重建。</summary>
     private CancellationTokenSource _lifetime = new();
 
     private bool _isReloading;
+
+    /// <summary>从 <see cref="PageStateStore"/> 取回的滚动位置；加载完列表后消费一次。</summary>
+    private double _pendingOffset;
 
     public ModLibraryPage()
     {
@@ -73,13 +77,18 @@ public sealed partial class ModLibraryPage : Page
                 SortBox.SelectedItem = _viewModel.SelectedSortMode;
             }
 
+            // 页面是重建的：把上次离开时的搜索词/排序/来源筛选先放回去，再加载列表。
+            RestoreState();
+
             if (!AppServices.IsInitialized)
             {
                 await _viewModel.LoadAsync(null, _lifetime.Token).ConfigureAwait(true);
+                await RestoreScrollAsync().ConfigureAwait(true);
                 return;
             }
 
             await ReloadAsync().ConfigureAwait(true);
+            await RestoreScrollAsync().ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -144,6 +153,79 @@ public sealed partial class ModLibraryPage : Page
             _isReloading = false;
         }
     }
+
+    // ------------------------------------------------------------ 状态恢复
+
+    /// <summary>把上次离开时的搜索词 / 排序 / 来源筛选套回 ViewModel 与控件；换了游戏就不套用。</summary>
+    private void RestoreState()
+    {
+        var state = PageStateStore.ModLibrary;
+        if (state is null || !IsSameGame(state.GameId))
+        {
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(state.SearchText))
+        {
+            SearchBox.Text = state.SearchText;
+        }
+
+        if (!string.IsNullOrEmpty(state.SortMode))
+        {
+            _viewModel.SelectedSortMode = state.SortMode;
+            SortBox.SelectedItem = state.SortMode;
+        }
+
+        if (!string.IsNullOrEmpty(state.SourceFilter))
+        {
+            _viewModel.SelectedSourceFilter = state.SourceFilter;
+            SourceBox.SelectedItem = state.SourceFilter;
+        }
+
+        _pendingOffset = state.VerticalOffset;
+    }
+
+    private async Task RestoreScrollAsync()
+    {
+        var offset = _pendingOffset;
+        _pendingOffset = 0;
+        if (offset <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await ListViewScrollState.RestoreAsync(ModList, offset).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("ModLibraryPage 恢复滚动位置失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>离开页面（导航去别处）时把状态记下来，页面本身随即销毁。</summary>
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        try
+        {
+            PageStateStore.ModLibrary = new ModLibraryState(
+                AppServices.IsInitialized ? AppServices.CurrentGame?.GameId : null,
+                _viewModel.SearchText,
+                _viewModel.SelectedSortMode,
+                _viewModel.SelectedSourceFilter,
+                ListViewScrollState.GetVerticalOffset(ModList));
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("ModLibraryPage 记录页面状态失败：" + ex.Message);
+        }
+
+        base.OnNavigatedFrom(e);
+    }
+
+    private static bool IsSameGame(string? gameId) =>
+        string.Equals(gameId, AppServices.IsInitialized ? AppServices.CurrentGame?.GameId : null, StringComparison.Ordinal);
 
     // ------------------------------------------------------------ 控件事件
 

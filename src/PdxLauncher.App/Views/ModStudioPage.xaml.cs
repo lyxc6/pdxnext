@@ -2,6 +2,7 @@ namespace PdxLauncher.App.Views;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Navigation;
 using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
@@ -22,7 +23,7 @@ public sealed partial class ModStudioPage : Page
 {
     private readonly ModStudioViewModel _viewModel;
 
-    /// <summary>页面生命周期令牌；NavigationCacheMode=Required 会在返回页面时重建。</summary>
+    /// <summary>页面生命周期令牌；NavigationCacheMode=Disabled 会在每次进入时重建。</summary>
     private CancellationTokenSource _lifetime = new();
 
     /// <summary>当前上传的取消源；只在上传期间存在。</summary>
@@ -73,6 +74,7 @@ public sealed partial class ModStudioPage : Page
             AppServices.CurrentGameChanged += OnCurrentGameChanged;
 
             await ReloadAsync().ConfigureAwait(true);
+            await RestoreStateAsync().ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -126,6 +128,130 @@ public sealed partial class ModStudioPage : Page
             _isReloading = false;
         }
     }
+
+    // ------------------------------------------------------------ 状态恢复
+
+    /// <summary>
+    /// 页面是重建的：把上次离开时选中的 mod、面板、滚动位置和表单草稿放回去。
+    /// 选中行会触发 <c>ResetUploadForm</c> 并把面板拉回详情，所以顺序必须是「选行 → 填草稿 → 切面板」。
+    /// </summary>
+    private async Task RestoreStateAsync()
+    {
+        var state = PageStateStore.ModStudio;
+        if (state is null || !IsSameGame(state.GameId))
+        {
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(state.SelectedPath))
+        {
+            var row = _viewModel.Mods.FirstOrDefault(
+                candidate => string.Equals(candidate.DirPath, state.SelectedPath, StringComparison.OrdinalIgnoreCase));
+            if (row is not null)
+            {
+                _viewModel.SelectedRow = row;
+            }
+        }
+
+        ApplyDraft(state.Draft);
+
+        if (Enum.TryParse<ModStudioPane>(state.Pane, ignoreCase: true, out var pane))
+        {
+            _viewModel.Pane = pane;
+        }
+
+        var (target, offset) = _viewModel.Pane switch
+        {
+            ModStudioPane.Create => (CreatePaneScroll, state.CreateOffset),
+            ModStudioPane.Upload => (UploadPaneScroll, state.UploadOffset),
+            _ => (DetailPaneScroll, state.DetailOffset),
+        };
+
+        try
+        {
+            await ListViewScrollState.RestoreAsync(target, offset).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("ModStudioPage 恢复滚动位置失败：" + ex.Message);
+        }
+    }
+
+    private void ApplyDraft(ModStudioDraft draft)
+    {
+        _viewModel.CreateName = draft.CreateName;
+        _viewModel.CreateFolderName = draft.CreateFolderName;
+        _viewModel.CreateVersion = draft.CreateVersion;
+        _viewModel.CreateSupportedVersion = draft.CreateSupportedVersion;
+        _viewModel.CreateTags = draft.CreateTags;
+        _viewModel.CreateDescription = draft.CreateDescription;
+        _viewModel.CreatePreviewPath = draft.CreatePreviewPath;
+
+        _viewModel.UploadTitle = draft.UploadTitle;
+        _viewModel.UploadDescription = draft.UploadDescription;
+        _viewModel.UploadTags = draft.UploadTags;
+        _viewModel.UploadChangeNote = draft.UploadChangeNote;
+        _viewModel.UploadPreviewPath = draft.UploadPreviewPath;
+        _viewModel.UploadPublic = draft.UploadPublic;
+        _viewModel.UploadModId = draft.UploadModId;
+        _viewModel.UploadDirectory = draft.UploadDirectory;
+        _viewModel.UploadDescriptorAdult = draft.UploadDescriptorAdult;
+        _viewModel.UploadDescriptorViolence = draft.UploadDescriptorViolence;
+
+        if (Enum.TryParse<ModUploadTarget>(draft.UploadTarget, ignoreCase: true, out var target))
+        {
+            _viewModel.UploadTarget = target;
+        }
+
+        if (Enum.TryParse<SteamWorkshopVisibility>(draft.UploadVisibility, ignoreCase: true, out var visibility))
+        {
+            _viewModel.UploadVisibility = visibility;
+        }
+    }
+
+    /// <summary>离开页面时把状态记下来；页面本身随即销毁。</summary>
+    protected override void OnNavigatedFrom(NavigationEventArgs e)
+    {
+        try
+        {
+            PageStateStore.ModStudio = new ModStudioState(
+                AppServices.IsInitialized ? AppServices.CurrentGame?.GameId : null,
+                _viewModel.SelectedRow?.DirPath,
+                _viewModel.Pane.ToString(),
+                ListViewScrollState.GetVerticalOffset(DetailPaneScroll),
+                ListViewScrollState.GetVerticalOffset(CreatePaneScroll),
+                ListViewScrollState.GetVerticalOffset(UploadPaneScroll),
+                new ModStudioDraft(
+                    _viewModel.CreateName,
+                    _viewModel.CreateFolderName,
+                    _viewModel.CreateVersion,
+                    _viewModel.CreateSupportedVersion,
+                    _viewModel.CreateTags,
+                    _viewModel.CreateDescription,
+                    _viewModel.CreatePreviewPath,
+                    _viewModel.UploadTitle,
+                    _viewModel.UploadDescription,
+                    _viewModel.UploadTags,
+                    _viewModel.UploadChangeNote,
+                    _viewModel.UploadPreviewPath,
+                    _viewModel.UploadPublic,
+                    _viewModel.UploadTarget.ToString(),
+                    _viewModel.UploadModId,
+                    _viewModel.UploadDirectory,
+                    _viewModel.UploadVisibility.ToString(),
+                    _viewModel.UploadDescriptorAdult,
+                    _viewModel.UploadDescriptorViolence));
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("ModStudioPage 记录页面状态失败：" + ex.Message);
+        }
+
+        base.OnNavigatedFrom(e);
+    }
+
+    private static bool IsSameGame(string? gameId) =>
+        string.Equals(gameId, AppServices.IsInitialized ? AppServices.CurrentGame?.GameId : null, StringComparison.Ordinal);
 
     // ------------------------------------------------------------ 顶部操作
 

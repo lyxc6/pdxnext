@@ -98,5 +98,14 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\ImageDecodeSize.cs" Link="Linked\ImageDecodeSize.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\ImagePixelSize.cs" Link="Linked\ImagePixelSize.cs" />
+
+    <!--
+      页面状态快照：只有 record 与静态字段，不碰 UI 类型，可以直接链接。
+      它错了的表现是「回到页面筛选/滚动丢了」，编译器和真机都不容易发现，所以由 PageStateChecks 钉住字段与默认值。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\ModLibraryState.cs" Link="Linked\ModLibraryState.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\ModStudioDraft.cs" Link="Linked\ModStudioDraft.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\ModStudioState.cs" Link="Linked\ModStudioState.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\PageStateStore.cs" Link="Linked\PageStateStore.cs" />
   </ItemGroup>
 </Project>

@@ -6,7 +6,7 @@
     xmlns:svc="using:PdxLauncher.App.Services"
     xmlns:vm="using:PdxLauncher.App.ViewModels"
     xmlns:controls="using:PdxLauncher.App.Controls"
-    NavigationCacheMode="Required"
+    NavigationCacheMode="Disabled"
     Background="{ThemeResource PdxPageVeilBrush}">
 
     <!--
