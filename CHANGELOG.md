@@ -3,6 +3,17 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)；版本号遵循
 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
+## [1.1.1] - 2026-11-03
+
+### Fixed
+
+- 设置页「检查更新」成功后「上次检查」不刷新、自动检查开关不同步：`UpdateService` 与 UI 现在共用同一个 `AppSettings` 实例，并增加一致性检查。
+- 设置页 `ToggleSwitch` 因默认 `MinWidth` 和「开/关」文案偏左，统一收紧后与右侧操作按钮对齐。
+
+### Added
+
+- 本地安装版本校验工具与发版规则：发布前必须安装并校验已安装程序的 `FileVersion` 与 `version.props` 一致；CI 自检同时校验版本文件与 CHANGELOG 条目。
+
 ## [1.1.0] - 2026-11-03
 
 ### Added

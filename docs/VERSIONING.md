@@ -54,6 +54,16 @@ PdxNext 采用 [Semantic Versioning 2.0](https://semver.org/lang/zh-CN/)：`MAJO
    python tools\build-installer.py
    ```
 
+   然后安装刚生成的 Setup，并校验本机安装版本：
+
+   ```powershell
+   Start-Process "dist\installer\PdxNext-Setup-<version>.exe" `
+     -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/CURRENTUSER", "/NORESTART"
+   powershell -ExecutionPolicy Bypass -File tools\verify-installed-version.ps1
+   ```
+
+   安装后如果启动器自动拉起，先退出再跑校验。**校验不通过不能提交发版。**
+
 4. 提交并推送 `main`。
 5. 打 tag 并推送：
 
@@ -82,3 +92,24 @@ PdxNext 采用 [Semantic Versioning 2.0](https://semver.org/lang/zh-CN/)：`MAJO
 - 升级只替换程序文件，`data\`、`data-root.txt`、`install-mode.txt` 由安装器保留/重写。
 - `schemaVersion=1` 的更新清单保持字段向后兼容；新增字段必须可选，旧客户端应能忽略。
 - `OnlineHosts` 只放精确主机名，不加通配子域；更换发布域名要同步改清单地址与白名单。
+
+## 7. 本地安装版本同步（硬规则）
+
+每次发版必须同时满足下面三条，缺一条都视为发版未完成：
+
+1. `version.props`、`CHANGELOG.md` 与实际代码一致；
+2. 用新生成的 Setup 在本机完成一次真实安装/覆盖安装；
+3. `tools/verify-installed-version.ps1` 退出码为 0，且安装目录里的
+   `PdxLauncher.App.exe` 的 `FileVersion` 等于 `version.props` 的
+   `FileVersion`。
+
+原因：安装包和更新清单都由 `version.props` 派生，但**本机已安装副本不会自动更新**。
+如果只改源码/打 tag、不安装新包，About 页和卸载项会继续显示旧版本，更新链路也会
+拿旧程序去比较版本，表现为「发了版但客户端还是旧号」。
+
+CI 的 `ReleaseVersionChecks` 只能校验版本文件与 CHANGELOG；本地安装副本必须在
+发布机器上单独校验：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\verify-installed-version.ps1
+```
