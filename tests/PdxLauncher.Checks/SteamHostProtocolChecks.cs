@@ -51,8 +51,9 @@ public static class SteamHostProtocolChecks
         var lone = new[] { SteamHostProtocol.VerbArgument };
         Assert(!SteamHostProtocol.IsHostInvocation(lone), "只有 --steam-host 没有动词不算宿主调用");
 
-        // 动词表后来又多了两个：workshop-subscribed（整库订阅列表）与 workshop-batch（批量下载/本地禁用）。
-        AssertEqual(7, SteamHostProtocol.Verbs.Count, "动词表恰好七个（probe + 四工坊操作 + 订阅列表 + 批量）");
+        // 动词表后来又多了两组：workshop-subscribed（整库订阅列表）+ workshop-batch（批量下载/本地禁用），
+        // 以及 workshop-mine / workshop-mine-detail（读「我自己发布的条目」）。
+        AssertEqual(9, SteamHostProtocol.Verbs.Count, "动词表恰好九个（probe + 四工坊操作 + 订阅列表 + 批量 + 我的条目两个）");
         AssertEqual(
             SteamHostProtocol.WorkshopPublishVerb,
             SteamHostProtocol.Verbs[4],
@@ -64,7 +65,15 @@ public static class SteamHostProtocolChecks
         AssertEqual(
             SteamHostProtocol.WorkshopBatchVerb,
             SteamHostProtocol.Verbs[6],
-            "动词表末位是 workshop-batch");
+            "动词表第七位是 workshop-batch");
+        AssertEqual(
+            SteamHostProtocol.WorkshopMineVerb,
+            SteamHostProtocol.Verbs[7],
+            "动词表第八位是 workshop-mine");
+        AssertEqual(
+            SteamHostProtocol.WorkshopMineDetailVerb,
+            SteamHostProtocol.Verbs[8],
+            "动词表末位是 workshop-mine-detail");
     }
 
     private static void CheckProbeResultRoundTrip()

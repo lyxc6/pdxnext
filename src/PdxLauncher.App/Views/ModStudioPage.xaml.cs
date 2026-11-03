@@ -431,6 +431,44 @@ public sealed partial class ModStudioPage : Page
         }
     }
 
+    /// <summary>
+    /// 「绑定已有条目…」：先弹框拿到工坊 id，再交给 ViewModel 落库。
+    /// 绑定不上传文件，只是把本地目录与已存在的条目对上号。
+    /// </summary>
+    private async void OnBindWorkshopClick(object sender, RoutedEventArgs e)
+    {
+        var row = _viewModel.SelectedRow;
+        if (row is null || !_viewModel.CanBindWorkshop)
+        {
+            return;
+        }
+
+        var publishedFileId = await BindWorkshopItemDialog.ShowAsync(
+            XamlRoot,
+            row.Name,
+            _viewModel.ReadOwnWorkshopItemsAsync).ConfigureAwait(true);
+        if (publishedFileId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _viewModel
+                .BindWorkshopAsync(publishedFileId.Value, verifyVisibility: true, _lifetime.Token)
+                .ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面已关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("绑定创意工坊条目失败", ex);
+            _viewModel.SetStatus(L.T(Keys.ModstudioBindFailed, ex.Message));
+        }
+    }
+
     // ------------------------------------------------------------ 文件选择
     private static async Task<string?> PickPreviewAsync() => await PickImageAsync(multiple: false) is { Count: > 0 } paths
         ? paths[0]

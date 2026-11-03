@@ -12,6 +12,15 @@
     LLamaSharp 提供进程内 GGUF 推理（Index-Translate-2B），原生库在 Backend.Cpu 包里。
     两个包都已在离线 NuGet 缓存中，NuGet.config 是全离线源，不会去联网。
   -->
+  <!--
+    自检工程要钉住原生结果结构体的封送尺寸（Marshal.SizeOf == 416 / 9760，见
+    SteamWorkshopHostOperation.OwnEnumerateResultSize / OwnDetailResultSize），
+    那两个结构体是 internal，所以只对这个测试程序集开放。
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="PdxLauncher.Checks" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="BergamotTranslatorSharp" Version="0.7.0" />
     <PackageReference Include="LLamaSharp" Version="0.30.0" />

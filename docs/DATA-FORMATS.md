@@ -818,6 +818,48 @@ PdxLauncher.App.exe --steam-host workshop-publish --api <steam_api64.dll> --appi
 
 补充：`HtmlDescriptionParser` 现在把 Steam 渲染出的 `<hr>` 也映射成 `MarkdownRule`（之前该标签被静默丢弃）。
 
+
+### 18.9 「我发布的条目」与真实可见性（`workshop-mine` / `workshop-mine-detail`）
+
+**匿名 Web API 看不见隐藏条目。** 对隐藏 / 仅限好友 / 私密 / 提交未完成的条目，`POST ISteamRemoteStorage/GetPublishedFileDetails/v1/` 回的是
+
+```json
+{"response":{"result":1,"resultcount":1,"publishedfiledetails":[{"publishedfileid":"3832809800","result":9}]}}
+```
+
+`EResult 9 = FileNotFound`。**它不区分「真的没有」和「藏起来了」**，所以「查不到」不能当「不存在」。要看自己的隐藏条目，只能走本机 Steam 客户端的登录态：
+
+| 动词 | 参数 | 原生调用 | 结果记录 |
+| --- | --- | --- | --- |
+| `workshop-mine` | 无 | `ISteamRemoteStorage::EnumerateUserPublishedFiles(unStartIndex)`（回调 **1312**） | `SteamHostMineResult` |
+| `workshop-mine-detail` | `--fileid <id>` | `ISteamRemoteStorage::GetPublishedFileDetails(id, 0)`（回调 **1318**） | `SteamHostMineItemResult` |
+
+- 枚举 50 条一页（`OwnPageSize = 50`）翻页，上限 `SteamHostMineResult.MaxItems = 1000`，超出置 `Truncated`；`Total = -1` 表示没读成。
+- `SteamHostMineItemResult.Visibility` 取 `ERemoteStoragePublishedFileVisibility`（0/1/2/3），**`-1` = 没读到**，与「Steam 说是公开」必须分得开。
+- 枚举只回 id，**不回标题**（原生接口如此），所以「从我的 Steam 条目里选」列表里显示的是 id；要标题得对每条再跑一次 `workshop-mine-detail`。
+- 结构体封送尺寸：`RemoteStorageEnumerateUserPublishedFilesResult_t` → **416**（原生 412，尾部按 8 对齐）；
+  `RemoteStorageGetPublishedFileDetailsResult_t` → **9760**（`char[8000]` 描述缓冲是大头，别凭直觉往小了写）。
+  三个 `bool` 必须 `[MarshalAs(UnmanagedType.I1)]`，否则 C# 默认 4 字节 bool 会把后面的 `char[1025]` 整体错位。
+- 访问器候选 `SteamAPI_SteamRemoteStorage_v016` … `v013`；RemoteStorage 绑定失败**不阻断** init（发布走的 UGC 接口照常可用）。
+
+`ModPublication` 追加 `int? SteamVisibility = null`：
+
+| 值 | 含义 |
+| --- | --- |
+| 0 | 公开 |
+| 1 | 仅限好友 |
+| 2 | 私密（只有作者本人能看到） |
+| 3 | 非公开（知道链接可见，不出现在列表与搜索） |
+| null | 未核实（老记录，或绑定 / 发布时没能从 Steam 读回） |
+
+**两套可见性字段不能混用**：`Visibility` 是「提交时想设成什么」（意图，可能早已在网页上被改过），
+`SteamVisibility` 是「Steam 现在说是什么」（事实，只在读回详情时写）。`EffectiveVisibility` 仍按意图回填上传表单，
+行文案按事实判断：`IsUnlisted => SteamVisibility is 1 or 2 or 3`、`IsPubliclyVisible => SteamVisibility is null or 0`。
+
+绑定语义（`ModStudioService.BindWorkshopItemAsync`）：硬性前提只有「本地目录存在 + id > 0」；读详情失败**不阻断**绑定
+（Steam 没开 / 没登录 / 缺导出时手填 id 仍可绑定，`SteamVisibility` 留 null → 文案显示「已发布 · {id}」而不是「未公开」）。
+发布记录键不变（`modstudio.publish.<gameId>.<sha256(path)[..16]>`），所以「绑定已有条目」与「上传」写的是同一行记录。
+
 ## 19. 创意工坊信息缓存（`data\workshop-info\`）
 
 给创意工坊列表/详情做「同一 id 复用」的本地缓存。实现：`src/PdxLauncher.Core/Online/WorkshopInfoCache.cs`。

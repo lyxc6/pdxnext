@@ -11,7 +11,7 @@
 ## 0. 一句话现状
 
 启动器外壳与主页已从「照官方 Paradox 启动器截图逐像素自绘」**改成 WinUI 3 标准控件 UI**（用户明确要求），
-Release **0 警告 0 错误**，自检 **80 个检查类 / 0 失败**（2026-11-03 实测；最近一轮新增 `SteamBbCodeParserChecks` 与 `ModPublishLimitsChecks`（钉住 BBCode 解析与字节上限），再往前是 `LocalizationBindingChecks` 与 `ModStudioPaneChecks`（钉住 `{0}` 裸绑与上传面板出口），再往前是 `ModPublishExtrasChecks`（含多语言语言池的 `PickUnused` / `IsDuplicate` 断言），再往前是 `WorkshopItemStateBitsChecks`、`WorkshopStateTextChecks`、`WorkshopStateCacheChecks`、`WorkshopSubscribedProtocolChecks`；此前还有 `ConfirmOverlayChecks`、`ModLibraryWarningChecks`、`PdxDatabaseChecks`、`JsonDocumentStoreChecks`、`OwnPlaysetRepositoryChecks`、`LauncherDbProjectionChecks`、`ModPathChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
+Release **0 警告 0 错误**，自检 **94 个检查类 / 0 失败**（2026-11-03 实测；最近一轮新增 `SteamBbCodeParserChecks` 与 `ModPublishLimitsChecks`（钉住 BBCode 解析与字节上限），再往前是 `LocalizationBindingChecks` 与 `ModStudioPaneChecks`（钉住 `{0}` 裸绑与上传面板出口），再往前是 `ModPublishExtrasChecks`（含多语言语言池的 `PickUnused` / `IsDuplicate` 断言），再往前是 `WorkshopItemStateBitsChecks`、`WorkshopStateTextChecks`、`WorkshopStateCacheChecks`、`WorkshopSubscribedProtocolChecks`；此前还有 `ConfirmOverlayChecks`、`ModLibraryWarningChecks`、`PdxDatabaseChecks`、`JsonDocumentStoreChecks`、`OwnPlaysetRepositoryChecks`、`LauncherDbProjectionChecks`、`ModPathChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
 **2026-10-26 已完成：窗口置顶开关（§0.2）+ 整窗背景「方案 B」（§0.3）**——游戏主题背景图现在连标题栏条和左侧
 NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统一纱 + 卡片/列表玻璃底衬），主页那条 260 高、被裁掉一半的
 主题横幅已删除。剩下的活：Light / HighContrast 真机切主题跑一遍（§0.3 唯一视觉盲区）、真机复验 settings.json 与置顶持久化、
@@ -60,6 +60,7 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-11-03 16:40 追加：Mod 创建页三处 UI 修正 —— 列表徽标不再原样显示 `{0}`（改为短文案 `PublicationBadgeText`，根因是 `Localizer.Format` 无参返回模板原文）、删掉详情面板顶部多余的小标题、上传成功 / 取消 / 切换选中都能回到详情面板（此前成功分支走 `resetPane: false`、取消分支不切面板，进去就出不来）；顺带新增 `LocalizationBindingChecks`（裸绑 `{x:Bind L.Xxx}` 的键模板不许含 `{n}`）与 `ModStudioPaneChecks`，自检 71→73；见 §0.72。**
 **2026-11-03 20:00 追加：Windows 安装包与自动更新落地 —— Inno Setup 7.1.1 双模式安装器（默认每用户无 UAC / 可选每机器）、公开 GitHub Releases 的 `update.json`、启动检查 + 下载校验 + 静默/提权安装、设置页「关于与更新」、每机器数据回退到 `%LOCALAPPDATA%\PdxNext-Data`；自检 83 类全过；见 §0.74。**
 **2026-11-03 20:45 追加：发布链路改 GitHub Actions —— 推 `v*` tag 自动构建、自检、生成 Inno 安装器并上传 Release；新增 SemVer 版本规范 `docs/VERSIONING.md`、`CHANGELOG.md`、CI 工作流；发布仓库统一为公开的 `lyxc6/pdxnext`；见 §0.75。**
+**2026-11-03 23:55 追加：已发布到创意工坊却仍显示「未发布」—— 根因是隐藏条目对匿名 API 回 `EResult 9`（FileNotFound，**不等于不存在**），而启动器只认「自己发起的上传」；现给宿主加 `workshop-mine` / `workshop-mine-detail` 两个动词（回调 1312/1318，走本机登录态读自己发布的条目），Mod 创建页加「绑定已有条目…」入口、发布状态改四态（未发布 / 发布未完成 / 已发布（未公开）/ 已发布）并显示 Steam 真实可见性；自检 93→94；见 §0.76。**
 
 ## 0.74 最新一轮（2026-11-03 19:00–20:00）：安装包与自动更新
 
@@ -154,6 +155,90 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 - `dotnet tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll`：85 类 / 0 失败。
 - `python tools\gen-i18n.py --check`：通过（1135 键）。
 - 尚未做：提交并推送、Actions 首次运行验证、`v1.0.0` tag、Release 资产可访问性/安装实测。
+
+## 0.76 最新一轮（2026-11-03 22:30–23:55）：已经发布到创意工坊，启动器却说「未发布」
+
+> 用户诉求原话（m00001）：「mod上传有问题，我已经上传了mod（vic3那个），启动器仍然认为mod不存在」
+> 后续（m00574）：用户贴出 `https://steamcommunity.com/sharedfiles/filedetails/?id=3832809800`，说明「这个是mod地址」。
+
+### 0.76.1 根因：不是没传上去，是「藏起来了就查不到」
+
+匿名调用 `POST ISteamRemoteStorage/GetPublishedFileDetails/v1/` 查该 id，回来的是一句：
+
+```json
+{"response":{"result":1,"resultcount":1,"publishedfiledetails":[{"publishedfileid":"3832809800","result":9}]}}
+```
+
+`EResult 9 = FileNotFound`。Steam 对**隐藏 / 仅限好友 / 私密 / 提交未完成**的条目，对匿名调用方一律回 9 ——
+它不区分「真的不存在」和「藏起来了」。启动器把这句话当成了「这个 mod 没有」。
+
+我们的链路原本有三处断点：
+
+| # | 现象 | 根因 |
+| --- | --- | --- |
+| 1 | 详情页对它显示一张空卡片 | `SteamWorkshopClient.ParseDetail` 只取 `publishedfiledetails[0]`，**丢掉 `result` 字段**；`result:9` 被当成一条「标题空、大小 0」的正常条目 |
+| 2 | Mod 创建页永远显示「未发布」 | 发布记录（`modstudio.publish.*`）**只在「本启动器发起过上传」时**才写；用户是在 Steam 客户端 / 网页上发的，没有任何回填入口。实测 dev 库 `documents` 表零条 `modstudio.publish.*`、日志零条发布记录 |
+| 3 | Mod 库 / 创意工坊页都看不到它 | `workshop_items` 与 `ModLibraryService` 只收**订阅**条目，而自己发布的条目不是订阅；`EnumerateUserSubscribedFiles` 也不含自己的条目 |
+
+结论：**不需要任何第三方服务**。Steamworks SDK 自带两个走本机登录态的接口就能看见自己的隐藏条目：
+`sdk/public/steam/isteamremotestorage.h:279-280` `GetPublishedFileDetails`（鉴权版，能读隐藏条目的标题与可见性）与
+`:283-285` `EnumerateUserPublishedFiles`（注释原文 "enumerate the files that the current user published with this app"）。
+本机 `Victoria 3\binaries\steam_api64.dll` 实测导出 `SteamAPI_ISteamRemoteStorage_EnumerateUserPublishedFiles` /
+`…_GetPublishedFileDetails` / `SteamAPI_SteamRemoteStorage_v014`，既有的 `--steam-host` 子进程通道直接可用。
+
+### 0.76.2 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.Core/Steam/SteamHostProtocol.cs` | 新增动词 `WorkshopMineVerb = "workshop-mine"`、`WorkshopMineDetailVerb = "workshop-mine-detail"` 并进 `Verbs`（7 → **9**）；新增 `SteamHostMineResult(bool Ok, IReadOnlyList<ulong> Ids, int Total, bool Truncated, string? Error, bool Initialized)`（`MaxItems = 1000`、`Fail(error)` → Total=-1）与 `SteamHostMineItemResult(bool Ok, ulong PublishedFileId, string Title, string Description, IReadOnlyList<string> Tags, int Visibility, ulong OwnerSteamId64, long FileSizeBytes, uint CreatedUnix, uint UpdatedUnix, int CreatorAppId, string? Error)`（`Fail(id, error)` → Visibility=-1） |
+| `src/PdxLauncher.Core/Steam/SteamHostRunner.cs` | `OwnItemsTimeout = 30s`；`Run` 加 `RunMine` / `RunMineDetail` 分支（后者 `--fileid` 必填且须 `ulong`，非法写 stderr 返回 `ExitFailure`）；usage 字符串补两个动词 |
+| `src/PdxLauncher.Core/Steam/SteamWorkshopHostOperation.cs` | 绑 `SteamAPI_SteamRemoteStorage_v*` 与两个 `ISteamRemoteStorage` 导出（候选 v016…v013），RemoteStorage **不是** init 硬门槛；`ReadOwnPublishedItems(timeout)`（50/页翻页，回调 **1312**）、`ReadOwnPublishedItem(id, timeout)`（回调 **1318**，`Result==9` 文案「Steam 说这个条目不存在（EResult=9）」）；`PumpManualCallbacks` 从两分支改成按回调号 switch（3403/3404/1312/1318）；新增 `OwnEnumerateFilesResult`（`Marshal.SizeOf = 416`）与 `OwnFileDetailResult`（**9760**，三个 bool 显式 `UnmanagedType.I1`）；`OwnEnumerateResultSize` / `OwnDetailResultSize` 供自检 |
+| `src/PdxLauncher.Core/PdxLauncher.Core.csproj` | 新增 `<InternalsVisibleTo Include="PdxLauncher.Checks" />`（自检要读 internal 的结构体尺寸属性） |
+| `src/PdxLauncher.Core/Online/SteamWorkshopClient.cs` | 新增 `ParseDetailWithResult(string? json) → (SteamWorkshopItemDetail? Detail, int Result)`、`ResultUnknown = -1`、`DetailUnavailableReason(int)`（9 →「这个条目对未登录 / 匿名调用方不可见…**不等于它不存在**」）；`ParseDetail` 改为取 `.Detail`；`GetDetailCoreAsync` 在详情为空时 Warn 一句原因 |
+| `src/PdxLauncher.Core/ModStudio/ModPublication.cs` | 末位追加 `int? SteamVisibility = null` + `IsPubliclyVisible`（null / 0）/ `IsUnlisted`（1/2/3）；XML 注释写明与 `Visibility`（意图）的区别 |
+| `src/PdxLauncher.Core/ModStudio/ModBindResult.cs` | **新增**。`record ModBindResult(bool Ok, ModPublication? Publication, string? Error, bool Verified, string? VerifyError)` + `Fail` / `Bound` |
+| `src/PdxLauncher.App/Services/ModStudioService.cs` | 新增 `BindWorkshopItemAsync(game, entry, publishedFileId, verifyVisibility, ct)`（硬前提只有「本地目录存在 + id>0」；读详情失败只 Warn 不阻断；保留既有 Description/Tags/Preview 等字段，`LastError = null`）、`ReadOwnItemsAsync`、私有 `TryReadOwnItemAsync` / `ResolveMineContext`；`PublishAsync` 的 4 处早退（无工坊 / 无目录 / 预览图不合规 / `backend is null`）补 Warn |
+| `src/PdxLauncher.App/Services/ModPublishBackend.cs` | `TryCreate` 的 3 处失败（appid / 宿主 / dll）补 `logger.Warn` |
+| `src/PdxLauncher.App/Services/SteamHostClient.cs` | `OwnItemsTimeout = 45s`；新增 `ReadMineAsync` / `ReadMineItemAsync`（走既有 `ExecuteAsync`，会自动追加 `--fileid`） |
+| `src/PdxLauncher.App/ViewModels/ModStudioRowViewModel.cs` | `PublicationText` 两态 → **四态**：无 id「未发布」/ `LastError` 非空「发布未完成 · {0}」/ `IsUnlisted`「已发布 · {0}（未公开）」/ 其它「已发布 · {0}」 |
+| `src/PdxLauncher.App/ViewModels/ModStudioViewModel.cs` | 新增 `SelectedSteamVisibility` / `HasSelectedSteamVisibility` / `CanBindWorkshop` / `BindWorkshopHint` / `BindWorkshopAsync(...)` / `ReadOwnWorkshopItemsAsync(ct)`（枚举只回 id，列表里标题就是 id 字符串）；`PublishAsync` 的 7 处校验分支补 Warn；`RaiseDerived` / `OnIsPublishingChanged` 通知新派生属性 |
+| `src/PdxLauncher.App/Views/BindWorkshopItemDialog.cs` | **新增**。`internal static class`，`ShowAsync(XamlRoot, modName, loadMine)` → `ulong?`（null = 取消）；纯代码 UI（照 `ModPathRepairDialog` 范式），含 id 输入框、「从我的 Steam 条目里选」按钮与列表、错误行；确认键只在 `ulong.TryParse` 且 >0 时可用 |
+| `src/PdxLauncher.App/Views/ModStudioPage.xaml(.cs)` | 详情面板加第 8 行「Steam 可见性」（仅 `HasSelectedSteamVisibility` 为真时显示）+ 按钮「绑定已有条目…」（`CanBindWorkshop`，AutomationId `modStudioBindWorkshop`）；`OnBindWorkshopClick` 串对话框 → `BindWorkshopAsync(id, verifyVisibility: true, ct)` |
+| `tools/i18n/{zh-CN,en-US}/modstudio.json` | 各 +14 键（`bindExisting` / `bindHint` / `bindTitle` / `bindBody` / `bindIdLabel` / `bindLoadMine` / `bindMyItemsEmpty` / `bindSuccess` / `bindUnverified` / `bindFailed` / `detailSteamVisibility` / `rowPublishedUnlisted` / `rowPublishFailed` / `visibilityUnknown`），复用既有 `visibilityPublic/FriendsOnly/Private/Unlisted`；modstudio **155 → 169 键**，全库 **1140 → 1154 键** |
+| `tests/PdxLauncher.Checks/ModWorkshopBindingChecks.cs` | **新增**。8 组断言：id 解析边界（空 / 0 / 负号 / 全角数字）、四态判据（含「意图 Public + 事实私密」）、`ModPublication` JSON 往返与旧记录无字段 → null、20 个 i18n 键在两份 json 里存在、两个新动词与两条结果记录 Encode/TryDecode 往返、`ParseDetailWithResult` 对 `result:9` 返回 (null, 9) 与坏响应 → -1、结构体尺寸 416 / 9760、记录键大小写与尾分隔符稳定 |
+| `docs/DATA-FORMATS.md` | 新增 §18.9「我发布的条目与真实可见性」：EResult 9 的含义、两个动词与回调号、结构体尺寸、`SteamVisibility` 五值表、意图 vs 事实、绑定语义 |
+| `docs/HANDOFF.md` | 本节 |
+
+未改：`ModLibraryService` 的订阅注入、`mods.steamId` 列、`WorkshopPage` 的浏览逻辑（自己发布的条目仍不进「订阅」列表，这是刻意的）。
+
+### 0.76.3 验证
+
+- `dotnet build src/PdxLauncher.App/PdxLauncher.App.csproj -c Release -v m` → 0 警告 0 错误。
+- `dotnet run --project tests/PdxLauncher.Checks -c Release` → `检查类: 94，失败: 0，断言失败总数: 0`（4603 条 ok）。
+- `python tools/gen-i18n.py --check` → 退出码 0，1154 键。
+- 未做真机验证：本机 Steam 账号下 Victoria 3（529340）**没有任何已发布条目**（9 条作者条目全是 CK3）；3832809800 是隐藏条目，
+  属于另一个账号，所以「从我的条目里选」这条路径只能等用户在自己账号上实测。
+
+### 0.76.4 坑
+
+- **结构体尺寸别凭直觉**：我一开始断言详情结构是 1760，实测 `Marshal.SizeOf` = **9760**（`char[8000]` 描述缓冲是大头，
+  之后还有 `ulong` 对齐补位）。唯一可靠做法是让自检打印实测值，再对着 `isteamremotestorage.h:467-497` 数一遍字段。
+- **`bool` 一律 `UnmanagedType.I1`**：C# 默认 4 字节，SDK 里是 1 字节，不标会把后面的 `char[1025]` 整体错位，
+  而且原生调用**不会报错**，只会读到脏的标签 / 可见性。
+- **动词表数量断言会被新动词打破**：`SteamHostProtocolChecks` 里「动词表恰好七个」必须同步改成九个，
+  否则自检报失败，容易误判成自己写坏了协议。
+- **枚举接口只回 id**：`EnumerateUserPublishedFiles` 不回标题，所以「从我的条目里选」列表显示 id；
+  想显示标题必须逐条跑 `workshop-mine-detail`（9 条 = 9 次子进程，暂未做）。
+- **绑定不该被「查不到详情」卡住**：Steam 没开 / 没登录 / 缺导出都会让读详情失败，但这不该阻止手填 id 绑定；
+  `SteamVisibility` 留 null，文案退回「已发布 · {id}」，并单独提示「已绑定，但没能从 Steam 核实可见性」。
+- **排查这类问题先看证据**：`data\logs\pdxnext.log` 里有没有 `Steam 工坊发布：使用宿主` / `已发布到 Steam 创意工坊`，
+  以及 `pdxnext.sqlite` 的 `documents` 表有没有 `modstudio.publish.*` —— 两条都没有，就说明这单上传从未经过本启动器。
+
+### 0.76.5 下一步
+
+1. 让用户在**自己账号**上实测：「绑定已有条目…」→ 手填 id → 行文案变「已发布 · {id}」；再点「从我的 Steam 条目里选」看是否列出。
+2. 若实测发现隐藏条目读回来的 `Visibility` 是 2（私密），考虑在 Mod 创建页给一条「把它改成公开」的快捷入口（走已有 `SetItemVisibility`）。
+3. 可选：`workshop-mine` 加 `--with-titles` 之类的一次性批量读标题，避免 N 次子进程。
 
 ## 0.60 最新一轮（2026-10-31 13:00–17:00）：新增「Mod 创建」页
 

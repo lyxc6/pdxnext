@@ -22,6 +22,9 @@ public static class SteamHostRunner
     /// <summary>拉订阅列表 / 批量动作最多等多久（订阅库大时拿状态要一条条读）。</summary>
     public static readonly TimeSpan WorkshopListTimeout = TimeSpan.FromSeconds(60);
 
+    /// <summary>列出 / 读取自己发布的条目最多等多久（每页 50 条，纯内存往返，用不了这么久）。</summary>
+    public static readonly TimeSpan OwnItemsTimeout = TimeSpan.FromSeconds(30);
+
     /// <summary>运行一次宿主操作，返回进程退出码。</summary>
     /// <param name="args">完整命令行参数（含 <c>--steam-host</c>）。</param>
     /// <param name="stdout">结果输出（真实调用传 <see cref="Console.Out"/>）。</param>
@@ -30,7 +33,7 @@ public static class SteamHostRunner
     {
         if (!SteamHostProtocol.TryGetVerb(args, out var verb))
         {
-            stderr.WriteLine("用法：--steam-host probe|workshop-state|workshop-subscribe|workshop-unsubscribe|workshop-publish|workshop-subscribed|workshop-batch --api <dll> --appid <int> [--fileid <ulong>] [--request <base64 json>]");
+            stderr.WriteLine("用法：--steam-host probe|workshop-state|workshop-subscribe|workshop-unsubscribe|workshop-publish|workshop-subscribed|workshop-batch|workshop-mine|workshop-mine-detail --api <dll> --appid <int> [--fileid <ulong>] [--request <base64 json>]");
             return SteamHostProtocol.ExitFailure;
         }
 
@@ -66,6 +69,16 @@ public static class SteamHostRunner
         if (verb == SteamHostProtocol.WorkshopBatchVerb)
         {
             return RunBatch(apiPath!, appId, args, stdout, stderr);
+        }
+
+        if (verb == SteamHostProtocol.WorkshopMineVerb)
+        {
+            return RunMine(apiPath!, appId, stdout);
+        }
+
+        if (verb == SteamHostProtocol.WorkshopMineDetailVerb)
+        {
+            return RunMineDetail(apiPath!, appId, args, stdout, stderr);
         }
 
         return RunWorkshop(verb, apiPath!, appId, args, stdout, stderr);
@@ -219,6 +232,58 @@ public static class SteamHostRunner
         catch (Exception ex)
         {
             WriteResult(stdout, WorkshopBatchResult.Fail(op, ex.GetType().Name + "：" + ex.Message));
+            return SteamHostProtocol.ExitOk;
+        }
+    }
+
+    /// <summary>列出当前账号在本游戏下自己发布的工坊条目（含未公开条目）。</summary>
+    private static int RunMine(string apiPath, int appId, TextWriter stdout)
+    {
+        if (!File.Exists(apiPath))
+        {
+            WriteResult(stdout, SteamHostMineResult.Fail("找不到 steam_api64.dll：" + apiPath));
+            return SteamHostProtocol.ExitOk;
+        }
+
+        try
+        {
+            using var operation = new SteamWorkshopHostOperation(apiPath, appId);
+            WriteResult(stdout, operation.ReadOwnPublishedItems(OwnItemsTimeout));
+            return SteamHostProtocol.ExitOk;
+        }
+        catch (Exception ex)
+        {
+            WriteResult(stdout, SteamHostMineResult.Fail(ex.GetType().Name + "：" + ex.Message));
+            return SteamHostProtocol.ExitOk;
+        }
+    }
+
+    /// <summary>按 id 读自己某个工坊条目的详情（未公开条目也读得到）。</summary>
+    private static int RunMineDetail(string apiPath, int appId, IReadOnlyList<string> args, TextWriter stdout, TextWriter stderr)
+    {
+        if (!TryGetOption(args, "--fileid", out var fileIdText) ||
+            !ulong.TryParse(fileIdText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var fileId) ||
+            fileId == 0)
+        {
+            stderr.WriteLine("缺少或非法的 --fileid <工坊条目 id>");
+            return SteamHostProtocol.ExitFailure;
+        }
+
+        if (!File.Exists(apiPath))
+        {
+            WriteResult(stdout, SteamHostMineItemResult.Fail(fileId, "找不到 steam_api64.dll：" + apiPath));
+            return SteamHostProtocol.ExitOk;
+        }
+
+        try
+        {
+            using var operation = new SteamWorkshopHostOperation(apiPath, appId);
+            WriteResult(stdout, operation.ReadOwnPublishedItem(fileId, OwnItemsTimeout));
+            return SteamHostProtocol.ExitOk;
+        }
+        catch (Exception ex)
+        {
+            WriteResult(stdout, SteamHostMineItemResult.Fail(fileId, ex.GetType().Name + "：" + ex.Message));
             return SteamHostProtocol.ExitOk;
         }
     }

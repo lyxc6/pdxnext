@@ -556,7 +556,7 @@ src/
     Controls/                  :: 自绘控件：ConfirmOverlay（全局「确认 / 取消」浮层，取消在左、确认在右）、SettingsCard、SettingsValueCard、MarkdownView
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
 tests/
-  PdxLauncher.Checks/          :: 83 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 94 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
@@ -582,7 +582,7 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**476 个 .cs + 17 个 .xaml**（不含 `obj/` 生成物；2026-11-03 实测：Core 257 / App 124+17 / Imaging 9 / Checks 86 —— Checks 的 86 个文件是 83 个检查类 + Program + ChecksContext + GlobalUsings）。
+**509 个 .cs + 17 个 .xaml**（不含 `obj/` 生成物；2026-11-03 实测：Core 267 / App 136+17 / Imaging 9 / Checks 97 —— Checks 的 97 个文件是 94 个检查类 + Program + ChecksContext + GlobalUsings）。
 
 ---
 
@@ -592,11 +592,11 @@ tools/
 dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 83，失败: 0，断言失败总数: 0` 即通过（2026-11-03 实测 83 类）。覆盖：Steam 探测与
+输出 `检查类: 94，失败: 0，断言失败总数: 0` 即通过（2026-11-03 实测 94 类）。覆盖：Steam 探测与
 launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取、
 Mod 创建（legacy `.mod`/`descriptor.mod` 与 V3 `.metadata/metadata.json` 生成、非法输入拒绝、本地清单合并、发布记录与发布协议参数、
 工坊发布面：可见性四档映射、1 MB 与张数上限、五种 YouTube 链接解析、30 种语言码与归一化、请求 JSON 全字段往返、旧 `public` 记录回显、内嵌默认封面的 PNG 签名与落盘一致、
-描述 BBCode 解析（标题 / 列表 / 分隔线 / 链接 / 图片 / 视频缩略图 / `[noparse]` / 未知标签原样保留 / 超长截断）、标题与描述的 UTF-8 字节上限（汉字 3 字节、emoji 4 字节、128 与 8000 的边界））
+描述 BBCode 解析（标题 / 列表 / 分隔线 / 链接 / 图片 / 视频缩略图 / `[noparse]` / 未知标签原样保留 / 超长截断）、标题与描述的 UTF-8 字节上限（汉字 3 字节、emoji 4 字节、128 与 8000 的边界）、绑定已有工坊条目（id 解析边界、四态发布文案判据、`workshop-mine` / `workshop-mine-detail` 结果往返、原生结果结构体 416 / 9760））
 （mods 全量、size / subscribedDate 解析、播放集归属、requiredVersion 兼容判断）、创意工坊 id 解析、启动参数拼装、路径大小写不敏感处理；
 自有库 `pdxnext.sqlite`（建表幂等 / schema 版本 / 事务回滚 / 损坏自愈 / `documents` 键空间与前缀统计）、
 官方库双向投射（导入带来源与工坊 id、投射回写新行、**官方库缺席时绝不创建 `launcher-v2.sqlite`**、pending 补投）、

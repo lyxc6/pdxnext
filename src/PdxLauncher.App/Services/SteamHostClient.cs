@@ -33,6 +33,9 @@ public sealed class SteamHostClient
     /// <summary>拉订阅列表 / 批量动作的超时；宿主自己最多等 60 秒，这里再留余量。</summary>
     public static readonly TimeSpan WorkshopListTimeout = TimeSpan.FromSeconds(90);
 
+    /// <summary>列 / 读「我自己发布的条目」的超时；宿主自己最多等 30 秒，这里再留余量。</summary>
+    public static readonly TimeSpan OwnItemsTimeout = TimeSpan.FromSeconds(45);
+
     private readonly IAppLogger _logger;
     private readonly string _hostPath;
 
@@ -134,6 +137,63 @@ public sealed class SteamHostClient
         }
 
         return SteamHostSubscribedResult.Fail(Describe(run));
+    }
+
+    /// <summary>
+    /// 列出当前账号在本游戏下**自己发布**的工坊条目。
+    /// <para>与 <see cref="ReadSubscribedAsync"/> 是两回事：这边是作者视角，未公开条目也在。</para>
+    /// </summary>
+    /// <param name="apiFilePath">要加载的 <c>steam_api64.dll</c>。</param>
+    /// <param name="appId">游戏的 Steam appid。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>条目 id 列表；失败时带中文原因。</returns>
+    public async Task<SteamHostMineResult> ReadMineAsync(
+        string apiFilePath,
+        int appId,
+        CancellationToken cancellationToken)
+    {
+        var run = await ExecuteAsync(
+            SteamHostProtocol.WorkshopMineVerb,
+            apiFilePath,
+            appId,
+            publishedFileId: null,
+            OwnItemsTimeout,
+            cancellationToken).ConfigureAwait(false);
+
+        if (SteamHostProtocol.TryDecode<SteamHostMineResult>(run.Stdout, out var payload) && payload is not null)
+        {
+            return payload;
+        }
+
+        return SteamHostMineResult.Fail(Describe(run));
+    }
+
+    /// <summary>按 id 读自己某个工坊条目的详情（未公开条目也读得到）。</summary>
+    /// <param name="apiFilePath">要加载的 <c>steam_api64.dll</c>。</param>
+    /// <param name="appId">游戏的 Steam appid。</param>
+    /// <param name="publishedFileId">工坊条目 id。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>详情；失败时带中文原因。</returns>
+    public async Task<SteamHostMineItemResult> ReadMineItemAsync(
+        string apiFilePath,
+        int appId,
+        ulong publishedFileId,
+        CancellationToken cancellationToken)
+    {
+        var run = await ExecuteAsync(
+            SteamHostProtocol.WorkshopMineDetailVerb,
+            apiFilePath,
+            appId,
+            publishedFileId,
+            OwnItemsTimeout,
+            cancellationToken).ConfigureAwait(false);
+
+        if (SteamHostProtocol.TryDecode<SteamHostMineItemResult>(run.Stdout, out var payload) && payload is not null)
+        {
+            return payload;
+        }
+
+        return SteamHostMineItemResult.Fail(publishedFileId, Describe(run));
     }
 
     /// <summary>对一批工坊条目执行同一个动作（下载 / 本地禁用 / 解除禁用 / 只读状态）。</summary>

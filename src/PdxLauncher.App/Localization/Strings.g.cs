@@ -443,6 +443,16 @@ public sealed partial class Localizer
         ["modstudio.bbcodeRule"] = "分隔线 [hr]",
         ["modstudio.bbcodeStrike"] = "删除线 [strike]文字[/strike]",
         ["modstudio.bbcodeUnderline"] = "下划线 [u]文字[/u]",
+        ["modstudio.bindBody"] = "把本地 Mod「{0}」绑定到一条已经存在的创意工坊条目。绑定不会上传任何文件。",
+        ["modstudio.bindExisting"] = "绑定已有条目…",
+        ["modstudio.bindFailed"] = "绑定失败：{0}",
+        ["modstudio.bindHint"] = "如果这个 Mod 已经在 Steam 工坊发布过（隐藏、仅好友或私密的条目也算），在这里填入条目 id 就能认领它。",
+        ["modstudio.bindIdLabel"] = "创意工坊条目 id",
+        ["modstudio.bindLoadMine"] = "从我的 Steam 条目里选",
+        ["modstudio.bindMyItemsEmpty"] = "没读出你在工坊发布的条目：{0}",
+        ["modstudio.bindSuccess"] = "已绑定创意工坊条目：{0}",
+        ["modstudio.bindTitle"] = "绑定已有的创意工坊条目",
+        ["modstudio.bindUnverified"] = "已绑定，但没能从 Steam 核实可见性：{0}",
         ["modstudio.builtInCover"] = "当前使用启动器内置封面",
         ["modstudio.bytesCounter"] = "{0} / {1} 字节",
         ["modstudio.cancel"] = "取消",
@@ -474,6 +484,7 @@ public sealed partial class Localizer
         ["modstudio.detailNoSelection"] = "未选择 Mod",
         ["modstudio.detailNoSelectionHint"] = "从左侧选择一个本地 Mod 查看详情。",
         ["modstudio.detailPublication"] = "创意工坊",
+        ["modstudio.detailSteamVisibility"] = "Steam 可见性",
         ["modstudio.detailSupportedVersion"] = "支持版本",
         ["modstudio.detailTags"] = "标签",
         ["modstudio.detailVersion"] = "版本",
@@ -527,8 +538,10 @@ public sealed partial class Localizer
         ["modstudio.publicHint"] = "公开后其他玩家可以在创意工坊订阅。",
         ["modstudio.refreshName"] = "刷新本地 Mod",
         ["modstudio.removePreview"] = "移除",
+        ["modstudio.rowPublishFailed"] = "发布未完成 · {0}",
         ["modstudio.rowPublished"] = "已发布 · {0}",
         ["modstudio.rowPublishedShort"] = "已发布",
+        ["modstudio.rowPublishedUnlisted"] = "已发布 · {0}（未公开）",
         ["modstudio.rowUnpublished"] = "未发布",
         ["modstudio.searchName"] = "搜索本地 Mod",
         ["modstudio.searchPlaceholder"] = "搜索 Mod 名称或目录",
@@ -583,6 +596,7 @@ public sealed partial class Localizer
         ["modstudio.visibilityFriendsOnly"] = "仅限好友",
         ["modstudio.visibilityPrivate"] = "隐藏",
         ["modstudio.visibilityPublic"] = "公开",
+        ["modstudio.visibilityUnknown"] = "未核实",
         ["modstudio.visibilityUnlisted"] = "非公开",
         ["settings.about.autoCheck"] = "自动检查更新",
         ["settings.about.autoCheckName"] = "启动时自动检查更新",
@@ -1587,6 +1601,16 @@ public sealed partial class Localizer
         ["modstudio.bbcodeRule"] = "Horizontal rule [hr]",
         ["modstudio.bbcodeStrike"] = "Strikethrough [strike]text[/strike]",
         ["modstudio.bbcodeUnderline"] = "Underline [u]text[/u]",
+        ["modstudio.bindBody"] = "Bind the local mod \"{0}\" to an existing Workshop item. Nothing is uploaded.",
+        ["modstudio.bindExisting"] = "Bind existing item…",
+        ["modstudio.bindFailed"] = "Could not bind: {0}",
+        ["modstudio.bindHint"] = "If this mod is already published on the Steam Workshop (hidden, friends-only, or private items count too), enter its item ID here to claim it.",
+        ["modstudio.bindIdLabel"] = "Workshop item ID",
+        ["modstudio.bindLoadMine"] = "Pick from my Steam items",
+        ["modstudio.bindMyItemsEmpty"] = "Could not read the Workshop items you published: {0}",
+        ["modstudio.bindSuccess"] = "Bound Workshop item: {0}",
+        ["modstudio.bindTitle"] = "Bind an existing Workshop item",
+        ["modstudio.bindUnverified"] = "Bound, but Steam could not confirm the visibility: {0}",
         ["modstudio.builtInCover"] = "Using the launcher's built-in cover",
         ["modstudio.bytesCounter"] = "{0} / {1} bytes",
         ["modstudio.cancel"] = "Cancel",
@@ -1618,6 +1642,7 @@ public sealed partial class Localizer
         ["modstudio.detailNoSelection"] = "No mod selected",
         ["modstudio.detailNoSelectionHint"] = "Select a local mod on the left to see its details.",
         ["modstudio.detailPublication"] = "Workshop",
+        ["modstudio.detailSteamVisibility"] = "Steam visibility",
         ["modstudio.detailSupportedVersion"] = "Supported version",
         ["modstudio.detailTags"] = "Tags",
         ["modstudio.detailVersion"] = "Version",
@@ -1671,8 +1696,10 @@ public sealed partial class Localizer
         ["modstudio.publicHint"] = "When public, other players can subscribe on the Workshop.",
         ["modstudio.refreshName"] = "Refresh local mods",
         ["modstudio.removePreview"] = "Remove",
+        ["modstudio.rowPublishFailed"] = "Publish incomplete · {0}",
         ["modstudio.rowPublished"] = "Published · {0}",
         ["modstudio.rowPublishedShort"] = "Published",
+        ["modstudio.rowPublishedUnlisted"] = "Published · {0} (not public)",
         ["modstudio.rowUnpublished"] = "Not published",
         ["modstudio.searchName"] = "Search local mods",
         ["modstudio.searchPlaceholder"] = "Search by mod name or folder",
@@ -1727,6 +1754,7 @@ public sealed partial class Localizer
         ["modstudio.visibilityFriendsOnly"] = "Friends only",
         ["modstudio.visibilityPrivate"] = "Hidden",
         ["modstudio.visibilityPublic"] = "Public",
+        ["modstudio.visibilityUnknown"] = "Not verified",
         ["modstudio.visibilityUnlisted"] = "Unlisted",
         ["settings.about.autoCheck"] = "Check for updates automatically",
         ["settings.about.autoCheckName"] = "Check for updates when the launcher starts",
@@ -2731,6 +2759,16 @@ public sealed partial class Localizer
         ("modstudio.bbcodeRule", "ModstudioBbcodeRule"),
         ("modstudio.bbcodeStrike", "ModstudioBbcodeStrike"),
         ("modstudio.bbcodeUnderline", "ModstudioBbcodeUnderline"),
+        ("modstudio.bindBody", "ModstudioBindBody"),
+        ("modstudio.bindExisting", "ModstudioBindExisting"),
+        ("modstudio.bindFailed", "ModstudioBindFailed"),
+        ("modstudio.bindHint", "ModstudioBindHint"),
+        ("modstudio.bindIdLabel", "ModstudioBindIdLabel"),
+        ("modstudio.bindLoadMine", "ModstudioBindLoadMine"),
+        ("modstudio.bindMyItemsEmpty", "ModstudioBindMyItemsEmpty"),
+        ("modstudio.bindSuccess", "ModstudioBindSuccess"),
+        ("modstudio.bindTitle", "ModstudioBindTitle"),
+        ("modstudio.bindUnverified", "ModstudioBindUnverified"),
         ("modstudio.builtInCover", "ModstudioBuiltInCover"),
         ("modstudio.bytesCounter", "ModstudioBytesCounter"),
         ("modstudio.cancel", "ModstudioCancel"),
@@ -2762,6 +2800,7 @@ public sealed partial class Localizer
         ("modstudio.detailNoSelection", "ModstudioDetailNoSelection"),
         ("modstudio.detailNoSelectionHint", "ModstudioDetailNoSelectionHint"),
         ("modstudio.detailPublication", "ModstudioDetailPublication"),
+        ("modstudio.detailSteamVisibility", "ModstudioDetailSteamVisibility"),
         ("modstudio.detailSupportedVersion", "ModstudioDetailSupportedVersion"),
         ("modstudio.detailTags", "ModstudioDetailTags"),
         ("modstudio.detailVersion", "ModstudioDetailVersion"),
@@ -2815,8 +2854,10 @@ public sealed partial class Localizer
         ("modstudio.publicHint", "ModstudioPublicHint"),
         ("modstudio.refreshName", "ModstudioRefreshName"),
         ("modstudio.removePreview", "ModstudioRemovePreview"),
+        ("modstudio.rowPublishFailed", "ModstudioRowPublishFailed"),
         ("modstudio.rowPublished", "ModstudioRowPublished"),
         ("modstudio.rowPublishedShort", "ModstudioRowPublishedShort"),
+        ("modstudio.rowPublishedUnlisted", "ModstudioRowPublishedUnlisted"),
         ("modstudio.rowUnpublished", "ModstudioRowUnpublished"),
         ("modstudio.searchName", "ModstudioSearchName"),
         ("modstudio.searchPlaceholder", "ModstudioSearchPlaceholder"),
@@ -2871,6 +2912,7 @@ public sealed partial class Localizer
         ("modstudio.visibilityFriendsOnly", "ModstudioVisibilityFriendsOnly"),
         ("modstudio.visibilityPrivate", "ModstudioVisibilityPrivate"),
         ("modstudio.visibilityPublic", "ModstudioVisibilityPublic"),
+        ("modstudio.visibilityUnknown", "ModstudioVisibilityUnknown"),
         ("modstudio.visibilityUnlisted", "ModstudioVisibilityUnlisted"),
         ("settings.about.autoCheck", "SettingsAboutAutoCheck"),
         ("settings.about.autoCheckName", "SettingsAboutAutoCheckName"),
@@ -3873,6 +3915,16 @@ public sealed partial class Localizer
     public string ModstudioBbcodeRule => Format("modstudio.bbcodeRule");
     public string ModstudioBbcodeStrike => Format("modstudio.bbcodeStrike");
     public string ModstudioBbcodeUnderline => Format("modstudio.bbcodeUnderline");
+    public string ModstudioBindBody => Format("modstudio.bindBody");
+    public string ModstudioBindExisting => Format("modstudio.bindExisting");
+    public string ModstudioBindFailed => Format("modstudio.bindFailed");
+    public string ModstudioBindHint => Format("modstudio.bindHint");
+    public string ModstudioBindIdLabel => Format("modstudio.bindIdLabel");
+    public string ModstudioBindLoadMine => Format("modstudio.bindLoadMine");
+    public string ModstudioBindMyItemsEmpty => Format("modstudio.bindMyItemsEmpty");
+    public string ModstudioBindSuccess => Format("modstudio.bindSuccess");
+    public string ModstudioBindTitle => Format("modstudio.bindTitle");
+    public string ModstudioBindUnverified => Format("modstudio.bindUnverified");
     public string ModstudioBuiltInCover => Format("modstudio.builtInCover");
     public string ModstudioBytesCounter => Format("modstudio.bytesCounter");
     public string ModstudioCancel => Format("modstudio.cancel");
@@ -3904,6 +3956,7 @@ public sealed partial class Localizer
     public string ModstudioDetailNoSelection => Format("modstudio.detailNoSelection");
     public string ModstudioDetailNoSelectionHint => Format("modstudio.detailNoSelectionHint");
     public string ModstudioDetailPublication => Format("modstudio.detailPublication");
+    public string ModstudioDetailSteamVisibility => Format("modstudio.detailSteamVisibility");
     public string ModstudioDetailSupportedVersion => Format("modstudio.detailSupportedVersion");
     public string ModstudioDetailTags => Format("modstudio.detailTags");
     public string ModstudioDetailVersion => Format("modstudio.detailVersion");
@@ -3957,8 +4010,10 @@ public sealed partial class Localizer
     public string ModstudioPublicHint => Format("modstudio.publicHint");
     public string ModstudioRefreshName => Format("modstudio.refreshName");
     public string ModstudioRemovePreview => Format("modstudio.removePreview");
+    public string ModstudioRowPublishFailed => Format("modstudio.rowPublishFailed");
     public string ModstudioRowPublished => Format("modstudio.rowPublished");
     public string ModstudioRowPublishedShort => Format("modstudio.rowPublishedShort");
+    public string ModstudioRowPublishedUnlisted => Format("modstudio.rowPublishedUnlisted");
     public string ModstudioRowUnpublished => Format("modstudio.rowUnpublished");
     public string ModstudioSearchName => Format("modstudio.searchName");
     public string ModstudioSearchPlaceholder => Format("modstudio.searchPlaceholder");
@@ -4013,6 +4068,7 @@ public sealed partial class Localizer
     public string ModstudioVisibilityFriendsOnly => Format("modstudio.visibilityFriendsOnly");
     public string ModstudioVisibilityPrivate => Format("modstudio.visibilityPrivate");
     public string ModstudioVisibilityPublic => Format("modstudio.visibilityPublic");
+    public string ModstudioVisibilityUnknown => Format("modstudio.visibilityUnknown");
     public string ModstudioVisibilityUnlisted => Format("modstudio.visibilityUnlisted");
     public string SettingsAboutAutoCheck => Format("settings.about.autoCheck");
     public string SettingsAboutAutoCheckName => Format("settings.about.autoCheckName");
@@ -5018,6 +5074,16 @@ internal static class Keys
     public const string ModstudioBbcodeRule = "modstudio.bbcodeRule";
     public const string ModstudioBbcodeStrike = "modstudio.bbcodeStrike";
     public const string ModstudioBbcodeUnderline = "modstudio.bbcodeUnderline";
+    public const string ModstudioBindBody = "modstudio.bindBody";
+    public const string ModstudioBindExisting = "modstudio.bindExisting";
+    public const string ModstudioBindFailed = "modstudio.bindFailed";
+    public const string ModstudioBindHint = "modstudio.bindHint";
+    public const string ModstudioBindIdLabel = "modstudio.bindIdLabel";
+    public const string ModstudioBindLoadMine = "modstudio.bindLoadMine";
+    public const string ModstudioBindMyItemsEmpty = "modstudio.bindMyItemsEmpty";
+    public const string ModstudioBindSuccess = "modstudio.bindSuccess";
+    public const string ModstudioBindTitle = "modstudio.bindTitle";
+    public const string ModstudioBindUnverified = "modstudio.bindUnverified";
     public const string ModstudioBuiltInCover = "modstudio.builtInCover";
     public const string ModstudioBytesCounter = "modstudio.bytesCounter";
     public const string ModstudioCancel = "modstudio.cancel";
@@ -5049,6 +5115,7 @@ internal static class Keys
     public const string ModstudioDetailNoSelection = "modstudio.detailNoSelection";
     public const string ModstudioDetailNoSelectionHint = "modstudio.detailNoSelectionHint";
     public const string ModstudioDetailPublication = "modstudio.detailPublication";
+    public const string ModstudioDetailSteamVisibility = "modstudio.detailSteamVisibility";
     public const string ModstudioDetailSupportedVersion = "modstudio.detailSupportedVersion";
     public const string ModstudioDetailTags = "modstudio.detailTags";
     public const string ModstudioDetailVersion = "modstudio.detailVersion";
@@ -5102,8 +5169,10 @@ internal static class Keys
     public const string ModstudioPublicHint = "modstudio.publicHint";
     public const string ModstudioRefreshName = "modstudio.refreshName";
     public const string ModstudioRemovePreview = "modstudio.removePreview";
+    public const string ModstudioRowPublishFailed = "modstudio.rowPublishFailed";
     public const string ModstudioRowPublished = "modstudio.rowPublished";
     public const string ModstudioRowPublishedShort = "modstudio.rowPublishedShort";
+    public const string ModstudioRowPublishedUnlisted = "modstudio.rowPublishedUnlisted";
     public const string ModstudioRowUnpublished = "modstudio.rowUnpublished";
     public const string ModstudioSearchName = "modstudio.searchName";
     public const string ModstudioSearchPlaceholder = "modstudio.searchPlaceholder";
@@ -5158,6 +5227,7 @@ internal static class Keys
     public const string ModstudioVisibilityFriendsOnly = "modstudio.visibilityFriendsOnly";
     public const string ModstudioVisibilityPrivate = "modstudio.visibilityPrivate";
     public const string ModstudioVisibilityPublic = "modstudio.visibilityPublic";
+    public const string ModstudioVisibilityUnknown = "modstudio.visibilityUnknown";
     public const string ModstudioVisibilityUnlisted = "modstudio.visibilityUnlisted";
     public const string SettingsAboutAutoCheck = "settings.about.autoCheck";
     public const string SettingsAboutAutoCheckName = "settings.about.autoCheckName";

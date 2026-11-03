@@ -21,6 +21,19 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
     private const int SubmitItemUpdateResultId = 3404;
     private const int SteamApiCallCompletedId = 703;
 
+    /// <summary><c>k_iSteamRemoteStorageCallbacks = 1300</c>（见 sdk/public/steam/steam_api_internal.h:258）+ 12 / + 18。</summary>
+    private const int OwnEnumerateResultId = 1312;
+    private const int OwnDetailResultId = 1318;
+
+    /// <summary>EResult 9 = FileNotFound；匿名 Web API 对未公开条目也回这个值。</summary>
+    private const int FileNotFoundResult = 9;
+
+    /// <summary>每次枚举最多回 50 条（<c>k_unEnumeratePublishedFilesMaxResults</c>，isteamremotestorage.h:55）。</summary>
+    private const int OwnPageSize = 50;
+
+    /// <summary>枚举自己发布的条目时最多翻多少页（50 × 20 = 1000 条）。</summary>
+    private const int MaxOwnPages = 20;
+
     /// <summary>内容描述词 id 的下界（EUGCContentDescriptorID 从 1 开始）。</summary>
     private const int ContentDescriptorFirst = 1;
 
@@ -80,6 +93,15 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
     private ManualDispatchGetNextCallbackFn? _manualDispatchGetNextCallback;
     private ManualDispatchFreeLastCallbackFn? _manualDispatchFreeLastCallback;
     private ManualDispatchGetApiCallResultFn? _manualDispatchGetApiCallResult;
+
+    // ISteamRemoteStorage 这一组只在「查我自己发布的条目」时用到：它不依赖 UGC 版本，
+    // 且旧版 / 裁剪过的 dll 可能没有，所以单独探测、单独判可用，不参与 EnsureInitialized 的硬门槛。
+    private SteamRemoteStorageFn? _steamRemoteStorage;
+    private IntPtr _remoteStorage;
+    private SteamRemoteStorageEnumFn? _rsEnumUserPublishedFiles;
+    private SteamRemoteStorageDetailFn? _rsGetPublishedFileDetails;
+    private OwnEnumerateFilesResult? _ownEnumerateResult;
+    private OwnFileDetailResult? _ownDetailResult;
 
     private CreateItemResult? _createResult;
     private SubmitItemUpdateResult? _submitResult;
@@ -819,6 +841,227 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
         return "提交超时";
     }
 
+    /// <summary>
+    /// 列出当前账号在本游戏下**自己发布**的工坊条目。
+    /// <para>
+    /// 走 <c>EnumerateUserPublishedFiles</c>：每页 50 条，按 <c>unStartIndex</c> 翻页，
+    /// 直到返回不足一页、拿满 <c>m_nTotalResultCount</c>、或撞上 <see cref="SteamHostMineResult.MaxItems"/>。
+    /// **未公开（仅好友 / 私密 / 未列出）的条目同样在列表里** —— 这是 Web API 对匿名调用方回
+    /// <c>EResult 9</c> 时唯一还能看见自己条目的途径。
+    /// </para>
+    /// </summary>
+    /// <param name="timeout">整批（所有页）共用的等待上限。</param>
+    /// <returns>自己的条目 id 列表；失败时 <c>Ok</c> 为 false 且带中文原因。</returns>
+    public SteamHostMineResult ReadOwnPublishedItems(TimeSpan timeout)
+    {
+        var error = EnsureInitialized();
+        if (error is not null)
+        {
+            return SteamHostMineResult.Fail(error);
+        }
+
+        if (!EnsureRemoteStorageBindings())
+        {
+            return SteamHostMineResult.Fail("steam_api64.dll 缺少查询自己创意工坊条目所需的 Steamworks 导出（EnumerateUserPublishedFiles 等）");
+        }
+
+        var dispatchError = EnsureManualDispatch();
+        if (dispatchError is not null)
+        {
+            return SteamHostMineResult.Fail(dispatchError);
+        }
+
+        var deadline = DateTime.UtcNow + timeout;
+        var ids = new List<ulong>();
+        var seen = new HashSet<ulong>();
+        var total = -1;
+        var truncated = false;
+
+        for (var page = 0; page < MaxOwnPages; page++)
+        {
+            _ownEnumerateResult = null;
+            _callbackError = null;
+
+            ulong call;
+            try
+            {
+                call = _rsEnumUserPublishedFiles!(_remoteStorage, checked((uint)(page * OwnPageSize)));
+            }
+            catch (Exception ex)
+            {
+                return SteamHostMineResult.Fail("列出自己发布的工坊条目异常：" + ex.Message);
+            }
+
+            if (call == 0)
+            {
+                return SteamHostMineResult.Fail("Steam 未返回列举条目的调用句柄");
+            }
+
+            while (DateTime.UtcNow < deadline && _ownEnumerateResult is null)
+            {
+                PumpManualCallbacks();
+                if (_callbackError is not null)
+                {
+                    return SteamHostMineResult.Fail(_callbackError);
+                }
+
+                Thread.Sleep(50);
+            }
+
+            if (_ownEnumerateResult is not { } pageResult)
+            {
+                return SteamHostMineResult.Fail("列出自己在工坊发布的条目超时");
+            }
+
+            if (pageResult.Result != ResultOk)
+            {
+                return SteamHostMineResult.Fail("列出自己在工坊发布的条目失败（EResult=" + pageResult.Result + "）");
+            }
+
+            total = pageResult.TotalResultCount;
+            var returned = Math.Clamp(pageResult.ResultsReturned, 0, OwnPageSize);
+            for (var index = 0; index < returned; index++)
+            {
+                var id = pageResult.Ids[index];
+                if (id != 0 && seen.Add(id))
+                {
+                    ids.Add(id);
+                }
+            }
+
+            if (returned < OwnPageSize || (total > 0 && ids.Count >= total))
+            {
+                break;
+            }
+
+            if (ids.Count >= SteamHostMineResult.MaxItems)
+            {
+                truncated = true;
+                break;
+            }
+        }
+
+        return new SteamHostMineResult(true, ids, total, truncated, null, _initialized);
+    }
+
+    /// <summary>
+    /// 按 id 读**自己**某个工坊条目的详情，含 <b>Steam 侧真实可见性</b>。
+    /// <para>未公开条目也读得到（鉴权版 <c>GetPublishedFileDetails</c>），这正是判断
+    /// 「用户以为没发布成功、其实是设成了私密」的依据。</para>
+    /// </summary>
+    /// <param name="publishedFileId">工坊条目 id。</param>
+    /// <param name="timeout">等待 Steam 返回详情的上限。</param>
+    /// <returns>详情结果；<c>EResult 9</c> 会翻成中文原因。</returns>
+    public SteamHostMineItemResult ReadOwnPublishedItem(ulong publishedFileId, TimeSpan timeout)
+    {
+        if (publishedFileId == 0)
+        {
+            return SteamHostMineItemResult.Fail(0, "工坊条目 id 必须大于 0");
+        }
+
+        var error = EnsureInitialized();
+        if (error is not null)
+        {
+            return SteamHostMineItemResult.Fail(publishedFileId, error);
+        }
+
+        if (!EnsureRemoteStorageBindings())
+        {
+            return SteamHostMineItemResult.Fail(publishedFileId, "steam_api64.dll 缺少查询自己创意工坊条目所需的 Steamworks 导出（GetPublishedFileDetails 等）");
+        }
+
+        var dispatchError = EnsureManualDispatch();
+        if (dispatchError is not null)
+        {
+            return SteamHostMineItemResult.Fail(publishedFileId, dispatchError);
+        }
+
+        _ownDetailResult = null;
+        _callbackError = null;
+
+        ulong call;
+        try
+        {
+            call = _rsGetPublishedFileDetails!(_remoteStorage, publishedFileId, 0);
+        }
+        catch (Exception ex)
+        {
+            return SteamHostMineItemResult.Fail(publishedFileId, "读取工坊条目异常：" + ex.Message);
+        }
+
+        if (call == 0)
+        {
+            return SteamHostMineItemResult.Fail(publishedFileId, "Steam 未返回读取条目详情的调用句柄");
+        }
+
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline && _ownDetailResult is null)
+        {
+            PumpManualCallbacks();
+            if (_callbackError is not null)
+            {
+                return SteamHostMineItemResult.Fail(publishedFileId, _callbackError);
+            }
+
+            Thread.Sleep(50);
+        }
+
+        if (_ownDetailResult is not { } detail)
+        {
+            return SteamHostMineItemResult.Fail(publishedFileId, "读取工坊条目详情超时");
+        }
+
+        if (detail.Result == FileNotFoundResult)
+        {
+            return SteamHostMineItemResult.Fail(publishedFileId, "Steam 说这个条目不存在（EResult=9）");
+        }
+
+        if (detail.Result != ResultOk)
+        {
+            return SteamHostMineItemResult.Fail(publishedFileId, "读取工坊条目失败（EResult=" + detail.Result + "）");
+        }
+
+        return new SteamHostMineItemResult(
+            true,
+            detail.PublishedFileId == 0 ? publishedFileId : detail.PublishedFileId,
+            detail.Title ?? string.Empty,
+            detail.Description ?? string.Empty,
+            SplitTagList(detail.Tags),
+            detail.Visibility,
+            detail.OwnerSteamId64,
+            detail.FileSize,
+            detail.TimeCreated,
+            detail.TimeUpdated,
+            (int)Math.Min(detail.CreatorAppId, int.MaxValue),
+            null);
+    }
+
+    /// <summary>自检用：枚举结果结构体的托管尺寸（钉住布局，字段或修饰符漂移时立刻红）。</summary>
+    internal static int OwnEnumerateResultSize => Marshal.SizeOf<OwnEnumerateFilesResult>();
+
+    /// <summary>自检用：详情结果结构体的托管尺寸（期望 9760，主要是 8000 字节的描述缓冲 + 各定长 char 数组）。</summary>
+    internal static int OwnDetailResultSize => Marshal.SizeOf<OwnFileDetailResult>();
+
+    private static IReadOnlyList<string> SplitTagList(string? tags)
+    {
+        if (string.IsNullOrWhiteSpace(tags))
+        {
+            return Array.Empty<string>();
+        }
+
+        var values = new List<string>();
+        foreach (var part in tags.Split(','))
+        {
+            var tag = part.Trim();
+            if (tag.Length > 0)
+            {
+                values.Add(tag);
+            }
+        }
+
+        return values;
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -881,6 +1124,9 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
         _shutdown = Bind<ShutdownFn>("SteamAPI_Shutdown");
         _runCallbacks = Bind<RunCallbacksFn>("SteamAPI_RunCallbacks");
         _steamUgc = BindUgcAccessor();
+        _steamRemoteStorage = BindRemoteStorageAccessor();
+        _rsEnumUserPublishedFiles = Bind<SteamRemoteStorageEnumFn>("SteamAPI_ISteamRemoteStorage_EnumerateUserPublishedFiles");
+        _rsGetPublishedFileDetails = Bind<SteamRemoteStorageDetailFn>("SteamAPI_ISteamRemoteStorage_GetPublishedFileDetails");
         _subscribeItem = Bind<SubscribeItemFn>("SteamAPI_ISteamUGC_SubscribeItem");
         _unsubscribeItem = Bind<UnsubscribeItemFn>("SteamAPI_ISteamUGC_UnsubscribeItem");
         _getItemState = Bind<GetItemStateFn>("SteamAPI_ISteamUGC_GetItemState");
@@ -947,6 +1193,15 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
         try
         {
             _ugc = _steamUgc?.Invoke() ?? IntPtr.Zero;
+
+            try
+            {
+                _remoteStorage = _steamRemoteStorage?.Invoke() ?? IntPtr.Zero;
+            }
+            catch
+            {
+                _remoteStorage = IntPtr.Zero;
+            }
         }
         catch
         {
@@ -961,6 +1216,22 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
         foreach (var version in new[] { 21, 20, 18, 17, 16, 15, 14, 13, 12 })
         {
             var accessor = Bind<SteamUgcFn>("SteamAPI_SteamUGC_v" + version.ToString("D3", System.Globalization.CultureInfo.InvariantCulture));
+            if (accessor is not null)
+            {
+                return accessor;
+            }
+        }
+
+        return null;
+    }
+
+    private SteamRemoteStorageFn? BindRemoteStorageAccessor()
+    {
+        // 实测游戏自带的 dll 只导出 v014；仍照 UGC 的写法往上探，
+        // 免得换一款游戏（或 Steam 更新）多了新版本反而绑不上。
+        foreach (var version in new[] { 16, 15, 14, 13 })
+        {
+            var accessor = Bind<SteamRemoteStorageFn>("SteamAPI_SteamRemoteStorage_v" + version.ToString("D3", System.Globalization.CultureInfo.InvariantCulture));
             if (accessor is not null)
             {
                 return accessor;
@@ -1006,6 +1277,39 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
             || (_addContentDescriptor is not null && _removeContentDescriptor is not null))
         && (!needLanguage || _setItemUpdateLanguage is not null);
 
+    /// <summary>查「我自己发布的条目」所需的导出是否齐全（含手动回调分发那一套）。</summary>
+    private bool EnsureRemoteStorageBindings() =>
+        _remoteStorage != IntPtr.Zero
+        && _rsEnumUserPublishedFiles is not null
+        && _rsGetPublishedFileDetails is not null
+        && _getHSteamPipe is not null
+        && _manualDispatchInit is not null
+        && _manualDispatchRunFrame is not null
+        && _manualDispatchGetNextCallback is not null
+        && _manualDispatchFreeLastCallback is not null
+        && _manualDispatchGetApiCallResult is not null;
+
+    /// <summary>确保手动回调分发已初始化（与 <see cref="Publish"/> 里那段同义）。</summary>
+    private string? EnsureManualDispatch()
+    {
+        if (_manualInitialized)
+        {
+            return null;
+        }
+
+        try
+        {
+            _manualDispatchInit!();
+            _pipe = _getHSteamPipe!();
+            _manualInitialized = true;
+            return null;
+        }
+        catch (Exception ex)
+        {
+            return "初始化 Steam 回调分发失败：" + ex.Message;
+        }
+    }
+
     private void PumpCallbacks()
     {
         try
@@ -1040,14 +1344,19 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
                     }
 
                     var completed = Marshal.PtrToStructure<SteamApiCallCompleted>(header.Param);
-                    if (completed.Callback != CreateItemResultId && completed.Callback != SubmitItemUpdateResultId)
+                    var size = completed.Callback switch
+                    {
+                        CreateItemResultId => Marshal.SizeOf<CreateItemResult>(),
+                        SubmitItemUpdateResultId => Marshal.SizeOf<SubmitItemUpdateResult>(),
+                        OwnEnumerateResultId => Marshal.SizeOf<OwnEnumerateFilesResult>(),
+                        OwnDetailResultId => Marshal.SizeOf<OwnFileDetailResult>(),
+                        _ => 0,
+                    };
+
+                    if (size == 0)
                     {
                         continue;
                     }
-
-                    var size = completed.Callback == CreateItemResultId
-                        ? Marshal.SizeOf<CreateItemResult>()
-                        : Marshal.SizeOf<SubmitItemUpdateResult>();
                     var buffer = Marshal.AllocHGlobal(size);
                     try
                     {
@@ -1059,13 +1368,20 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
                                 completed.Callback,
                                 out var ioFailure))
                         {
-                            if (completed.Callback == CreateItemResultId)
+                            switch (completed.Callback)
                             {
-                                _createResult = Marshal.PtrToStructure<CreateItemResult>(buffer);
-                            }
-                            else
-                            {
-                                _submitResult = Marshal.PtrToStructure<SubmitItemUpdateResult>(buffer);
+                                case CreateItemResultId:
+                                    _createResult = Marshal.PtrToStructure<CreateItemResult>(buffer);
+                                    break;
+                                case SubmitItemUpdateResultId:
+                                    _submitResult = Marshal.PtrToStructure<SubmitItemUpdateResult>(buffer);
+                                    break;
+                                case OwnEnumerateResultId:
+                                    _ownEnumerateResult = Marshal.PtrToStructure<OwnEnumerateFilesResult>(buffer);
+                                    break;
+                                default:
+                                    _ownDetailResult = Marshal.PtrToStructure<OwnFileDetailResult>(buffer);
+                                    break;
                             }
                         }
                         else if (ioFailure)
@@ -1336,6 +1652,12 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate IntPtr SteamUgcFn();
 
+    private delegate IntPtr SteamRemoteStorageFn();
+
+    private delegate ulong SteamRemoteStorageEnumFn(IntPtr remoteStorage, uint startIndex);
+
+    private delegate ulong SteamRemoteStorageDetailFn(IntPtr remoteStorage, ulong publishedFileId, uint maxSecondsOld);
+
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate ulong SubscribeItemFn(IntPtr ugc, ulong publishedFileId);
 
@@ -1494,6 +1816,80 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
         public bool NeedsLegalAgreement;
 
         public ulong PublishedFileId;
+    }
+
+    /// <summary>
+    /// <c>RemoteStorageEnumerateUserPublishedFilesResult_t</c>（回调 1312）。
+    /// <para>
+    /// 布局照 <c>sdk/public/steam/isteamremotestorage.h:386-393</c>：3 个 int32 + 50 个
+    /// <c>PublishedFileId_t</c>。x64 下 <c>Marshal.SizeOf</c> = 416（原生 412，尾部按 8 对齐补齐），
+    /// 传大一点给 <c>GetAPICallResult</c> 是安全的。
+    /// </para>
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    private struct OwnEnumerateFilesResult
+    {
+        public int Result;
+        public int ResultsReturned;
+        public int TotalResultCount;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = OwnPageSize)]
+        public ulong[] Ids;
+    }
+
+    /// <summary>
+    /// <c>RemoteStorageGetPublishedFileDetailsResult_t</c>（回调 1318）。
+    /// <para>
+    /// 字段顺序照 <c>sdk/public/steam/isteamremotestorage.h:467-497</c>，定长缓冲的长度取自
+    /// <c>isteamremotestorage.h:52-58</c>（129 / 8000 / 1025 / 260 / 256）。
+    /// <b>三个 <c>bool</c> 必须显式标 <see cref="UnmanagedType.I1"/></b>：C# 默认把 <c>bool</c> 按 4 字节
+    /// 封送，而 SDK 里是 1 字节，不标就会把后面的 <c>char[1025]</c> 整体错位。
+    /// 期望 <c>Marshal.SizeOf</c> = 9760（起头的 4 字节 int 之后按 8 对齐；描述缓冲 8000 字节 + 其余定长 char 数组）。
+    /// </para>
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    private struct OwnFileDetailResult
+    {
+        public int Result;
+        public ulong PublishedFileId;
+        public uint CreatorAppId;
+        public uint ConsumerAppId;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 129)]
+        public string Title;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 8000)]
+        public string Description;
+
+        public ulong FileHandle;
+        public ulong PreviewFileHandle;
+        public ulong OwnerSteamId64;
+        public uint TimeCreated;
+        public uint TimeUpdated;
+        public int Visibility;
+
+        [MarshalAs(UnmanagedType.I1)]
+        public bool Banned;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 1025)]
+        public string Tags;
+
+        [MarshalAs(UnmanagedType.I1)]
+        public bool TagsTruncated;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+        public string FileName;
+
+        public int FileSize;
+        public int PreviewFileSize;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+        public string Url;
+
+        public int FileType;
+
+        [MarshalAs(UnmanagedType.I1)]
+        public bool AcceptedForUse;
     }
 
     [StructLayout(LayoutKind.Sequential)]

@@ -176,9 +176,12 @@ public sealed class SteamWorkshopClient
                 .PostFormAsync(OnlineHosts.SteamPublishedFileDetailsEndpoint, body, cancellationToken)
                 .ConfigureAwait(false);
 
-            var detail = ParseDetail(text);
+            var (detail, result) = ParseDetailWithResult(text);
             if (detail is null)
             {
+                // 记下 Steam 给的 EResult：9 表示「对匿名调用方不可见」（未公开 / 仅好友 / 私密），
+                // 与「真的不存在」在界面上是同一句文案，只有日志能区分开。
+                _logger.Warn("Steam 创意工坊详情不可用（item=" + publishedFileId + "）：" + DetailUnavailableReason(result));
                 return AppResult<SteamWorkshopItemDetail>.Fail(ErrorKind.NotFound, "steam-workshop-detail:not-found");
             }
 
@@ -460,11 +463,27 @@ public sealed class SteamWorkshopClient
 
     /// <summary>解析 GetPublishedFileDetails 响应（纯函数，自检覆盖）。</summary>
     /// <param name="json">响应正文。</param>
-    public static SteamWorkshopItemDetail? ParseDetail(string? json)
+    /// <returns>解析成功且条目可见时返回详情；否则 null。需要区分失败原因时用 <see cref="ParseDetailWithResult"/>。</returns>
+    public static SteamWorkshopItemDetail? ParseDetail(string? json) => ParseDetailWithResult(json).Detail;
+
+    /// <summary>
+    /// 解析 GetPublishedFileDetails 响应，并把「为什么没有详情」一并带出来。
+    /// <para>
+    /// Steam 对**匿名调用方**看不见的条目回 <c>{"result":9}</c>（FileNotFound）而不是 4xx，
+    /// 隐藏 / 仅好友 / 私密 / 未完成提交的条目都长这样。旧实现直接把这种响应当成一条
+    /// 标题描述全空的条目返回，界面上就成了一张空卡片 —— 所以这里必须先看 result。
+    /// </para>
+    /// </summary>
+    /// <param name="json">响应正文。</param>
+    /// <returns>
+    /// <c>Detail</c> 为空时 <c>Result</c> 是 Steam 给的原因：<c>9</c> = 不可见 / 不存在，
+    /// 其它非 1 值为对应 EResult，<c>-1</c> = 响应本身解析不出来。
+    /// </returns>
+    public static (SteamWorkshopItemDetail? Detail, int Result) ParseDetailWithResult(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
-            return null;
+            return (null, ResultUnknown);
         }
 
         try
@@ -473,10 +492,18 @@ public sealed class SteamWorkshopClient
                 || array.Count == 0
                 || array[0] is not JsonObject item)
             {
-                return null;
+                return (null, ResultUnknown);
             }
 
-            return new SteamWorkshopItemDetail(
+            // result 缺省按 1（OK）处理：自检夹具与老版本响应里不一定带这个字段。
+            var raw = LongOf(item, "result");
+            var result = raw > 0 ? (int)Math.Min(raw, int.MaxValue) : 1;
+            if (result != 1)
+            {
+                return (null, result);
+            }
+
+            var detail = new SteamWorkshopItemDetail(
                 PublishedFileId: StringOf(item, "publishedfileid") ?? string.Empty,
                 Title: StringOf(item, "title") ?? string.Empty,
                 Description: StringOf(item, "description") ?? StringOf(item, "file_description") ?? string.Empty,
@@ -489,12 +516,26 @@ public sealed class SteamWorkshopClient
                 Tags: TagsOf(item),
                 Views: LongOf(item, "views"),
                 LifetimeSubscriptions: LongOf(item, "lifetime_subscriptions"));
+
+            return (detail, result);
         }
         catch (JsonException)
         {
-            return null;
+            return (null, ResultUnknown);
         }
     }
+
+    /// <summary>响应里既没有 result 字段、也解析不出条目时用的哨兵值。</summary>
+    public const int ResultUnknown = -1;
+
+    /// <summary>把 <c>GetPublishedFileDetails</c> 的 result 翻成中文原因（界面 / 日志共用）。</summary>
+    /// <param name="result">Steam 返回的 EResult；<see cref="ResultUnknown"/> 表示没解析出来。</param>
+    public static string DetailUnavailableReason(int result) => result switch
+    {
+        9 => "这个条目对未登录 / 匿名调用方不可见（隐藏、仅好友或私密）；不等于它不存在",
+        ResultUnknown => "Steam 没有返回可解析的条目详情",
+        _ => "查不到这个创意工坊条目（EResult=" + result.ToString(System.Globalization.CultureInfo.InvariantCulture) + "）",
+    };
 
     /// <summary>取 <c>tags[].tag</c>（Steam 返回的是对象数组，旧代码直接丢弃了）。</summary>
     private static IReadOnlyList<string> TagsOf(JsonObject item)

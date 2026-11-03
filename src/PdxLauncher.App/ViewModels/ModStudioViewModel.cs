@@ -346,6 +346,25 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
     /// <summary>是否已有发布记录。</summary>
     public bool HasSelectedPublication => SelectedRow?.HasPublication == true;
 
+    /// <summary>选中行在 Steam 侧的事实可见性文案；没核实过显示「未核实」。</summary>
+    public string SelectedSteamVisibility => SelectedRow?.Publication?.SteamVisibility switch
+    {
+        0 => T(Keys.ModstudioVisibilityPublic),
+        1 => T(Keys.ModstudioVisibilityFriendsOnly),
+        2 => T(Keys.ModstudioVisibilityPrivate),
+        3 => T(Keys.ModstudioVisibilityUnlisted),
+        _ => T(Keys.ModstudioVisibilityUnknown),
+    };
+
+    /// <summary>是否从 Steam 核实过可见性（决定详情面板那一行要不要显示）。</summary>
+    public bool HasSelectedSteamVisibility => SelectedRow?.Publication?.SteamVisibility is not null;
+
+    /// <summary>能否绑定一个已存在的工坊条目；与上传同口径，唯一硬性前提是有本地目录。</summary>
+    public bool CanBindWorkshop => CanPublishGame && !IsPublishing && SelectedRow?.DirPath is { Length: > 0 };
+
+    /// <summary>绑定入口的说明文案。</summary>
+    public string BindWorkshopHint => T(Keys.ModstudioBindHint);
+
     /// <summary>上传按钮是否可用（上传中或选择 Paradox 目标时禁用）。</summary>
     public bool CanStartUpload => !IsPublishing && UploadTarget == ModUploadTarget.Steam;
 
@@ -752,24 +771,28 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
     {
         if (Game is null || SelectedRow is null)
         {
+            _logger.Warn("上传被拦下：没有选中可上传的 Mod");
             StatusMessage = T(Keys.ModstudioUploadSelectMod);
             return;
         }
 
         if (!SelectedRow.CanUpload)
         {
+            _logger.Warn("上传被拦下：" + SelectedRow.UploadDisabledText + "（" + SelectedRow.Name + "）");
             StatusMessage = SelectedRow.UploadDisabledText;
             return;
         }
 
         if (UploadTarget != ModUploadTarget.Steam)
         {
+            _logger.Warn("上传被拦下：上传目标不是 Steam");
             StatusMessage = T(Keys.ModstudioUploadTargetPdxUnavailable);
             return;
         }
 
         if (!ModIdInput.TryParse(UploadModId, out var publishedFileId))
         {
+            _logger.Warn("上传被拦下：工坊 id 不合法（" + UploadModId + "）");
             StatusMessage = T(Keys.ModstudioUploadModIdInvalid);
             return;
         }
@@ -779,6 +802,7 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
         var title = UploadTitle.Trim();
         if (title.Length == 0)
         {
+            _logger.Warn("上传被拦下：标题为空");
             StatusMessage = T(Keys.ModstudioUploadTitleRequired);
             return;
         }
@@ -787,12 +811,14 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
         // 这里先按 UTF-8 字节挡住，用户还能改；到了宿主再失败就只剩一句看不懂的英文。
         if (IsUploadTitleTooLong)
         {
+            _logger.Warn("上传被拦下：" + UploadTitleWarningText);
             StatusMessage = UploadTitleWarningText;
             return;
         }
 
         if (IsUploadDescriptionTooLong)
         {
+            _logger.Warn("上传被拦下：" + UploadDescriptionWarningText);
             StatusMessage = UploadDescriptionWarningText;
             return;
         }
@@ -800,6 +826,7 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
         var tooLarge = UploadPreviewItems.FirstOrDefault(item => item.IsTooLarge);
         if (tooLarge is not null)
         {
+            _logger.Warn("上传被拦下：预览图超过 1 MB（" + tooLarge.FileName + "）");
             StatusMessage = T(Keys.ModstudioPreviewTooLarge) + "：" + tooLarge.FileName;
             return;
         }
@@ -862,6 +889,92 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
             IsPublishing = false;
             RaiseDerived();
         }
+    }
+
+    /// <summary>
+    /// 把选中的本地 mod 绑定到一条**已经存在**的创意工坊条目上。
+    /// <para>
+    /// 这是给「条目已经发布，但启动器查不到」准备的出口：隐藏 / 私密 / 仅好友的条目
+    /// 对匿名 API 一律回 EResult 9，只有作者手动给 id 才认得出来。
+    /// </para>
+    /// </summary>
+    /// <param name="publishedFileId">工坊条目 id。</param>
+    /// <param name="verifyVisibility">是否顺便从 Steam 读回真实可见性。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>绑定结果。</returns>
+    public async Task<ModBindResult> BindWorkshopAsync(
+        ulong publishedFileId,
+        bool verifyVisibility,
+        CancellationToken cancellationToken)
+    {
+        if (Game is null || SelectedRow is null)
+        {
+            StatusMessage = T(Keys.ModstudioUploadSelectMod);
+            return ModBindResult.Fail(T(Keys.ModstudioUploadSelectMod));
+        }
+
+        if (!CanBindWorkshop)
+        {
+            var blocked = string.IsNullOrWhiteSpace(SelectedRow.DirPath)
+                ? T(Keys.ModstudioUploadNotLocal)
+                : T(Keys.ModstudioNoWorkshopHint);
+            _logger.Warn("绑定工坊条目被拦下：" + blocked + "（" + SelectedRow.Name + "）");
+            StatusMessage = blocked;
+            return ModBindResult.Fail(blocked);
+        }
+
+        var selectedPath = SelectedRow.DirPath;
+        var result = await _service
+            .BindWorkshopItemAsync(Game, SelectedRow.Entry, publishedFileId, verifyVisibility, cancellationToken)
+            .ConfigureAwait(true);
+
+        if (!result.Ok)
+        {
+            StatusMessage = T(Keys.ModstudioBindFailed, result.Error ?? T(Keys.CommonUnknown));
+            _logger.Warn("绑定创意工坊条目失败：" + result.Error);
+            return result;
+        }
+
+        await LoadAsync(Game, cancellationToken, resetPane: true).ConfigureAwait(true);
+        SelectByPath(selectedPath);
+        Pane = ModStudioPane.Detail;
+        StatusMessage = result.Verified
+            ? T(Keys.ModstudioBindSuccess, publishedFileId)
+            : T(Keys.ModstudioBindUnverified, result.VerifyError ?? T(Keys.CommonUnknown));
+        return result;
+    }
+
+    /// <summary>
+    /// 列出当前账号在本游戏下自己发布的工坊条目，供绑定对话框挑选。
+    /// <para>
+    /// 原生枚举只给 id，不给标题，所以标题位置放的是 id 本身；选中后绑定流程会读详情补上真标题。
+    /// </para>
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>条目列表与失败原因。</returns>
+    public async Task<(IReadOnlyList<(ulong Id, string Title, bool Unlisted)> Items, string? Error)> ReadOwnWorkshopItemsAsync(
+        CancellationToken cancellationToken)
+    {
+        if (Game is null)
+        {
+            return (Array.Empty<(ulong Id, string Title, bool Unlisted)>(), T(Keys.ModstudioNoGameHint));
+        }
+
+        var (result, error) = await _service.ReadOwnItemsAsync(Game, cancellationToken).ConfigureAwait(true);
+        if (result is null || !result.Ok)
+        {
+            return (Array.Empty<(ulong Id, string Title, bool Unlisted)>(), error ?? T(Keys.CommonUnknown));
+        }
+
+        var items = result.Ids
+            .Select(id => (Id: id, Title: id.ToString(CultureInfo.InvariantCulture), Unlisted: false))
+            .ToArray();
+        if (result.Truncated)
+        {
+            _logger.Warn("我的工坊条目超过上限，只列出了前 " + items.Length + " 条");
+        }
+
+        return (items, null);
     }
 
     /// <summary>页面把后台进度派发回 UI 线程后调用。</summary>
@@ -1212,6 +1325,7 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
     {
         OnPropertyChanged(nameof(CanStartUpload));
         OnPropertyChanged(nameof(CanEditUploadFields));
+        OnPropertyChanged(nameof(CanBindWorkshop));
     }
 
     partial void OnUploadTargetChanged(ModUploadTarget value)
@@ -1428,6 +1542,10 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(CanStartUpload));
         OnPropertyChanged(nameof(CanEditUploadFields));
         OnPropertyChanged(nameof(HasSelectedPublication));
+        OnPropertyChanged(nameof(SelectedSteamVisibility));
+        OnPropertyChanged(nameof(HasSelectedSteamVisibility));
+        OnPropertyChanged(nameof(CanBindWorkshop));
+        OnPropertyChanged(nameof(BindWorkshopHint));
         OnPropertyChanged(nameof(CreateFolderHintText));
         OnPropertyChanged(nameof(UploadModName));
         OnPropertyChanged(nameof(UploadDirectoryText));

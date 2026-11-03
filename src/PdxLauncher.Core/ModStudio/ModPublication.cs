@@ -18,6 +18,11 @@ using PdxLauncher.Core.Steam;
 /// <param name="PreviewPaths">上次提交的附加预览图路径。</param>
 /// <param name="PreviewVideoIds">上次提交的附加预览视频 YouTube ID。</param>
 /// <param name="Localizations">上次提交的附加语言标题与描述。</param>
+/// <param name="SteamVisibility">
+/// **Steam 侧的事实**可见性：0 公开 / 1 仅好友 / 2 私密 / 3 未列出；null = 没核实过
+/// （旧记录，或者没联网查过）。与 <see cref="Visibility"/> 不是一回事：那个是「上次提交时想设成什么」，
+/// 这个是从 Steam 读回来的「现在实际是什么」。已发布却被设成私密的条目，只有这个字段能说清楚。
+/// </param>
 public sealed record ModPublication(
     string GameId,
     string ModPath,
@@ -33,7 +38,8 @@ public sealed record ModPublication(
     IReadOnlyList<int>? ContentDescriptors = null,
     IReadOnlyList<string>? PreviewPaths = null,
     IReadOnlyList<string>? PreviewVideoIds = null,
-    IReadOnlyList<ModLocalizedText>? Localizations = null)
+    IReadOnlyList<ModLocalizedText>? Localizations = null,
+    int? SteamVisibility = null)
 {
     /// <summary>实际生效的可见性：有 <see cref="Visibility"/> 用它，否则从旧 <see cref="Public"/> 迁移。</summary>
     public SteamWorkshopVisibility EffectiveVisibility =>
@@ -50,4 +56,10 @@ public sealed record ModPublication(
 
     /// <summary>附加语言；没有记录时返回空数组。</summary>
     public IReadOnlyList<ModLocalizedText> ExtraLocalizations => Localizations ?? [];
+
+    /// <summary>Steam 侧现在能公开访问（或还没核实过）。未核实时按「能公开」处理，不误报。</summary>
+    public bool IsPubliclyVisible => SteamVisibility is null or 0;
+
+    /// <summary>Steam 侧限制了可见性：仅好友 / 私密 / 未列出。作者常在这一档上以为「没上传成功」。</summary>
+    public bool IsUnlisted => SteamVisibility is 1 or 2 or 3;
 }

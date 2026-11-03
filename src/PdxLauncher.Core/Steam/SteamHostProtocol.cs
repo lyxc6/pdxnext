@@ -46,6 +46,20 @@ public static class SteamHostProtocol
     /// <summary>对一批工坊条目做同一个动作（下载 / 本地禁用 / 解除本地禁用 / 只读状态）。</summary>
     public const string WorkshopBatchVerb = "workshop-batch";
 
+    /// <summary>
+    /// 列出当前账号在本游戏下**自己发布**的工坊条目 id。
+    /// <para>
+    /// 走 <c>ISteamRemoteStorage::EnumerateUserPublishedFiles</c>：吃本机登录态、不收 API key，
+    /// 未公开（仅好友 / 私密 / 未列出）的条目同样在列表里 —— 这正是 Web API 的
+    /// <c>GetPublishedFileDetails</c> 给匿名调用方回 <c>EResult 9 (FileNotFound)</c> 时唯一的补救途径。
+    /// 注意它只能列出**自己**的条目，与「订阅列表」是两回事。
+    /// </para>
+    /// </summary>
+    public const string WorkshopMineVerb = "workshop-mine";
+
+    /// <summary>按 id 读**自己**某个工坊条目的详情（含真实可见性）；配合 <c>--fileid</c> 使用。</summary>
+    public const string WorkshopMineDetailVerb = "workshop-mine-detail";
+
     /// <summary>结果行的前缀；宿主只往 stdout 写这一行 + 换行。</summary>
     public const string ResultPrefix = "PDXNEXT-STEAM-HOST ";
 
@@ -68,6 +82,8 @@ public static class SteamHostProtocol
         WorkshopPublishVerb,
         WorkshopSubscribedVerb,
         WorkshopBatchVerb,
+        WorkshopMineVerb,
+        WorkshopMineDetailVerb,
     };
 
     /// <summary>共享的 JSON 设置：camelCase、忽略 null、不回填只有 getter 的派生属性。</summary>
@@ -416,6 +432,74 @@ public sealed record SteamHostSubscribedResult(
     /// <summary>失败结果。</summary>
     public static SteamHostSubscribedResult Fail(string error) =>
         new(false, Array.Empty<WorkshopSubscribedItem>(), error, false);
+}
+
+/// <summary>
+/// 宿主列出「我自己在这个游戏下发布了哪些工坊条目」的结果。
+/// <para>
+/// 与 <see cref="SteamHostSubscribedResult"/> 的区别：那边是**订阅**（别人的条目装到本机），
+/// 这边是**自己的发布**（作者视角，含未公开条目）。两者没有交集可依赖 —— 作者一般不订阅自己。
+/// </para>
+/// </summary>
+/// <param name="Ok">是否成功拿到列表（单条无效 id 不影响整体）。</param>
+/// <param name="Ids">自己的条目 id（去重、剔除 0）。</param>
+/// <param name="Total">Steam 报的总条数；&lt; 0 表示没读到。</param>
+/// <param name="Truncated">因翻页上限被截断时为 true。</param>
+/// <param name="Error">失败原因（中文，直接进日志）。</param>
+/// <param name="Initialized"><c>SteamAPI_Init</c> 是否成功。</param>
+public sealed record SteamHostMineResult(
+    bool Ok,
+    IReadOnlyList<ulong> Ids,
+    int Total,
+    bool Truncated,
+    string? Error,
+    bool Initialized)
+{
+    /// <summary>单次宿主动作最多回传的条目数（20 页 × 50）。</summary>
+    public const int MaxItems = 1000;
+
+    /// <summary>失败结果。</summary>
+    public static SteamHostMineResult Fail(string error) =>
+        new(false, Array.Empty<ulong>(), -1, false, error, false);
+}
+
+/// <summary>
+/// 宿主按 id 读「自己某个工坊条目」详情的结果。
+/// <para>
+/// 对应 <c>ISteamRemoteStorage::GetPublishedFileDetails</c>（鉴权版）。<see cref="Visibility"/>
+/// 是 **Steam 侧事实**，与发布记录里「上次提交时想设成什么」的
+/// <see cref="SteamWorkshopVisibility"/> 不是一回事。
+/// </para>
+/// </summary>
+/// <param name="Ok">是否读到了详情。</param>
+/// <param name="PublishedFileId">条目 id（回显）。</param>
+/// <param name="Title">标题。</param>
+/// <param name="Description">描述（BBCode 原文）。</param>
+/// <param name="Tags">标签（宿主已按逗号拆开）。</param>
+/// <param name="Visibility">可见性 0 公开 / 1 仅好友 / 2 私密 / 3 未列出。</param>
+/// <param name="OwnerSteamId64">作者 SteamID64。</param>
+/// <param name="FileSizeBytes">内容字节数。</param>
+/// <param name="CreatedUnix">创建时间（Unix 秒）；0 表示没读到。</param>
+/// <param name="UpdatedUnix">更新时间（Unix 秒）；0 表示没读到。</param>
+/// <param name="CreatorAppId">发布时用的 AppID（可用于识别「发到别的游戏里了」）。</param>
+/// <param name="Error">失败原因（中文，直接进日志 / UI）。</param>
+public sealed record SteamHostMineItemResult(
+    bool Ok,
+    ulong PublishedFileId,
+    string Title,
+    string Description,
+    IReadOnlyList<string> Tags,
+    int Visibility,
+    ulong OwnerSteamId64,
+    long FileSizeBytes,
+    uint CreatedUnix,
+    uint UpdatedUnix,
+    int CreatorAppId,
+    string? Error)
+{
+    /// <summary>失败结果。</summary>
+    public static SteamHostMineItemResult Fail(ulong publishedFileId, string error) =>
+        new(false, publishedFileId, string.Empty, string.Empty, Array.Empty<string>(), -1, 0, 0, 0, 0, 0, error);
 }
 
 /// <summary>批量动作请求；由 App 侧序列化、base64 后通过 <c>--request</c> 传给宿主。</summary>

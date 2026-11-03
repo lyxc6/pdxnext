@@ -232,6 +232,7 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
 
                                     <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Bind L.ModstudioDetailFolder, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -254,6 +255,17 @@
 
                                     <TextBlock Grid.Row="6" Grid.Column="0" Text="{x:Bind L.ModstudioDetailPublication, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                     <TextBlock Grid.Row="6" Grid.Column="1" Text="{x:Bind ViewModel.SelectedPublication, Mode=OneWay}" TextWrapping="Wrap" />
+
+                                    <!-- 只有发布记录里带了「从 Steam 读回的真实可见性」才显示这一行；手填 id 绑定的不会凭空猜。 -->
+                                    <TextBlock Grid.Row="7" Grid.Column="0"
+                                               Text="{x:Bind L.ModstudioDetailSteamVisibility, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasSelectedSteamVisibility), Mode=OneWay}" />
+                                    <TextBlock Grid.Row="7" Grid.Column="1"
+                                               Text="{x:Bind ViewModel.SelectedSteamVisibility, Mode=OneWay}"
+                                               TextWrapping="Wrap"
+                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasSelectedSteamVisibility), Mode=OneWay}" />
                                 </Grid>
 
                                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -271,6 +283,17 @@
                                         <StackPanel Orientation="Horizontal" Spacing="6">
                                             <FontIcon Glyph="&#xE774;" FontSize="14" />
                                             <TextBlock Text="{x:Bind L.ModstudioOpenWorkshop, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Button>
+
+                                    <!-- 给「已经发布、但启动器查不到」的条目一个出口：手填 id 绑定，不上传任何文件。 -->
+                                    <Button Click="OnBindWorkshopClick"
+                                            IsEnabled="{x:Bind ViewModel.CanBindWorkshop, Mode=OneWay}"
+                                            ToolTipService.ToolTip="{x:Bind ViewModel.BindWorkshopHint, Mode=OneWay}"
+                                            AutomationProperties.AutomationId="modStudioBindWorkshop">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon Glyph="&#xE71B;" FontSize="14" />
+                                            <TextBlock Text="{x:Bind L.ModstudioBindExisting, Mode=OneWay}" />
                                         </StackPanel>
                                     </Button>
                                 </StackPanel>

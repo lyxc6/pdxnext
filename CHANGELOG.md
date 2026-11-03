@@ -3,6 +3,17 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)；版本号遵循
 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
+## [Unreleased]
+
+### Fixed
+
+- 已经在创意工坊发布（或上传后被设成隐藏 / 私密）的 Mod，在「Mod 创建」页一直显示「未发布」、工坊页也打不开：现在可以「绑定已有条目…」手填工坊 id 或从自己的 Steam 条目里选；发布状态改为四态（未发布 / 发布未完成 / 已发布（未公开）/ 已发布）并显示 Steam 真实可见性。根因是对隐藏条目匿名 Web API 只回 `EResult 9`（FileNotFound），它不等于条目不存在。
+- 发布被环境问题拦下（缺 steam_api64.dll / 缺宿主 / 无 appid / 预览图不合规等）时只在状态栏闪一句、日志里毫无痕迹：这些分支现在都写一条 Warn，便于事后定位。
+
+### Added
+
+- 宿主新增 `workshop-mine` / `workshop-mine-detail` 两个动词（回调 1312 / 1318），走本机 Steam 登录态读「我自己发布的条目」，包括隐藏条目的标题与真实可见性。
+
 ## [1.1.1] - 2026-11-03
 
 ### Fixed

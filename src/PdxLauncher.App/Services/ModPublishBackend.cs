@@ -51,12 +51,14 @@ public sealed class ModPublishBackend
         if (appId is not { } id || id <= 0)
         {
             reason = "不知道这款游戏的 Steam appid";
+            logger.Warn("Steam 工坊发布不可用：" + reason);
             return null;
         }
 
         if (!client.IsHostAvailable)
         {
             reason = "找不到可用的 Steam 宿主程序：" + client.HostPath;
+            logger.Warn("Steam 工坊发布不可用：" + reason);
             return null;
         }
 
@@ -65,6 +67,7 @@ public sealed class ModPublishBackend
         if (string.IsNullOrWhiteSpace(apiPath))
         {
             reason = "找不到可用的 steam_api64.dll（游戏目录、设置里手填的路径与 Steam 安装目录都没有）";
+            logger.Warn("Steam 工坊发布不可用：" + reason + "（game=" + (game?.GameId ?? "?") + "）");
             return null;
         }
 

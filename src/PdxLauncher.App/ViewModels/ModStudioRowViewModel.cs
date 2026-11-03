@@ -87,10 +87,32 @@ public sealed partial class ModStudioRowViewModel : LocalizedObservableObject
     /// <summary>来源文案（本页只列本地 mod）。</summary>
     public string OriginText => T(Keys.CommonSourceLocal);
 
-    /// <summary>发布状态文案。</summary>
-    public string PublicationText => Publication?.PublishedFileId is { } id
-        ? T(Keys.ModstudioRowPublished, id)
-        : T(Keys.ModstudioRowUnpublished);
+    /// <summary>
+    /// 发布状态文案，四态：未发布 / 发布未完成 / 已发布（未公开）/ 已发布。
+    /// <para>
+    /// 「发布未完成」指上次提交失败但已经拿到 id；「未公开」指 Steam 侧事实可见性不是公开
+    /// （仅好友 / 私密 / 未列出）——作者最容易把这一档误认为「没传上去」。
+    /// </para>
+    /// </summary>
+    public string PublicationText
+    {
+        get
+        {
+            if (Publication is not { PublishedFileId: { } id })
+            {
+                return T(Keys.ModstudioRowUnpublished);
+            }
+
+            if (Publication.LastError is not null)
+            {
+                return T(Keys.ModstudioRowPublishFailed, id);
+            }
+
+            return Publication.IsUnlisted
+                ? T(Keys.ModstudioRowPublishedUnlisted, id)
+                : T(Keys.ModstudioRowPublished, id);
+        }
+    }
 
     /// <summary>是否已经发布过。</summary>
     public bool HasPublication => Publication?.PublishedFileId is not null;
