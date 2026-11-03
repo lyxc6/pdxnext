@@ -26,6 +26,12 @@ public sealed partial class ModsPage : Page
     /// <summary>页面生命周期令牌；NavigationCacheMode=Required 会在返回页面时重建。</summary>
     private CancellationTokenSource _lifetime = new();
 
+    /// <summary>
+    /// 进行中的自动排序扫描的取消源（链到 _lifetime）。null 表示没有扫描在跑；
+    /// 它同时充当「别开第二份扫描」的门。
+    /// </summary>
+    private CancellationTokenSource? _autoSortCts;
+
     /// <summary>重载协调器：连点游戏时取消旧重载，只应用最新那次的结果。</summary>
     private readonly ReloadCoordinator _reload = new();
 
@@ -662,12 +668,20 @@ public sealed partial class ModsPage : Page
 
     /// <summary>
     /// 「自动排序」：按文件改动足迹预览新顺序，用户确认后应用并留一次撤销入口。
+    /// 扫描与页面生命周期、取消按钮共用一个令牌；离开页面即停。
     /// </summary>
     private async void OnAutoSortClick(object sender, RoutedEventArgs e)
     {
+        if (_autoSortCts is not null)
+        {
+            return;
+        }
+
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _autoSortCts = cts;
         try
         {
-            var preview = await ViewModel.BuildAutoSortPreviewAsync(CancellationToken.None);
+            var preview = await ViewModel.BuildAutoSortPreviewAsync(cts.Token, ViewModel.CreateAutoSortProgress());
             if (preview is null)
             {
                 return;
@@ -683,12 +697,35 @@ public sealed partial class ModsPage : Page
             var confirmed = await AutoSortPreviewDialog.ShowAsync(XamlRoot, preview, ViewModel.CurrentPlaySetMods);
             if (confirmed)
             {
+                // 预览到确认之间列表可能被自动保存或刷新改过；Apply 会自行拒绝过期预览。
                 ViewModel.ApplyAutoSort(preview);
             }
+        }
+        catch (OperationCanceledException)
+        {
+            // 用户点了取消或已离开页面：状态栏由视图模型写成「已取消」。
         }
         catch (Exception ex)
         {
             AppServices.Logger.Error("ModsPage 自动排序失败", ex);
+        }
+        finally
+        {
+            _autoSortCts = null;
+            cts.Dispose();
+        }
+    }
+
+    /// <summary>「取消排序」：只取消扫描，不改动列表。</summary>
+    private void OnAutoSortCancelClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _autoSortCts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 扫描恰好已经结束并释放了取消源：没有可取消的工作。
         }
     }
 

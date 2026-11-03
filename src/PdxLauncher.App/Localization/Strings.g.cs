@@ -282,16 +282,22 @@ public sealed partial class Localizer
         ["mods.autoSort.apply"] = "应用排序",
         ["mods.autoSort.button"] = "自动排序",
         ["mods.autoSort.buttonName"] = "自动排序（按文件改动重排加载顺序）",
+        ["mods.autoSort.cancel"] = "取消排序",
+        ["mods.autoSort.cancelled"] = "已取消自动排序",
         ["mods.autoSort.conflictAmbiguous"] = "「{0}」与「{1}」共享 {2} 个新增文件，无法判定先后，保持现有相对顺序",
         ["mods.autoSort.conflictSameTier"] = "「{0}」与「{1}」同层位覆盖 {2} 处原版文件，后者生效",
         ["mods.autoSort.conflictsTitle"] = "同文件冲突（后加载者生效）",
         ["mods.autoSort.noChange"] = "当前顺序已符合自动排序规则，无需调整。",
         ["mods.autoSort.previewTitle"] = "自动排序预览",
+        ["mods.autoSort.progressGraph"] = "正在计算冲突与加载顺序…",
+        ["mods.autoSort.progressScan"] = "正在扫描第 {0}/{1} 个 mod：{2}",
+        ["mods.autoSort.progressVanilla"] = "正在建立原版文件索引（已扫描 {0} 个文件）…",
         ["mods.autoSort.reasonDeclaredDep"] = "声明依赖「{0}」，排在其后",
         ["mods.autoSort.reasonDerivedPatch"] = "与「{0}」共带文件，作为补丁后置",
         ["mods.autoSort.reasonOverrides"] = "覆盖 {0} 处原版玩法文件",
         ["mods.autoSort.reasonPatchName"] = "名称标记为补丁/兼容，后置于基础 mod",
         ["mods.autoSort.rowMove"] = "第 {0} 位 → 第 {1} 位",
+        ["mods.autoSort.stale"] = "播放集内容已变化，这次预览已作废，请重新点「自动排序」。",
         ["mods.autoSort.summary"] = "共 {0} 个 mod，{1} 个将改变位置。规则：大改在上、小改与补丁在下、翻译最后。",
         ["mods.autoSort.tierGfxOnly"] = "仅美化/界面",
         ["mods.autoSort.tierLargeChange"] = "大量修改",
@@ -301,8 +307,10 @@ public sealed partial class Localizer
         ["mods.autoSort.tierPureAdditive"] = "纯新增",
         ["mods.autoSort.tierSmallTweak"] = "小幅调整",
         ["mods.autoSort.tooltip"] = "扫描每个 mod 的实际文件改动，按「大改在上、小改与补丁在下、翻译最后」自动重排；先预览再应用。",
+        ["mods.autoSort.truncated"] = "…另有 {0} 项未显示",
         ["mods.autoSort.undo"] = "撤销排序",
         ["mods.autoSort.warningCycle"] = "依赖关系存在循环，已断开并按层级排序",
+        ["mods.autoSort.warningMods"] = "涉及 {0} 个 mod：{1}",
         ["mods.autoSort.warningsTitle"] = "警告",
         ["mods.dialog.cannotDeleteBody"] = "这是当前唯一的播放集，无法删除。",
         ["mods.dialog.defaultNewName"] = "新播放集",
@@ -365,6 +373,7 @@ public sealed partial class Localizer
         ["mods.status.autoSaveSavedTo"] = "已自动保存到「{0}」（未激活，游戏加载文件未改动）",
         ["mods.status.autoSortApplied"] = "已应用自动排序：{0} 个 mod 位置变更",
         ["mods.status.autoSortNeedsGame"] = "未选择游戏，无法自动排序",
+        ["mods.status.autoSortNeedsPlaySet"] = "未选择播放集，无法自动排序",
         ["mods.status.autoSortUndone"] = "已恢复自动排序前的顺序",
         ["mods.status.cannotDeleteLast"] = "无法删除：这是当前唯一的播放集",
         ["mods.status.cannotDeleteTitle"] = "无法删除播放集",
@@ -1412,16 +1421,22 @@ public sealed partial class Localizer
         ["mods.autoSort.apply"] = "Apply Order",
         ["mods.autoSort.button"] = "Auto-Sort",
         ["mods.autoSort.buttonName"] = "Auto-sort (reorder load order from file changes)",
+        ["mods.autoSort.cancel"] = "Cancel Sort",
+        ["mods.autoSort.cancelled"] = "Auto-sort cancelled",
         ["mods.autoSort.conflictAmbiguous"] = "“{0}” and “{1}” share {2} added files; precedence cannot be inferred, keeping their current relative order",
         ["mods.autoSort.conflictSameTier"] = "“{0}” and “{1}” override {2} vanilla files at the same tier; the later one wins",
         ["mods.autoSort.conflictsTitle"] = "Same-file conflicts (later load wins)",
         ["mods.autoSort.noChange"] = "The current order already matches the auto-sort rules; nothing to change.",
         ["mods.autoSort.previewTitle"] = "Auto-Sort Preview",
+        ["mods.autoSort.progressGraph"] = "Computing conflicts and load order…",
+        ["mods.autoSort.progressScan"] = "Scanning mod {0} of {1}: {2}",
+        ["mods.autoSort.progressVanilla"] = "Building the vanilla file index ({0} files scanned)…",
         ["mods.autoSort.reasonDeclaredDep"] = "Declared dependency on “{0}”, placed after it",
         ["mods.autoSort.reasonDerivedPatch"] = "Shares files with “{0}”, placed after it as a patch",
         ["mods.autoSort.reasonOverrides"] = "Overrides {0} vanilla gameplay files",
         ["mods.autoSort.reasonPatchName"] = "Name marks it as a patch/compat mod; placed after its base mods",
         ["mods.autoSort.rowMove"] = "Position {0} → {1}",
+        ["mods.autoSort.stale"] = "The play set changed while this preview was open, so the preview is void. Run Auto-Sort again.",
         ["mods.autoSort.summary"] = "{0} mods in total, {1} will change position. Rules: big overhauls on top, tweaks and patches below, translations last.",
         ["mods.autoSort.tierGfxOnly"] = "Cosmetic/UI only",
         ["mods.autoSort.tierLargeChange"] = "Large changes",
@@ -1431,8 +1446,10 @@ public sealed partial class Localizer
         ["mods.autoSort.tierPureAdditive"] = "Purely additive",
         ["mods.autoSort.tierSmallTweak"] = "Small tweaks",
         ["mods.autoSort.tooltip"] = "Scan each mod's actual file changes and reorder: big overhauls on top, tweaks and patches below, translations last. Preview before applying.",
+        ["mods.autoSort.truncated"] = "…{0} more not shown",
         ["mods.autoSort.undo"] = "Undo Sort",
         ["mods.autoSort.warningCycle"] = "Dependency cycle detected; broken and sorted by tier",
+        ["mods.autoSort.warningMods"] = "{0} mods involved: {1}",
         ["mods.autoSort.warningsTitle"] = "Warnings",
         ["mods.dialog.cannotDeleteBody"] = "This is the only play set and cannot be deleted.",
         ["mods.dialog.defaultNewName"] = "New Play Set",
@@ -1495,6 +1512,7 @@ public sealed partial class Localizer
         ["mods.status.autoSaveSavedTo"] = "Auto-saved to \"{0}\" (not active; the game load file was not changed)",
         ["mods.status.autoSortApplied"] = "Auto-sort applied: {0} mod positions changed",
         ["mods.status.autoSortNeedsGame"] = "No game selected; cannot auto-sort",
+        ["mods.status.autoSortNeedsPlaySet"] = "No play set selected; cannot auto-sort",
         ["mods.status.autoSortUndone"] = "Restored the order from before auto-sort",
         ["mods.status.cannotDeleteLast"] = "Cannot delete: this is the only play set",
         ["mods.status.cannotDeleteTitle"] = "Cannot Delete Play Set",
@@ -2542,16 +2560,22 @@ public sealed partial class Localizer
         ("mods.autoSort.apply", "ModsAutoSortApply"),
         ("mods.autoSort.button", "ModsAutoSortButton"),
         ("mods.autoSort.buttonName", "ModsAutoSortButtonName"),
+        ("mods.autoSort.cancel", "ModsAutoSortCancel"),
+        ("mods.autoSort.cancelled", "ModsAutoSortCancelled"),
         ("mods.autoSort.conflictAmbiguous", "ModsAutoSortConflictAmbiguous"),
         ("mods.autoSort.conflictSameTier", "ModsAutoSortConflictSameTier"),
         ("mods.autoSort.conflictsTitle", "ModsAutoSortConflictsTitle"),
         ("mods.autoSort.noChange", "ModsAutoSortNoChange"),
         ("mods.autoSort.previewTitle", "ModsAutoSortPreviewTitle"),
+        ("mods.autoSort.progressGraph", "ModsAutoSortProgressGraph"),
+        ("mods.autoSort.progressScan", "ModsAutoSortProgressScan"),
+        ("mods.autoSort.progressVanilla", "ModsAutoSortProgressVanilla"),
         ("mods.autoSort.reasonDeclaredDep", "ModsAutoSortReasonDeclaredDep"),
         ("mods.autoSort.reasonDerivedPatch", "ModsAutoSortReasonDerivedPatch"),
         ("mods.autoSort.reasonOverrides", "ModsAutoSortReasonOverrides"),
         ("mods.autoSort.reasonPatchName", "ModsAutoSortReasonPatchName"),
         ("mods.autoSort.rowMove", "ModsAutoSortRowMove"),
+        ("mods.autoSort.stale", "ModsAutoSortStale"),
         ("mods.autoSort.summary", "ModsAutoSortSummary"),
         ("mods.autoSort.tierGfxOnly", "ModsAutoSortTierGfxOnly"),
         ("mods.autoSort.tierLargeChange", "ModsAutoSortTierLargeChange"),
@@ -2561,8 +2585,10 @@ public sealed partial class Localizer
         ("mods.autoSort.tierPureAdditive", "ModsAutoSortTierPureAdditive"),
         ("mods.autoSort.tierSmallTweak", "ModsAutoSortTierSmallTweak"),
         ("mods.autoSort.tooltip", "ModsAutoSortTooltip"),
+        ("mods.autoSort.truncated", "ModsAutoSortTruncated"),
         ("mods.autoSort.undo", "ModsAutoSortUndo"),
         ("mods.autoSort.warningCycle", "ModsAutoSortWarningCycle"),
+        ("mods.autoSort.warningMods", "ModsAutoSortWarningMods"),
         ("mods.autoSort.warningsTitle", "ModsAutoSortWarningsTitle"),
         ("mods.dialog.cannotDeleteBody", "ModsDialogCannotDeleteBody"),
         ("mods.dialog.defaultNewName", "ModsDialogDefaultNewName"),
@@ -2625,6 +2651,7 @@ public sealed partial class Localizer
         ("mods.status.autoSaveSavedTo", "ModsStatusAutoSaveSavedTo"),
         ("mods.status.autoSortApplied", "ModsStatusAutoSortApplied"),
         ("mods.status.autoSortNeedsGame", "ModsStatusAutoSortNeedsGame"),
+        ("mods.status.autoSortNeedsPlaySet", "ModsStatusAutoSortNeedsPlaySet"),
         ("mods.status.autoSortUndone", "ModsStatusAutoSortUndone"),
         ("mods.status.cannotDeleteLast", "ModsStatusCannotDeleteLast"),
         ("mods.status.cannotDeleteTitle", "ModsStatusCannotDeleteTitle"),
@@ -3670,16 +3697,22 @@ public sealed partial class Localizer
     public string ModsAutoSortApply => Format("mods.autoSort.apply");
     public string ModsAutoSortButton => Format("mods.autoSort.button");
     public string ModsAutoSortButtonName => Format("mods.autoSort.buttonName");
+    public string ModsAutoSortCancel => Format("mods.autoSort.cancel");
+    public string ModsAutoSortCancelled => Format("mods.autoSort.cancelled");
     public string ModsAutoSortConflictAmbiguous => Format("mods.autoSort.conflictAmbiguous");
     public string ModsAutoSortConflictSameTier => Format("mods.autoSort.conflictSameTier");
     public string ModsAutoSortConflictsTitle => Format("mods.autoSort.conflictsTitle");
     public string ModsAutoSortNoChange => Format("mods.autoSort.noChange");
     public string ModsAutoSortPreviewTitle => Format("mods.autoSort.previewTitle");
+    public string ModsAutoSortProgressGraph => Format("mods.autoSort.progressGraph");
+    public string ModsAutoSortProgressScan => Format("mods.autoSort.progressScan");
+    public string ModsAutoSortProgressVanilla => Format("mods.autoSort.progressVanilla");
     public string ModsAutoSortReasonDeclaredDep => Format("mods.autoSort.reasonDeclaredDep");
     public string ModsAutoSortReasonDerivedPatch => Format("mods.autoSort.reasonDerivedPatch");
     public string ModsAutoSortReasonOverrides => Format("mods.autoSort.reasonOverrides");
     public string ModsAutoSortReasonPatchName => Format("mods.autoSort.reasonPatchName");
     public string ModsAutoSortRowMove => Format("mods.autoSort.rowMove");
+    public string ModsAutoSortStale => Format("mods.autoSort.stale");
     public string ModsAutoSortSummary => Format("mods.autoSort.summary");
     public string ModsAutoSortTierGfxOnly => Format("mods.autoSort.tierGfxOnly");
     public string ModsAutoSortTierLargeChange => Format("mods.autoSort.tierLargeChange");
@@ -3689,8 +3722,10 @@ public sealed partial class Localizer
     public string ModsAutoSortTierPureAdditive => Format("mods.autoSort.tierPureAdditive");
     public string ModsAutoSortTierSmallTweak => Format("mods.autoSort.tierSmallTweak");
     public string ModsAutoSortTooltip => Format("mods.autoSort.tooltip");
+    public string ModsAutoSortTruncated => Format("mods.autoSort.truncated");
     public string ModsAutoSortUndo => Format("mods.autoSort.undo");
     public string ModsAutoSortWarningCycle => Format("mods.autoSort.warningCycle");
+    public string ModsAutoSortWarningMods => Format("mods.autoSort.warningMods");
     public string ModsAutoSortWarningsTitle => Format("mods.autoSort.warningsTitle");
     public string ModsDialogCannotDeleteBody => Format("mods.dialog.cannotDeleteBody");
     public string ModsDialogDefaultNewName => Format("mods.dialog.defaultNewName");
@@ -3753,6 +3788,7 @@ public sealed partial class Localizer
     public string ModsStatusAutoSaveSavedTo => Format("mods.status.autoSaveSavedTo");
     public string ModsStatusAutoSortApplied => Format("mods.status.autoSortApplied");
     public string ModsStatusAutoSortNeedsGame => Format("mods.status.autoSortNeedsGame");
+    public string ModsStatusAutoSortNeedsPlaySet => Format("mods.status.autoSortNeedsPlaySet");
     public string ModsStatusAutoSortUndone => Format("mods.status.autoSortUndone");
     public string ModsStatusCannotDeleteLast => Format("mods.status.cannotDeleteLast");
     public string ModsStatusCannotDeleteTitle => Format("mods.status.cannotDeleteTitle");
@@ -4801,16 +4837,22 @@ internal static class Keys
     public const string ModsAutoSortApply = "mods.autoSort.apply";
     public const string ModsAutoSortButton = "mods.autoSort.button";
     public const string ModsAutoSortButtonName = "mods.autoSort.buttonName";
+    public const string ModsAutoSortCancel = "mods.autoSort.cancel";
+    public const string ModsAutoSortCancelled = "mods.autoSort.cancelled";
     public const string ModsAutoSortConflictAmbiguous = "mods.autoSort.conflictAmbiguous";
     public const string ModsAutoSortConflictSameTier = "mods.autoSort.conflictSameTier";
     public const string ModsAutoSortConflictsTitle = "mods.autoSort.conflictsTitle";
     public const string ModsAutoSortNoChange = "mods.autoSort.noChange";
     public const string ModsAutoSortPreviewTitle = "mods.autoSort.previewTitle";
+    public const string ModsAutoSortProgressGraph = "mods.autoSort.progressGraph";
+    public const string ModsAutoSortProgressScan = "mods.autoSort.progressScan";
+    public const string ModsAutoSortProgressVanilla = "mods.autoSort.progressVanilla";
     public const string ModsAutoSortReasonDeclaredDep = "mods.autoSort.reasonDeclaredDep";
     public const string ModsAutoSortReasonDerivedPatch = "mods.autoSort.reasonDerivedPatch";
     public const string ModsAutoSortReasonOverrides = "mods.autoSort.reasonOverrides";
     public const string ModsAutoSortReasonPatchName = "mods.autoSort.reasonPatchName";
     public const string ModsAutoSortRowMove = "mods.autoSort.rowMove";
+    public const string ModsAutoSortStale = "mods.autoSort.stale";
     public const string ModsAutoSortSummary = "mods.autoSort.summary";
     public const string ModsAutoSortTierGfxOnly = "mods.autoSort.tierGfxOnly";
     public const string ModsAutoSortTierLargeChange = "mods.autoSort.tierLargeChange";
@@ -4820,8 +4862,10 @@ internal static class Keys
     public const string ModsAutoSortTierPureAdditive = "mods.autoSort.tierPureAdditive";
     public const string ModsAutoSortTierSmallTweak = "mods.autoSort.tierSmallTweak";
     public const string ModsAutoSortTooltip = "mods.autoSort.tooltip";
+    public const string ModsAutoSortTruncated = "mods.autoSort.truncated";
     public const string ModsAutoSortUndo = "mods.autoSort.undo";
     public const string ModsAutoSortWarningCycle = "mods.autoSort.warningCycle";
+    public const string ModsAutoSortWarningMods = "mods.autoSort.warningMods";
     public const string ModsAutoSortWarningsTitle = "mods.autoSort.warningsTitle";
     public const string ModsDialogCannotDeleteBody = "mods.dialog.cannotDeleteBody";
     public const string ModsDialogDefaultNewName = "mods.dialog.defaultNewName";
@@ -4884,6 +4928,7 @@ internal static class Keys
     public const string ModsStatusAutoSaveSavedTo = "mods.status.autoSaveSavedTo";
     public const string ModsStatusAutoSortApplied = "mods.status.autoSortApplied";
     public const string ModsStatusAutoSortNeedsGame = "mods.status.autoSortNeedsGame";
+    public const string ModsStatusAutoSortNeedsPlaySet = "mods.status.autoSortNeedsPlaySet";
     public const string ModsStatusAutoSortUndone = "mods.status.autoSortUndone";
     public const string ModsStatusCannotDeleteLast = "mods.status.cannotDeleteLast";
     public const string ModsStatusCannotDeleteTitle = "mods.status.cannotDeleteTitle";

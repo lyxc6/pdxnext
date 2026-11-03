@@ -39,10 +39,24 @@ internal static class AutoSortPreviewDialog
             TextWrapping = TextWrapping.Wrap,
         });
 
+        // 数百 mod 的播放集可能有上百行移动：全量塞进 StackPanel 会造出上千个控件，
+        // 而对话框本身不可虚拟化。只列前 MaxMovedRows 条，其余折成一行计数。
+        const int MaxMovedRows = 60;
+        const int MaxConflictRows = 30;
+
+        var movedRows = 0;
+        var hiddenMoves = 0;
         foreach (var row in diff.Rows)
         {
             if (!row.Moved)
             {
+                continue;
+            }
+
+            movedRows++;
+            if (movedRows > MaxMovedRows)
+            {
+                hiddenMoves++;
                 continue;
             }
 
@@ -61,6 +75,16 @@ internal static class AutoSortPreviewDialog
             panel.Children.Add(block);
         }
 
+        if (hiddenMoves > 0)
+        {
+            panel.Children.Add(new TextBlock
+            {
+                Text = localizer.T(Keys.ModsAutoSortTruncated, hiddenMoves),
+                TextWrapping = TextWrapping.Wrap,
+                Foreground = SecondaryTextBrush(),
+            });
+        }
+
         if (diff.Warnings.Count > 0)
         {
             panel.Children.Add(new TextBlock
@@ -70,13 +94,26 @@ internal static class AutoSortPreviewDialog
                 Foreground = CautionBrush(),
             });
             // 目前只有 DependencyCycleBroken 一种警告（成环被断开）。
-            foreach (var _ in diff.Warnings)
+            // 只写「有环」不写「哪几个 mod 成环」，用户没法自己去拆环，所以补上名字。
+            foreach (var warning in diff.Warnings)
             {
                 panel.Children.Add(new TextBlock
                 {
                     Text = localizer.ModsAutoSortWarningCycle,
                     TextWrapping = TextWrapping.Wrap,
                 });
+                if (warning.ModIds.Count > 0)
+                {
+                    panel.Children.Add(new TextBlock
+                    {
+                        Text = localizer.T(
+                            Keys.ModsAutoSortWarningMods,
+                            warning.ModIds.Count,
+                            DescribeMods(diff, warning.ModIds)),
+                        TextWrapping = TextWrapping.Wrap,
+                        Foreground = SecondaryTextBrush(),
+                    });
+                }
             }
         }
 
@@ -87,7 +124,7 @@ internal static class AutoSortPreviewDialog
                 Text = localizer.ModsAutoSortConflictsTitle,
                 TextWrapping = TextWrapping.Wrap,
             });
-            foreach (var conflict in diff.Conflicts)
+            foreach (var conflict in diff.Conflicts.Take(MaxConflictRows))
             {
                 var nameA = NameOf(diff, conflict.ModIdA);
                 var nameB = NameOf(diff, conflict.ModIdB);
@@ -97,6 +134,16 @@ internal static class AutoSortPreviewDialog
                         ? localizer.T(Keys.ModsAutoSortConflictAmbiguous, nameA, nameB, conflict.SharedPathCount)
                         : localizer.T(Keys.ModsAutoSortConflictSameTier, nameA, nameB, conflict.SharedPathCount),
                     TextWrapping = TextWrapping.Wrap,
+                });
+            }
+
+            if (diff.Conflicts.Count > MaxConflictRows)
+            {
+                panel.Children.Add(new TextBlock
+                {
+                    Text = localizer.T(Keys.ModsAutoSortTruncated, diff.Conflicts.Count - MaxConflictRows),
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = SecondaryTextBrush(),
                 });
             }
         }
@@ -164,6 +211,21 @@ internal static class AutoSortPreviewDialog
         }
 
         return modId.ToString("N");
+    }
+
+    /// <summary>
+    /// 把告警涉及的一批 mod 拼成「「甲」、「乙」…」。只取前几个：
+    /// 环可能很长，这里要的是让人认出是哪一组，不是逐个列完。
+    /// </summary>
+    private static string DescribeMods(AutoSortDiff diff, IReadOnlyList<Guid> modIds)
+    {
+        const int MaxNames = 5;
+        var names = modIds
+            .Take(MaxNames)
+            .Select(id => "「" + NameOf(diff, id) + "」")
+            .ToList();
+        var text = string.Join("、", names);
+        return modIds.Count > MaxNames ? text + "…" : text;
     }
 
     /// <summary>次要说明文字色；主题资源缺失时返回 null 用默认色（不硬编码颜色）。</summary>

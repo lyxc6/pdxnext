@@ -183,15 +183,13 @@ public static class PlaySetAutoSorterChecks
         var second = PlaySetAutoSorter.Sort(items, Array.Empty<SortEdge>());
 
         ChecksContext.Equal("300 mod 全部出序", count, first.Entries.Count);
-        ChecksContext.Equal(
-            "300 mod 的 NewIndex 连续",
-            string.Join(",", Enumerable.Range(0, count)),
-            string.Join(",", first.Entries.Select(e => e.NewIndex)));
+        ChecksContext.Check(
+            "300 mod 的 NewIndex 连续 0..299",
+            first.Entries.Select(e => e.NewIndex).SequenceEqual(Enumerable.Range(0, count)));
         ChecksContext.Equal("300 mod 无警告", 0, first.Warnings.Count);
-        ChecksContext.Equal(
+        ChecksContext.Check(
             "两次排序结果一致",
-            string.Join(",", first.Entries.Select(e => e.ModId)),
-            string.Join(",", second.Entries.Select(e => e.ModId)));
+            first.Entries.Select(e => e.ModId).SequenceEqual(second.Entries.Select(e => e.ModId)));
     }
 
     private static AutoSortInput Input(string name, ModFootprint footprint, int currentIndex) =>

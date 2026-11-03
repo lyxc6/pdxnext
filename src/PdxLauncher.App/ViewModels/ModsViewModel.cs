@@ -8,6 +8,7 @@ using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.LoadFiles;
+using PdxLauncher.Core.Mods.Sorting;
 using PdxLauncher.Core.Playsets;
 
 /// <summary>
@@ -29,6 +30,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
     private GameInstallation? _game;
     private bool _isBusy;
+    private bool _isAutoSortRunning;
     private bool _isLoaded;
     private string _statusMessage = string.Empty;
     private bool _translateFailureReported;
@@ -126,6 +128,16 @@ public sealed class ModsViewModel : LocalizedObservableObject
                 RaiseActivationState();
             }
         }
+    }
+
+    /// <summary>
+    /// 自动排序扫描是否进行中。取消按钮绑定这个属性：IsBusy 期间所有编辑入口都被禁用，
+    /// 若取消按钮也绑 IsEditorEnabled，就会在最需要它的时刻点不动。
+    /// </summary>
+    public bool IsAutoSortRunning
+    {
+        get => _isAutoSortRunning;
+        private set => SetProperty(ref _isAutoSortRunning, value);
     }
 
     /// <summary>首次加载完成（界面据此决定是否显示空状态提示）。</summary>
@@ -773,9 +785,14 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
     /// <summary>
     /// 计算自动排序预览：扫描各 mod 的实际文件改动并算出新顺序，只读不落库。
-    /// 未选游戏时置状态栏并返回 null；扫描期间置忙，防止中途编辑。
+    /// 未选游戏/未选播放集时置状态栏并返回 null；扫描期间置忙，防止中途编辑；
+    /// 用户取消时返回 null 并把状态栏改成「已取消」。
     /// </summary>
-    public async Task<AutoSortPreview?> BuildAutoSortPreviewAsync(CancellationToken cancellationToken)
+    /// <param name="cancellationToken">页面生命周期与取消按钮合并后的令牌。</param>
+    /// <param name="progress">扫描进度（原版索引 / 逐 mod 扫描 / 建图），回调在 UI 线程。</param>
+    public async Task<AutoSortPreview?> BuildAutoSortPreviewAsync(
+        CancellationToken cancellationToken,
+        IProgress<AutoSortProgress>? progress = null)
     {
         var game = Game;
         if (game is null)
@@ -784,33 +801,89 @@ public sealed class ModsViewModel : LocalizedObservableObject
             return null;
         }
 
+        // 没有播放集时列表本来就是空的：此时点「自动排序」会得到「无需调整」，
+        // 那是把「没东西可排」说成了「排过了没问题」。这里直接说清楚缺的是什么。
+        var playSet = SelectedPlaySet;
+        if (playSet is null)
+        {
+            StatusMessage = T(Keys.ModsStatusAutoSortNeedsPlaySet);
+            return null;
+        }
+
+        IsAutoSortRunning = true;
         IsBusy = true;
         try
         {
+            var signature = PlaySetAutoSortService.ComputeInputSignature(_allMods);
             var preview = await PlaySetAutoSortService
-                .BuildPreviewAsync(AppServices.FileSystem, game, _allMods, _logger, cancellationToken)
+                .BuildPreviewAsync(AppServices.FileSystem, game, _allMods, _logger, cancellationToken, progress)
                 .ConfigureAwait(true);
+
+            // 预览与「应用」之间隔着一次对话框确认。把当时的播放集与输入指纹钉进预览，
+            // 应用前重签比对：这期间列表若被自动保存/刷新改过，宁可作废也不覆盖。
+            preview = preview with { PlaySetId = playSet.Id, InputSignature = signature };
             var moved = preview.Result.Entries.Count(e => e.OldIndex != e.NewIndex);
             _logger.Info("自动排序（preview）：共 " + _allMods.Count.ToString(CultureInfo.InvariantCulture)
                 + " 个 mod，移动 " + moved.ToString(CultureInfo.InvariantCulture)
                 + " 个，冲突 " + preview.Conflicts.Count.ToString(CultureInfo.InvariantCulture)
                 + " 组，警告 " + preview.Result.Warnings.Count.ToString(CultureInfo.InvariantCulture)
-                + " 条（playSetId=" + (SelectedPlaySet?.Id.ToString("N") ?? "-") + "）");
+                + " 条（playSetId=" + playSet.Id.ToString("N") + "）");
             return preview;
+        }
+        catch (OperationCanceledException)
+        {
+            StatusMessage = T(Keys.ModsAutoSortCancelled);
+            _logger.Info("自动排序（preview）：已取消（playSetId=" + playSet.Id.ToString("N") + "）");
+            return null;
         }
         finally
         {
             IsBusy = false;
+            IsAutoSortRunning = false;
         }
     }
+
+    /// <summary>
+    /// 把扫描进度写进状态栏。页面用 <see cref="CreateAutoSortProgress"/> 拿到回调对象，
+    /// 所有文案格式都留在这一层，进度来源换实现时不用动视图。
+    /// </summary>
+    public void ReportAutoSortProgress(AutoSortProgress progress)
+    {
+        StatusMessage = progress.Phase switch
+        {
+            AutoSortPhase.VanillaIndex => T(Keys.ModsAutoSortProgressVanilla, progress.Completed),
+            AutoSortPhase.ScanningMods => T(
+                Keys.ModsAutoSortProgressScan,
+                progress.Completed + 1,
+                progress.Total,
+                progress.CurrentModName ?? string.Empty),
+            _ => T(Keys.ModsAutoSortProgressGraph),
+        };
+    }
+
+    /// <summary>
+    /// 生成进度回调。必须在 UI 线程上构造 <see cref="Progress{T}"/>，
+    /// 否则回调会在线程池上改状态栏（绑定属性变更不会回到 UI 线程）。
+    /// </summary>
+    public IProgress<AutoSortProgress> CreateAutoSortProgress() =>
+        new Progress<AutoSortProgress>(ReportAutoSortProgress);
 
     /// <summary>
     /// 应用预览给出的新顺序：先把当前顺序存成撤销快照，再整体替换并走自动保存通道。
     /// 只改顺序，不碰启用状态与其它行内容。
     /// </summary>
-    public void ApplyAutoSort(AutoSortPreview preview)
+    /// <returns>预览已过期（播放集换了，或列表内容/启用态变了）时返回 false，不改任何行。</returns>
+    public bool ApplyAutoSort(AutoSortPreview preview)
     {
         ArgumentNullException.ThrowIfNull(preview);
+
+        if (preview.PlaySetId != SelectedPlaySet?.Id || preview.IsStaleFor(_allMods))
+        {
+            StatusMessage = T(Keys.ModsAutoSortStale);
+            _logger.Info("自动排序（apply）：预览已作废，拒绝应用（playSetId="
+                + (SelectedPlaySet?.Id.ToString("N") ?? "-") + "）");
+            return false;
+        }
 
         _autoSortUndo = _allMods;
         _allMods = PlaySetEditor.Renumber(preview.ReorderedRows);
@@ -822,6 +895,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
         _logger.Info("自动排序（apply）：移动 " + moved.ToString(CultureInfo.InvariantCulture)
             + " 个 mod（playSetId=" + (SelectedPlaySet?.Id.ToString("N") ?? "-") + "）");
         RequestAutoSave();
+        return true;
     }
 
     /// <summary>一键撤销上一次自动排序（还原应用前的顺序）；没有快照时返回 false。</summary>
