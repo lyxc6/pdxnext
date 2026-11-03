@@ -376,6 +376,7 @@ public static class AppServices
         }
 
         DebouncedDocumentFile.FlushAll();
+        DebouncedJsonDocumentStore.FlushAll();
     }
 
     /// <summary>
