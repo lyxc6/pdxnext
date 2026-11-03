@@ -4,6 +4,7 @@ using PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Storage;
 
 /// <summary>
 /// <see cref="WorkshopImageCache"/> 的自检：截图文件名按 URL 哈希（不是列表序号）、
@@ -24,7 +25,9 @@ public static class WorkshopImageCacheChecks
         {
             var clock = new FixedClock();
             var logger = new NullLogger();
-            var info = new WorkshopInfoCache(fs, logger, clock, Path.Combine(tempRoot, "workshop-info"));
+            var workshopRoot = Path.Combine(tempRoot, "workshop-info");
+            var database = new PdxDatabase(fs, logger, Path.Combine(workshopRoot, PdxDatabase.FileName));
+            var info = new WorkshopInfoCache(fs, logger, clock, workshopRoot, new SqliteWorkshopItemStore(database, logger));
             var assets = new FakeAssetDownloader(fs);
             var cache = new WorkshopImageCache(fs, assets, info);
 

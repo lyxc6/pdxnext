@@ -138,17 +138,22 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 CacheRowViewModel.WorkshopKey,
                 Keys.SettingsCacheRowWorkshopTitle,
                 Keys.SettingsCacheRowWorkshopDesc,
-                JsonDocumentKeys.WorkshopInfo + " / " + JsonDocumentKeys.WorkshopPages,
+                "workshop_items / workshop_pages",
                 () =>
                 {
-                    // 索引在内存里也有一份，删目录后必须一起清掉，否则下次还会报「命中」。
+                    // v2 起条目与分页都在自有库真表里，清完再把封面目录一起删掉。
                     AppServices.WorkshopInfo.Clear();
-                    AppServices.Documents.Delete(JsonDocumentKeys.WorkshopInfo);
-                    AppServices.Documents.Delete(JsonDocumentKeys.WorkshopPages);
+                    AppServices.WorkshopItemPages.Clear();
                     CacheStorage.Clear(AppServices.FileSystem, AppServices.WorkshopCacheRoot);
                 },
-                JsonDocumentKeys.WorkshopInfo,
-                AppServices.WorkshopCacheRoot),
+                documentKey: null,
+                folderPath: AppServices.WorkshopCacheRoot,
+                measure: () =>
+                {
+                    var covers = CacheStorage.Measure(AppServices.FileSystem, AppServices.WorkshopCacheRoot);
+                    var entries = AppServices.WorkshopInfo.Count + AppServices.WorkshopItemPages.Count;
+                    return new CacheUsage(covers.Bytes, covers.Files + entries);
+                }),
             new(
                 CacheRowViewModel.TranslationsKey,
                 Keys.SettingsCacheRowTranslationsTitle,
@@ -1282,11 +1287,12 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 var result = new CacheUsage[rows.Length];
                 for (var index = 0; index < rows.Length; index++)
                 {
-                    result[index] = CacheStorage.Measure(
-                        fileSystem,
-                        AppServices.Documents,
-                        rows[index].DocumentKey,
-                        rows[index].FolderPath);
+                    result[index] = rows[index].MeasureOverride?.Invoke()
+                        ?? CacheStorage.Measure(
+                            fileSystem,
+                            AppServices.Documents,
+                            rows[index].DocumentKey,
+                            rows[index].FolderPath);
                 }
 
                 return result;

@@ -2,10 +2,11 @@ namespace PdxLauncher.Checks;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Storage;
 
 /// <summary>
-/// 创意工坊 mod 信息缓存（<see cref="WorkshopInfoCache"/>）的自检：
-/// 键格式、合并语义、封面命中、详情 TTL、快照过滤、损坏索引容错、清空。
+/// 创意工坊 mod 信息缓存（<see cref="WorkshopInfoCache"/>，v2 起背后是 <c>workshop_items</c> 真表）的自检：
+/// 键格式、合并语义、封面命中、详情 TTL、快照过滤、清空、旧索引文件不再被读取。
 /// </summary>
 public static class WorkshopInfoCacheChecks
 {
@@ -32,7 +33,7 @@ public static class WorkshopInfoCacheChecks
             CheckDetailMeta(fileSystem, root, clock, logger);
             CheckSnapshot(fileSystem, root, clock, logger);
             CheckClear(fileSystem, root, clock, logger);
-            CheckCorruptedIndex(fileSystem, root, clock, logger);
+            CheckLegacyIndexIgnored(fileSystem, root, clock, logger);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -70,7 +71,7 @@ public static class WorkshopInfoCacheChecks
         IClock clock,
         IAppLogger logger)
     {
-        var cache = new WorkshopInfoCache(fileSystem, logger, clock, root);
+        var cache = CreateCache(fileSystem, logger, clock, root);
 
         cache.Upsert(new WorkshopInfoCacheEntry
         {
@@ -125,11 +126,6 @@ public static class WorkshopInfoCacheChecks
         // 空 Id 一律忽略，避免写出 "steam:" 这种键。
         cache.Upsert(new WorkshopInfoCacheEntry { Source = "steam", Id = "  " });
         ChecksContext.Equal("缓存：空 id 被忽略", 2, cache.Count);
-
-        // 批量：Upsert 只改内存，显式 Flush 才写一次索引（翻页 30 条不再 30 次写盘）。
-        ChecksContext.Check("缓存：只改内存时不落盘", !fileSystem.FileExists(cache.IndexPath));
-        cache.Flush();
-        ChecksContext.Check("缓存：Flush 后索引落盘", fileSystem.FileExists(cache.IndexPath));
     }
 
     private static void CheckPersistence(
@@ -138,7 +134,8 @@ public static class WorkshopInfoCacheChecks
         IClock clock,
         IAppLogger logger)
     {
-        var writer = new WorkshopInfoCache(fileSystem, logger, clock, root);
+        var persistRoot = Path.Combine(root, "persist");
+        var writer = CreateCache(fileSystem, logger, clock, persistRoot);
         writer.Upsert(new WorkshopInfoCacheEntry
         {
             Source = "steam",
@@ -147,10 +144,10 @@ public static class WorkshopInfoCacheChecks
             Name = "Persisted",
         });
 
-        writer.Flush();
-        ChecksContext.Check("缓存：索引落盘", fileSystem.FileExists(writer.IndexPath));
+        // v2 起每次 Upsert 直接落库，不再有「只改内存、Flush 才写盘」的中间态。
+        ChecksContext.Equal("缓存：写入即落库", 1, writer.Count);
 
-        var reader = new WorkshopInfoCache(fileSystem, logger, clock, root);
+        var reader = CreateCache(fileSystem, logger, clock, persistRoot);
         ChecksContext.Check(
             "缓存：新实例能读回条目",
             reader.TryGet("steam:200", out var entry) && entry.Name == "Persisted");
@@ -162,7 +159,7 @@ public static class WorkshopInfoCacheChecks
         IClock clock,
         IAppLogger logger)
     {
-        var cache = new WorkshopInfoCache(fileSystem, logger, clock, root);
+        var cache = CreateCache(fileSystem, logger, clock, root);
         cache.Upsert(new WorkshopInfoCacheEntry { Source = "steam", Id = "300", Name = "Cover" });
 
         ChecksContext.Check("缓存：没有封面文件名时不命中", !cache.TryGetCachedCover("steam:300", out _));
@@ -173,7 +170,6 @@ public static class WorkshopInfoCacheChecks
         fileSystem.WriteAllTextAtomic(absolute, "fake-image");
 
         cache.SetCover("steam:300", relative, "https://images.steamusercontent.com/300.jpg");
-        cache.Flush();
 
         ChecksContext.Check(
             "缓存：封面文件存在时命中",
@@ -193,7 +189,7 @@ public static class WorkshopInfoCacheChecks
         MutableClock clock,
         IAppLogger logger)
     {
-        var cache = new WorkshopInfoCache(fileSystem, logger, clock, root);
+        var cache = CreateCache(fileSystem, logger, clock, root);
         cache.Upsert(new WorkshopInfoCacheEntry { Source = "steam", Id = "400", Name = "Detail" });
 
         ChecksContext.Check("缓存：没抓过详情时不算新鲜", !cache.TryGet("steam:400", out var empty) || !cache.IsDetailFresh(empty));
@@ -218,7 +214,7 @@ public static class WorkshopInfoCacheChecks
             cache.IsDetailFresh(stale, TimeSpan.FromDays(30)));
     }
 
-    /// <summary>详情元数据（作者 SteamID / 标签 / 浏览数 / 累计订阅）要能落盘再读回，缺字段的旧索引也不能炸。</summary>
+    /// <summary>详情元数据（作者 SteamID / 标签 / 浏览数 / 累计订阅）要能落盘再读回，缺字段的写入不能把旧值洗掉。</summary>
     private static void CheckDetailMeta(
         IFileSystem fileSystem,
         string root,
@@ -226,7 +222,7 @@ public static class WorkshopInfoCacheChecks
         IAppLogger logger)
     {
         var metaRoot = Path.Combine(root, "meta");
-        var cache = new WorkshopInfoCache(fileSystem, logger, clock, metaRoot);
+        var cache = CreateCache(fileSystem, logger, clock, metaRoot);
         cache.Upsert(new WorkshopInfoCacheEntry { Source = "steam", Id = "500", Name = "Meta" });
 
         cache.SetDetail(
@@ -255,49 +251,24 @@ public static class WorkshopInfoCacheChecks
             kept.CreatorSteamId == "76561198145098971" &&
             kept.Views == 4321);
 
-        // 旧版索引文件里没有这些键：读出来是 null/0，不能因为反序列化不认字段就整份丢弃。
-        var legacyRoot = Path.Combine(root, "legacy-meta");
-        fileSystem.EnsureDirectory(legacyRoot);
-        fileSystem.WriteAllTextAtomic(
-            fileSystem.Combine(legacyRoot, WorkshopInfoCache.IndexFileName),
-            """
-            {
-              "entries": {
-                "steam:600": {
-                  "source": "steam",
-                  "id": "600",
-                  "name": "Legacy",
-                  "author": "76561198000000009",
-                  "detailText": "旧正文"
-                }
-              }
-            }
-            """);
-
-        var legacy = new WorkshopInfoCache(fileSystem, logger, clock, legacyRoot);
-        ChecksContext.Check(
-            "缓存：旧索引仍能读出条目",
-            legacy.TryGet("steam:600", out var old) &&
-            old.DetailText == "旧正文" &&
-            old.CreatorSteamId is null &&
-            old.Views is null);
-
         // 旧条目靠 Author 兜底还原出作者 id，评论翻页才不会失效。
         ChecksContext.Equal(
             "缓存：旧条目还原出作者 id",
             "76561198000000009",
-            legacy.TryGet("steam:600", out var forRestore)
-                ? SteamWorkshopDetailCache.Restore(forRestore, forRestore.Id, "兜底").CreatorSteamId
-                : null);
+            SteamWorkshopDetailCache.Restore(
+                new WorkshopInfoCacheEntry { Author = "76561198000000009" },
+                "600",
+                "兜底").CreatorSteamId);
     }
 
     private static void CheckSnapshot(
         IFileSystem fileSystem,
-        string root,        IClock clock,
+        string root,
+        IClock clock,
         IAppLogger logger)
     {
-        // 用独立子目录，免得被前面几组写进同一索引的条目干扰。
-        var cache = new WorkshopInfoCache(fileSystem, logger, clock, Path.Combine(root, "snapshot"));
+        // 用独立子目录，免得被前面几组写进同一个库的条目干扰。
+        var cache = CreateCache(fileSystem, logger, clock, Path.Combine(root, "snapshot"));
         cache.Upsert(new WorkshopInfoCacheEntry { Source = "steam", Id = "501", GameId = "ck3", Name = "A", UpdatedUtc = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero) });
         cache.Upsert(new WorkshopInfoCacheEntry { Source = "steam", Id = "502", GameId = "ck3", Name = "B", UpdatedUtc = new DateTimeOffset(2026, 5, 1, 0, 0, 0, TimeSpan.Zero) });
         cache.Upsert(new WorkshopInfoCacheEntry { Source = "steam", Id = "503", GameId = "stellaris", Name = "C", UpdatedUtc = new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero) });
@@ -310,7 +281,7 @@ public static class WorkshopInfoCacheChecks
         var allSteam = cache.Snapshot(WorkshopSource.Steam, null);
         ChecksContext.Equal("缓存：不过滤游戏时给全量", 3, allSteam.Count);
 
-        // 快照是副本：改它不影响索引。
+        // 快照是副本：改它不影响库里的数据。
         ck3[0].Name = "changed";
         ChecksContext.Check(
             "缓存：快照返回副本",
@@ -323,34 +294,45 @@ public static class WorkshopInfoCacheChecks
         IClock clock,
         IAppLogger logger)
     {
-        var cache = new WorkshopInfoCache(fileSystem, logger, clock, root);
+        var cache = CreateCache(fileSystem, logger, clock, Path.Combine(root, "clear"));
         cache.Upsert(new WorkshopInfoCacheEntry { Source = "steam", Id = "700", Name = "Clear me" });
-        ChecksContext.Check("缓存：清空前有索引文件", fileSystem.FileExists(cache.IndexPath));
+        ChecksContext.Equal("缓存：清空前有条目", 1, cache.Count);
 
         cache.Clear();
         ChecksContext.Equal("缓存：清空后条目数归零", 0, cache.Count);
-        ChecksContext.Check("缓存：清空后索引文件被删", !fileSystem.FileExists(cache.IndexPath));
         ChecksContext.Check("缓存：清空后取不到", !cache.TryGet("steam:700", out _));
     }
 
-    private static void CheckCorruptedIndex(
+    /// <summary>v1 的 workshop-info.json 现在只剩留档意义：放在目录里也不能被读进真表。</summary>
+    private static void CheckLegacyIndexIgnored(
         IFileSystem fileSystem,
         string root,
         IClock clock,
         IAppLogger logger)
     {
-        var brokenRoot = Path.Combine(root, "broken");
-        fileSystem.EnsureDirectory(brokenRoot);
-        fileSystem.WriteAllTextAtomic(Path.Combine(brokenRoot, WorkshopInfoCache.IndexFileName), "{not-json");
+        var legacyRoot = Path.Combine(root, "legacy-file");
+        fileSystem.EnsureDirectory(legacyRoot);
+        fileSystem.WriteAllTextAtomic(
+            Path.Combine(legacyRoot, WorkshopInfoCache.IndexFileName),
+            "{\"entries\":{\"steam:800\":{\"source\":\"steam\",\"id\":\"800\",\"name\":\"Old\"}}}");
 
-        var cache = new WorkshopInfoCache(fileSystem, logger, clock, brokenRoot);
-        ChecksContext.Equal("缓存：损坏索引视为空", 0, cache.Count);
+        var cache = CreateCache(fileSystem, logger, clock, legacyRoot);
+        ChecksContext.Equal("缓存：旧索引文件不再被读取", 0, cache.Count);
 
-        // 损坏之后仍然能正常写入。
-        cache.Upsert(new WorkshopInfoCacheEntry { Source = "pdx", Id = "800", Name = "Recovered" });
+        cache.Upsert(new WorkshopInfoCacheEntry { Source = "pdx", Id = "801", Name = "Recovered" });
         ChecksContext.Check(
-            "缓存：损坏后仍可写",
-            cache.TryGet("pdx:800", out var entry) && entry.Name == "Recovered");
+            "缓存：旧文件存在时仍可写",
+            cache.TryGet("pdx:801", out var entry) && entry.Name == "Recovered");
+    }
+
+    private static WorkshopInfoCache CreateCache(
+        IFileSystem fileSystem,
+        IAppLogger logger,
+        IClock clock,
+        string root)
+    {
+        var database = new PdxDatabase(fileSystem, logger, Path.Combine(root, PdxDatabase.FileName));
+        return new WorkshopInfoCache(fileSystem, logger, clock, root, new SqliteWorkshopItemStore(database, logger));
     }
 
     private sealed class MutableClock : IClock

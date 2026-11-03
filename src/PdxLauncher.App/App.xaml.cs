@@ -124,7 +124,7 @@ public partial class App : Application
 
         // 联网链路（HttpFetcher → 元数据 / 素材 / 主题 / DLC 简介）集中在 NetworkComposition，
         // 设置页改代理后只换连接池、不换服务对象（见 AppServices.TryRebuildNetworkServices）。
-        var network = NetworkComposition.Create(fileSystem, logger, clock, settings, documents);
+        var network = NetworkComposition.Create(fileSystem, logger, clock, settings, documents, database);
 
         var gameCatalog = new GameCatalog(fileSystem, logger);
 

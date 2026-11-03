@@ -3,6 +3,7 @@ namespace PdxLauncher.Core.Storage;
 using System.Globalization;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Configuration;
+using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Playsets;
 
 /// <summary>
@@ -23,7 +24,7 @@ public sealed class PdxDatabase
     public const string FileName = "pdxnext.sqlite";
 
     /// <summary>当前 schema 版本；加表/加列时递增，并在 <see cref="Migrate"/> 里补一段迁移。</summary>
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
 
     /// <summary>schema 版本号所在的 meta 键。</summary>
     public const string SchemaVersionKey = "schema_version";
@@ -220,24 +221,96 @@ public sealed class PdxDatabase
     private void EnsureSchema(SqliteConnection connection)
     {
         var current = ReadSchemaVersion(connection);
-        if (current >= SchemaVersion)
+        if (current < SchemaVersion)
+        {
+            if (current > 0)
+            {
+                // 只在真的要改结构时备份：旧版本数据不能因为一次升级就没救。
+                BackupBeforeMigration();
+            }
+
+            Migrate(connection, current);
+            connection.Execute(
+                "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                SchemaVersionKey,
+                SchemaVersion.ToString(CultureInfo.InvariantCulture));
+            _logger.Info("自有库 schema 就绪：v" + SchemaVersion.ToString(CultureInfo.InvariantCulture) + "（" + Path + "）");
+        }
+
+        // 每次打开都查一次闸门（只读一行 meta）：上次迁移中途失败时下次启动会接着导。
+        EnsureWorkshopImport(connection);
+    }
+
+    /// <summary>
+    /// v2 的一次性数据搬迁：把 <c>documents</c> 里两段工坊缓存 JSON 倒进 <c>workshop_items</c> /
+    /// <c>workshop_pages</c>，成功后删旧行并写 meta 闸门。
+    /// <para>
+    /// 幂等靠 meta 键 <c>workshop-import-v2</c>；任一段解析失败就整体保留旧行，下次启动重试，
+    /// 绝不因为缓存搬家把用户数据删掉。
+    /// </para>
+    /// </summary>
+    private void EnsureWorkshopImport(SqliteConnection connection)
+    {
+        const string importKey = "workshop-import-v2";
+        var marker = connection.ExecuteScalar("SELECT value FROM meta WHERE key = ?", importKey) as string;
+        if (string.Equals(marker, "done", StringComparison.Ordinal))
         {
             return;
         }
 
-        if (current > 0)
+        var infoJson = ReadDocument(connection, JsonDocumentKeys.WorkshopInfo);
+        var pagesJson = ReadDocument(connection, JsonDocumentKeys.WorkshopPages);
+        if (infoJson is null && pagesJson is null)
         {
-            // 只在真的要改结构时备份：旧版本数据不能因为一次升级就没救。
-            BackupBeforeMigration();
+            WriteMeta(connection, importKey, "done");
+            return;
         }
 
-        Migrate(connection, current);
+        if (infoJson is not null)
+        {
+            var items = new SqliteWorkshopItemStore(this, _logger);
+            if (!items.Import(connection, infoJson, WorkshopInfoCache.MaxEntries))
+            {
+                _logger.Warn("工坊条目缓存迁移未完成，保留旧数据下次重试。");
+                return;
+            }
+        }
+
+        if (pagesJson is not null)
+        {
+            var pages = new SqliteWorkshopPageStore(this, _logger);
+            if (!pages.Import(connection, pagesJson, SteamItemPageCache.MaxEntries))
+            {
+                _logger.Warn("工坊分页缓存迁移未完成，保留旧数据下次重试。");
+                return;
+            }
+        }
+
+        if (infoJson is not null)
+        {
+            DeleteDocument(connection, JsonDocumentKeys.WorkshopInfo);
+        }
+
+        if (pagesJson is not null)
+        {
+            DeleteDocument(connection, JsonDocumentKeys.WorkshopPages);
+        }
+
+        WriteMeta(connection, importKey, "done");
+        _logger.Info("工坊缓存已迁移到真表（workshop_items / workshop_pages）。");
+    }
+
+    private static string? ReadDocument(SqliteConnection connection, string key) =>
+        connection.ExecuteScalar("SELECT json FROM documents WHERE key = ?", key) as string;
+
+    private static void DeleteDocument(SqliteConnection connection, string key) =>
+        connection.Execute("DELETE FROM documents WHERE key = ?", key);
+
+    private static void WriteMeta(SqliteConnection connection, string key, string value) =>
         connection.Execute(
             "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            SchemaVersionKey,
-            SchemaVersion.ToString(CultureInfo.InvariantCulture));
-        _logger.Info("自有库 schema 就绪：v" + SchemaVersion.ToString(CultureInfo.InvariantCulture) + "（" + Path + "）");
-    }
+            key,
+            value);
 
     private static int ReadSchemaVersion(SqliteConnection connection)
     {
@@ -299,6 +372,23 @@ public sealed class PdxDatabase
         connection.Execute("CREATE INDEX IF NOT EXISTS ix_mods_game ON mods (gameId)");
         connection.Execute("CREATE INDEX IF NOT EXISTS ix_playsets_mods ON playsets_mods (gameId, playsetId, position)");
         connection.Execute("CREATE INDEX IF NOT EXISTS ix_playsets_dlcs ON playsets_dlcs (gameId, playsetId)");
+
+        // v2：工坊缓存从「一整段 JSON」改成一览表 + 分页表。
+        connection.Execute(
+            "CREATE TABLE IF NOT EXISTS workshop_items (" +
+            "source TEXT NOT NULL, id TEXT NOT NULL, game_id TEXT, name TEXT, author TEXT, " +
+            "rating REAL, ratings_total INTEGER, subscriptions INTEGER, updated_utc INTEGER, " +
+            "size_bytes INTEGER, cover_url TEXT, cover_file TEXT, cover_fetched_utc INTEGER, " +
+            "detail_text TEXT, detail_screenshots TEXT, detail_fetched_utc INTEGER, " +
+            "fetched_utc INTEGER NOT NULL, creator_steam_id TEXT, tags TEXT, " +
+            "views INTEGER, lifetime_subscriptions INTEGER, PRIMARY KEY (source, id))");
+        connection.Execute(
+            "CREATE TABLE IF NOT EXISTS workshop_pages (" +
+            "published_file_id TEXT PRIMARY KEY, fetched_utc INTEGER NOT NULL, payload TEXT NOT NULL)");
+        connection.Execute(
+            "CREATE INDEX IF NOT EXISTS ix_workshop_items_game ON workshop_items (game_id, fetched_utc)");
+        connection.Execute(
+            "CREATE INDEX IF NOT EXISTS ix_workshop_items_fetched ON workshop_items (fetched_utc)");
     }
 
     private void RecoverCorrupt()

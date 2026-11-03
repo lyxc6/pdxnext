@@ -1,104 +1,83 @@
 namespace PdxLauncher.Core.Online;
 
-using System.Linq;
-using System.Text.Encodings.Web;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using PdxLauncher.Core.Abstractions;
-using PdxLauncher.Core.Storage;
 
 /// <summary>
-/// 创意工坊 mod 信息缓存：索引 <c>workshop-info.json</c>，按「来源 + id」存列表元数据、封面文件名与详情正文。
+/// 创意工坊 mod 信息缓存：按「来源 + id」存列表元数据、封面文件名与详情正文。
 /// <para>
 /// 目的：同一个 mod 在翻页、切游戏、重新进页面时不再重复抓取 —— 名称/作者/评分立刻可用，
-/// 封面文件命中后不再下载，详情在 TTL 内直接复用。索引与主题缓存同一套容错策略：
+/// 封面文件命中后不再下载，详情在 TTL 内直接复用。
+/// </para>
+/// <para>
+/// v2 起数据落在自有库的 <c>workshop_items</c> 真表（<see cref="IWorkshopItemStore"/>），
+/// 一行一个条目；本类只做键解析、TTL 判定与封面文件存在性检查，不再整份序列化。
 /// 缺失或损坏一律视为无缓存，绝不把异常抛给调用方。
 /// </para>
 /// </summary>
 public sealed class WorkshopInfoCache
 {
-    /// <summary>索引文件名（位于缓存根目录下）。</summary>
+    /// <summary>旧索引文件名（v1 遗留，仅用于识别与清理，不再写入）。</summary>
     public const string IndexFileName = "workshop-info.json";
 
     /// <summary>详情正文的默认新鲜期；超过后下次打开详情会重新抓取。</summary>
     public static readonly TimeSpan DefaultDetailTtl = TimeSpan.FromDays(7);
 
     /// <summary>
-    /// 索引最多保留的条目数；超出后按抓取时间淘汰最旧的。
+    /// 最多保留的条目数；超出后按抓取时间淘汰最旧的。
     /// 真实库里通常只有几百条，2000 条是给「换游戏 / 重装」留的余量，
-    /// 同时把最坏内存占用钉住（单条正文另有 <see cref="MaxDetailChars"/> 上限）。
+    /// 同时把最坏占用钉住（单条正文另有 <see cref="MaxDetailChars"/> 上限）。
     /// </summary>
     public const int MaxEntries = 2000;
 
     /// <summary>详情正文最多保留的字符数；正文已清洗成纯文本，截断只影响极长帖子的尾巴。</summary>
     public const int MaxDetailChars = 16 * 1024;
 
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        WriteIndented = false,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
-
     private readonly IFileSystem _fileSystem;
     private readonly IAppLogger _logger;
     private readonly IClock _clock;
     private readonly string _cacheRoot;
-    private readonly IDocumentFile _indexDocument;
-    private readonly object _gate = new();
-    private readonly Dictionary<string, WorkshopInfoCacheEntry> _entries;
+    private readonly IWorkshopItemStore _store;
 
-    /// <summary>内存里有未落盘的修改；由 <see cref="Flush"/> 统一写入。</summary>
-    private bool _dirty;
-
+    /// <summary>构造。</summary>
+    /// <param name="fileSystem">文件系统抽象（判断封面文件是否存在）。</param>
+    /// <param name="logger">日志。</param>
+    /// <param name="clock">时钟（TTL 判定与新鲜度记账）。</param>
+    /// <param name="cacheRoot">缓存根目录（封面文件仍落在这里）。</param>
+    /// <param name="store">条目持久层。</param>
     public WorkshopInfoCache(
         IFileSystem fileSystem,
         IAppLogger logger,
         IClock clock,
         string cacheRoot,
-        IDocumentFile? indexDocument = null)
+        IWorkshopItemStore store)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentException.ThrowIfNullOrWhiteSpace(cacheRoot);
+        ArgumentNullException.ThrowIfNull(store);
         _fileSystem = fileSystem;
         _logger = logger;
         _clock = clock;
         _cacheRoot = cacheRoot;
-        _indexDocument = indexDocument ?? new FileDocumentFile(fileSystem, IndexPath);
-        _entries = Load(_indexDocument, logger);
+        _store = store;
     }
 
     /// <summary>缓存根目录。</summary>
     public string CacheRoot => _cacheRoot;
 
-    /// <summary>索引的旧文件路径（索引已搬进自有库，图片/封面仍在缓存根下）。</summary>
-    public string IndexPath => Path.Combine(_cacheRoot, IndexFileName);
-
-    /// <summary>索引落点（库键或旧文件）。</summary>
-    public string IndexLocation => _indexDocument.DisplayPath;
-
     /// <summary>
-    /// 封面根目录：与索引同根，清缓存时一起删掉。
+    /// 封面根目录：与旧索引同根，清缓存时一起删掉。
     /// 条目里的 <see cref="WorkshopInfoCacheEntry.CoverFileName"/> 是相对这里的路径（含 steam/ 或 pdx/ 子目录）。
     /// </summary>
     public string CoverRoot => _cacheRoot;
 
-    /// <summary>索引里的条目数。</summary>
-    public int Count
-    {
-        get
-        {
-            lock (_gate)
-            {
-                return _entries.Count;
-            }
-        }
-    }
+    /// <summary>缓存里的条目数。</summary>
+    public int Count => _store.Count;
 
     /// <summary>缓存键：<c>steam:{publishedfileid}</c> 或 <c>pdx:{modId}</c>。</summary>
+    /// <param name="source">来源。</param>
+    /// <param name="id">来源侧 id。</param>
     public static string Key(WorkshopSource source, string id)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
@@ -106,12 +85,14 @@ public sealed class WorkshopInfoCache
     }
 
     /// <summary>来源在缓存键与封面目录里使用的小写标记。</summary>
+    /// <param name="source">来源。</param>
     public static string SourceTag(WorkshopSource source) => source == WorkshopSource.Steam ? "steam" : "pdx";
 
     /// <summary>
     /// 写入或合并一条列表元数据。传 null 的字段保留旧值，
     /// 这样列表刷新不会把已抓到的封面文件名与详情正文抹掉。
     /// </summary>
+    /// <param name="entry">要写入的条目。</param>
     public void Upsert(WorkshopInfoCacheEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
@@ -120,44 +101,12 @@ public sealed class WorkshopInfoCache
             return;
         }
 
-        var source = string.Equals(entry.Source, "steam", StringComparison.OrdinalIgnoreCase)
-            ? WorkshopSource.Steam
-            : WorkshopSource.Pdx;
-        var key = Key(source, entry.Id);
-
-        lock (_gate)
-        {
-            if (!_entries.TryGetValue(key, out var target))
-            {
-                target = new WorkshopInfoCacheEntry();
-                _entries[key] = target;
-            }
-
-            target.Source = SourceTag(source);
-            target.Id = entry.Id;
-            target.GameId = entry.GameId ?? target.GameId;
-            target.Name = entry.Name ?? target.Name;
-            target.Author = entry.Author ?? target.Author;
-            target.Rating = entry.Rating ?? target.Rating;
-            target.RatingsTotal = entry.RatingsTotal ?? target.RatingsTotal;
-            target.Subscriptions = entry.Subscriptions ?? target.Subscriptions;
-            target.UpdatedUtc = entry.UpdatedUtc ?? target.UpdatedUtc;
-            target.SizeBytes = entry.SizeBytes ?? target.SizeBytes;
-
-            // 封面 URL 变了说明作者换了图：旧文件名留着，但下次下载会覆盖同一槽位。
-            if (!string.IsNullOrWhiteSpace(entry.CoverUrl) &&
-                !string.Equals(entry.CoverUrl, target.CoverUrl, StringComparison.Ordinal))
-            {
-                target.CoverUrl = entry.CoverUrl;
-            }
-
-            target.FetchedUtc = _clock.UtcNow;
-            _dirty = true;
-            TrimLocked();
-        }
+        _store.Upsert(entry);
     }
 
-    /// <summary>取一条快照；没有返回 false。返回的是副本，调用方改动不会影响索引。</summary>
+    /// <summary>取一条快照；没有返回 false。返回的是副本，调用方改动不会影响缓存。</summary>
+    /// <param name="key">缓存键。</param>
+    /// <param name="entry">命中的条目副本。</param>
     public bool TryGet(string key, out WorkshopInfoCacheEntry entry)
     {
         entry = new WorkshopInfoCacheEntry();
@@ -166,19 +115,19 @@ public sealed class WorkshopInfoCache
             return false;
         }
 
-        lock (_gate)
+        var found = _store.Find(key);
+        if (found is null)
         {
-            if (!_entries.TryGetValue(key, out var found))
-            {
-                return false;
-            }
-
-            entry = Clone(found);
-            return true;
+            return false;
         }
+
+        entry = found;
+        return true;
     }
 
     /// <summary>封面文件是否还在缓存目录里；在就返回绝对路径，调用方不必再下载。</summary>
+    /// <param name="key">缓存键。</param>
+    /// <param name="fullPath">封面文件的绝对路径。</param>
     public bool TryGetCachedCover(string key, out string fullPath)
     {
         fullPath = string.Empty;
@@ -236,6 +185,8 @@ public sealed class WorkshopInfoCache
     }
 
     /// <summary>该条目的列表元数据是否在 TTL 内。</summary>
+    /// <param name="entry">条目。</param>
+    /// <param name="ttl">新鲜期。</param>
     public bool IsFresh(WorkshopInfoCacheEntry entry, TimeSpan ttl)
     {
         ArgumentNullException.ThrowIfNull(entry);
@@ -249,6 +200,8 @@ public sealed class WorkshopInfoCache
     }
 
     /// <summary>详情正文是否在 TTL 内（且确实抓取过）。</summary>
+    /// <param name="entry">条目。</param>
+    /// <param name="ttl">新鲜期；null 用 <see cref="DefaultDetailTtl"/>。</param>
     public bool IsDetailFresh(WorkshopInfoCacheEntry entry, TimeSpan? ttl = null)
     {
         ArgumentNullException.ThrowIfNull(entry);
@@ -262,28 +215,14 @@ public sealed class WorkshopInfoCache
     }
 
     /// <summary>记录封面下载结果。</summary>
+    /// <param name="key">缓存键。</param>
+    /// <param name="fileName">封面相对缓存根的文件名。</param>
+    /// <param name="url">封面来源地址。</param>
     public void SetCover(string key, string fileName, string? url)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
-
-        lock (_gate)
-        {
-            if (!_entries.TryGetValue(key, out var target))
-            {
-                target = new WorkshopInfoCacheEntry();
-                _entries[key] = target;
-            }
-
-            target.CoverFileName = fileName;
-            target.CoverFetchedUtc = _clock.UtcNow;
-            if (!string.IsNullOrWhiteSpace(url))
-            {
-                target.CoverUrl = url;
-            }
-
-            _dirty = true;
-        }
+        _store.SetCover(key, fileName, url, _clock.UtcNow);
     }
 
     /// <summary>记录详情抓取结果。</summary>
@@ -304,146 +243,30 @@ public sealed class WorkshopInfoCache
         long lifetimeSubscriptions = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
-
-        lock (_gate)
-        {
-            if (!_entries.TryGetValue(key, out var target))
-            {
-                target = new WorkshopInfoCacheEntry();
-                _entries[key] = target;
-            }
-
-            target.DetailText = ClampDetail(text);
-            target.DetailScreenshots = screenshots is { Count: > 0 } ? [.. screenshots] : null;
-
-            // 追加的元数据只在这次真拿到时才覆盖：PDX 详情没有这些字段，
-            // 传默认值会把 Steam 那条已经存下的作者/标签洗掉（同一 key 不会跨来源，但保持「缺就不写」更稳）。
-            if (!string.IsNullOrWhiteSpace(creatorSteamId))
-            {
-                target.CreatorSteamId = creatorSteamId;
-            }
-
-            if (tags is { Count: > 0 })
-            {
-                target.Tags = [.. tags];
-            }
-
-            if (views > 0)
-            {
-                target.Views = views;
-            }
-
-            if (lifetimeSubscriptions > 0)
-            {
-                target.LifetimeSubscriptions = lifetimeSubscriptions;
-            }
-
-            target.DetailFetchedUtc = _clock.UtcNow;
-        }
-
-        Save();
+        _store.SetDetail(
+            key,
+            ClampDetail(text),
+            screenshots,
+            creatorSteamId,
+            tags,
+            views,
+            lifetimeSubscriptions,
+            _clock.UtcNow);
     }
 
     /// <summary>按来源与游戏取条目快照（断网回退用）。</summary>
-    public IReadOnlyList<WorkshopInfoCacheEntry> Snapshot(WorkshopSource source, string? gameId)
-    {
-        var tag = SourceTag(source);
-        lock (_gate)
-        {
-            return _entries.Values
-                .Where(entry => string.Equals(entry.Source, tag, StringComparison.OrdinalIgnoreCase))
-                .Where(entry => string.IsNullOrWhiteSpace(gameId) ||
-                                string.Equals(entry.GameId, gameId, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(entry => entry.UpdatedUtc)
-                .Select(Clone)
-                .ToList();
-        }
-    }
+    /// <param name="source">来源。</param>
+    /// <param name="gameId">游戏注册 ID；空白表示不按游戏过滤。</param>
+    public IReadOnlyList<WorkshopInfoCacheEntry> Snapshot(WorkshopSource source, string? gameId) =>
+        _store.List(source, gameId, MaxEntries);
 
-    /// <summary>清空缓存：删索引文件并清空内存索引。删除失败只记 Warn。</summary>
-    public void Clear()
-    {
-        lock (_gate)
-        {
-            _entries.Clear();
-            _dirty = false;
-        }
+    /// <summary>清空缓存。删除失败只记 Warn。</summary>
+    public void Clear() => _store.Clear();
 
-        try
-        {
-            _indexDocument.Delete();
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            _logger.Warn("创意工坊缓存索引清理失败：" + exception.Message);
-        }
-    }
-
-    /// <summary>
-    /// 把内存里累积的修改一次性写盘（列表 30 条与封面 30 张各只写一次，避免逐条同步 IO 卡 UI）。
-    /// </summary>
+    /// <summary>兼容旧调用：v2 起每条写入即落库，这里无事可做。</summary>
     public void Flush()
     {
-        lock (_gate)
-        {
-            if (!_dirty)
-            {
-                return;
-            }
-
-            _dirty = false;
-        }
-
-        Save();
-    }
-
-    /// <summary>原子写索引；写入失败只记日志。</summary>
-    public void Save()
-    {
-        IndexFile snapshot;
-        lock (_gate)
-        {
-            snapshot = new IndexFile
-            {
-                Entries = new Dictionary<string, WorkshopInfoCacheEntry>(_entries, StringComparer.OrdinalIgnoreCase),
-            };
-        }
-
-        try
-        {
-            if (!_indexDocument.WriteText(JsonSerializer.Serialize(snapshot, Options)))
-            {
-                _logger.Warn("创意工坊缓存索引写入失败：" + _indexDocument.DisplayPath);
-            }
-        }
-        catch (Exception exception) when (exception is IOException
-                                              or UnauthorizedAccessException
-                                              or ArgumentException
-                                              or NotSupportedException
-                                              or PathTooLongException)
-        {
-            _logger.Warn("创意工坊缓存索引写入失败：" + exception.Message);
-        }
-    }
-
-    /// <summary>索引超限时按抓取时间丢掉最旧的条目；调用方必须已持有 <see cref="_gate"/>。</summary>
-    private void TrimLocked()
-    {
-        int overflow = _entries.Count - MaxEntries;
-        if (overflow <= 0)
-        {
-            return;
-        }
-
-        var stale = _entries
-            .OrderBy(pair => pair.Value.FetchedUtc ?? DateTimeOffset.MinValue)
-            .Take(overflow)
-            .Select(pair => pair.Key)
-            .ToList();
-        foreach (var key in stale)
-        {
-            _entries.Remove(key);
-        }
+        // 真表存储下没有内存脏页，保留空实现避免调用点大改。
     }
 
     /// <summary>截断超长正文，且不把代理对切成半个字符。</summary>
@@ -461,73 +284,5 @@ public sealed class WorkshopInfoCache
         }
 
         return text[..length];
-    }
-
-    private static WorkshopInfoCacheEntry Clone(WorkshopInfoCacheEntry source) => new()
-    {
-        Source = source.Source,
-        Id = source.Id,
-        GameId = source.GameId,
-        Name = source.Name,
-        Author = source.Author,
-        Rating = source.Rating,
-        RatingsTotal = source.RatingsTotal,
-        Subscriptions = source.Subscriptions,
-        UpdatedUtc = source.UpdatedUtc,
-        SizeBytes = source.SizeBytes,
-        CoverUrl = source.CoverUrl,
-        CoverFileName = source.CoverFileName,
-        CoverFetchedUtc = source.CoverFetchedUtc,
-        DetailText = source.DetailText,
-        DetailScreenshots = source.DetailScreenshots is null ? null : [.. source.DetailScreenshots],
-        DetailFetchedUtc = source.DetailFetchedUtc,
-        FetchedUtc = source.FetchedUtc,
-        CreatorSteamId = source.CreatorSteamId,
-        Tags = source.Tags is null ? null : [.. source.Tags],
-        Views = source.Views,
-        LifetimeSubscriptions = source.LifetimeSubscriptions,
-    };
-
-    private static Dictionary<string, WorkshopInfoCacheEntry> Load(
-        IDocumentFile document,
-        IAppLogger logger)
-    {
-        var entries = new Dictionary<string, WorkshopInfoCacheEntry>(StringComparer.OrdinalIgnoreCase);
-        var json = document.ReadText();
-        if (json is null)
-        {
-            return entries;
-        }
-        try
-        {
-            var loaded = JsonSerializer.Deserialize<IndexFile>(json, Options);
-            if (loaded?.Entries is null)
-            {
-                return entries;
-            }
-
-            foreach (var pair in loaded.Entries)
-            {
-                if (pair.Value is not null && !string.IsNullOrWhiteSpace(pair.Key))
-                {
-                    entries[pair.Key] = pair.Value;
-                }
-            }
-        }
-        catch (Exception exception) when (exception is JsonException
-                                              or IOException
-                                              or UnauthorizedAccessException)
-        {
-            logger.Warn("创意工坊缓存索引损坏，视为无缓存：" + exception.Message);
-        }
-
-        return entries;
-    }
-
-    private sealed class IndexFile
-    {
-        public int Version { get; set; } = 1;
-
-        public Dictionary<string, WorkshopInfoCacheEntry>? Entries { get; set; }
     }
 }

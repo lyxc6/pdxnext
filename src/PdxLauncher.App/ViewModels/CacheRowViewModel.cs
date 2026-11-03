@@ -33,6 +33,7 @@ public sealed class CacheRowViewModel : LocalizedObservableObject
     private readonly string _titleKey;
     private readonly string _descriptionKey;
     private readonly Action _clear;
+    private readonly Func<CacheUsage>? _measure;
     private CacheUsage _usage = CacheUsage.Empty;
     private bool _isBusy;
 
@@ -43,13 +44,15 @@ public sealed class CacheRowViewModel : LocalizedObservableObject
         string path,
         Action clear,
         string? documentKey = null,
-        string? folderPath = null)
+        string? folderPath = null,
+        Func<CacheUsage>? measure = null)
     {
         Key = key;
         _titleKey = titleKey;
         _descriptionKey = descriptionKey;
         Path = path;
         _clear = clear;
+        _measure = measure;
         DocumentKey = documentKey;
         FolderPath = folderPath;
     }
@@ -65,6 +68,12 @@ public sealed class CacheRowViewModel : LocalizedObservableObject
 
     /// <summary>仍在磁盘上的图片目录（索引入库后，图片仍按原布局存放）。</summary>
     public string? FolderPath { get; }
+
+    /// <summary>
+    /// 自定义占用统计（可选）。数据已经住进真表、不再是一个文档键时用它：
+    /// 例如工坊缓存 = 封面目录 + 两张表的行数。
+    /// </summary>
+    public Func<CacheUsage>? MeasureOverride => _measure;
 
     /// <summary>最近一次统计到的占用。</summary>
     public CacheUsage Usage => _usage;

@@ -2,13 +2,14 @@ namespace PdxLauncher.Checks;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Storage;
 
 /// <summary>
-/// 创意工坊「条目页 HTML 解析结果」缓存（<see cref="SteamItemPageCache"/>）的自检：
-/// 落盘往返、TTL、容量淘汰、超大条目只留内存、损坏索引容错、还原映射。
+/// 创意工坊「条目页 HTML 解析结果」缓存（<see cref="SteamItemPageCache"/>，v2 起背后是 <c>workshop_pages</c> 真表）的自检：
+/// 落库往返、TTL、容量淘汰、超大条目拒绝、旧索引文件容错、还原映射。
 /// <para>
 /// 起因：每次打开详情都会拉 1–3 MB 的 SSR 页面，是单次交互里最大的一笔请求预算；
-/// 这个缓存把解析结果存盘，重开同一个 mod 时零请求。
+/// 这个缓存把解析结果存库，重开同一个 mod 时零请求。
 /// </para>
 /// </summary>
 public static class SteamItemPageCacheChecks
@@ -26,8 +27,8 @@ public static class SteamItemPageCacheChecks
             CheckRoundTrip(fileSystem, root, clock);
             CheckTtl(fileSystem, root, clock);
             CheckEviction(fileSystem, root, clock);
-            CheckOversizeKeptInMemoryOnly(fileSystem, root, clock);
-            CheckCorruptedIndex(fileSystem, root, clock);
+            CheckOversizeRejected(fileSystem, root, clock);
+            CheckLegacyIndexIgnored(fileSystem, root, clock);
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -54,12 +55,12 @@ public static class SteamItemPageCacheChecks
     /// <summary>写入后重建实例仍然读得到，字段不丢（评论是首屏复用的关键）。</summary>
     private static void CheckRoundTrip(IFileSystem fileSystem, string root, MutableClock clock)
     {
-        var first = new SteamItemPageCache(fileSystem, new NullLogger(), clock, root);
+        var first = CreateCache(fileSystem, clock, root);
         first.Set("2216623537", SamplePage());
 
         ChecksContext.Equal("条目页缓存：写入后条目数", 1, first.Count);
 
-        var second = new SteamItemPageCache(fileSystem, new NullLogger(), clock, root);
+        var second = CreateCache(fileSystem, clock, root);
         var found = second.TryGet("2216623537", out var entry);
 
         ChecksContext.Check("条目页缓存：重建后仍能读到", found);
@@ -92,7 +93,7 @@ public static class SteamItemPageCacheChecks
     /// <summary>超过 12 小时算过期（调用方据此决定要不要重新抓）。</summary>
     private static void CheckTtl(IFileSystem fileSystem, string root, MutableClock clock)
     {
-        var cache = new SteamItemPageCache(fileSystem, new NullLogger(), clock, root);
+        var cache = CreateCache(fileSystem, clock, Path.Combine(root, "ttl"));
         cache.Set("ttl-1", SamplePage());
 
         ChecksContext.Check("条目页缓存：刚写入是新鲜的", cache.TryGet("ttl-1", out var entry) && cache.IsFresh(entry));
@@ -107,7 +108,7 @@ public static class SteamItemPageCacheChecks
     private static void CheckEviction(IFileSystem fileSystem, string root, MutableClock clock)
     {
         var evictRoot = Path.Combine(root, "evict");
-        var cache = new SteamItemPageCache(fileSystem, new NullLogger(), clock, evictRoot);
+        var cache = CreateCache(fileSystem, clock, evictRoot);
 
         for (var i = 0; i < SteamItemPageCache.MaxEntries + 1; i++)
         {
@@ -125,35 +126,39 @@ public static class SteamItemPageCacheChecks
         ChecksContext.Equal("条目页缓存：清空后条目数归零", 0, cache.Count);
     }
 
-    /// <summary>单条超过 512 KB 不落盘，但内存里仍可用（避免索引无限膨胀）。</summary>
-    private static void CheckOversizeKeptInMemoryOnly(IFileSystem fileSystem, string root, MutableClock clock)
+    /// <summary>单条超过 128 KB 直接拒绝：真表没有内存兜底，写进去只会让库无限长。</summary>
+    private static void CheckOversizeRejected(IFileSystem fileSystem, string root, MutableClock clock)
     {
         var bigRoot = Path.Combine(root, "big");
-        var cache = new SteamItemPageCache(fileSystem, new NullLogger(), clock, bigRoot);
+        var cache = CreateCache(fileSystem, clock, bigRoot);
         var huge = new string('x', SteamItemPageCache.MaxEntryBytes + 1024);
 
         cache.Set("big-1", SamplePage() with { DescriptionHtml = huge });
 
-        ChecksContext.Check("条目页缓存：超大条目仍在内存里可读", cache.TryGet("big-1", out _));
-
-        var reopened = new SteamItemPageCache(fileSystem, new NullLogger(), clock, bigRoot);
-        ChecksContext.Check("条目页缓存：超大条目没有落盘", !reopened.TryGet("big-1", out _));
+        ChecksContext.Check("条目页缓存：超大条目没有被写入", !cache.TryGet("big-1", out _));
+        ChecksContext.Equal("条目页缓存：超大条目不占条目数", 0, cache.Count);
     }
 
-    /// <summary>索引损坏按空缓存处理，不能让详情页打不开。</summary>
-    private static void CheckCorruptedIndex(IFileSystem fileSystem, string root, MutableClock clock)
+    /// <summary>旧版 workshop-pages.json 已不再被读取：放在目录里也不能把数据带进来。</summary>
+    private static void CheckLegacyIndexIgnored(IFileSystem fileSystem, string root, MutableClock clock)
     {
-        var corruptRoot = Path.Combine(root, "corrupt");
-        fileSystem.EnsureDirectory(corruptRoot);
+        var legacyRoot = Path.Combine(root, "legacy");
+        fileSystem.EnsureDirectory(legacyRoot);
         fileSystem.WriteAllTextAtomic(
-            Path.Combine(corruptRoot, SteamItemPageCache.IndexFileName),
+            Path.Combine(legacyRoot, SteamItemPageCache.IndexFileName),
             "{ this is not json");
 
-        var cache = new SteamItemPageCache(fileSystem, new NullLogger(), clock, corruptRoot);
+        var cache = CreateCache(fileSystem, clock, legacyRoot);
 
-        ChecksContext.Equal("条目页缓存：损坏索引按空缓存处理", 0, cache.Count);
-        cache.Set("after-corrupt", SamplePage());
-        ChecksContext.Check("条目页缓存：损坏后仍可写入", cache.TryGet("after-corrupt", out _));
+        ChecksContext.Equal("条目页缓存：旧索引文件按空缓存处理", 0, cache.Count);
+        cache.Set("after-legacy", SamplePage());
+        ChecksContext.Check("条目页缓存：旧文件存在时仍可写入", cache.TryGet("after-legacy", out _));
+    }
+
+    private static SteamItemPageCache CreateCache(IFileSystem fileSystem, MutableClock clock, string root)
+    {
+        var database = new PdxDatabase(fileSystem, new NullLogger(), Path.Combine(root, PdxDatabase.FileName));
+        return new SteamItemPageCache(fileSystem, new NullLogger(), clock, root, new SqliteWorkshopPageStore(database, new NullLogger()));
     }
 
     private static SteamWorkshopItemPage SamplePage() => new(

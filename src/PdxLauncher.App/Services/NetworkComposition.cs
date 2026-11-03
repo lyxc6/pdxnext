@@ -54,13 +54,15 @@ internal static class NetworkComposition
         IAppLogger logger,
         IClock clock,
         AppSettings settings,
-        IJsonDocumentStore documents)
+        IJsonDocumentStore documents,
+        PdxDatabase database)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(documents);
+        ArgumentNullException.ThrowIfNull(database);
 
         var proxy = ProxyResolver.Resolve(settings, logger);
 
@@ -82,13 +84,14 @@ internal static class NetworkComposition
         var steamWorkshop = new SteamWorkshopClient(http, logger);
 
         // 工坊 mod 信息缓存：按「来源 + id」存元数据与详情，封面文件落在同一个目录下。
+        // v2 起落进自有库的 workshop_items 表，启动时不再整份反序列化索引 JSON。
         var workshopPages = new WorkshopPageCache(clock);
         var workshopInfo = new WorkshopInfoCache(
             fileSystem,
             logger,
             clock,
             AppServices.WorkshopCacheRoot,
-            new StoreDocumentFile(documents, JsonDocumentKeys.WorkshopInfo));
+            new SqliteWorkshopItemStore(database, logger));
 
         // 条目页解析结果缓存：整个流程里最大的响应是 1–3 MB 的 item HTML，
         // 存下解析结果后同一个 mod 重开不再抓页面（详情页一条请求就能出全部内容）。
@@ -97,7 +100,7 @@ internal static class NetworkComposition
             logger,
             clock,
             AppServices.WorkshopCacheRoot,
-            new StoreDocumentFile(documents, JsonDocumentKeys.WorkshopPages));
+            new SqliteWorkshopPageStore(database, logger));
 
         var metadata = new MetadataClient(http, logger);
         var assets = new AssetDownloader(http, logger, fileSystem);
