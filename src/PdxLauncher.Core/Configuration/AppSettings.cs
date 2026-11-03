@@ -174,6 +174,15 @@ public sealed class AppSettings
     public bool TranslateEnabled { get; set; } = true;
 
     /// <summary>
+    /// 本地翻译模型是否常驻内存（默认常驻）。
+    /// <para>
+    /// 开着时模型加载一次就一直留在内存里，翻译随点随出；关掉后空闲 5 分钟卸载，
+    /// 把约 1.3 GB 还给系统，下次翻译再重新加载（第一次会慢几秒）。
+    /// </para>
+    /// </summary>
+    public bool KeepTranslationModelLoaded { get; set; } = true;
+
+    /// <summary>
     /// 翻译引擎的选择方式，取值见 <see cref="TranslationEngineModes"/>；
     /// null/未知值视为 <see cref="TranslationEngineModes.Auto"/>（优先自填 API，失败回落到内置免费服务）。
     /// </summary>

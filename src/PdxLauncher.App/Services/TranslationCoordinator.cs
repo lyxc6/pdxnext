@@ -85,6 +85,9 @@ public sealed class TranslationCoordinator : IDisposable
         }
 
         AuthorizeCustomHost();
+
+        // 刚关掉「常驻」时计时器可能还没启动过，这里补一次；开着常驻时到点会直接返回。
+        ArmIdleUnload();
     }
 
     /// <summary>当前翻译选项（设置 + 界面语言）。</summary>
@@ -442,6 +445,12 @@ public sealed class TranslationCoordinator : IDisposable
     private void OnIdleTick(object? state)
     {
         if (_disposed || _local is null)
+        {
+            return;
+        }
+
+        // 默认「从不卸载」：只有用户明确关掉常驻，才在空闲后释放约 1.3 GB 的模型内存。
+        if (AppServices.IsInitialized && AppServices.Settings.KeepTranslationModelLoaded)
         {
             return;
         }

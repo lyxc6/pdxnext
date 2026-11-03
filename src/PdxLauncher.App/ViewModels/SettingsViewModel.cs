@@ -1488,9 +1488,23 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             afterSave: NotifyTranslationSettingsChanged);
     }
 
+    /// <summary>
+    /// 本地翻译模型是否常驻内存；关掉后空闲 5 分钟自动卸载，把约 1.3 GB 还给系统。
+    /// </summary>
+    public bool KeepTranslationModelLoaded
+    {
+        get => AppServices.Settings.KeepTranslationModelLoaded;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.KeepTranslationModelLoaded,
+            v => AppServices.Settings.KeepTranslationModelLoaded = v,
+            Keys.SettingsTranslateStatusKeepLoadedOn,
+            Keys.SettingsTranslateStatusKeepLoadedOff,
+            afterSave: NotifyTranslationSettingsChanged);
+    }
+
     /// <summary>可选的翻译引擎模式（自动 / 仅自填接口 / 仅内置免费服务）。</summary>
-    public IReadOnlyList<TranslationEngineOption> TranslationEngineOptions =>
-        TranslationEngineCatalog.All;
+    public IReadOnlyList<TranslationEngineOption> TranslationEngineOptions =>        TranslationEngineCatalog.All;
 
     /// <summary>翻译引擎模式；改动立即写 settings.json，并作废在途的翻译请求。</summary>
     public TranslationEngineOption SelectedTranslationEngine

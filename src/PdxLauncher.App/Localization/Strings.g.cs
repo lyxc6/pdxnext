@@ -924,6 +924,9 @@ public sealed partial class Localizer
         ["settings.translate.googleKey"] = "API Key",
         ["settings.translate.googleKeyName"] = "谷歌云翻译的 API Key",
         ["settings.translate.hint"] = "译文与原文同时显示：自填接口的地址与密钥只保存在本机 settings.json 里，日志中不会打印；内置免费服务是第三方公开接口，稳定性不由本启动器保证。",
+        ["settings.translate.keepLoaded"] = "翻译模型常驻内存",
+        ["settings.translate.keepLoadedDesc"] = "开着时模型加载后一直留在内存里，翻译随点随出；关掉后空闲 5 分钟自动卸载，省下约 1.3 GB 内存，下次翻译会重新加载（慢几秒）。",
+        ["settings.translate.keepLoadedName"] = "翻译模型常驻内存",
         ["settings.translate.language"] = "译文语言",
         ["settings.translate.language.enUS.desc"] = "无论界面是什么语言，一律译成英文。",
         ["settings.translate.language.enUS.title"] = "English",
@@ -969,6 +972,8 @@ public sealed partial class Localizer
         ["settings.translate.statusEnabled"] = "已开启翻译：工坊列表、详情页与评论区会在原文之外附带译文",
         ["settings.translate.statusEndpoint"] = "翻译接口已更新：{0}",
         ["settings.translate.statusEngine"] = "翻译引擎已改为 {0}",
+        ["settings.translate.statusKeepLoadedOff"] = "已关闭常驻：空闲 5 分钟后释放本地翻译模型",
+        ["settings.translate.statusKeepLoadedOn"] = "已开启常驻：本地翻译模型会一直留在内存里",
         ["settings.translate.statusLanguage"] = "译文语言已改为 {0}",
         ["settings.translate.statusPortalFailed"] = "打不开浏览器：{0}",
         ["settings.translate.statusScope"] = "翻译范围已更新：{0}",
@@ -2063,6 +2068,9 @@ public sealed partial class Localizer
         ["settings.translate.googleKey"] = "API key",
         ["settings.translate.googleKeyName"] = "Google Cloud Translation API key",
         ["settings.translate.hint"] = "Translations are shown next to the original. The API URL and key are stored in the local settings.json only and are never written to the log; the built-in free service is a third-party public endpoint whose availability is not guaranteed.",
+        ["settings.translate.keepLoaded"] = "Keep translation model in memory",
+        ["settings.translate.keepLoadedDesc"] = "When on, the local model stays loaded so translations start instantly. When off, it is unloaded after 5 idle minutes to free about 1.3 GB, and the next translation reloads it (a few seconds slower).",
+        ["settings.translate.keepLoadedName"] = "Keep translation model in memory",
         ["settings.translate.language"] = "Translation language",
         ["settings.translate.language.enUS.desc"] = "Always translate into English, whatever the interface language is.",
         ["settings.translate.language.enUS.title"] = "English",
@@ -2108,6 +2116,8 @@ public sealed partial class Localizer
         ["settings.translate.statusEnabled"] = "Translation enabled: workshop lists, details and comments show a translation next to the original",
         ["settings.translate.statusEndpoint"] = "Translation endpoint updated: {0}",
         ["settings.translate.statusEngine"] = "Translation engine changed to {0}",
+        ["settings.translate.statusKeepLoadedOff"] = "Model will be unloaded after 5 idle minutes",
+        ["settings.translate.statusKeepLoadedOn"] = "Model will stay loaded in memory",
         ["settings.translate.statusLanguage"] = "Translation language changed to {0}",
         ["settings.translate.statusPortalFailed"] = "Could not open the browser: {0}",
         ["settings.translate.statusScope"] = "Translation scope updated: {0}",
@@ -3202,6 +3212,9 @@ public sealed partial class Localizer
         ("settings.translate.googleKey", "SettingsTranslateGoogleKey"),
         ("settings.translate.googleKeyName", "SettingsTranslateGoogleKeyName"),
         ("settings.translate.hint", "SettingsTranslateHint"),
+        ("settings.translate.keepLoaded", "SettingsTranslateKeepLoaded"),
+        ("settings.translate.keepLoadedDesc", "SettingsTranslateKeepLoadedDesc"),
+        ("settings.translate.keepLoadedName", "SettingsTranslateKeepLoadedName"),
         ("settings.translate.language", "SettingsTranslateLanguage"),
         ("settings.translate.language.enUS.desc", "SettingsTranslateLanguageEnUSDesc"),
         ("settings.translate.language.enUS.title", "SettingsTranslateLanguageEnUSTitle"),
@@ -3247,6 +3260,8 @@ public sealed partial class Localizer
         ("settings.translate.statusEnabled", "SettingsTranslateStatusEnabled"),
         ("settings.translate.statusEndpoint", "SettingsTranslateStatusEndpoint"),
         ("settings.translate.statusEngine", "SettingsTranslateStatusEngine"),
+        ("settings.translate.statusKeepLoadedOff", "SettingsTranslateStatusKeepLoadedOff"),
+        ("settings.translate.statusKeepLoadedOn", "SettingsTranslateStatusKeepLoadedOn"),
         ("settings.translate.statusLanguage", "SettingsTranslateStatusLanguage"),
         ("settings.translate.statusPortalFailed", "SettingsTranslateStatusPortalFailed"),
         ("settings.translate.statusScope", "SettingsTranslateStatusScope"),
@@ -4339,6 +4354,9 @@ public sealed partial class Localizer
     public string SettingsTranslateGoogleKey => Format("settings.translate.googleKey");
     public string SettingsTranslateGoogleKeyName => Format("settings.translate.googleKeyName");
     public string SettingsTranslateHint => Format("settings.translate.hint");
+    public string SettingsTranslateKeepLoaded => Format("settings.translate.keepLoaded");
+    public string SettingsTranslateKeepLoadedDesc => Format("settings.translate.keepLoadedDesc");
+    public string SettingsTranslateKeepLoadedName => Format("settings.translate.keepLoadedName");
     public string SettingsTranslateLanguage => Format("settings.translate.language");
     public string SettingsTranslateLanguageEnUSDesc => Format("settings.translate.language.enUS.desc");
     public string SettingsTranslateLanguageEnUSTitle => Format("settings.translate.language.enUS.title");
@@ -4384,6 +4402,8 @@ public sealed partial class Localizer
     public string SettingsTranslateStatusEnabled => Format("settings.translate.statusEnabled");
     public string SettingsTranslateStatusEndpoint => Format("settings.translate.statusEndpoint");
     public string SettingsTranslateStatusEngine => Format("settings.translate.statusEngine");
+    public string SettingsTranslateStatusKeepLoadedOff => Format("settings.translate.statusKeepLoadedOff");
+    public string SettingsTranslateStatusKeepLoadedOn => Format("settings.translate.statusKeepLoadedOn");
     public string SettingsTranslateStatusLanguage => Format("settings.translate.statusLanguage");
     public string SettingsTranslateStatusPortalFailed => Format("settings.translate.statusPortalFailed");
     public string SettingsTranslateStatusScope => Format("settings.translate.statusScope");
@@ -5479,6 +5499,9 @@ internal static class Keys
     public const string SettingsTranslateGoogleKey = "settings.translate.googleKey";
     public const string SettingsTranslateGoogleKeyName = "settings.translate.googleKeyName";
     public const string SettingsTranslateHint = "settings.translate.hint";
+    public const string SettingsTranslateKeepLoaded = "settings.translate.keepLoaded";
+    public const string SettingsTranslateKeepLoadedDesc = "settings.translate.keepLoadedDesc";
+    public const string SettingsTranslateKeepLoadedName = "settings.translate.keepLoadedName";
     public const string SettingsTranslateLanguage = "settings.translate.language";
     public const string SettingsTranslateLanguageEnUSDesc = "settings.translate.language.enUS.desc";
     public const string SettingsTranslateLanguageEnUSTitle = "settings.translate.language.enUS.title";
@@ -5524,6 +5547,8 @@ internal static class Keys
     public const string SettingsTranslateStatusEnabled = "settings.translate.statusEnabled";
     public const string SettingsTranslateStatusEndpoint = "settings.translate.statusEndpoint";
     public const string SettingsTranslateStatusEngine = "settings.translate.statusEngine";
+    public const string SettingsTranslateStatusKeepLoadedOff = "settings.translate.statusKeepLoadedOff";
+    public const string SettingsTranslateStatusKeepLoadedOn = "settings.translate.statusKeepLoadedOn";
     public const string SettingsTranslateStatusLanguage = "settings.translate.statusLanguage";
     public const string SettingsTranslateStatusPortalFailed = "settings.translate.statusPortalFailed";
     public const string SettingsTranslateStatusScope = "settings.translate.statusScope";

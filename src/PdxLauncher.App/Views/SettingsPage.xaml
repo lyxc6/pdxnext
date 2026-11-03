@@ -607,6 +607,15 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
+                        <controls:SettingsCard Header="{x:Bind L.SettingsTranslateKeepLoaded, Mode=OneWay}"
+                                               Description="{x:Bind L.SettingsTranslateKeepLoadedDesc, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ToggleSwitch AutomationProperties.AutomationId="tglTranslateKeepLoaded"
+                                              AutomationProperties.Name="{x:Bind L.SettingsTranslateKeepLoadedName, Mode=OneWay}"
+                                              IsOn="{x:Bind ViewModel.KeepTranslationModelLoaded, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
                         <controls:SettingsCard Header="{x:Bind L.SettingsTranslateEngine, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
                                 <controls:PdxDropDown AutomationProperties.AutomationId="cmbTranslateEngineMode"
