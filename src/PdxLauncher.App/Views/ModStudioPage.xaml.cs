@@ -241,6 +241,7 @@ public sealed partial class ModStudioPage : Page
                     _viewModel.UploadVisibility.ToString(),
                     _viewModel.UploadDescriptorAdult,
                     _viewModel.UploadDescriptorViolence));
+            PageStateStore.Persist();
         }
         catch (Exception ex)
         {

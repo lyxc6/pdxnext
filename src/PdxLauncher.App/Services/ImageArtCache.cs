@@ -34,6 +34,12 @@ public sealed class ImageArtCache
     /// <summary>解码并发上限：DDS 解码是 CPU 活，开太多只会抢 UI 线程的时间片。</summary>
     private const int MaxConcurrency = 2;
 
+    /// <summary>
+    /// 首屏最多同步等这么多张转完；剩下的丢后台慢慢转。
+    /// 一屏列表大约 8–10 行，12 张足够铺满首屏，再多等只会拖慢打开速度。
+    /// </summary>
+    public const int EagerPrewarmCount = 12;
+
     private readonly IFileSystem _fileSystem;
     private readonly IAppLogger _logger;
     private readonly string _cacheDirectory;
@@ -96,14 +102,19 @@ public sealed class ImageArtCache
 
     /// <summary>
     /// 批量预热：列表页在构造行之前调用，保证 x:Bind 取 <see cref="Resolve"/> 时已经有 PNG。
+    /// <para>
+    /// 只同步等前 <see cref="EagerPrewarmCount"/> 张（刚好铺满首屏），其余交给后台按顺序转。
+    /// 以前是把整页（几十上百张）一起解出来再建行，首屏要等所有缩略图转完才出来。
     /// 非 DDS、文件不存在、超过大小上限、解码失败都只是跳过，永不抛异常。
+    /// </para>
     /// </summary>
     public async Task PrewarmAsync(IEnumerable<string?> paths, CancellationToken cancellationToken)
     {
         var pending = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in paths)
         {
-            if (!string.IsNullOrWhiteSpace(path) && IsDds(path))
+            if (!string.IsNullOrWhiteSpace(path) && IsDds(path) && seen.Add(path))
             {
                 pending.Add(path);
             }
@@ -114,13 +125,51 @@ public sealed class ImageArtCache
             return;
         }
 
-        var tasks = new List<Task<string?>>(pending.Count);
-        foreach (var path in pending)
+        var eager = Math.Min(pending.Count, EagerPrewarmCount);
+        var tasks = new List<Task<string?>>(eager);
+        for (var index = 0; index < eager; index++)
         {
-            tasks.Add(EnsureAsync(path, cancellationToken));
+            tasks.Add(EnsureAsync(pending[index], cancellationToken));
         }
 
         await Task.WhenAll(tasks).ConfigureAwait(true);
+
+        if (pending.Count > eager)
+        {
+            PrewarmRemainder(pending, eager, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// 首屏之外的缩略图在后台补转：不阻塞列表出现，失败只记 Warn，取消时安静退出。
+    /// 每张走 <see cref="EnsureAsync"/>，同一路径并发只解码一次，重复调用无副作用。
+    /// </summary>
+    private void PrewarmRemainder(List<string> pending, int start, CancellationToken cancellationToken)
+    {
+        var rest = pending.GetRange(start, pending.Count - start);
+
+        // 后台任务自带完整 try/catch：这里的异常没人 await，不能让它把进程带崩。
+        _ = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    foreach (var path in rest)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        await EnsureAsync(path, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // 用户已经离开列表页，剩下的不用转了。
+                }
+                catch (Exception exception)
+                {
+                    _logger.Warn("缩略图后台预热失败：" + exception.Message);
+                }
+            },
+            CancellationToken.None);
     }
 
     /// <summary>确保一张 DDS 有可显示的 PNG；成功返回 PNG 路径，跳过或失败返回 null。</summary>

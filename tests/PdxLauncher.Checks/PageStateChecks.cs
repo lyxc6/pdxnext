@@ -2,6 +2,7 @@ namespace PdxLauncher.Checks;
 
 using PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Storage;
 
 /// <summary>
 /// 页面状态快照（<see cref="PageStateStore"/> 与三个 record）的自检：
@@ -93,6 +94,40 @@ public static class PageStateChecks
             "页面状态：草稿保留空预览图",
             studioBack is not null && studioBack.Draft.UploadPreviewPath is null);
 
+        // 落盘形态：快照能整份序列化再读回来，坏 JSON 当没有。
+        var snapshotJson = PageStateSnapshot.Serialize(new PageStateSnapshot(library, studio));
+        var restored = PageStateSnapshot.Deserialize(snapshotJson);
+        ChecksContext.Check(
+            "页面状态：快照序列化往返不丢字段",
+            restored is not null
+                && restored.ModLibrary == library
+                && restored.ModStudio == studio);
+        ChecksContext.Check(
+            "页面状态：坏 JSON 当没有",
+            PageStateSnapshot.Deserialize("not json") is null
+                && PageStateSnapshot.Deserialize(null) is null
+                && PageStateSnapshot.Deserialize(string.Empty) is null);
+
+        // 持久化：Persist 写进 documents，Attach 再读回来。
+        var documents = new FakeStore();
+        PageStateStore.Persist();
+        ChecksContext.Check("页面状态：未 Attach 时 Persist 不写库", !documents.Exists(JsonDocumentKeys.UiPageState));
+
+        PageStateStore.Attach(documents, new SilentLogger());
+        PageStateStore.Persist();
+        ChecksContext.Check(
+            "页面状态：Persist 写进 ui:page-state",
+            documents.TryRead(JsonDocumentKeys.UiPageState, out var persisted)
+                && persisted is not null
+                && persisted.Contains("ck3", StringComparison.Ordinal));
+
+        PageStateStore.ModLibrary = null;
+        PageStateStore.ModStudio = null;
+        PageStateStore.Attach(documents, new SilentLogger());
+        ChecksContext.Check(
+            "页面状态：重启后 Attach 能恢复两份快照",
+            PageStateStore.ModLibrary == library && PageStateStore.ModStudio == studio);
+
         // 清掉，避免污染其它检查或同进程内的后续运行。
         PageStateStore.ModLibrary = null;
         PageStateStore.ModStudio = null;
@@ -101,5 +136,44 @@ public static class PageStateChecks
             PageStateStore.ModLibrary is null && PageStateStore.ModStudio is null);
 
         return ChecksContext.Failures == before ? 0 : 1;
+    }
+
+    private sealed class FakeStore : IJsonDocumentStore
+    {
+        private readonly Dictionary<string, string> _documents = new(StringComparer.Ordinal);
+
+        public bool TryRead(string key, out string? json) => _documents.TryGetValue(key, out json);
+
+        public bool Write(string key, string json)
+        {
+            _documents[key] = json;
+            return true;
+        }
+
+        public bool Delete(string key) => _documents.Remove(key);
+
+        public bool Exists(string key) => _documents.ContainsKey(key);
+
+        public long MeasureBytes(string prefix) => 0;
+
+        public IReadOnlyList<string> List(string prefix) =>
+            _documents.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal)
+                .ToList();
+    }
+
+    private sealed class SilentLogger : IAppLogger
+    {
+        public void Info(string message)
+        {
+        }
+
+        public void Warn(string message)
+        {
+        }
+
+        public void Error(string message, Exception? exception = null)
+        {
+        }
     }
 }

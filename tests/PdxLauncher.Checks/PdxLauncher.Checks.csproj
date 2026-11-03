@@ -112,5 +112,12 @@
     <Compile Include="..\..\src\PdxLauncher.App\Services\ModStudioDraft.cs" Link="Linked\ModStudioDraft.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\ModStudioState.cs" Link="Linked\ModStudioState.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\PageStateStore.cs" Link="Linked\PageStateStore.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\PageStateSnapshot.cs" Link="Linked\PageStateSnapshot.cs" />
+    <!--
+      Debug 内存埋点：只依赖 Core 的 IAppLogger，缓存计数由调用点通过委托传入，
+      不碰 WinUI / AppServices，因此可以原样链接进来。它错了不会崩，只会让基线文档的读数不可信，
+      所以描述格式（MB 一位小数、缓存计数拼法）与「Capture 永不抛」由 MemoryDiagnosticsChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\MemoryDiagnostics.cs" Link="Linked\MemoryDiagnostics.cs" />
   </ItemGroup>
 </Project>

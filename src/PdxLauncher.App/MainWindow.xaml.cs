@@ -554,10 +554,20 @@ public sealed partial class MainWindow : Window
             AppServices.Settings.WindowX = position.X;
             AppServices.Settings.WindowY = position.Y;
 
-            // 关闭窗口是最后一次落盘机会：先把各缓存攒着的防抖写入落盘，
-            // 再把设置页的延迟写合并进来，最后立即写一次窗口尺寸。
+            // 关闭窗口是最后一次落盘机会：先把页面状态记下来，
+            // 再把各缓存攒着的防抖写入落盘，再把设置页的延迟写合并进来，最后立即写一次窗口尺寸。
+            PageStateStore.Persist();
             AppServices.FlushCaches();
             AppServices.FlushSettings();
+#if DEBUG
+            if (AppServices.IsInitialized)
+            {
+                MemoryDiagnostics.Log(
+                    AppServices.Logger,
+                    "窗口关闭",
+                    () => (AppServices.WorkshopInfo.Count, AppServices.WorkshopItemPages.Count, AppServices.ModThumbnails.Cache.Count));
+            }
+#endif
             var saved = AppServices.SaveSettings();
             if (!saved.IsSuccess)
             {

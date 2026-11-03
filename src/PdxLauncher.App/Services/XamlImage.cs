@@ -64,6 +64,15 @@ public static class XamlImage
             }
 
             int decodeWidth = ImageDecodeSize.Compute(displayWidthDip, DisplayScale, ImagePixelSize.ReadWidth(path));
+
+            // 下载时顺手生成的 96/256 小图优先：源图 1900px、列表只画 72px 时，
+            // 直接读 96px 的变体比每次从原图缩一遍省 CPU，内存也更稳。
+            var variant = ThumbnailVariants.Resolve(AppServices.FileSystem, path, decodeWidth);
+            if (variant is not null)
+            {
+                path = variant;
+            }
+
             return Cache.GetOrCreate(path, decodeWidth);
         }
         catch (UriFormatException ex)

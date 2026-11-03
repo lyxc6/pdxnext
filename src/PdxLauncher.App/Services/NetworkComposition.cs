@@ -148,7 +148,11 @@ internal static class NetworkComposition
         var translationTransport = new TranslationHttpTransport(logger, proxy);
 
         // 译文缓存：与引擎无关，跨引擎切换也能复用同一份文档存储。
-        var translationCache = new TranslationCache(documents, clock, logger);
+        // 每写一条译文都会整份序列化，连续翻译时同一个键被反复重写：攒 500ms 再落盘。
+        var translationCache = new TranslationCache(
+            new DebouncedJsonDocumentStore(documents, logger),
+            clock,
+            logger);
         return new NetworkServices(
             http,
             pdxHttp,
