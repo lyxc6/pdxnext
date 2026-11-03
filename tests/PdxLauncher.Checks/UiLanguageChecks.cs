@@ -1,5 +1,6 @@
 namespace PdxLauncher.Checks;
 
+using System.Globalization;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Online;
@@ -34,7 +35,20 @@ public static class UiLanguageChecks
         // --- 界面语言 → Steam 商店 l= 参数
         ChecksContext.Equal("商店语言: 简中 → schinese", SteamStoreLanguage.SimplifiedChinese, SteamStoreLanguage.FromUiLanguage(UiLanguages.SimplifiedChinese));
         ChecksContext.Equal("商店语言: 英文 → english", SteamStoreLanguage.English, SteamStoreLanguage.FromUiLanguage(UiLanguages.English));
-        ChecksContext.Equal("商店语言: null → schinese", SteamStoreLanguage.Default, SteamStoreLanguage.FromUiLanguage(null));
+        // null 表示「跟随系统 UI 语言」，必须显式固定当前 UI 文化，
+        // 否则 zh-CN 开发机与 en-US CI runner 会得到不同答案（CI 曾因此失败）。
+        var originalCulture = CultureInfo.CurrentUICulture;
+        try
+        {
+            CultureInfo.CurrentUICulture = new CultureInfo("zh-CN");
+            ChecksContext.Equal("商店语言: null(zh-CN) → schinese", SteamStoreLanguage.Default, SteamStoreLanguage.FromUiLanguage(null));
+            CultureInfo.CurrentUICulture = new CultureInfo("en-US");
+            ChecksContext.Equal("商店语言: null(en-US) → english", SteamStoreLanguage.English, SteamStoreLanguage.FromUiLanguage(null));
+        }
+        finally
+        {
+            CultureInfo.CurrentUICulture = originalCulture;
+        }
         ChecksContext.Equal("商店语言: 未知值 → schinese", SteamStoreLanguage.Default, SteamStoreLanguage.FromUiLanguage("fr-FR"));
         ChecksContext.Check(
             "商店语言: 映射结果都在 Known 里",
