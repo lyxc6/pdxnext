@@ -215,6 +215,7 @@ public sealed partial class ModLibraryPage : Page
                 _viewModel.SelectedSortMode,
                 _viewModel.SelectedSourceFilter,
                 ListViewScrollState.GetVerticalOffset(ModList));
+            PageStateStore.Persist();
         }
         catch (Exception ex)
         {

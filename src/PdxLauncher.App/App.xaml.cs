@@ -250,6 +250,9 @@ public partial class App : Application
 
         logger.Info("服务装配完成");
 
+        // 页面状态（搜索词/筛选/滚动/表单草稿）跨重启保留：先读回上次的位置，页面创建时直接用。
+        PageStateStore.Attach(documents, logger);
+
 #if DEBUG
         // 只在 Debug 构建里埋点：Release 不留这行日志，也完全不碰 Process。
         MemoryDiagnostics.Log(

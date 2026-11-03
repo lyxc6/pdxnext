@@ -62,6 +62,12 @@ public static class JsonDocumentKeys
     /// <summary>译文缓存索引。</summary>
     public const string Translations = CachePrefix + "translations";
 
+    /// <summary>
+    /// 页面状态（Mod 库的搜索/排序/滚动、Mod 创建页的面板与表单草稿）。
+    /// 不是缓存，删了只丢「上次看到哪儿」，所以不走 <see cref="CachePrefix"/>。
+    /// </summary>
+    public const string UiPageState = "ui:page-state";
+
     /// <summary>主题资源解析结果缓存索引（按游戏分开）。</summary>
     public static string ThemeAssets(string gameId) =>
         CachePrefix + "theme-assets:" + (gameId ?? string.Empty).Trim();
