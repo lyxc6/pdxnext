@@ -54,7 +54,8 @@ public sealed partial class WorkshopDetailPage : Page
             new WorkshopImageCache(
                 AppServices.FileSystem,
                 AppServices.Assets,
-                AppServices.WorkshopInfo),
+                AppServices.WorkshopInfo,
+                AppServices.Covers),
             new WorkshopSubscriptionService(
                 AppServices.PdxMods,
                 AppServices.Account,

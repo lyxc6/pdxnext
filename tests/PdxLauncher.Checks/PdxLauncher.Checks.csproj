@@ -43,6 +43,11 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\WorkshopImageCache.cs" Link="Linked\WorkshopImageCache.cs" />
     <!--
+      封面目录配额（100 MB 上限、按最后写入时间删最旧）。只依赖 IFileSystem / IAppLogger / IClock，
+      可以原样链接进来；WorkshopImageCache 现在依赖它，所以必须一起链接。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\CoverDiskQuota.cs" Link="Linked\CoverDiskQuota.cs" />
+    <!--
       会话状态机（登录 / 续期 / 登出 / 落盘时机）本身不碰任何 UI 类型，
       只用 Core 的 IAppLogger / PdxSessionStore / IClock / PdxAccountClient，
       所以可以原样链接进来。它的「不勾保持登录就不落盘」和「登出清内存」是文案承诺，

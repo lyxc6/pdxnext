@@ -250,6 +250,9 @@ public partial class App : Application
 
         logger.Info("服务装配完成");
 
+        // 封面目录只增不减（实测能到 200 MB+），启动时在后台按 100 MB 配额扫一轮。
+        AppServices.Covers.SweepInBackground();
+
         // 翻译是否开着一句话就能看出来：这个功能失败是静默的，日志里得留下判断依据。
         var translationOptions = TranslationOptions.FromSettings(settings, Localizer.Instance.Language);
         if (translationOptions.Enabled)

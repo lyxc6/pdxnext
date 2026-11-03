@@ -75,6 +75,9 @@ public static class AppServices
     /// <summary>创意工坊条目页（HTML 解析结果）持久缓存：同一个 mod 在 TTL 内重开不再抓页面。</summary>
     public static SteamItemPageCache WorkshopItemPages { get; private set; } = null!;
 
+    /// <summary>工坊封面/截图目录的磁盘配额（100 MB 上限，超出从最旧的删起）。</summary>
+    public static CoverDiskQuota Covers { get; private set; } = null!;
+
     /// <summary>
     /// 「当前账号在这款游戏下订阅了什么、各自装到哪一步」的内存缓存（按 appid，TTL 1 分钟）。
     /// <para>
@@ -256,6 +259,7 @@ public static class AppServices
         WorkshopInfo = workshopInfo;
         WorkshopPages = workshopPages;
         WorkshopItemPages = workshopItemPages;
+        Covers = new CoverDiskQuota(fileSystem, logger, clock, WorkshopCacheRoot);
         HttpThrottle = httpThrottle;
         Translation = translation;
         LocalTranslation = localTranslation;

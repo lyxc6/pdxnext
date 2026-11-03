@@ -29,6 +29,7 @@ public sealed class WorkshopImageCache
     private readonly IFileSystem _files;
     private readonly IAssetDownloader _assets;
     private readonly WorkshopInfoCache _info;
+    private readonly CoverDiskQuota? _quota;
 
     /// <summary>
     /// 同一张图并发落地时只下载一次。实测触发点：详情页顶部图片墙与正文配图
@@ -40,11 +41,17 @@ public sealed class WorkshopImageCache
     /// <param name="files">文件系统抽象。</param>
     /// <param name="assets">下载器。</param>
     /// <param name="info">工坊信息缓存（提供缓存根与封面记账）。</param>
-    public WorkshopImageCache(IFileSystem files, IAssetDownloader assets, WorkshopInfoCache info)
+    /// <param name="quota">封面目录配额；下载成功后安排一轮清理，null 表示不清理（自检用）。</param>
+    public WorkshopImageCache(
+        IFileSystem files,
+        IAssetDownloader assets,
+        WorkshopInfoCache info,
+        CoverDiskQuota? quota = null)
     {
         _files = files;
         _assets = assets;
         _info = info;
+        _quota = quota;
     }
 
     /// <summary>本地已存在的封面路径；没有则返回 null。</summary>
@@ -105,6 +112,7 @@ public sealed class WorkshopImageCache
 
         var key = WorkshopInfoCache.Key(source, id);
         _info.SetCover(key, relative + Path.GetExtension(local), url);
+        _quota?.RequestSweep();
         return local;
     }
 
@@ -157,9 +165,15 @@ public sealed class WorkshopImageCache
         }
 
         _files.EnsureDirectory(directory);
-        return await _assets
+        var shot = await _assets
             .DownloadAsync(url, _files.Combine(directory, stem), cancellationToken)
             .ConfigureAwait(true);
+        if (!string.IsNullOrWhiteSpace(shot))
+        {
+            _quota?.RequestSweep();
+        }
+
+        return shot;
     }
 
     /// <summary>截图落地的绝对目录。</summary>
