@@ -22,7 +22,7 @@ public sealed partial class AccountPage : Page
 {
     private readonly AccountViewModel _viewModel;
 
-    /// <summary>页面生命周期令牌；NavigationCacheMode=Required 会在返回页面时重建。</summary>
+    /// <summary>页面生命周期令牌；页面不缓存（NavigationCacheMode=Disabled），每次进入都会重建。</summary>
     private CancellationTokenSource _lifetime = new();
 
     /// <summary>成功提示自动收起的计时器；错误提示必须由用户自己关掉。</summary>

@@ -14,7 +14,7 @@ using PdxLauncher.Core.Contracts;
 public sealed partial class DlcPage : Page
 {
     private readonly DlcViewModel _viewModel;
-    /// <summary>页面生命周期令牌；NavigationCacheMode=Required 会在返回页面时重建。</summary>
+    /// <summary>页面生命周期令牌；页面不缓存（NavigationCacheMode=Disabled），每次进入都会重建。</summary>
     private CancellationTokenSource _lifetime = new();
 
     /// <summary>重载协调器：连点游戏时取消旧重载，只应用最新那次的结果。</summary>

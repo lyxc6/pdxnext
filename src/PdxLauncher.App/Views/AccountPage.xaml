@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:PdxLauncher.App.Controls"
     xmlns:svc="using:PdxLauncher.App.Services"
-    NavigationCacheMode="Required"
+    NavigationCacheMode="Disabled"
     Background="{ThemeResource PdxPageVeilBrush}">
 
     <!--
