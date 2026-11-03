@@ -936,9 +936,9 @@ data\workshop-info\
 - 路径：`PdxDatabase.GetDefaultPath()` = `PdxDataRoot.Directory` + `pdxnext.sqlite`（即 `data\pdxnext.sqlite`）。
 - 访问层：`src/PdxLauncher.Core/Playsets/SqliteConnection.cs`（P/Invoke `winsqlite3.dll`，不引 NuGet）。
 - 封装：`src/PdxLauncher.Core/Storage/PdxDatabase.cs`；建表由 `EnsureSchema()` 用
-  `CREATE TABLE IF NOT EXISTS` 幂等完成，版本记在 `meta.schema_version`（当前 `1`）。
+  `CREATE TABLE IF NOT EXISTS` 幂等完成，版本记在 `meta.schema_version`（当前 `2`）。
 
-### 20.1 表结构（v1）
+### 20.1 表结构（v2）
 
 | 表 | 主键 | 列 |
 | --- | --- | --- |
@@ -950,8 +950,17 @@ data\workshop-info\
 | `playsets` | `(gameId, id)` | `name`、`isActive`、`loadOrder`、`createdOn`、`updatedOn` |
 | `playsets_mods` | —（`gameId, playsetId, modId` 唯一） | `enabled`、`position` |
 | `playsets_dlcs` | —（`gameId, playsetId, dlcId` 唯一） | `enabled` |
+| `workshop_items` | `(source, id)` | `game_id`、`name`、`author`、`rating`、`ratings_total`、`subscriptions`、`updated_utc`、`size_bytes`、`cover_url`、`cover_file`、`cover_fetched_utc`、`detail_text`、`detail_screenshots`（JSON）、`detail_fetched_utc`、`fetched_utc`、`creator_steam_id`、`tags`（JSON）、`views`、`lifetime_subscriptions` |
+| `workshop_pages` | `published_file_id` | `fetched_utc`、`payload`（整页 JSON） |
 
-索引：`ix_mods_game`、`ix_playsets_mods(gameId, playsetId, position)`、`ix_playsets_dlcs(gameId, playsetId)`。
+索引：`ix_mods_game`、`ix_playsets_mods(gameId, playsetId, position)`、`ix_playsets_dlcs(gameId, playsetId)`、
+`ix_workshop_items_game(game_id, fetched_utc)`、`ix_workshop_items_fetched(fetched_utc)`。
+
+**v1 → v2（2026-11-03）**：工坊条目与工坊分页从 `documents` 的一整段 JSON 改成上面两张真表。
+原因：条目 500+、单条详情最大 9 KB，整份序列化每次刷新都要重写几百 KB，且启动时全量反序列化；
+真表可以只读写命中的那一行，并按 `fetched_utc` 在 SQL 里淘汰最旧。迁移在 `Open()` 里由
+`EnsureWorkshopImport(connection)` 完成，meta 键 `workshop-import-v2` 做幂等闸门：
+读旧 `documents` 两键 → 逐条导入 → 删旧行 → 写 `done`；任一步解析失败只 Warn 并保留旧行，下次启动重试。
 所有领域表都带 `gameId`，一个库服务所有游戏；跨游戏查询一律被 `gameId` 隔开（自检 `OwnPlaysetRepositoryChecks.CheckGameIsolation` 盯着这条）。
 
 `PRAGMA`：`journal_mode=DELETE`（不产生 `-wal` / `-shm` 两个尾巴文件）、`foreign_keys=OFF`（官方库窄表没有外键，
@@ -959,7 +968,7 @@ data\workshop-info\
 
 ### 20.2 为什么 settings / session / 缓存是「一整段 JSON 一行」
 
-读取方本来就是「整份加载 → 内存对象 → 改完整份写回」（`AppSettingsStore`、`PdxSessionStore`、六个缓存服务全是这个形态）。
+读取方本来就是「整份加载 → 内存对象 → 改完整份写回」（`AppSettingsStore`、`PdxSessionStore`、以及主题素材/DLC 简介/新闻/mod 缩略图四个缓存服务仍是这个形态）。
 拆成列要重写 `AppSettings` 40+ 字段与嵌套 model，风险远大于收益。
 **领域数据（mods / playsets）才用真关系表**，因为要按 `position` 排序、按 `gameId` 过滤、按 `modId` 聚合播放集归属。
 
@@ -969,8 +978,8 @@ data\workshop-info\
 | --- | --- | --- |
 | `settings` | `AppSettings` | `data\settings.json` |
 | `session` | PDX 账号会话（DPAPI 保护后的密文仍在 JSON 里） | `data\pdx-session.json` |
-| `cache:workshop-info` | 工坊信息索引（见 §19） | `data\workshop-info.json` |
-| `cache:workshop-pages` | 物品页 HTML 缓存索引 | `data\workshop-pages.json` |
+| ~~`cache:workshop-info`~~ | **v2 起改真表 `workshop_items`**（旧键只在迁移时读一次） | `data\workshop-info.json` |
+| ~~`cache:workshop-pages`~~ | **v2 起改真表 `workshop_pages`**（旧键只在迁移时读一次） | `data\workshop-pages.json` |
 | `cache:news-cards` | Braze 公告 | `data\news-cards.json` |
 | `cache:dlc-descriptions` | DLC 简介（见 §7.2） | `data\dlc-descriptions.json` |
 | `cache:mod-thumbnails` | Mod 缩略图索引 | `data\mod-thumbnails.json` |
@@ -978,7 +987,13 @@ data\workshop-info\
 | `cache:theme-assets:<gameId>` | 主题素材索引（每游戏一条） | `data\<gameId>.assets.json` |
 
 磁盘只保留图片本身（`theme-cache\`、`news-cache\`、`mod-cache\`、`workshop-info\`、`image-cache\`），
-索引 JSON 已全部入库。
+索引 JSON 已全部入库。`workshop-info\` 目录（工坊封面/截图）另有 100 MB 磁盘配额：
+`CoverDiskQuota` 启动时后台扫一轮、每次下载后再防抖扫一轮，超限按「最久没写过」删到 90 MB，
+最近 10 分钟内写过的文件不删。
+
+剩余四个 JSON 文档（主题素材、DLC 简介、新闻卡片、mod 缩略图索引）的写入走
+`DebouncedDocumentFile`：500 ms 内多次改只落盘一次，窗口关闭时由 `AppServices.FlushCaches()`
+统一 `FlushAll()`。`settings` / `session` 仍是立即写。
 
 ### 20.3 备份、迁移、自愈
 
