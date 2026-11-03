@@ -55,7 +55,8 @@ public sealed partial class WorkshopDetailPage : Page
                 AppServices.FileSystem,
                 AppServices.Assets,
                 AppServices.WorkshopInfo,
-                AppServices.Covers),
+                AppServices.Covers,
+                path => ThumbnailVariants.GenerateInBackground(AppServices.FileSystem, AppServices.Logger, path, CancellationToken.None)),
             new WorkshopSubscriptionService(
                 AppServices.PdxMods,
                 AppServices.Account,

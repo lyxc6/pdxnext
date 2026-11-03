@@ -30,6 +30,7 @@ public sealed class WorkshopImageCache
     private readonly IAssetDownloader _assets;
     private readonly WorkshopInfoCache _info;
     private readonly CoverDiskQuota? _quota;
+    private readonly Action<string>? _onCoverSaved;
 
     /// <summary>
     /// 同一张图并发落地时只下载一次。实测触发点：详情页顶部图片墙与正文配图
@@ -42,16 +43,19 @@ public sealed class WorkshopImageCache
     /// <param name="assets">下载器。</param>
     /// <param name="info">工坊信息缓存（提供缓存根与封面记账）。</param>
     /// <param name="quota">封面目录配额；下载成功后安排一轮清理，null 表示不清理（自检用）。</param>
+    /// <param name="onCoverSaved">封面落盘后的回调（App 层用来生成 96/256 两档小图）；null 表示不做。</param>
     public WorkshopImageCache(
         IFileSystem files,
         IAssetDownloader assets,
         WorkshopInfoCache info,
-        CoverDiskQuota? quota = null)
+        CoverDiskQuota? quota = null,
+        Action<string>? onCoverSaved = null)
     {
         _files = files;
         _assets = assets;
         _info = info;
         _quota = quota;
+        _onCoverSaved = onCoverSaved;
     }
 
     /// <summary>本地已存在的封面路径；没有则返回 null。</summary>
@@ -113,6 +117,9 @@ public sealed class WorkshopImageCache
         var key = WorkshopInfoCache.Key(source, id);
         _info.SetCover(key, relative + Path.GetExtension(local), url);
         _quota?.RequestSweep();
+
+        // 下载的是 1900px 原图，列表只画 48–72px：交给回调顺手落 96/256 两档小图。
+        _onCoverSaved?.Invoke(local);
         return local;
     }
 
