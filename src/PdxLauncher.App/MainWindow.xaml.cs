@@ -558,6 +558,15 @@ public sealed partial class MainWindow : Window
             // 再把设置页的延迟写合并进来，最后立即写一次窗口尺寸。
             AppServices.FlushCaches();
             AppServices.FlushSettings();
+#if DEBUG
+            if (AppServices.IsInitialized)
+            {
+                MemoryDiagnostics.Log(
+                    AppServices.Logger,
+                    "窗口关闭",
+                    () => (AppServices.WorkshopInfo.Count, AppServices.WorkshopItemPages.Count, AppServices.ModThumbnails.Cache.Count));
+            }
+#endif
             var saved = AppServices.SaveSettings();
             if (!saved.IsSuccess)
             {
