@@ -147,7 +147,7 @@
                                                          HorizontalAlignment="Center"
                                                          VerticalAlignment="Center"
                                                          Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasPath), Mode=OneWay}" />
-                                                <Image Source="{x:Bind svc:XamlImage.FromPath(Path), Mode=OneWay}"
+                                                <Image Source="{x:Bind svc:XamlImage.FromPath(Path, 1024), Mode=OneWay}"
                                                        Stretch="Uniform"
                                                        Margin="8"
                                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(HasPath), Mode=OneWay}" />
@@ -199,7 +199,7 @@
                                                                      HorizontalAlignment="Center"
                                                                      VerticalAlignment="Center"
                                                                      Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasPath), Mode=OneWay}" />
-                                                            <Image Source="{x:Bind svc:XamlImage.FromPath(Path), Mode=OneWay}"
+                                                            <Image Source="{x:Bind svc:XamlImage.FromPath(Path, 200), Mode=OneWay}"
                                                                    Stretch="Uniform"
                                                                    Margin="6"
                                                                    Visibility="{x:Bind svc:XamlVisibility.FromBool(HasPath), Mode=OneWay}" />
@@ -813,7 +813,7 @@
                                 不限制就会被裁掉一大块（1x 也不能拖）。MaxWidth/MaxHeight 由页面按浮层尺寸算好，
                                 1x 刚好整张放进窗口，放大后才滚动。
                             -->
-                            <Image Source="{x:Bind svc:XamlImage.FromPath(Path), Mode=OneWay}"
+                            <Image Source="{x:Bind svc:XamlImage.FromPath(Path, 1600), Mode=OneWay}"
                                    Stretch="Uniform"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"

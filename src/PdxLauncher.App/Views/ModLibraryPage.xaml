@@ -129,7 +129,7 @@
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1">
                                 <Grid>
-                                    <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath), Mode=OneWay}"
+                                    <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath, 72), Mode=OneWay}"
                                            Stretch="Uniform"
                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(HasThumbnail), Mode=OneWay}" />
                                     <FontIcon Glyph="&#xE8B9;"

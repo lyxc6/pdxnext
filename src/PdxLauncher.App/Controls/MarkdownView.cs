@@ -374,7 +374,7 @@ public sealed partial class MarkdownView : ContentControl
         /// <summary>切到本地文件显示。</summary>
         public void Show(string path)
         {
-            var source = XamlImage.FromPath(path);
+            var source = XamlImage.FromPath(path, 1024);
             if (source is null)
             {
                 return;

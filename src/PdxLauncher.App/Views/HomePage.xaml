@@ -311,7 +311,7 @@
                                 AutomationProperties.AutomationId="imgNews_main"
                                 AutomationProperties.Name="{x:Bind L.HomeNewsImageName, Mode=OneWay}"
                                 Stretch="UniformToFill"
-                                Source="{x:Bind svc:XamlImage.FromPath(ViewModel.NewsMain.ImagePath), Mode=OneWay}"
+                                Source="{x:Bind svc:XamlImage.FromPath(ViewModel.NewsMain.ImagePath, 1024), Mode=OneWay}"
                                 Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.NewsMain.HasImage), Mode=OneWay}" />
                             <Border
                                 IsHitTestVisible="False"
@@ -383,7 +383,7 @@
                                 AutomationProperties.AutomationId="imgNews_secondary1"
                                 AutomationProperties.Name="{x:Bind L.HomeNewsImageName, Mode=OneWay}"
                                 Stretch="UniformToFill"
-                                Source="{x:Bind svc:XamlImage.FromPath(ViewModel.NewsSecondary1.ImagePath), Mode=OneWay}"
+                                Source="{x:Bind svc:XamlImage.FromPath(ViewModel.NewsSecondary1.ImagePath, 640), Mode=OneWay}"
                                 Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.NewsSecondary1.HasImage), Mode=OneWay}" />
                             <Border
                                 IsHitTestVisible="False"
@@ -455,7 +455,7 @@
                                 AutomationProperties.AutomationId="imgNews_secondary2"
                                 AutomationProperties.Name="{x:Bind L.HomeNewsImageName, Mode=OneWay}"
                                 Stretch="UniformToFill"
-                                Source="{x:Bind svc:XamlImage.FromPath(ViewModel.NewsSecondary2.ImagePath), Mode=OneWay}"
+                                Source="{x:Bind svc:XamlImage.FromPath(ViewModel.NewsSecondary2.ImagePath, 640), Mode=OneWay}"
                                 Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.NewsSecondary2.HasImage), Mode=OneWay}" />
                             <Border
                                 IsHitTestVisible="False"

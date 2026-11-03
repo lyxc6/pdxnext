@@ -132,6 +132,13 @@
                             ToolTipService.ToolTip="{x:Bind L.ModsAutoSortTooltip, Mode=OneWay}"
                             AutomationProperties.AutomationId="btnAutoSort"
                             AutomationProperties.Name="{x:Bind L.ModsAutoSortButtonName, Mode=OneWay}" />
+                    <!-- 扫描期间才出现：不绑 IsEditorEnabled，否则 IsBusy 会把它一起禁用。 -->
+                    <Button Content="{x:Bind L.ModsAutoSortCancel, Mode=OneWay}"
+                            Click="OnAutoSortCancelClick"
+                            Visibility="{x:Bind ViewModel.IsAutoSortRunning, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind L.ModsAutoSortCancel, Mode=OneWay}"
+                            AutomationProperties.AutomationId="btnAutoSortCancel"
+                            AutomationProperties.Name="{x:Bind L.ModsAutoSortCancel, Mode=OneWay}" />
                     <Button Content="{x:Bind L.ModsAutoSortUndo, Mode=OneWay}"
                             Click="OnUndoAutoSortClick"
                             IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
@@ -228,7 +235,7 @@
                                         Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                         BorderThickness="1">
-                                    <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath), Mode=OneWay}"
+                                    <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath, 72), Mode=OneWay}"
                                            Stretch="Uniform" />
                                 </Border>
 

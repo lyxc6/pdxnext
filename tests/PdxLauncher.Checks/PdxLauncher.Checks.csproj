@@ -91,5 +91,12 @@
       不会崩，只在预览对话框里给出错误的排序理由，编译器看不见，所以由 AutoSortDiffChecks 钉住。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\AutoSortDiff.cs" Link="Linked\AutoSortDiff.cs" />
+    <!--
+      图片按显示尺寸解码：目标宽度换算（纯算术）与文件头宽度解析（只碰 System.Buffers / System.IO）。
+      两块都不引用 UI 类型，可以原样链接进来。它们错了不会崩，只会在真机上表现为「图糊了」
+      或「内存没降下来」，编译器看不见，所以由 ImageDecodeSizeChecks 钉住口径。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\ImageDecodeSize.cs" Link="Linked\ImageDecodeSize.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\ImagePixelSize.cs" Link="Linked\ImagePixelSize.cs" />
   </ItemGroup>
 </Project>

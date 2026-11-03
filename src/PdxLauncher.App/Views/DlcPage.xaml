@@ -176,7 +176,7 @@
                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                           AutomationProperties.AccessibilityView="Raw"
                                           Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasThumbnail), Mode=OneWay}" />
-                                <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath), Mode=OneTime}"
+                                <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath, 208), Mode=OneTime}"
                                        Stretch="UniformToFill"
                                        AutomationProperties.Name="{x:Bind DisplayName, Mode=OneTime}" />
                             </Grid>

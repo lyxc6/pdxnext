@@ -14,10 +14,15 @@ public sealed class BitmapLoader
 {
     private const int MaxCacheEntries = 64;
 
+    /// <summary>缓存按解码后大小估算的内存预算；超了就从最旧的开始丢，而不是整表清空。</summary>
+    private const long MaxCacheBytes = 24L * 1024 * 1024;
+
     private readonly IFileSystem _fileSystem;
     private readonly IAppLogger _logger;
     private readonly ThemeImageFlattener? _flattener;
-    private readonly Dictionary<string, ImageSource> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, LinkedListNode<CacheEntry>> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly LinkedList<CacheEntry> _lru = new();
+    private long _cacheBytes;
 
     public BitmapLoader(IFileSystem fileSystem, IAppLogger logger, ThemeImageFlattener? flattener = null)
     {
@@ -62,7 +67,9 @@ public sealed class BitmapLoader
             var cacheKey = path + "|" + decodePixelWidth;
             if (_cache.TryGetValue(cacheKey, out var cached))
             {
-                return cached;
+                _lru.Remove(cached);
+                _lru.AddFirst(cached);
+                return cached.Value.Image;
             }
 
             var bytes = await Task.Run(() => _fileSystem.ReadAllBytes(path), cancellationToken).ConfigureAwait(true);
@@ -79,12 +86,11 @@ public sealed class BitmapLoader
                 return null;
             }
 
-            if (_cache.Count >= MaxCacheEntries)
-            {
-                _cache.Clear();
-            }
-
-            _cache[cacheKey] = image;
+            var entry = new CacheEntry(cacheKey, image, EstimateBytes(bytes.Length, decodePixelWidth));
+            var node = _lru.AddFirst(entry);
+            _cache[cacheKey] = node;
+            _cacheBytes += entry.Bytes;
+            TrimCache();
             return image;
         }
         catch (OperationCanceledException)
@@ -99,7 +105,37 @@ public sealed class BitmapLoader
     }
 
     /// <summary>清空缓存（切换游戏主题时调用，避免旧主题图片占内存）。</summary>
-    public void ClearCache() => _cache.Clear();
+    public void ClearCache()
+    {
+        _cache.Clear();
+        _lru.Clear();
+        _cacheBytes = 0;
+    }
+
+    /// <summary>解码后占多少内存的粗估：知道目标宽度就按 ARGB 算，否则按源文件大小放大。</summary>
+    private static long EstimateBytes(int sourceBytes, int decodePixelWidth)
+    {
+        return decodePixelWidth > 0
+            ? 4L * decodePixelWidth * decodePixelWidth
+            : Math.Max(sourceBytes, 1) * 8L;
+    }
+
+    /// <summary>超过条数或内存预算就从队尾丢，至少留一条刚放进去的。</summary>
+    private void TrimCache()
+    {
+        while ((_cache.Count > MaxCacheEntries || _cacheBytes > MaxCacheBytes) && _lru.Count > 1)
+        {
+            var last = _lru.Last;
+            if (last is null)
+            {
+                return;
+            }
+
+            _lru.RemoveLast();
+            _cache.Remove(last.Value.Key);
+            _cacheBytes -= last.Value.Bytes;
+        }
+    }
 
     private static async Task<ImageSource?> CreateImageAsync(
         byte[] bytes,
@@ -137,4 +173,6 @@ public sealed class BitmapLoader
         await bitmap.SetSourceAsync(stream);
         return bitmap;
     }
+
+    private sealed record CacheEntry(string Key, ImageSource Image, long Bytes);
 }

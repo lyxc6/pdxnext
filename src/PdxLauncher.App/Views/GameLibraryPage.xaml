@@ -115,7 +115,7 @@
                                 <Image
                                     AutomationProperties.AutomationId="{x:Bind CoverAutomationId, Mode=OneTime}"
                                     AutomationProperties.Name="{x:Bind DisplayName, Mode=OneTime}"
-                                    Source="{x:Bind svc:XamlImage.FromPath(CoverImagePath), Mode=OneTime}"
+                                    Source="{x:Bind svc:XamlImage.FromPath(CoverImagePath, 320), Mode=OneTime}"
                                     Stretch="UniformToFill" />
                                 <TextBlock
                                     Margin="12,0"

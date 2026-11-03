@@ -129,7 +129,7 @@
                                     Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1">
-                                <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath), Mode=OneWay}"
+                                <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath, 72), Mode=OneWay}"
                                        Stretch="Uniform" />
                             </Border>
 
