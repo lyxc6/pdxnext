@@ -27,6 +27,16 @@ public static class Program
     /// </summary>
     private static Mutex? _appMutex;
 
+    /// <summary>
+    /// 更新流程在启动安装器前主动释放 mutex：安装器启动时若仍看到 mutex 会直接判定
+    /// “程序正在运行”并退出，等不到 CloseApplications 去关窗口。
+    /// </summary>
+    public static void ReleaseAppMutex()
+    {
+        var mutex = Interlocked.Exchange(ref _appMutex, null);
+        mutex?.Dispose();
+    }
+
     /// <summary>入口。</summary>
     [STAThread]
     public static int Main(string[] args)

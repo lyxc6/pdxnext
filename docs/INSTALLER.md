@@ -118,11 +118,11 @@ dist\installer\update.json
 更新清单默认地址：
 
 ```
-https://github.com/lyxc6/pdxnext-releases/releases/latest/download/update.json
+https://github.com/lyxc6/pdxnext/releases/latest/download/update.json
 ```
 
-主源码仓库可以保持私有；**发布仓库必须是公开的**（例如 `lyxc6/pdxnext-releases`），
-否则启动器匿名下载会 404/401。第一次发布前先在 GitHub 上创建这个公开仓库。
+源码与安装包都放在公开仓库 `lyxc6/pdxnext`；仓库必须是公开的，否则启动器匿名下载会 404/401。
+发布走 GitHub Actions（`.github/workflows/release.yml`），推 `v*` tag 时自动构建并上传资产。
 
 ```powershell
 $env:GITHUB_TOKEN = "ghp_..."
@@ -142,10 +142,10 @@ $env:GITHUB_TOKEN = "ghp_..."
 {
   "schemaVersion": 1,
   "version": "1.0.0",
-  "setupUrl": "https://github.com/lyxc6/pdxnext-releases/releases/download/v1.0.0/PdxNext-Setup-1.0.0.exe",
+  "setupUrl": "https://github.com/lyxc6/pdxnext/releases/download/v1.0.0/PdxNext-Setup-1.0.0.exe",
   "sha256": "64 位小写十六进制",
   "size": 67576019,
-  "releaseNotesUrl": "https://github.com/lyxc6/pdxnext-releases/releases/tag/v1.0.0",
+  "releaseNotesUrl": "https://github.com/lyxc6/pdxnext/releases/tag/v1.0.0",
   "releaseNotes": "PdxNext 1.0.0",
   "mandatory": false,
   "publishedUtc": "2026-11-03T11:37:53Z"

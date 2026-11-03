@@ -1,4 +1,4 @@
-namespace PdxLauncher.Checks;
+﻿namespace PdxLauncher.Checks;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Configuration;
@@ -64,7 +64,7 @@ public static class UpdateChecks
         Console.WriteLine("[UpdateChecks] 更新清单校验");
 
         var sha = new string('a', 64);
-        var valid = BuildJson("1.2.3", "https://github.com/lyxc6/pdxnext-releases/releases/download/v1.2.3/PdxNext-Setup-1.2.3.exe", sha, 123456);
+        var valid = BuildJson("1.2.3", "https://github.com/lyxc6/pdxnext/releases/download/v1.2.3/PdxNext-Setup-1.2.3.exe", sha, 123456);
         ChecksContext.Check("合法清单通过", UpdateManifest.TryParse(valid, out var manifest, out var error), error);
         ChecksContext.Check("合法清单不是 null", manifest is not null);
         if (manifest is not null)
@@ -87,7 +87,7 @@ public static class UpdateChecks
         var notesOverHttp = valid[..^1] + ",\"releaseNotesUrl\":\"http://example.com/notes\"}";
         Reject("拒绝 http 发布说明", notesOverHttp);
 
-        var notesHttps = valid[..^1] + ",\"releaseNotesUrl\":\"https://github.com/lyxc6/pdxnext-releases/releases/tag/v1.2.3\"}";
+        var notesHttps = valid[..^1] + ",\"releaseNotesUrl\":\"https://github.com/lyxc6/pdxnext/releases/tag/v1.2.3\"}";
         ChecksContext.Check("接受 https 发布说明", UpdateManifest.TryParse(notesHttps, out _, out var notesError), notesError);
 
         ChecksContext.Check("空清单被拒绝", !UpdateManifest.TryParse(null, out _, out _));

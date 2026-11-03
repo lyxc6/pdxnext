@@ -193,6 +193,8 @@ internal static class UpdateFlow
 
             host.Close();
 
+            // 安装器会检查 AppMutex；先释放再启动，让 CloseApplications 有机会正常关窗。
+            Program.ReleaseAppMutex();
             var launch = AppServices.Updates.LaunchInstaller(setupPath);
             if (launch.ElevationCanceled)
             {

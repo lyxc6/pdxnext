@@ -179,13 +179,13 @@ python tools\build-installer.py
 ```
 
 自动更新清单默认是
-`https://github.com/lyxc6/pdxnext-releases/releases/latest/download/update.json`，发布仓库
-必须公开；上传用 `tools\publish-release.ps1`。启动器检查 24 小时节流、下载时边写边算
+`https://github.com/lyxc6/pdxnext/releases/latest/download/update.json`，仓库必须公开；
+发布走 GitHub Actions（推 `v*` tag 自动构建并上传），本地也可用 `tools\publish-release.ps1`。启动器检查 24 小时节流、下载时边写边算
 SHA-256、校验长度/摘要后按安装模式静默安装或提权安装。
 
 版本号唯一来源是 `version.props`；安装器排除 `data\`、`data-root.txt`、`*.log` 和
 `update-cache\`，升级不覆盖用户数据。完整流程、MSIX 取舍和实机验证清单见
-[docs/INSTALLER.md](docs/INSTALLER.md)。
+[docs/INSTALLER.md](docs/INSTALLER.md)；版本规则见 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
 ---
 

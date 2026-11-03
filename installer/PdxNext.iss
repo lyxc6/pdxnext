@@ -1,4 +1,4 @@
-; PdxNext installer (Inno Setup 7.1.1+).
+﻿; PdxNext installer (Inno Setup 7.1.1+).
 ; Build with tools/build-installer.py, which passes Version, FileVersion,
 ; PayloadDir and OutputDir. The script can also be compiled directly:
 ;   ISCC.exe installer\PdxNext.iss /DVersion=1.0.0 /DFileVersion=1.0.0.0 ^
@@ -23,7 +23,7 @@
 #define AppName "PdxNext"
 #define AppPublisher "lyxc6"
 #define AppUrl "https://github.com/lyxc6/pdxnext"
-#define ReleasesUrl "https://github.com/lyxc6/pdxnext-releases/releases"
+#define ReleasesUrl "https://github.com/lyxc6/pdxnext/releases"
 
 [Setup]
 AppId={{A2E3D5E1-5133-46BA-A846-1388A878E1A7}

@@ -1,9 +1,9 @@
-<#
+﻿<#
 .SYNOPSIS
   Publish the PdxNext installer and update manifest to a public GitHub release.
 
 .DESCRIPTION
-  Requires a token with repo scope for lyxc6/pdxnext-releases:
+  Requires a token with repo scope for lyxc6/pdxnext:
     $env:GITHUB_TOKEN = "ghp_..."
   The repository must exist and be public. The script creates the release if
   needed, replaces the two assets, and uploads update.json last so
@@ -16,7 +16,7 @@
 param(
     [string]$Version = "",
     [string]$Tag = "",
-    [string]$Repo = "lyxc6/pdxnext-releases",
+    [string]$Repo = "lyxc6/pdxnext",
     [string]$InstallerDir = "dist\installer",
     [string]$Token = $env:GITHUB_TOKEN,
     [string]$NotesFile = "",

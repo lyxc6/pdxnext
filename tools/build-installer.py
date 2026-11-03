@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Build the PdxNext installer and update manifest.
 
 The payload is the already-published, self-contained directory produced by
@@ -33,7 +33,7 @@ VERSION_PROPS = ROOT / "version.props"
 ISS = ROOT / "installer" / "PdxNext.iss"
 DEFAULT_PAYLOAD = ROOT / "dist" / "PdxNext"
 DEFAULT_OUTPUT = ROOT / "dist" / "installer"
-DEFAULT_REPO = "lyxc6/pdxnext-releases"
+DEFAULT_REPO = "lyxc6/pdxnext"
 REQUIRED_PAYLOAD = [
     "PdxLauncher.App.exe",
     "PdxLauncher.App.pri",

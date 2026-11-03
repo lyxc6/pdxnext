@@ -59,6 +59,7 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-11-03 17:50 追加：创意工坊描述支持 BBCode 与字节上限 —— Steam 的标题 / 描述是定长字符缓冲（128 / 8000），描述格式是社区方言 BBCode（`[h1]`–`[h3]`、`[list]`、`[url=]`、`[img]`、`[hr]`、裸链接自动小部件），此前我们既没校验长度也没做任何富文本；现按 UTF-8 字节三层拦截（`ModPublishLimits` → 宿主 → 上传页）、新增 `SteamBbCodeParser`（BBCode → 现有 `MarkdownDocument` AST，详情页兜底与上传页预览共用）并顺手修掉 `[hr]` / `[olist]` 残留与两份 `ToPlainText` 分叉；上传页描述框上方加 11 键工具条、下方加实时预览，自检 73→80；见 §0.73。**
 **2026-11-03 16:40 追加：Mod 创建页三处 UI 修正 —— 列表徽标不再原样显示 `{0}`（改为短文案 `PublicationBadgeText`，根因是 `Localizer.Format` 无参返回模板原文）、删掉详情面板顶部多余的小标题、上传成功 / 取消 / 切换选中都能回到详情面板（此前成功分支走 `resetPane: false`、取消分支不切面板，进去就出不来）；顺带新增 `LocalizationBindingChecks`（裸绑 `{x:Bind L.Xxx}` 的键模板不许含 `{n}`）与 `ModStudioPaneChecks`，自检 71→73；见 §0.72。**
 **2026-11-03 20:00 追加：Windows 安装包与自动更新落地 —— Inno Setup 7.1.1 双模式安装器（默认每用户无 UAC / 可选每机器）、公开 GitHub Releases 的 `update.json`、启动检查 + 下载校验 + 静默/提权安装、设置页「关于与更新」、每机器数据回退到 `%LOCALAPPDATA%\PdxNext-Data`；自检 83 类全过；见 §0.74。**
+**2026-11-03 20:45 追加：发布链路改 GitHub Actions —— 推 `v*` tag 自动构建、自检、生成 Inno 安装器并上传 Release；新增 SemVer 版本规范 `docs/VERSIONING.md`、`CHANGELOG.md`、CI 工作流；发布仓库统一为公开的 `lyxc6/pdxnext`；见 §0.75。**
 
 ## 0.74 最新一轮（2026-11-03 19:00–20:00）：安装包与自动更新
 
@@ -111,16 +112,48 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 
 - `dotnet build PdxLauncher.sln -c Release -m:1`：0 警告 0 错误。
 - `dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"`：
-  83 类 / 0 失败（新增 `UpdateChecks`：版本、清单、安装模式 marker）。
+  85 类 / 0 失败（含 `UpdateChecks`、`LocalizationBindingChecks`）。
 - `python tools\build-installer.py`：成功生成 `PdxNext-Setup-1.0.0.exe` + `update.json`。
 - 尚未做：真实安装/卸载、每机器 UAC 更新、GitHub 发布仓库创建与上传、代码签名。
 
 ### 0.74.5 下一步
 
 1. 刷新 `publish.cmd` 后重新打安装包（安装器 payload 必须是修过文案的最新 `dist\PdxNext`）。
-2. 在 GitHub 建公开仓库 `lyxc6/pdxnext-releases`，用 `tools\publish-release.ps1` 上传。
+2. 发布仓库统一为公开的 `lyxc6/pdxnext`，推 `v*` tag 由 GitHub Actions 自动上传。
 3. 按 `docs/INSTALLER.md` §7 做每用户/每机器安装、升级、取消 UAC、校验失败实机验证。
 4. 如需对外分发，补 Authenticode 证书与 `SignTool` / `SignedUninstaller=yes`。
+
+## 0.75 最新一轮（2026-11-03 20:35–21:00）：GitHub Actions 与版本规范
+
+> 用户诉求原话（m00822）：「项目地址：https://github.com/lyxc6/pdxnext / 1.可以更改为GitHub Actions / 2.同时规范下项目的接下来的各种更改，做好版本号规划 / 3.推送下最近的更新内容」
+
+### 0.75.1 发布改为 Actions
+
+- `.github/workflows/release.yml`：`push` tag `v*` 或手动触发；`windows-latest`；
+  checkout `fetch-depth: 0`；`setup-dotnet 10.0.x`；临时把 `NuGet.config` 换成 nuget.org；
+  静默安装 Inno Setup 7.1.1 x64 并定位 `ISCC.exe`；校验 tag 与 `version.props` 一致；
+  跑 `publish.cmd`（含自检）与 `tools/build-installer.py`；上传 artifact；
+  `softprops/action-gh-release@v2` 上传 `PdxNext-Setup-*.exe` 与 `update.json`。
+- `.github/workflows/ci.yml`：push main / PR / 手动；构建 + 跑 `PdxLauncher.Checks.dll`。
+- 发布仓库从 `lyxc6/pdxnext-releases` 统一回 `lyxc6/pdxnext`，因为源码仓库已公开；
+  `UpdateService.DefaultManifestUri`、安装器 `ReleasesUrl`、`build-installer.py`、
+  `publish-release.ps1`、`UpdateChecks` 与文档全部同步。
+- 本地脚本仍保留：`tools/publish-release.ps1` 用 `GITHUB_TOKEN` 调 GitHub REST，作为 Actions 之外的手动兜底。
+
+### 0.75.2 版本规范
+
+- `docs/VERSIONING.md`：SemVer；`version.props` 是唯一版本源；MAJOR/MINOR/PATCH 判定；
+  预发布只手动分发、不进 `latest` 清单；发版顺序（改版本 → 更新 CHANGELOG → 本地验证 → 推 main →
+  打 tag → Actions 校验/构建/上传 → 验证 latest → 旧版本实测升级）。
+- `CHANGELOG.md`：`[Unreleased]` + `[1.0.0] - 2026-11-03` 首个公开版本。
+- 安装器 AppId 固定为 `A2E3D5E1-5133-46BA-A846-1388A878E1A7`，升级不能变。
+
+### 0.75.3 验证
+
+- `dotnet build PdxLauncher.sln -c Release -m:1`：0 警告 0 错误。
+- `dotnet tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll`：85 类 / 0 失败。
+- `python tools\gen-i18n.py --check`：通过（1135 键）。
+- 尚未做：提交并推送、Actions 首次运行验证、`v1.0.0` tag、Release 资产可访问性/安装实测。
 
 ## 0.60 最新一轮（2026-10-31 13:00–17:00）：新增「Mod 创建」页
 

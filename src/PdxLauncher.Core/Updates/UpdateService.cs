@@ -1,4 +1,4 @@
-namespace PdxLauncher.Core.Updates;
+﻿namespace PdxLauncher.Core.Updates;
 
 using System.ComponentModel;
 using System.Diagnostics;
@@ -47,9 +47,9 @@ public sealed record UpdateLaunchResult(bool Started, bool ElevationCanceled, st
 /// </summary>
 public sealed class UpdateService
 {
-    /// <summary>默认公开清单地址；发布仓库与主仓库分开，避免把源码历史当更新通道。</summary>
+    /// <summary>默认公开清单地址；安装包与源码放在同一个公开仓库，走 Releases 静态资产。</summary>
     public static readonly Uri DefaultManifestUri =
-        new("https://github.com/lyxc6/pdxnext-releases/releases/latest/download/update.json");
+        new("https://github.com/lyxc6/pdxnext/releases/latest/download/update.json");
 
     /// <summary>自动检查的节流窗口。</summary>
     public static readonly TimeSpan CheckInterval = TimeSpan.FromHours(24);
