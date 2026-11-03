@@ -13,6 +13,7 @@ using PdxLauncher.Core.Online.Translation;
 public sealed class LocalTranslationRuntime : IDisposable
 {
     private readonly IAppLogger _logger;
+    private readonly object _sync = new();
     private BergamotTranslationEngine? _bergamot;
     private IndexTranslateEngine? _indexTranslate;
     private bool _disposed;
@@ -51,15 +52,42 @@ public sealed class LocalTranslationRuntime : IDisposable
     /// </summary>
     public IReadOnlyList<ITranslationEngine> CreateEngines()
     {
-        var engines = new List<ITranslationEngine>(2);
+        lock (_sync)
+        {
+            var engines = new List<ITranslationEngine>(2);
 
-        _indexTranslate ??= new IndexTranslateEngine(_logger, Glossary, Store);
-        engines.Add(_indexTranslate);
+            _indexTranslate ??= new IndexTranslateEngine(_logger, Glossary, Store);
+            engines.Add(_indexTranslate);
 
-        _bergamot ??= new BergamotTranslationEngine(_logger, Glossary, Store);
-        engines.Add(_bergamot);
+            _bergamot ??= new BergamotTranslationEngine(_logger, Glossary, Store);
+            engines.Add(_bergamot);
 
-        return engines;
+            return engines;
+        }
+    }
+
+    /// <summary>
+    /// 空闲时卸载本地引擎：模型权重（Index-Translate 约 1.2GB）只在下次翻译时重新加载。
+    /// <para>
+    /// 调用方必须先确认没有在途翻译——引擎被 Dispose 后再用会抛异常。
+    /// </para>
+    /// </summary>
+    /// <returns>真的卸掉了东西返回 true；本来就没加载返回 false。</returns>
+    public bool ReleaseEngines()
+    {
+        lock (_sync)
+        {
+            if (_indexTranslate is null && _bergamot is null)
+            {
+                return false;
+            }
+
+            _bergamot?.Dispose();
+            _bergamot = null;
+            _indexTranslate?.Dispose();
+            _indexTranslate = null;
+            return true;
+        }
     }
 
     /// <summary>下载并安装模型。</summary>
@@ -78,9 +106,12 @@ public sealed class LocalTranslationRuntime : IDisposable
         }
 
         _disposed = true;
-        _bergamot?.Dispose();
-        _bergamot = null;
-        _indexTranslate?.Dispose();
-        _indexTranslate = null;
+        lock (_sync)
+        {
+            _bergamot?.Dispose();
+            _bergamot = null;
+            _indexTranslate?.Dispose();
+            _indexTranslate = null;
+        }
     }
 }

@@ -25,12 +25,18 @@ public sealed class TranslationCoordinator : IDisposable
     /// <summary>同时进行的翻译批次数上限。</summary>
     public const int MaxConcurrency = 4;
 
+    /// <summary>
+    /// 本地模型空闲多久后卸载权重；下次翻译会重新加载（Index-Translate 权重约 1.2GB）。
+    /// </summary>
+    public static readonly TimeSpan IdleUnloadDelay = TimeSpan.FromMinutes(5);
+
     private readonly ITranslationTransport _transport;
     private readonly TranslationCache? _cache;
     private readonly IAppLogger _logger;
     private readonly LocalTranslationRuntime? _local;
     private readonly SemaphoreSlim _gate = new(MaxConcurrency, MaxConcurrency);
     private readonly object _stateLock = new();
+    private readonly Timer _idleTimer;
 
     private CancellationTokenSource _settingsCts = new();
     private bool _disposed;
@@ -53,6 +59,7 @@ public sealed class TranslationCoordinator : IDisposable
         _cache = cache;
         _logger = logger;
         _local = local;
+        _idleTimer = new Timer(OnIdleTick, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
 
         // 界面语言变了，目标语言（默认跟随界面）也会变：作废在途批次并重新授权主机。
         Localizer.Instance.LanguageChanged += OnLanguageChanged;
@@ -186,6 +193,9 @@ public sealed class TranslationCoordinator : IDisposable
         finally
         {
             _gate.Release();
+
+            // 批次结束后开始计时：空闲够久就把本地模型权重卸掉，别让 1.2GB 常驻到退出。
+            ArmIdleUnload();
         }
     }
 
@@ -428,6 +438,46 @@ public sealed class TranslationCoordinator : IDisposable
         }
     }
 
+    /// <summary>空闲计时到点：没有在途翻译就卸载本地模型权重，有就再等一轮。</summary>
+    private void OnIdleTick(object? state)
+    {
+        if (_disposed || _local is null)
+        {
+            return;
+        }
+
+        if (Activity.IsActive)
+        {
+            ArmIdleUnload();
+            return;
+        }
+
+        try
+        {
+            if (_local.ReleaseEngines())
+            {
+                _logger.Info("本地翻译模型已空闲卸载");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("卸载本地翻译模型失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>重新安排空闲卸载；协调器已释放时静默忽略。</summary>
+    private void ArmIdleUnload()
+    {
+        try
+        {
+            _idleTimer.Change(IdleUnloadDelay, Timeout.InfiniteTimeSpan);
+        }
+        catch (ObjectDisposedException)
+        {
+            // 协调器已释放，计时器已经没了，不需要再安排。
+        }
+    }
+
     /// <summary>界面语言变了：目标语言跟着变，在途批次作废。</summary>
     private void OnLanguageChanged(object? sender, EventArgs e) => NotifySettingsChanged();
 
@@ -445,6 +495,8 @@ public sealed class TranslationCoordinator : IDisposable
         }
 
         Localizer.Instance.LanguageChanged -= OnLanguageChanged;
+
+        _idleTimer.Dispose();
 
         var cts = _settingsCts;
         _settingsCts = new CancellationTokenSource();

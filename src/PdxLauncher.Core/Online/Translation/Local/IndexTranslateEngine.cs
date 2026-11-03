@@ -23,8 +23,13 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
     /// <summary>单次生成的最大 token 数。</summary>
     public const int MaxTokens = 512;
 
-    /// <summary>上下文窗口大小。</summary>
-    public const int ContextSize = 4096;
+    /// <summary>上下文窗口大小；2B 模型下 4096 的 KV 缓存约多占 60MB，2048 对逐段翻译够用。</summary>
+    public const int ContextSize = 2048;
+
+    /// <summary>
+    /// 单块输入的最大字符数。提示词里还要塞指令和术语表，所以正文不能把 2048 上下文吃满。
+    /// </summary>
+    public const int MaxInputChars = 900;
 
     private const string NewLine = "\n";
 
@@ -84,20 +89,28 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
             return null;
         }
 
-        var prompt = BuildPrompt(text, target);
+        var chunks = TranslationTextSplitter.SplitText(text, MaxInputChars);
 
         try
         {
             await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var output = await InferAsync(prompt, cancellationToken).ConfigureAwait(false);
-                if (string.IsNullOrWhiteSpace(output))
+                var builder = new StringBuilder();
+                foreach (var chunk in chunks)
                 {
-                    return null;
+                    var output = await InferAsync(BuildPrompt(chunk, target), cancellationToken)
+                        .ConfigureAwait(false);
+                    if (string.IsNullOrWhiteSpace(output))
+                    {
+                        return null;
+                    }
+
+                    builder.Append(output.Trim());
+                    AppendChunkTail(builder, chunk);
                 }
 
-                return output.Trim();
+                return builder.ToString().Trim();
             }
             finally
             {
@@ -147,6 +160,25 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
         return false;
     }
 
+    /// <summary>把分块末尾的分隔符补回来，拼接后的译文才保持原来的换行与空格。</summary>
+    private static void AppendChunkTail(StringBuilder builder, string chunk)
+    {
+        if (chunk.Length == 0)
+        {
+            return;
+        }
+
+        var tail = chunk[^1];
+        if (tail == '\n')
+        {
+            builder.Append('\n');
+        }
+        else if (tail == ' ')
+        {
+            builder.Append(' ');
+        }
+    }
+
     /// <summary>
     /// 拼提示词：词典为空时用最简指令，有词条时改用 instTrans 的硬约束格式。
     /// <para>
@@ -189,7 +221,9 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
         var weights = GetWeights();
         var modelParams = new ModelParams(ModelPath)
         {
-            GpuLayerCount = 99,
+            // 与 GetWeights 保持一致：CUDA / Vulkan 已关闭，全部层留在内存里，
+            // 写 99 只会让 LLamaSharp 白算一遍「哪些层能上 GPU」。
+            GpuLayerCount = 0,
             ContextSize = ContextSize,
         };
 

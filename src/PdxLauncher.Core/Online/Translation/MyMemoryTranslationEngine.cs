@@ -279,55 +279,8 @@ public sealed class MyMemoryTranslationEngine : ITranslationEngine
     /// </summary>
     /// <param name="text">原文。</param>
     /// <param name="maxChars">单块最大字符数。</param>
-    public static IReadOnlyList<string> SplitText(string text, int maxChars = MaxChunkChars)
-    {
-        ArgumentNullException.ThrowIfNull(text);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxChars);
-
-        if (text.Length <= maxChars)
-        {
-            return [text];
-        }
-
-        var chunks = new List<string>();
-        var start = 0;
-        while (start < text.Length)
-        {
-            var remaining = text.Length - start;
-            if (remaining <= maxChars)
-            {
-                chunks.Add(text[start..]);
-                break;
-            }
-
-            var window = text.AsSpan(start, maxChars);
-            var cut = -1;
-            for (var i = window.Length - 1; i > 0; i--)
-            {
-                if (IsCutCharacter(window[i]))
-                {
-                    cut = i + 1;
-                    break;
-                }
-            }
-
-            if (cut <= 0)
-            {
-                // 一整段没有任何标点：硬切，总比整段译不出来强。
-                cut = window.Length;
-            }
-
-            chunks.Add(text[start..(start + cut)]);
-            start += cut;
-        }
-
-        return chunks;
-    }
-
-    /// <summary>可以作为切点的字符：换行与中英句读符号。</summary>
-    private static bool IsCutCharacter(char value) =>
-        value is '\n' or '。' or '！' or '？' or '；' or '，' or '、'
-            or '.' or '!' or '?' or ';' or ',' or ' ';
+    public static IReadOnlyList<string> SplitText(string text, int maxChars = MaxChunkChars) =>
+        TranslationTextSplitter.SplitText(text, maxChars);
 
     /// <summary>
     /// 发一个请求并解析译文。
