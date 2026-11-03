@@ -162,7 +162,7 @@
                                                   Width="20" Height="20"
                                                   IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                                                   Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsBusy), Mode=OneWay}" />
-                                    <ToggleSwitch AutomationProperties.AutomationId="tglOnlineThemeRefresh"
+                                    <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglOnlineThemeRefresh"
                                                   AutomationProperties.Name="{x:Bind L.SettingsThemeOnlineOn, Mode=OneWay}"
                                                   IsOn="{x:Bind ViewModel.OnlineRefreshEnabled, Mode=TwoWay}" />
                                     <Button AutomationProperties.AutomationId="btnCheckThemeNow"
@@ -228,7 +228,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsInterfaceAlwaysOnTop, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglAlwaysOnTop"
+                                <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglAlwaysOnTop"
                                               AutomationProperties.Name="{x:Bind L.SettingsInterfaceAlwaysOnTopName, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.AlwaysOnTop, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>
@@ -381,7 +381,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsSteamStateOn, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglSteamWorkshopState"
+                                <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglSteamWorkshopState"
                                               AutomationProperties.Name="{x:Bind L.SettingsSteamStateOn, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.SteamStateEnabled, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>
@@ -391,7 +391,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsSteamSubscribeOn, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglSteamWorkshopSubscribe"
+                                <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglSteamWorkshopSubscribe"
                                               AutomationProperties.Name="{x:Bind L.SettingsSteamSubscribeOn, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.SteamSubscribeEnabled, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>
@@ -453,7 +453,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsDataDlcOnlineOn, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglOnlineDlcDescription"
+                                <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglOnlineDlcDescription"
                                               AutomationProperties.Name="{x:Bind L.SettingsDataDlcOnlineOn, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.DlcDescriptionOnlineEnabled, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>
@@ -472,7 +472,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsDataNewsOnlineOn, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglOnlineNewsFeed"
+                                <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglOnlineNewsFeed"
                                               AutomationProperties.Name="{x:Bind L.SettingsDataNewsOnlineOn, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.NewsFeedOnlineEnabled, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>
@@ -484,7 +484,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsModThumbnailsOnlineOn, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglOnlineModThumbnail"
+                                <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglOnlineModThumbnail"
                                               AutomationProperties.Name="{x:Bind L.SettingsModThumbnailsOnlineOn, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.ModThumbnailOnlineEnabled, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>
@@ -571,7 +571,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsDangerAllowOn, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglWriteDlcSignature"
+                                <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglWriteDlcSignature"
                                               AutomationProperties.Name="{x:Bind L.SettingsDangerAllowOn, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.WriteDlcSignature, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>
@@ -601,7 +601,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsTranslateEnabled, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglTranslateEnabled"
+                                <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglTranslateEnabled"
                                               AutomationProperties.Name="{x:Bind L.SettingsTranslateEnabledName, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.TranslateEnabled, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>
@@ -610,7 +610,7 @@
                         <controls:SettingsCard Header="{x:Bind L.SettingsTranslateKeepLoaded, Mode=OneWay}"
                                                Description="{x:Bind L.SettingsTranslateKeepLoadedDesc, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglTranslateKeepLoaded"
+                                <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglTranslateKeepLoaded"
                                               AutomationProperties.Name="{x:Bind L.SettingsTranslateKeepLoadedName, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.KeepTranslationModelLoaded, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>
@@ -733,7 +733,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsTranslateScopeNames, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglTranslateNames"
+                                <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglTranslateNames"
                                               AutomationProperties.Name="{x:Bind L.SettingsTranslateScopeNames, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.TranslateNamesEnabled, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>
@@ -741,7 +741,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsTranslateScopeDescription, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglTranslateDescription"
+                                <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglTranslateDescription"
                                               AutomationProperties.Name="{x:Bind L.SettingsTranslateScopeDescription, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.TranslateDescriptionEnabled, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>
@@ -749,7 +749,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsTranslateScopeChangelog, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglTranslateChangelog"
+                                <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglTranslateChangelog"
                                               AutomationProperties.Name="{x:Bind L.SettingsTranslateScopeChangelog, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.TranslateChangelogEnabled, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>
@@ -757,7 +757,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsTranslateScopeComments, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglTranslateComments"
+                                <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglTranslateComments"
                                               AutomationProperties.Name="{x:Bind L.SettingsTranslateScopeComments, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.TranslateCommentsEnabled, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>
@@ -902,7 +902,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsAboutAutoCheck, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ToggleSwitch AutomationProperties.AutomationId="tglAutoCheckUpdates"
+                                <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglAutoCheckUpdates"
                                               AutomationProperties.Name="{x:Bind L.SettingsAboutAutoCheckName, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.AutoCheckUpdates, Mode=TwoWay}" />
                             </controls:SettingsCard.ActionContent>

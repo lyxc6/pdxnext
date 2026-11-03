@@ -95,6 +95,9 @@ public sealed class UpdateService
 
     public string CurrentVersion => _currentVersion;
 
+    /// <summary>构造时传入的设置实例；必须与 AppServices.Settings 是同一个对象。</summary>
+    public AppSettings Settings => _settings;
+
     public bool IsPerMachineInstall => PdxDataRoot.IsPerMachineInstall(_installDirectory);
 
     /// <summary>从程序集信息版本读取当前版本；失败时退回 1.0.0。</summary>

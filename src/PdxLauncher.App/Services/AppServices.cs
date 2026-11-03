@@ -196,6 +196,7 @@ public static class AppServices
         IGamePatchService gamePatch,
         ISteamOwnershipService dlcOwnership,
         AppSettingsStore settingsStore,
+        AppSettings settings,
         PdxDatabase database,
         IJsonDocumentStore documents,
         UpdateService updates,
@@ -231,6 +232,7 @@ public static class AppServices
         ArgumentNullException.ThrowIfNull(gamePatch);
         ArgumentNullException.ThrowIfNull(dlcOwnership);
         ArgumentNullException.ThrowIfNull(settingsStore);
+        ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(database);
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(updates);
@@ -268,9 +270,13 @@ public static class AppServices
         SettingsStore = settingsStore;
         Database = database;
         Documents = documents;
+        Settings = settings;
         Updates = updates;
+        if (!ReferenceEquals(updates.Settings, settings))
+        {
+            Logger.Error("UpdateService 与 AppServices.Settings 不是同一实例，更新检查时间与自动检查开关会不同步");
+        }
         _networkLink = networkLink;
-        Settings = settingsStore.Load();
         Games = games;
         CurrentGame = SelectDefaultGame(games);
         IsInitialized = true;

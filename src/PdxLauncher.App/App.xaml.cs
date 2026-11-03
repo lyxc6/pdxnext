@@ -118,7 +118,7 @@ public partial class App : Application
         // 原文件改名成 *.migrated.bak 留档；重复执行什么也不做。
         new LegacyJsonImporter(database, fileSystem, documents, logger).Import(AppServices.DataRoot);
 
-        // 先读设置，代理模式与地址来自 settings.json；AppServices.Initialize 内部会再读一次（幂等）。
+        // 先读设置，代理模式与地址来自 settings.json；后续所有服务共用这一实例。
         var settingsStore = new AppSettingsStore(documents, logger);
         var settings = settingsStore.Load();
 
@@ -241,6 +241,7 @@ public partial class App : Application
             gamePatch,
             dlcOwnership,
             settingsStore,
+            settings,
             database,
             documents,
             updates,
