@@ -361,6 +361,20 @@ public static class AppServices
     public static AppResult<bool> FlushSettings() => SettingsStore.Flush();
 
     /// <summary>
+    /// 把各缓存攒着的防抖写入立刻落盘；关闭窗口前调用，否则最后几百毫秒的缓存会丢。
+    /// 缓存写失败不影响退出，所以这里不返回结果。
+    /// </summary>
+    public static void FlushCaches()
+    {
+        if (!IsInitialized)
+        {
+            return;
+        }
+
+        DebouncedDocumentFile.FlushAll();
+    }
+
+    /// <summary>
     /// 按当前 <see cref="Settings"/> 里的代理设置重建联网连接池（不换服务对象）。
     /// <para>
     /// 只调用两条连接的 <c>UseProxy</c>：客户端实例保持不变，页面构造函数里缓存的引用继续有效；

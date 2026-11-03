@@ -554,8 +554,9 @@ public sealed partial class MainWindow : Window
             AppServices.Settings.WindowX = position.X;
             AppServices.Settings.WindowY = position.Y;
 
-            // 关闭窗口是最后一次落盘机会：先把设置页攒着的延迟写合并进来，
-            // 再用立即写把窗口尺寸一起写下去，否则最近 300ms 内的改动会丢。
+            // 关闭窗口是最后一次落盘机会：先把各缓存攒着的防抖写入落盘，
+            // 再把设置页的延迟写合并进来，最后立即写一次窗口尺寸。
+            AppServices.FlushCaches();
             AppServices.FlushSettings();
             var saved = AppServices.SaveSettings();
             if (!saved.IsSuccess)

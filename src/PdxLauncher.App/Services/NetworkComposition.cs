@@ -64,6 +64,11 @@ internal static class NetworkComposition
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(database);
 
+        // 缓存文档一律套一层防抖：Save() 是「整份序列化 + 整行覆盖写」，列表刷新会连写十几遍。
+        // 设置与登录态不走这里，它们要立即落盘。
+        IDocumentFile CachedDocument(string key) =>
+            new DebouncedDocumentFile(new StoreDocumentFile(documents, key), logger);
+
         var proxy = ProxyResolver.Resolve(settings, logger);
 
         // 出口闸门必须先于所有联网服务建好：HttpFetcher 构造时就把它接上，
@@ -114,14 +119,14 @@ internal static class NetworkComposition
             AppServices.ThemeCacheRoot,
             steamCovers,
             new BundledThemes(),
-            gameId => new StoreDocumentFile(documents, JsonDocumentKeys.ThemeAssets(gameId)));
+            gameId => CachedDocument(JsonDocumentKeys.ThemeAssets(gameId)));
         var descriptions = new DlcDescriptionService(
             fileSystem,
             http,
             clock,
             logger,
             AppServices.DataRoot,
-            new StoreDocumentFile(documents, JsonDocumentKeys.DlcDescriptions));
+            CachedDocument(JsonDocumentKeys.DlcDescriptions));
         var newsFeed = new NewsFeedService(
             fileSystem,
             http,
@@ -129,14 +134,14 @@ internal static class NetworkComposition
             clock,
             logger,
             AppServices.NewsCacheRoot,
-            new StoreDocumentFile(documents, JsonDocumentKeys.NewsCards));
+            CachedDocument(JsonDocumentKeys.NewsCards));
         var modThumbnails = new ModThumbnailService(
             fileSystem,
             assets,
             clock,
             logger,
             AppServices.ModThumbnailCacheRoot,
-            new StoreDocumentFile(documents, JsonDocumentKeys.ModThumbnails));
+            CachedDocument(JsonDocumentKeys.ModThumbnails));
 
         // 翻译专用传输：OpenAI 兼容接口要带 Authorization 头，普通 IHttpFetcher 表达不了；
         // 白名单闸门与其它传输共用（用户自填的主机由 TranslationCoordinator 精确授权）。
