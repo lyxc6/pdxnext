@@ -17,6 +17,7 @@
   "shell.nav.home": "Current Game",
   "shell.nav.library": "Game Library",
   "shell.nav.modLibrary": "Mod Library",
+  "shell.nav.modStudio": "Mod Studio",
   "shell.nav.playSets": "Playsets",
   "shell.nav.settings": "Settings",
   "shell.nav.workshop": "Workshop",
@@ -32,5 +33,6 @@
   "shell.status.gamesFound": "Found {0} games",
   "shell.status.noGames": "No installed games found. Check your Steam library paths",
   "shell.support.managedByGame": "This game manages its own mods and DLC (in-game MOD menu / Steam Workshop); this launcher does not",
+  "shell.translating": "Translating…",
   "shell.version": "Version {0}"
 }

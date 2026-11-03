@@ -148,6 +148,52 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
         }
     }
 
+    /// <summary>
+    /// 下载入口：与 <see cref="GetAsync"/> 相同，但额外返回 Content-Length，供进度条使用。
+    /// 只给更新下载器用（不放进 <see cref="IHttpFetcher"/>，避免所有测试假实现都要跟着改）。
+    /// </summary>
+    public async Task<HttpDownload> GetDownloadAsync(Uri uri, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
+        EnsureAllowed(uri);
+
+        var slot = await AcquireSlotAsync(uri, cancellationToken).ConfigureAwait(false);
+        HttpResponseMessage response;
+        try
+        {
+            response = await Volatile.Read(ref _client)
+                .GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            slot?.Dispose();
+            throw;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var failure = ClassifyFailure(uri, response);
+            response.Dispose();
+            slot?.Dispose();
+            throw failure;
+        }
+
+        _throttle?.ReportSuccess(uri.Host);
+        slot?.Dispose();
+
+        try
+        {
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            return new HttpDownload(stream, response.Content.Headers.ContentLength);
+        }
+        catch (Exception)
+        {
+            response.Dispose();
+            throw;
+        }
+    }
+
     public async Task<string> PostJsonAsync(Uri uri, string jsonBody, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(uri);

@@ -34,7 +34,7 @@ public sealed class TranslationTargetLanguageOption : LocalizedObservableObject
 
 /// <summary>
 /// 译文语言的可选项目录：跟随界面语言 / 简体中文 / English。
-/// Resolve 返回目录中的同一实例，ComboBox 才能按引用相等匹配。
+/// Resolve 返回目录中的同一实例，下拉控件才能按引用相等匹配。
 /// </summary>
 public static class TranslationTargetLanguageCatalog
 {

@@ -1,0 +1,34 @@
+{
+  "files.encoding": "utf8",
+  "files.eol": "\r\n",
+  "files.trimTrailingWhitespace": false,
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "dist": true,
+    ".scratch": true,
+    ".tmp": true,
+    ".backup": true,
+    ".agents": true,
+    "ui-test-artifacts": true,
+    ".nuget": true
+  },
+  "search.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "dist": true,
+    ".scratch": true,
+    ".tmp": true,
+    ".backup": true,
+    ".agents": true,
+    "ui-test-artifacts": true,
+    ".nuget": true
+  },
+  "[csharp]": {
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true
+  },
+  "[json]": {
+    "editor.tabSize": 2
+  }
+}

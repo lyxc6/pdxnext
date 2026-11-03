@@ -14,12 +14,17 @@ using System.Text.RegularExpressions;
 /// </summary>
 public static class WorkshopHtml
 {
+    /// <summary>
+    /// 成对 / 单标签的白名单。**不要**写成 <c>\[[^\]]*\]</c>：作者常拿方括号写正文
+    /// （版本号 <c>[1.13]</c>、参数 <c>[range=5]</c>），一刀切会把正文一起吃掉。
+    /// 长标签排在前面，避免 <c>s</c> 把 <c>[spoiler]</c> 的头部当成命中。
+    /// </summary>
     private static readonly Regex BbCodeBlockRegex = new(
-        @"\[/?(b|i|u|h[1-6]|list|\*)\]",
+        @"\[/?(?:previewyoutube|strike|spoiler|noparse|olist|list|quote|code|h[1-6]|hr|b|i|u|s|\*)(?:=[^\]]*)?\]",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static readonly Regex BbCodeMediaRegex = new(
-        @"\[/?(url|img)[^\]]*\]",
+        @"\[/?(?:url|img)(?:=[^\]]*)?\]",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static readonly Regex MarkdownLinkRegex = new(

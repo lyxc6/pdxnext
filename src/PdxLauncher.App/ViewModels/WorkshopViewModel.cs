@@ -68,8 +68,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         Keys.WorkshopTimeAll,
     ];
 
-    /// <summary>时间范围对应的服务端 <c>days</c>；0 表示发布至今。</summary>
-    private static readonly int[] TimeRangeDays = [1, 7, 30, 90, 180, 365, 0];
+    /// <summary>时间范围对应的服务端 <c>days</c>；-1 表示发布至今（Steam 自己的 All time）。</summary>
+    private static readonly int[] TimeRangeDays = [1, 7, 30, 90, 180, 365, -1];
 
     /// <summary>默认时间范围的索引（30 天，与 Steam 网页默认一致）。</summary>
     private const int DefaultTimeRangeIndex = 2;
@@ -123,6 +123,21 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>同时下载的封面数上限。</summary>
     private const int MaxConcurrentCovers = 6;
 
+    /// <summary>已经提交的搜索词：只有回车 / 刷新才更新，翻页与页缓存键都用它。</summary>
+    private string _appliedSearch = string.Empty;
+
+    /// <summary>页面生命周期令牌（由 <see cref="LoadAsync"/> 传入）；每一轮查询的令牌都从它派生。</summary>
+    private CancellationToken _pageToken = CancellationToken.None;
+
+    /// <summary>当前在途查询的令牌源；起新查询时取消并释放上一轮。</summary>
+    private CancellationTokenSource? _queryCts;
+
+    /// <summary>查询代号：只有最新一代允许写界面，迟到的结果直接丢弃。</summary>
+    private int _queryVersion;
+
+    /// <summary>最近一次后台查询（主查询或静默刷新）；内部已收口异常，这里只为卸载判断与诊断。</summary>
+    private Task? _queryTask;
+
     /// <summary>当前游戏；null 表示还没在游戏库里选游戏。</summary>
     [ObservableProperty]
     private GameInstallation? _game;
@@ -138,6 +153,9 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>状态栏文案。</summary>
     [ObservableProperty]
     private string _statusMessage = string.Empty;
+
+    /// <summary>已经提示过「本页标题完全没翻出来」的页键（同一页只提示一次）。</summary>
+    private string? _translateFailureKey;
 
     /// <summary>搜索词。</summary>
     [ObservableProperty]
@@ -262,6 +280,11 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         Game = game;
         _gameId = game?.GameId;
 
+        // 换游戏 / 重新加载：上一轮查询作废；已提交的搜索词跟随输入框当前内容。
+        CancelPendingQuery();
+        _pageToken = cancellationToken;
+        _appliedSearch = SearchText.Trim();
+
         // 独立安装读不到 appmanifest 时 SteamAppId 是 null，这里用映射表兜底，
         // 否则 EU4 / CS1 / 监狱建筑师这些明明有 Steam 工坊的游戏会被误判成没有。
         _steamAppId = WorkshopSourceChooser.ResolveAppId(game?.SteamAppId, game?.GameId);
@@ -302,7 +325,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         {
             Source = await ResolveSourceAsync(cancellationToken).ConfigureAwait(true);
             RaiseDerived();
-            await QueryAsync(cancellationToken).ConfigureAwait(true);
+            await RunQueryAsync(resetPage: false, force: false).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -322,26 +345,36 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 刷新当前页。Steam 侧处于限流冷却时直接给出提示，不再发请求——
-    /// 冷却期内点刷新只会让封禁更久。
+    /// 刷新当前页，同时充当「提交搜索」：文本框里改了关键词但没回车时，按刷新就按新词查。
+    /// Steam 侧处于限流冷却时直接给出提示，不再发请求——冷却期内点刷新只会让封禁更久。
     /// </summary>
     public async Task RefreshAsync()
     {
         if (!HasGame)
         {
-            await LoadAsync(Game, CancellationToken.None).ConfigureAwait(true);
+            await LoadAsync(Game, _pageToken).ConfigureAwait(true);
             return;
         }
 
         if (Source == WorkshopSource.Steam && TryGetCooldown(out var remaining))
         {
+            // 冷却期不提交搜索词：否则列表还停在旧关键词上，状态栏却说在搜新的。
             StatusMessage = DescribeCooldown(remaining);
             RaiseDerived();
             return;
         }
 
+        // 关键词变了回第 1 页（旧页码对新词没有意义），没变就只刷新当前页。
+        var text = SearchText.Trim();
+        var searchChanged = !string.Equals(text, _appliedSearch, StringComparison.Ordinal);
+        _appliedSearch = text;
+        if (searchChanged)
+        {
+            _page = 0;
+        }
+
         var before = AppServices.HttpThrottle.Snapshot();
-        await QueryAsync(CancellationToken.None, force: true).ConfigureAwait(true);
+        await RunQueryAsync(resetPage: false, force: true).ConfigureAwait(true);
         var after = AppServices.HttpThrottle.Snapshot();
         _logger.Info("本次刷新请求数：" + DescribeRequestDelta(before, after));
     }
@@ -380,10 +413,18 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
                 remaining = cooldown;
             }
 
-            return DescribeCooldown(remaining);
+            // 请求已经被 Steam 拒了，这里要说「等多久重试」，而不是「已暂停、自动继续」。
+            return DescribeRetryAfter(remaining);
         }
 
         return T(Keys.WorkshopStatusFailed, exception.Message);
+    }
+
+    /// <summary>把冷却剩余时间写成「请约 N 分钟后重试」的提示。</summary>
+    private string DescribeRetryAfter(TimeSpan remaining)
+    {
+        var minutes = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
+        return T(Keys.WorkshopThrottleRetryIn, minutes);
     }
 
     /// <summary>刷新前后按 host 比较请求数，写进日志作为请求预算的验收证据。</summary>
@@ -421,7 +462,102 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         }
 
         _page = target;
-        await QueryAsync(cancellationToken).ConfigureAwait(true);
+        _pageToken = cancellationToken;
+        await RunQueryAsync(resetPage: false, force: false).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 提交搜索框里的关键词并重查第一页。只有回车（或刷新按钮）走到这里 ——
+    /// 打字过程中不发请求，否则每敲一个字符就会排一次 1–3 MB 的工坊页请求。
+    /// </summary>
+    public Task CommitSearchAsync()
+    {
+        if (!HasGame)
+        {
+            return Task.CompletedTask;
+        }
+
+        _appliedSearch = SearchText.Trim();
+        return RunQueryAsync(resetPage: true, force: true);
+    }
+
+    /// <summary>页面卸载时取消在途查询（页面令牌本身也会级联取消，这里让状态立刻停下）。</summary>
+    public void CancelPendingQuery()
+    {
+        var pending = _queryCts;
+        _queryCts = null;
+        if (pending is null)
+        {
+            return;
+        }
+
+        if (_queryTask is { IsCompleted: false })
+        {
+            _logger.Info("创意工坊页卸载：取消在途查询");
+        }
+
+        try
+        {
+            pending.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 已经收尾，忽略。
+        }
+
+        pending.Dispose();
+    }
+
+    /// <summary>
+    /// 起一轮新查询：取消上一轮、递增代号，再把本轮从头跑到尾。
+    /// 取消是正常路径（翻页 / 换筛选 / 页面卸载），所有异常都在这里收口，调用方只需要 await 到结束。
+    /// </summary>
+    /// <param name="resetPage">是否回到第一页（回车搜索、换筛选条件为 true）。</param>
+    /// <param name="force">是否跳过页缓存。</param>
+    private async Task RunQueryAsync(bool resetPage, bool force)
+    {
+        if (!HasGame || Source == WorkshopSource.None)
+        {
+            return;
+        }
+
+        if (resetPage)
+        {
+            _page = 0;
+        }
+
+        CancelPendingQuery();
+        _queryCts = CancellationTokenSource.CreateLinkedTokenSource(_pageToken);
+        var version = ++_queryVersion;
+
+        try
+        {
+            await QueryAsync(version, _queryCts.Token, force).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // 被新查询或页面卸载取代：正常路径，不提示。
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("创意工坊查询流程失败（game=" + _gameId + "）", ex);
+        }
+    }
+
+    /// <summary>
+    /// 把工坊信息缓存落盘。序列化 + 同步写都在后台线程：
+    /// 30 条累加后的这一下写盘原先跑在 UI 线程上，慢磁盘时整个页面会短暂失去响应。
+    /// </summary>
+    private async Task FlushInfoCacheAsync()
+    {
+        try
+        {
+            await Task.Run(_info.Flush).ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _logger.Warn("创意工坊信息缓存落盘失败：" + ex.Message);
+        }
     }
 
     /// <summary>
@@ -479,9 +615,10 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// 按当前来源执行一次查询。命中内存页缓存就立刻铺满列表（回看过的页不必再抓 1–3 MB 的 SSR 页面），
     /// 未命中才联网；联网期间保留旧行，不白屏。
     /// </summary>
-    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    /// <param name="force">true 表示跳过缓存读取（刷新按钮、换筛选条件时用）。</param>
-    private async Task QueryAsync(CancellationToken cancellationToken, bool force = false)
+    /// <param name="version">查询代号；只有最新一代允许写界面，迟到的结果直接丢弃。</param>
+    /// <param name="cancellationToken">本轮查询的取消令牌（由页面令牌派生）。</param>
+    /// <param name="force">true 表示跳过缓存读取（回车搜索、刷新按钮、换筛选条件时用）。</param>
+    private async Task QueryAsync(int version, CancellationToken cancellationToken, bool force = false)
     {
         if (_gameId is null || Source == WorkshopSource.None)
         {
@@ -491,6 +628,11 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         var key = BuildPageKey();
         if (!force && _pages.TryGet(key, out var cached))
         {
+            if (version != _queryVersion)
+            {
+                return;
+            }
+
             ApplyCachedPage(cached, cancellationToken);
             StatusMessage = T(Keys.WorkshopStatusLoadedCached, _totalCount);
             RaiseDerived();
@@ -500,25 +642,52 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             if (!_pages.IsFresh(cached) && _pages.CanReattempt(cached, SilentRefreshMinInterval))
             {
                 _pages.MarkAttempt(key);
-                _ = RefreshSilentlyAsync(key, cancellationToken);
+                _queryTask = RefreshSilentlyAsync(key, version, cancellationToken);
             }
 
             return;
         }
 
+        // Steam 限流冷却期内不发请求：换了排序/时间范围却拿到旧列表，
+        // 用户只会以为「排序没生效」。这里先拦住，并在状态栏说明原因。
+        if (Source == WorkshopSource.Steam && TryGetCooldown(out var remaining))
+        {
+            var cooldown = DescribeCooldown(remaining);
+            if (Rows.Count == 0)
+            {
+                // 一行都没有时才用离线缓存兜底，免得页面空着。
+                ShowFailureOrCache(Source, "throttled", cooldown, cancellationToken);
+                if (Rows.Count > 0)
+                {
+                    // 兜底成功：冷却原因仍然要说，否则用户只看到「显示缓存中的 N 个结果」。
+                    StatusMessage = cooldown + " · " + StatusMessage;
+                }
+            }
+            else
+            {
+                // 已有行保持不动（不改成与排序无关的旧列表），只说明为什么没刷新。
+                StatusMessage = cooldown;
+            }
+
+            RaiseDerived();
+            return;
+        }
+
         IsBusy = true;
-        StatusMessage = T(Keys.WorkshopStatusLoadingPage, _page + 1);
+        StatusMessage = _appliedSearch.Length > 0
+            ? T(Keys.WorkshopStatusSearching)
+            : T(Keys.WorkshopStatusLoadingPage, _page + 1);
         RaiseDerived();
 
         try
         {
             if (Source == WorkshopSource.Steam)
             {
-                await QuerySteamAsync(cancellationToken, key).ConfigureAwait(true);
+                await QuerySteamAsync(version, cancellationToken, key).ConfigureAwait(true);
             }
             else
             {
-                await QueryPdxAsync(cancellationToken, key).ConfigureAwait(true);
+                await QueryPdxAsync(version, cancellationToken, key).ConfigureAwait(true);
             }
         }
         catch (OperationCanceledException)
@@ -527,26 +696,33 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         }
         catch (Exception ex)
         {
-            IsLoaded = true;
-            ShowFailureOrCache(
-                Source,
-                ex.Message,
-                ex is SteamThrottleException ? DescribeFailure(ex) : null,
-                cancellationToken);
-            _logger.Error("创意工坊查询失败（game=" + _gameId + "）", ex);
-            RaiseDerived();
+            if (version == _queryVersion)
+            {
+                IsLoaded = true;
+                ShowFailureOrCache(
+                    Source,
+                    ex.Message,
+                    ex is SteamThrottleException ? DescribeFailure(ex) : null,
+                    cancellationToken);
+                _logger.Error("创意工坊查询失败（game=" + _gameId + "）", ex);
+                RaiseDerived();
+            }
         }
         finally
         {
-            IsBusy = false;
-            RaiseDerived();
+            // 旧一代查询退出时不能复位忙碌状态，否则会把新一代的转圈提前关掉。
+            if (version == _queryVersion)
+            {
+                IsBusy = false;
+                RaiseDerived();
+            }
         }
     }
 
-    /// <summary>生成页缓存的键：来源、游戏、关键词、排序、时间范围、页码都参与。</summary>
+    /// <summary>生成页缓存的键：来源、游戏、已提交的关键词、排序、时间范围、页码都参与。</summary>
     private string BuildPageKey()
     {
-        var search = string.IsNullOrWhiteSpace(SearchText) ? null : SearchText.Trim();
+        var search = _appliedSearch.Length == 0 ? null : _appliedSearch;
         if (Source == WorkshopSource.Steam)
         {
             var sort = ResolveSteamSort();
@@ -604,29 +780,34 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _ = TranslateNamesAsync(pending, cancellationToken);
     }
 
-    /// <summary>逐行翻译标题；每行译完立刻写回行模型。</summary>
+    /// <summary>整页标题一次性批翻（引擎内部并发），译完统一回填。</summary>
     private async Task TranslateNamesAsync(
         IReadOnlyList<WorkshopRowViewModel> rows,
         CancellationToken cancellationToken)
     {
         try
         {
-            foreach (var row in rows)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    return;
-                }
+            var names = rows.Select(static row => row.Name).ToList();
+            var translated = await AppServices.Translation
+                .TranslateBatchAsync(names, cancellationToken)
+                .ConfigureAwait(true);
 
-                var translated = await AppServices.Translation
-                    .TranslateAsync(row.Name, cancellationToken)
-                    .ConfigureAwait(true);
-                if (translated is null || string.IsNullOrWhiteSpace(translated))
+            var anyTranslated = false;
+            for (var i = 0; i < rows.Count && i < translated.Count; i++)
+            {
+                var translatedName = translated[i];
+                if (string.IsNullOrWhiteSpace(translatedName))
                 {
                     continue;
                 }
 
-                row.TranslatedName = translated;
+                rows[i].TranslatedName = translatedName;
+                anyTranslated = true;
+            }
+
+            if (!anyTranslated)
+            {
+                ReportTranslationFailure();
             }
         }
         catch (OperationCanceledException)
@@ -637,6 +818,26 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         {
             _logger.Warn("创意工坊标题翻译失败：" + ex.Message);
         }
+    }
+
+    /// <summary>
+    /// 整页一条译文都没拿到时，在底部状态条说明原因（同一页只提示一次）。
+    /// <para>
+    /// 引擎连不通时原本没有任何反馈，用户会以为翻译功能压根没做。
+    /// </para>
+    /// </summary>
+    private void ReportTranslationFailure()
+    {
+        var key = BuildPageKey();
+        if (string.Equals(_translateFailureKey, key, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _translateFailureKey = key;
+        var reason = AppServices.Translation.LastFailure ?? T(Keys.CommonUnknown);
+        _logger.Warn("创意工坊标题全部未翻译（" + key + "）：" + reason);
+        SetStatus(T(Keys.WorkshopTranslateUnavailable, reason));
     }
 
     /// <summary>整体替换列表行；先取消上一轮封面下载，避免旧页任务继续占用带宽。</summary>
@@ -653,18 +854,19 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
     /// <summary>页缓存过期时的静默刷新：不置忙碌、失败只记 Warn。</summary>
     /// <param name="key">页缓存键。</param>
-    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    private async Task RefreshSilentlyAsync(string key, CancellationToken cancellationToken)
+    /// <param name="version">发起静默刷新时的查询代号；期间有新查询就放弃写入。</param>
+    /// <param name="cancellationToken">本轮查询的取消令牌。</param>
+    private async Task RefreshSilentlyAsync(string key, int version, CancellationToken cancellationToken)
     {
         try
         {
             if (Source == WorkshopSource.Steam)
             {
-                await QuerySteamAsync(cancellationToken, key).ConfigureAwait(true);
+                await QuerySteamAsync(version, cancellationToken, key).ConfigureAwait(true);
             }
             else
             {
-                await QueryPdxAsync(cancellationToken, key).ConfigureAwait(true);
+                await QueryPdxAsync(version, cancellationToken, key).ConfigureAwait(true);
             }
         }
         catch (OperationCanceledException)
@@ -707,9 +909,10 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     }
 
     /// <summary>Steam 创意工坊查询。</summary>
-    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    /// <param name="version">查询代号；结果回来时不是最新一代就丢弃。</param>
+    /// <param name="cancellationToken">本轮查询的取消令牌。</param>
     /// <param name="pageKey">页缓存键（成功后把这一页写进去）。</param>
-    private async Task QuerySteamAsync(CancellationToken cancellationToken, string pageKey)
+    private async Task QuerySteamAsync(int version, CancellationToken cancellationToken, string pageKey)
     {
         if (_steamAppId is not { } appId)
         {
@@ -719,13 +922,20 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         var sort = ResolveSteamSort();
         var days = sort is SteamWorkshopSort.Trend or SteamWorkshopSort.TopRated ? ResolveDays() : (int?)null;
         var query = new SteamWorkshopQuery(
-            string.IsNullOrWhiteSpace(SearchText) ? null : SearchText.Trim(),
+            _appliedSearch.Length == 0 ? null : _appliedSearch,
             sort,
             _page,
             SteamPageSize,
             days);
 
         var result = await _steam.BrowseAsync(appId, query, cancellationToken).ConfigureAwait(true);
+
+        // 已经被新一代查询或页面卸载取代：这一次的结果直接丢掉，别覆盖新列表。
+        if (version != _queryVersion || cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
         IsLoaded = true;
 
         if (!result.IsSuccess || result.Value is null)
@@ -769,10 +979,10 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         StartNameTranslation(rows, cancellationToken);
         _pages.Set(pageKey, entries, _totalCount, _totalPages);
 
-        // 30 条累加后只落盘一次（逐条 Save 会卡在同步 IO 上）。
-        _info.Flush();
+        // 30 条累加后只落盘一次（逐条 Save 会卡在同步 IO 上），并放到后台线程，不占 UI 线程。
+        await FlushInfoCacheAsync().ConfigureAwait(true);
         StatusMessage = rows.Count == 0
-            ? T(Keys.WorkshopStatusEmpty, SearchText.Trim())
+            ? T(Keys.WorkshopStatusEmpty, _appliedSearch)
             : T(Keys.WorkshopStatusLoaded, _totalCount);
         RaiseDerived();
 
@@ -780,9 +990,10 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     }
 
     /// <summary>PDX Mods 查询。</summary>
-    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    /// <param name="version">查询代号；结果回来时不是最新一代就丢弃。</param>
+    /// <param name="cancellationToken">本轮查询的取消令牌。</param>
     /// <param name="pageKey">页缓存键（成功后把这一页写进去）。</param>
-    private async Task QueryPdxAsync(CancellationToken cancellationToken, string pageKey)
+    private async Task QueryPdxAsync(int version, CancellationToken cancellationToken, string pageKey)
     {
         if (_gameId is not { } gameId)
         {
@@ -790,7 +1001,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         }
 
         var query = new PdxModsQuery(
-            string.IsNullOrWhiteSpace(SearchText) ? null : SearchText.Trim(),
+            _appliedSearch.Length == 0 ? null : _appliedSearch,
             ResolvePdxSort(),
             Descending: true,
             Page: _page,
@@ -799,6 +1010,12 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         var result = await _pdx
             .SearchAsync(gameId, query, _account.Session, cancellationToken)
             .ConfigureAwait(true);
+
+        // 已经被新一代查询或页面卸载取代：这一次的结果直接丢掉，别覆盖新列表。
+        if (version != _queryVersion || cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
 
         IsLoaded = true;
 
@@ -839,9 +1056,9 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         ReplaceRows(rows);
         StartNameTranslation(rows, cancellationToken);
         _pages.Set(pageKey, entries, _totalCount, _totalPages);
-        _info.Flush();
+        await FlushInfoCacheAsync().ConfigureAwait(true);
         StatusMessage = rows.Count == 0
-            ? T(Keys.WorkshopStatusEmpty, SearchText.Trim())
+            ? T(Keys.WorkshopStatusEmpty, _appliedSearch)
             : T(Keys.WorkshopStatusLoaded, _totalCount);
         RaiseDerived();
 
@@ -1047,19 +1264,26 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         return TimeRangeDays[Math.Clamp(index < 0 ? DefaultTimeRangeIndex : index, 0, TimeRangeDays.Length - 1)];
     }
 
-    /// <summary>把下拉框里的文案反查成文案键（切语言后仍然是同一档排序）。</summary>
+    /// <summary>当前时间范围下标的序号（按 <see cref="TimeRangeModes"/> 的顺序，与文案无关）。</summary>
+    private int CurrentTimeRangeIndex()
+    {
+        var index = Array.FindIndex(TimeRangeModes.ToArray(), item => string.Equals(item, SelectedTimeRange, StringComparison.Ordinal));
+        return index < 0 ? DefaultTimeRangeIndex : index;
+    }
+
+    /// <summary>当前排序下标的序号（按 <see cref="SortModes"/> 的顺序，与文案无关）。</summary>
+    private int CurrentSortIndex()
+    {
+        var index = Array.FindIndex(SortModes.ToArray(), item => string.Equals(item, SelectedSortMode, StringComparison.Ordinal));
+        return index < 0 ? 0 : index;
+    }
+
+    /// <summary>把下拉框里的选项位置反查成文案键（切语言后仍然是同一档排序）。</summary>
     private string ResolveSortKey()
     {
         var keys = SortKeysFor(Source);
-        foreach (var key in keys)
-        {
-            if (string.Equals(T(key), SelectedSortMode, StringComparison.Ordinal))
-            {
-                return key;
-            }
-        }
-
-        return keys[0];
+        var index = CurrentSortIndex();
+        return index < keys.Length ? keys[index] : keys[0];
     }
 
     /// <summary>排序下拉框的选项（按来源与当前语言生成）。</summary>
@@ -1069,7 +1293,11 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>时间范围下拉框的选项。</summary>
     private static string[] BuildTimeRangeModes() => TimeRangeKeys.Select(static key => T(key)).ToArray();
 
-    partial void OnSearchTextChanged(string value) => _ = OnFilterChangedAsync();
+    partial void OnSearchTextChanged(string value)
+    {
+        // 打字只更新绑定值：真正发请求的是回车 / 刷新走的提交路径。
+        // 如果在这里查询，每敲一个字符都会排一次 1–3 MB 的工坊页请求（限流下 1 秒一次），页面就像卡死。
+    }
 
     partial void OnSelectedSortModeChanged(string value)
     {
@@ -1080,7 +1308,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
         OnPropertyChanged(nameof(ShowTimeRange));
 
-        _ = OnFilterChangedAsync();
+        _queryTask = RunQueryAsync(resetPage: true, force: true);
     }
 
     partial void OnSelectedTimeRangeChanged(string value)
@@ -1090,7 +1318,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             return;
         }
 
-        _ = OnFilterChangedAsync();
+        _queryTask = RunQueryAsync(resetPage: true, force: true);
     }
 
     partial void OnSourceChanged(WorkshopSource value)
@@ -1127,31 +1355,19 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(SelectedSortMode));
     }
 
-    /// <summary>搜索词、排序或时间范围变了：回到第一页重查。</summary>
-    private async Task OnFilterChangedAsync()
-    {
-        if (!HasGame || _isRelocalizing)
-        {
-            return;
-        }
-
-        _page = 0;
-        await QueryAsync(CancellationToken.None, force: true).ConfigureAwait(true);
-    }
-
     /// <summary>切语言后重建排序与时间范围选项，并把选中项换到新语言的同一档上。</summary>
     protected override void Relocalize()
     {
-        var sortKey = ResolveSortKey();
-        var timeIndex = Array.FindIndex(TimeRangeModes.ToArray(), item => string.Equals(item, SelectedTimeRange, StringComparison.Ordinal));
+        var sortIndex = CurrentSortIndex();
+        var timeIndex = CurrentTimeRangeIndex();
 
         _isRelocalizing = true;
         try
         {
             SortModes = BuildSortModes(Source);
-            SelectedSortMode = T(sortKey);
+            SelectedSortMode = SortModes[Math.Clamp(sortIndex, 0, SortModes.Count - 1)];
             TimeRangeModes = BuildTimeRangeModes();
-            SelectedTimeRange = TimeRangeModes[Math.Clamp(timeIndex < 0 ? DefaultTimeRangeIndex : timeIndex, 0, TimeRangeModes.Count - 1)];
+            SelectedTimeRange = TimeRangeModes[Math.Clamp(timeIndex, 0, TimeRangeModes.Count - 1)];
         }
         finally
         {

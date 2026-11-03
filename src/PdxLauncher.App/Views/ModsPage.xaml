@@ -7,6 +7,7 @@
     xmlns:vm="using:PdxLauncher.App.ViewModels"
     xmlns:contracts="using:PdxLauncher.Core.Contracts"
     xmlns:loc="using:PdxLauncher.App.Localization"
+    xmlns:controls="using:PdxLauncher.App.Controls"
     NavigationCacheMode="Required"
     Background="{ThemeResource PdxPageVeilBrush}">
 
@@ -41,7 +42,7 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                    <ComboBox x:Name="PlaySetSwitcher"
+                    <controls:PdxDropDown x:Name="PlaySetSwitcher"
                               MinWidth="150"
                               MaxWidth="240"
                               VerticalAlignment="Center"
@@ -52,7 +53,7 @@
                               ToolTipService.ToolTip="{x:Bind L.ModsPlaySetSwitcherToolTip, Mode=OneWay}"
                               AutomationProperties.AutomationId="cmbPlaySets"
                               AutomationProperties.Name="{x:Bind L.ModsPlaySetSwitcherName, Mode=OneWay}">
-                        <ComboBox.ItemTemplate>
+                        <controls:PdxDropDown.ItemTemplate>
                             <DataTemplate x:DataType="contracts:PlaySet">
                                 <Grid ColumnSpacing="6"
                                       Padding="0,4"
@@ -73,8 +74,8 @@
                                                Visibility="{x:Bind svc:XamlVisibility.FromBool(IsActive), Mode=OneTime}" />
                                 </Grid>
                             </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
+                        </controls:PdxDropDown.ItemTemplate>
+                    </controls:PdxDropDown>
 
                     <Button Content="{x:Bind L.ModsToolbarNew, Mode=OneWay}"
                             Click="OnNewPlaySetClick"
@@ -124,6 +125,20 @@
                             ToolTipService.ToolTip="{x:Bind L.ModsRepairName, Mode=OneWay}"
                             AutomationProperties.AutomationId="btnRepairModPaths"
                             AutomationProperties.Name="{x:Bind L.ModsRepairName, Mode=OneWay}" />
+
+                    <Button Content="{x:Bind L.ModsAutoSortButton, Mode=OneWay}"
+                            Click="OnAutoSortClick"
+                            IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind L.ModsAutoSortTooltip, Mode=OneWay}"
+                            AutomationProperties.AutomationId="btnAutoSort"
+                            AutomationProperties.Name="{x:Bind L.ModsAutoSortButtonName, Mode=OneWay}" />
+                    <Button Content="{x:Bind L.ModsAutoSortUndo, Mode=OneWay}"
+                            Click="OnUndoAutoSortClick"
+                            IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
+                            Visibility="{x:Bind ViewModel.HasAutoSortUndo, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind L.ModsAutoSortUndo, Mode=OneWay}"
+                            AutomationProperties.AutomationId="btnUndoAutoSort"
+                            AutomationProperties.Name="{x:Bind L.ModsAutoSortUndo, Mode=OneWay}" />
                 </StackPanel>
 
                 <TextBox Grid.Column="1"
@@ -251,7 +266,7 @@
                                                   Visibility="{x:Bind svc:XamlVisibility.FromBool(HasWarning), Mode=OneWay}"
                                                   ToolTipService.ToolTip="{x:Bind WarningText, Mode=OneWay}" />
                                     </StackPanel>
-                                    <!-- 译名：原文与译文同显，译文在标题下方的描边框里。 -->
+                                    <!-- 译名：原文与译文同显，译文在标题下方的描边框里（不加「译文」标题）。 -->
                                     <Border Margin="0,6,0,0"
                                             Padding="6,4"
                                             CornerRadius="6"
@@ -259,15 +274,10 @@
                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                             BorderThickness="1"
                                             Visibility="{x:Bind svc:XamlVisibility.FromString(TranslatedName), Mode=OneWay}">
-                                        <StackPanel Spacing="2">
-                                            <TextBlock Text="{x:Bind L.WorkshopTranslateLabel, Mode=OneWay}"
-                                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                            <TextBlock Text="{x:Bind TranslatedName, Mode=OneWay}"
-                                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                                       TextTrimming="CharacterEllipsis" />
-                                        </StackPanel>
+                                        <TextBlock Text="{x:Bind TranslatedName, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                                   TextTrimming="CharacterEllipsis" />
                                     </Border>
                                     <TextBlock Text="{x:Bind Subtitle, Mode=OneWay}"
                                                Style="{StaticResource CaptionTextBlockStyle}"

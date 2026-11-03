@@ -70,7 +70,8 @@ $sections = @(
   @{ id='navSettingsOnline';     name='online';     want='cmbProxyMode,txtProxyUrl,txtProxyStatus' },
   @{ id='navSettingsCache';      name='cache';      want='btnRefreshCache,btnClearAllCaches,tglOnlineDlcDescription,cmbDlcDescriptionRetention,tglOnlineNewsFeed,tglOnlineModThumbnail,cmbModThumbnailRetention,txtModThumbnailCachePath' },
   @{ id='navSettingsAdvanced';   name='advanced';   want='tglWriteDlcSignature,btnRegenerateDlcSignature' },
-  @{ id='navSettingsTranslation'; name='translation'; want='tglTranslateEnabled,cmbTranslateEngineMode,txtTranslateBaseUrl,pwdTranslateApiKey,txtTranslateModel,cmbTranslateTargetLanguage,tglTranslateNames,tglTranslateDescription,tglTranslateChangelog,tglTranslateComments,txtTranslateCacheDays,pwdTranslateMicrosoftKey,txtTranslateMicrosoftRegion,pwdTranslateGoogleKey' }
+  @{ id='navSettingsTranslation'; name='translation'; want='tglTranslateEnabled,cmbTranslateEngineMode,txtTranslateBaseUrl,pwdTranslateApiKey,txtTranslateModel,cmbTranslateTargetLanguage,tglTranslateNames,tglTranslateDescription,tglTranslateChangelog,tglTranslateComments,txtTranslateCacheDays,pwdTranslateMicrosoftKey,txtTranslateMicrosoftRegion,pwdTranslateGoogleKey,btnTranslateTest,txtTranslateTestResult' },
+  @{ id='navSettingsAbout';     name='about';     want='txtLauncherVersion,txtInstallMode,tglAutoCheckUpdates,btnCheckUpdates,txtLastUpdateCheck,txtUpdateStatus' }
 )
 
 $hwnd = $p.MainWindowHandle

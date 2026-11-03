@@ -1,0 +1,795 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="PdxLauncher.App.Views.ModStudioPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:svc="using:PdxLauncher.App.Services"
+    xmlns:ctl="using:PdxLauncher.App.Controls"
+    xmlns:vm="using:PdxLauncher.App.ViewModels"
+    NavigationCacheMode="Required"
+    Background="{ThemeResource PdxPageVeilBrush}">
+
+    <!--
+        Mod 创建页：左侧只列本游戏的本地 mod；右侧是详情 / 新建 / 上传三块面板。
+        新建和上传都使用页内表单（不用 ContentDialog），上传进度和状态统一落在底栏。
+    -->
+    <Grid Padding="16" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- 顶部工具条 -->
+        <Grid Grid.Row="0" ColumnSpacing="10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+                <TextBlock Text="{x:Bind L.ModstudioTitle, Mode=OneWay}" Style="{StaticResource TitleTextBlockStyle}" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="{x:Bind ViewModel.GameTitle, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="{x:Bind ViewModel.CountText, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               Visibility="{x:Bind svc:XamlVisibility.FromString(ViewModel.CountText), Mode=OneWay}" />
+                </StackPanel>
+            </StackPanel>
+
+            <TextBox Grid.Column="1"
+                     MinWidth="180"
+                     MaxWidth="320"
+                     HorizontalAlignment="Right"
+                     VerticalAlignment="Center"
+                     PlaceholderText="{x:Bind L.ModstudioSearchPlaceholder, Mode=OneWay}"
+                     Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     AutomationProperties.AutomationId="modStudioSearch"
+                     AutomationProperties.Name="{x:Bind L.ModstudioSearchName, Mode=OneWay}" />
+
+            <Button Grid.Column="2"
+                    VerticalAlignment="Center"
+                    Click="OnCreateClick"
+                    IsEnabled="{x:Bind ViewModel.CanCreate, Mode=OneWay}"
+                    AutomationProperties.AutomationId="modStudioCreate">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon Glyph="&#xE710;" FontSize="14" />
+                    <TextBlock Text="{x:Bind L.ModstudioCreateButton, Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+
+            <Button Grid.Column="3"
+                    VerticalAlignment="Center"
+                    Click="OnUploadClick"
+                    IsEnabled="{x:Bind ViewModel.CanUploadSelected, Mode=OneWay}"
+                    AutomationProperties.AutomationId="modStudioUpload">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon Glyph="&#xE898;" FontSize="14" />
+                    <TextBlock Text="{x:Bind L.ModstudioUploadButton, Mode=OneWay}" />
+                </StackPanel>
+            </Button>
+
+            <ProgressRing Grid.Column="4"
+                          Width="20"
+                          Height="20"
+                          VerticalAlignment="Center"
+                          IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                          AutomationProperties.AutomationId="modStudioBusy" />
+
+            <Button Grid.Column="5"
+                    VerticalAlignment="Center"
+                    Click="OnRefreshClick"
+                    AutomationProperties.AutomationId="modStudioRefresh"
+                    AutomationProperties.Name="{x:Bind L.ModstudioRefreshName, Mode=OneWay}">
+                <FontIcon Glyph="&#xE72C;" FontSize="16" />
+            </Button>
+        </Grid>
+
+        <!-- 主体：左列表 / 右面板 -->
+        <Grid Grid.Row="1" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="360" MinWidth="280" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 左：本地 mod 列表 -->
+            <Grid Grid.Column="0">
+                <Border Background="{ThemeResource PdxCardGlassBrush}" CornerRadius="8" />
+                <ListView x:Name="ModList"
+                          ItemsSource="{x:Bind ViewModel.Mods, Mode=OneWay}"
+                          SelectedItem="{x:Bind ViewModel.SelectedRow, Mode=TwoWay}"
+                          SelectionMode="Single"
+                          AutomationProperties.AutomationId="modStudioList"
+                          AutomationProperties.Name="{x:Bind L.ModstudioListName, Mode=OneWay}">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ModStudioRowViewModel">
+                            <Grid ColumnSpacing="10"
+                                  Padding="4,6"
+                                  AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
+                                  AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <Border Grid.Column="0"
+                                        Width="40"
+                                        Height="40"
+                                        CornerRadius="6"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1">
+                                    <Grid>
+                                        <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath), Mode=OneWay}"
+                                               Stretch="Uniform"
+                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(HasThumbnail), Mode=OneWay}" />
+                                        <FontIcon Glyph="&#xE8B9;"
+                                                  FontSize="18"
+                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                  Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasThumbnail), Mode=OneWay}" />
+                                    </Grid>
+                                </Border>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                    <TextBlock Text="{x:Bind Name, Mode=OneTime}"
+                                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{x:Bind SubtitleText, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+
+                                <Border Grid.Column="2"
+                                        VerticalAlignment="Center"
+                                        Padding="6,1"
+                                        CornerRadius="4"
+                                        Background="{ThemeResource PdxOriginLocalBackgroundBrush}"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(HasPublication), Mode=OneWay}">
+                                    <TextBlock Text="{x:Bind PublicationBadgeText, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource PdxOriginLocalForegroundBrush}" />
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <!-- 空状态 -->
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Spacing="8"
+                            Margin="20"
+                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowEmptyState), Mode=OneWay}">
+                    <TextBlock Text="{x:Bind L.ModstudioNoGameHint, Mode=OneWay}"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               Style="{StaticResource BodyTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowNoGameHint), Mode=OneWay}" />
+                    <TextBlock Text="{x:Bind L.ModstudioManagedHint, Mode=OneWay}"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               Style="{StaticResource BodyTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowManagedHint), Mode=OneWay}" />
+                    <TextBlock Text="{x:Bind L.ModstudioNoModsHint, Mode=OneWay}"
+                               HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               Style="{StaticResource BodyTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowNoModsHint), Mode=OneWay}" />
+                </StackPanel>
+            </Grid>
+
+            <!-- 右：详情 / 新建 / 上传 -->
+            <Grid Grid.Column="1">
+                <Border Background="{ThemeResource PdxCardGlassBrush}" CornerRadius="8" />
+                <Grid Padding="18">
+
+                    <!-- 详情 -->
+                    <ScrollViewer Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsDetailPane), Mode=OneWay}">
+                        <StackPanel Spacing="12" MaxWidth="720" HorizontalAlignment="Left">
+                            <TextBlock Text="{x:Bind L.ModstudioUnsupportedHint, Mode=OneWay}"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowUnsupportedCreateHint), Mode=OneWay}" />
+
+                            <TextBlock Text="{x:Bind L.ModstudioDetailNoSelectionHint, Mode=OneWay}"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource BodyTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(ViewModel.HasSelection), Mode=OneWay}" />
+
+                            <StackPanel Spacing="10"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasSelection), Mode=OneWay}">
+                                <TextBlock Text="{x:Bind ViewModel.SelectedName, Mode=OneWay}"
+                                           Style="{StaticResource TitleTextBlockStyle}"
+                                           TextWrapping="Wrap" />
+
+                                <Grid ColumnSpacing="12" RowSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Bind L.ModstudioDetailFolder, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{x:Bind ViewModel.SelectedFolder, Mode=OneWay}" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{x:Bind L.ModstudioDetailVersion, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{x:Bind ViewModel.SelectedVersion, Mode=OneWay}" TextWrapping="Wrap" />
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{x:Bind L.ModstudioDetailSupportedVersion, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{x:Bind ViewModel.SelectedSupportedVersion, Mode=OneWay}" TextWrapping="Wrap" />
+
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="{x:Bind L.ModstudioDetailTags, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{x:Bind ViewModel.SelectedTags, Mode=OneWay}" TextWrapping="Wrap" />
+
+                                    <TextBlock Grid.Row="4" Grid.Column="0" Text="{x:Bind L.ModstudioDetailDescription, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Text="{x:Bind ViewModel.SelectedDescription, Mode=OneWay}" TextWrapping="Wrap" />
+
+                                    <TextBlock Grid.Row="5" Grid.Column="0" Text="{x:Bind L.ModstudioDetailDescriptor, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Grid.Row="5" Grid.Column="1" Text="{x:Bind ViewModel.SelectedDescriptor, Mode=OneWay}" TextWrapping="Wrap" />
+
+                                    <TextBlock Grid.Row="6" Grid.Column="0" Text="{x:Bind L.ModstudioDetailPublication, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    <TextBlock Grid.Row="6" Grid.Column="1" Text="{x:Bind ViewModel.SelectedPublication, Mode=OneWay}" TextWrapping="Wrap" />
+                                </Grid>
+
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Click="OnOpenFolderClick"
+                                            IsEnabled="{x:Bind ViewModel.CanOpenSelectedFolder, Mode=OneWay}"
+                                            AutomationProperties.AutomationId="modStudioOpenFolder">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon Glyph="&#xE8B7;" FontSize="14" />
+                                            <TextBlock Text="{x:Bind L.ModstudioOpenFolder, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Click="OnOpenWorkshopClick"
+                                            IsEnabled="{x:Bind ViewModel.CanOpenSelectedWorkshop, Mode=OneWay}"
+                                            AutomationProperties.AutomationId="modStudioOpenWorkshop">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon Glyph="&#xE774;" FontSize="14" />
+                                            <TextBlock Text="{x:Bind L.ModstudioOpenWorkshop, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- 新建 -->
+                    <ScrollViewer Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsCreatePane), Mode=OneWay}">
+                        <StackPanel Spacing="8" MaxWidth="560" HorizontalAlignment="Left">
+                            <TextBlock Text="{x:Bind L.ModstudioCreateTitle, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock Text="{x:Bind L.ModstudioCreateHint, Mode=OneWay}" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Text="{x:Bind ViewModel.DescriptorHint, Mode=OneWay}" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                            <TextBlock Text="{x:Bind L.ModstudioFieldName, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBox Text="{x:Bind ViewModel.CreateName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     PlaceholderText="{x:Bind L.ModstudioNamePlaceholder, Mode=OneWay}"
+                                     AutomationProperties.AutomationId="txtModStudioName" />
+
+                            <TextBlock Text="{x:Bind L.ModstudioFieldFolder, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBox Text="{x:Bind ViewModel.CreateFolderName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     PlaceholderText="{x:Bind L.ModstudioFolderPlaceholder, Mode=OneWay}"
+                                     AutomationProperties.AutomationId="txtModStudioFolder" />
+                            <TextBlock Text="{x:Bind ViewModel.CreateFolderHintText, Mode=OneWay}" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                            <Grid ColumnSpacing="10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="{x:Bind L.ModstudioFieldVersion, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                    <TextBox Text="{x:Bind ViewModel.CreateVersion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             PlaceholderText="{x:Bind L.ModstudioVersionPlaceholder, Mode=OneWay}"
+                                             AutomationProperties.AutomationId="txtModStudioVersion" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Spacing="4">
+                                    <TextBlock Text="{x:Bind L.ModstudioFieldSupportedVersion, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                    <TextBox Text="{x:Bind ViewModel.CreateSupportedVersion, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             PlaceholderText="{x:Bind L.ModstudioSupportedVersionPlaceholder, Mode=OneWay}"
+                                             AutomationProperties.AutomationId="txtModStudioSupportedVersion" />
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="{x:Bind L.ModstudioFieldTags, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBox Text="{x:Bind ViewModel.CreateTags, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     PlaceholderText="{x:Bind L.ModstudioTagsPlaceholder, Mode=OneWay}"
+                                     AutomationProperties.AutomationId="txtModStudioTags" />
+
+                            <TextBlock Text="{x:Bind L.ModstudioFieldDescription, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBox Text="{x:Bind ViewModel.CreateDescription, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     PlaceholderText="{x:Bind L.ModstudioDescriptionPlaceholder, Mode=OneWay}"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     MinHeight="64"
+                                     AutomationProperties.AutomationId="txtModStudioDescription" />
+
+                            <TextBlock Text="{x:Bind L.ModstudioFieldPreview, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Click="OnPickCreatePreviewClick" AutomationProperties.AutomationId="btnModStudioPickCreatePreview">
+                                    <TextBlock Text="{x:Bind L.ModstudioPickPreview, Mode=OneWay}" />
+                                </Button>
+                                <TextBlock Text="{x:Bind ViewModel.CreatePreviewText, Mode=OneWay}"
+                                           VerticalAlignment="Center"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,4,0,0">
+                                <Button Click="OnCreateCancelClick" AutomationProperties.AutomationId="btnModStudioCreateCancel">
+                                    <TextBlock Text="{x:Bind L.ModstudioCreateCancel, Mode=OneWay}" />
+                                </Button>
+                                <Button Style="{StaticResource AccentButtonStyle}"
+                                        Click="OnCreateConfirmClick"
+                                        AutomationProperties.AutomationId="btnModStudioCreateConfirm">
+                                    <TextBlock Text="{x:Bind L.ModstudioCreateConfirm, Mode=OneWay}" />
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- 上传 -->
+                    <ScrollViewer Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsUploadPane), Mode=OneWay}">
+                        <StackPanel Spacing="10" MaxWidth="620" HorizontalAlignment="Left">
+                            <TextBlock Text="{x:Bind L.ModstudioUploadTitle, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <TextBlock Text="{x:Bind L.ModstudioUploadHint, Mode=OneWay}" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{x:Bind L.ModstudioUploadMod, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <TextBlock Text="{x:Bind ViewModel.UploadModName, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            </StackPanel>
+
+                            <TextBlock Text="{x:Bind L.ModstudioFieldUploadDirectory, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBlock Text="{x:Bind ViewModel.UploadDirectoryText, Mode=OneWay}"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       AutomationProperties.AutomationId="txtModStudioUploadDirectory" />
+
+                            <TextBlock Text="{x:Bind L.ModstudioFieldUploadTarget, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <StackPanel Orientation="Horizontal" Spacing="16">
+                                <RadioButton GroupName="ModStudioUploadTarget"
+                                             Content="{x:Bind L.ModstudioUploadTargetSteam, Mode=OneWay}"
+                                             IsChecked="{x:Bind ViewModel.IsSteamTarget, Mode=TwoWay}"
+                                             AutomationProperties.AutomationId="rdoModStudioTargetSteam" />
+                                <RadioButton GroupName="ModStudioUploadTarget"
+                                             Content="{x:Bind L.ModstudioUploadTargetPdx, Mode=OneWay}"
+                                             IsChecked="{x:Bind ViewModel.IsParadoxTarget, Mode=TwoWay}"
+                                             AutomationProperties.AutomationId="rdoModStudioTargetPdx" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind ViewModel.UploadTargetHint, Mode=OneWay}"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsParadoxTarget), Mode=OneWay}" />
+
+                            <TextBlock Text="{x:Bind L.ModstudioFieldUploadModId, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBox Text="{x:Bind ViewModel.UploadModId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     PlaceholderText="{x:Bind L.ModstudioUploadModIdPlaceholder, Mode=OneWay}"
+                                     IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                     AutomationProperties.AutomationId="txtModStudioUploadModId" />
+                            <TextBlock Text="{x:Bind ViewModel.UploadModIdHint, Mode=OneWay}"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                            <!-- 与 Steam 客户端的「编辑标题与描述」一致：语言在上，标题居中，描述在下 -->
+                            <TextBlock Text="{x:Bind L.ModstudioFieldLanguage, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <ComboBox MinWidth="200"
+                                      HorizontalAlignment="Stretch"
+                                      ItemsSource="{x:Bind ViewModel.UploadLanguageOptions, Mode=OneWay}"
+                                      SelectedItem="{x:Bind ViewModel.UploadSelectedLanguage, Mode=OneWay}"
+                                      DisplayMemberPath="DisplayName"
+                                      SelectionChanged="OnUploadLanguageChanged"
+                                      IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                      AutomationProperties.AutomationId="cmbModStudioUploadLanguage" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{x:Bind L.ModstudioFieldUploadTitle, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                <TextBlock Text="{x:Bind ViewModel.UploadTitleCountText, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           AutomationProperties.AutomationId="txtModStudioTitleCount" />
+                            </StackPanel>
+                            <TextBox Text="{x:Bind ViewModel.UploadTitle, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     PlaceholderText="{x:Bind L.ModstudioUploadTitlePlaceholder, Mode=OneWay}"
+                                     IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                     AutomationProperties.AutomationId="txtModStudioUploadTitle" />
+                            <TextBlock Text="{x:Bind ViewModel.UploadTitleWarningText, Mode=OneWay}"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsUploadTitleTooLong), Mode=OneWay}"
+                                       AutomationProperties.AutomationId="txtModStudioTitleWarning" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{x:Bind L.ModstudioFieldUploadDescription, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                <TextBlock Text="{x:Bind ViewModel.UploadDescriptionCountText, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           AutomationProperties.AutomationId="txtModStudioDescriptionCount" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind L.ModstudioBbcodeHint, Mode=OneWay}"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="4"
+                                        AutomationProperties.AutomationId="modStudioBbcodeToolbar">
+                                <Button Content="B"
+                                        Tag="bold"
+                                        MinWidth="36"
+                                        Padding="8,4"
+                                        FontWeight="Bold"
+                                        IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind L.ModstudioBbcodeBold, Mode=OneWay}"
+                                        Click="OnBbCodeClick"
+                                        AutomationProperties.AutomationId="btnBbCodeBold" />
+                                <Button Content="I"
+                                        Tag="italic"
+                                        MinWidth="36"
+                                        Padding="8,4"
+                                        FontStyle="Italic"
+                                        IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind L.ModstudioBbcodeItalic, Mode=OneWay}"
+                                        Click="OnBbCodeClick"
+                                        AutomationProperties.AutomationId="btnBbCodeItalic" />
+                                <Button Content="U"
+                                        Tag="underline"
+                                        MinWidth="36"
+                                        Padding="8,4"
+                                        IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind L.ModstudioBbcodeUnderline, Mode=OneWay}"
+                                        Click="OnBbCodeClick"
+                                        AutomationProperties.AutomationId="btnBbCodeUnderline" />
+                                <Button Content="S"
+                                        Tag="strike"
+                                        MinWidth="36"
+                                        Padding="8,4"
+                                        IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind L.ModstudioBbcodeStrike, Mode=OneWay}"
+                                        Click="OnBbCodeClick"
+                                        AutomationProperties.AutomationId="btnBbCodeStrike" />
+                                <Button Content="H2"
+                                        Tag="heading"
+                                        MinWidth="36"
+                                        Padding="8,4"
+                                        IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind L.ModstudioBbcodeHeading, Mode=OneWay}"
+                                        Click="OnBbCodeClick"
+                                        AutomationProperties.AutomationId="btnBbCodeHeading" />
+                                <Button Content="•"
+                                        Tag="bullets"
+                                        MinWidth="36"
+                                        Padding="8,4"
+                                        IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind L.ModstudioBbcodeBulletList, Mode=OneWay}"
+                                        Click="OnBbCodeClick"
+                                        AutomationProperties.AutomationId="btnBbCodeBullets" />
+                                <Button Content="1."
+                                        Tag="numbered"
+                                        MinWidth="36"
+                                        Padding="8,4"
+                                        IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind L.ModstudioBbcodeNumberedList, Mode=OneWay}"
+                                        Click="OnBbCodeClick"
+                                        AutomationProperties.AutomationId="btnBbCodeNumbered" />
+                                <Button Content="—"
+                                        Tag="rule"
+                                        MinWidth="36"
+                                        Padding="8,4"
+                                        IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind L.ModstudioBbcodeRule, Mode=OneWay}"
+                                        Click="OnBbCodeClick"
+                                        AutomationProperties.AutomationId="btnBbCodeRule" />
+                                <Button Content="Link"
+                                        Tag="link"
+                                        MinWidth="36"
+                                        Padding="8,4"
+                                        IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind L.ModstudioBbcodeLink, Mode=OneWay}"
+                                        Click="OnBbCodeClick"
+                                        AutomationProperties.AutomationId="btnBbCodeLink" />
+                                <Button Content="Img"
+                                        Tag="image"
+                                        MinWidth="36"
+                                        Padding="8,4"
+                                        IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind L.ModstudioBbcodeImage, Mode=OneWay}"
+                                        Click="OnBbCodeClick"
+                                        AutomationProperties.AutomationId="btnBbCodeImage" />
+                                <Button Content="Code"
+                                        Tag="code"
+                                        MinWidth="36"
+                                        Padding="8,4"
+                                        IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind L.ModstudioBbcodeCode, Mode=OneWay}"
+                                        Click="OnBbCodeClick"
+                                        AutomationProperties.AutomationId="btnBbCodeCode" />
+                            </StackPanel>
+                            <TextBox x:Name="txtUgcDescription"
+                                     Text="{x:Bind ViewModel.UploadDescription, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                     PlaceholderText="{x:Bind L.ModstudioUploadDescriptionPlaceholder, Mode=OneWay}"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     MinHeight="84"
+                                     AutomationProperties.AutomationId="txtModStudioUploadDescription" />
+                            <TextBlock Text="{x:Bind ViewModel.UploadDescriptionWarningText, Mode=OneWay}"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsUploadDescriptionTooLong), Mode=OneWay}"
+                                       AutomationProperties.AutomationId="txtModStudioDescriptionWarning" />
+
+                            <StackPanel Spacing="6"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasUploadDescriptionPreview), Mode=OneWay}">
+                                <TextBlock Text="{x:Bind L.ModstudioPreviewHeader, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <Border Padding="12"
+                                        MaxHeight="320"
+                                        CornerRadius="4"
+                                        BorderThickness="1"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        AutomationProperties.AutomationId="brdModStudioDescriptionPreview">
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto" VerticalScrollMode="Auto">
+                                        <ctl:MarkdownView Markdown="{x:Bind ViewModel.UploadDescriptionPreview, Mode=OneWay}" />
+                                    </ScrollViewer>
+                                </Border>
+                            </StackPanel>
+
+
+
+                            <TextBlock Text="{x:Bind ViewModel.UploadExtraLanguageSummary, Mode=OneWay}"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                       AutomationProperties.AutomationId="txtModStudioLocalizationCount" />
+                            <TextBlock Text="{x:Bind L.ModstudioLocalizationNote, Mode=OneWay}"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{x:Bind L.ModstudioFieldUploadTags, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                <TextBlock Text="{x:Bind ViewModel.UploadSelectedTagCountText, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.UploadTagOptions, Mode=OneWay}"
+                                           AutomationProperties.AutomationId="modStudioUploadTags">
+                                <ItemsRepeater.Layout>
+                                    <UniformGridLayout MinItemWidth="220"
+                                                       MinItemHeight="32"
+                                                       MaximumRowsOrColumns="2"
+                                                       Orientation="Horizontal"
+                                                       ItemsStretch="Fill" />
+                                </ItemsRepeater.Layout>
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ModTagOption">
+                                        <CheckBox Content="{x:Bind Name}"
+                                                  IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                                                  Margin="0,0,8,4" />
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                            </ItemsRepeater>
+
+                            <TextBlock Text="{x:Bind L.ModstudioFieldVisibility, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <ComboBox ItemsSource="{x:Bind ViewModel.VisibilityOptions, Mode=OneWay}"
+                                      SelectedItem="{x:Bind ViewModel.SelectedVisibilityOption, Mode=TwoWay}"
+                                      DisplayMemberPath="Text"
+                                      HorizontalAlignment="Stretch"
+                                      IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                      AutomationProperties.AutomationId="cmbModStudioVisibility" />
+
+                            <TextBlock Text="{x:Bind L.ModstudioFieldDescriptors, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <StackPanel Spacing="2">
+                                <CheckBox Content="{x:Bind L.ModstudioDescriptorAdult, Mode=OneWay}"
+                                          IsChecked="{x:Bind ViewModel.UploadDescriptorAdult, Mode=TwoWay}"
+                                          AutomationProperties.AutomationId="chkModStudioDescriptorAdult" />
+                                <CheckBox Content="{x:Bind L.ModstudioDescriptorViolence, Mode=OneWay}"
+                                          IsChecked="{x:Bind ViewModel.UploadDescriptorViolence, Mode=TwoWay}"
+                                          AutomationProperties.AutomationId="chkModStudioDescriptorViolence" />
+                                <CheckBox Content="{x:Bind L.ModstudioDescriptorNudity, Mode=OneWay}"
+                                          IsChecked="{x:Bind ViewModel.UploadDescriptorNudity, Mode=TwoWay}"
+                                          AutomationProperties.AutomationId="chkModStudioDescriptorNudity" />
+                                <CheckBox Content="{x:Bind L.ModstudioDescriptorFrequentNudity, Mode=OneWay}"
+                                          IsChecked="{x:Bind ViewModel.UploadDescriptorFrequentNudity, Mode=TwoWay}"
+                                          AutomationProperties.AutomationId="chkModStudioDescriptorFrequentNudity" />
+                                <CheckBox Content="{x:Bind L.ModstudioDescriptorAdultOnly, Mode=OneWay}"
+                                          IsChecked="{x:Bind ViewModel.UploadDescriptorAdultOnly, Mode=TwoWay}"
+                                          AutomationProperties.AutomationId="chkModStudioDescriptorAdultOnly" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind L.ModstudioDescriptorsHint, Mode=OneWay}"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+                            <TextBlock Text="{x:Bind L.ModstudioFieldPreview, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Click="OnPickUploadPreviewClick" AutomationProperties.AutomationId="btnModStudioPickUploadPreview">
+                                    <TextBlock Text="{x:Bind L.ModstudioPickPreview, Mode=OneWay}" />
+                                </Button>
+                                <Button Click="OnUseBuiltInCoverClick" AutomationProperties.AutomationId="btnModStudioUseBuiltInCover">
+                                    <TextBlock Text="{x:Bind L.ModstudioUseBuiltInCover, Mode=OneWay}" />
+                                </Button>
+                                <TextBlock Text="{x:Bind ViewModel.UploadPreviewText, Mode=OneWay}"
+                                           VerticalAlignment="Center"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+
+                            <TextBlock Text="{x:Bind L.ModstudioFieldPreviews, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <StackPanel Spacing="4">
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.UploadPreviewItems, Mode=OneWay}"
+                                              AutomationProperties.AutomationId="lstModStudioPreviews">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ModUploadPreviewItem">
+                                            <Grid ColumnSpacing="8" Margin="0,2,0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0" Spacing="0">
+                                                    <TextBlock Text="{x:Bind FileName}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{x:Bind SizeText}"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                    <TextBlock Text="{x:Bind TooLargeText}"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                                               Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(HasTooLargeText)}" />
+                                                </StackPanel>
+                                                <Button Grid.Column="1" Click="OnMovePreviewUpClick" Content="&#xE74A;"
+                                                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                        AutomationProperties.Name="{x:Bind L.ModstudioMoveUp, Mode=OneWay}" />
+                                                <Button Grid.Column="2" Click="OnMovePreviewDownClick" Content="&#xE74B;"
+                                                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                        AutomationProperties.Name="{x:Bind L.ModstudioMoveDown, Mode=OneWay}" />
+                                                <Button Grid.Column="3" Click="OnRemovePreviewClick" Content="&#xE711;"
+                                                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                        AutomationProperties.Name="{x:Bind L.ModstudioRemovePreview, Mode=OneWay}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Button Click="OnAddPreviewsClick" AutomationProperties.AutomationId="btnModStudioAddPreviews">
+                                    <TextBlock Text="{x:Bind L.ModstudioAddPreviews, Mode=OneWay}" />
+                                </Button>
+                                <TextBlock Text="{x:Bind L.ModstudioPreviewLimitHint, Mode=OneWay}"
+                                           TextWrapping="Wrap"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+
+                            <TextBlock Text="{x:Bind L.ModstudioFieldVideoPreviews, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <StackPanel Spacing="4">
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.UploadVideoItems, Mode=OneWay}"
+                                              AutomationProperties.AutomationId="lstModStudioVideos">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ModUploadVideoItem">
+                                            <Grid ColumnSpacing="8" Margin="0,2,0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{x:Bind Url}" TextTrimming="CharacterEllipsis" />
+                                                <Button Grid.Column="1" Click="OnRemoveVideoClick" Content="&#xE711;"
+                                                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                        ToolTipService.ToolTip="{x:Bind L.ModstudioRemovePreview, Mode=OneWay}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0"
+                                             Text="{x:Bind ViewModel.UploadNewVideoUrl, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                             PlaceholderText="{x:Bind L.ModstudioVideoUrlPlaceholder, Mode=OneWay}"
+                                             AutomationProperties.AutomationId="txtModStudioVideoUrl" />
+                                    <Button Grid.Column="1" Click="OnAddVideoClick" AutomationProperties.AutomationId="btnModStudioAddVideo">
+                                        <TextBlock Text="{x:Bind L.ModstudioAddVideo, Mode=OneWay}" />
+                                    </Button>
+                                </Grid>
+                                <TextBlock Text="{x:Bind L.ModstudioVideoHint, Mode=OneWay}"
+                                           TextWrapping="Wrap"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+
+                            <!-- 进度 -->
+                            <StackPanel Spacing="4" Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsPublishing), Mode=OneWay}">
+                                <ProgressBar Value="{x:Bind ViewModel.ProgressPercent, Mode=OneWay}"
+                                             Maximum="100"
+                                             AutomationProperties.AutomationId="modStudioProgress"
+                                             AutomationProperties.Name="{x:Bind L.ModstudioProgressName, Mode=OneWay}" />
+                                <TextBlock Text="{x:Bind ViewModel.ProgressText, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="8" Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.NeedsLegalAgreement), Mode=OneWay}">
+                                <TextBlock Text="{x:Bind L.ModstudioNeedsLegal, Mode=OneWay}"
+                                           TextWrapping="Wrap"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                                <HyperlinkButton Content="{x:Bind L.ModstudioLegalLink, Mode=OneWay}"
+                                                 Click="OnLegalClick"
+                                                 AutomationProperties.AutomationId="modStudioLegalLink" />
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,4,0,0">
+                                <Button Click="OnUploadCancelClick" AutomationProperties.AutomationId="btnModStudioUploadCancel">
+                                    <TextBlock Text="{x:Bind L.ModstudioCancel, Mode=OneWay}" />
+                                </Button>
+                                <Button Style="{StaticResource AccentButtonStyle}"
+                                        Click="OnUploadConfirmClick"
+                                        IsEnabled="{x:Bind ViewModel.CanStartUpload, Mode=OneWay}"
+                                        AutomationProperties.AutomationId="btnModStudioUploadConfirm">
+                                    <TextBlock Text="{x:Bind L.ModstudioUploadConfirm, Mode=OneWay}" />
+                                </Button>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+        </Grid>
+
+        <!-- 底栏：状态 + 上传进度条 -->
+        <Border Grid.Row="2"
+                Padding="10,6"
+                CornerRadius="6"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ProgressBar Grid.Column="0"
+                             Width="220"
+                             VerticalAlignment="Center"
+                             Value="{x:Bind ViewModel.ProgressPercent, Mode=OneWay}"
+                             Maximum="100"
+                             Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsPublishing), Mode=OneWay}" />
+                <TextBlock Grid.Column="1"
+                           Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           AutomationProperties.AutomationId="modStudioStatus"
+                           AutomationProperties.Name="{x:Bind L.ModstudioStatusName, Mode=OneWay}" />
+            </Grid>
+        </Border>
+    </Grid>
+</Page>

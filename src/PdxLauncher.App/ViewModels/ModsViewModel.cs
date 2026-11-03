@@ -31,6 +31,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
     private bool _isBusy;
     private bool _isLoaded;
     private string _statusMessage = string.Empty;
+    private bool _translateFailureReported;
     private string _searchText = string.Empty;
     private PlaySet? _selectedPlaySet;
     private IReadOnlyList<PlaySetMod> _allMods = Array.Empty<PlaySetMod>();
@@ -52,6 +53,12 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
     /// <summary>正在运行的自动保存循环；为 null 或已完成时才允许启动新循环。</summary>
     private Task? _autoSaveTask;
+
+    /// <summary>
+    /// 自动排序应用前的顺序快照（含位次，可直接还原），只保留在内存。
+    /// 切换或重载播放集即清空，避免把旧快照套到别的播放集上。
+    /// </summary>
+    private IReadOnlyList<PlaySetMod>? _autoSortUndo;
 
     public ModsViewModel(
         PlaySetEditor editor,
@@ -184,6 +191,12 @@ public sealed class ModsViewModel : LocalizedObservableObject
     /// <summary>选中项相关的「重命名 / 删除」按钮是否可用：有选中且不在忙碌中。</summary>
     public bool CanManageSelection => HasSelection && !IsBusy;
 
+    /// <summary>是否可以一键撤销上一次自动排序。</summary>
+    public bool HasAutoSortUndo => _autoSortUndo is not null;
+
+    /// <summary>当前播放集的原始行（顺序即旧位次），供自动排序预览对话框对照「谁移到哪」。</summary>
+    public IReadOnlyList<PlaySetMod> CurrentPlaySetMods => _allMods;
+
     /// <summary>当前选中的播放集是否就是激活集（以列表里的 IsActive 为准，避免 SelectedPlaySet 过期）。</summary>
     public bool IsSelectedPlaySetActive =>
         SelectedPlaySet is { } selected && PlaySets.Any(p => p.Id == selected.Id && p.IsActive);
@@ -239,6 +252,9 @@ public sealed class ModsViewModel : LocalizedObservableObject
     {
         RefreshDisplayMode();
         Game = game;
+        // 自动排序的撤销快照与旧播放集绑定，切换/重载即作废，避免一键撤销还原到别的播放集的顺序。
+        _autoSortUndo = null;
+        OnPropertyChanged(nameof(HasAutoSortUndo));
         if (game is null)
         {
             PlaySets.Clear();
@@ -331,18 +347,21 @@ public sealed class ModsViewModel : LocalizedObservableObject
     public async Task SelectPlaySetAsync(PlaySet? playSet, CancellationToken cancellationToken)
     {
         // 集合元素是不可变 record，激活标记变化时会被替换成新实例；这里按 Id 归一化，
-        // 保证 SelectedPlaySet 始终是 ItemsSource 中的对象，ComboBox 才能匹配到选中项。
+        // 保证 SelectedPlaySet 始终是 ItemsSource 中的对象，下拉控件才能匹配到选中项。
         if (playSet is not null)
         {
             playSet = PlaySets.FirstOrDefault(p => p.Id == playSet.Id) ?? playSet;
         }
 
         SelectedPlaySet = playSet;
-        // PlaySet 是值相等的 record：LoadAsync 里 PlaySets.Clear() 会让 ComboBox 的 SelectedItem
+        // PlaySet 是值相等的 record：LoadAsync 里 PlaySets.Clear() 会让下拉控件的 SelectedItem
         // 掉成 null，随后即使重新选中"同一个播放集的新实例"，SetProperty 也会因值相等而跳过通知，
         // 单向 x:Bind 永远不回灌，选择框就一直空白（页面之前只有摘要文字有值，正是这个症状）。
         // 因此这里无条件补一次 PropertyChanged，保证下拉框每次都能显示当前播放集名。
         OnPropertyChanged(nameof(SelectedPlaySet));
+        // 撤销快照只对它产生的播放集有效，换集即清空。
+        _autoSortUndo = null;
+        OnPropertyChanged(nameof(HasAutoSortUndo));
         if (Game is null || playSet is null)
         {
             _allMods = Array.Empty<PlaySetMod>();
@@ -548,32 +567,39 @@ public sealed class ModsViewModel : LocalizedObservableObject
             return;
         }
 
+        // 新一轮加载重新给一次提示机会。
+        _translateFailureReported = false;
         _ = TranslateNamesAsync(pending, cancellationToken);
     }
 
-    /// <summary>逐行翻译 mod 名称；译好一行刷一行。</summary>
+    /// <summary>整页名称一次性批翻（引擎内部并发），译完统一回填。</summary>
     private async Task TranslateNamesAsync(
         IReadOnlyList<ModRowViewModel> rows,
         CancellationToken cancellationToken)
     {
         try
         {
-            foreach (var row in rows)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    return;
-                }
+            var names = rows.Select(static row => row.Name).ToList();
+            var translated = await AppServices.Translation
+                .TranslateBatchAsync(names, cancellationToken)
+                .ConfigureAwait(true);
 
-                var translated = await AppServices.Translation
-                    .TranslateAsync(row.Name, cancellationToken)
-                    .ConfigureAwait(true);
-                if (translated is null || string.IsNullOrWhiteSpace(translated))
+            var anyTranslated = false;
+            for (var i = 0; i < rows.Count && i < translated.Count; i++)
+            {
+                var translatedName = translated[i];
+                if (string.IsNullOrWhiteSpace(translatedName))
                 {
                     continue;
                 }
 
-                row.TranslatedName = translated;
+                rows[i].TranslatedName = translatedName;
+                anyTranslated = true;
+            }
+
+            if (!anyTranslated)
+            {
+                ReportTranslationFailure(rows.Count);
             }
         }
         catch (OperationCanceledException)
@@ -584,6 +610,20 @@ public sealed class ModsViewModel : LocalizedObservableObject
         {
             _logger.Warn("Mod 名称翻译失败：" + ex.Message);
         }
+    }
+
+    /// <summary>整页一条译文都没拿到时，在底部状态条说明原因（同一次加载只提示一次）。</summary>
+    private void ReportTranslationFailure(int count)
+    {
+        if (_translateFailureReported)
+        {
+            return;
+        }
+
+        _translateFailureReported = true;
+        var reason = AppServices.Translation.LastFailure ?? T(Keys.CommonUnknown);
+        _logger.Warn("Mod 名称全部未翻译（" + count + " 条）：" + reason);
+        StatusMessage = T(Keys.ModsTranslateUnavailable, reason);
     }
 
     /// <summary>行内开关变化：同步集合顺序（不重排），刷新计数与状态，并自动保存。</summary>
@@ -727,6 +767,80 @@ public sealed class ModsViewModel : LocalizedObservableObject
             ? T(Keys.ModsStatusAllEnabled)
             : T(Keys.ModsStatusAllDisabled);
         RequestAutoSave();
+    }
+
+    // ------------------------------------------------------------ 自动排序
+
+    /// <summary>
+    /// 计算自动排序预览：扫描各 mod 的实际文件改动并算出新顺序，只读不落库。
+    /// 未选游戏时置状态栏并返回 null；扫描期间置忙，防止中途编辑。
+    /// </summary>
+    public async Task<AutoSortPreview?> BuildAutoSortPreviewAsync(CancellationToken cancellationToken)
+    {
+        var game = Game;
+        if (game is null)
+        {
+            StatusMessage = T(Keys.ModsStatusAutoSortNeedsGame);
+            return null;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var preview = await PlaySetAutoSortService
+                .BuildPreviewAsync(AppServices.FileSystem, game, _allMods, _logger, cancellationToken)
+                .ConfigureAwait(true);
+            var moved = preview.Result.Entries.Count(e => e.OldIndex != e.NewIndex);
+            _logger.Info("自动排序（preview）：共 " + _allMods.Count.ToString(CultureInfo.InvariantCulture)
+                + " 个 mod，移动 " + moved.ToString(CultureInfo.InvariantCulture)
+                + " 个，冲突 " + preview.Conflicts.Count.ToString(CultureInfo.InvariantCulture)
+                + " 组，警告 " + preview.Result.Warnings.Count.ToString(CultureInfo.InvariantCulture)
+                + " 条（playSetId=" + (SelectedPlaySet?.Id.ToString("N") ?? "-") + "）");
+            return preview;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// 应用预览给出的新顺序：先把当前顺序存成撤销快照，再整体替换并走自动保存通道。
+    /// 只改顺序，不碰启用状态与其它行内容。
+    /// </summary>
+    public void ApplyAutoSort(AutoSortPreview preview)
+    {
+        ArgumentNullException.ThrowIfNull(preview);
+
+        _autoSortUndo = _allMods;
+        _allMods = PlaySetEditor.Renumber(preview.ReorderedRows);
+        RebuildVisibleMods();
+
+        var moved = preview.Result.Entries.Count(e => e.OldIndex != e.NewIndex);
+        StatusMessage = T(Keys.ModsStatusAutoSortApplied, moved);
+        OnPropertyChanged(nameof(HasAutoSortUndo));
+        _logger.Info("自动排序（apply）：移动 " + moved.ToString(CultureInfo.InvariantCulture)
+            + " 个 mod（playSetId=" + (SelectedPlaySet?.Id.ToString("N") ?? "-") + "）");
+        RequestAutoSave();
+    }
+
+    /// <summary>一键撤销上一次自动排序（还原应用前的顺序）；没有快照时返回 false。</summary>
+    public bool UndoAutoSort()
+    {
+        if (_autoSortUndo is null)
+        {
+            return false;
+        }
+
+        _allMods = PlaySetEditor.Renumber(_autoSortUndo);
+        _autoSortUndo = null;
+        RebuildVisibleMods();
+        StatusMessage = T(Keys.ModsStatusAutoSortUndone);
+        OnPropertyChanged(nameof(HasAutoSortUndo));
+        _logger.Info("自动排序（undo）：已还原自动排序前的顺序（playSetId="
+            + (SelectedPlaySet?.Id.ToString("N") ?? "-") + "）");
+        RequestAutoSave();
+        return true;
     }
 
     /// <summary>把字节数格式化成 "1.2MB" 这样的短文本（与 Mod 库页同一格式）；未知返回 null。</summary>
@@ -1141,7 +1255,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
     /// <summary>
     /// 把 SelectedPlaySet 同步到 PlaySets 中同 Id 的实例。PlaySet 是不可变 record，激活标记变化时
-    /// 集合元素会被替换；不同步会让 ComboBox.SelectedItem 指向不存在的旧对象，选择框显示空白。
+    /// 集合元素会被替换；不同步会让下拉控件的 SelectedItem 指向不存在的旧对象，选择框显示空白。
     /// </summary>
     private void SyncSelectedPlaySetInstance()
     {

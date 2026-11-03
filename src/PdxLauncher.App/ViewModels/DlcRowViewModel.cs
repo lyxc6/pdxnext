@@ -15,6 +15,7 @@ public sealed class DlcRowViewModel : LocalizedObservableObject
     private readonly Action<DlcRowViewModel>? _onEnabledChanged;
     private bool _isEnabled;
     private string _description;
+    private bool? _isOwned;
 
     /// <param name="dlc">磁盘上的 DLC 描述。</param>
     /// <param name="isEnabled">该 DLC 在激活播放集里是否启用。</param>
@@ -24,11 +25,16 @@ public sealed class DlcRowViewModel : LocalizedObservableObject
     /// V0 的 disabled_dlcs 写的是 .dlc 相对路径，pops_id 为空也能禁用。
     /// </param>
     /// <param name="onEnabledChanged">启用状态变化回调。</param>
+    /// <param name="showsToggle">
+    /// 是否显示启用开关。CS2 这类由 Steam 授权决定归属的游戏没有 pops_id、播放集里也没有 DLC 条目，
+    /// 打开/禁用在任何文件里都无法表达，此时整列开关直接隐藏（而不是给一个置灰的无效控件）。
+    /// </param>
     public DlcRowViewModel(
         DlcInfo dlc,
         bool isEnabled,
         bool canBeDisabled,
-        Action<DlcRowViewModel>? onEnabledChanged = null)
+        Action<DlcRowViewModel>? onEnabledChanged = null,
+        bool showsToggle = true)
     {
         ArgumentNullException.ThrowIfNull(dlc);
         DisplayName = dlc.DisplayName;
@@ -46,6 +52,7 @@ public sealed class DlcRowViewModel : LocalizedObservableObject
         // 因此它们永远视为启用：即使上层传了 false 也强制回到 true，避免"UI 显示禁用、加载文件里没写"的不一致。
         _isEnabled = CanBeDisabled ? isEnabled : true;
         _onEnabledChanged = onEnabledChanged;
+        ShowsToggle = showsToggle;
     }
 
     public string DisplayName { get; }
@@ -64,6 +71,12 @@ public sealed class DlcRowViewModel : LocalizedObservableObject
     /// V1/V1_1 下 pops_id 为空的 DLC 为 false；V0 下所有 DLC 都为 true。
     /// </summary>
     public bool CanBeDisabled { get; }
+
+    /// <summary>
+    /// 是否显示启用开关。Steam 清单（CS2）没有可写的启用状态，所以整列开关隐藏；
+    /// 其余游戏恒为 true，与 <see cref="CanBeDisabled"/> 一起决定"可切换 / 置灰 / 隐藏"。
+    /// </summary>
+    public bool ShowsToggle { get; }
 
     public string SteamId { get; }
 
@@ -108,6 +121,51 @@ public sealed class DlcRowViewModel : LocalizedObservableObject
     public string ToggleToolTip => CanBeDisabled
         ? T(Keys.DlcToggleToolTip)
         : T(Keys.DlcToggleToolTipLocked);
+
+    /// <summary>
+    /// Steam 授权判定的结果：true/false 来自实际探测，null 表示未知
+    /// （没配 appid、探测失败，或这个 DLC 没有 Steam AppID）。
+    /// </summary>
+    public bool? IsOwned
+    {
+        get => _isOwned;
+        private set
+        {
+            if (SetProperty(ref _isOwned, value))
+            {
+                OnPropertyChanged(nameof(OwnershipKind));
+                OnPropertyChanged(nameof(OwnershipText));
+                OnPropertyChanged(nameof(OwnershipToolTip));
+            }
+        }
+    }
+
+    /// <summary>徽标配色类别：owned / unowned / unknown（由 XamlBrush 换成主题画笔）。</summary>
+    public string OwnershipKind => _isOwned switch
+    {
+        true => "owned",
+        false => "unowned",
+        _ => "unknown",
+    };
+
+    /// <summary>徽标文字（已拥有 / 未拥有 / 授权未知）。</summary>
+    public string OwnershipText => _isOwned switch
+    {
+        true => T(Keys.DlcOwnedBadge),
+        false => T(Keys.DlcUnownedBadge),
+        _ => T(Keys.DlcUnknownBadge),
+    };
+
+    /// <summary>徽标的自动化 Id（供 UI 测试确认每行都显示了拥有状态）。</summary>
+    public string OwnershipAutomationId => "txtDlcOwned_" + EffectiveId;
+
+    /// <summary>徽标悬停提示：带 Steam AppID，或说明为什么判不了。</summary>
+    public string OwnershipToolTip => string.IsNullOrWhiteSpace(SteamId)
+        ? T(Keys.DlcOwnershipRowNoSteam)
+        : T(Keys.DlcOwnershipRowToolTip, SteamId);
+
+    /// <summary>由 <c>DlcViewModel</c> 在探测完成后回填；null 表示未知。</summary>
+    public void SetOwnership(bool? isOwned) => IsOwned = isOwned;
 
     public bool IsEnabled
     {

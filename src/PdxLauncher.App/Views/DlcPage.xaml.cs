@@ -2,6 +2,7 @@ namespace PdxLauncher.App.Views;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
@@ -132,19 +133,29 @@ public sealed partial class DlcPage : Page
         }
     }
 
+    private async void OnRecheckOwnershipClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            // force: true 丢掉 30 秒缓存 —— 用户刚打完/移除补丁时点这个按钮，要看到最新的授权。
+            await _viewModel.RefreshOwnershipAsync(force: true, _lifetime.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("DlcPage 重新检测 Steam 授权失败", ex);
+            await ShowMessageAsync(L.DlcOwnershipRecheckFailed, ex.Message).ConfigureAwait(true);
+        }
+    }
+
     private async Task ShowMessageAsync(string title, string message)
     {
         try
         {
-            var dialog = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = title,
-                Content = message,
-                CloseButtonText = L.CommonClose,
-            };
-
-            await dialog.ShowAsync();
+            await ConfirmOverlay.ShowMessage(title, message, L.CommonClose);
         }
         catch (Exception ex)
         {

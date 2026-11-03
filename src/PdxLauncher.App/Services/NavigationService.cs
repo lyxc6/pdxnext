@@ -23,6 +23,9 @@ public sealed class NavigationService
     /// <summary>Mod 库页的导航 Tag。</summary>
     public const string ModLibraryTag = "modlibrary";
 
+    /// <summary>「Mod 创建」页的导航 Tag。</summary>
+    public const string ModStudioTag = "modstudio";
+
     /// <summary>创意工坊页的导航 Tag。</summary>
     public const string WorkshopTag = "workshop";
 
@@ -47,6 +50,7 @@ public sealed class NavigationService
         [HomeTag] = "PdxLauncher.App.Views.HomePage",
         [PlaySetsTag] = "PdxLauncher.App.Views.ModsPage",
         [ModLibraryTag] = "PdxLauncher.App.Views.ModLibraryPage",
+        [ModStudioTag] = "PdxLauncher.App.Views.ModStudioPage",
         [WorkshopTag] = "PdxLauncher.App.Views.WorkshopPage",
         [WorkshopDetailTag] = "PdxLauncher.App.Views.WorkshopDetailPage",
         [AddModsTag] = "PdxLauncher.App.Views.AddModsPage",

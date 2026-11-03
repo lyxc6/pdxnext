@@ -4,6 +4,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
+using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
@@ -136,31 +137,31 @@ public static class CrashReporter
             });
             panel.Children.Add(details);
 
-            var dialog = new ContentDialog
+            // 崩溃框也走全局确认浮层：左边「取消」右边「复制」，点确认时把详情写进剪贴板。
+            var overlay = ConfirmOverlay.Host;
+            if (overlay is null)
             {
-                XamlRoot = xamlRoot,
-                Title = localizer.ShellCrashTitle,
-                Content = new ScrollViewer { Content = panel, MaxHeight = 420 },
-                CloseButtonText = localizer.CommonClose,
-                PrimaryButtonText = localizer.ShellCrashCopy,
-                DefaultButton = ContentDialogButton.Close,
-            };
+                return;
+            }
 
-            dialog.PrimaryButtonClick += async (_, _) =>
-            {
-                try
+            _ = overlay.ShowAsync(
+                localizer.ShellCrashTitle,
+                new ScrollViewer { Content = panel, MaxHeight = 420 },
+                localizer.ShellCrashCopy,
+                localizer.CommonClose,
+                () =>
                 {
-                    var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
-                    package.SetText(details.Text);
-                    Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
-                }
-                catch
-                {
-                    // 剪贴板被占用等：忽略，用户仍可手动选中复制。
-                }
-            };
-
-            _ = dialog.ShowAsync();
+                    try
+                    {
+                        var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+                        package.SetText(details.Text);
+                        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+                    }
+                    catch
+                    {
+                        // 剪贴板被占用等：忽略，用户仍可手动选中复制。
+                    }
+                });
         }
         catch
         {

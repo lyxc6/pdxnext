@@ -52,5 +52,18 @@
   "modlib.sourceFilterName": "Source",
   "modlib.sourceFilterAll": "All sources",
   "modlib.sourceFilterLocal": "Local only",
-  "modlib.sourceFilterSubscribed": "Subscribed only"
+  "modlib.sourceFilterSubscribed": "Subscribed only",
+  "modlib.steamStateInstalled": "Installed via Steam",
+  "modlib.steamStateUpdateNeeded": "Update available",
+  "modlib.steamStateDownloading": "Downloading {0}%",
+  "modlib.steamStateDownloadingNoPercent": "Downloading",
+  "modlib.steamStatePending": "Queued in Steam",
+  "modlib.steamStateDisabled": "Disabled in Steam",
+  "modlib.steamStateName": "Steam status",
+  "modlib.steamDownloadName": "Download via Steam",
+  "modlib.steamDisableName": "Disable in Steam",
+  "modlib.steamEnableName": "Enable in Steam",
+  "modlib.steamDownloadRequested": "Asked Steam to download: {0}",
+  "modlib.steamActionFailed": "Steam action failed: {0}",
+  "modlib.steamWriteDisabled": "Write access is off: turn on \"Steam Workshop direct access\" in Settings to download or disable via Steam."
 }

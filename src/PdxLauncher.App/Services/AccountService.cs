@@ -173,6 +173,36 @@ public sealed class AccountService
         }
     }
 
+    /// <summary>
+    /// 把「保持登录」开关立刻落到磁盘：开 → 保存当前会话，关 → 删除已保存的会话。
+    /// </summary>
+    /// <param name="remember">新的开关值。</param>
+    /// <remarks>
+    /// 只在已登录时有意义：<see cref="SignInAsync"/> 只在登录那一刻按参数决定落盘，
+    /// 登录之后再改开关原本毫无作用（下次启动照样自动续期，或者照样要重登）。
+    /// 未登录时开关只是偏好，等下次登录生效，所以这里直接返回。
+    /// <para>
+    /// 不加 <c>_gate</c>：调用点是 UI 线程上的开关回调，只做一次文件读写，
+    /// 与正在进行的登录请求不会写同一个值（登录中途输入框是禁用的）。
+    /// </para>
+    /// </remarks>
+    public void ApplyRememberPreference(bool remember)
+    {
+        if (_session is not { } session)
+        {
+            return;
+        }
+
+        if (remember)
+        {
+            _store.Save(session);
+        }
+        else
+        {
+            _store.Clear();
+        }
+    }
+
     /// <summary>登出：清内存与磁盘。服务端会话不强制吊销（官方同样只在本地清）。</summary>
     public void SignOut()
     {

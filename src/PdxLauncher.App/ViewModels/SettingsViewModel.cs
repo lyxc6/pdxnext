@@ -9,9 +9,11 @@ using PdxLauncher.App.Services;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Online.Translation.Local;
 using PdxLauncher.Core.Patch;
 using PdxLauncher.Core.Steam;
 using PdxLauncher.Core.Storage;
+using PdxLauncher.Core.Updates;
 
 /// <summary>
 /// 设置页的视图模型：界面语言、主题来源与联网检查、网络代理、界面档位、启动参数、
@@ -67,6 +69,15 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     private string _translateMicrosoftKey = string.Empty;
     private string _translateMicrosoftRegion = string.Empty;
     private string _translateGoogleKey = string.Empty;
+    private bool _isTranslateTesting;
+    private string _translateTestText = string.Empty;
+    private IReadOnlyList<TranslationProbeResult>? _translateTestResults;
+    private string _glossarySourceInput = string.Empty;
+    private string _glossaryTargetInput = string.Empty;
+    private readonly ObservableCollection<LocalModelRowViewModel> _localModelRows = new();
+    private readonly ObservableCollection<GlossaryEntryViewModel> _glossaryEntries = new();
+    private bool _isCheckingUpdates;
+    private string _updateStatusText = string.Empty;
 
     public SettingsViewModel()
     {
@@ -162,6 +173,22 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             v => AppServices.Settings.SteamWorkshopSubscribeEnabled = v,
             Keys.SettingsSteamSubscribeStatusOn,
             Keys.SettingsSteamSubscribeStatusOff,
+            afterSave: RefreshSteamApiStatus);
+    }
+
+    /// <summary>
+    /// Steam 工坊状态开关（默认开）：只为读订阅/安装/下载状态而拉起宿主子进程。
+    /// 它是只读的，不会订阅、退订或改 Steam 的任何东西；每次查询会让 Steam 有几秒以为游戏在跑。
+    /// </summary>
+    public bool SteamStateEnabled
+    {
+        get => AppServices.Settings.SteamWorkshopStateEnabled;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.SteamWorkshopStateEnabled,
+            v => AppServices.Settings.SteamWorkshopStateEnabled = v,
+            Keys.SettingsSteamStateOn,
+            Keys.SettingsSteamStateOff,
             afterSave: RefreshSteamApiStatus);
     }
 
@@ -409,6 +436,115 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         if (!result.IsSuccess)
         {
             SetStatus(Keys.SettingsStatusSaveFailed, result.ErrorMessage ?? string.Empty);
+        }
+    }
+
+    // ------------------------------------------------------------ 关于与更新
+
+    /// <summary>启动时是否自动检查更新（只影响静默检查，手动检查不受影响）。</summary>
+    public bool AutoCheckUpdates
+    {
+        get => AppServices.Settings.AutoCheckUpdates;
+        set
+        {
+            if (AppServices.Settings.AutoCheckUpdates == value)
+            {
+                return;
+            }
+
+            AppServices.Settings.AutoCheckUpdates = value;
+            OnPropertyChanged();
+            PersistSettings();
+        }
+    }
+
+    public bool IsCheckingUpdates
+    {
+        get => _isCheckingUpdates;
+        private set
+        {
+            if (SetProperty(ref _isCheckingUpdates, value))
+            {
+                OnPropertyChanged(nameof(CanCheckUpdates));
+            }
+        }
+    }
+
+    public bool CanCheckUpdates => !_isCheckingUpdates;
+
+    public string LauncherVersionText => AppServices.Updates?.CurrentVersion ?? "1.0.0";
+
+    /// <summary>安装模式：每机器 / 每用户 / 便携。每机器由 marker 或 Program Files 路径判定。</summary>
+    public string InstallModeText
+    {
+        get
+        {
+            if (AppServices.Updates?.IsPerMachineInstall == true)
+            {
+                return T(Keys.SettingsAboutInstallModePerMachine);
+            }
+
+            var localPrograms = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Programs");
+            var baseDirectory = AppContext.BaseDirectory;
+            return baseDirectory.StartsWith(localPrograms + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                ? T(Keys.SettingsAboutInstallModePerUser)
+                : T(Keys.SettingsAboutInstallModePortable);
+        }
+    }
+
+    public string LastUpdateCheckText
+    {
+        get
+        {
+            var last = AppServices.Settings.LastUpdateCheckUtc;
+            return last is null
+                ? T(Keys.SettingsAboutNever)
+                : last.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        }
+    }
+
+    public string UpdateStatusText
+    {
+        get => _updateStatusText;
+        private set => SetProperty(ref _updateStatusText, value);
+    }
+
+    /// <summary>设置页的「立即检查」：手动检查总是访问网络，发现更新会弹全局浮层。</summary>
+    public async Task CheckForUpdatesAsync()
+    {
+        if (_isCheckingUpdates)
+        {
+            return;
+        }
+
+        IsCheckingUpdates = true;
+        UpdateStatusText = T(Keys.SettingsAboutChecking);
+        try
+        {
+            var result = await UpdateFlow.CheckAsync(manual: true).ConfigureAwait(true);
+            UpdateStatusText = result?.Status switch
+            {
+                UpdateCheckStatus.UpToDate => T(Keys.SettingsAboutStatusUpToDate),
+                UpdateCheckStatus.Available when result.Manifest is { } manifest =>
+                    T(Keys.SettingsAboutStatusAvailable, manifest.Version),
+                UpdateCheckStatus.NotDue => T(Keys.SettingsAboutStatusNotDue),
+                UpdateCheckStatus.Failed => T(Keys.SettingsAboutCheckFailed, result.Message),
+                UpdateCheckStatus.Skipped when result.Manifest is { } skipped =>
+                    T(Keys.SettingsAboutStatusAvailable, skipped.Version),
+                _ => string.Empty,
+            };
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("手动检查更新失败: " + ex.Message);
+            UpdateStatusText = T(Keys.SettingsAboutCheckFailed, ex.Message);
+        }
+        finally
+        {
+            IsCheckingUpdates = false;
+            OnPropertyChanged(nameof(LastUpdateCheckText));
         }
     }
 
@@ -1568,13 +1704,354 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             statusArgs: new object?[] { T(Keys.SettingsTranslateScopeComments) });
     }
 
+    /// <summary>「测试翻译」是否正在进行（按钮据此禁用，避免连点）。</summary>
+    public bool IsTranslateTesting
+    {
+        get => _isTranslateTesting;
+        private set
+        {
+            if (SetProperty(ref _isTranslateTesting, value))
+            {
+                OnPropertyChanged(nameof(CanTestTranslation));
+            }
+        }
+    }
+
+    /// <summary>「测试翻译」按钮当前是否可点。</summary>
+    public bool CanTestTranslation => !_isTranslateTesting;
+
+    /// <summary>
+    /// 各引擎的探测结果，一行一个：「✓ 引擎名：译文」或「✗ 引擎名：原因」。
+    /// </summary>
+    public string TranslateTestText
+    {
+        get => _translateTestText;
+        private set => SetProperty(ref _translateTestText, value);
+    }
+
+    // ------------------------------------------------------ 本地离线翻译
+
+    /// <summary>
+    /// 本地离线模型清单：每个模型一行，可下载 / 删除。
+    /// <para>
+    /// 没有本地运行时（理论上不会出现）时为空列表，设置页就看不到这一块。
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<LocalModelRowViewModel> LocalModelRows => _localModelRows;
+
+    /// <summary>术语词典的词条列表（可逐条编辑，保存后写盘）。</summary>
+    public IReadOnlyList<GlossaryEntryViewModel> GlossaryEntries => _glossaryEntries;
+
+    /// <summary>新增词条的「原文」输入框内容。</summary>
+    public string GlossarySourceInput
+    {
+        get => _glossarySourceInput;
+        set
+        {
+            if (SetProperty(ref _glossarySourceInput, value))
+            {
+                OnPropertyChanged(nameof(CanAddGlossaryEntry));
+            }
+        }
+    }
+
+    /// <summary>新增词条的「译文」输入框内容。</summary>
+    public string GlossaryTargetInput
+    {
+        get => _glossaryTargetInput;
+        set
+        {
+            if (SetProperty(ref _glossaryTargetInput, value))
+            {
+                OnPropertyChanged(nameof(CanAddGlossaryEntry));
+            }
+        }
+    }
+
+    /// <summary>「添加词条」按钮当前是否可点：两边都填了内容。</summary>
+    public bool CanAddGlossaryEntry =>
+        !string.IsNullOrWhiteSpace(_glossarySourceInput) && !string.IsNullOrWhiteSpace(_glossaryTargetInput);
+
+    /// <summary>模型当前占用的磁盘总量文案。</summary>
+    public string LocalModelSizeText
+    {
+        get
+        {
+            var runtime = AppServices.LocalTranslation;
+            if (runtime is null)
+            {
+                return string.Empty;
+            }
+
+            long total = 0;
+            foreach (var row in _localModelRows)
+            {
+                total += runtime.Store.GetInstalledSize(row.Kind);
+            }
+
+            return total <= 0 ? string.Empty : SizeFormatter.Format(total);
+        }
+    }
+
+    /// <summary>
+    /// 下载某个本地模型；下载中该行会显示进度。
+    /// </summary>
+    /// <param name="row">模型行。</param>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public async Task DownloadLocalModelAsync(LocalModelRowViewModel row, CancellationToken cancellationToken)
+    {
+        var runtime = AppServices.LocalTranslation;
+        if (runtime is null || row is null)
+        {
+            return;
+        }
+
+        row.IsBusy = true;
+        row.StatusText = T(Keys.SettingsTranslateLocalModelDownloading, 0);
+        try
+        {
+            var progress = new Progress<double>(value =>
+                row.StatusText = T(Keys.SettingsTranslateLocalModelDownloading, (int)Math.Round(value * 100)));
+            var result = await runtime.DownloadAsync(row.Kind, progress, cancellationToken).ConfigureAwait(true);
+            if (result.Success)
+            {
+                row.IsInstalled = true;
+                row.StatusText = T(Keys.SettingsTranslateLocalModelStatusDownloaded, row.Title);
+                SetStatus(Keys.SettingsTranslateLocalModelStatusDownloaded, row.Title);
+            }
+            else
+            {
+                row.StatusText = T(Keys.SettingsTranslateLocalModelStatusFailed, result.Message);
+                SetStatus(Keys.SettingsTranslateLocalModelStatusFailed, result.Message);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            row.StatusText = T(Keys.SettingsTranslateLocalModelNotInstalled);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("下载本地翻译模型失败", ex);
+            row.StatusText = T(Keys.SettingsTranslateLocalModelStatusFailed, ex.Message);
+            SetStatus(Keys.SettingsTranslateLocalModelStatusFailed, ex.Message);
+        }
+        finally
+        {
+            row.IsBusy = false;
+            OnPropertyChanged(nameof(LocalModelSizeText));
+        }
+    }
+
+    /// <summary>删除某个已安装的本地模型。</summary>
+    /// <param name="row">模型行。</param>
+    public void RemoveLocalModel(LocalModelRowViewModel row)
+    {
+        var runtime = AppServices.LocalTranslation;
+        if (runtime is null || row is null)
+        {
+            return;
+        }
+
+        try
+        {
+            runtime.Store.Remove(row.Kind);
+            row.IsInstalled = runtime.Store.IsInstalled(row.Kind);
+            row.StatusText = T(
+                row.IsInstalled ? Keys.SettingsTranslateLocalModelStatusRemoveFailed : Keys.SettingsTranslateLocalModelStatusRemoved,
+                row.Title);
+            SetStatus(
+                row.IsInstalled ? Keys.SettingsTranslateLocalModelStatusRemoveFailed : Keys.SettingsTranslateLocalModelStatusRemoved,
+                row.Title);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("删除本地翻译模型失败", ex);
+            SetStatus(Keys.SettingsTranslateLocalModelStatusRemoveFailed, ex.Message);
+        }
+        finally
+        {
+            OnPropertyChanged(nameof(LocalModelSizeText));
+        }
+    }
+
+    /// <summary>把新增词条追加到列表（不写盘，等用户点「保存词典」）。</summary>
+    public void AddGlossaryEntry()
+    {
+        var source = _glossarySourceInput.Trim();
+        var target = _glossaryTargetInput.Trim();
+        if (source.Length == 0 || target.Length == 0)
+        {
+            return;
+        }
+
+        var existing = _glossaryEntries.FirstOrDefault(entry =>
+            string.Equals(entry.Source, source, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+        {
+            existing.Target = target;
+        }
+        else
+        {
+            _glossaryEntries.Add(new GlossaryEntryViewModel(source, target));
+        }
+
+        GlossarySourceInput = string.Empty;
+        GlossaryTargetInput = string.Empty;
+    }
+
+    /// <summary>从列表里移除一条词条（不写盘，等用户点「保存词典」）。</summary>
+    /// <param name="entry">词条。</param>
+    public void RemoveGlossaryEntry(GlossaryEntryViewModel entry)
+    {
+        if (entry is null)
+        {
+            return;
+        }
+
+        _glossaryEntries.Remove(entry);
+    }
+
+    /// <summary>把当前词条列表写盘。</summary>
+    public void SaveGlossary()
+    {
+        var runtime = AppServices.LocalTranslation;
+        if (runtime is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var entries = _glossaryEntries.Select(entry => entry.ToEntry()).ToList();
+            runtime.Glossary.Save(entries);
+            SetStatus(Keys.SettingsTranslateGlossaryStatusSaved, entries.Count);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("保存术语词典失败", ex);
+            SetStatus(Keys.SettingsTranslateGlossaryStatusFailed, ex.Message);
+        }
+    }
+
+    /// <summary>重新读取本地模型与术语词典（进入设置页、下完模型后调用）。</summary>
+    public void RefreshLocalTranslationState()
+    {
+        RefreshLocalModelRows();
+
+        _glossaryEntries.Clear();
+        var runtime = AppServices.LocalTranslation;
+        if (runtime is not null)
+        {
+            foreach (var entry in runtime.Glossary.Entries)
+            {
+                _glossaryEntries.Add(new GlossaryEntryViewModel(entry.Source, entry.Target));
+            }
+        }
+
+        OnPropertyChanged(nameof(GlossaryEntries));
+    }
+
+    /// <summary>
+    /// 重新读取本地模型清单（安装状态、状态文案）。
+    /// <para>
+    /// 只重建模型行，不动术语词典：词典里的词条是用户正在编辑的数据，
+    /// 切语言时不该被丢掉。
+    /// </para>
+    /// </summary>
+    private void RefreshLocalModelRows()
+    {
+        var runtime = AppServices.LocalTranslation;
+        _localModelRows.Clear();
+        if (runtime is null)
+        {
+            OnPropertyChanged(nameof(LocalModelRows));
+            OnPropertyChanged(nameof(LocalModelSizeText));
+            return;
+        }
+
+        foreach (var model in runtime.Catalog.Models)
+        {
+            var titleKey = model.Kind switch
+            {
+                LocalTranslationModelKind.IndexTranslate => Keys.SettingsTranslateLocalModelIndexTranslate,
+                LocalTranslationModelKind.BergamotEnZh => Keys.SettingsTranslateLocalModelBergamotEnZh,
+                LocalTranslationModelKind.BergamotZhEn => Keys.SettingsTranslateLocalModelBergamotZhEn,
+                _ => Keys.SettingsTranslateLocalModelIndexTranslate,
+            };
+
+            var installed = runtime.Store.IsInstalled(model.Kind);
+            _localModelRows.Add(new LocalModelRowViewModel(model.Kind, titleKey, model.DisplayName)
+            {
+                IsInstalled = installed,
+                StatusText = T(installed
+                    ? Keys.SettingsTranslateLocalModelInstalled
+                    : Keys.SettingsTranslateLocalModelNotInstalled),
+            });
+        }
+
+        OnPropertyChanged(nameof(LocalModelRows));
+        OnPropertyChanged(nameof(LocalModelSizeText));
+    }
+
+    /// <summary>
+    /// 逐个引擎各翻一句探针文本，把结果写进翻译区。
+    /// <para>
+    /// 这是给「开了翻译却什么都没变」准备的诊断入口：它绕开缓存、也不看当前模式，
+    /// 直接告诉用户哪条链路通、哪条不通，不用去翻日志。
+    /// </para>
+    /// </summary>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public async Task TestTranslationAsync(CancellationToken cancellationToken)
+    {
+        if (_isTranslateTesting)
+        {
+            return;
+        }
+
+        IsTranslateTesting = true;
+        TranslateTestText = T(Keys.SettingsTranslateTestRunning);
+        try
+        {
+            var results = await AppServices.Translation.ProbeAsync(cancellationToken).ConfigureAwait(true);
+            _translateTestResults = results;
+            TranslateTestText = FormatProbeResults(results);
+        }
+        catch (OperationCanceledException)
+        {
+            TranslateTestText = string.Empty;
+        }
+        finally
+        {
+            IsTranslateTesting = false;
+        }
+    }
+
+    /// <summary>把探测结果拼成多行文案（✓/✗ 是符号，不随语言变）。</summary>
+    private string FormatProbeResults(IReadOnlyList<TranslationProbeResult> results)
+    {
+        if (results.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var lines = new List<string>(results.Count);
+        foreach (var result in results)
+        {
+            var title = TranslationEngineCatalog.Resolve(result.Key).Title;
+            lines.Add(T(
+                Keys.SettingsTranslateTestResult,
+                (result.Ok ? "✓ " : "✗ ") + title,
+                result.Detail));
+        }
+
+        return string.Join(Environment.NewLine, lines);
+    }
+
     /// <summary>翻译相关设置变化后作废在途请求，并让下一次翻译用新配置。</summary>
     private void NotifyTranslationSettingsChanged()
     {
         AppServices.Translation.NotifySettingsChanged();
-    }
-
-    /// <summary>文本框类翻译设置落盘：延迟写盘 + 作废在途请求。</summary>
+    }    /// <summary>文本框类翻译设置落盘：延迟写盘 + 作废在途请求。</summary>
     private void SaveTranslationSettings()
     {
         PersistSettings();
@@ -1603,6 +2080,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(TranslateDescriptionEnabled));
         OnPropertyChanged(nameof(TranslateChangelogEnabled));
         OnPropertyChanged(nameof(TranslateCommentsEnabled));
+        OnPropertyChanged(nameof(IsTranslateTesting));
+        OnPropertyChanged(nameof(CanTestTranslation));
+        OnPropertyChanged(nameof(TranslateTestText));
     }
 
     // ------------------------------------------------------------ 内部
@@ -1615,6 +2095,16 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         RefreshAlternativeLabels();
         RefreshPatchState();
         RaiseTranslationProps();
+
+        // 本地模型行的文案要按新语言重建；术语词典是用户数据，不动它。
+        RefreshLocalModelRows();
+
+        // 探测结果是拼好的句子，语言切换后要按新语言重建。
+        if (_translateTestResults is { Count: > 0 })
+        {
+            TranslateTestText = FormatProbeResults(_translateTestResults);
+        }
+
         if (_statusKey is not null)
         {
             StatusMessage = T(_statusKey, _statusArgs);

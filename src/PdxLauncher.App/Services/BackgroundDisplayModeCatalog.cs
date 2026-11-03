@@ -29,7 +29,7 @@ public sealed class BackgroundDisplayModeOption : LocalizedObservableObject
 
 /// <summary>
 /// 整窗背景显示方式的可选项目录（取值真源在 <see cref="BackgroundDisplayModes"/>）。
-/// Resolve 返回目录中的同一实例，ComboBox 的 SelectedItem 才能按引用相等匹配。
+/// Resolve 返回目录中的同一实例，下拉控件的 SelectedItem 才能按引用相等匹配。
 /// 具体落到 <see cref="ImageBrush"/> 上的 Stretch / 对齐由 <see cref="ApplyTo"/> 决定。
 /// </summary>
 public static class BackgroundDisplayModeCatalog

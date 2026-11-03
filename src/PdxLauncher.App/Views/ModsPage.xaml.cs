@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
+using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
@@ -137,7 +138,7 @@ public sealed partial class ModsPage : Page
     /// 工具条里的播放集切换器：只切换当前查看/编辑的播放集并加载它的 mod 行，
     /// 不改变激活状态、不写游戏加载文件；要应用请点「激活播放集」。
     /// </summary>
-    private async void OnPlaySetSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void OnPlaySetSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
     {
         try
         {
@@ -150,15 +151,15 @@ public sealed partial class ModsPage : Page
             // 把下拉框的选择回退到视图模型里的当前播放集。
             if (_viewModel.IsBusy || _viewModel.IsPlaceholderLayout)
             {
-                if (sender is ComboBox combo)
+                if (sender is PdxDropDown dropdown)
                 {
-                    combo.SelectedItem = _viewModel.SelectedPlaySet;
+                    dropdown.SelectedItem = _viewModel.SelectedPlaySet;
                 }
 
                 return;
             }
 
-            if (e.AddedItems.Count == 0 || e.AddedItems[0] is not PlaySet playSet)
+            if (e.SelectedItem is not PlaySet playSet)
             {
                 return;
             }
@@ -293,18 +294,12 @@ public sealed partial class ModsPage : Page
                 content += Localizer.Instance.ModsDialogDeleteBodyInactive;
             }
 
-            var confirm = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = Localizer.Instance.ModsToolbarDeleteName,
-                Content = content,
-                PrimaryButtonText = Localizer.Instance.CommonDelete,
-                CloseButtonText = Localizer.Instance.CommonCancel,
-                DefaultButton = ContentDialogButton.Close,
-            };
-
-            var result = await confirm.ShowAsync();
-            if (result != ContentDialogResult.Primary)
+            var confirmed = await ConfirmOverlay.ConfirmAsync(
+                Localizer.Instance.ModsToolbarDeleteName,
+                content,
+                Localizer.Instance.CommonDelete,
+                Localizer.Instance.CommonCancel);
+            if (!confirmed)
             {
                 return;
             }
@@ -665,6 +660,53 @@ public sealed partial class ModsPage : Page
         }
     }
 
+    /// <summary>
+    /// 「自动排序」：按文件改动足迹预览新顺序，用户确认后应用并留一次撤销入口。
+    /// </summary>
+    private async void OnAutoSortClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var preview = await ViewModel.BuildAutoSortPreviewAsync(CancellationToken.None);
+            if (preview is null)
+            {
+                return;
+            }
+
+            var moved = preview.Result.Entries.Count(entry => entry.OldIndex != entry.NewIndex);
+            if (moved == 0)
+            {
+                await ShowMessageAsync(Localizer.Instance.ModsAutoSortPreviewTitle, Localizer.Instance.ModsAutoSortNoChange);
+                return;
+            }
+
+            var confirmed = await AutoSortPreviewDialog.ShowAsync(XamlRoot, preview, ViewModel.CurrentPlaySetMods);
+            if (confirmed)
+            {
+                ViewModel.ApplyAutoSort(preview);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 自动排序失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 「撤销排序」：恢复应用自动排序前的顺序（快照只在内存，换播放集即作废）。
+    /// </summary>
+    private void OnUndoAutoSortClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            ViewModel.UndoAutoSort();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 撤销自动排序失败", ex);
+        }
+    }
+
     // ------------------------------------------------------------ 对话框
 
     private async Task<string?> PromptForNameAsync(string title, string placeholder, string initial)
@@ -680,18 +722,12 @@ public sealed partial class ModsPage : Page
         AutomationProperties.SetAutomationId(input, "txtPlaySetName");
         AutomationProperties.SetName(input, placeholder);
 
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = title,
-            Content = input,
-            PrimaryButtonText = Localizer.Instance.CommonOk,
-            CloseButtonText = Localizer.Instance.CommonCancel,
-            DefaultButton = ContentDialogButton.Primary,
-        };
-
-        var result = await dialog.ShowAsync();
-        if (result != ContentDialogResult.Primary)
+        var confirmed = await ConfirmOverlay.ConfirmAsync(
+            title,
+            input,
+            Localizer.Instance.CommonOk,
+            Localizer.Instance.CommonCancel);
+        if (!confirmed)
         {
             return null;
         }
@@ -703,15 +739,7 @@ public sealed partial class ModsPage : Page
     {
         try
         {
-            var dialog = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = title,
-                Content = message,
-                CloseButtonText = Localizer.Instance.CommonClose,
-            };
-
-            await dialog.ShowAsync();
+            await ConfirmOverlay.ShowMessage(title, message, Localizer.Instance.CommonClose);
         }
         catch (Exception ex)
         {

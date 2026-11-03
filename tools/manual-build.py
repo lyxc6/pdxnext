@@ -40,6 +40,32 @@ MVVM_ANALYZER = os.path.join(
     NUGET, "communitytoolkit.mvvm/8.4.2/analyzers/dotnet/roslyn4.12/cs/CommunityToolkit.Mvvm.SourceGenerators.dll")
 MVVM_REF = os.path.join(NUGET, "communitytoolkit.mvvm/8.4.2/lib/net8.0/CommunityToolkit.Mvvm.dll")
 
+# Core 现在引用了本地翻译相关的 NuGet 包（离线缓存里已有）：
+#   BergamotTranslatorSharp  -> Bergamot（NMT）本地引擎
+#   LLamaSharp               -> Index-Translate-2B（GGUF）进程内推理
+#   LLamaSharp.Backend.Cpu   -> llama.cpp 的 CPU 原生后端
+# 手工构建不经过 MSBuild 的 NuGet 资产解析，必须自己补 -r: 引用与原生 payload。
+NUGET_CORE_REFS = [
+    os.path.join(NUGET, "bergamottranslatorsharp/0.7.0/lib/net10.0/BergamotTranslatorSharp.dll"),
+    os.path.join(NUGET, "llamasharp/0.30.0/lib/net10.0/LLamaSharp.dll"),
+    os.path.join(NUGET, "communitytoolkit.highperformance/8.4.2/lib/net8.0/CommunityToolkit.HighPerformance.dll"),
+    os.path.join(NUGET, "microsoft.bcl.asyncinterfaces/10.0.13/lib/netstandard2.0/Microsoft.Bcl.AsyncInterfaces.dll"),
+    os.path.join(NUGET, "microsoft.bcl.memory/10.0.13/lib/net10.0/Microsoft.Bcl.Memory.dll"),
+    os.path.join(NUGET, "microsoft.extensions.ai.abstractions/10.11.0/lib/net10.0/Microsoft.Extensions.AI.Abstractions.dll"),
+    os.path.join(NUGET, "microsoft.extensions.logging.abstractions/10.0.13/lib/net10.0/Microsoft.Extensions.Logging.Abstractions.dll"),
+    os.path.join(NUGET, "system.linq.async/7.0.1/lib/net10.0/System.Linq.Async.dll"),
+    os.path.join(NUGET, "system.numerics.tensors/10.0.13/lib/net10.0/System.Numerics.Tensors.dll"),
+]
+
+# 原生 payload：本地翻译引擎的 dll 必须随应用一起发布。
+#   BergamotTranslatorSharp -> runtimes/win-x64/native/bergamot.dll
+#   LLamaSharp.Backend.Cpu  -> LLamaSharpRuntimes/win-x64/native/{avx,avx2,avx512,noavx}/*.dll
+NATIVE_CORE_PAYLOADS = [
+    (os.path.join(NUGET, "bergamottranslatorsharp/0.7.0/runtimes/win-x64/native"), ""),
+    (os.path.join(NUGET, "llamasharp.backend.cpu/0.30.0/LLamaSharpRuntimes/win-x64/native"),
+     os.path.join("runtimes", "win-x64", "native")),
+]
+
 CORE_PROJ = os.path.join(WS, "src", "PdxLauncher.Core")
 IMAGING_PROJ = os.path.join(WS, "src", "PdxLauncher.Imaging")
 APP_PROJ = os.path.join(WS, "src", "PdxLauncher.App")
@@ -94,7 +120,7 @@ def sources(proj, exclude_dirs=("obj", "bin")):
 def compile_library(name, srcs, refs, outdir, extra_defines=None, target="library", analyzers=None, resources=None):
     os.makedirs(outdir, exist_ok=True)
     dll = os.path.join(outdir, name + ".dll")
-    args = [DOTNET, CSC, "-nologo", "-target:" + target, "-nullable:enable", "-langversion:latest",
+    args = ["-nologo", "-target:" + target, "-nullable:enable", "-langversion:latest",
             "-preferreduilang:en-US", "-nowarn:1591", "-nowarn:1701", "-out:" + dll]
     if extra_defines:
         args += ["-define:" + d for d in extra_defines]
@@ -109,8 +135,16 @@ def compile_library(name, srcs, refs, outdir, extra_defines=None, target="librar
         args.append("-resource:" + path + "," + logical)
     args += ["-r:" + r for r in refs]
     args += srcs
+    # Windows 命令行有 32767 字符上限，Core 的源文件+引用已经顶到边界，
+    # 所以统一走 csc 的响应文件（@file），一行一个参数。
+    # 响应文件里带空格的路径必须加双引号，否则 csc 会按空格切分（"C:\Program Files\..." 会断）。
+    rsp = os.path.join(OBJ, name + ".rsp")
+    os.makedirs(OBJ, exist_ok=True)
+    with open(rsp, "w", encoding="utf-8") as f:
+        for a in args:
+            f.write('"' + a.replace('"', '\\"') + '"\n')
     logpath = os.path.join(OBJ, name + ".csc.log")
-    rc = run(args, logpath)
+    rc = run([DOTNET, CSC, "@" + rsp], logpath)
     text = readlog(logpath)
     errs = [l for l in text.splitlines() if ": error " in l]
     if rc != 0 or errs:
@@ -119,6 +153,30 @@ def compile_library(name, srcs, refs, outdir, extra_defines=None, target="librar
             log("     " + l.strip()[:240])
         return None
     return dll
+
+
+def copy_native_payload(outdir):
+    """把本地翻译引擎的原生 dll 复制到输出目录（MSBuild 的 .props 在手工构建里不生效）。"""
+    total = 0
+    for src, sub in NATIVE_CORE_PAYLOADS:
+        if not os.path.isdir(src):
+            fail("缺少原生 payload: " + src)
+            continue
+        dst = os.path.join(outdir, sub) if sub else outdir
+        os.makedirs(dst, exist_ok=True)
+        n = 0
+        for root, dirs, files in os.walk(src):
+            dirs[:] = sorted(dirs)
+            rel = os.path.relpath(root, src)
+            target_dir = dst if rel == "." else os.path.join(dst, rel)
+            os.makedirs(target_dir, exist_ok=True)
+            for f in sorted(files):
+                if f.lower().endswith(".dll"):
+                    shutil.copy2(os.path.join(root, f), os.path.join(target_dir, f))
+                    n += 1
+        total += n
+        log("  原生 payload " + os.path.basename(src) + " -> " + str(n) + " 个 dll")
+    return total
 
 
 # ---------------------------------------------------------------- Core
@@ -138,14 +196,21 @@ def build_core():
     if not srcs:
         fail("core: 没有找到 .cs 源文件")
         return None
+    refs = netrefs()
+    for r in NUGET_CORE_REFS:
+        if not os.path.exists(r):
+            fail("core: 缺少 NuGet 引用 " + r)
+            return None
+        refs.append(r)
     dll = compile_library(
         "PdxLauncher.Core",
         srcs,
-        netrefs(),
+        refs,
         BUILD,
         analyzers=[REGEX_GENERATOR],
         resources=core_resources())
     if dll:
+        copy_native_payload(BUILD)
         log("  OK  " + dll + "  (" + str(os.path.getsize(dll)) + " B, " + str(len(srcs)) + " 源文件)")
     return dll
 
@@ -279,7 +344,8 @@ def build_app(core_dll):
              os.path.join(APPSDK_INC, "UndockedRegFreeWinRT-AutoInitializer.cs")]
     args = [DOTNET, CSC, "-nologo", "-target:exe", "-nullable:enable", "-langversion:latest",
             "-preferreduilang:en-US", "-nowarn:1591", "-nowarn:1701", "-out:" + dll,
-            "-define:MICROSOFT_WINDOWSAPPSDK_AUTOINITIALIZE_UNDOCKEDREGFREEWINRT"]
+            "-define:MICROSOFT_WINDOWSAPPSDK_AUTOINITIALIZE_UNDOCKEDREGFREEWINRT",
+            "-define:DISABLE_XAML_GENERATED_MAIN"]
     if os.path.exists(MVVM_ANALYZER):
         args.append("-analyzer:" + MVVM_ANALYZER)
     args += ["-r:" + p for p in refs + [core_dll]]

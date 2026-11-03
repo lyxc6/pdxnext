@@ -27,6 +27,10 @@ namespace PdxLauncher.Core.Contracts;
 /// <param name="ThumbnailUrl">
 /// mods.thumbnailUrl：Steam 官方缩略图地址，用于本地找不到图时联网补全并缓存；可能为 null。
 /// </param>
+/// <param name="SteamState">
+/// 这一行在 Steam 侧的真实状态（订阅 / 已安装 / 需要更新 / 下载中 / 本地禁用）。
+/// 由 Mod 库在装载时整库注入；Steam 直连不可用或不是工坊 mod 时为 null（界面不显示徽标）。
+/// </param>
 public sealed record ModLibraryEntry(
     Guid ModId,
     string Name,
@@ -42,7 +46,8 @@ public sealed record ModLibraryEntry(
     IReadOnlyList<Guid> PlaySetIds,
     bool IsUnregistered = false,
     string? SteamId = null,
-    string? ThumbnailUrl = null)
+    string? ThumbnailUrl = null,
+    PdxLauncher.Core.Steam.WorkshopInstallState? SteamState = null)
 {
     /// <summary>该 mod 是否已经被至少一个播放集引用（对应官方启动器的「在 N 个播放集中」）。</summary>
     public bool IsInPlaySet => PlaySetIds.Count > 0;

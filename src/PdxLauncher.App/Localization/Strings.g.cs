@@ -37,6 +37,8 @@ public sealed partial class Localizer
         ["account.status"] = "登录状态",
         ["account.statusHint"] = "登录后可以浏览 PDX Mods 平台、查看订阅与收藏的 mod。",
         ["account.statusNotReady"] = "启动器尚未完成初始化",
+        ["account.statusSessionAuto"] = "已登录 · 下次启动自动续期",
+        ["account.statusSessionOnce"] = "已登录 · 仅本次运行有效",
         ["account.statusSignInOk"] = "Paradox 账号登录成功",
         ["account.statusSignOutOk"] = "已退出 Paradox 账号",
         ["account.statusSignedIn"] = "已登录：{0}（{1}）",
@@ -76,6 +78,7 @@ public sealed partial class Localizer
         ["common.unknown"] = "未知",
         ["common.yes"] = "是",
         ["dlc.countsText"] = "共 {0} 个 DLC，已启用 {1} 个",
+        ["dlc.countsTextSteam"] = "共 {0} 个 DLC（清单来自 Steam）",
         ["dlc.descriptionName"] = "简介",
         ["dlc.descriptionsLoading"] = "正在获取 {0} 个 DLC 的简介…",
         ["dlc.disableAll"] = "禁用全部",
@@ -97,6 +100,7 @@ public sealed partial class Localizer
         ["dlc.ownershipDetailPatchOn"] = "补丁：已加载",
         ["dlc.ownershipDetailSteamId"] = "SteamID64 {0}",
         ["dlc.ownershipErrorBusy"] = "Steam 正被其他页面占用，请稍后重试",
+        ["dlc.ownershipErrorHostFailed"] = "Steam 查询进程没有正常返回（可能被 Steam 退出、被杀或超时），请重试",
         ["dlc.ownershipErrorInitFailed"] = "Steam 初始化失败（可能未登录）",
         ["dlc.ownershipErrorNative"] = "Steam 接口调用失败",
         ["dlc.ownershipErrorNoAppId"] = "无法确定 Steam AppID，跳过授权探测",
@@ -120,6 +124,7 @@ public sealed partial class Localizer
         ["dlc.saveFailedShort"] = "保存失败",
         ["dlc.saveName"] = "保存 DLC 状态",
         ["dlc.saveNoActivePlaySet"] = "该游戏没有激活播放集：请在播放集页选择播放集并点「激活播放集」，再保存 DLC",
+        ["dlc.saveSteamManaged"] = "该游戏的 DLC 由 Steam 授权决定，无需在这里保存",
         ["dlc.statusAllDisabled"] = "已禁用全部 DLC（尚未保存）",
         ["dlc.statusAllEnabled"] = "已启用全部 DLC（尚未保存）",
         ["dlc.statusLoaded"] = "已加载 {0} 个 DLC（播放集「{1}」）",
@@ -130,6 +135,9 @@ public sealed partial class Localizer
         ["dlc.statusRowEnabled"] = "已启用「{0}」（尚未保存）",
         ["dlc.statusSaved"] = "已保存：playsets_dlcs 与加载文件一致（{0}/{1} 启用）",
         ["dlc.statusSkippedSuffix"] = "；{0} 个 DLC 的 pops_id 为空，无法禁用，已跳过",
+        ["dlc.statusSteamEmpty"] = "Steam 报告该游戏没有任何 DLC",
+        ["dlc.statusSteamList"] = "已从 Steam 读取 {0} 个 DLC（该游戏没有 DLC 描述文件，归属与开关由 Steam 授权决定）",
+        ["dlc.statusSteamUnavailable"] = "未能从 Steam 读取 DLC 清单：{0}",
         ["dlc.toggleToolTip"] = "启用或禁用该 DLC",
         ["dlc.toggleToolTipLocked"] = "该 DLC 无法通过 content_load.json 禁用（pops_id 为空，官方启动器同样会丢弃它）",
         ["dlc.unknownBadge"] = "授权未知",
@@ -230,6 +238,19 @@ public sealed partial class Localizer
         ["modlib.statusOpenedBrowser"] = "已在浏览器中打开 {0}",
         ["modlib.statusOpenedFolder"] = "已打开 {0} 的本地文件夹",
         ["modlib.statusOpenedSteam"] = "已在 Steam 中打开 {0}",
+        ["modlib.steamActionFailed"] = "Steam 操作失败：{0}",
+        ["modlib.steamDisableName"] = "在 Steam 中禁用",
+        ["modlib.steamDownloadName"] = "让 Steam 下载",
+        ["modlib.steamDownloadRequested"] = "已让 Steam 开始下载：{0}",
+        ["modlib.steamEnableName"] = "在 Steam 中启用",
+        ["modlib.steamStateDisabled"] = "Steam 本地已禁用",
+        ["modlib.steamStateDownloading"] = "Steam 下载中 {0}%",
+        ["modlib.steamStateDownloadingNoPercent"] = "Steam 下载中",
+        ["modlib.steamStateInstalled"] = "已在 Steam 安装",
+        ["modlib.steamStateName"] = "Steam 状态",
+        ["modlib.steamStatePending"] = "Steam 排队中",
+        ["modlib.steamStateUpdateNeeded"] = "Steam 有更新",
+        ["modlib.steamWriteDisabled"] = "写操作没打开：到设置里开启「Steam 工坊直连订阅」后才能让 Steam 下载或禁用。",
         ["modlib.subscribedOn"] = "已订阅 {0}",
         ["modlib.supportedVersion"] = "支持版本 {0}",
         ["modlib.supportedVersionName"] = "支持的游戏版本",
@@ -258,6 +279,31 @@ public sealed partial class Localizer
         ["mods.addPage.target"] = "加入播放集「{0}」",
         ["mods.addPage.targetMissing"] = "目标播放集已不存在，未添加任何 mod",
         ["mods.addPage.title"] = "添加模组",
+        ["mods.autoSort.apply"] = "应用排序",
+        ["mods.autoSort.button"] = "自动排序",
+        ["mods.autoSort.buttonName"] = "自动排序（按文件改动重排加载顺序）",
+        ["mods.autoSort.conflictAmbiguous"] = "「{0}」与「{1}」共享 {2} 个新增文件，无法判定先后，保持现有相对顺序",
+        ["mods.autoSort.conflictSameTier"] = "「{0}」与「{1}」同层位覆盖 {2} 处原版文件，后者生效",
+        ["mods.autoSort.conflictsTitle"] = "同文件冲突（后加载者生效）",
+        ["mods.autoSort.noChange"] = "当前顺序已符合自动排序规则，无需调整。",
+        ["mods.autoSort.previewTitle"] = "自动排序预览",
+        ["mods.autoSort.reasonDeclaredDep"] = "声明依赖「{0}」，排在其后",
+        ["mods.autoSort.reasonDerivedPatch"] = "与「{0}」共带文件，作为补丁后置",
+        ["mods.autoSort.reasonOverrides"] = "覆盖 {0} 处原版玩法文件",
+        ["mods.autoSort.reasonPatchName"] = "名称标记为补丁/兼容，后置于基础 mod",
+        ["mods.autoSort.rowMove"] = "第 {0} 位 → 第 {1} 位",
+        ["mods.autoSort.summary"] = "共 {0} 个 mod，{1} 个将改变位置。规则：大改在上、小改与补丁在下、翻译最后。",
+        ["mods.autoSort.tierGfxOnly"] = "仅美化/界面",
+        ["mods.autoSort.tierLargeChange"] = "大量修改",
+        ["mods.autoSort.tierLocalization"] = "本地化",
+        ["mods.autoSort.tierMediumChange"] = "中量修改",
+        ["mods.autoSort.tierOverhaul"] = "大型重构",
+        ["mods.autoSort.tierPureAdditive"] = "纯新增",
+        ["mods.autoSort.tierSmallTweak"] = "小幅调整",
+        ["mods.autoSort.tooltip"] = "扫描每个 mod 的实际文件改动，按「大改在上、小改与补丁在下、翻译最后」自动重排；先预览再应用。",
+        ["mods.autoSort.undo"] = "撤销排序",
+        ["mods.autoSort.warningCycle"] = "依赖关系存在循环，已断开并按层级排序",
+        ["mods.autoSort.warningsTitle"] = "警告",
         ["mods.dialog.cannotDeleteBody"] = "这是当前唯一的播放集，无法删除。",
         ["mods.dialog.defaultNewName"] = "新播放集",
         ["mods.dialog.deleteBody"] = "确定要删除播放集「{0}」吗？该操作会删除它的 mod 顺序与启用状态记录，且无法撤销。",
@@ -317,6 +363,9 @@ public sealed partial class Localizer
         ["mods.status.autoSaveFailed"] = "自动保存失败：{0}",
         ["mods.status.autoSaveSaved"] = "已自动保存：sqlite（playsets_mods/playsets_dlcs）与加载文件一致",
         ["mods.status.autoSaveSavedTo"] = "已自动保存到「{0}」（未激活，游戏加载文件未改动）",
+        ["mods.status.autoSortApplied"] = "已应用自动排序：{0} 个 mod 位置变更",
+        ["mods.status.autoSortNeedsGame"] = "未选择游戏，无法自动排序",
+        ["mods.status.autoSortUndone"] = "已恢复自动排序前的顺序",
         ["mods.status.cannotDeleteLast"] = "无法删除：这是当前唯一的播放集",
         ["mods.status.cannotDeleteTitle"] = "无法删除播放集",
         ["mods.status.createFailed"] = "新建播放集失败：{0}",
@@ -363,6 +412,7 @@ public sealed partial class Localizer
         ["mods.toolbar.rename"] = "重命名",
         ["mods.toolbar.renameName"] = "重命名播放集",
         ["mods.toolbar.searchPlaceholder"] = "搜索播放集内的 mod",
+        ["mods.translateUnavailable"] = "翻译没有出结果：{0}。可在「设置 → 翻译」里点「测试翻译」查看各引擎状态。",
         ["mods.warnMissingPath"] = "路径写进了加载文件，但磁盘上找不到这个目录或文件",
         ["mods.warnName"] = "这条 mod 在游戏里可能不会生效",
         ["mods.warnNoArchive"] = "这个游戏的加载文件只认压缩包路径，目录型 mod 无法表达",
@@ -370,6 +420,181 @@ public sealed partial class Localizer
         ["mods.warnNoRegistryId"] = "这个游戏的加载文件只认注册 id，而这一行的注册 id 是空的",
         ["mods.warnNonAsciiParent"] = "上层目录含非 ASCII 字符，只能改游戏的 gameDataPath 才能解决",
         ["mods.warnNonAsciiPath"] = "这个游戏的加载器不认非 ASCII 路径，中文目录名会被静默忽略",
+        ["modstudio.addPreviews"] = "添加图片",
+        ["modstudio.addVideo"] = "添加视频",
+        ["modstudio.bbcodeBold"] = "加粗 [b]文字[/b]",
+        ["modstudio.bbcodeBulletList"] = "无序列表 [list][*]条目[/list]",
+        ["modstudio.bbcodeCode"] = "代码 [code]内容[/code]",
+        ["modstudio.bbcodeHeading"] = "标题 [h2]文字[/h2]",
+        ["modstudio.bbcodeHint"] = "描述支持 Steam 的 BBCode。用下面的按钮插入标记，再往下能看到读者读到的样子。",
+        ["modstudio.bbcodeImage"] = "图片 [img]图片地址[/img]",
+        ["modstudio.bbcodeItalic"] = "斜体 [i]文字[/i]",
+        ["modstudio.bbcodeLink"] = "链接 [url=地址]文字[/url]",
+        ["modstudio.bbcodeNumberedList"] = "有序列表 [olist][*]条目[/olist]",
+        ["modstudio.bbcodeRule"] = "分隔线 [hr]",
+        ["modstudio.bbcodeStrike"] = "删除线 [strike]文字[/strike]",
+        ["modstudio.bbcodeUnderline"] = "下划线 [u]文字[/u]",
+        ["modstudio.builtInCover"] = "当前使用启动器内置封面",
+        ["modstudio.bytesCounter"] = "{0} / {1} 字节",
+        ["modstudio.cancel"] = "取消",
+        ["modstudio.changeNotePlaceholder"] = "这次更新改了什么（可留空）",
+        ["modstudio.count"] = "{0} 个本地 mod",
+        ["modstudio.createButton"] = "新建 Mod",
+        ["modstudio.createCancel"] = "取消",
+        ["modstudio.createConfirm"] = "创建",
+        ["modstudio.createFailed"] = "创建失败：{0}",
+        ["modstudio.createFolderHint"] = "文件夹名只能包含字母、数字、点、下划线和连字符。",
+        ["modstudio.createHint"] = "会在当前游戏的 mod 目录下生成描述符、目录和封面；创建后可以继续补内容文件。",
+        ["modstudio.createNameRequired"] = "请填写 Mod 名称。",
+        ["modstudio.createSuccess"] = "已创建 {0}",
+        ["modstudio.createTitle"] = "新建本地 Mod",
+        ["modstudio.descriptionPlaceholder"] = "简短介绍这个 mod 的玩法与改动",
+        ["modstudio.descriptionTooLong"] = "描述太长：{0} 字节，Steam 上限 {1} 字节",
+        ["modstudio.descriptorAdult"] = "常见成人内容",
+        ["modstudio.descriptorAdultOnly"] = "仅限成人的色情内容",
+        ["modstudio.descriptorFrequentNudity"] = "频繁的裸露画面或色情内容",
+        ["modstudio.descriptorLegacy"] = "CK3 风格（.mod + descriptor.mod）",
+        ["modstudio.descriptorMetadata"] = "V3 风格（.metadata/metadata.json）",
+        ["modstudio.descriptorNudity"] = "一些裸露画面或色情内容",
+        ["modstudio.descriptorUnsupported"] = "不支持本地描述符",
+        ["modstudio.descriptorViolence"] = "频繁出现暴力或血腥",
+        ["modstudio.descriptorsHint"] = "与 Steam 创意工坊条目页的「内容描述词」一一对应；改选后重新上传会整体覆盖。",
+        ["modstudio.detailDescription"] = "简介",
+        ["modstudio.detailDescriptor"] = "描述符",
+        ["modstudio.detailFolder"] = "目录",
+        ["modstudio.detailNoSelection"] = "未选择 Mod",
+        ["modstudio.detailNoSelectionHint"] = "从左侧选择一个本地 Mod 查看详情。",
+        ["modstudio.detailPublication"] = "创意工坊",
+        ["modstudio.detailSupportedVersion"] = "支持版本",
+        ["modstudio.detailTags"] = "标签",
+        ["modstudio.detailVersion"] = "版本",
+        ["modstudio.fieldChangeNote"] = "更新说明",
+        ["modstudio.fieldDescription"] = "简介",
+        ["modstudio.fieldDescriptors"] = "内容描述词",
+        ["modstudio.fieldFolder"] = "文件夹名",
+        ["modstudio.fieldLanguage"] = "语言",
+        ["modstudio.fieldName"] = "名称",
+        ["modstudio.fieldPreview"] = "封面",
+        ["modstudio.fieldPreviews"] = "预览图",
+        ["modstudio.fieldPublic"] = "公开",
+        ["modstudio.fieldSupportedVersion"] = "支持的游戏版本",
+        ["modstudio.fieldTags"] = "标签",
+        ["modstudio.fieldUploadDescription"] = "描述",
+        ["modstudio.fieldUploadDirectory"] = "目录",
+        ["modstudio.fieldUploadModId"] = "Mod ID",
+        ["modstudio.fieldUploadTags"] = "标签",
+        ["modstudio.fieldUploadTarget"] = "上传至",
+        ["modstudio.fieldUploadTitle"] = "名称",
+        ["modstudio.fieldVersion"] = "版本",
+        ["modstudio.fieldVideoPreviews"] = "视频预览",
+        ["modstudio.fieldVisibility"] = "可见性",
+        ["modstudio.folderPlaceholder"] = "ASCII 文件夹名，例如 my_mod",
+        ["modstudio.legalHint"] = "上传前需要先在 Steam 接受创意工坊法律协议。",
+        ["modstudio.legalLink"] = "打开创意工坊法律协议",
+        ["modstudio.listName"] = "本地 Mod 列表",
+        ["modstudio.loadFailed"] = "加载失败：{0}",
+        ["modstudio.localizationCount"] = "另有 {0} 种语言已填标题",
+        ["modstudio.localizationNote"] = "切换语言只改变下面这对标题与描述；english 是默认语言，其他语言的文本只影响对应语言的用户看到的内容。上传时每种语言各提交一次。",
+        ["modstudio.managedHint"] = "这款游戏的内容由游戏本体管理，启动器不提供创建或上传。",
+        ["modstudio.moveDown"] = "下移",
+        ["modstudio.moveUp"] = "上移",
+        ["modstudio.namePlaceholder"] = "例如：更多游戏规则",
+        ["modstudio.needsLegal"] = "Steam 要求先接受创意工坊法律协议，然后才能发布。",
+        ["modstudio.newMod"] = "新建 Mod",
+        ["modstudio.noGameHint"] = "请先在游戏库里选择一款游戏。",
+        ["modstudio.noGameTitle"] = "（未选择游戏）",
+        ["modstudio.noModsHint"] = "还没有本地 Mod，点击「新建 Mod」创建一个。",
+        ["modstudio.noWorkshopHint"] = "这款游戏没有 Steam 创意工坊，无法上传。",
+        ["modstudio.openFolder"] = "打开文件夹",
+        ["modstudio.openFolderUnavailable"] = "这个 Mod 没有可打开的本地目录。",
+        ["modstudio.openWorkshop"] = "在浏览器中打开工坊页面",
+        ["modstudio.openWorkshopUnavailable"] = "这个 Mod 还没有创意工坊页面。",
+        ["modstudio.pickPreview"] = "选择图片…",
+        ["modstudio.previewHeader"] = "预览（读者看到的样子）",
+        ["modstudio.previewLimitHint"] = "最多 8 张，单张必须小于 1 MB；第一张作为主封面。",
+        ["modstudio.previewNone"] = "未选择封面",
+        ["modstudio.previewTooLarge"] = "超过 Steam 的 1 MB 限制",
+        ["modstudio.progressName"] = "上传进度",
+        ["modstudio.publicHint"] = "公开后其他玩家可以在创意工坊订阅。",
+        ["modstudio.refreshName"] = "刷新本地 Mod",
+        ["modstudio.removePreview"] = "移除",
+        ["modstudio.rowPublished"] = "已发布 · {0}",
+        ["modstudio.rowPublishedShort"] = "已发布",
+        ["modstudio.rowUnpublished"] = "未发布",
+        ["modstudio.searchName"] = "搜索本地 Mod",
+        ["modstudio.searchPlaceholder"] = "搜索 Mod 名称或目录",
+        ["modstudio.stageCommitting"] = "正在提交更改…",
+        ["modstudio.stageCreating"] = "正在准备工坊条目…",
+        ["modstudio.stageDone"] = "上传完成",
+        ["modstudio.stageLocalizing"] = "正在提交多语言标题…",
+        ["modstudio.stagePreparing"] = "正在准备内容…",
+        ["modstudio.stagePreview"] = "正在上传封面…",
+        ["modstudio.stageUploading"] = "正在上传内容…",
+        ["modstudio.statusFiltered"] = "显示 {0} / {1} 个本地 Mod",
+        ["modstudio.statusLoaded"] = "已加载 {0} 个本地 Mod",
+        ["modstudio.statusName"] = "状态",
+        ["modstudio.statusNoMatch"] = "没有匹配「{0}」的 Mod",
+        ["modstudio.supportedVersionPlaceholder"] = "例如 1.20.*",
+        ["modstudio.tagsPlaceholder"] = "Gameplay, Balance",
+        ["modstudio.title"] = "Mod 创建",
+        ["modstudio.titleTooLong"] = "标题太长：{0} 字节，Steam 上限 {1} 字节",
+        ["modstudio.unsupportedCreate"] = "这款游戏暂不支持创建本地 Mod。",
+        ["modstudio.unsupportedHint"] = "这款游戏暂不支持创建 Mod，只能查看已有的本地 Mod。",
+        ["modstudio.uploadArchived"] = "压缩包形式的 Mod 不能直接上传。",
+        ["modstudio.uploadButton"] = "上传到创意工坊",
+        ["modstudio.uploadCanceled"] = "上传已取消。",
+        ["modstudio.uploadCanceling"] = "正在取消上传…",
+        ["modstudio.uploadConfirm"] = "开始上传",
+        ["modstudio.uploadConfirmBody"] = "将把「{0}」的整个目录上传到 Steam 创意工坊。",
+        ["modstudio.uploadConfirmMulti"] = "将要上传「{0}」，并额外提交 {1} 种语言的标题与描述。继续吗？",
+        ["modstudio.uploadConfirmTitle"] = "上传到创意工坊",
+        ["modstudio.uploadDescriptionPlaceholder"] = "介绍这个 Mod 的内容和玩法",
+        ["modstudio.uploadFailed"] = "上传失败：{0}",
+        ["modstudio.uploadHint"] = "上传会把整个 Mod 目录作为工坊内容；已有发布记录时会更新同一条目。",
+        ["modstudio.uploadMod"] = "要上传的 Mod",
+        ["modstudio.uploadModIdHint"] = "留空表示新建工坊条目；填写已有条目的数字 ID 表示更新该条目。",
+        ["modstudio.uploadModIdInvalid"] = "Mod ID 必须是正整数，或留空。",
+        ["modstudio.uploadModIdPlaceholder"] = "留空新建，或填写已有工坊 ID",
+        ["modstudio.uploadNotLocal"] = "这个 Mod 没有本地目录，不能上传。",
+        ["modstudio.uploadSelectMod"] = "请先在左侧选择一个可上传的 Mod。",
+        ["modstudio.uploadSuccess"] = "已上传到创意工坊。",
+        ["modstudio.uploadTagCount"] = "已选 {0} 个标签",
+        ["modstudio.uploadTagsPlaceholder"] = "Gameplay, Balance",
+        ["modstudio.uploadTargetPdx"] = "Paradox Mod",
+        ["modstudio.uploadTargetPdxUnavailable"] = "Paradox Mod 上传需要 Paradox 账号登录与官方上传接口，当前版本尚未接入；请选择 Steam 创意工坊。",
+        ["modstudio.uploadTargetSteam"] = "Steam 创意工坊",
+        ["modstudio.uploadTitle"] = "上传到创意工坊",
+        ["modstudio.uploadTitlePlaceholder"] = "工坊条目的标题",
+        ["modstudio.uploadTitleRequired"] = "请填写工坊标题。",
+        ["modstudio.useBuiltInCover"] = "用内置封面",
+        ["modstudio.versionPlaceholder"] = "0.1.0",
+        ["modstudio.videoHint"] = "Steam 只接受 YouTube 链接，不能直接上传视频文件。",
+        ["modstudio.videoUrlInvalid"] = "不是有效的 YouTube 链接。",
+        ["modstudio.videoUrlPlaceholder"] = "粘贴 YouTube 视频链接",
+        ["modstudio.visibilityFriendsOnly"] = "仅限好友",
+        ["modstudio.visibilityPrivate"] = "隐藏",
+        ["modstudio.visibilityPublic"] = "公开",
+        ["modstudio.visibilityUnlisted"] = "非公开",
+        ["settings.about.autoCheck"] = "自动检查更新",
+        ["settings.about.autoCheckName"] = "启动时自动检查更新",
+        ["settings.about.checkFailed"] = "检查失败：{0}",
+        ["settings.about.checkNow"] = "检查更新",
+        ["settings.about.checkNowName"] = "立即检查更新",
+        ["settings.about.checking"] = "正在检查更新…",
+        ["settings.about.installMode"] = "安装模式",
+        ["settings.about.installModeName"] = "当前安装方式",
+        ["settings.about.installModePerMachine"] = "所有用户（更新需要管理员权限）",
+        ["settings.about.installModePerUser"] = "仅当前用户",
+        ["settings.about.installModePortable"] = "便携 / 未安装",
+        ["settings.about.lastCheck"] = "上次检查：{0}",
+        ["settings.about.lastCheckLabel"] = "上次检查",
+        ["settings.about.launcherVersion"] = "启动器版本",
+        ["settings.about.never"] = "从未",
+        ["settings.about.releaseNotes"] = "查看发布说明",
+        ["settings.about.statusAvailable"] = "发现新版本 {0}",
+        ["settings.about.statusNotDue"] = "距离上次检查不足 24 小时",
+        ["settings.about.statusUpToDate"] = "已是最新版本",
+        ["settings.about.title"] = "关于与更新",
         ["settings.appData.clearLegacy"] = "清理旧 C 盘数据",
         ["settings.appData.clearLegacyName"] = "清理旧 C 盘数据",
         ["settings.appData.current"] = "当前数据目录",
@@ -535,6 +760,7 @@ public sealed partial class Localizer
         ["settings.modThumbnails.statusOnlineOff"] = "已关闭联网补全 Mod 缩略图：只显示本地图片与已有缓存",
         ["settings.modThumbnails.statusOnlineOn"] = "已开启联网补全 Mod 缩略图（下载后缓存在数据目录）",
         ["settings.modThumbnails.statusRetention"] = "Mod 缩略图保留天数已改为 {0} 天，下次加载 Mod 库时清理过期图片",
+        ["settings.nav.about"] = "关于与更新",
         ["settings.nav.advanced"] = "高级",
         ["settings.nav.appearance"] = "外观",
         ["settings.nav.cache"] = "缓存",
@@ -616,6 +842,9 @@ public sealed partial class Localizer
         ["settings.steamApiHeader"] = "steam_api64.dll",
         ["settings.steamApiMissing"] = "未找到 steam_api64.dll：{0}",
         ["settings.steamApiReady"] = "已找到 steam_api64.dll",
+        ["settings.steamStateHint"] = "读取工坊条目的真实状态（订阅 / 已安装 / 需要更新 / 下载中 / 在 Steam 里被本地禁用），Mod 库与详情页据此显示徽标。只读，不改任何东西；每次查询会拉起一个几秒的子进程，Steam 会在这几秒里把本程序登记成「游戏中」。",
+        ["settings.steamStateOff"] = "关闭 Steam 工坊状态读取",
+        ["settings.steamStateOn"] = "读取 Steam 工坊状态",
         ["settings.steamSubscribeHint"] = "开启后，创意工坊详情页的「在 Steam 中订阅」按钮会直接调用 Steam 客户端完成订阅 / 取消订阅；关闭时只会在 Steam 客户端里打开该 mod 页面。需要 steam_api64.dll（放在程序目录或游戏目录）。",
         ["settings.steamSubscribeOn"] = "Steam 工坊直连订阅（实验）",
         ["settings.steamSubscribeStatusOff"] = "已关闭 Steam 工坊直连订阅",
@@ -652,15 +881,37 @@ public sealed partial class Localizer
         ["settings.translate.engine"] = "翻译引擎",
         ["settings.translate.engine.auto.desc"] = "优先用下面配置的 OpenAI 兼容接口，其次微软翻译、谷歌云翻译，最后回落到内置免费服务。",
         ["settings.translate.engine.auto.title"] = "自动（推荐）",
+        ["settings.translate.engine.bergamot.desc"] = "Firefox 网页翻译同款的神经机器翻译模型，48–70 MB、毫秒级响应；不认识游戏专名，需要靠下面的术语词典纠正。",
+        ["settings.translate.engine.bergamot.title"] = "仅 Bergamot（离线，最快最小）",
         ["settings.translate.engine.builtin.desc"] = "使用谷歌翻译的公开网页接口，不需要任何密钥；这是非官方公开端点，随时可能变，可用性不保证。",
         ["settings.translate.engine.builtin.title"] = "谷歌免费翻译（无需密钥）",
         ["settings.translate.engine.custom.desc"] = "只调用下面自填的接口；没配置或调用失败就是失败，不回落。",
         ["settings.translate.engine.custom.title"] = "仅自填接口",
         ["settings.translate.engine.googleCloud.desc"] = "调用谷歌云端翻译的官方接口，需要填写 API Key；免费额度每月 50 万字符。",
         ["settings.translate.engine.googleCloud.title"] = "谷歌云翻译",
+        ["settings.translate.engine.indexTranslate.desc"] = "完全离线运行的小型翻译模型，质量最好、术语可强制对齐；模型约 1.3 GB，纯 CPU 下每句约 1 秒，失败不回落到其它引擎。",
+        ["settings.translate.engine.indexTranslate.title"] = "仅 Index-Translate-2B（离线，质量最好）",
+        ["settings.translate.engine.local.desc"] = "优先用本机离线模型翻译（需要先在下面下载模型）；模型没装好或翻译失败时依次回落到自填接口、微软翻译、谷歌云翻译、MyMemory 与内置免费服务。",
+        ["settings.translate.engine.local.title"] = "本地离线翻译",
         ["settings.translate.engine.microsoft.desc"] = "调用微软 Azure Translator，需要填写订阅密钥与区域；免费额度每月 200 万字符。",
         ["settings.translate.engine.microsoft.title"] = "微软翻译",
+        ["settings.translate.engine.mymemory.desc"] = "使用 MyMemory 的公开接口，不需要填写任何密钥；单次上限 500 字符，超长会自动分段。在谷歌端点连不上的网络里通常仍然可用。",
+        ["settings.translate.engine.mymemory.title"] = "MyMemory 翻译（免密钥）",
         ["settings.translate.engineName"] = "翻译引擎选择",
+        ["settings.translate.glossary"] = "术语词典",
+        ["settings.translate.glossaryAdd"] = "添加词条",
+        ["settings.translate.glossaryHint"] = "词典会同时喂给两个本地引擎：Index-Translate 用它强制对齐专名，Bergamot 用它直接替换。只在本地引擎生效，联网引擎不受影响。",
+        ["settings.translate.glossaryName"] = "本地翻译术语词典",
+        ["settings.translate.glossaryRemove"] = "删除此词条",
+        ["settings.translate.glossarySave"] = "保存词典",
+        ["settings.translate.glossarySource"] = "原文词条",
+        ["settings.translate.glossarySourcePlaceholder"] = "例如 mod",
+        ["settings.translate.glossaryStatusFailed"] = "保存术语词典失败：{0}",
+        ["settings.translate.glossaryStatusSaved"] = "术语词典已保存（{0} 条）",
+        ["settings.translate.glossaryTarget"] = "译文词条",
+        ["settings.translate.glossaryTargetPlaceholder"] = "例如 模组",
+        ["settings.translate.googleCloud.hint"] = "谷歌云翻译要先用 Cloud Console 启用 Cloud Translation API，再创建 API 密钥：启用 API → 搜索 Cloud Translation API → 启用 → 凭据 → 创建凭据 → API 密钥。每月前 50 万字符免费，这里只填密钥，不用填项目名。",
+        ["settings.translate.googleCloud.portal"] = "打开 Google Cloud 控制台创建 API 密钥",
         ["settings.translate.googleKey"] = "API Key",
         ["settings.translate.googleKeyName"] = "谷歌云翻译的 API Key",
         ["settings.translate.hint"] = "译文与原文同时显示：自填接口的地址与密钥只保存在本机 settings.json 里，日志中不会打印；内置免费服务是第三方公开接口，稳定性不由本启动器保证。",
@@ -672,6 +923,24 @@ public sealed partial class Localizer
         ["settings.translate.language.zhCN.desc"] = "无论界面是什么语言，一律译成简体中文。",
         ["settings.translate.language.zhCN.title"] = "简体中文",
         ["settings.translate.languageName"] = "译文目标语言",
+        ["settings.translate.lastFailure"] = "翻译失败：{0}",
+        ["settings.translate.localModelBergamotEnZh"] = "Bergamot 英译中（约 48 MB）",
+        ["settings.translate.localModelBergamotZhEn"] = "Bergamot 中译英（约 70 MB）",
+        ["settings.translate.localModelDownload"] = "下载",
+        ["settings.translate.localModelDownloading"] = "下载中 {0}%",
+        ["settings.translate.localModelIndexTranslate"] = "Index-Translate-2B（质量最好，约 1.3 GB）",
+        ["settings.translate.localModelInstalled"] = "已安装",
+        ["settings.translate.localModelNotInstalled"] = "未安装",
+        ["settings.translate.localModelRemove"] = "删除",
+        ["settings.translate.localModelStatusDownloaded"] = "本地模型已就绪：{0}",
+        ["settings.translate.localModelStatusFailed"] = "本地模型下载失败：{0}",
+        ["settings.translate.localModelStatusRemoveFailed"] = "删除本地模型失败：{0}",
+        ["settings.translate.localModelStatusRemoved"] = "已删除本地模型：{0}",
+        ["settings.translate.localModels"] = "本地离线模型",
+        ["settings.translate.localModelsHint"] = "模型下载到本机后完全离线翻译，不占用网络也不需要任何密钥。首次下载 Index-Translate-2B 约 1.3 GB，请确认磁盘空间充足。",
+        ["settings.translate.localModelsName"] = "本地离线模型下载",
+        ["settings.translate.microsoft.hint"] = "微软翻译要先在 Azure 订阅里创建「翻译器」资源：创建资源 → 搜索 Translator（翻译器）→ 定价层选 F0（每月 200 万字符免费）→ 创建完成后在「密钥和终结点」复制 KEY 1，区域填资源的位置（如 eastasia、global）。",
+        ["settings.translate.microsoft.portal"] = "打开 Azure 门户创建翻译器资源",
         ["settings.translate.microsoftKey"] = "订阅密钥",
         ["settings.translate.microsoftKeyName"] = "微软翻译的订阅密钥",
         ["settings.translate.microsoftRegion"] = "资源区域",
@@ -692,7 +961,12 @@ public sealed partial class Localizer
         ["settings.translate.statusEndpoint"] = "翻译接口已更新：{0}",
         ["settings.translate.statusEngine"] = "翻译引擎已改为 {0}",
         ["settings.translate.statusLanguage"] = "译文语言已改为 {0}",
+        ["settings.translate.statusPortalFailed"] = "打不开浏览器：{0}",
         ["settings.translate.statusScope"] = "翻译范围已更新：{0}",
+        ["settings.translate.test"] = "测试翻译",
+        ["settings.translate.testName"] = "测试各翻译引擎是否可用",
+        ["settings.translate.testResult"] = "{0}：{1}",
+        ["settings.translate.testRunning"] = "正在逐个测试引擎…",
         ["shell.alwaysOnTop.applyFailed"] = "切换窗口置顶失败：{0}",
         ["shell.alwaysOnTop.disable"] = "取消窗口置顶",
         ["shell.alwaysOnTop.disableTooltip"] = "取消置顶（Ctrl+Shift+T）",
@@ -711,6 +985,7 @@ public sealed partial class Localizer
         ["shell.nav.home"] = "当前游戏",
         ["shell.nav.library"] = "游戏库",
         ["shell.nav.modLibrary"] = "Mod 库",
+        ["shell.nav.modStudio"] = "Mod 创建",
         ["shell.nav.playSets"] = "播放集",
         ["shell.nav.settings"] = "设置",
         ["shell.nav.workshop"] = "创意工坊",
@@ -726,7 +1001,22 @@ public sealed partial class Localizer
         ["shell.status.gamesFound"] = "已发现 {0} 个游戏",
         ["shell.status.noGames"] = "未发现已安装的游戏，请检查 Steam 库路径",
         ["shell.support.managedByGame"] = "该游戏的模组与 DLC 由游戏本体管理（游戏内 MOD 菜单 / Steam 创意工坊），本启动器不接管",
+        ["shell.translating"] = "正在翻译…",
         ["shell.version"] = "版本 {0}",
+        ["update.available.body"] = "当前版本 {0}，新版本 {1}。更新会下载安装包并在校验通过后启动安装器。",
+        ["update.downloadCancel"] = "取消下载",
+        ["update.downloadFailed"] = "下载更新失败：{0}",
+        ["update.downloading"] = "正在下载更新…",
+        ["update.elevationCanceled"] = "已取消管理员授权，更新未开始。",
+        ["update.install"] = "下载并更新",
+        ["update.installFailed"] = "无法启动安装器：{0}",
+        ["update.installerStarted"] = "安装器已启动，启动器即将退出。",
+        ["update.later"] = "稍后",
+        ["update.mandatoryHint"] = "此版本为强制更新。",
+        ["update.perMachineHint"] = "当前为所有用户安装，更新需要管理员授权（UAC）。",
+        ["update.ready"] = "更新已准备好，启动器即将退出并安装。",
+        ["update.title.available"] = "发现新版本 {0}",
+        ["update.verifyFailed"] = "安装包校验失败：{0}",
         ["workshop.author"] = "作者 {0}",
         ["workshop.commentsClosed"] = "这个 mod 没有可显示的评论",
         ["workshop.commentsCount"] = "共 {0} 条评论",
@@ -770,6 +1060,9 @@ public sealed partial class Localizer
         ["workshop.detailScreenshots"] = "截图 {0} 张",
         ["workshop.detailScreenshotsLoading"] = "正在下载截图…",
         ["workshop.detailScreenshotsTitle"] = "截图",
+        ["workshop.detailSteamDownloadProgress"] = "下载中 {0}%",
+        ["workshop.detailSteamNeedsUpdate"] = "Steam 上有新版本，可在 Steam 客户端或库里更新。",
+        ["workshop.detailSteamReadOnlyHint"] = "当前只读取 Steam 状态：能看到订阅 / 安装 / 下载进度，但改订阅要在设置页打开「Steam 工坊直连订阅」。",
         ["workshop.detailSteamSubscribeConfirm"] = "将通过 Steam 客户端订阅这个工坊物品，Steam 会立刻开始下载。确定继续吗？",
         ["workshop.detailSteamSubscribeHintOff"] = "未开启直连订阅：按钮只会在 Steam 客户端里打开该 mod。可在设置页的「Steam 工坊直连订阅」里打开。",
         ["workshop.detailSteamSubscribeHintOn"] = "已开启直连订阅：按钮会直接调用 Steam 客户端订阅 / 取消订阅。",
@@ -782,6 +1075,9 @@ public sealed partial class Localizer
         ["workshop.detailSubscribeSteam"] = "在 Steam 中订阅",
         ["workshop.detailSubscribing"] = "正在订阅…",
         ["workshop.detailTags"] = "标签",
+        ["workshop.detailTranslatingChangelog"] = "正在翻译更新日志…",
+        ["workshop.detailTranslatingComments"] = "正在翻译评论…",
+        ["workshop.detailTranslatingDescription"] = "正在翻译简介…",
         ["workshop.detailUnsubscribe"] = "取消订阅",
         ["workshop.detailUnsubscribeFailed"] = "取消订阅失败：{0}",
         ["workshop.detailUnsubscribeOk"] = "已取消订阅",
@@ -804,7 +1100,7 @@ public sealed partial class Localizer
         ["workshop.rating"] = "{0} 分（{1} 人评分）",
         ["workshop.refreshName"] = "刷新创意工坊",
         ["workshop.searchName"] = "搜索创意工坊",
-        ["workshop.searchPlaceholder"] = "搜索创意工坊内容",
+        ["workshop.searchPlaceholder"] = "搜索创意工坊内容（回车搜索）",
         ["workshop.signInAction"] = "去登录",
         ["workshop.signInHint"] = "未登录 Paradox 账号，只显示公开内容",
         ["workshop.size"] = "体积 {0}",
@@ -827,6 +1123,7 @@ public sealed partial class Localizer
         ["workshop.statusName"] = "状态",
         ["workshop.statusOffline"] = "网络不可用，显示缓存中的 {0} 个结果",
         ["workshop.statusParseFailed"] = "Steam 页面结构解析失败，暂时无法显示列表",
+        ["workshop.statusSearching"] = "正在搜索…",
         ["workshop.subscriptions"] = "{0} 订阅",
         ["workshop.throttlePaused"] = "Steam 提示请求过多，已暂停请求约 {0} 分钟，恢复后会自动继续",
         ["workshop.throttleRetryIn"] = "Steam 提示请求过多，请约 {0} 分钟后重试",
@@ -839,8 +1136,8 @@ public sealed partial class Localizer
         ["workshop.timeWeek"] = "1 周",
         ["workshop.timeYear"] = "1 年",
         ["workshop.title"] = "创意工坊",
-        ["workshop.translateLabel"] = "译文",
         ["workshop.translateOriginalLabel"] = "原文",
+        ["workshop.translateUnavailable"] = "翻译没有出结果：{0}。可在「设置 → 翻译」里点「测试翻译」查看各引擎状态。",
         ["workshop.updated"] = "更新于 {0}",
     };
 
@@ -870,6 +1167,8 @@ public sealed partial class Localizer
         ["account.status"] = "Status",
         ["account.statusHint"] = "Signing in lets you browse PDX Mods, your subscriptions and your library.",
         ["account.statusNotReady"] = "Launcher is not initialized yet",
+        ["account.statusSessionAuto"] = "Signed in · renews automatically next launch",
+        ["account.statusSessionOnce"] = "Signed in · valid for this run only",
         ["account.statusSignInOk"] = "Signed in to your Paradox account",
         ["account.statusSignOutOk"] = "Signed out of your Paradox account",
         ["account.statusSignedIn"] = "Signed in as {0} ({1})",
@@ -909,6 +1208,7 @@ public sealed partial class Localizer
         ["common.unknown"] = "Unknown",
         ["common.yes"] = "Yes",
         ["dlc.countsText"] = "{0} DLCs in total, {1} enabled",
+        ["dlc.countsTextSteam"] = "{0} DLCs (list from Steam)",
         ["dlc.descriptionName"] = "Description",
         ["dlc.descriptionsLoading"] = "Fetching descriptions for {0} DLCs…",
         ["dlc.disableAll"] = "Disable all",
@@ -930,6 +1230,7 @@ public sealed partial class Localizer
         ["dlc.ownershipDetailPatchOn"] = "Patch: loaded",
         ["dlc.ownershipDetailSteamId"] = "SteamID64 {0}",
         ["dlc.ownershipErrorBusy"] = "Steam is in use by another page, try again shortly",
+        ["dlc.ownershipErrorHostFailed"] = "The Steam query process did not return normally (exited, killed or timed out). Please retry.",
         ["dlc.ownershipErrorInitFailed"] = "Steam initialisation failed (not signed in?)",
         ["dlc.ownershipErrorNative"] = "The Steam API call failed",
         ["dlc.ownershipErrorNoAppId"] = "Cannot determine the Steam AppID, so the ownership probe was skipped",
@@ -953,6 +1254,7 @@ public sealed partial class Localizer
         ["dlc.saveFailedShort"] = "Save failed",
         ["dlc.saveName"] = "Save DLC states",
         ["dlc.saveNoActivePlaySet"] = "This game has no active play set: pick one on the Play Sets page, click \"Activate play set\", then save the DLC changes",
+        ["dlc.saveSteamManaged"] = "This game's DLC is decided by Steam ownership; there is nothing to save here",
         ["dlc.statusAllDisabled"] = "All DLCs disabled (not saved yet)",
         ["dlc.statusAllEnabled"] = "All DLCs enabled (not saved yet)",
         ["dlc.statusLoaded"] = "Loaded {0} DLCs (play set \"{1}\")",
@@ -963,6 +1265,9 @@ public sealed partial class Localizer
         ["dlc.statusRowEnabled"] = "Enabled \"{0}\" (not saved yet)",
         ["dlc.statusSaved"] = "Saved: playsets_dlcs matches the load file ({0}/{1} enabled)",
         ["dlc.statusSkippedSuffix"] = "; {0} DLCs have an empty pops_id and cannot be disabled, so they were skipped",
+        ["dlc.statusSteamEmpty"] = "Steam reports no DLC for this game",
+        ["dlc.statusSteamList"] = "Read {0} DLCs from Steam (this game has no DLC manifest; ownership and toggles are decided by Steam)",
+        ["dlc.statusSteamUnavailable"] = "Could not read the DLC list from Steam: {0}",
         ["dlc.toggleToolTip"] = "Enable or disable this DLC",
         ["dlc.toggleToolTipLocked"] = "This DLC cannot be disabled through content_load.json (empty pops_id; the official launcher drops it too)",
         ["dlc.unknownBadge"] = "Ownership unknown",
@@ -1063,6 +1368,19 @@ public sealed partial class Localizer
         ["modlib.statusOpenedBrowser"] = "Opened {0} in the browser",
         ["modlib.statusOpenedFolder"] = "Opened the local folder for {0}",
         ["modlib.statusOpenedSteam"] = "Opened {0} in Steam",
+        ["modlib.steamActionFailed"] = "Steam action failed: {0}",
+        ["modlib.steamDisableName"] = "Disable in Steam",
+        ["modlib.steamDownloadName"] = "Download via Steam",
+        ["modlib.steamDownloadRequested"] = "Asked Steam to download: {0}",
+        ["modlib.steamEnableName"] = "Enable in Steam",
+        ["modlib.steamStateDisabled"] = "Disabled in Steam",
+        ["modlib.steamStateDownloading"] = "Downloading {0}%",
+        ["modlib.steamStateDownloadingNoPercent"] = "Downloading",
+        ["modlib.steamStateInstalled"] = "Installed via Steam",
+        ["modlib.steamStateName"] = "Steam status",
+        ["modlib.steamStatePending"] = "Queued in Steam",
+        ["modlib.steamStateUpdateNeeded"] = "Update available",
+        ["modlib.steamWriteDisabled"] = "Write access is off: turn on \"Steam Workshop direct access\" in Settings to download or disable via Steam.",
         ["modlib.subscribedOn"] = "Subscribed {0}",
         ["modlib.supportedVersion"] = "Supported version {0}",
         ["modlib.supportedVersionName"] = "Supported game version",
@@ -1091,6 +1409,31 @@ public sealed partial class Localizer
         ["mods.addPage.target"] = "Add to play set “{0}”",
         ["mods.addPage.targetMissing"] = "The target play set no longer exists, so nothing was added.",
         ["mods.addPage.title"] = "Add Mods",
+        ["mods.autoSort.apply"] = "Apply Order",
+        ["mods.autoSort.button"] = "Auto-Sort",
+        ["mods.autoSort.buttonName"] = "Auto-sort (reorder load order from file changes)",
+        ["mods.autoSort.conflictAmbiguous"] = "“{0}” and “{1}” share {2} added files; precedence cannot be inferred, keeping their current relative order",
+        ["mods.autoSort.conflictSameTier"] = "“{0}” and “{1}” override {2} vanilla files at the same tier; the later one wins",
+        ["mods.autoSort.conflictsTitle"] = "Same-file conflicts (later load wins)",
+        ["mods.autoSort.noChange"] = "The current order already matches the auto-sort rules; nothing to change.",
+        ["mods.autoSort.previewTitle"] = "Auto-Sort Preview",
+        ["mods.autoSort.reasonDeclaredDep"] = "Declared dependency on “{0}”, placed after it",
+        ["mods.autoSort.reasonDerivedPatch"] = "Shares files with “{0}”, placed after it as a patch",
+        ["mods.autoSort.reasonOverrides"] = "Overrides {0} vanilla gameplay files",
+        ["mods.autoSort.reasonPatchName"] = "Name marks it as a patch/compat mod; placed after its base mods",
+        ["mods.autoSort.rowMove"] = "Position {0} → {1}",
+        ["mods.autoSort.summary"] = "{0} mods in total, {1} will change position. Rules: big overhauls on top, tweaks and patches below, translations last.",
+        ["mods.autoSort.tierGfxOnly"] = "Cosmetic/UI only",
+        ["mods.autoSort.tierLargeChange"] = "Large changes",
+        ["mods.autoSort.tierLocalization"] = "Localization",
+        ["mods.autoSort.tierMediumChange"] = "Medium changes",
+        ["mods.autoSort.tierOverhaul"] = "Overhaul",
+        ["mods.autoSort.tierPureAdditive"] = "Purely additive",
+        ["mods.autoSort.tierSmallTweak"] = "Small tweaks",
+        ["mods.autoSort.tooltip"] = "Scan each mod's actual file changes and reorder: big overhauls on top, tweaks and patches below, translations last. Preview before applying.",
+        ["mods.autoSort.undo"] = "Undo Sort",
+        ["mods.autoSort.warningCycle"] = "Dependency cycle detected; broken and sorted by tier",
+        ["mods.autoSort.warningsTitle"] = "Warnings",
         ["mods.dialog.cannotDeleteBody"] = "This is the only play set and cannot be deleted.",
         ["mods.dialog.defaultNewName"] = "New Play Set",
         ["mods.dialog.deleteBody"] = "Delete play set \"{0}\"? Its mod order and enabled state will be removed, and this cannot be undone.",
@@ -1150,6 +1493,9 @@ public sealed partial class Localizer
         ["mods.status.autoSaveFailed"] = "Auto-save failed: {0}",
         ["mods.status.autoSaveSaved"] = "Auto-saved: sqlite (playsets_mods/playsets_dlcs) matches the load file",
         ["mods.status.autoSaveSavedTo"] = "Auto-saved to \"{0}\" (not active; the game load file was not changed)",
+        ["mods.status.autoSortApplied"] = "Auto-sort applied: {0} mod positions changed",
+        ["mods.status.autoSortNeedsGame"] = "No game selected; cannot auto-sort",
+        ["mods.status.autoSortUndone"] = "Restored the order from before auto-sort",
         ["mods.status.cannotDeleteLast"] = "Cannot delete: this is the only play set",
         ["mods.status.cannotDeleteTitle"] = "Cannot Delete Play Set",
         ["mods.status.createFailed"] = "Failed to create play set: {0}",
@@ -1196,6 +1542,7 @@ public sealed partial class Localizer
         ["mods.toolbar.rename"] = "Rename",
         ["mods.toolbar.renameName"] = "Rename Play Set",
         ["mods.toolbar.searchPlaceholder"] = "Search mods in this play set",
+        ["mods.translateUnavailable"] = "Translation returned nothing: {0}. Use Settings > Translation > Test translation to check engines.",
         ["mods.warnMissingPath"] = "The path is written to the load file, but it does not exist on disk",
         ["mods.warnName"] = "This mod may not load in game",
         ["mods.warnNoArchive"] = "This game’s load file only accepts archive paths, so folder mods cannot be listed",
@@ -1203,6 +1550,181 @@ public sealed partial class Localizer
         ["mods.warnNoRegistryId"] = "This game’s load file only accepts a registry id, and this row has none",
         ["mods.warnNonAsciiParent"] = "A parent folder contains non-ASCII characters; only changing the game’s gameDataPath will help",
         ["mods.warnNonAsciiPath"] = "This game cannot load mods from paths containing non-ASCII characters, so this folder name is silently ignored",
+        ["modstudio.addPreviews"] = "Add images",
+        ["modstudio.addVideo"] = "Add video",
+        ["modstudio.bbcodeBold"] = "Bold [b]text[/b]",
+        ["modstudio.bbcodeBulletList"] = "Bulleted list [list][*]item[/list]",
+        ["modstudio.bbcodeCode"] = "Code [code]content[/code]",
+        ["modstudio.bbcodeHeading"] = "Heading [h2]text[/h2]",
+        ["modstudio.bbcodeHint"] = "Descriptions support Steam BBCode. Use the buttons below to insert tags, and scroll on to see how readers will see it.",
+        ["modstudio.bbcodeImage"] = "Image [img]address[/img]",
+        ["modstudio.bbcodeItalic"] = "Italic [i]text[/i]",
+        ["modstudio.bbcodeLink"] = "Link [url=address]text[/url]",
+        ["modstudio.bbcodeNumberedList"] = "Numbered list [olist][*]item[/olist]",
+        ["modstudio.bbcodeRule"] = "Horizontal rule [hr]",
+        ["modstudio.bbcodeStrike"] = "Strikethrough [strike]text[/strike]",
+        ["modstudio.bbcodeUnderline"] = "Underline [u]text[/u]",
+        ["modstudio.builtInCover"] = "Using the launcher's built-in cover",
+        ["modstudio.bytesCounter"] = "{0} / {1} bytes",
+        ["modstudio.cancel"] = "Cancel",
+        ["modstudio.changeNotePlaceholder"] = "What changed in this update (optional)",
+        ["modstudio.count"] = "{0} local mods",
+        ["modstudio.createButton"] = "New Mod",
+        ["modstudio.createCancel"] = "Cancel",
+        ["modstudio.createConfirm"] = "Create",
+        ["modstudio.createFailed"] = "Could not create: {0}",
+        ["modstudio.createFolderHint"] = "Folder names may only contain letters, digits, dots, underscores, and hyphens.",
+        ["modstudio.createHint"] = "Creates a descriptor, folder, and cover under this game's mod directory. You can add content files afterwards.",
+        ["modstudio.createNameRequired"] = "Enter a mod name.",
+        ["modstudio.createSuccess"] = "Created {0}",
+        ["modstudio.createTitle"] = "New Local Mod",
+        ["modstudio.descriptionPlaceholder"] = "Briefly describe what this mod adds or changes",
+        ["modstudio.descriptionTooLong"] = "Description is too long: {0} bytes, Steam allows {1} bytes",
+        ["modstudio.descriptorAdult"] = "General mature content",
+        ["modstudio.descriptorAdultOnly"] = "Adult only sexual content",
+        ["modstudio.descriptorFrequentNudity"] = "Frequent nudity or sexual content",
+        ["modstudio.descriptorLegacy"] = "CK3 style (.mod + descriptor.mod)",
+        ["modstudio.descriptorMetadata"] = "V3 style (.metadata/metadata.json)",
+        ["modstudio.descriptorNudity"] = "Some nudity or sexual content",
+        ["modstudio.descriptorUnsupported"] = "No local descriptor support",
+        ["modstudio.descriptorViolence"] = "Frequent violence or gore",
+        ["modstudio.descriptorsHint"] = "Mirrors the content descriptors on the Steam Workshop page; re-uploading replaces the whole set.",
+        ["modstudio.detailDescription"] = "Description",
+        ["modstudio.detailDescriptor"] = "Descriptor",
+        ["modstudio.detailFolder"] = "Folder",
+        ["modstudio.detailNoSelection"] = "No mod selected",
+        ["modstudio.detailNoSelectionHint"] = "Select a local mod on the left to see its details.",
+        ["modstudio.detailPublication"] = "Workshop",
+        ["modstudio.detailSupportedVersion"] = "Supported version",
+        ["modstudio.detailTags"] = "Tags",
+        ["modstudio.detailVersion"] = "Version",
+        ["modstudio.fieldChangeNote"] = "Change note",
+        ["modstudio.fieldDescription"] = "Description",
+        ["modstudio.fieldDescriptors"] = "Content descriptors",
+        ["modstudio.fieldFolder"] = "Folder name",
+        ["modstudio.fieldLanguage"] = "Language",
+        ["modstudio.fieldName"] = "Name",
+        ["modstudio.fieldPreview"] = "Cover",
+        ["modstudio.fieldPreviews"] = "Preview images",
+        ["modstudio.fieldPublic"] = "Public",
+        ["modstudio.fieldSupportedVersion"] = "Supported game version",
+        ["modstudio.fieldTags"] = "Tags",
+        ["modstudio.fieldUploadDescription"] = "Description",
+        ["modstudio.fieldUploadDirectory"] = "Directory",
+        ["modstudio.fieldUploadModId"] = "Mod ID",
+        ["modstudio.fieldUploadTags"] = "Tags",
+        ["modstudio.fieldUploadTarget"] = "Upload to",
+        ["modstudio.fieldUploadTitle"] = "Name",
+        ["modstudio.fieldVersion"] = "Version",
+        ["modstudio.fieldVideoPreviews"] = "Preview videos",
+        ["modstudio.fieldVisibility"] = "Visibility",
+        ["modstudio.folderPlaceholder"] = "ASCII folder name, e.g. my_mod",
+        ["modstudio.legalHint"] = "You must accept the Steam Workshop Legal Agreement before publishing.",
+        ["modstudio.legalLink"] = "Open the Workshop Legal Agreement",
+        ["modstudio.listName"] = "Local mods",
+        ["modstudio.loadFailed"] = "Could not load: {0}",
+        ["modstudio.localizationCount"] = "Titles added for {0} other language(s)",
+        ["modstudio.localizationNote"] = "Switching the language only changes the title and description below. English is the default; other languages only change what users of that language see. Each language is submitted once during upload.",
+        ["modstudio.managedHint"] = "This game manages its own content; the launcher does not create or publish mods for it.",
+        ["modstudio.moveDown"] = "Move down",
+        ["modstudio.moveUp"] = "Move up",
+        ["modstudio.namePlaceholder"] = "For example: More Game Rules",
+        ["modstudio.needsLegal"] = "Steam requires you to accept the Workshop Legal Agreement before publishing.",
+        ["modstudio.newMod"] = "New Mod",
+        ["modstudio.noGameHint"] = "Select a game in the library first.",
+        ["modstudio.noGameTitle"] = "(no game selected)",
+        ["modstudio.noModsHint"] = "No local mods yet. Choose New Mod to create one.",
+        ["modstudio.noWorkshopHint"] = "This game has no Steam Workshop, so it cannot publish.",
+        ["modstudio.openFolder"] = "Open folder",
+        ["modstudio.openFolderUnavailable"] = "This mod has no local folder to open.",
+        ["modstudio.openWorkshop"] = "Open the Workshop page in a browser",
+        ["modstudio.openWorkshopUnavailable"] = "This mod does not have a Steam Workshop page yet.",
+        ["modstudio.pickPreview"] = "Choose image…",
+        ["modstudio.previewHeader"] = "Preview (what readers see)",
+        ["modstudio.previewLimitHint"] = "Up to 8 images, each under 1 MB; the first one becomes the main cover.",
+        ["modstudio.previewNone"] = "No cover selected",
+        ["modstudio.previewTooLarge"] = "exceeds Steam's 1 MB limit",
+        ["modstudio.progressName"] = "Upload progress",
+        ["modstudio.publicHint"] = "When public, other players can subscribe on the Workshop.",
+        ["modstudio.refreshName"] = "Refresh local mods",
+        ["modstudio.removePreview"] = "Remove",
+        ["modstudio.rowPublished"] = "Published · {0}",
+        ["modstudio.rowPublishedShort"] = "Published",
+        ["modstudio.rowUnpublished"] = "Not published",
+        ["modstudio.searchName"] = "Search local mods",
+        ["modstudio.searchPlaceholder"] = "Search by mod name or folder",
+        ["modstudio.stageCommitting"] = "Committing changes…",
+        ["modstudio.stageCreating"] = "Preparing the Workshop item…",
+        ["modstudio.stageDone"] = "Upload complete",
+        ["modstudio.stageLocalizing"] = "Submitting localized titles…",
+        ["modstudio.stagePreparing"] = "Preparing content…",
+        ["modstudio.stagePreview"] = "Uploading the cover…",
+        ["modstudio.stageUploading"] = "Uploading content…",
+        ["modstudio.statusFiltered"] = "Showing {0} of {1} local mods",
+        ["modstudio.statusLoaded"] = "Loaded {0} local mods",
+        ["modstudio.statusName"] = "Status",
+        ["modstudio.statusNoMatch"] = "No mods match \"{0}\"",
+        ["modstudio.supportedVersionPlaceholder"] = "For example 1.20.*",
+        ["modstudio.tagsPlaceholder"] = "Gameplay, Balance",
+        ["modstudio.title"] = "Mod Studio",
+        ["modstudio.titleTooLong"] = "Title is too long: {0} bytes, Steam allows {1} bytes",
+        ["modstudio.unsupportedCreate"] = "This game does not support creating local mods yet.",
+        ["modstudio.unsupportedHint"] = "This game does not support creating mods; existing local mods are still listed.",
+        ["modstudio.uploadArchived"] = "Archive mods cannot be uploaded directly.",
+        ["modstudio.uploadButton"] = "Publish to Workshop",
+        ["modstudio.uploadCanceled"] = "Upload canceled.",
+        ["modstudio.uploadCanceling"] = "Canceling upload…",
+        ["modstudio.uploadConfirm"] = "Start upload",
+        ["modstudio.uploadConfirmBody"] = "The entire folder for \"{0}\" will be uploaded to the Steam Workshop.",
+        ["modstudio.uploadConfirmMulti"] = "\"{0}\" will be uploaded, plus titles and descriptions for {1} more language(s). Continue?",
+        ["modstudio.uploadConfirmTitle"] = "Publish to Workshop",
+        ["modstudio.uploadDescriptionPlaceholder"] = "Describe what this mod contains and how it plays",
+        ["modstudio.uploadFailed"] = "Upload failed: {0}",
+        ["modstudio.uploadHint"] = "Uploads the whole mod folder as Workshop content. If a publication record exists, it updates the same item.",
+        ["modstudio.uploadMod"] = "Mod to upload",
+        ["modstudio.uploadModIdHint"] = "Leave empty to create a new Workshop item; enter the numeric ID of an existing item to update it.",
+        ["modstudio.uploadModIdInvalid"] = "Mod ID must be a positive integer, or empty.",
+        ["modstudio.uploadModIdPlaceholder"] = "Empty to create, or an existing Workshop ID",
+        ["modstudio.uploadNotLocal"] = "This mod has no local folder, so it cannot be uploaded.",
+        ["modstudio.uploadSelectMod"] = "Select an uploadable mod on the left first.",
+        ["modstudio.uploadSuccess"] = "Published to the Workshop.",
+        ["modstudio.uploadTagCount"] = "{0} tags selected",
+        ["modstudio.uploadTagsPlaceholder"] = "Gameplay, Balance",
+        ["modstudio.uploadTargetPdx"] = "Paradox Mod",
+        ["modstudio.uploadTargetPdxUnavailable"] = "Publishing to Paradox Mod requires a Paradox account session and the official upload API, which this build does not include yet. Choose Steam Workshop instead.",
+        ["modstudio.uploadTargetSteam"] = "Steam Workshop",
+        ["modstudio.uploadTitle"] = "Publish to Workshop",
+        ["modstudio.uploadTitlePlaceholder"] = "Title of the Workshop item",
+        ["modstudio.uploadTitleRequired"] = "Enter a Workshop title.",
+        ["modstudio.useBuiltInCover"] = "Use built-in cover",
+        ["modstudio.versionPlaceholder"] = "0.1.0",
+        ["modstudio.videoHint"] = "Steam only accepts YouTube links; video files cannot be uploaded directly.",
+        ["modstudio.videoUrlInvalid"] = "That is not a valid YouTube link.",
+        ["modstudio.videoUrlPlaceholder"] = "Paste a YouTube video link",
+        ["modstudio.visibilityFriendsOnly"] = "Friends only",
+        ["modstudio.visibilityPrivate"] = "Hidden",
+        ["modstudio.visibilityPublic"] = "Public",
+        ["modstudio.visibilityUnlisted"] = "Unlisted",
+        ["settings.about.autoCheck"] = "Check for updates automatically",
+        ["settings.about.autoCheckName"] = "Check for updates when the launcher starts",
+        ["settings.about.checkFailed"] = "Check failed: {0}",
+        ["settings.about.checkNow"] = "Check now",
+        ["settings.about.checkNowName"] = "Check for updates now",
+        ["settings.about.checking"] = "Checking for updates…",
+        ["settings.about.installMode"] = "Installation mode",
+        ["settings.about.installModeName"] = "How this copy is installed",
+        ["settings.about.installModePerMachine"] = "All users (updates need administrator approval)",
+        ["settings.about.installModePerUser"] = "Current user only",
+        ["settings.about.installModePortable"] = "Portable / not installed",
+        ["settings.about.lastCheck"] = "Last checked: {0}",
+        ["settings.about.lastCheckLabel"] = "Last checked",
+        ["settings.about.launcherVersion"] = "Launcher version",
+        ["settings.about.never"] = "Never",
+        ["settings.about.releaseNotes"] = "View release notes",
+        ["settings.about.statusAvailable"] = "Version {0} is available",
+        ["settings.about.statusNotDue"] = "The last check was less than 24 hours ago",
+        ["settings.about.statusUpToDate"] = "You are up to date",
+        ["settings.about.title"] = "About & updates",
         ["settings.appData.clearLegacy"] = "Delete old C: data",
         ["settings.appData.clearLegacyName"] = "Delete old C: data",
         ["settings.appData.current"] = "Current data folder",
@@ -1368,6 +1890,7 @@ public sealed partial class Localizer
         ["settings.modThumbnails.statusOnlineOff"] = "Mod thumbnail download off: local images and existing cache only",
         ["settings.modThumbnails.statusOnlineOn"] = "Mod thumbnail download on (cached in the data folder)",
         ["settings.modThumbnails.statusRetention"] = "Mod thumbnail retention set to {0} days; expired images are pruned the next time the library loads",
+        ["settings.nav.about"] = "About & updates",
         ["settings.nav.advanced"] = "Advanced",
         ["settings.nav.appearance"] = "Appearance",
         ["settings.nav.cache"] = "Cache",
@@ -1449,6 +1972,9 @@ public sealed partial class Localizer
         ["settings.steamApiHeader"] = "steam_api64.dll",
         ["settings.steamApiMissing"] = "steam_api64.dll not found: {0}",
         ["settings.steamApiReady"] = "steam_api64.dll found",
+        ["settings.steamStateHint"] = "Read real workshop item state (subscribed / installed / update available / downloading / disabled locally in Steam) and show it in the mod library and detail page. Read-only; each query starts a short-lived child process, during which Steam briefly lists this app as \"in game\".",
+        ["settings.steamStateOff"] = "Steam workshop state reading off",
+        ["settings.steamStateOn"] = "Read Steam workshop state",
         ["settings.steamSubscribeHint"] = "When on, the Subscribe button on a Workshop detail page subscribes or unsubscribes through the Steam client. When off, it only opens the item in the Steam client. Requires steam_api64.dll next to the launcher or in the game folder.",
         ["settings.steamSubscribeOn"] = "Direct Steam Workshop subscription (experimental)",
         ["settings.steamSubscribeStatusOff"] = "Direct Steam Workshop subscription disabled",
@@ -1485,15 +2011,37 @@ public sealed partial class Localizer
         ["settings.translate.engine"] = "Translation engine",
         ["settings.translate.engine.auto.desc"] = "Prefer the OpenAI-compatible API configured below, then Microsoft Translator and Google Cloud Translation, and finally fall back to the built-in free service.",
         ["settings.translate.engine.auto.title"] = "Automatic (recommended)",
+        ["settings.translate.engine.bergamot.desc"] = "The neural machine translation model behind Firefox web translation: 48-70 MB with millisecond responses. It does not know game proper nouns, so the glossary below is what fixes them.",
+        ["settings.translate.engine.bergamot.title"] = "Bergamot only (offline, fastest and smallest)",
         ["settings.translate.engine.builtin.desc"] = "Uses the public Google Translate web endpoint; no key is required. It is an unofficial public endpoint and may change at any time, so availability is not guaranteed.",
         ["settings.translate.engine.builtin.title"] = "Google free translation (no key)",
         ["settings.translate.engine.custom.desc"] = "Only call the API configured below; a missing key or a failed call is a failure, with no fallback.",
         ["settings.translate.engine.custom.title"] = "Configured API only",
         ["settings.translate.engine.googleCloud.desc"] = "Calls the official Google Cloud Translation API; requires an API key. The free tier allows 500 thousand characters per month.",
         ["settings.translate.engine.googleCloud.title"] = "Google Cloud Translation",
+        ["settings.translate.engine.indexTranslate.desc"] = "A small translation model that runs fully offline with the best quality and forced terminology alignment. The model is about 1.3 GB and takes roughly one second per sentence on CPU; there is no fallback to other engines.",
+        ["settings.translate.engine.indexTranslate.title"] = "Index-Translate-2B only (offline, best quality)",
+        ["settings.translate.engine.local.desc"] = "Prefer the on-device offline models (download them below first); when no model is installed or translation fails, fall back to the configured API, Microsoft Translator, Google Cloud Translation, MyMemory and the built-in free service.",
+        ["settings.translate.engine.local.title"] = "Local offline translation",
         ["settings.translate.engine.microsoft.desc"] = "Calls Microsoft Azure Translator; requires a subscription key and region. The free tier allows 2 million characters per month.",
         ["settings.translate.engine.microsoft.title"] = "Microsoft Translator",
+        ["settings.translate.engine.mymemory.desc"] = "Calls the public MyMemory API and needs no API key. One request is limited to 500 characters, so long text is split automatically. Usually still reachable on networks where the Google endpoint fails.",
+        ["settings.translate.engine.mymemory.title"] = "MyMemory translation (no key)",
         ["settings.translate.engineName"] = "Translation engine choice",
+        ["settings.translate.glossary"] = "Glossary",
+        ["settings.translate.glossaryAdd"] = "Add term",
+        ["settings.translate.glossaryHint"] = "The glossary feeds both local engines: Index-Translate uses it to force proper nouns into place, Bergamot uses it as a direct replacement table. It only affects the local engines.",
+        ["settings.translate.glossaryName"] = "Glossary for local translation",
+        ["settings.translate.glossaryRemove"] = "Delete this term",
+        ["settings.translate.glossarySave"] = "Save glossary",
+        ["settings.translate.glossarySource"] = "Source term",
+        ["settings.translate.glossarySourcePlaceholder"] = "for example mod",
+        ["settings.translate.glossaryStatusFailed"] = "Could not save the glossary: {0}",
+        ["settings.translate.glossaryStatusSaved"] = "Glossary saved ({0} terms)",
+        ["settings.translate.glossaryTarget"] = "Target term",
+        ["settings.translate.glossaryTargetPlaceholder"] = "for example 模组",
+        ["settings.translate.googleCloud.hint"] = "Google Cloud Translation needs the Cloud Translation API enabled and an API key: Enable APIs -> search Cloud Translation API -> Enable -> Credentials -> Create credentials -> API key. The first 500,000 characters each month are free; only the key goes here, no project name.",
+        ["settings.translate.googleCloud.portal"] = "Open Google Cloud console to create an API key",
         ["settings.translate.googleKey"] = "API key",
         ["settings.translate.googleKeyName"] = "Google Cloud Translation API key",
         ["settings.translate.hint"] = "Translations are shown next to the original. The API URL and key are stored in the local settings.json only and are never written to the log; the built-in free service is a third-party public endpoint whose availability is not guaranteed.",
@@ -1505,6 +2053,24 @@ public sealed partial class Localizer
         ["settings.translate.language.zhCN.desc"] = "Always translate into Simplified Chinese, whatever the interface language is.",
         ["settings.translate.language.zhCN.title"] = "简体中文",
         ["settings.translate.languageName"] = "Target language of translations",
+        ["settings.translate.lastFailure"] = "Translation failed: {0}",
+        ["settings.translate.localModelBergamotEnZh"] = "Bergamot English to Chinese (about 48 MB)",
+        ["settings.translate.localModelBergamotZhEn"] = "Bergamot Chinese to English (about 70 MB)",
+        ["settings.translate.localModelDownload"] = "Download",
+        ["settings.translate.localModelDownloading"] = "Downloading {0}%",
+        ["settings.translate.localModelIndexTranslate"] = "Index-Translate-2B (best quality, about 1.3 GB)",
+        ["settings.translate.localModelInstalled"] = "Installed",
+        ["settings.translate.localModelNotInstalled"] = "Not installed",
+        ["settings.translate.localModelRemove"] = "Delete",
+        ["settings.translate.localModelStatusDownloaded"] = "Local model ready: {0}",
+        ["settings.translate.localModelStatusFailed"] = "Local model download failed: {0}",
+        ["settings.translate.localModelStatusRemoveFailed"] = "Could not delete the local model: {0}",
+        ["settings.translate.localModelStatusRemoved"] = "Local model deleted: {0}",
+        ["settings.translate.localModels"] = "Local offline models",
+        ["settings.translate.localModelsHint"] = "Once a model is downloaded the translation runs fully offline, using no network and no keys. The first Index-Translate-2B download is about 1.3 GB, so make sure there is enough free disk space.",
+        ["settings.translate.localModelsName"] = "Local offline model downloads",
+        ["settings.translate.microsoft.hint"] = "Microsoft Translator needs a Translator resource in your Azure subscription: Create a resource -> search Translator -> pick the F0 tier (2 million characters per month free) -> after it is created copy KEY 1 from Keys and Endpoint, and set the region to the resource location (for example eastasia or global).",
+        ["settings.translate.microsoft.portal"] = "Open the Azure portal to create a Translator resource",
         ["settings.translate.microsoftKey"] = "Subscription key",
         ["settings.translate.microsoftKeyName"] = "Microsoft Translator subscription key",
         ["settings.translate.microsoftRegion"] = "Resource region",
@@ -1525,7 +2091,12 @@ public sealed partial class Localizer
         ["settings.translate.statusEndpoint"] = "Translation endpoint updated: {0}",
         ["settings.translate.statusEngine"] = "Translation engine changed to {0}",
         ["settings.translate.statusLanguage"] = "Translation language changed to {0}",
+        ["settings.translate.statusPortalFailed"] = "Could not open the browser: {0}",
         ["settings.translate.statusScope"] = "Translation scope updated: {0}",
+        ["settings.translate.test"] = "Test translation",
+        ["settings.translate.testName"] = "Test whether each translation engine works",
+        ["settings.translate.testResult"] = "{0}: {1}",
+        ["settings.translate.testRunning"] = "Testing each engine…",
         ["shell.alwaysOnTop.applyFailed"] = "Could not change always-on-top: {0}",
         ["shell.alwaysOnTop.disable"] = "Stop Always on Top",
         ["shell.alwaysOnTop.disableTooltip"] = "Stop Always on Top (Ctrl+Shift+T)",
@@ -1544,6 +2115,7 @@ public sealed partial class Localizer
         ["shell.nav.home"] = "Current Game",
         ["shell.nav.library"] = "Game Library",
         ["shell.nav.modLibrary"] = "Mod Library",
+        ["shell.nav.modStudio"] = "Mod Studio",
         ["shell.nav.playSets"] = "Playsets",
         ["shell.nav.settings"] = "Settings",
         ["shell.nav.workshop"] = "Workshop",
@@ -1559,7 +2131,22 @@ public sealed partial class Localizer
         ["shell.status.gamesFound"] = "Found {0} games",
         ["shell.status.noGames"] = "No installed games found. Check your Steam library paths",
         ["shell.support.managedByGame"] = "This game manages its own mods and DLC (in-game MOD menu / Steam Workshop); this launcher does not",
+        ["shell.translating"] = "Translating…",
         ["shell.version"] = "Version {0}",
+        ["update.available.body"] = "You are on {0}; version {1} is available. The installer will be downloaded, verified, and launched.",
+        ["update.downloadCancel"] = "Cancel download",
+        ["update.downloadFailed"] = "Could not download the update: {0}",
+        ["update.downloading"] = "Downloading update…",
+        ["update.elevationCanceled"] = "Administrator approval was canceled; the update did not start.",
+        ["update.install"] = "Download and update",
+        ["update.installFailed"] = "Could not start the installer: {0}",
+        ["update.installerStarted"] = "The installer has started. The launcher will now exit.",
+        ["update.later"] = "Later",
+        ["update.mandatoryHint"] = "This is a required update.",
+        ["update.perMachineHint"] = "This installation is shared by all users; updating requires administrator approval (UAC).",
+        ["update.ready"] = "The update is ready. The launcher will exit and install it.",
+        ["update.title.available"] = "Update available: {0}",
+        ["update.verifyFailed"] = "The installer failed verification: {0}",
         ["workshop.author"] = "by {0}",
         ["workshop.commentsClosed"] = "This item has no comments",
         ["workshop.commentsCount"] = "{0} comments",
@@ -1603,6 +2190,9 @@ public sealed partial class Localizer
         ["workshop.detailScreenshots"] = "{0} screenshots",
         ["workshop.detailScreenshotsLoading"] = "Downloading screenshots…",
         ["workshop.detailScreenshotsTitle"] = "Screenshots",
+        ["workshop.detailSteamDownloadProgress"] = "Downloading {0}%",
+        ["workshop.detailSteamNeedsUpdate"] = "A newer version is on Steam; update it in the Steam client or the mod library.",
+        ["workshop.detailSteamReadOnlyHint"] = "Only reading Steam state right now: you can see subscription, install and download progress, but changing subscriptions needs \"Steam Workshop direct\" in Settings.",
         ["workshop.detailSteamSubscribeConfirm"] = "This subscribes to the Workshop item through the Steam client, and Steam starts downloading it immediately. Continue?",
         ["workshop.detailSteamSubscribeHintOff"] = "Direct subscription is off: the button only opens this item in the Steam client. Turn it on in Settings.",
         ["workshop.detailSteamSubscribeHintOn"] = "Direct subscription is on: the button subscribes or unsubscribes through the Steam client.",
@@ -1615,6 +2205,9 @@ public sealed partial class Localizer
         ["workshop.detailSubscribeSteam"] = "Subscribe in Steam",
         ["workshop.detailSubscribing"] = "Subscribing…",
         ["workshop.detailTags"] = "Tags",
+        ["workshop.detailTranslatingChangelog"] = "Translating the changelog…",
+        ["workshop.detailTranslatingComments"] = "Translating comments…",
+        ["workshop.detailTranslatingDescription"] = "Translating the description…",
         ["workshop.detailUnsubscribe"] = "Unsubscribe",
         ["workshop.detailUnsubscribeFailed"] = "Unsubscribe failed: {0}",
         ["workshop.detailUnsubscribeOk"] = "Unsubscribed",
@@ -1637,7 +2230,7 @@ public sealed partial class Localizer
         ["workshop.rating"] = "{0} ({1} ratings)",
         ["workshop.refreshName"] = "Refresh workshop",
         ["workshop.searchName"] = "Search workshop",
-        ["workshop.searchPlaceholder"] = "Search workshop items",
+        ["workshop.searchPlaceholder"] = "Search workshop items (press Enter)",
         ["workshop.signInAction"] = "Sign in",
         ["workshop.signInHint"] = "Not signed in to Paradox; only public items are shown",
         ["workshop.size"] = "Size {0}",
@@ -1660,6 +2253,7 @@ public sealed partial class Localizer
         ["workshop.statusName"] = "Status",
         ["workshop.statusOffline"] = "Network unavailable, showing {0} cached results",
         ["workshop.statusParseFailed"] = "Steam page structure could not be parsed; the list is unavailable",
+        ["workshop.statusSearching"] = "Searching…",
         ["workshop.subscriptions"] = "{0} subscriptions",
         ["workshop.throttlePaused"] = "Steam reports too many requests — pausing requests for about {0} minute(s); they resume automatically",
         ["workshop.throttleRetryIn"] = "Steam reports too many requests — please retry in about {0} minute(s)",
@@ -1672,8 +2266,8 @@ public sealed partial class Localizer
         ["workshop.timeWeek"] = "1 week",
         ["workshop.timeYear"] = "1 year",
         ["workshop.title"] = "Workshop",
-        ["workshop.translateLabel"] = "Translation",
         ["workshop.translateOriginalLabel"] = "Original",
+        ["workshop.translateUnavailable"] = "Translation returned nothing: {0}. Open Settings → Translation and press \"Test translation\" to check each engine.",
         ["workshop.updated"] = "Updated {0}",
     };
 
@@ -1703,6 +2297,8 @@ public sealed partial class Localizer
         ("account.status", "AccountStatus"),
         ("account.statusHint", "AccountStatusHint"),
         ("account.statusNotReady", "AccountStatusNotReady"),
+        ("account.statusSessionAuto", "AccountStatusSessionAuto"),
+        ("account.statusSessionOnce", "AccountStatusSessionOnce"),
         ("account.statusSignInOk", "AccountStatusSignInOk"),
         ("account.statusSignOutOk", "AccountStatusSignOutOk"),
         ("account.statusSignedIn", "AccountStatusSignedIn"),
@@ -1742,6 +2338,7 @@ public sealed partial class Localizer
         ("common.unknown", "CommonUnknown"),
         ("common.yes", "CommonYes"),
         ("dlc.countsText", "DlcCountsText"),
+        ("dlc.countsTextSteam", "DlcCountsTextSteam"),
         ("dlc.descriptionName", "DlcDescriptionName"),
         ("dlc.descriptionsLoading", "DlcDescriptionsLoading"),
         ("dlc.disableAll", "DlcDisableAll"),
@@ -1763,6 +2360,7 @@ public sealed partial class Localizer
         ("dlc.ownershipDetailPatchOn", "DlcOwnershipDetailPatchOn"),
         ("dlc.ownershipDetailSteamId", "DlcOwnershipDetailSteamId"),
         ("dlc.ownershipErrorBusy", "DlcOwnershipErrorBusy"),
+        ("dlc.ownershipErrorHostFailed", "DlcOwnershipErrorHostFailed"),
         ("dlc.ownershipErrorInitFailed", "DlcOwnershipErrorInitFailed"),
         ("dlc.ownershipErrorNative", "DlcOwnershipErrorNative"),
         ("dlc.ownershipErrorNoAppId", "DlcOwnershipErrorNoAppId"),
@@ -1786,6 +2384,7 @@ public sealed partial class Localizer
         ("dlc.saveFailedShort", "DlcSaveFailedShort"),
         ("dlc.saveName", "DlcSaveName"),
         ("dlc.saveNoActivePlaySet", "DlcSaveNoActivePlaySet"),
+        ("dlc.saveSteamManaged", "DlcSaveSteamManaged"),
         ("dlc.statusAllDisabled", "DlcStatusAllDisabled"),
         ("dlc.statusAllEnabled", "DlcStatusAllEnabled"),
         ("dlc.statusLoaded", "DlcStatusLoaded"),
@@ -1796,6 +2395,9 @@ public sealed partial class Localizer
         ("dlc.statusRowEnabled", "DlcStatusRowEnabled"),
         ("dlc.statusSaved", "DlcStatusSaved"),
         ("dlc.statusSkippedSuffix", "DlcStatusSkippedSuffix"),
+        ("dlc.statusSteamEmpty", "DlcStatusSteamEmpty"),
+        ("dlc.statusSteamList", "DlcStatusSteamList"),
+        ("dlc.statusSteamUnavailable", "DlcStatusSteamUnavailable"),
         ("dlc.toggleToolTip", "DlcToggleToolTip"),
         ("dlc.toggleToolTipLocked", "DlcToggleToolTipLocked"),
         ("dlc.unknownBadge", "DlcUnknownBadge"),
@@ -1896,6 +2498,19 @@ public sealed partial class Localizer
         ("modlib.statusOpenedBrowser", "ModlibStatusOpenedBrowser"),
         ("modlib.statusOpenedFolder", "ModlibStatusOpenedFolder"),
         ("modlib.statusOpenedSteam", "ModlibStatusOpenedSteam"),
+        ("modlib.steamActionFailed", "ModlibSteamActionFailed"),
+        ("modlib.steamDisableName", "ModlibSteamDisableName"),
+        ("modlib.steamDownloadName", "ModlibSteamDownloadName"),
+        ("modlib.steamDownloadRequested", "ModlibSteamDownloadRequested"),
+        ("modlib.steamEnableName", "ModlibSteamEnableName"),
+        ("modlib.steamStateDisabled", "ModlibSteamStateDisabled"),
+        ("modlib.steamStateDownloading", "ModlibSteamStateDownloading"),
+        ("modlib.steamStateDownloadingNoPercent", "ModlibSteamStateDownloadingNoPercent"),
+        ("modlib.steamStateInstalled", "ModlibSteamStateInstalled"),
+        ("modlib.steamStateName", "ModlibSteamStateName"),
+        ("modlib.steamStatePending", "ModlibSteamStatePending"),
+        ("modlib.steamStateUpdateNeeded", "ModlibSteamStateUpdateNeeded"),
+        ("modlib.steamWriteDisabled", "ModlibSteamWriteDisabled"),
         ("modlib.subscribedOn", "ModlibSubscribedOn"),
         ("modlib.supportedVersion", "ModlibSupportedVersion"),
         ("modlib.supportedVersionName", "ModlibSupportedVersionName"),
@@ -1924,6 +2539,31 @@ public sealed partial class Localizer
         ("mods.addPage.target", "ModsAddPageTarget"),
         ("mods.addPage.targetMissing", "ModsAddPageTargetMissing"),
         ("mods.addPage.title", "ModsAddPageTitle"),
+        ("mods.autoSort.apply", "ModsAutoSortApply"),
+        ("mods.autoSort.button", "ModsAutoSortButton"),
+        ("mods.autoSort.buttonName", "ModsAutoSortButtonName"),
+        ("mods.autoSort.conflictAmbiguous", "ModsAutoSortConflictAmbiguous"),
+        ("mods.autoSort.conflictSameTier", "ModsAutoSortConflictSameTier"),
+        ("mods.autoSort.conflictsTitle", "ModsAutoSortConflictsTitle"),
+        ("mods.autoSort.noChange", "ModsAutoSortNoChange"),
+        ("mods.autoSort.previewTitle", "ModsAutoSortPreviewTitle"),
+        ("mods.autoSort.reasonDeclaredDep", "ModsAutoSortReasonDeclaredDep"),
+        ("mods.autoSort.reasonDerivedPatch", "ModsAutoSortReasonDerivedPatch"),
+        ("mods.autoSort.reasonOverrides", "ModsAutoSortReasonOverrides"),
+        ("mods.autoSort.reasonPatchName", "ModsAutoSortReasonPatchName"),
+        ("mods.autoSort.rowMove", "ModsAutoSortRowMove"),
+        ("mods.autoSort.summary", "ModsAutoSortSummary"),
+        ("mods.autoSort.tierGfxOnly", "ModsAutoSortTierGfxOnly"),
+        ("mods.autoSort.tierLargeChange", "ModsAutoSortTierLargeChange"),
+        ("mods.autoSort.tierLocalization", "ModsAutoSortTierLocalization"),
+        ("mods.autoSort.tierMediumChange", "ModsAutoSortTierMediumChange"),
+        ("mods.autoSort.tierOverhaul", "ModsAutoSortTierOverhaul"),
+        ("mods.autoSort.tierPureAdditive", "ModsAutoSortTierPureAdditive"),
+        ("mods.autoSort.tierSmallTweak", "ModsAutoSortTierSmallTweak"),
+        ("mods.autoSort.tooltip", "ModsAutoSortTooltip"),
+        ("mods.autoSort.undo", "ModsAutoSortUndo"),
+        ("mods.autoSort.warningCycle", "ModsAutoSortWarningCycle"),
+        ("mods.autoSort.warningsTitle", "ModsAutoSortWarningsTitle"),
         ("mods.dialog.cannotDeleteBody", "ModsDialogCannotDeleteBody"),
         ("mods.dialog.defaultNewName", "ModsDialogDefaultNewName"),
         ("mods.dialog.deleteBody", "ModsDialogDeleteBody"),
@@ -1983,6 +2623,9 @@ public sealed partial class Localizer
         ("mods.status.autoSaveFailed", "ModsStatusAutoSaveFailed"),
         ("mods.status.autoSaveSaved", "ModsStatusAutoSaveSaved"),
         ("mods.status.autoSaveSavedTo", "ModsStatusAutoSaveSavedTo"),
+        ("mods.status.autoSortApplied", "ModsStatusAutoSortApplied"),
+        ("mods.status.autoSortNeedsGame", "ModsStatusAutoSortNeedsGame"),
+        ("mods.status.autoSortUndone", "ModsStatusAutoSortUndone"),
         ("mods.status.cannotDeleteLast", "ModsStatusCannotDeleteLast"),
         ("mods.status.cannotDeleteTitle", "ModsStatusCannotDeleteTitle"),
         ("mods.status.createFailed", "ModsStatusCreateFailed"),
@@ -2029,6 +2672,7 @@ public sealed partial class Localizer
         ("mods.toolbar.rename", "ModsToolbarRename"),
         ("mods.toolbar.renameName", "ModsToolbarRenameName"),
         ("mods.toolbar.searchPlaceholder", "ModsToolbarSearchPlaceholder"),
+        ("mods.translateUnavailable", "ModsTranslateUnavailable"),
         ("mods.warnMissingPath", "ModsWarnMissingPath"),
         ("mods.warnName", "ModsWarnName"),
         ("mods.warnNoArchive", "ModsWarnNoArchive"),
@@ -2036,6 +2680,181 @@ public sealed partial class Localizer
         ("mods.warnNoRegistryId", "ModsWarnNoRegistryId"),
         ("mods.warnNonAsciiParent", "ModsWarnNonAsciiParent"),
         ("mods.warnNonAsciiPath", "ModsWarnNonAsciiPath"),
+        ("modstudio.addPreviews", "ModstudioAddPreviews"),
+        ("modstudio.addVideo", "ModstudioAddVideo"),
+        ("modstudio.bbcodeBold", "ModstudioBbcodeBold"),
+        ("modstudio.bbcodeBulletList", "ModstudioBbcodeBulletList"),
+        ("modstudio.bbcodeCode", "ModstudioBbcodeCode"),
+        ("modstudio.bbcodeHeading", "ModstudioBbcodeHeading"),
+        ("modstudio.bbcodeHint", "ModstudioBbcodeHint"),
+        ("modstudio.bbcodeImage", "ModstudioBbcodeImage"),
+        ("modstudio.bbcodeItalic", "ModstudioBbcodeItalic"),
+        ("modstudio.bbcodeLink", "ModstudioBbcodeLink"),
+        ("modstudio.bbcodeNumberedList", "ModstudioBbcodeNumberedList"),
+        ("modstudio.bbcodeRule", "ModstudioBbcodeRule"),
+        ("modstudio.bbcodeStrike", "ModstudioBbcodeStrike"),
+        ("modstudio.bbcodeUnderline", "ModstudioBbcodeUnderline"),
+        ("modstudio.builtInCover", "ModstudioBuiltInCover"),
+        ("modstudio.bytesCounter", "ModstudioBytesCounter"),
+        ("modstudio.cancel", "ModstudioCancel"),
+        ("modstudio.changeNotePlaceholder", "ModstudioChangeNotePlaceholder"),
+        ("modstudio.count", "ModstudioCount"),
+        ("modstudio.createButton", "ModstudioCreateButton"),
+        ("modstudio.createCancel", "ModstudioCreateCancel"),
+        ("modstudio.createConfirm", "ModstudioCreateConfirm"),
+        ("modstudio.createFailed", "ModstudioCreateFailed"),
+        ("modstudio.createFolderHint", "ModstudioCreateFolderHint"),
+        ("modstudio.createHint", "ModstudioCreateHint"),
+        ("modstudio.createNameRequired", "ModstudioCreateNameRequired"),
+        ("modstudio.createSuccess", "ModstudioCreateSuccess"),
+        ("modstudio.createTitle", "ModstudioCreateTitle"),
+        ("modstudio.descriptionPlaceholder", "ModstudioDescriptionPlaceholder"),
+        ("modstudio.descriptionTooLong", "ModstudioDescriptionTooLong"),
+        ("modstudio.descriptorAdult", "ModstudioDescriptorAdult"),
+        ("modstudio.descriptorAdultOnly", "ModstudioDescriptorAdultOnly"),
+        ("modstudio.descriptorFrequentNudity", "ModstudioDescriptorFrequentNudity"),
+        ("modstudio.descriptorLegacy", "ModstudioDescriptorLegacy"),
+        ("modstudio.descriptorMetadata", "ModstudioDescriptorMetadata"),
+        ("modstudio.descriptorNudity", "ModstudioDescriptorNudity"),
+        ("modstudio.descriptorUnsupported", "ModstudioDescriptorUnsupported"),
+        ("modstudio.descriptorViolence", "ModstudioDescriptorViolence"),
+        ("modstudio.descriptorsHint", "ModstudioDescriptorsHint"),
+        ("modstudio.detailDescription", "ModstudioDetailDescription"),
+        ("modstudio.detailDescriptor", "ModstudioDetailDescriptor"),
+        ("modstudio.detailFolder", "ModstudioDetailFolder"),
+        ("modstudio.detailNoSelection", "ModstudioDetailNoSelection"),
+        ("modstudio.detailNoSelectionHint", "ModstudioDetailNoSelectionHint"),
+        ("modstudio.detailPublication", "ModstudioDetailPublication"),
+        ("modstudio.detailSupportedVersion", "ModstudioDetailSupportedVersion"),
+        ("modstudio.detailTags", "ModstudioDetailTags"),
+        ("modstudio.detailVersion", "ModstudioDetailVersion"),
+        ("modstudio.fieldChangeNote", "ModstudioFieldChangeNote"),
+        ("modstudio.fieldDescription", "ModstudioFieldDescription"),
+        ("modstudio.fieldDescriptors", "ModstudioFieldDescriptors"),
+        ("modstudio.fieldFolder", "ModstudioFieldFolder"),
+        ("modstudio.fieldLanguage", "ModstudioFieldLanguage"),
+        ("modstudio.fieldName", "ModstudioFieldName"),
+        ("modstudio.fieldPreview", "ModstudioFieldPreview"),
+        ("modstudio.fieldPreviews", "ModstudioFieldPreviews"),
+        ("modstudio.fieldPublic", "ModstudioFieldPublic"),
+        ("modstudio.fieldSupportedVersion", "ModstudioFieldSupportedVersion"),
+        ("modstudio.fieldTags", "ModstudioFieldTags"),
+        ("modstudio.fieldUploadDescription", "ModstudioFieldUploadDescription"),
+        ("modstudio.fieldUploadDirectory", "ModstudioFieldUploadDirectory"),
+        ("modstudio.fieldUploadModId", "ModstudioFieldUploadModId"),
+        ("modstudio.fieldUploadTags", "ModstudioFieldUploadTags"),
+        ("modstudio.fieldUploadTarget", "ModstudioFieldUploadTarget"),
+        ("modstudio.fieldUploadTitle", "ModstudioFieldUploadTitle"),
+        ("modstudio.fieldVersion", "ModstudioFieldVersion"),
+        ("modstudio.fieldVideoPreviews", "ModstudioFieldVideoPreviews"),
+        ("modstudio.fieldVisibility", "ModstudioFieldVisibility"),
+        ("modstudio.folderPlaceholder", "ModstudioFolderPlaceholder"),
+        ("modstudio.legalHint", "ModstudioLegalHint"),
+        ("modstudio.legalLink", "ModstudioLegalLink"),
+        ("modstudio.listName", "ModstudioListName"),
+        ("modstudio.loadFailed", "ModstudioLoadFailed"),
+        ("modstudio.localizationCount", "ModstudioLocalizationCount"),
+        ("modstudio.localizationNote", "ModstudioLocalizationNote"),
+        ("modstudio.managedHint", "ModstudioManagedHint"),
+        ("modstudio.moveDown", "ModstudioMoveDown"),
+        ("modstudio.moveUp", "ModstudioMoveUp"),
+        ("modstudio.namePlaceholder", "ModstudioNamePlaceholder"),
+        ("modstudio.needsLegal", "ModstudioNeedsLegal"),
+        ("modstudio.newMod", "ModstudioNewMod"),
+        ("modstudio.noGameHint", "ModstudioNoGameHint"),
+        ("modstudio.noGameTitle", "ModstudioNoGameTitle"),
+        ("modstudio.noModsHint", "ModstudioNoModsHint"),
+        ("modstudio.noWorkshopHint", "ModstudioNoWorkshopHint"),
+        ("modstudio.openFolder", "ModstudioOpenFolder"),
+        ("modstudio.openFolderUnavailable", "ModstudioOpenFolderUnavailable"),
+        ("modstudio.openWorkshop", "ModstudioOpenWorkshop"),
+        ("modstudio.openWorkshopUnavailable", "ModstudioOpenWorkshopUnavailable"),
+        ("modstudio.pickPreview", "ModstudioPickPreview"),
+        ("modstudio.previewHeader", "ModstudioPreviewHeader"),
+        ("modstudio.previewLimitHint", "ModstudioPreviewLimitHint"),
+        ("modstudio.previewNone", "ModstudioPreviewNone"),
+        ("modstudio.previewTooLarge", "ModstudioPreviewTooLarge"),
+        ("modstudio.progressName", "ModstudioProgressName"),
+        ("modstudio.publicHint", "ModstudioPublicHint"),
+        ("modstudio.refreshName", "ModstudioRefreshName"),
+        ("modstudio.removePreview", "ModstudioRemovePreview"),
+        ("modstudio.rowPublished", "ModstudioRowPublished"),
+        ("modstudio.rowPublishedShort", "ModstudioRowPublishedShort"),
+        ("modstudio.rowUnpublished", "ModstudioRowUnpublished"),
+        ("modstudio.searchName", "ModstudioSearchName"),
+        ("modstudio.searchPlaceholder", "ModstudioSearchPlaceholder"),
+        ("modstudio.stageCommitting", "ModstudioStageCommitting"),
+        ("modstudio.stageCreating", "ModstudioStageCreating"),
+        ("modstudio.stageDone", "ModstudioStageDone"),
+        ("modstudio.stageLocalizing", "ModstudioStageLocalizing"),
+        ("modstudio.stagePreparing", "ModstudioStagePreparing"),
+        ("modstudio.stagePreview", "ModstudioStagePreview"),
+        ("modstudio.stageUploading", "ModstudioStageUploading"),
+        ("modstudio.statusFiltered", "ModstudioStatusFiltered"),
+        ("modstudio.statusLoaded", "ModstudioStatusLoaded"),
+        ("modstudio.statusName", "ModstudioStatusName"),
+        ("modstudio.statusNoMatch", "ModstudioStatusNoMatch"),
+        ("modstudio.supportedVersionPlaceholder", "ModstudioSupportedVersionPlaceholder"),
+        ("modstudio.tagsPlaceholder", "ModstudioTagsPlaceholder"),
+        ("modstudio.title", "ModstudioTitle"),
+        ("modstudio.titleTooLong", "ModstudioTitleTooLong"),
+        ("modstudio.unsupportedCreate", "ModstudioUnsupportedCreate"),
+        ("modstudio.unsupportedHint", "ModstudioUnsupportedHint"),
+        ("modstudio.uploadArchived", "ModstudioUploadArchived"),
+        ("modstudio.uploadButton", "ModstudioUploadButton"),
+        ("modstudio.uploadCanceled", "ModstudioUploadCanceled"),
+        ("modstudio.uploadCanceling", "ModstudioUploadCanceling"),
+        ("modstudio.uploadConfirm", "ModstudioUploadConfirm"),
+        ("modstudio.uploadConfirmBody", "ModstudioUploadConfirmBody"),
+        ("modstudio.uploadConfirmMulti", "ModstudioUploadConfirmMulti"),
+        ("modstudio.uploadConfirmTitle", "ModstudioUploadConfirmTitle"),
+        ("modstudio.uploadDescriptionPlaceholder", "ModstudioUploadDescriptionPlaceholder"),
+        ("modstudio.uploadFailed", "ModstudioUploadFailed"),
+        ("modstudio.uploadHint", "ModstudioUploadHint"),
+        ("modstudio.uploadMod", "ModstudioUploadMod"),
+        ("modstudio.uploadModIdHint", "ModstudioUploadModIdHint"),
+        ("modstudio.uploadModIdInvalid", "ModstudioUploadModIdInvalid"),
+        ("modstudio.uploadModIdPlaceholder", "ModstudioUploadModIdPlaceholder"),
+        ("modstudio.uploadNotLocal", "ModstudioUploadNotLocal"),
+        ("modstudio.uploadSelectMod", "ModstudioUploadSelectMod"),
+        ("modstudio.uploadSuccess", "ModstudioUploadSuccess"),
+        ("modstudio.uploadTagCount", "ModstudioUploadTagCount"),
+        ("modstudio.uploadTagsPlaceholder", "ModstudioUploadTagsPlaceholder"),
+        ("modstudio.uploadTargetPdx", "ModstudioUploadTargetPdx"),
+        ("modstudio.uploadTargetPdxUnavailable", "ModstudioUploadTargetPdxUnavailable"),
+        ("modstudio.uploadTargetSteam", "ModstudioUploadTargetSteam"),
+        ("modstudio.uploadTitle", "ModstudioUploadTitle"),
+        ("modstudio.uploadTitlePlaceholder", "ModstudioUploadTitlePlaceholder"),
+        ("modstudio.uploadTitleRequired", "ModstudioUploadTitleRequired"),
+        ("modstudio.useBuiltInCover", "ModstudioUseBuiltInCover"),
+        ("modstudio.versionPlaceholder", "ModstudioVersionPlaceholder"),
+        ("modstudio.videoHint", "ModstudioVideoHint"),
+        ("modstudio.videoUrlInvalid", "ModstudioVideoUrlInvalid"),
+        ("modstudio.videoUrlPlaceholder", "ModstudioVideoUrlPlaceholder"),
+        ("modstudio.visibilityFriendsOnly", "ModstudioVisibilityFriendsOnly"),
+        ("modstudio.visibilityPrivate", "ModstudioVisibilityPrivate"),
+        ("modstudio.visibilityPublic", "ModstudioVisibilityPublic"),
+        ("modstudio.visibilityUnlisted", "ModstudioVisibilityUnlisted"),
+        ("settings.about.autoCheck", "SettingsAboutAutoCheck"),
+        ("settings.about.autoCheckName", "SettingsAboutAutoCheckName"),
+        ("settings.about.checkFailed", "SettingsAboutCheckFailed"),
+        ("settings.about.checkNow", "SettingsAboutCheckNow"),
+        ("settings.about.checkNowName", "SettingsAboutCheckNowName"),
+        ("settings.about.checking", "SettingsAboutChecking"),
+        ("settings.about.installMode", "SettingsAboutInstallMode"),
+        ("settings.about.installModeName", "SettingsAboutInstallModeName"),
+        ("settings.about.installModePerMachine", "SettingsAboutInstallModePerMachine"),
+        ("settings.about.installModePerUser", "SettingsAboutInstallModePerUser"),
+        ("settings.about.installModePortable", "SettingsAboutInstallModePortable"),
+        ("settings.about.lastCheck", "SettingsAboutLastCheck"),
+        ("settings.about.lastCheckLabel", "SettingsAboutLastCheckLabel"),
+        ("settings.about.launcherVersion", "SettingsAboutLauncherVersion"),
+        ("settings.about.never", "SettingsAboutNever"),
+        ("settings.about.releaseNotes", "SettingsAboutReleaseNotes"),
+        ("settings.about.statusAvailable", "SettingsAboutStatusAvailable"),
+        ("settings.about.statusNotDue", "SettingsAboutStatusNotDue"),
+        ("settings.about.statusUpToDate", "SettingsAboutStatusUpToDate"),
+        ("settings.about.title", "SettingsAboutTitle"),
         ("settings.appData.clearLegacy", "SettingsAppDataClearLegacy"),
         ("settings.appData.clearLegacyName", "SettingsAppDataClearLegacyName"),
         ("settings.appData.current", "SettingsAppDataCurrent"),
@@ -2201,6 +3020,7 @@ public sealed partial class Localizer
         ("settings.modThumbnails.statusOnlineOff", "SettingsModThumbnailsStatusOnlineOff"),
         ("settings.modThumbnails.statusOnlineOn", "SettingsModThumbnailsStatusOnlineOn"),
         ("settings.modThumbnails.statusRetention", "SettingsModThumbnailsStatusRetention"),
+        ("settings.nav.about", "SettingsNavAbout"),
         ("settings.nav.advanced", "SettingsNavAdvanced"),
         ("settings.nav.appearance", "SettingsNavAppearance"),
         ("settings.nav.cache", "SettingsNavCache"),
@@ -2282,6 +3102,9 @@ public sealed partial class Localizer
         ("settings.steamApiHeader", "SettingsSteamApiHeader"),
         ("settings.steamApiMissing", "SettingsSteamApiMissing"),
         ("settings.steamApiReady", "SettingsSteamApiReady"),
+        ("settings.steamStateHint", "SettingsSteamStateHint"),
+        ("settings.steamStateOff", "SettingsSteamStateOff"),
+        ("settings.steamStateOn", "SettingsSteamStateOn"),
         ("settings.steamSubscribeHint", "SettingsSteamSubscribeHint"),
         ("settings.steamSubscribeOn", "SettingsSteamSubscribeOn"),
         ("settings.steamSubscribeStatusOff", "SettingsSteamSubscribeStatusOff"),
@@ -2318,15 +3141,37 @@ public sealed partial class Localizer
         ("settings.translate.engine", "SettingsTranslateEngine"),
         ("settings.translate.engine.auto.desc", "SettingsTranslateEngineAutoDesc"),
         ("settings.translate.engine.auto.title", "SettingsTranslateEngineAutoTitle"),
+        ("settings.translate.engine.bergamot.desc", "SettingsTranslateEngineBergamotDesc"),
+        ("settings.translate.engine.bergamot.title", "SettingsTranslateEngineBergamotTitle"),
         ("settings.translate.engine.builtin.desc", "SettingsTranslateEngineBuiltinDesc"),
         ("settings.translate.engine.builtin.title", "SettingsTranslateEngineBuiltinTitle"),
         ("settings.translate.engine.custom.desc", "SettingsTranslateEngineCustomDesc"),
         ("settings.translate.engine.custom.title", "SettingsTranslateEngineCustomTitle"),
         ("settings.translate.engine.googleCloud.desc", "SettingsTranslateEngineGoogleCloudDesc"),
         ("settings.translate.engine.googleCloud.title", "SettingsTranslateEngineGoogleCloudTitle"),
+        ("settings.translate.engine.indexTranslate.desc", "SettingsTranslateEngineIndexTranslateDesc"),
+        ("settings.translate.engine.indexTranslate.title", "SettingsTranslateEngineIndexTranslateTitle"),
+        ("settings.translate.engine.local.desc", "SettingsTranslateEngineLocalDesc"),
+        ("settings.translate.engine.local.title", "SettingsTranslateEngineLocalTitle"),
         ("settings.translate.engine.microsoft.desc", "SettingsTranslateEngineMicrosoftDesc"),
         ("settings.translate.engine.microsoft.title", "SettingsTranslateEngineMicrosoftTitle"),
+        ("settings.translate.engine.mymemory.desc", "SettingsTranslateEngineMymemoryDesc"),
+        ("settings.translate.engine.mymemory.title", "SettingsTranslateEngineMymemoryTitle"),
         ("settings.translate.engineName", "SettingsTranslateEngineName"),
+        ("settings.translate.glossary", "SettingsTranslateGlossary"),
+        ("settings.translate.glossaryAdd", "SettingsTranslateGlossaryAdd"),
+        ("settings.translate.glossaryHint", "SettingsTranslateGlossaryHint"),
+        ("settings.translate.glossaryName", "SettingsTranslateGlossaryName"),
+        ("settings.translate.glossaryRemove", "SettingsTranslateGlossaryRemove"),
+        ("settings.translate.glossarySave", "SettingsTranslateGlossarySave"),
+        ("settings.translate.glossarySource", "SettingsTranslateGlossarySource"),
+        ("settings.translate.glossarySourcePlaceholder", "SettingsTranslateGlossarySourcePlaceholder"),
+        ("settings.translate.glossaryStatusFailed", "SettingsTranslateGlossaryStatusFailed"),
+        ("settings.translate.glossaryStatusSaved", "SettingsTranslateGlossaryStatusSaved"),
+        ("settings.translate.glossaryTarget", "SettingsTranslateGlossaryTarget"),
+        ("settings.translate.glossaryTargetPlaceholder", "SettingsTranslateGlossaryTargetPlaceholder"),
+        ("settings.translate.googleCloud.hint", "SettingsTranslateGoogleCloudHint"),
+        ("settings.translate.googleCloud.portal", "SettingsTranslateGoogleCloudPortal"),
         ("settings.translate.googleKey", "SettingsTranslateGoogleKey"),
         ("settings.translate.googleKeyName", "SettingsTranslateGoogleKeyName"),
         ("settings.translate.hint", "SettingsTranslateHint"),
@@ -2338,6 +3183,24 @@ public sealed partial class Localizer
         ("settings.translate.language.zhCN.desc", "SettingsTranslateLanguageZhCNDesc"),
         ("settings.translate.language.zhCN.title", "SettingsTranslateLanguageZhCNTitle"),
         ("settings.translate.languageName", "SettingsTranslateLanguageName"),
+        ("settings.translate.lastFailure", "SettingsTranslateLastFailure"),
+        ("settings.translate.localModelBergamotEnZh", "SettingsTranslateLocalModelBergamotEnZh"),
+        ("settings.translate.localModelBergamotZhEn", "SettingsTranslateLocalModelBergamotZhEn"),
+        ("settings.translate.localModelDownload", "SettingsTranslateLocalModelDownload"),
+        ("settings.translate.localModelDownloading", "SettingsTranslateLocalModelDownloading"),
+        ("settings.translate.localModelIndexTranslate", "SettingsTranslateLocalModelIndexTranslate"),
+        ("settings.translate.localModelInstalled", "SettingsTranslateLocalModelInstalled"),
+        ("settings.translate.localModelNotInstalled", "SettingsTranslateLocalModelNotInstalled"),
+        ("settings.translate.localModelRemove", "SettingsTranslateLocalModelRemove"),
+        ("settings.translate.localModelStatusDownloaded", "SettingsTranslateLocalModelStatusDownloaded"),
+        ("settings.translate.localModelStatusFailed", "SettingsTranslateLocalModelStatusFailed"),
+        ("settings.translate.localModelStatusRemoveFailed", "SettingsTranslateLocalModelStatusRemoveFailed"),
+        ("settings.translate.localModelStatusRemoved", "SettingsTranslateLocalModelStatusRemoved"),
+        ("settings.translate.localModels", "SettingsTranslateLocalModels"),
+        ("settings.translate.localModelsHint", "SettingsTranslateLocalModelsHint"),
+        ("settings.translate.localModelsName", "SettingsTranslateLocalModelsName"),
+        ("settings.translate.microsoft.hint", "SettingsTranslateMicrosoftHint"),
+        ("settings.translate.microsoft.portal", "SettingsTranslateMicrosoftPortal"),
         ("settings.translate.microsoftKey", "SettingsTranslateMicrosoftKey"),
         ("settings.translate.microsoftKeyName", "SettingsTranslateMicrosoftKeyName"),
         ("settings.translate.microsoftRegion", "SettingsTranslateMicrosoftRegion"),
@@ -2358,7 +3221,12 @@ public sealed partial class Localizer
         ("settings.translate.statusEndpoint", "SettingsTranslateStatusEndpoint"),
         ("settings.translate.statusEngine", "SettingsTranslateStatusEngine"),
         ("settings.translate.statusLanguage", "SettingsTranslateStatusLanguage"),
+        ("settings.translate.statusPortalFailed", "SettingsTranslateStatusPortalFailed"),
         ("settings.translate.statusScope", "SettingsTranslateStatusScope"),
+        ("settings.translate.test", "SettingsTranslateTest"),
+        ("settings.translate.testName", "SettingsTranslateTestName"),
+        ("settings.translate.testResult", "SettingsTranslateTestResult"),
+        ("settings.translate.testRunning", "SettingsTranslateTestRunning"),
         ("shell.alwaysOnTop.applyFailed", "ShellAlwaysOnTopApplyFailed"),
         ("shell.alwaysOnTop.disable", "ShellAlwaysOnTopDisable"),
         ("shell.alwaysOnTop.disableTooltip", "ShellAlwaysOnTopDisableTooltip"),
@@ -2377,6 +3245,7 @@ public sealed partial class Localizer
         ("shell.nav.home", "ShellNavHome"),
         ("shell.nav.library", "ShellNavLibrary"),
         ("shell.nav.modLibrary", "ShellNavModLibrary"),
+        ("shell.nav.modStudio", "ShellNavModStudio"),
         ("shell.nav.playSets", "ShellNavPlaySets"),
         ("shell.nav.settings", "ShellNavSettings"),
         ("shell.nav.workshop", "ShellNavWorkshop"),
@@ -2392,7 +3261,22 @@ public sealed partial class Localizer
         ("shell.status.gamesFound", "ShellStatusGamesFound"),
         ("shell.status.noGames", "ShellStatusNoGames"),
         ("shell.support.managedByGame", "ShellSupportManagedByGame"),
+        ("shell.translating", "ShellTranslating"),
         ("shell.version", "ShellVersion"),
+        ("update.available.body", "UpdateAvailableBody"),
+        ("update.downloadCancel", "UpdateDownloadCancel"),
+        ("update.downloadFailed", "UpdateDownloadFailed"),
+        ("update.downloading", "UpdateDownloading"),
+        ("update.elevationCanceled", "UpdateElevationCanceled"),
+        ("update.install", "UpdateInstall"),
+        ("update.installFailed", "UpdateInstallFailed"),
+        ("update.installerStarted", "UpdateInstallerStarted"),
+        ("update.later", "UpdateLater"),
+        ("update.mandatoryHint", "UpdateMandatoryHint"),
+        ("update.perMachineHint", "UpdatePerMachineHint"),
+        ("update.ready", "UpdateReady"),
+        ("update.title.available", "UpdateTitleAvailable"),
+        ("update.verifyFailed", "UpdateVerifyFailed"),
         ("workshop.author", "WorkshopAuthor"),
         ("workshop.commentsClosed", "WorkshopCommentsClosed"),
         ("workshop.commentsCount", "WorkshopCommentsCount"),
@@ -2436,6 +3320,9 @@ public sealed partial class Localizer
         ("workshop.detailScreenshots", "WorkshopDetailScreenshots"),
         ("workshop.detailScreenshotsLoading", "WorkshopDetailScreenshotsLoading"),
         ("workshop.detailScreenshotsTitle", "WorkshopDetailScreenshotsTitle"),
+        ("workshop.detailSteamDownloadProgress", "WorkshopDetailSteamDownloadProgress"),
+        ("workshop.detailSteamNeedsUpdate", "WorkshopDetailSteamNeedsUpdate"),
+        ("workshop.detailSteamReadOnlyHint", "WorkshopDetailSteamReadOnlyHint"),
         ("workshop.detailSteamSubscribeConfirm", "WorkshopDetailSteamSubscribeConfirm"),
         ("workshop.detailSteamSubscribeHintOff", "WorkshopDetailSteamSubscribeHintOff"),
         ("workshop.detailSteamSubscribeHintOn", "WorkshopDetailSteamSubscribeHintOn"),
@@ -2448,6 +3335,9 @@ public sealed partial class Localizer
         ("workshop.detailSubscribeSteam", "WorkshopDetailSubscribeSteam"),
         ("workshop.detailSubscribing", "WorkshopDetailSubscribing"),
         ("workshop.detailTags", "WorkshopDetailTags"),
+        ("workshop.detailTranslatingChangelog", "WorkshopDetailTranslatingChangelog"),
+        ("workshop.detailTranslatingComments", "WorkshopDetailTranslatingComments"),
+        ("workshop.detailTranslatingDescription", "WorkshopDetailTranslatingDescription"),
         ("workshop.detailUnsubscribe", "WorkshopDetailUnsubscribe"),
         ("workshop.detailUnsubscribeFailed", "WorkshopDetailUnsubscribeFailed"),
         ("workshop.detailUnsubscribeOk", "WorkshopDetailUnsubscribeOk"),
@@ -2493,6 +3383,7 @@ public sealed partial class Localizer
         ("workshop.statusName", "WorkshopStatusName"),
         ("workshop.statusOffline", "WorkshopStatusOffline"),
         ("workshop.statusParseFailed", "WorkshopStatusParseFailed"),
+        ("workshop.statusSearching", "WorkshopStatusSearching"),
         ("workshop.subscriptions", "WorkshopSubscriptions"),
         ("workshop.throttlePaused", "WorkshopThrottlePaused"),
         ("workshop.throttleRetryIn", "WorkshopThrottleRetryIn"),
@@ -2505,8 +3396,8 @@ public sealed partial class Localizer
         ("workshop.timeWeek", "WorkshopTimeWeek"),
         ("workshop.timeYear", "WorkshopTimeYear"),
         ("workshop.title", "WorkshopTitle"),
-        ("workshop.translateLabel", "WorkshopTranslateLabel"),
         ("workshop.translateOriginalLabel", "WorkshopTranslateOriginalLabel"),
+        ("workshop.translateUnavailable", "WorkshopTranslateUnavailable"),
         ("workshop.updated", "WorkshopUpdated"),
     ];
 
@@ -2534,6 +3425,8 @@ public sealed partial class Localizer
     public string AccountStatus => Format("account.status");
     public string AccountStatusHint => Format("account.statusHint");
     public string AccountStatusNotReady => Format("account.statusNotReady");
+    public string AccountStatusSessionAuto => Format("account.statusSessionAuto");
+    public string AccountStatusSessionOnce => Format("account.statusSessionOnce");
     public string AccountStatusSignInOk => Format("account.statusSignInOk");
     public string AccountStatusSignOutOk => Format("account.statusSignOutOk");
     public string AccountStatusSignedIn => Format("account.statusSignedIn");
@@ -2573,6 +3466,7 @@ public sealed partial class Localizer
     public string CommonUnknown => Format("common.unknown");
     public string CommonYes => Format("common.yes");
     public string DlcCountsText => Format("dlc.countsText");
+    public string DlcCountsTextSteam => Format("dlc.countsTextSteam");
     public string DlcDescriptionName => Format("dlc.descriptionName");
     public string DlcDescriptionsLoading => Format("dlc.descriptionsLoading");
     public string DlcDisableAll => Format("dlc.disableAll");
@@ -2594,6 +3488,7 @@ public sealed partial class Localizer
     public string DlcOwnershipDetailPatchOn => Format("dlc.ownershipDetailPatchOn");
     public string DlcOwnershipDetailSteamId => Format("dlc.ownershipDetailSteamId");
     public string DlcOwnershipErrorBusy => Format("dlc.ownershipErrorBusy");
+    public string DlcOwnershipErrorHostFailed => Format("dlc.ownershipErrorHostFailed");
     public string DlcOwnershipErrorInitFailed => Format("dlc.ownershipErrorInitFailed");
     public string DlcOwnershipErrorNative => Format("dlc.ownershipErrorNative");
     public string DlcOwnershipErrorNoAppId => Format("dlc.ownershipErrorNoAppId");
@@ -2617,6 +3512,7 @@ public sealed partial class Localizer
     public string DlcSaveFailedShort => Format("dlc.saveFailedShort");
     public string DlcSaveName => Format("dlc.saveName");
     public string DlcSaveNoActivePlaySet => Format("dlc.saveNoActivePlaySet");
+    public string DlcSaveSteamManaged => Format("dlc.saveSteamManaged");
     public string DlcStatusAllDisabled => Format("dlc.statusAllDisabled");
     public string DlcStatusAllEnabled => Format("dlc.statusAllEnabled");
     public string DlcStatusLoaded => Format("dlc.statusLoaded");
@@ -2627,6 +3523,9 @@ public sealed partial class Localizer
     public string DlcStatusRowEnabled => Format("dlc.statusRowEnabled");
     public string DlcStatusSaved => Format("dlc.statusSaved");
     public string DlcStatusSkippedSuffix => Format("dlc.statusSkippedSuffix");
+    public string DlcStatusSteamEmpty => Format("dlc.statusSteamEmpty");
+    public string DlcStatusSteamList => Format("dlc.statusSteamList");
+    public string DlcStatusSteamUnavailable => Format("dlc.statusSteamUnavailable");
     public string DlcToggleToolTip => Format("dlc.toggleToolTip");
     public string DlcToggleToolTipLocked => Format("dlc.toggleToolTipLocked");
     public string DlcUnknownBadge => Format("dlc.unknownBadge");
@@ -2727,6 +3626,19 @@ public sealed partial class Localizer
     public string ModlibStatusOpenedBrowser => Format("modlib.statusOpenedBrowser");
     public string ModlibStatusOpenedFolder => Format("modlib.statusOpenedFolder");
     public string ModlibStatusOpenedSteam => Format("modlib.statusOpenedSteam");
+    public string ModlibSteamActionFailed => Format("modlib.steamActionFailed");
+    public string ModlibSteamDisableName => Format("modlib.steamDisableName");
+    public string ModlibSteamDownloadName => Format("modlib.steamDownloadName");
+    public string ModlibSteamDownloadRequested => Format("modlib.steamDownloadRequested");
+    public string ModlibSteamEnableName => Format("modlib.steamEnableName");
+    public string ModlibSteamStateDisabled => Format("modlib.steamStateDisabled");
+    public string ModlibSteamStateDownloading => Format("modlib.steamStateDownloading");
+    public string ModlibSteamStateDownloadingNoPercent => Format("modlib.steamStateDownloadingNoPercent");
+    public string ModlibSteamStateInstalled => Format("modlib.steamStateInstalled");
+    public string ModlibSteamStateName => Format("modlib.steamStateName");
+    public string ModlibSteamStatePending => Format("modlib.steamStatePending");
+    public string ModlibSteamStateUpdateNeeded => Format("modlib.steamStateUpdateNeeded");
+    public string ModlibSteamWriteDisabled => Format("modlib.steamWriteDisabled");
     public string ModlibSubscribedOn => Format("modlib.subscribedOn");
     public string ModlibSupportedVersion => Format("modlib.supportedVersion");
     public string ModlibSupportedVersionName => Format("modlib.supportedVersionName");
@@ -2755,6 +3667,31 @@ public sealed partial class Localizer
     public string ModsAddPageTarget => Format("mods.addPage.target");
     public string ModsAddPageTargetMissing => Format("mods.addPage.targetMissing");
     public string ModsAddPageTitle => Format("mods.addPage.title");
+    public string ModsAutoSortApply => Format("mods.autoSort.apply");
+    public string ModsAutoSortButton => Format("mods.autoSort.button");
+    public string ModsAutoSortButtonName => Format("mods.autoSort.buttonName");
+    public string ModsAutoSortConflictAmbiguous => Format("mods.autoSort.conflictAmbiguous");
+    public string ModsAutoSortConflictSameTier => Format("mods.autoSort.conflictSameTier");
+    public string ModsAutoSortConflictsTitle => Format("mods.autoSort.conflictsTitle");
+    public string ModsAutoSortNoChange => Format("mods.autoSort.noChange");
+    public string ModsAutoSortPreviewTitle => Format("mods.autoSort.previewTitle");
+    public string ModsAutoSortReasonDeclaredDep => Format("mods.autoSort.reasonDeclaredDep");
+    public string ModsAutoSortReasonDerivedPatch => Format("mods.autoSort.reasonDerivedPatch");
+    public string ModsAutoSortReasonOverrides => Format("mods.autoSort.reasonOverrides");
+    public string ModsAutoSortReasonPatchName => Format("mods.autoSort.reasonPatchName");
+    public string ModsAutoSortRowMove => Format("mods.autoSort.rowMove");
+    public string ModsAutoSortSummary => Format("mods.autoSort.summary");
+    public string ModsAutoSortTierGfxOnly => Format("mods.autoSort.tierGfxOnly");
+    public string ModsAutoSortTierLargeChange => Format("mods.autoSort.tierLargeChange");
+    public string ModsAutoSortTierLocalization => Format("mods.autoSort.tierLocalization");
+    public string ModsAutoSortTierMediumChange => Format("mods.autoSort.tierMediumChange");
+    public string ModsAutoSortTierOverhaul => Format("mods.autoSort.tierOverhaul");
+    public string ModsAutoSortTierPureAdditive => Format("mods.autoSort.tierPureAdditive");
+    public string ModsAutoSortTierSmallTweak => Format("mods.autoSort.tierSmallTweak");
+    public string ModsAutoSortTooltip => Format("mods.autoSort.tooltip");
+    public string ModsAutoSortUndo => Format("mods.autoSort.undo");
+    public string ModsAutoSortWarningCycle => Format("mods.autoSort.warningCycle");
+    public string ModsAutoSortWarningsTitle => Format("mods.autoSort.warningsTitle");
     public string ModsDialogCannotDeleteBody => Format("mods.dialog.cannotDeleteBody");
     public string ModsDialogDefaultNewName => Format("mods.dialog.defaultNewName");
     public string ModsDialogDeleteBody => Format("mods.dialog.deleteBody");
@@ -2814,6 +3751,9 @@ public sealed partial class Localizer
     public string ModsStatusAutoSaveFailed => Format("mods.status.autoSaveFailed");
     public string ModsStatusAutoSaveSaved => Format("mods.status.autoSaveSaved");
     public string ModsStatusAutoSaveSavedTo => Format("mods.status.autoSaveSavedTo");
+    public string ModsStatusAutoSortApplied => Format("mods.status.autoSortApplied");
+    public string ModsStatusAutoSortNeedsGame => Format("mods.status.autoSortNeedsGame");
+    public string ModsStatusAutoSortUndone => Format("mods.status.autoSortUndone");
     public string ModsStatusCannotDeleteLast => Format("mods.status.cannotDeleteLast");
     public string ModsStatusCannotDeleteTitle => Format("mods.status.cannotDeleteTitle");
     public string ModsStatusCreateFailed => Format("mods.status.createFailed");
@@ -2860,6 +3800,7 @@ public sealed partial class Localizer
     public string ModsToolbarRename => Format("mods.toolbar.rename");
     public string ModsToolbarRenameName => Format("mods.toolbar.renameName");
     public string ModsToolbarSearchPlaceholder => Format("mods.toolbar.searchPlaceholder");
+    public string ModsTranslateUnavailable => Format("mods.translateUnavailable");
     public string ModsWarnMissingPath => Format("mods.warnMissingPath");
     public string ModsWarnName => Format("mods.warnName");
     public string ModsWarnNoArchive => Format("mods.warnNoArchive");
@@ -2867,6 +3808,181 @@ public sealed partial class Localizer
     public string ModsWarnNoRegistryId => Format("mods.warnNoRegistryId");
     public string ModsWarnNonAsciiParent => Format("mods.warnNonAsciiParent");
     public string ModsWarnNonAsciiPath => Format("mods.warnNonAsciiPath");
+    public string ModstudioAddPreviews => Format("modstudio.addPreviews");
+    public string ModstudioAddVideo => Format("modstudio.addVideo");
+    public string ModstudioBbcodeBold => Format("modstudio.bbcodeBold");
+    public string ModstudioBbcodeBulletList => Format("modstudio.bbcodeBulletList");
+    public string ModstudioBbcodeCode => Format("modstudio.bbcodeCode");
+    public string ModstudioBbcodeHeading => Format("modstudio.bbcodeHeading");
+    public string ModstudioBbcodeHint => Format("modstudio.bbcodeHint");
+    public string ModstudioBbcodeImage => Format("modstudio.bbcodeImage");
+    public string ModstudioBbcodeItalic => Format("modstudio.bbcodeItalic");
+    public string ModstudioBbcodeLink => Format("modstudio.bbcodeLink");
+    public string ModstudioBbcodeNumberedList => Format("modstudio.bbcodeNumberedList");
+    public string ModstudioBbcodeRule => Format("modstudio.bbcodeRule");
+    public string ModstudioBbcodeStrike => Format("modstudio.bbcodeStrike");
+    public string ModstudioBbcodeUnderline => Format("modstudio.bbcodeUnderline");
+    public string ModstudioBuiltInCover => Format("modstudio.builtInCover");
+    public string ModstudioBytesCounter => Format("modstudio.bytesCounter");
+    public string ModstudioCancel => Format("modstudio.cancel");
+    public string ModstudioChangeNotePlaceholder => Format("modstudio.changeNotePlaceholder");
+    public string ModstudioCount => Format("modstudio.count");
+    public string ModstudioCreateButton => Format("modstudio.createButton");
+    public string ModstudioCreateCancel => Format("modstudio.createCancel");
+    public string ModstudioCreateConfirm => Format("modstudio.createConfirm");
+    public string ModstudioCreateFailed => Format("modstudio.createFailed");
+    public string ModstudioCreateFolderHint => Format("modstudio.createFolderHint");
+    public string ModstudioCreateHint => Format("modstudio.createHint");
+    public string ModstudioCreateNameRequired => Format("modstudio.createNameRequired");
+    public string ModstudioCreateSuccess => Format("modstudio.createSuccess");
+    public string ModstudioCreateTitle => Format("modstudio.createTitle");
+    public string ModstudioDescriptionPlaceholder => Format("modstudio.descriptionPlaceholder");
+    public string ModstudioDescriptionTooLong => Format("modstudio.descriptionTooLong");
+    public string ModstudioDescriptorAdult => Format("modstudio.descriptorAdult");
+    public string ModstudioDescriptorAdultOnly => Format("modstudio.descriptorAdultOnly");
+    public string ModstudioDescriptorFrequentNudity => Format("modstudio.descriptorFrequentNudity");
+    public string ModstudioDescriptorLegacy => Format("modstudio.descriptorLegacy");
+    public string ModstudioDescriptorMetadata => Format("modstudio.descriptorMetadata");
+    public string ModstudioDescriptorNudity => Format("modstudio.descriptorNudity");
+    public string ModstudioDescriptorUnsupported => Format("modstudio.descriptorUnsupported");
+    public string ModstudioDescriptorViolence => Format("modstudio.descriptorViolence");
+    public string ModstudioDescriptorsHint => Format("modstudio.descriptorsHint");
+    public string ModstudioDetailDescription => Format("modstudio.detailDescription");
+    public string ModstudioDetailDescriptor => Format("modstudio.detailDescriptor");
+    public string ModstudioDetailFolder => Format("modstudio.detailFolder");
+    public string ModstudioDetailNoSelection => Format("modstudio.detailNoSelection");
+    public string ModstudioDetailNoSelectionHint => Format("modstudio.detailNoSelectionHint");
+    public string ModstudioDetailPublication => Format("modstudio.detailPublication");
+    public string ModstudioDetailSupportedVersion => Format("modstudio.detailSupportedVersion");
+    public string ModstudioDetailTags => Format("modstudio.detailTags");
+    public string ModstudioDetailVersion => Format("modstudio.detailVersion");
+    public string ModstudioFieldChangeNote => Format("modstudio.fieldChangeNote");
+    public string ModstudioFieldDescription => Format("modstudio.fieldDescription");
+    public string ModstudioFieldDescriptors => Format("modstudio.fieldDescriptors");
+    public string ModstudioFieldFolder => Format("modstudio.fieldFolder");
+    public string ModstudioFieldLanguage => Format("modstudio.fieldLanguage");
+    public string ModstudioFieldName => Format("modstudio.fieldName");
+    public string ModstudioFieldPreview => Format("modstudio.fieldPreview");
+    public string ModstudioFieldPreviews => Format("modstudio.fieldPreviews");
+    public string ModstudioFieldPublic => Format("modstudio.fieldPublic");
+    public string ModstudioFieldSupportedVersion => Format("modstudio.fieldSupportedVersion");
+    public string ModstudioFieldTags => Format("modstudio.fieldTags");
+    public string ModstudioFieldUploadDescription => Format("modstudio.fieldUploadDescription");
+    public string ModstudioFieldUploadDirectory => Format("modstudio.fieldUploadDirectory");
+    public string ModstudioFieldUploadModId => Format("modstudio.fieldUploadModId");
+    public string ModstudioFieldUploadTags => Format("modstudio.fieldUploadTags");
+    public string ModstudioFieldUploadTarget => Format("modstudio.fieldUploadTarget");
+    public string ModstudioFieldUploadTitle => Format("modstudio.fieldUploadTitle");
+    public string ModstudioFieldVersion => Format("modstudio.fieldVersion");
+    public string ModstudioFieldVideoPreviews => Format("modstudio.fieldVideoPreviews");
+    public string ModstudioFieldVisibility => Format("modstudio.fieldVisibility");
+    public string ModstudioFolderPlaceholder => Format("modstudio.folderPlaceholder");
+    public string ModstudioLegalHint => Format("modstudio.legalHint");
+    public string ModstudioLegalLink => Format("modstudio.legalLink");
+    public string ModstudioListName => Format("modstudio.listName");
+    public string ModstudioLoadFailed => Format("modstudio.loadFailed");
+    public string ModstudioLocalizationCount => Format("modstudio.localizationCount");
+    public string ModstudioLocalizationNote => Format("modstudio.localizationNote");
+    public string ModstudioManagedHint => Format("modstudio.managedHint");
+    public string ModstudioMoveDown => Format("modstudio.moveDown");
+    public string ModstudioMoveUp => Format("modstudio.moveUp");
+    public string ModstudioNamePlaceholder => Format("modstudio.namePlaceholder");
+    public string ModstudioNeedsLegal => Format("modstudio.needsLegal");
+    public string ModstudioNewMod => Format("modstudio.newMod");
+    public string ModstudioNoGameHint => Format("modstudio.noGameHint");
+    public string ModstudioNoGameTitle => Format("modstudio.noGameTitle");
+    public string ModstudioNoModsHint => Format("modstudio.noModsHint");
+    public string ModstudioNoWorkshopHint => Format("modstudio.noWorkshopHint");
+    public string ModstudioOpenFolder => Format("modstudio.openFolder");
+    public string ModstudioOpenFolderUnavailable => Format("modstudio.openFolderUnavailable");
+    public string ModstudioOpenWorkshop => Format("modstudio.openWorkshop");
+    public string ModstudioOpenWorkshopUnavailable => Format("modstudio.openWorkshopUnavailable");
+    public string ModstudioPickPreview => Format("modstudio.pickPreview");
+    public string ModstudioPreviewHeader => Format("modstudio.previewHeader");
+    public string ModstudioPreviewLimitHint => Format("modstudio.previewLimitHint");
+    public string ModstudioPreviewNone => Format("modstudio.previewNone");
+    public string ModstudioPreviewTooLarge => Format("modstudio.previewTooLarge");
+    public string ModstudioProgressName => Format("modstudio.progressName");
+    public string ModstudioPublicHint => Format("modstudio.publicHint");
+    public string ModstudioRefreshName => Format("modstudio.refreshName");
+    public string ModstudioRemovePreview => Format("modstudio.removePreview");
+    public string ModstudioRowPublished => Format("modstudio.rowPublished");
+    public string ModstudioRowPublishedShort => Format("modstudio.rowPublishedShort");
+    public string ModstudioRowUnpublished => Format("modstudio.rowUnpublished");
+    public string ModstudioSearchName => Format("modstudio.searchName");
+    public string ModstudioSearchPlaceholder => Format("modstudio.searchPlaceholder");
+    public string ModstudioStageCommitting => Format("modstudio.stageCommitting");
+    public string ModstudioStageCreating => Format("modstudio.stageCreating");
+    public string ModstudioStageDone => Format("modstudio.stageDone");
+    public string ModstudioStageLocalizing => Format("modstudio.stageLocalizing");
+    public string ModstudioStagePreparing => Format("modstudio.stagePreparing");
+    public string ModstudioStagePreview => Format("modstudio.stagePreview");
+    public string ModstudioStageUploading => Format("modstudio.stageUploading");
+    public string ModstudioStatusFiltered => Format("modstudio.statusFiltered");
+    public string ModstudioStatusLoaded => Format("modstudio.statusLoaded");
+    public string ModstudioStatusName => Format("modstudio.statusName");
+    public string ModstudioStatusNoMatch => Format("modstudio.statusNoMatch");
+    public string ModstudioSupportedVersionPlaceholder => Format("modstudio.supportedVersionPlaceholder");
+    public string ModstudioTagsPlaceholder => Format("modstudio.tagsPlaceholder");
+    public string ModstudioTitle => Format("modstudio.title");
+    public string ModstudioTitleTooLong => Format("modstudio.titleTooLong");
+    public string ModstudioUnsupportedCreate => Format("modstudio.unsupportedCreate");
+    public string ModstudioUnsupportedHint => Format("modstudio.unsupportedHint");
+    public string ModstudioUploadArchived => Format("modstudio.uploadArchived");
+    public string ModstudioUploadButton => Format("modstudio.uploadButton");
+    public string ModstudioUploadCanceled => Format("modstudio.uploadCanceled");
+    public string ModstudioUploadCanceling => Format("modstudio.uploadCanceling");
+    public string ModstudioUploadConfirm => Format("modstudio.uploadConfirm");
+    public string ModstudioUploadConfirmBody => Format("modstudio.uploadConfirmBody");
+    public string ModstudioUploadConfirmMulti => Format("modstudio.uploadConfirmMulti");
+    public string ModstudioUploadConfirmTitle => Format("modstudio.uploadConfirmTitle");
+    public string ModstudioUploadDescriptionPlaceholder => Format("modstudio.uploadDescriptionPlaceholder");
+    public string ModstudioUploadFailed => Format("modstudio.uploadFailed");
+    public string ModstudioUploadHint => Format("modstudio.uploadHint");
+    public string ModstudioUploadMod => Format("modstudio.uploadMod");
+    public string ModstudioUploadModIdHint => Format("modstudio.uploadModIdHint");
+    public string ModstudioUploadModIdInvalid => Format("modstudio.uploadModIdInvalid");
+    public string ModstudioUploadModIdPlaceholder => Format("modstudio.uploadModIdPlaceholder");
+    public string ModstudioUploadNotLocal => Format("modstudio.uploadNotLocal");
+    public string ModstudioUploadSelectMod => Format("modstudio.uploadSelectMod");
+    public string ModstudioUploadSuccess => Format("modstudio.uploadSuccess");
+    public string ModstudioUploadTagCount => Format("modstudio.uploadTagCount");
+    public string ModstudioUploadTagsPlaceholder => Format("modstudio.uploadTagsPlaceholder");
+    public string ModstudioUploadTargetPdx => Format("modstudio.uploadTargetPdx");
+    public string ModstudioUploadTargetPdxUnavailable => Format("modstudio.uploadTargetPdxUnavailable");
+    public string ModstudioUploadTargetSteam => Format("modstudio.uploadTargetSteam");
+    public string ModstudioUploadTitle => Format("modstudio.uploadTitle");
+    public string ModstudioUploadTitlePlaceholder => Format("modstudio.uploadTitlePlaceholder");
+    public string ModstudioUploadTitleRequired => Format("modstudio.uploadTitleRequired");
+    public string ModstudioUseBuiltInCover => Format("modstudio.useBuiltInCover");
+    public string ModstudioVersionPlaceholder => Format("modstudio.versionPlaceholder");
+    public string ModstudioVideoHint => Format("modstudio.videoHint");
+    public string ModstudioVideoUrlInvalid => Format("modstudio.videoUrlInvalid");
+    public string ModstudioVideoUrlPlaceholder => Format("modstudio.videoUrlPlaceholder");
+    public string ModstudioVisibilityFriendsOnly => Format("modstudio.visibilityFriendsOnly");
+    public string ModstudioVisibilityPrivate => Format("modstudio.visibilityPrivate");
+    public string ModstudioVisibilityPublic => Format("modstudio.visibilityPublic");
+    public string ModstudioVisibilityUnlisted => Format("modstudio.visibilityUnlisted");
+    public string SettingsAboutAutoCheck => Format("settings.about.autoCheck");
+    public string SettingsAboutAutoCheckName => Format("settings.about.autoCheckName");
+    public string SettingsAboutCheckFailed => Format("settings.about.checkFailed");
+    public string SettingsAboutCheckNow => Format("settings.about.checkNow");
+    public string SettingsAboutCheckNowName => Format("settings.about.checkNowName");
+    public string SettingsAboutChecking => Format("settings.about.checking");
+    public string SettingsAboutInstallMode => Format("settings.about.installMode");
+    public string SettingsAboutInstallModeName => Format("settings.about.installModeName");
+    public string SettingsAboutInstallModePerMachine => Format("settings.about.installModePerMachine");
+    public string SettingsAboutInstallModePerUser => Format("settings.about.installModePerUser");
+    public string SettingsAboutInstallModePortable => Format("settings.about.installModePortable");
+    public string SettingsAboutLastCheck => Format("settings.about.lastCheck");
+    public string SettingsAboutLastCheckLabel => Format("settings.about.lastCheckLabel");
+    public string SettingsAboutLauncherVersion => Format("settings.about.launcherVersion");
+    public string SettingsAboutNever => Format("settings.about.never");
+    public string SettingsAboutReleaseNotes => Format("settings.about.releaseNotes");
+    public string SettingsAboutStatusAvailable => Format("settings.about.statusAvailable");
+    public string SettingsAboutStatusNotDue => Format("settings.about.statusNotDue");
+    public string SettingsAboutStatusUpToDate => Format("settings.about.statusUpToDate");
+    public string SettingsAboutTitle => Format("settings.about.title");
     public string SettingsAppDataClearLegacy => Format("settings.appData.clearLegacy");
     public string SettingsAppDataClearLegacyName => Format("settings.appData.clearLegacyName");
     public string SettingsAppDataCurrent => Format("settings.appData.current");
@@ -3032,6 +4148,7 @@ public sealed partial class Localizer
     public string SettingsModThumbnailsStatusOnlineOff => Format("settings.modThumbnails.statusOnlineOff");
     public string SettingsModThumbnailsStatusOnlineOn => Format("settings.modThumbnails.statusOnlineOn");
     public string SettingsModThumbnailsStatusRetention => Format("settings.modThumbnails.statusRetention");
+    public string SettingsNavAbout => Format("settings.nav.about");
     public string SettingsNavAdvanced => Format("settings.nav.advanced");
     public string SettingsNavAppearance => Format("settings.nav.appearance");
     public string SettingsNavCache => Format("settings.nav.cache");
@@ -3113,6 +4230,9 @@ public sealed partial class Localizer
     public string SettingsSteamApiHeader => Format("settings.steamApiHeader");
     public string SettingsSteamApiMissing => Format("settings.steamApiMissing");
     public string SettingsSteamApiReady => Format("settings.steamApiReady");
+    public string SettingsSteamStateHint => Format("settings.steamStateHint");
+    public string SettingsSteamStateOff => Format("settings.steamStateOff");
+    public string SettingsSteamStateOn => Format("settings.steamStateOn");
     public string SettingsSteamSubscribeHint => Format("settings.steamSubscribeHint");
     public string SettingsSteamSubscribeOn => Format("settings.steamSubscribeOn");
     public string SettingsSteamSubscribeStatusOff => Format("settings.steamSubscribeStatusOff");
@@ -3149,15 +4269,37 @@ public sealed partial class Localizer
     public string SettingsTranslateEngine => Format("settings.translate.engine");
     public string SettingsTranslateEngineAutoDesc => Format("settings.translate.engine.auto.desc");
     public string SettingsTranslateEngineAutoTitle => Format("settings.translate.engine.auto.title");
+    public string SettingsTranslateEngineBergamotDesc => Format("settings.translate.engine.bergamot.desc");
+    public string SettingsTranslateEngineBergamotTitle => Format("settings.translate.engine.bergamot.title");
     public string SettingsTranslateEngineBuiltinDesc => Format("settings.translate.engine.builtin.desc");
     public string SettingsTranslateEngineBuiltinTitle => Format("settings.translate.engine.builtin.title");
     public string SettingsTranslateEngineCustomDesc => Format("settings.translate.engine.custom.desc");
     public string SettingsTranslateEngineCustomTitle => Format("settings.translate.engine.custom.title");
     public string SettingsTranslateEngineGoogleCloudDesc => Format("settings.translate.engine.googleCloud.desc");
     public string SettingsTranslateEngineGoogleCloudTitle => Format("settings.translate.engine.googleCloud.title");
+    public string SettingsTranslateEngineIndexTranslateDesc => Format("settings.translate.engine.indexTranslate.desc");
+    public string SettingsTranslateEngineIndexTranslateTitle => Format("settings.translate.engine.indexTranslate.title");
+    public string SettingsTranslateEngineLocalDesc => Format("settings.translate.engine.local.desc");
+    public string SettingsTranslateEngineLocalTitle => Format("settings.translate.engine.local.title");
     public string SettingsTranslateEngineMicrosoftDesc => Format("settings.translate.engine.microsoft.desc");
     public string SettingsTranslateEngineMicrosoftTitle => Format("settings.translate.engine.microsoft.title");
+    public string SettingsTranslateEngineMymemoryDesc => Format("settings.translate.engine.mymemory.desc");
+    public string SettingsTranslateEngineMymemoryTitle => Format("settings.translate.engine.mymemory.title");
     public string SettingsTranslateEngineName => Format("settings.translate.engineName");
+    public string SettingsTranslateGlossary => Format("settings.translate.glossary");
+    public string SettingsTranslateGlossaryAdd => Format("settings.translate.glossaryAdd");
+    public string SettingsTranslateGlossaryHint => Format("settings.translate.glossaryHint");
+    public string SettingsTranslateGlossaryName => Format("settings.translate.glossaryName");
+    public string SettingsTranslateGlossaryRemove => Format("settings.translate.glossaryRemove");
+    public string SettingsTranslateGlossarySave => Format("settings.translate.glossarySave");
+    public string SettingsTranslateGlossarySource => Format("settings.translate.glossarySource");
+    public string SettingsTranslateGlossarySourcePlaceholder => Format("settings.translate.glossarySourcePlaceholder");
+    public string SettingsTranslateGlossaryStatusFailed => Format("settings.translate.glossaryStatusFailed");
+    public string SettingsTranslateGlossaryStatusSaved => Format("settings.translate.glossaryStatusSaved");
+    public string SettingsTranslateGlossaryTarget => Format("settings.translate.glossaryTarget");
+    public string SettingsTranslateGlossaryTargetPlaceholder => Format("settings.translate.glossaryTargetPlaceholder");
+    public string SettingsTranslateGoogleCloudHint => Format("settings.translate.googleCloud.hint");
+    public string SettingsTranslateGoogleCloudPortal => Format("settings.translate.googleCloud.portal");
     public string SettingsTranslateGoogleKey => Format("settings.translate.googleKey");
     public string SettingsTranslateGoogleKeyName => Format("settings.translate.googleKeyName");
     public string SettingsTranslateHint => Format("settings.translate.hint");
@@ -3169,6 +4311,24 @@ public sealed partial class Localizer
     public string SettingsTranslateLanguageZhCNDesc => Format("settings.translate.language.zhCN.desc");
     public string SettingsTranslateLanguageZhCNTitle => Format("settings.translate.language.zhCN.title");
     public string SettingsTranslateLanguageName => Format("settings.translate.languageName");
+    public string SettingsTranslateLastFailure => Format("settings.translate.lastFailure");
+    public string SettingsTranslateLocalModelBergamotEnZh => Format("settings.translate.localModelBergamotEnZh");
+    public string SettingsTranslateLocalModelBergamotZhEn => Format("settings.translate.localModelBergamotZhEn");
+    public string SettingsTranslateLocalModelDownload => Format("settings.translate.localModelDownload");
+    public string SettingsTranslateLocalModelDownloading => Format("settings.translate.localModelDownloading");
+    public string SettingsTranslateLocalModelIndexTranslate => Format("settings.translate.localModelIndexTranslate");
+    public string SettingsTranslateLocalModelInstalled => Format("settings.translate.localModelInstalled");
+    public string SettingsTranslateLocalModelNotInstalled => Format("settings.translate.localModelNotInstalled");
+    public string SettingsTranslateLocalModelRemove => Format("settings.translate.localModelRemove");
+    public string SettingsTranslateLocalModelStatusDownloaded => Format("settings.translate.localModelStatusDownloaded");
+    public string SettingsTranslateLocalModelStatusFailed => Format("settings.translate.localModelStatusFailed");
+    public string SettingsTranslateLocalModelStatusRemoveFailed => Format("settings.translate.localModelStatusRemoveFailed");
+    public string SettingsTranslateLocalModelStatusRemoved => Format("settings.translate.localModelStatusRemoved");
+    public string SettingsTranslateLocalModels => Format("settings.translate.localModels");
+    public string SettingsTranslateLocalModelsHint => Format("settings.translate.localModelsHint");
+    public string SettingsTranslateLocalModelsName => Format("settings.translate.localModelsName");
+    public string SettingsTranslateMicrosoftHint => Format("settings.translate.microsoft.hint");
+    public string SettingsTranslateMicrosoftPortal => Format("settings.translate.microsoft.portal");
     public string SettingsTranslateMicrosoftKey => Format("settings.translate.microsoftKey");
     public string SettingsTranslateMicrosoftKeyName => Format("settings.translate.microsoftKeyName");
     public string SettingsTranslateMicrosoftRegion => Format("settings.translate.microsoftRegion");
@@ -3189,7 +4349,12 @@ public sealed partial class Localizer
     public string SettingsTranslateStatusEndpoint => Format("settings.translate.statusEndpoint");
     public string SettingsTranslateStatusEngine => Format("settings.translate.statusEngine");
     public string SettingsTranslateStatusLanguage => Format("settings.translate.statusLanguage");
+    public string SettingsTranslateStatusPortalFailed => Format("settings.translate.statusPortalFailed");
     public string SettingsTranslateStatusScope => Format("settings.translate.statusScope");
+    public string SettingsTranslateTest => Format("settings.translate.test");
+    public string SettingsTranslateTestName => Format("settings.translate.testName");
+    public string SettingsTranslateTestResult => Format("settings.translate.testResult");
+    public string SettingsTranslateTestRunning => Format("settings.translate.testRunning");
     public string ShellAlwaysOnTopApplyFailed => Format("shell.alwaysOnTop.applyFailed");
     public string ShellAlwaysOnTopDisable => Format("shell.alwaysOnTop.disable");
     public string ShellAlwaysOnTopDisableTooltip => Format("shell.alwaysOnTop.disableTooltip");
@@ -3208,6 +4373,7 @@ public sealed partial class Localizer
     public string ShellNavHome => Format("shell.nav.home");
     public string ShellNavLibrary => Format("shell.nav.library");
     public string ShellNavModLibrary => Format("shell.nav.modLibrary");
+    public string ShellNavModStudio => Format("shell.nav.modStudio");
     public string ShellNavPlaySets => Format("shell.nav.playSets");
     public string ShellNavSettings => Format("shell.nav.settings");
     public string ShellNavWorkshop => Format("shell.nav.workshop");
@@ -3223,7 +4389,22 @@ public sealed partial class Localizer
     public string ShellStatusGamesFound => Format("shell.status.gamesFound");
     public string ShellStatusNoGames => Format("shell.status.noGames");
     public string ShellSupportManagedByGame => Format("shell.support.managedByGame");
+    public string ShellTranslating => Format("shell.translating");
     public string ShellVersion => Format("shell.version");
+    public string UpdateAvailableBody => Format("update.available.body");
+    public string UpdateDownloadCancel => Format("update.downloadCancel");
+    public string UpdateDownloadFailed => Format("update.downloadFailed");
+    public string UpdateDownloading => Format("update.downloading");
+    public string UpdateElevationCanceled => Format("update.elevationCanceled");
+    public string UpdateInstall => Format("update.install");
+    public string UpdateInstallFailed => Format("update.installFailed");
+    public string UpdateInstallerStarted => Format("update.installerStarted");
+    public string UpdateLater => Format("update.later");
+    public string UpdateMandatoryHint => Format("update.mandatoryHint");
+    public string UpdatePerMachineHint => Format("update.perMachineHint");
+    public string UpdateReady => Format("update.ready");
+    public string UpdateTitleAvailable => Format("update.title.available");
+    public string UpdateVerifyFailed => Format("update.verifyFailed");
     public string WorkshopAuthor => Format("workshop.author");
     public string WorkshopCommentsClosed => Format("workshop.commentsClosed");
     public string WorkshopCommentsCount => Format("workshop.commentsCount");
@@ -3267,6 +4448,9 @@ public sealed partial class Localizer
     public string WorkshopDetailScreenshots => Format("workshop.detailScreenshots");
     public string WorkshopDetailScreenshotsLoading => Format("workshop.detailScreenshotsLoading");
     public string WorkshopDetailScreenshotsTitle => Format("workshop.detailScreenshotsTitle");
+    public string WorkshopDetailSteamDownloadProgress => Format("workshop.detailSteamDownloadProgress");
+    public string WorkshopDetailSteamNeedsUpdate => Format("workshop.detailSteamNeedsUpdate");
+    public string WorkshopDetailSteamReadOnlyHint => Format("workshop.detailSteamReadOnlyHint");
     public string WorkshopDetailSteamSubscribeConfirm => Format("workshop.detailSteamSubscribeConfirm");
     public string WorkshopDetailSteamSubscribeHintOff => Format("workshop.detailSteamSubscribeHintOff");
     public string WorkshopDetailSteamSubscribeHintOn => Format("workshop.detailSteamSubscribeHintOn");
@@ -3279,6 +4463,9 @@ public sealed partial class Localizer
     public string WorkshopDetailSubscribeSteam => Format("workshop.detailSubscribeSteam");
     public string WorkshopDetailSubscribing => Format("workshop.detailSubscribing");
     public string WorkshopDetailTags => Format("workshop.detailTags");
+    public string WorkshopDetailTranslatingChangelog => Format("workshop.detailTranslatingChangelog");
+    public string WorkshopDetailTranslatingComments => Format("workshop.detailTranslatingComments");
+    public string WorkshopDetailTranslatingDescription => Format("workshop.detailTranslatingDescription");
     public string WorkshopDetailUnsubscribe => Format("workshop.detailUnsubscribe");
     public string WorkshopDetailUnsubscribeFailed => Format("workshop.detailUnsubscribeFailed");
     public string WorkshopDetailUnsubscribeOk => Format("workshop.detailUnsubscribeOk");
@@ -3324,6 +4511,7 @@ public sealed partial class Localizer
     public string WorkshopStatusName => Format("workshop.statusName");
     public string WorkshopStatusOffline => Format("workshop.statusOffline");
     public string WorkshopStatusParseFailed => Format("workshop.statusParseFailed");
+    public string WorkshopStatusSearching => Format("workshop.statusSearching");
     public string WorkshopSubscriptions => Format("workshop.subscriptions");
     public string WorkshopThrottlePaused => Format("workshop.throttlePaused");
     public string WorkshopThrottleRetryIn => Format("workshop.throttleRetryIn");
@@ -3336,8 +4524,8 @@ public sealed partial class Localizer
     public string WorkshopTimeWeek => Format("workshop.timeWeek");
     public string WorkshopTimeYear => Format("workshop.timeYear");
     public string WorkshopTitle => Format("workshop.title");
-    public string WorkshopTranslateLabel => Format("workshop.translateLabel");
     public string WorkshopTranslateOriginalLabel => Format("workshop.translateOriginalLabel");
+    public string WorkshopTranslateUnavailable => Format("workshop.translateUnavailable");
     public string WorkshopUpdated => Format("workshop.updated");
 }
 
@@ -3368,6 +4556,8 @@ internal static class Keys
     public const string AccountStatus = "account.status";
     public const string AccountStatusHint = "account.statusHint";
     public const string AccountStatusNotReady = "account.statusNotReady";
+    public const string AccountStatusSessionAuto = "account.statusSessionAuto";
+    public const string AccountStatusSessionOnce = "account.statusSessionOnce";
     public const string AccountStatusSignInOk = "account.statusSignInOk";
     public const string AccountStatusSignOutOk = "account.statusSignOutOk";
     public const string AccountStatusSignedIn = "account.statusSignedIn";
@@ -3407,6 +4597,7 @@ internal static class Keys
     public const string CommonUnknown = "common.unknown";
     public const string CommonYes = "common.yes";
     public const string DlcCountsText = "dlc.countsText";
+    public const string DlcCountsTextSteam = "dlc.countsTextSteam";
     public const string DlcDescriptionName = "dlc.descriptionName";
     public const string DlcDescriptionsLoading = "dlc.descriptionsLoading";
     public const string DlcDisableAll = "dlc.disableAll";
@@ -3428,6 +4619,7 @@ internal static class Keys
     public const string DlcOwnershipDetailPatchOn = "dlc.ownershipDetailPatchOn";
     public const string DlcOwnershipDetailSteamId = "dlc.ownershipDetailSteamId";
     public const string DlcOwnershipErrorBusy = "dlc.ownershipErrorBusy";
+    public const string DlcOwnershipErrorHostFailed = "dlc.ownershipErrorHostFailed";
     public const string DlcOwnershipErrorInitFailed = "dlc.ownershipErrorInitFailed";
     public const string DlcOwnershipErrorNative = "dlc.ownershipErrorNative";
     public const string DlcOwnershipErrorNoAppId = "dlc.ownershipErrorNoAppId";
@@ -3451,6 +4643,7 @@ internal static class Keys
     public const string DlcSaveFailedShort = "dlc.saveFailedShort";
     public const string DlcSaveName = "dlc.saveName";
     public const string DlcSaveNoActivePlaySet = "dlc.saveNoActivePlaySet";
+    public const string DlcSaveSteamManaged = "dlc.saveSteamManaged";
     public const string DlcStatusAllDisabled = "dlc.statusAllDisabled";
     public const string DlcStatusAllEnabled = "dlc.statusAllEnabled";
     public const string DlcStatusLoaded = "dlc.statusLoaded";
@@ -3461,6 +4654,9 @@ internal static class Keys
     public const string DlcStatusRowEnabled = "dlc.statusRowEnabled";
     public const string DlcStatusSaved = "dlc.statusSaved";
     public const string DlcStatusSkippedSuffix = "dlc.statusSkippedSuffix";
+    public const string DlcStatusSteamEmpty = "dlc.statusSteamEmpty";
+    public const string DlcStatusSteamList = "dlc.statusSteamList";
+    public const string DlcStatusSteamUnavailable = "dlc.statusSteamUnavailable";
     public const string DlcToggleToolTip = "dlc.toggleToolTip";
     public const string DlcToggleToolTipLocked = "dlc.toggleToolTipLocked";
     public const string DlcUnknownBadge = "dlc.unknownBadge";
@@ -3561,6 +4757,19 @@ internal static class Keys
     public const string ModlibStatusOpenedBrowser = "modlib.statusOpenedBrowser";
     public const string ModlibStatusOpenedFolder = "modlib.statusOpenedFolder";
     public const string ModlibStatusOpenedSteam = "modlib.statusOpenedSteam";
+    public const string ModlibSteamActionFailed = "modlib.steamActionFailed";
+    public const string ModlibSteamDisableName = "modlib.steamDisableName";
+    public const string ModlibSteamDownloadName = "modlib.steamDownloadName";
+    public const string ModlibSteamDownloadRequested = "modlib.steamDownloadRequested";
+    public const string ModlibSteamEnableName = "modlib.steamEnableName";
+    public const string ModlibSteamStateDisabled = "modlib.steamStateDisabled";
+    public const string ModlibSteamStateDownloading = "modlib.steamStateDownloading";
+    public const string ModlibSteamStateDownloadingNoPercent = "modlib.steamStateDownloadingNoPercent";
+    public const string ModlibSteamStateInstalled = "modlib.steamStateInstalled";
+    public const string ModlibSteamStateName = "modlib.steamStateName";
+    public const string ModlibSteamStatePending = "modlib.steamStatePending";
+    public const string ModlibSteamStateUpdateNeeded = "modlib.steamStateUpdateNeeded";
+    public const string ModlibSteamWriteDisabled = "modlib.steamWriteDisabled";
     public const string ModlibSubscribedOn = "modlib.subscribedOn";
     public const string ModlibSupportedVersion = "modlib.supportedVersion";
     public const string ModlibSupportedVersionName = "modlib.supportedVersionName";
@@ -3589,6 +4798,31 @@ internal static class Keys
     public const string ModsAddPageTarget = "mods.addPage.target";
     public const string ModsAddPageTargetMissing = "mods.addPage.targetMissing";
     public const string ModsAddPageTitle = "mods.addPage.title";
+    public const string ModsAutoSortApply = "mods.autoSort.apply";
+    public const string ModsAutoSortButton = "mods.autoSort.button";
+    public const string ModsAutoSortButtonName = "mods.autoSort.buttonName";
+    public const string ModsAutoSortConflictAmbiguous = "mods.autoSort.conflictAmbiguous";
+    public const string ModsAutoSortConflictSameTier = "mods.autoSort.conflictSameTier";
+    public const string ModsAutoSortConflictsTitle = "mods.autoSort.conflictsTitle";
+    public const string ModsAutoSortNoChange = "mods.autoSort.noChange";
+    public const string ModsAutoSortPreviewTitle = "mods.autoSort.previewTitle";
+    public const string ModsAutoSortReasonDeclaredDep = "mods.autoSort.reasonDeclaredDep";
+    public const string ModsAutoSortReasonDerivedPatch = "mods.autoSort.reasonDerivedPatch";
+    public const string ModsAutoSortReasonOverrides = "mods.autoSort.reasonOverrides";
+    public const string ModsAutoSortReasonPatchName = "mods.autoSort.reasonPatchName";
+    public const string ModsAutoSortRowMove = "mods.autoSort.rowMove";
+    public const string ModsAutoSortSummary = "mods.autoSort.summary";
+    public const string ModsAutoSortTierGfxOnly = "mods.autoSort.tierGfxOnly";
+    public const string ModsAutoSortTierLargeChange = "mods.autoSort.tierLargeChange";
+    public const string ModsAutoSortTierLocalization = "mods.autoSort.tierLocalization";
+    public const string ModsAutoSortTierMediumChange = "mods.autoSort.tierMediumChange";
+    public const string ModsAutoSortTierOverhaul = "mods.autoSort.tierOverhaul";
+    public const string ModsAutoSortTierPureAdditive = "mods.autoSort.tierPureAdditive";
+    public const string ModsAutoSortTierSmallTweak = "mods.autoSort.tierSmallTweak";
+    public const string ModsAutoSortTooltip = "mods.autoSort.tooltip";
+    public const string ModsAutoSortUndo = "mods.autoSort.undo";
+    public const string ModsAutoSortWarningCycle = "mods.autoSort.warningCycle";
+    public const string ModsAutoSortWarningsTitle = "mods.autoSort.warningsTitle";
     public const string ModsDialogCannotDeleteBody = "mods.dialog.cannotDeleteBody";
     public const string ModsDialogDefaultNewName = "mods.dialog.defaultNewName";
     public const string ModsDialogDeleteBody = "mods.dialog.deleteBody";
@@ -3648,6 +4882,9 @@ internal static class Keys
     public const string ModsStatusAutoSaveFailed = "mods.status.autoSaveFailed";
     public const string ModsStatusAutoSaveSaved = "mods.status.autoSaveSaved";
     public const string ModsStatusAutoSaveSavedTo = "mods.status.autoSaveSavedTo";
+    public const string ModsStatusAutoSortApplied = "mods.status.autoSortApplied";
+    public const string ModsStatusAutoSortNeedsGame = "mods.status.autoSortNeedsGame";
+    public const string ModsStatusAutoSortUndone = "mods.status.autoSortUndone";
     public const string ModsStatusCannotDeleteLast = "mods.status.cannotDeleteLast";
     public const string ModsStatusCannotDeleteTitle = "mods.status.cannotDeleteTitle";
     public const string ModsStatusCreateFailed = "mods.status.createFailed";
@@ -3694,6 +4931,7 @@ internal static class Keys
     public const string ModsToolbarRename = "mods.toolbar.rename";
     public const string ModsToolbarRenameName = "mods.toolbar.renameName";
     public const string ModsToolbarSearchPlaceholder = "mods.toolbar.searchPlaceholder";
+    public const string ModsTranslateUnavailable = "mods.translateUnavailable";
     public const string ModsWarnMissingPath = "mods.warnMissingPath";
     public const string ModsWarnName = "mods.warnName";
     public const string ModsWarnNoArchive = "mods.warnNoArchive";
@@ -3701,6 +4939,181 @@ internal static class Keys
     public const string ModsWarnNoRegistryId = "mods.warnNoRegistryId";
     public const string ModsWarnNonAsciiParent = "mods.warnNonAsciiParent";
     public const string ModsWarnNonAsciiPath = "mods.warnNonAsciiPath";
+    public const string ModstudioAddPreviews = "modstudio.addPreviews";
+    public const string ModstudioAddVideo = "modstudio.addVideo";
+    public const string ModstudioBbcodeBold = "modstudio.bbcodeBold";
+    public const string ModstudioBbcodeBulletList = "modstudio.bbcodeBulletList";
+    public const string ModstudioBbcodeCode = "modstudio.bbcodeCode";
+    public const string ModstudioBbcodeHeading = "modstudio.bbcodeHeading";
+    public const string ModstudioBbcodeHint = "modstudio.bbcodeHint";
+    public const string ModstudioBbcodeImage = "modstudio.bbcodeImage";
+    public const string ModstudioBbcodeItalic = "modstudio.bbcodeItalic";
+    public const string ModstudioBbcodeLink = "modstudio.bbcodeLink";
+    public const string ModstudioBbcodeNumberedList = "modstudio.bbcodeNumberedList";
+    public const string ModstudioBbcodeRule = "modstudio.bbcodeRule";
+    public const string ModstudioBbcodeStrike = "modstudio.bbcodeStrike";
+    public const string ModstudioBbcodeUnderline = "modstudio.bbcodeUnderline";
+    public const string ModstudioBuiltInCover = "modstudio.builtInCover";
+    public const string ModstudioBytesCounter = "modstudio.bytesCounter";
+    public const string ModstudioCancel = "modstudio.cancel";
+    public const string ModstudioChangeNotePlaceholder = "modstudio.changeNotePlaceholder";
+    public const string ModstudioCount = "modstudio.count";
+    public const string ModstudioCreateButton = "modstudio.createButton";
+    public const string ModstudioCreateCancel = "modstudio.createCancel";
+    public const string ModstudioCreateConfirm = "modstudio.createConfirm";
+    public const string ModstudioCreateFailed = "modstudio.createFailed";
+    public const string ModstudioCreateFolderHint = "modstudio.createFolderHint";
+    public const string ModstudioCreateHint = "modstudio.createHint";
+    public const string ModstudioCreateNameRequired = "modstudio.createNameRequired";
+    public const string ModstudioCreateSuccess = "modstudio.createSuccess";
+    public const string ModstudioCreateTitle = "modstudio.createTitle";
+    public const string ModstudioDescriptionPlaceholder = "modstudio.descriptionPlaceholder";
+    public const string ModstudioDescriptionTooLong = "modstudio.descriptionTooLong";
+    public const string ModstudioDescriptorAdult = "modstudio.descriptorAdult";
+    public const string ModstudioDescriptorAdultOnly = "modstudio.descriptorAdultOnly";
+    public const string ModstudioDescriptorFrequentNudity = "modstudio.descriptorFrequentNudity";
+    public const string ModstudioDescriptorLegacy = "modstudio.descriptorLegacy";
+    public const string ModstudioDescriptorMetadata = "modstudio.descriptorMetadata";
+    public const string ModstudioDescriptorNudity = "modstudio.descriptorNudity";
+    public const string ModstudioDescriptorUnsupported = "modstudio.descriptorUnsupported";
+    public const string ModstudioDescriptorViolence = "modstudio.descriptorViolence";
+    public const string ModstudioDescriptorsHint = "modstudio.descriptorsHint";
+    public const string ModstudioDetailDescription = "modstudio.detailDescription";
+    public const string ModstudioDetailDescriptor = "modstudio.detailDescriptor";
+    public const string ModstudioDetailFolder = "modstudio.detailFolder";
+    public const string ModstudioDetailNoSelection = "modstudio.detailNoSelection";
+    public const string ModstudioDetailNoSelectionHint = "modstudio.detailNoSelectionHint";
+    public const string ModstudioDetailPublication = "modstudio.detailPublication";
+    public const string ModstudioDetailSupportedVersion = "modstudio.detailSupportedVersion";
+    public const string ModstudioDetailTags = "modstudio.detailTags";
+    public const string ModstudioDetailVersion = "modstudio.detailVersion";
+    public const string ModstudioFieldChangeNote = "modstudio.fieldChangeNote";
+    public const string ModstudioFieldDescription = "modstudio.fieldDescription";
+    public const string ModstudioFieldDescriptors = "modstudio.fieldDescriptors";
+    public const string ModstudioFieldFolder = "modstudio.fieldFolder";
+    public const string ModstudioFieldLanguage = "modstudio.fieldLanguage";
+    public const string ModstudioFieldName = "modstudio.fieldName";
+    public const string ModstudioFieldPreview = "modstudio.fieldPreview";
+    public const string ModstudioFieldPreviews = "modstudio.fieldPreviews";
+    public const string ModstudioFieldPublic = "modstudio.fieldPublic";
+    public const string ModstudioFieldSupportedVersion = "modstudio.fieldSupportedVersion";
+    public const string ModstudioFieldTags = "modstudio.fieldTags";
+    public const string ModstudioFieldUploadDescription = "modstudio.fieldUploadDescription";
+    public const string ModstudioFieldUploadDirectory = "modstudio.fieldUploadDirectory";
+    public const string ModstudioFieldUploadModId = "modstudio.fieldUploadModId";
+    public const string ModstudioFieldUploadTags = "modstudio.fieldUploadTags";
+    public const string ModstudioFieldUploadTarget = "modstudio.fieldUploadTarget";
+    public const string ModstudioFieldUploadTitle = "modstudio.fieldUploadTitle";
+    public const string ModstudioFieldVersion = "modstudio.fieldVersion";
+    public const string ModstudioFieldVideoPreviews = "modstudio.fieldVideoPreviews";
+    public const string ModstudioFieldVisibility = "modstudio.fieldVisibility";
+    public const string ModstudioFolderPlaceholder = "modstudio.folderPlaceholder";
+    public const string ModstudioLegalHint = "modstudio.legalHint";
+    public const string ModstudioLegalLink = "modstudio.legalLink";
+    public const string ModstudioListName = "modstudio.listName";
+    public const string ModstudioLoadFailed = "modstudio.loadFailed";
+    public const string ModstudioLocalizationCount = "modstudio.localizationCount";
+    public const string ModstudioLocalizationNote = "modstudio.localizationNote";
+    public const string ModstudioManagedHint = "modstudio.managedHint";
+    public const string ModstudioMoveDown = "modstudio.moveDown";
+    public const string ModstudioMoveUp = "modstudio.moveUp";
+    public const string ModstudioNamePlaceholder = "modstudio.namePlaceholder";
+    public const string ModstudioNeedsLegal = "modstudio.needsLegal";
+    public const string ModstudioNewMod = "modstudio.newMod";
+    public const string ModstudioNoGameHint = "modstudio.noGameHint";
+    public const string ModstudioNoGameTitle = "modstudio.noGameTitle";
+    public const string ModstudioNoModsHint = "modstudio.noModsHint";
+    public const string ModstudioNoWorkshopHint = "modstudio.noWorkshopHint";
+    public const string ModstudioOpenFolder = "modstudio.openFolder";
+    public const string ModstudioOpenFolderUnavailable = "modstudio.openFolderUnavailable";
+    public const string ModstudioOpenWorkshop = "modstudio.openWorkshop";
+    public const string ModstudioOpenWorkshopUnavailable = "modstudio.openWorkshopUnavailable";
+    public const string ModstudioPickPreview = "modstudio.pickPreview";
+    public const string ModstudioPreviewHeader = "modstudio.previewHeader";
+    public const string ModstudioPreviewLimitHint = "modstudio.previewLimitHint";
+    public const string ModstudioPreviewNone = "modstudio.previewNone";
+    public const string ModstudioPreviewTooLarge = "modstudio.previewTooLarge";
+    public const string ModstudioProgressName = "modstudio.progressName";
+    public const string ModstudioPublicHint = "modstudio.publicHint";
+    public const string ModstudioRefreshName = "modstudio.refreshName";
+    public const string ModstudioRemovePreview = "modstudio.removePreview";
+    public const string ModstudioRowPublished = "modstudio.rowPublished";
+    public const string ModstudioRowPublishedShort = "modstudio.rowPublishedShort";
+    public const string ModstudioRowUnpublished = "modstudio.rowUnpublished";
+    public const string ModstudioSearchName = "modstudio.searchName";
+    public const string ModstudioSearchPlaceholder = "modstudio.searchPlaceholder";
+    public const string ModstudioStageCommitting = "modstudio.stageCommitting";
+    public const string ModstudioStageCreating = "modstudio.stageCreating";
+    public const string ModstudioStageDone = "modstudio.stageDone";
+    public const string ModstudioStageLocalizing = "modstudio.stageLocalizing";
+    public const string ModstudioStagePreparing = "modstudio.stagePreparing";
+    public const string ModstudioStagePreview = "modstudio.stagePreview";
+    public const string ModstudioStageUploading = "modstudio.stageUploading";
+    public const string ModstudioStatusFiltered = "modstudio.statusFiltered";
+    public const string ModstudioStatusLoaded = "modstudio.statusLoaded";
+    public const string ModstudioStatusName = "modstudio.statusName";
+    public const string ModstudioStatusNoMatch = "modstudio.statusNoMatch";
+    public const string ModstudioSupportedVersionPlaceholder = "modstudio.supportedVersionPlaceholder";
+    public const string ModstudioTagsPlaceholder = "modstudio.tagsPlaceholder";
+    public const string ModstudioTitle = "modstudio.title";
+    public const string ModstudioTitleTooLong = "modstudio.titleTooLong";
+    public const string ModstudioUnsupportedCreate = "modstudio.unsupportedCreate";
+    public const string ModstudioUnsupportedHint = "modstudio.unsupportedHint";
+    public const string ModstudioUploadArchived = "modstudio.uploadArchived";
+    public const string ModstudioUploadButton = "modstudio.uploadButton";
+    public const string ModstudioUploadCanceled = "modstudio.uploadCanceled";
+    public const string ModstudioUploadCanceling = "modstudio.uploadCanceling";
+    public const string ModstudioUploadConfirm = "modstudio.uploadConfirm";
+    public const string ModstudioUploadConfirmBody = "modstudio.uploadConfirmBody";
+    public const string ModstudioUploadConfirmMulti = "modstudio.uploadConfirmMulti";
+    public const string ModstudioUploadConfirmTitle = "modstudio.uploadConfirmTitle";
+    public const string ModstudioUploadDescriptionPlaceholder = "modstudio.uploadDescriptionPlaceholder";
+    public const string ModstudioUploadFailed = "modstudio.uploadFailed";
+    public const string ModstudioUploadHint = "modstudio.uploadHint";
+    public const string ModstudioUploadMod = "modstudio.uploadMod";
+    public const string ModstudioUploadModIdHint = "modstudio.uploadModIdHint";
+    public const string ModstudioUploadModIdInvalid = "modstudio.uploadModIdInvalid";
+    public const string ModstudioUploadModIdPlaceholder = "modstudio.uploadModIdPlaceholder";
+    public const string ModstudioUploadNotLocal = "modstudio.uploadNotLocal";
+    public const string ModstudioUploadSelectMod = "modstudio.uploadSelectMod";
+    public const string ModstudioUploadSuccess = "modstudio.uploadSuccess";
+    public const string ModstudioUploadTagCount = "modstudio.uploadTagCount";
+    public const string ModstudioUploadTagsPlaceholder = "modstudio.uploadTagsPlaceholder";
+    public const string ModstudioUploadTargetPdx = "modstudio.uploadTargetPdx";
+    public const string ModstudioUploadTargetPdxUnavailable = "modstudio.uploadTargetPdxUnavailable";
+    public const string ModstudioUploadTargetSteam = "modstudio.uploadTargetSteam";
+    public const string ModstudioUploadTitle = "modstudio.uploadTitle";
+    public const string ModstudioUploadTitlePlaceholder = "modstudio.uploadTitlePlaceholder";
+    public const string ModstudioUploadTitleRequired = "modstudio.uploadTitleRequired";
+    public const string ModstudioUseBuiltInCover = "modstudio.useBuiltInCover";
+    public const string ModstudioVersionPlaceholder = "modstudio.versionPlaceholder";
+    public const string ModstudioVideoHint = "modstudio.videoHint";
+    public const string ModstudioVideoUrlInvalid = "modstudio.videoUrlInvalid";
+    public const string ModstudioVideoUrlPlaceholder = "modstudio.videoUrlPlaceholder";
+    public const string ModstudioVisibilityFriendsOnly = "modstudio.visibilityFriendsOnly";
+    public const string ModstudioVisibilityPrivate = "modstudio.visibilityPrivate";
+    public const string ModstudioVisibilityPublic = "modstudio.visibilityPublic";
+    public const string ModstudioVisibilityUnlisted = "modstudio.visibilityUnlisted";
+    public const string SettingsAboutAutoCheck = "settings.about.autoCheck";
+    public const string SettingsAboutAutoCheckName = "settings.about.autoCheckName";
+    public const string SettingsAboutCheckFailed = "settings.about.checkFailed";
+    public const string SettingsAboutCheckNow = "settings.about.checkNow";
+    public const string SettingsAboutCheckNowName = "settings.about.checkNowName";
+    public const string SettingsAboutChecking = "settings.about.checking";
+    public const string SettingsAboutInstallMode = "settings.about.installMode";
+    public const string SettingsAboutInstallModeName = "settings.about.installModeName";
+    public const string SettingsAboutInstallModePerMachine = "settings.about.installModePerMachine";
+    public const string SettingsAboutInstallModePerUser = "settings.about.installModePerUser";
+    public const string SettingsAboutInstallModePortable = "settings.about.installModePortable";
+    public const string SettingsAboutLastCheck = "settings.about.lastCheck";
+    public const string SettingsAboutLastCheckLabel = "settings.about.lastCheckLabel";
+    public const string SettingsAboutLauncherVersion = "settings.about.launcherVersion";
+    public const string SettingsAboutNever = "settings.about.never";
+    public const string SettingsAboutReleaseNotes = "settings.about.releaseNotes";
+    public const string SettingsAboutStatusAvailable = "settings.about.statusAvailable";
+    public const string SettingsAboutStatusNotDue = "settings.about.statusNotDue";
+    public const string SettingsAboutStatusUpToDate = "settings.about.statusUpToDate";
+    public const string SettingsAboutTitle = "settings.about.title";
     public const string SettingsAppDataClearLegacy = "settings.appData.clearLegacy";
     public const string SettingsAppDataClearLegacyName = "settings.appData.clearLegacyName";
     public const string SettingsAppDataCurrent = "settings.appData.current";
@@ -3866,6 +5279,7 @@ internal static class Keys
     public const string SettingsModThumbnailsStatusOnlineOff = "settings.modThumbnails.statusOnlineOff";
     public const string SettingsModThumbnailsStatusOnlineOn = "settings.modThumbnails.statusOnlineOn";
     public const string SettingsModThumbnailsStatusRetention = "settings.modThumbnails.statusRetention";
+    public const string SettingsNavAbout = "settings.nav.about";
     public const string SettingsNavAdvanced = "settings.nav.advanced";
     public const string SettingsNavAppearance = "settings.nav.appearance";
     public const string SettingsNavCache = "settings.nav.cache";
@@ -3947,6 +5361,9 @@ internal static class Keys
     public const string SettingsSteamApiHeader = "settings.steamApiHeader";
     public const string SettingsSteamApiMissing = "settings.steamApiMissing";
     public const string SettingsSteamApiReady = "settings.steamApiReady";
+    public const string SettingsSteamStateHint = "settings.steamStateHint";
+    public const string SettingsSteamStateOff = "settings.steamStateOff";
+    public const string SettingsSteamStateOn = "settings.steamStateOn";
     public const string SettingsSteamSubscribeHint = "settings.steamSubscribeHint";
     public const string SettingsSteamSubscribeOn = "settings.steamSubscribeOn";
     public const string SettingsSteamSubscribeStatusOff = "settings.steamSubscribeStatusOff";
@@ -3983,15 +5400,37 @@ internal static class Keys
     public const string SettingsTranslateEngine = "settings.translate.engine";
     public const string SettingsTranslateEngineAutoDesc = "settings.translate.engine.auto.desc";
     public const string SettingsTranslateEngineAutoTitle = "settings.translate.engine.auto.title";
+    public const string SettingsTranslateEngineBergamotDesc = "settings.translate.engine.bergamot.desc";
+    public const string SettingsTranslateEngineBergamotTitle = "settings.translate.engine.bergamot.title";
     public const string SettingsTranslateEngineBuiltinDesc = "settings.translate.engine.builtin.desc";
     public const string SettingsTranslateEngineBuiltinTitle = "settings.translate.engine.builtin.title";
     public const string SettingsTranslateEngineCustomDesc = "settings.translate.engine.custom.desc";
     public const string SettingsTranslateEngineCustomTitle = "settings.translate.engine.custom.title";
     public const string SettingsTranslateEngineGoogleCloudDesc = "settings.translate.engine.googleCloud.desc";
     public const string SettingsTranslateEngineGoogleCloudTitle = "settings.translate.engine.googleCloud.title";
+    public const string SettingsTranslateEngineIndexTranslateDesc = "settings.translate.engine.indexTranslate.desc";
+    public const string SettingsTranslateEngineIndexTranslateTitle = "settings.translate.engine.indexTranslate.title";
+    public const string SettingsTranslateEngineLocalDesc = "settings.translate.engine.local.desc";
+    public const string SettingsTranslateEngineLocalTitle = "settings.translate.engine.local.title";
     public const string SettingsTranslateEngineMicrosoftDesc = "settings.translate.engine.microsoft.desc";
     public const string SettingsTranslateEngineMicrosoftTitle = "settings.translate.engine.microsoft.title";
+    public const string SettingsTranslateEngineMymemoryDesc = "settings.translate.engine.mymemory.desc";
+    public const string SettingsTranslateEngineMymemoryTitle = "settings.translate.engine.mymemory.title";
     public const string SettingsTranslateEngineName = "settings.translate.engineName";
+    public const string SettingsTranslateGlossary = "settings.translate.glossary";
+    public const string SettingsTranslateGlossaryAdd = "settings.translate.glossaryAdd";
+    public const string SettingsTranslateGlossaryHint = "settings.translate.glossaryHint";
+    public const string SettingsTranslateGlossaryName = "settings.translate.glossaryName";
+    public const string SettingsTranslateGlossaryRemove = "settings.translate.glossaryRemove";
+    public const string SettingsTranslateGlossarySave = "settings.translate.glossarySave";
+    public const string SettingsTranslateGlossarySource = "settings.translate.glossarySource";
+    public const string SettingsTranslateGlossarySourcePlaceholder = "settings.translate.glossarySourcePlaceholder";
+    public const string SettingsTranslateGlossaryStatusFailed = "settings.translate.glossaryStatusFailed";
+    public const string SettingsTranslateGlossaryStatusSaved = "settings.translate.glossaryStatusSaved";
+    public const string SettingsTranslateGlossaryTarget = "settings.translate.glossaryTarget";
+    public const string SettingsTranslateGlossaryTargetPlaceholder = "settings.translate.glossaryTargetPlaceholder";
+    public const string SettingsTranslateGoogleCloudHint = "settings.translate.googleCloud.hint";
+    public const string SettingsTranslateGoogleCloudPortal = "settings.translate.googleCloud.portal";
     public const string SettingsTranslateGoogleKey = "settings.translate.googleKey";
     public const string SettingsTranslateGoogleKeyName = "settings.translate.googleKeyName";
     public const string SettingsTranslateHint = "settings.translate.hint";
@@ -4003,6 +5442,24 @@ internal static class Keys
     public const string SettingsTranslateLanguageZhCNDesc = "settings.translate.language.zhCN.desc";
     public const string SettingsTranslateLanguageZhCNTitle = "settings.translate.language.zhCN.title";
     public const string SettingsTranslateLanguageName = "settings.translate.languageName";
+    public const string SettingsTranslateLastFailure = "settings.translate.lastFailure";
+    public const string SettingsTranslateLocalModelBergamotEnZh = "settings.translate.localModelBergamotEnZh";
+    public const string SettingsTranslateLocalModelBergamotZhEn = "settings.translate.localModelBergamotZhEn";
+    public const string SettingsTranslateLocalModelDownload = "settings.translate.localModelDownload";
+    public const string SettingsTranslateLocalModelDownloading = "settings.translate.localModelDownloading";
+    public const string SettingsTranslateLocalModelIndexTranslate = "settings.translate.localModelIndexTranslate";
+    public const string SettingsTranslateLocalModelInstalled = "settings.translate.localModelInstalled";
+    public const string SettingsTranslateLocalModelNotInstalled = "settings.translate.localModelNotInstalled";
+    public const string SettingsTranslateLocalModelRemove = "settings.translate.localModelRemove";
+    public const string SettingsTranslateLocalModelStatusDownloaded = "settings.translate.localModelStatusDownloaded";
+    public const string SettingsTranslateLocalModelStatusFailed = "settings.translate.localModelStatusFailed";
+    public const string SettingsTranslateLocalModelStatusRemoveFailed = "settings.translate.localModelStatusRemoveFailed";
+    public const string SettingsTranslateLocalModelStatusRemoved = "settings.translate.localModelStatusRemoved";
+    public const string SettingsTranslateLocalModels = "settings.translate.localModels";
+    public const string SettingsTranslateLocalModelsHint = "settings.translate.localModelsHint";
+    public const string SettingsTranslateLocalModelsName = "settings.translate.localModelsName";
+    public const string SettingsTranslateMicrosoftHint = "settings.translate.microsoft.hint";
+    public const string SettingsTranslateMicrosoftPortal = "settings.translate.microsoft.portal";
     public const string SettingsTranslateMicrosoftKey = "settings.translate.microsoftKey";
     public const string SettingsTranslateMicrosoftKeyName = "settings.translate.microsoftKeyName";
     public const string SettingsTranslateMicrosoftRegion = "settings.translate.microsoftRegion";
@@ -4023,7 +5480,12 @@ internal static class Keys
     public const string SettingsTranslateStatusEndpoint = "settings.translate.statusEndpoint";
     public const string SettingsTranslateStatusEngine = "settings.translate.statusEngine";
     public const string SettingsTranslateStatusLanguage = "settings.translate.statusLanguage";
+    public const string SettingsTranslateStatusPortalFailed = "settings.translate.statusPortalFailed";
     public const string SettingsTranslateStatusScope = "settings.translate.statusScope";
+    public const string SettingsTranslateTest = "settings.translate.test";
+    public const string SettingsTranslateTestName = "settings.translate.testName";
+    public const string SettingsTranslateTestResult = "settings.translate.testResult";
+    public const string SettingsTranslateTestRunning = "settings.translate.testRunning";
     public const string ShellAlwaysOnTopApplyFailed = "shell.alwaysOnTop.applyFailed";
     public const string ShellAlwaysOnTopDisable = "shell.alwaysOnTop.disable";
     public const string ShellAlwaysOnTopDisableTooltip = "shell.alwaysOnTop.disableTooltip";
@@ -4042,6 +5504,7 @@ internal static class Keys
     public const string ShellNavHome = "shell.nav.home";
     public const string ShellNavLibrary = "shell.nav.library";
     public const string ShellNavModLibrary = "shell.nav.modLibrary";
+    public const string ShellNavModStudio = "shell.nav.modStudio";
     public const string ShellNavPlaySets = "shell.nav.playSets";
     public const string ShellNavSettings = "shell.nav.settings";
     public const string ShellNavWorkshop = "shell.nav.workshop";
@@ -4057,7 +5520,22 @@ internal static class Keys
     public const string ShellStatusGamesFound = "shell.status.gamesFound";
     public const string ShellStatusNoGames = "shell.status.noGames";
     public const string ShellSupportManagedByGame = "shell.support.managedByGame";
+    public const string ShellTranslating = "shell.translating";
     public const string ShellVersion = "shell.version";
+    public const string UpdateAvailableBody = "update.available.body";
+    public const string UpdateDownloadCancel = "update.downloadCancel";
+    public const string UpdateDownloadFailed = "update.downloadFailed";
+    public const string UpdateDownloading = "update.downloading";
+    public const string UpdateElevationCanceled = "update.elevationCanceled";
+    public const string UpdateInstall = "update.install";
+    public const string UpdateInstallFailed = "update.installFailed";
+    public const string UpdateInstallerStarted = "update.installerStarted";
+    public const string UpdateLater = "update.later";
+    public const string UpdateMandatoryHint = "update.mandatoryHint";
+    public const string UpdatePerMachineHint = "update.perMachineHint";
+    public const string UpdateReady = "update.ready";
+    public const string UpdateTitleAvailable = "update.title.available";
+    public const string UpdateVerifyFailed = "update.verifyFailed";
     public const string WorkshopAuthor = "workshop.author";
     public const string WorkshopCommentsClosed = "workshop.commentsClosed";
     public const string WorkshopCommentsCount = "workshop.commentsCount";
@@ -4101,6 +5579,9 @@ internal static class Keys
     public const string WorkshopDetailScreenshots = "workshop.detailScreenshots";
     public const string WorkshopDetailScreenshotsLoading = "workshop.detailScreenshotsLoading";
     public const string WorkshopDetailScreenshotsTitle = "workshop.detailScreenshotsTitle";
+    public const string WorkshopDetailSteamDownloadProgress = "workshop.detailSteamDownloadProgress";
+    public const string WorkshopDetailSteamNeedsUpdate = "workshop.detailSteamNeedsUpdate";
+    public const string WorkshopDetailSteamReadOnlyHint = "workshop.detailSteamReadOnlyHint";
     public const string WorkshopDetailSteamSubscribeConfirm = "workshop.detailSteamSubscribeConfirm";
     public const string WorkshopDetailSteamSubscribeHintOff = "workshop.detailSteamSubscribeHintOff";
     public const string WorkshopDetailSteamSubscribeHintOn = "workshop.detailSteamSubscribeHintOn";
@@ -4113,6 +5594,9 @@ internal static class Keys
     public const string WorkshopDetailSubscribeSteam = "workshop.detailSubscribeSteam";
     public const string WorkshopDetailSubscribing = "workshop.detailSubscribing";
     public const string WorkshopDetailTags = "workshop.detailTags";
+    public const string WorkshopDetailTranslatingChangelog = "workshop.detailTranslatingChangelog";
+    public const string WorkshopDetailTranslatingComments = "workshop.detailTranslatingComments";
+    public const string WorkshopDetailTranslatingDescription = "workshop.detailTranslatingDescription";
     public const string WorkshopDetailUnsubscribe = "workshop.detailUnsubscribe";
     public const string WorkshopDetailUnsubscribeFailed = "workshop.detailUnsubscribeFailed";
     public const string WorkshopDetailUnsubscribeOk = "workshop.detailUnsubscribeOk";
@@ -4158,6 +5642,7 @@ internal static class Keys
     public const string WorkshopStatusName = "workshop.statusName";
     public const string WorkshopStatusOffline = "workshop.statusOffline";
     public const string WorkshopStatusParseFailed = "workshop.statusParseFailed";
+    public const string WorkshopStatusSearching = "workshop.statusSearching";
     public const string WorkshopSubscriptions = "workshop.subscriptions";
     public const string WorkshopThrottlePaused = "workshop.throttlePaused";
     public const string WorkshopThrottleRetryIn = "workshop.throttleRetryIn";
@@ -4170,7 +5655,7 @@ internal static class Keys
     public const string WorkshopTimeWeek = "workshop.timeWeek";
     public const string WorkshopTimeYear = "workshop.timeYear";
     public const string WorkshopTitle = "workshop.title";
-    public const string WorkshopTranslateLabel = "workshop.translateLabel";
     public const string WorkshopTranslateOriginalLabel = "workshop.translateOriginalLabel";
+    public const string WorkshopTranslateUnavailable = "workshop.translateUnavailable";
     public const string WorkshopUpdated = "workshop.updated";
 }

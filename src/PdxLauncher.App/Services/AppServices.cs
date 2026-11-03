@@ -6,8 +6,11 @@ using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Online.Translation.Local;
 using PdxLauncher.Core.Patch;
 using PdxLauncher.Core.Storage;
+using PdxLauncher.Core.Steam;
+using PdxLauncher.Core.Updates;
 /// <summary>
 /// 应用级服务定位器。WinUI 的 Frame.Navigate 只支持无参构造，所以页面统一从这里取依赖。
 /// 由 App.xaml.cs 在启动时 <see cref="Initialize"/> 一次性装配；之后只读。
@@ -73,6 +76,15 @@ public static class AppServices
     public static SteamItemPageCache WorkshopItemPages { get; private set; } = null!;
 
     /// <summary>
+    /// 「当前账号在这款游戏下订阅了什么、各自装到哪一步」的内存缓存（按 appid，TTL 1 分钟）。
+    /// <para>
+    /// 数据来自 <c>--steam-host workshop-subscribed</c> 子进程，代价约一次进程启动，
+    /// 所以整库只查一次，翻页 / 排序 / 重画都复用这一份。
+    /// </para>
+    /// </summary>
+    public static WorkshopStateCache WorkshopStates { get; } = new();
+
+    /// <summary>
     /// 出口闸门（按 host 限并发/间隔 + 被 429 后冷却）。
     /// 界面靠它判断「现在是不是在冷却」，从而显示「已暂停 N 分钟」而不是反复撞墙。
     /// </summary>
@@ -83,8 +95,22 @@ public static class AppServices
     /// </summary>
     public static TranslationCoordinator Translation { get; private set; } = null!;
 
+    /// <summary>
+    /// 本地离线翻译运行时：模型下载、术语词典与两个本地引擎的容器。
+    /// <para>
+    /// 没有它也能启动——只是设置页看不到「本地模型」入口，翻译全部走云端引擎。
+    /// </para>
+    /// </summary>
+    public static LocalTranslationRuntime? LocalTranslation { get; private set; }
+
     /// <summary>游戏目录补丁（一键打补丁 / 移除补丁）。只在用户点按钮时读写游戏目录，不做任何自动变更。</summary>
     public static IGamePatchService GamePatch { get; private set; } = null!;
+
+    /// <summary>
+    /// DLC 授权判定：加载游戏目录里那份 steam_api DLL，问 Steam「这些 DLC 授权了吗」。
+    /// 补丁生效时它报告的授权就是游戏实际看到的授权，据此判断补丁有没有用上。
+    /// </summary>
+    public static ISteamOwnershipService DlcOwnership { get; private set; } = null!;
 
     public static AppSettingsStore SettingsStore { get; private set; } = null!;
 
@@ -122,6 +148,9 @@ public static class AppServices
 
     /// <summary>本启动器自己的 SQLite 库（唯一事实源；官方库缺席时开发播放集与 Mod 库的唯一来源）。</summary>
     public static PdxDatabase Database { get; private set; } = null!;
+
+    /// <summary>安装包更新：检查 GitHub Releases、下载并校验、按安装模式启动安装器。</summary>
+    public static UpdateService Updates { get; private set; } = null!;
 
     /// <summary>整份 JSON 文档存储（设置、登录态、各缓存索引都落在 <see cref="Database"/> 里）。</summary>
     public static IJsonDocumentStore Documents { get; private set; } = null!;
@@ -162,11 +191,14 @@ public static class AppServices
         RequestThrottle httpThrottle,
         TranslationCoordinator translation,
         IGamePatchService gamePatch,
+        ISteamOwnershipService dlcOwnership,
         AppSettingsStore settingsStore,
         PdxDatabase database,
         IJsonDocumentStore documents,
+        UpdateService updates,
         IReadOnlyList<GameInstallation> games,
-        NetworkLink? networkLink = null)
+        NetworkLink? networkLink = null,
+        LocalTranslationRuntime? localTranslation = null)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(logger);
@@ -194,9 +226,11 @@ public static class AppServices
         ArgumentNullException.ThrowIfNull(httpThrottle);
         ArgumentNullException.ThrowIfNull(translation);
         ArgumentNullException.ThrowIfNull(gamePatch);
+        ArgumentNullException.ThrowIfNull(dlcOwnership);
         ArgumentNullException.ThrowIfNull(settingsStore);
         ArgumentNullException.ThrowIfNull(database);
         ArgumentNullException.ThrowIfNull(documents);
+        ArgumentNullException.ThrowIfNull(updates);
         ArgumentNullException.ThrowIfNull(games);
 
         FileSystem = fileSystem;
@@ -224,10 +258,13 @@ public static class AppServices
         WorkshopItemPages = workshopItemPages;
         HttpThrottle = httpThrottle;
         Translation = translation;
+        LocalTranslation = localTranslation;
         GamePatch = gamePatch;
+        DlcOwnership = dlcOwnership;
         SettingsStore = settingsStore;
         Database = database;
         Documents = documents;
+        Updates = updates;
         _networkLink = networkLink;
         Settings = settingsStore.Load();
         Games = games;

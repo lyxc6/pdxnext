@@ -31,7 +31,7 @@ public sealed class ModThumbnailSizeOption : LocalizedObservableObject
 
 /// <summary>
 /// Mod 缩略图尺寸的可选项目录（取值真源在 <see cref="ModThumbnailSizes"/>）。
-/// Resolve 返回目录中的同一实例，ComboBox 的 SelectedItem 才能按引用相等匹配。
+/// Resolve 返回目录中的同一实例，下拉控件的 SelectedItem 才能按引用相等匹配。
 /// </summary>
 public static class ModThumbnailSizeCatalog
 {

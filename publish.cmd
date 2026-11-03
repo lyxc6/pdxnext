@@ -72,6 +72,7 @@ rem resource index, otherwise the copied output is broken.
 if not exist "%PUBDIR%\App.xbf"              goto :broken
 if not exist "%PUBDIR%\PdxLauncher.App.pri"  goto :broken
 if not exist "%PUBDIR%\Views\HomePage.xbf"   goto :broken
+if not exist "%PUBDIR%\Controls\ConfirmOverlay.xbf" goto :broken
 if not exist "%PUBDIR%\Assets\AppIcon.ico"   goto :broken
 if exist "%PUBDATABACKUP%" move "%PUBDATABACKUP%" "%PUBDIR%\data" >nul
 

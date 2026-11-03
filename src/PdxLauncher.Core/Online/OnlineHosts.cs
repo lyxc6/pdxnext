@@ -43,10 +43,30 @@ public static class OnlineHosts
     public const string SteamApiHost = "api.steampowered.com";
 
     /// <summary>
-    /// 内置免费翻译服务（Google 翻译的公开 Web 接口）。
-    /// 只放行这一个精确主机：用户自填的 API 走「已授权主机」机制，不在这里写死。
+    /// 内置免费翻译服务的主用主机（Google 翻译的公开 Web 接口）。
+    /// 用户自填的 API 走「已授权主机」机制，不在这里写死。
     /// </summary>
     public const string TranslationHost = "translate.googleapis.com";
+
+    /// <summary>
+    /// 内置免费翻译服务的首选主机：谷歌翻译网页自己的公开接口
+    /// （<c>translate.google.com/translate_a/t?client=dict-chrome-ex&amp;sl=auto&amp;tl=&amp;q=…</c>）。
+    /// <para>
+    /// 实测在网络对 <see cref="TranslationHost"/> 做按主机名阻断时，这台仍可连（TLS 握手正常），
+    /// 而且它的 <c>translate_a/t</c> 支持一次带多个 <c>q</c>，整批译文一个请求就能拿回来。
+    /// </para>
+    /// </summary>
+    public const string GoogleTranslateWebHost = "translate.google.com";
+
+    /// <summary>
+    /// 内置免费翻译服务的备用主机：谷歌 Chrome 词典扩展用的同一个公开接口
+    /// （<c>clients5.google.com/translate_a/single?client=gtx&amp;dt=t</c>，返回结构与主用主机完全一致）。
+    /// <para>
+    /// 主用主机在部分网络（实测国内宽带）TLS 握手直接失败，而这台主机可直连；
+    /// 两台都放行、由引擎按顺序回落，才能在「不开代理、不填密钥」时真的译出东西。
+    /// </para>
+    /// </summary>
+    public const string Clients5TranslationHost = "clients5.google.com";
 
     /// <summary>
     /// 微软 Azure Translator 文本翻译接口（v3）。
@@ -59,6 +79,37 @@ public static class OnlineHosts
     /// 与 <see cref="TranslationHost"/>（谷歌公开网页端点、无需密钥）是两个不同主机。
     /// </summary>
     public const string GoogleCloudTranslationHost = "translation.googleapis.com";
+
+    /// <summary>
+    /// 免密钥的 MyMemory 翻译接口。
+    /// 谷歌那几个端点在部分网络下不可达（TLS 握手失败），这台主机是实测可直连的兜底。
+    /// </summary>
+    public const string MyMemoryTranslationHost = "api.mymemory.translated.net";
+
+    /// <summary>
+    /// 本地翻译模型的下载源：Hugging Face（Index-Translate-2B 的 GGUF 权重）。
+    /// 只放行精确主机名，模型文件走 <c>resolve/main/…</c> 直链。
+    /// <para>
+    /// 直链会 302 到 Hugging Face 的 CDN 主机，那个跳转由 HttpClient 自己跟随，
+    /// 不再二次过白名单，所以这里只需要放行起始主机。
+    /// </para>
+    /// </summary>
+    public const string HuggingFaceHost = "huggingface.co";
+
+    /// <summary>
+    /// Mozilla 翻译数据仓库（Bergamot 模型的官方来源）。
+    /// 只放行精确主机名。
+    /// </summary>
+    public const string MozillaTranslationsHost = "storage.googleapis.com";
+
+    /// <summary>
+    /// 更新清单与安装包的托管入口（GitHub Releases 的 latest/download 链接）。
+    /// 实际下载会 302 到 objects.githubusercontent.com，由 HttpClient 跟随，不再二次过白名单。
+    /// </summary>
+    public const string GitHubHost = "github.com";
+
+    /// <summary>GitHub Release 资产重定向后的 CDN 主机（只作为显式备注，起始 URI 不经过它）。</summary>
+    public const string GitHubReleaseAssetsHost = "objects.githubusercontent.com";
 
     /// <summary>
     /// 用户自行授权的额外主机（自填 OpenAI 兼容 API 的域名）。
@@ -108,8 +159,14 @@ public static class OnlineHosts
         || string.Equals(host, SteamCommunityHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamApiHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, TranslationHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, GoogleTranslateWebHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, Clients5TranslationHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, MicrosoftTranslatorHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, GoogleCloudTranslationHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, MyMemoryTranslationHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, HuggingFaceHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, MozillaTranslationsHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, GitHubHost, StringComparison.OrdinalIgnoreCase)
         || IsAuthorizedHost(host);
 
     /// <summary>

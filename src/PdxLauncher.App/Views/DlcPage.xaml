@@ -9,14 +9,16 @@
     Background="{ThemeResource PdxPageVeilBrush}">
 
     <!--
-        DLC 页：以纵向列表列出当前游戏磁盘上真实的 DLC。
+        DLC 页：以纵向列表列出当前游戏的 DLC。
         布局对齐官方启动器：左侧固定尺寸缩略图（208x117，绝不随文字缩放），
         右侧标题 + 两行简介，最右是启用开关。
-        保存时写 playsets_dlcs（sqlite）并同步重写加载文件（disabledDLC / disabled_dlcs）。
+        清单来源有两种：一般游戏读磁盘上的 .dlc 描述文件，启用状态写 playsets_dlcs（sqlite）
+        并同步重写加载文件（disabledDLC / disabled_dlcs）；CS2 没有描述文件，清单来自游戏目录里
+        那份 steam_api64.dll 现场问 Steam 的结果，且没有可写的启用状态（工具条与开关整组隐藏）。
         没有激活播放集时全部 DLC 视为启用（与官方启动器一致），此时保存会被拒绝并提示。
-    -->
-    <Grid Padding="24" RowSpacing="12">
+    -->    <Grid Padding="24" RowSpacing="12">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -42,19 +44,23 @@
             </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <Button Content="{x:Bind L.DlcEnableAll, Mode=OneWay}"
-                        Click="OnEnableAllClick"
-                        AutomationProperties.AutomationId="btnEnableAllDlcs"
-                        AutomationProperties.Name="{x:Bind L.DlcEnableAllName, Mode=OneWay}" />
-                <Button Content="{x:Bind L.DlcDisableAll, Mode=OneWay}"
-                        Click="OnDisableAllClick"
-                        AutomationProperties.AutomationId="btnDisableAllDlcs"
-                        AutomationProperties.Name="{x:Bind L.DlcDisableAllName, Mode=OneWay}" />
-                <Button Content="{x:Bind L.CommonSave, Mode=OneWay}"
-                        Style="{StaticResource AccentButtonStyle}"
-                        Click="OnSaveClick"
-                        AutomationProperties.AutomationId="btnSaveDlcs"
-                        AutomationProperties.Name="{x:Bind L.DlcSaveName, Mode=OneWay}" />
+                <!-- CS2 的 DLC 由 Steam 授权决定，没有可写的启用状态：整组编辑按钮隐藏 -->
+                <StackPanel Orientation="Horizontal" Spacing="8"
+                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.CanEditDlcToggles), Mode=OneWay}">
+                    <Button Content="{x:Bind L.DlcEnableAll, Mode=OneWay}"
+                            Click="OnEnableAllClick"
+                            AutomationProperties.AutomationId="btnEnableAllDlcs"
+                            AutomationProperties.Name="{x:Bind L.DlcEnableAllName, Mode=OneWay}" />
+                    <Button Content="{x:Bind L.DlcDisableAll, Mode=OneWay}"
+                            Click="OnDisableAllClick"
+                            AutomationProperties.AutomationId="btnDisableAllDlcs"
+                            AutomationProperties.Name="{x:Bind L.DlcDisableAllName, Mode=OneWay}" />
+                    <Button Content="{x:Bind L.CommonSave, Mode=OneWay}"
+                            Style="{StaticResource AccentButtonStyle}"
+                            Click="OnSaveClick"
+                            AutomationProperties.AutomationId="btnSaveDlcs"
+                            AutomationProperties.Name="{x:Bind L.DlcSaveName, Mode=OneWay}" />
+                </StackPanel>
                 <ProgressRing Width="20"
                               Height="20"
                               IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
@@ -63,14 +69,71 @@
             </StackPanel>
         </Grid>
 
-        <!-- 列表底衬：半透明玻璃面，把行文字从背景图上托起来，避免与插图直接叠在一起 -->
+        <!--
+            Steam 授权判定条：回答"补丁到底有没有被游戏看到"。
+            口径照搬原版启动器（已拥有 = isSubscribedApp || 可信 DisabledDLC || isDlcInstalled），
+            探测对象是游戏目录里那份 steam_api64.dll，所以补丁生效时这里必然全绿。
+        -->
         <Border
             Grid.Row="1"
+            Padding="12,10"
+            CornerRadius="8"
+            Background="{ThemeResource PdxCardGlassBrush}"
+            BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+            BorderThickness="1"
+            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasOwnershipStrip), Mode=OneWay}">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE8FB;"
+                                  FontSize="14"
+                                  VerticalAlignment="Center"
+                                  Foreground="{x:Bind svc:XamlBrush.FromVerdict(ViewModel.OwnershipKind), Mode=OneWay}"
+                                  AutomationProperties.AccessibilityView="Raw" />
+                        <TextBlock Text="{x:Bind ViewModel.OwnershipHeadline, Mode=OneWay}"
+                                   Style="{StaticResource BodyTextBlockStyle}"
+                                   TextWrapping="Wrap"
+                                   Foreground="{x:Bind svc:XamlBrush.FromVerdict(ViewModel.OwnershipKind), Mode=OneWay}"
+                                   AutomationProperties.AutomationId="txtDlcOwnershipHeadline"
+                                   AutomationProperties.Name="{x:Bind ViewModel.OwnershipName, Mode=OneWay}" />
+                    </StackPanel>
+                    <TextBlock Text="{x:Bind ViewModel.OwnershipDetail, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               TextWrapping="Wrap"
+                               IsTextSelectionEnabled="True"
+                               AutomationProperties.AutomationId="txtDlcOwnershipDetail"
+                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasOwnershipDetail), Mode=OneWay}" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button Content="{x:Bind L.DlcOwnershipRecheck, Mode=OneWay}"
+                            Click="OnRecheckOwnershipClick"
+                            IsEnabled="{x:Bind ViewModel.IsRecheckEnabled, Mode=OneWay}"
+                            AutomationProperties.AutomationId="btnRecheckDlcOwnership"
+                            AutomationProperties.Name="{x:Bind L.DlcOwnershipRecheckName, Mode=OneWay}" />
+                    <ProgressRing Width="20"
+                                  Height="20"
+                                  IsActive="{x:Bind ViewModel.IsCheckingOwnership, Mode=OneWay}"
+                                  AutomationProperties.AutomationId="ringDlcOwnership"
+                                  AutomationProperties.Name="{x:Bind L.CommonLoading, Mode=OneWay}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 列表底衬：半透明玻璃面，把行文字从背景图上托起来，避免与插图直接叠在一起 -->
+        <Border
+            Grid.Row="2"
             Background="{ThemeResource PdxCardGlassBrush}"
             CornerRadius="8" />
 
         <!-- DLC 列表（保留 gvDlcs 这个 AutomationId：UI 测试按它定位列表） -->
-        <ListView Grid.Row="1"
+        <ListView Grid.Row="2"
                   x:Name="DlcList"
                   ItemsSource="{x:Bind ViewModel.Dlcs, Mode=OneWay}"
                   SelectionMode="None"
@@ -93,6 +156,7 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="208" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
@@ -140,13 +204,29 @@
                         </StackPanel>
 
                         <!--
+                            Steam 授权徽标：验证补丁是否真的把这份 DLC 的授权给了游戏。
+                            颜色来自 App.xaml 的 PdxOwned/Unowned/UnknownForegroundBrush，
+                            换主题时跟着走；判不出来时显示"授权未知"，绝不像"未拥有"那样误导。
+                        -->
+                        <TextBlock Grid.Column="2"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Text="{x:Bind OwnershipText, Mode=OneWay}"
+                                   Foreground="{x:Bind svc:XamlBrush.FromOwnership(OwnershipKind), Mode=OneWay}"
+                                   ToolTipService.ToolTip="{x:Bind OwnershipToolTip, Mode=OneWay}"
+                                   AutomationProperties.AutomationId="{x:Bind OwnershipAutomationId, Mode=OneTime}"
+                                   AutomationProperties.HelpText="{x:Bind OwnershipToolTip, Mode=OneWay}" />
+
+                        <!--
                             pops_id 为空的 DLC 无法写进 content_load.json 的 disabledDLC
                             （官方 app.asar 的 X2.mapPopsId 会丢弃空 id），所以这里把开关置灰。
+                            CS2 的清单来自 Steam，没有 pops_id 也没有播放集条目可写，整列开关隐藏。
                         -->
-                        <ToggleSwitch Grid.Column="2"
+                        <ToggleSwitch Grid.Column="3"
                                       VerticalAlignment="Center"
                                       IsOn="{x:Bind IsEnabled, Mode=TwoWay}"
                                       IsEnabled="{x:Bind CanBeDisabled, Mode=OneWay}"
+                                      Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowsToggle), Mode=OneWay}"
                                       OnContent="{x:Bind L.CommonEnable, Mode=OneWay}"
                                       OffContent="{x:Bind L.CommonDisable, Mode=OneWay}"
                                       ToolTipService.ToolTip="{x:Bind ToggleToolTip, Mode=OneWay}"
@@ -159,7 +239,7 @@
         </ListView>
 
         <!-- 状态栏 -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="3"
                 Padding="10,6"
                 CornerRadius="6"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"

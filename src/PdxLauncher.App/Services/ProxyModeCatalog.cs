@@ -34,7 +34,7 @@ public sealed class ProxyModeOption : LocalizedObservableObject
 /// <summary>
 /// 网络代理模式的目录。顺序即下拉顺序：默认「直接连接」排第一。
 /// 与 <see cref="PlaySetPageDisplayModeCatalog"/> 一样返回同一批实例，
-/// 这样 ComboBox 的 SelectedItem 能靠引用相等匹配上（否则每次重建选项都会丢选中项）。
+/// 这样下拉控件的 SelectedItem 能靠引用相等匹配上（否则每次重建选项都会丢选中项）。
 /// </summary>
 public static class ProxyModeCatalog
 {

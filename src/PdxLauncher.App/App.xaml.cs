@@ -13,12 +13,16 @@ using PdxLauncher.Core.Infrastructure;
 using PdxLauncher.Core.Launching;
 using PdxLauncher.Core.LoadFiles;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Online.Translation;
+using PdxLauncher.Core.Online.Translation.Local;
 using PdxLauncher.Core.Patch;
 using PdxLauncher.Core.Playsets;
 using PdxLauncher.Core.Playsets.Json;
 using PdxLauncher.Core.Playsets.PlaysetConfig;
 using PdxLauncher.Core.Signatures;
 using PdxLauncher.Core.Storage;
+using PdxLauncher.Core.Steam;
+using PdxLauncher.Core.Updates;
 
 /// <summary>
 /// 应用入口。启动阶段只做三件事：手工装配服务、创建主窗口、激活窗口。
@@ -75,7 +79,14 @@ public partial class App : Application
 
         // 数据根目录固定在程序目录下（见 PdxDataRoot）：首次启动把旧的 %LOCALAPPDATA%\PdxNext
         // 只读复制过来。迁移失败只记日志，绝不阻塞启动，也绝不删除源目录。
-        var migration = new DataRootMigrator(fileSystem, logger, DataRootMigrator.LegacyRoot, AppServices.DataRoot).Migrate();
+        var migration = PdxDataRoot.IsPerMachineInstall(AppContext.BaseDirectory)
+            ? DataRootMigrator.MigrateFirstAvailable(
+                fileSystem,
+                logger,
+                AppServices.DataRoot,
+                DataRootMigrator.PerUserInstallDataRoot,
+                DataRootMigrator.LegacyRoot)
+            : new DataRootMigrator(fileSystem, logger, DataRootMigrator.LegacyRoot, AppServices.DataRoot).Migrate();
         if (migration.Migrated)
         {
             logger.Info("旧数据目录已迁移：" + migration.FilesCopied + " 个文件 / " + migration.BytesCopied + " B");
@@ -159,16 +170,46 @@ public partial class App : Application
         var gamePatch = new GamePatchService(
             fileSystem, logger, patchAssets, Path.Combine(PdxDataRoot.Directory, "patch", "state.json"));
 
+        // DLC 授权判定：问 Steam「这些 DLC 授权了吗」。原生 Steamworks 调用放在短命子进程
+        // （PdxLauncher.App.exe --steam-host probe）里做：只要本进程自己调 SteamAPI_Init，
+        // Steam 就会把启动器登记成「游戏正在运行」，并在点「退出游戏」时把启动器杀掉。
+        // 补丁生效时它报的就是游戏实际看到的授权，所以这是判断「补丁有没有用上」的直接证据。
+        // 库目录（找 appmanifest 里的 DisabledDLC）按需读注册表，读一次就复用。
+        IReadOnlyList<string>? steamLibraries = null;
+        var dlcOwnership = new SteamOwnershipService(
+            fileSystem,
+            logger,
+            gamePatch,
+            () => steamLibraries ??= new SteamLibraryLocator(fileSystem, logger).FindLibraries(),
+            new SteamHostProbe(logger));
+
+        // 本地离线翻译：模型目录、术语词典与下载器都在这里；模型本身要用户点「下载」才拉，
+        // 启动阶段不碰网络。翻译协调器拿到它之后，「本地离线翻译」模式才可用。
+        var localTranslation = new LocalTranslationRuntime(fileSystem, logger, network.Http);
+
         // 翻译协调器：引擎随设置临时构建，这里只持传输、缓存与「设置变了就作废在途批次」的状态。
         var translation = new TranslationCoordinator(
             network.TranslationTransport,
             network.TranslationCache,
-            logger);
+            logger,
+            localTranslation);
 
         // Paradox 账号：会话落盘（DPAPI 保护）与登录客户端分开，代理重建时只换客户端。
         var secretProtector = new DpapiSecretProtector(logger);
         var sessionStore = new PdxSessionStore(documents, logger, secretProtector);
         var account = new AccountService(logger, sessionStore, clock, network.Account);
+
+        // 更新检查复用同一条 HttpFetcher：换代理时连接池原地替换，更新服务不需要重建。
+        // 每用户安装把安装包缓存在 data\update-cache；每机器安装时 DataRoot 已在
+        // %LOCALAPPDATA%\PdxNext-Data，同样可写。
+        var updates = new UpdateService(
+            network.Http,
+            logger,
+            settings,
+            Path.Combine(AppServices.DataRoot, "update-cache"),
+            AppContext.BaseDirectory,
+            UpdateService.ReadCurrentVersion(),
+            settingsStore);
 
         // 最后一个参数先给空列表：窗口先出来，游戏发现由 GameDiscovery 在 UI 就绪后补。
         AppServices.Initialize(
@@ -198,13 +239,30 @@ public partial class App : Application
             network.Throttle,
             translation,
             gamePatch,
+            dlcOwnership,
             settingsStore,
             database,
             documents,
+            updates,
             Array.Empty<GameInstallation>(),
-            new NetworkLink(network.Http, network.PdxHttp, network.TranslationTransport));
+            new NetworkLink(network.Http, network.PdxHttp, network.TranslationTransport),
+            localTranslation);
 
         logger.Info("服务装配完成");
+
+        // 翻译是否开着一句话就能看出来：这个功能失败是静默的，日志里得留下判断依据。
+        var translationOptions = TranslationOptions.FromSettings(settings, Localizer.Instance.Language);
+        if (translationOptions.Enabled)
+        {
+            logger.Info(
+                "翻译已启用：模式=" + translationOptions.EngineMode
+                + "，目标语言=" + translationOptions.TargetLanguage
+                + "，自填 API=" + (translationOptions.HasCustomConfiguration ? "已配置" : "未配置"));
+        }
+        else
+        {
+            logger.Info("翻译未启用");
+        }
 
         // 会话恢复必须在启动阶段跑：账号页与创意工坊提示条都依赖 Account.IsSignedIn，
         // 而旧实现只在进设置页时才续期，冷启动会误报未登录。

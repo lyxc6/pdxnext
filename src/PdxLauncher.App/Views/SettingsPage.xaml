@@ -111,6 +111,13 @@
                         <SymbolIcon Symbol="World" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.AutomationId="navSettingsAbout"
+                                    Tag="7"
+                                    Content="{x:Bind L.SettingsNavAbout, Mode=OneWay}">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Help" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
         </NavigationView>
 
@@ -173,7 +180,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsInterfaceLanguage, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ComboBox AutomationProperties.AutomationId="cmbUiLanguage"
+                                <controls:PdxDropDown AutomationProperties.AutomationId="cmbUiLanguage"
                                           AutomationProperties.Name="{x:Bind L.SettingsInterfaceLanguageName, Mode=OneWay}"
                                           Width="320" MinHeight="32"
                                           ItemsSource="{x:Bind ViewModel.LanguageOptions, Mode=OneWay}"
@@ -185,7 +192,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsInterfacePlaySetMode, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ComboBox AutomationProperties.AutomationId="cmbPlaySetPageDisplayMode"
+                                <controls:PdxDropDown AutomationProperties.AutomationId="cmbPlaySetPageDisplayMode"
                                           AutomationProperties.Name="{x:Bind L.SettingsInterfacePlaySetModeName, Mode=OneWay}"
                                           Width="320" MinHeight="32"
                                           ItemsSource="{x:Bind ViewModel.PlaySetDisplayModes, Mode=OneWay}"
@@ -197,7 +204,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsInterfaceBackgroundMode, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ComboBox AutomationProperties.AutomationId="cmbBackgroundDisplayMode"
+                                <controls:PdxDropDown AutomationProperties.AutomationId="cmbBackgroundDisplayMode"
                                           AutomationProperties.Name="{x:Bind L.SettingsInterfaceBackgroundModeName, Mode=OneWay}"
                                           Width="320" MinHeight="32"
                                           ItemsSource="{x:Bind ViewModel.BackgroundDisplayModeOptions, Mode=OneWay}"
@@ -209,7 +216,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsInterfaceModThumbnailSize, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ComboBox AutomationProperties.AutomationId="cmbModThumbnailSize"
+                                <controls:PdxDropDown AutomationProperties.AutomationId="cmbModThumbnailSize"
                                           AutomationProperties.Name="{x:Bind L.SettingsInterfaceModThumbnailSizeName, Mode=OneWay}"
                                           Width="320" MinHeight="32"
                                           ItemsSource="{x:Bind ViewModel.ModThumbnailSizeOptions, Mode=OneWay}"
@@ -246,7 +253,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsLaunchAlternatives, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ComboBox AutomationProperties.AutomationId="cmbAlternativeExecutable"
+                                <controls:PdxDropDown AutomationProperties.AutomationId="cmbAlternativeExecutable"
                                           AutomationProperties.Name="{x:Bind L.SettingsLaunchAlternativesName, Mode=OneWay}"
                                           Width="320" MinHeight="32"
                                           ItemsSource="{x:Bind ViewModel.Alternatives, Mode=OneWay}"
@@ -341,7 +348,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsProxyMode, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ComboBox AutomationProperties.AutomationId="cmbProxyMode"
+                                <controls:PdxDropDown AutomationProperties.AutomationId="cmbProxyMode"
                                           AutomationProperties.Name="{x:Bind L.SettingsProxyModeName, Mode=OneWay}"
                                           Width="320" MinHeight="32"
                                           ItemsSource="{x:Bind ViewModel.ProxyModeOptions, Mode=OneWay}"
@@ -371,6 +378,16 @@
                                                     ValueAutomationName="{x:Bind L.SettingsProxyCurrentName, Mode=OneWay}" />
 
                         <TextBlock Text="{x:Bind L.SettingsProxyHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsSteamStateOn, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ToggleSwitch AutomationProperties.AutomationId="tglSteamWorkshopState"
+                                              AutomationProperties.Name="{x:Bind L.SettingsSteamStateOn, Mode=OneWay}"
+                                              IsOn="{x:Bind ViewModel.SteamStateEnabled, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <TextBlock Text="{x:Bind L.SettingsSteamStateHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsSteamSubscribeOn, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
@@ -444,7 +461,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsDataDlcCacheDays, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ComboBox AutomationProperties.AutomationId="cmbDlcDescriptionRetention"
+                                <controls:PdxDropDown AutomationProperties.AutomationId="cmbDlcDescriptionRetention"
                                           AutomationProperties.Name="{x:Bind L.SettingsDataDlcCacheDaysName, Mode=OneWay}"
                                           Width="200" MinHeight="32"
                                           ItemsSource="{x:Bind ViewModel.DlcDescriptionRetentions, Mode=OneWay}"
@@ -475,7 +492,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsModThumbnailsRetention, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ComboBox AutomationProperties.AutomationId="cmbModThumbnailRetention"
+                                <controls:PdxDropDown AutomationProperties.AutomationId="cmbModThumbnailRetention"
                                           AutomationProperties.Name="{x:Bind L.SettingsModThumbnailsRetentionName, Mode=OneWay}"
                                           Width="200" MinHeight="32"
                                           ItemsSource="{x:Bind ViewModel.ModThumbnailRetentions, Mode=OneWay}"
@@ -592,7 +609,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsTranslateEngine, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ComboBox AutomationProperties.AutomationId="cmbTranslateEngineMode"
+                                <controls:PdxDropDown AutomationProperties.AutomationId="cmbTranslateEngineMode"
                                           AutomationProperties.Name="{x:Bind L.SettingsTranslateEngineName, Mode=OneWay}"
                                           Width="320" MinHeight="32"
                                           ItemsSource="{x:Bind ViewModel.TranslationEngineOptions, Mode=OneWay}"
@@ -655,6 +672,19 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
+                        <StackPanel Spacing="2"
+                                    Margin="0,0,0,8"
+                                    Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasMicrosoftFields), Mode=OneWay}">
+                            <TextBlock Text="{x:Bind L.SettingsTranslateMicrosoftHint, Mode=OneWay}"
+                                       Style="{StaticResource SettingsHintTextStyle}"
+                                       TextWrapping="Wrap"
+                                       AutomationProperties.AutomationId="txtTranslateMicrosoftHint" />
+                            <HyperlinkButton Padding="0"
+                                             Click="OnTranslateMicrosoftPortalClick"
+                                             Content="{x:Bind L.SettingsTranslateMicrosoftPortal, Mode=OneWay}"
+                                             AutomationProperties.AutomationId="btnTranslateMicrosoftPortal" />
+                        </StackPanel>
+
                         <controls:SettingsCard Header="{x:Bind L.SettingsTranslateGoogleKey, Mode=OneWay}"
                                                 Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasGoogleCloudFields), Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
@@ -665,9 +695,22 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
+                        <StackPanel Spacing="2"
+                                    Margin="0,0,0,8"
+                                    Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasGoogleCloudFields), Mode=OneWay}">
+                            <TextBlock Text="{x:Bind L.SettingsTranslateGoogleCloudHint, Mode=OneWay}"
+                                       Style="{StaticResource SettingsHintTextStyle}"
+                                       TextWrapping="Wrap"
+                                       AutomationProperties.AutomationId="txtTranslateGoogleCloudHint" />
+                            <HyperlinkButton Padding="0"
+                                             Click="OnTranslateGoogleCloudPortalClick"
+                                             Content="{x:Bind L.SettingsTranslateGoogleCloudPortal, Mode=OneWay}"
+                                             AutomationProperties.AutomationId="btnTranslateGoogleCloudPortal" />
+                        </StackPanel>
+
                         <controls:SettingsCard Header="{x:Bind L.SettingsTranslateLanguage, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <ComboBox AutomationProperties.AutomationId="cmbTranslateTargetLanguage"
+                                <controls:PdxDropDown AutomationProperties.AutomationId="cmbTranslateTargetLanguage"
                                           AutomationProperties.Name="{x:Bind L.SettingsTranslateLanguageName, Mode=OneWay}"
                                           Width="320" MinHeight="32"
                                           ItemsSource="{x:Bind ViewModel.TranslationLanguageOptions, Mode=OneWay}"
@@ -720,7 +763,161 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
+                        <controls:SettingsCard Header="{x:Bind L.SettingsTranslateTest, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <Button Click="OnTranslateTestClick"
+                                        Content="{x:Bind L.SettingsTranslateTest, Mode=OneWay}"
+                                        IsEnabled="{x:Bind ViewModel.CanTestTranslation, Mode=OneWay}"
+                                        AutomationProperties.AutomationId="btnTranslateTest"
+                                        AutomationProperties.Name="{x:Bind L.SettingsTranslateTestName, Mode=OneWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <TextBlock AutomationProperties.AutomationId="txtTranslateTestResult"
+                                   Text="{x:Bind ViewModel.TranslateTestText, Mode=OneWay}"
+                                   Style="{StaticResource SettingsHintTextStyle}"
+                                   TextWrapping="Wrap" />
+
+                        <TextBlock Text="{x:Bind L.SettingsTranslateLocalModels, Mode=OneWay}"
+                                   Style="{StaticResource SettingsSubsectionTitleStyle}" />
+
+                        <TextBlock Text="{x:Bind L.SettingsTranslateLocalModelsHint, Mode=OneWay}"
+                                   Style="{StaticResource SettingsHintTextStyle}" />
+
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.LocalModelRows, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:LocalModelRowViewModel">
+                                    <controls:SettingsCard Margin="0,0,0,8"
+                                                           Header="{x:Bind Title, Mode=OneWay}"
+                                                           Description="{x:Bind Description, Mode=OneWay}">
+                                        <controls:SettingsCard.ActionContent>
+                                            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                                <ProgressRing Width="16" Height="16"
+                                                              IsActive="{x:Bind IsBusy, Mode=OneWay}"
+                                                              Visibility="{x:Bind svc:XamlVisibility.FromBool(IsBusy), Mode=OneWay}" />
+                                                <TextBlock Text="{x:Bind StatusText, Mode=OneWay}"
+                                                           MinWidth="120" TextAlignment="Right" VerticalAlignment="Center" />
+                                                <Button Content="{x:Bind L.SettingsTranslateLocalModelDownload, Mode=OneWay}"
+                                                        IsEnabled="{x:Bind CanDownload, Mode=OneWay}"
+                                                        Click="OnDownloadLocalModelClick"
+                                                        AutomationProperties.AutomationId="btnDownloadLocalModel" />
+                                                <Button Content="{x:Bind L.SettingsTranslateLocalModelRemove, Mode=OneWay}"
+                                                        IsEnabled="{x:Bind CanRemove, Mode=OneWay}"
+                                                        Click="OnRemoveLocalModelClick"
+                                                        AutomationProperties.AutomationId="btnRemoveLocalModel" />
+                                            </StackPanel>
+                                        </controls:SettingsCard.ActionContent>
+                                    </controls:SettingsCard>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="{x:Bind L.SettingsTranslateGlossary, Mode=OneWay}"
+                                   Style="{StaticResource SettingsSubsectionTitleStyle}" />
+
+                        <TextBlock Text="{x:Bind L.SettingsTranslateGlossaryHint, Mode=OneWay}"
+                                   Style="{StaticResource SettingsHintTextStyle}" />
+
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.GlossaryEntries, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:GlossaryEntryViewModel">
+                                    <Grid ColumnSpacing="8" Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox Grid.Column="0"
+                                                 AutomationProperties.AutomationId="txtGlossarySource"
+                                                 Text="{x:Bind Source, Mode=TwoWay}" />
+                                        <TextBox Grid.Column="1"
+                                                 AutomationProperties.AutomationId="txtGlossaryTarget"
+                                                 Text="{x:Bind Target, Mode=TwoWay}" />
+                                        <Button Grid.Column="2"
+                                                Content="{x:Bind L.SettingsTranslateGlossaryRemove, Mode=OneWay}"
+                                                Click="OnRemoveGlossaryEntryClick"
+                                                AutomationProperties.AutomationId="btnRemoveGlossaryEntry" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Grid ColumnSpacing="8" Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0"
+                                     AutomationProperties.AutomationId="txtGlossarySourceInput"
+                                     AutomationProperties.Name="{x:Bind L.SettingsTranslateGlossarySource, Mode=OneWay}"
+                                     PlaceholderText="{x:Bind L.SettingsTranslateGlossarySourcePlaceholder, Mode=OneWay}"
+                                     Text="{x:Bind ViewModel.GlossarySourceInput, Mode=TwoWay}" />
+                            <TextBox Grid.Column="1"
+                                     AutomationProperties.AutomationId="txtGlossaryTargetInput"
+                                     AutomationProperties.Name="{x:Bind L.SettingsTranslateGlossaryTarget, Mode=OneWay}"
+                                     PlaceholderText="{x:Bind L.SettingsTranslateGlossaryTargetPlaceholder, Mode=OneWay}"
+                                     Text="{x:Bind ViewModel.GlossaryTargetInput, Mode=TwoWay}" />
+                            <Button Grid.Column="2"
+                                    Content="{x:Bind L.SettingsTranslateGlossaryAdd, Mode=OneWay}"
+                                    IsEnabled="{x:Bind ViewModel.CanAddGlossaryEntry, Mode=OneWay}"
+                                    Click="OnAddGlossaryEntryClick"
+                                    AutomationProperties.AutomationId="btnAddGlossaryEntry" />
+                        </Grid>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsTranslateGlossarySave, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <Button Click="OnSaveGlossaryClick"
+                                        Content="{x:Bind L.SettingsTranslateGlossarySave, Mode=OneWay}"
+                                        AutomationProperties.AutomationId="btnSaveGlossary"
+                                        AutomationProperties.Name="{x:Bind L.SettingsTranslateGlossarySave, Mode=OneWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
                         <TextBlock Text="{x:Bind L.SettingsTranslateHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
+                    </StackPanel>
+
+                    <StackPanel x:Name="secAbout" Spacing="8" Visibility="Collapsed">
+                        <TextBlock Text="{x:Bind L.SettingsAboutTitle, Mode=OneWay}"
+                                   Style="{StaticResource SubtitleTextBlockStyle}" />
+
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsAboutLauncherVersion, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.LauncherVersionText, Mode=OneWay}"
+                                                    ValueAutomationId="txtLauncherVersion"
+                                                    ValueAutomationName="{x:Bind L.SettingsAboutLauncherVersion, Mode=OneWay}" />
+
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsAboutInstallMode, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.InstallModeText, Mode=OneWay}"
+                                                    ValueAutomationId="txtInstallMode"
+                                                    ValueAutomationName="{x:Bind L.SettingsAboutInstallModeName, Mode=OneWay}" />
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsAboutAutoCheck, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <ToggleSwitch AutomationProperties.AutomationId="tglAutoCheckUpdates"
+                                              AutomationProperties.Name="{x:Bind L.SettingsAboutAutoCheckName, Mode=OneWay}"
+                                              IsOn="{x:Bind ViewModel.AutoCheckUpdates, Mode=TwoWay}" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsCard Header="{x:Bind L.SettingsAboutCheckNow, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <Button AutomationProperties.AutomationId="btnCheckUpdates"
+                                        AutomationProperties.Name="{x:Bind L.SettingsAboutCheckNowName, Mode=OneWay}"
+                                        Content="{x:Bind L.SettingsAboutCheckNow, Mode=OneWay}"
+                                        IsEnabled="{x:Bind ViewModel.CanCheckUpdates, Mode=OneWay}"
+                                        Click="OnCheckUpdatesClick" />
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsAboutLastCheckLabel, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.LastUpdateCheckText, Mode=OneWay}"
+                                                    ValueAutomationId="txtLastUpdateCheck"
+                                                    ValueAutomationName="{x:Bind L.SettingsAboutLastCheckLabel, Mode=OneWay}" />
+
+                        <TextBlock AutomationProperties.AutomationId="txtUpdateStatus"
+                                   Text="{x:Bind ViewModel.UpdateStatusText, Mode=OneWay}"
+                                   Style="{StaticResource SettingsHintTextStyle}"
+                                   TextWrapping="Wrap" />
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>

@@ -1,0 +1,92 @@
+<UserControl
+    x:Class="PdxLauncher.App.Controls.ConfirmOverlay"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        窗口级确认浮层：自绘的「确认 / 取消」对话框。
+
+        为什么不用 WinUI 的 ContentDialog：它的模板把 PrimaryButton 固定在第 0 列、
+        CloseButton 固定在第 4 列，视觉顺序永远是「确认在左、取消在右」，
+        框架没有任何公开的交换左右的能力（generic.xaml 的 DefaultContentDialogStyle）。
+        这里自己画按钮，才能把「取消」放到左边、「确认（Accent 主色）」放到右边。
+
+        外观规格照抄 ContentDialog 的主题资源（遮罩、圆角、边距、标题字号、按钮高度），
+        所以三套主题（浅色 / 深色 / 高对比度）都自动跟随，不用额外维护样式。
+    -->
+    <Grid x:Name="OverlayRoot"
+          Visibility="Collapsed"
+          KeyDown="OnOverlayKeyDown">
+        <!-- 遮罩：吃掉鼠标点击，点击不关闭对话框（与 ContentDialog 行为一致）。 -->
+        <Rectangle Fill="{ThemeResource ContentDialogSmokeFill}" />
+
+        <Border HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{ThemeResource ContentDialogBackground}"
+                BorderBrush="{ThemeResource ContentDialogBorderBrush}"
+                BorderThickness="{ThemeResource ContentDialogBorderWidth}"
+                CornerRadius="{ThemeResource OverlayCornerRadius}"
+                MinWidth="{ThemeResource ContentDialogMinWidth}"
+                MaxWidth="{ThemeResource ContentDialogMaxWidth}"
+                MinHeight="{ThemeResource ContentDialogMinHeight}"
+                MaxHeight="{ThemeResource ContentDialogMaxHeight}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- 内容区：标题 + 调用方给的内容（字符串或任意 UIElement）。 -->
+                <Grid Grid.Row="0"
+                      Padding="{ThemeResource ContentDialogPadding}"
+                      BorderBrush="{ThemeResource ContentDialogSeparatorBorderBrush}"
+                      BorderThickness="{ThemeResource ContentDialogSeparatorThickness}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock x:Name="TitleText"
+                               Grid.Row="0"
+                               FontSize="20"
+                               FontWeight="SemiBold"
+                               Margin="{ThemeResource ContentDialogTitleMargin}"
+                               TextWrapping="Wrap" />
+
+                    <ScrollViewer x:Name="ContentScroll"
+                                  Grid.Row="1"
+                                  MaxHeight="480"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  HorizontalScrollMode="Disabled"
+                                  VerticalScrollBarVisibility="Auto"
+                                  VerticalScrollMode="Auto">
+                        <ContentPresenter x:Name="ContentHost" Loaded="OnContentHostLoaded" />
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- 按钮条：左「取消」、右「确认（Accent 主色）」——这就是本次要换的位置。 -->
+                <Grid Grid.Row="1"
+                      Padding="{ThemeResource ContentDialogPadding}"
+                      HorizontalAlignment="Right">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="CancelButton"
+                                AutomationProperties.AutomationId="btnConfirmOverlayCancel"
+                                MinWidth="{ThemeResource ContentDialogButtonMinWidth}"
+                                MinHeight="32"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Click="OnCancelClick" />
+                        <Button x:Name="ConfirmButton"
+                                AutomationProperties.AutomationId="btnConfirmOverlayConfirm"
+                                Style="{StaticResource AccentButtonStyle}"
+                                MinWidth="{ThemeResource ContentDialogButtonMinWidth}"
+                                MinHeight="32"
+                                HorizontalContentAlignment="Center"
+                                VerticalContentAlignment="Center"
+                                Click="OnConfirmClick" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

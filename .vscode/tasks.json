@@ -1,0 +1,68 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "PdxNext: 一键启动（增量构建 + 运行）",
+      "detail": "增量构建 Release 后启动 PdxNext（start.cmd）",
+      "type": "process",
+      "command": "cmd",
+      "args": ["/c", "${workspaceFolder}\\start.cmd"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "构建 + 自检 (Release)",
+      "detail": "完整构建 Release 并运行 tests 自检（build.cmd）",
+      "type": "process",
+      "command": "cmd",
+      "args": ["/c", "${workspaceFolder}\\build.cmd"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": "$msbuild"
+    },
+    {
+      "label": "构建 (Debug)",
+      "detail": "构建 Debug 并运行自检（build-debug.cmd）",
+      "type": "process",
+      "command": "cmd",
+      "args": ["/c", "${workspaceFolder}\\build-debug.cmd"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": "$msbuild"
+    },
+    {
+      "label": "启动 Debug",
+      "detail": "启动已构建的 Debug 版 PdxNext（run-debug.cmd）",
+      "type": "process",
+      "command": "cmd",
+      "args": ["/c", "${workspaceFolder}\\run-debug.cmd"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "自检",
+      "detail": "只跑 tests 自检，不构建",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["tests\\PdxLauncher.Checks\\bin\\Release\\net10.0\\PdxLauncher.Checks.dll"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "发布到 dist",
+      "detail": "构建 + 自检 + 发布自包含产物到 dist\\PdxNext（publish.cmd）",
+      "type": "process",
+      "command": "cmd",
+      "args": ["/c", "${workspaceFolder}\\publish.cmd"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    }
+  ]
+}

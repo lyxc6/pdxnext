@@ -8,6 +8,7 @@ using PdxLauncher.App.Localization;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Playsets;
+using PdxLauncher.Core.Steam;
 
 /// <summary>
 /// Mod 库里的一行：把 <see cref="ModLibraryEntry"/> 翻译成界面直接可绑的只读文案
@@ -140,6 +141,42 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
     /// <summary>行的自动化 Id（每个 mod 唯一，供 UI 测试定位）。</summary>
     public string RowAutomationId => "modLibraryRow_" + ModId.ToString("N");
 
+    /// <summary>
+    /// Steam 侧状态（订阅 / 已安装 / 需要更新 / 下载中 / 本地禁用）。
+    /// Steam 直连不可用、或这行不是工坊 mod 时为 null（不显示徽标）。
+    /// </summary>
+    public WorkshopInstallState? SteamState => Entry.SteamState;
+
+    /// <summary>是否要显示 Steam 状态徽标。</summary>
+    public bool ShowSteamStateBadge => SteamState is not null && WorkshopStateText.Resolve(SteamState).IsVisible;
+
+    /// <summary>Steam 状态徽标文案（下载中会带上百分比）。没有可显示的状态时为空串。</summary>
+    public string SteamStateBadgeText
+    {
+        get
+        {
+            var info = WorkshopStateText.Resolve(SteamState);
+            return info.Badge switch
+            {
+                WorkshopStateBadge.None => string.Empty,
+                WorkshopStateBadge.Downloading when info.Percent is { } percent => T(info.Key, percent),
+                WorkshopStateBadge.Downloading => T(WorkshopStateText.KeyDownloadingNoPercent),
+                _ => T(info.Key),
+            };
+        }
+    }
+
+    /// <summary>是否可以在 Steam 里触发这条的下载（工坊 mod + 没在下载 + 已经订阅）。</summary>
+    public bool CanTriggerSteamDownload =>
+        HasWorkshopPage
+        && SteamState is { IsSubscribed: not false, IsInstalled: not true, IsDownloading: not true };
+
+    /// <summary>这条是否在 Steam 里被设为「本地禁用」（订阅还在，但游戏不加载）。</summary>
+    public bool IsSteamDisabledLocally => SteamState?.IsDisabledLocally == true;
+
+    /// <summary>「在 Steam 里禁用 / 启用」按钮的文案：当前禁用时是「启用」，否则是「禁用」。</summary>
+    public string SteamDisableActionText => T(IsSteamDisabledLocally ? Keys.ModlibSteamEnableName : Keys.ModlibSteamDisableName);
+
     /// <summary>支持版本文本的自动化 Id。</summary>
     public string VersionAutomationId => "modLibraryVersion_" + ModId.ToString("N");
 
@@ -154,6 +191,15 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
 
     /// <summary>行尾「打开详情页」按钮的自动化 Id。</summary>
     public string WorkshopDetailAutomationId => "modLibraryOpenDetail_" + ModId.ToString("N");
+
+    /// <summary>行尾「在 Steam 里触发下载」按钮的自动化 Id。</summary>
+    public string SteamDownloadAutomationId => "modLibrarySteamDownload_" + ModId.ToString("N");
+
+    /// <summary>行尾「在 Steam 里禁用 / 启用」按钮的自动化 Id。</summary>
+    public string SteamDisableAutomationId => "modLibrarySteamDisable_" + ModId.ToString("N");
+
+    /// <summary>Steam 状态徽标的自动化 Id。</summary>
+    public string SteamStateAutomationId => "modLibrarySteamState_" + ModId.ToString("N");
 
     partial void OnThumbnailPathChanged(string? value) => OnPropertyChanged(nameof(HasThumbnail));
 

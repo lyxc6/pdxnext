@@ -52,5 +52,18 @@
   "modlib.sourceFilterName": "来源",
   "modlib.sourceFilterAll": "全部来源",
   "modlib.sourceFilterLocal": "仅本地",
-  "modlib.sourceFilterSubscribed": "仅订阅"
+  "modlib.sourceFilterSubscribed": "仅订阅",
+  "modlib.steamStateInstalled": "已在 Steam 安装",
+  "modlib.steamStateUpdateNeeded": "Steam 有更新",
+  "modlib.steamStateDownloading": "Steam 下载中 {0}%",
+  "modlib.steamStateDownloadingNoPercent": "Steam 下载中",
+  "modlib.steamStatePending": "Steam 排队中",
+  "modlib.steamStateDisabled": "Steam 本地已禁用",
+  "modlib.steamStateName": "Steam 状态",
+  "modlib.steamDownloadName": "让 Steam 下载",
+  "modlib.steamDisableName": "在 Steam 中禁用",
+  "modlib.steamEnableName": "在 Steam 中启用",
+  "modlib.steamDownloadRequested": "已让 Steam 开始下载：{0}",
+  "modlib.steamActionFailed": "Steam 操作失败：{0}",
+  "modlib.steamWriteDisabled": "写操作没打开：到设置里开启「Steam 工坊直连订阅」后才能让 Steam 下载或禁用。"
 }

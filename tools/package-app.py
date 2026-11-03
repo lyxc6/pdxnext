@@ -67,6 +67,32 @@ FRAGMENT_PKGS = [
     ("microsoft.windowsappsdk.interactiveexperiences/2.1.9", "runtimes-framework/package.appxfragment"),
 ]
 
+# 本地离线翻译引擎（Index-Translate-2B + Bergamot）需要的托管程序集。
+# 这些不是 WinRT 投影程序集，MANAGED_KEYS 覆盖不到，必须单独整组复制。
+LOCAL_TRANSLATION_MANAGED = [
+    "bergamottranslatorsharp/0.7.0/lib/net10.0/BergamotTranslatorSharp.dll",
+    "llamasharp/0.30.0/lib/net10.0/LLamaSharp.dll",
+    "communitytoolkit.highperformance/8.4.2/lib/net8.0/CommunityToolkit.HighPerformance.dll",
+    "microsoft.bcl.asyncinterfaces/10.0.13/lib/netstandard2.0/Microsoft.Bcl.AsyncInterfaces.dll",
+    "microsoft.bcl.memory/10.0.13/lib/net10.0/Microsoft.Bcl.Memory.dll",
+    "microsoft.extensions.ai.abstractions/10.11.0/lib/net10.0/Microsoft.Extensions.AI.Abstractions.dll",
+    "microsoft.extensions.logging.abstractions/10.0.13/lib/net10.0/Microsoft.Extensions.Logging.Abstractions.dll",
+    "system.linq.async/7.0.1/lib/net10.0/System.Linq.Async.dll",
+    "system.linq.asyncenumerable/10.0.13/lib/net10.0/System.Linq.AsyncEnumerable.dll",
+    "system.numerics.tensors/10.0.13/lib/net10.0/System.Numerics.Tensors.dll",
+    "system.interactive.async/7.0.1/lib/net10.0/System.Interactive.Async.dll",
+    "system.collections.immutable/10.0.13/lib/net10.0/System.Collections.Immutable.dll",
+    "system.text.json/10.0.13/lib/net10.0/System.Text.Json.dll",
+    "microsoft.extensions.primitives/10.0.13/lib/net10.0/Microsoft.Extensions.Primitives.dll",
+    "microsoft.extensions.dependencyinjection.abstractions/10.0.13/lib/net10.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll",
+]
+
+# 本地翻译引擎的原生 payload：Bergamot 的 bergamot.dll 与 llama.cpp 的 CPU 后端。
+LOCAL_TRANSLATION_NATIVE = [
+    ("bergamottranslatorsharp/0.7.0/runtimes/win-x64/native", ""),
+    ("llamasharp.backend.cpu/0.30.0/LLamaSharpRuntimes/win-x64/native", os.path.join("runtimes", "win-x64", "native")),
+]
+
 FRAGMENT_NS = "http://schemas.microsoft.com/appx/manifest/foundation/windows10"
 
 problems = []
@@ -159,6 +185,29 @@ def main():
             copy_file(p, OUT)
             copied.append(os.path.basename(p))
     log("  " + str(len(set(copied))) + " 个投影程序集")
+
+    # ---------- 3b. 本地离线翻译引擎的托管程序集与原生 payload
+    log("[3b/6] 复制本地翻译引擎资源 ...")
+    for rel in LOCAL_TRANSLATION_MANAGED:
+        p = os.path.join(NUGET, rel)
+        if not os.path.exists(p):
+            fail("缺少本地翻译依赖: " + rel)
+            continue
+        copy_file(p, OUT)
+    for pkg, sub in LOCAL_TRANSLATION_NATIVE:
+        src = os.path.join(NUGET, pkg)
+        if not os.path.isdir(src):
+            fail("缺少本地翻译原生 payload: " + src)
+            continue
+        dst = os.path.join(OUT, sub) if sub else OUT
+        os.makedirs(dst, exist_ok=True)
+        for root, dirs, files in os.walk(src):
+            rel = os.path.relpath(root, src)
+            target_dir = dst if rel == "." else os.path.join(dst, rel)
+            os.makedirs(target_dir, exist_ok=True)
+            for f in sorted(files):
+                if f.lower().endswith(".dll"):
+                    copy_file(os.path.join(root, f), target_dir)
 
     # ---------- 4. 应用本体（dll + xbf + xaml）
     log("[4/6] 复制应用产物 ...")

@@ -17,6 +17,16 @@ public interface ITranslationEngine
     bool IsConfigured { get; }
 
     /// <summary>
+    /// 最近一次失败的人话原因（形如「额度已用完，约 2 小时后恢复」「连不上（TLS/超时）」）；
+    /// 成功时实现应当置回 null。默认实现返回 null，表示「就是没拿到译文」。
+    /// <para>
+    /// 用途：整批失败时由 <see cref="TranslationService"/> 逐个引擎拼成一句提示，
+    /// 让用户知道到底卡在额度、网络还是响应格式，而不是只看到第一个引擎的笼统备注。
+    /// </para>
+    /// </summary>
+    string? LastFailure => null;
+
+    /// <summary>
     /// 翻译一段文本；失败（网络、鉴权、返回格式不对）返回 null，不抛异常。
     /// </summary>
     /// <param name="text">原文。</param>

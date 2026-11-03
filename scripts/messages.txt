@@ -38,3 +38,21 @@ P_SIZE:  目录大小:   约 230 MB（自包含，目标机无需 .NET 运行时
 P_BROKEN1:[失败] publish 产物缺少 WinUI 关键文件（App.xbf / Views\*.xbf / .pri / Assets）。
 P_BROKEN2:       请确认 src\PdxLauncher.App\PdxLauncher.App.csproj 里的
 P_BROKEN3:       AddWinUIXamlArtifactsToPublish 目标仍然存在。
+S_USAGE1:用法  start.cmd [debug|release] [check] [new]
+S_USAGE2:  start.cmd          增量构建 Release 后启动
+S_USAGE3:  start.cmd debug    增量构建 Debug 后启动
+S_USAGE4:  start.cmd check    构建 + 自检 + 启动，加 new 可无视已运行实例
+S_TITLE:  PdxNext 一键启动（增量构建 + 运行）
+S_CONFIG:  配置  
+S_BUILDING:[1/1] 构建解决方案...
+S_NODOTNET:[错误] 找不到 dotnet。请安装 .NET SDK 10 或更高版本。
+S_FAILBUILD:[失败] 构建失败，未启动程序。
+S_STEPCHECK:[2/2] 运行自检...
+S_FAILCHECK:[失败] 自检未通过，未启动程序。
+S_CHECKOK:      自检通过。
+S_NOEXE:[错误] 找不到可执行文件，未启动程序。
+S_EXPECT:        期望路径  
+S_STARTING:启动 PdxNext...
+S_EXE:  可执行文件  
+S_ALREADY:[提示] PdxNext 已在运行，本次不重复启动。加 new 参数可强制开新窗口。
+S_PRESSKEY:按任意键关闭窗口...

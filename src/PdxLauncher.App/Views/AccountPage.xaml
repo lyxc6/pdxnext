@@ -13,9 +13,11 @@
         版式照 Windows 11「账户」页：顶部身份卡（头像 + 名字 + 登录态 + 主操作），
         下面是可展开的登录表单 / 已登录时的选项，反馈走页内 InfoBar 而不是弹窗。
         交互控件的 AutomationId 与旧设置页分节保持一致，UI 自动化脚本无需改写。
+        卡片与其它页共用 PdxCardBackgroundBrush / PdxCardStrokeBrush（不写死颜色），
+        于是 Light / Dark / HighContrast 三套主题一起生效。
     -->
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Padding="24,20,24,24" Spacing="16" MaxWidth="880" HorizontalAlignment="Left">
+        <StackPanel Padding="24" Spacing="16" MaxWidth="880" HorizontalAlignment="Stretch">
 
             <!-- 页头 -->
             <StackPanel Spacing="4">
@@ -28,12 +30,13 @@
                            MaxWidth="720" />
             </StackPanel>
 
-            <!-- 身份卡 -->
-            <Border Background="{ThemeResource PdxCardGlassBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            <!-- 身份卡：画刷、内边距、圆角与 SettingsCard 对齐，页面上所有卡片看起来是同一套。 -->
+            <Border Background="{ThemeResource PdxCardBackgroundBrush}"
+                    BorderBrush="{ThemeResource PdxCardStrokeBrush}"
                     BorderThickness="1"
                     CornerRadius="8"
-                    Padding="20,16">
+                    MinHeight="72"
+                    Padding="16,12">
                 <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
@@ -41,28 +44,29 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
+                    <!-- 首字母走 Accent 底反白字：比灰色占位块更像「有账号」，也避开了数字首字符的歧义。 -->
                     <PersonPicture Grid.Column="0"
-                                   Width="64"
-                                   Height="64"
+                                   Width="48"
+                                   Height="48"
                                    Initials="{x:Bind ViewModel.Initials, Mode=OneWay}"
+                                   Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                   Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                    VerticalAlignment="Center"
                                    AutomationProperties.AutomationId="imgAccountAvatar"
                                    AutomationProperties.Name="{x:Bind L.AccountProfileTitle, Mode=OneWay}" />
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                         <TextBlock Text="{x:Bind ViewModel.ProfileName, Mode=OneWay}"
-                                   Style="{StaticResource SubtitleTextBlockStyle}"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}"
                                    TextTrimming="CharacterEllipsis"
-                                   MaxWidth="420"
                                    HorizontalAlignment="Left"
                                    AutomationProperties.AutomationId="txtAccountProfileName" />
                         <TextBlock AutomationProperties.AutomationId="txtAccountStatus"
                                    AutomationProperties.Name="{x:Bind L.AccountStatus, Mode=OneWay}"
                                    Text="{x:Bind ViewModel.StatusText, Mode=OneWay}"
-                                   Style="{StaticResource BodyTextBlockStyle}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap"
-                                   MaxWidth="440"
                                    HorizontalAlignment="Left" />
                     </StackPanel>
 
@@ -76,18 +80,20 @@
                         <Button AutomationProperties.AutomationId="btnAccountSignOut"
                                 AutomationProperties.Name="{x:Bind L.AccountSignOut, Mode=OneWay}"
                                 Content="{x:Bind L.AccountSignOut, Mode=OneWay}"
+                                ToolTipService.ToolTip="{x:Bind L.AccountSignOutHint, Mode=OneWay}"
                                 Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSignedInPanel), Mode=OneWay}"
                                 Click="OnAccountSignOutClick" />
                     </StackPanel>
                 </Grid>
             </Border>
 
-            <!-- 登录反馈（登录成功 / 失败 / 需要重新登录） -->
+            <!-- 登录反馈（登录成功 / 失败 / 需要重新登录）。
+                 只给 Content 不给 Title：InfoBar 同时有两段文字时是两行布局，
+                 中间空出一大截，而且「登录状态」这句标题本身没有信息量。 -->
             <InfoBar x:Name="infoAccountStatus"
                      Severity="Informational"
                      IsClosable="True"
                      IsOpen="{x:Bind ViewModel.HasStatusMessage, Mode=OneWay}"
-                     Title="{x:Bind L.AccountStatus, Mode=OneWay}"
                      AutomationProperties.AutomationId="infoAccountStatus">
                 <InfoBar.Content>
                     <TextBlock AutomationProperties.AutomationId="txtAccountStatusBar"
@@ -98,6 +104,7 @@
 
             <!-- 未登录：登录表单 -->
             <Expander x:Name="expAccountSignIn"
+                      AutomationProperties.AutomationId="expAccountSignIn"
                       HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Stretch"
                       Header="{x:Bind L.AccountSignInHeader, Mode=OneWay}"
@@ -112,7 +119,8 @@
                                      Width="320"
                                      PlaceholderText="{x:Bind L.AccountEmailPlaceholder, Mode=OneWay}"
                                      Text="{x:Bind ViewModel.Email, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                     IsEnabled="{x:Bind ViewModel.CanEditCredentials, Mode=OneWay}" />
+                                     IsEnabled="{x:Bind ViewModel.CanEditCredentials, Mode=OneWay}"
+                                     KeyDown="OnCredentialKeyDown" />
                         </controls:SettingsCard.ActionContent>
                     </controls:SettingsCard>
 
@@ -124,17 +132,19 @@
                                          Width="320"
                                          PlaceholderText="{x:Bind L.AccountPasswordPlaceholder, Mode=OneWay}"
                                          PasswordRevealMode="Peek"
-                                         IsEnabled="{x:Bind ViewModel.CanEditCredentials, Mode=OneWay}" />
+                                         IsEnabled="{x:Bind ViewModel.CanEditCredentials, Mode=OneWay}"
+                                         KeyDown="OnCredentialKeyDown" />
                         </controls:SettingsCard.ActionContent>
                     </controls:SettingsCard>
 
+                    <!-- 开关不再带「开 / 关」文字：卡片里已经写着「保持登录」，再加两个字只是噪声。 -->
                     <controls:SettingsCard Header="{x:Bind L.AccountRemember, Mode=OneWay}"
                                            Description="{x:Bind L.AccountRememberHint, Mode=OneWay}">
                         <controls:SettingsCard.ActionContent>
                             <ToggleSwitch AutomationProperties.AutomationId="swAccountRemember"
                                           AutomationProperties.Name="{x:Bind L.AccountRemember, Mode=OneWay}"
-                                          OnContent="{x:Bind L.CommonOn, Mode=OneWay}"
-                                          OffContent="{x:Bind L.CommonOff, Mode=OneWay}"
+                                          OnContent=""
+                                          OffContent=""
                                           IsOn="{x:Bind ViewModel.Remember, Mode=TwoWay}"
                                           IsEnabled="{x:Bind ViewModel.CanEditCredentials, Mode=OneWay}" />
                         </controls:SettingsCard.ActionContent>
@@ -154,6 +164,7 @@
 
             <!-- 已登录：会话选项 -->
             <StackPanel x:Name="grpAccountSignedIn"
+                        AutomationProperties.AutomationId="grpAccountSignedIn"
                         Spacing="8"
                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSignedInPanel), Mode=OneWay}">
                 <controls:SettingsCard Header="{x:Bind L.AccountRemember, Mode=OneWay}"
@@ -161,8 +172,8 @@
                     <controls:SettingsCard.ActionContent>
                         <ToggleSwitch AutomationProperties.AutomationId="swAccountRememberSignedIn"
                                       AutomationProperties.Name="{x:Bind L.AccountRemember, Mode=OneWay}"
-                                      OnContent="{x:Bind L.CommonOn, Mode=OneWay}"
-                                      OffContent="{x:Bind L.CommonOff, Mode=OneWay}"
+                                      OnContent=""
+                                      OffContent=""
                                       IsOn="{x:Bind ViewModel.Remember, Mode=TwoWay}"
                                       IsEnabled="{x:Bind ViewModel.IsSignedIn, Mode=OneWay}" />
                     </controls:SettingsCard.ActionContent>

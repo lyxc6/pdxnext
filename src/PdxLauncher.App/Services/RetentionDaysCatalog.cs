@@ -31,7 +31,7 @@ public sealed class RetentionDaysOption : LocalizedObservableObject
 
 /// <summary>
 /// 「保留 N 天」下拉的可选项目录：天数表、各自的说明键与默认项。
-/// Resolve 返回目录里的同一实例，ComboBox 的 SelectedItem 才能按引用相等匹配。
+/// Resolve 返回目录里的同一实例，下拉控件的 SelectedItem 才能按引用相等匹配。
 /// 两个目录（Mod 缩略图 / DLC 简介）只是天数与描述键不同，逻辑共用这一份。
 /// </summary>
 public sealed class RetentionDaysCatalog

@@ -45,9 +45,25 @@ build.cmd
 
 ### 日常命令
 
+日常只有一条命令 —— **双击仓库根目录的 `start.cmd`**，或者对仓库右键「在终端中打开」后敲 `start.cmd`：
+
+```bat
+start.cmd        :: 一键启动：Release 增量构建后直接运行（已有实例在跑就跳过启动）
+start.cmd debug  :: 同上，但用 Debug 配置
+start.cmd check  :: 构建 + 跑一遍自检，再启动（相当于原来的 build.cmd + run.cmd）
+start.cmd new    :: 忽略「已在运行」判断，强制再开一个窗口
+start.cmd /?     :: 打印用法
+```
+
+`start.cmd` 每次都跑增量构建（不猜时间戳、不做短路），改完代码直接双击就是最新版本；
+它自己会 `cd` 到仓库根、自动找 `dotnet`、只在构建或自检失败时停住窗口，成功就悄悄把窗口关掉。
+**它和 `scripts\messages.txt` 之外不写任何中文**（顶层 `.cmd` 必须纯 ASCII，见 §7 最后一条）。
+
+单独构建 / 单独启动（脚本化、CI、或只想跑某一步时用）：
+
 ```bat
 build.cmd        :: Release 构建 + 跑自检（首次约 1 分钟，之后增量约 15 秒）
-run.cmd          :: 启动 Release 版
+run.cmd          :: 只启动 Release 版，不构建
 ```
 
 调试用：
@@ -56,6 +72,21 @@ run.cmd          :: 启动 Release 版
 build-debug.cmd
 run-debug.cmd
 ```
+
+### 用 VS Code 打开工程
+
+仓库自带 `.vscode\`，用 VS Code 打开这个目录（`code .`）即可，不用装 Visual Studio：
+
+- `Ctrl+Shift+B` 直接跑默认任务 **「PdxNext: 一键启动（增量构建 + 运行）」**，等价于 `start.cmd`；
+- `Ctrl+Shift+P` → `Tasks: Run Task` 还能选「构建 + 自检 (Release)」「构建 (Debug)」「启动 Debug」「自检」「发布到 dist」；
+- 构建错误进「问题」面板（`$msbuild` matcher）；
+- 仓库里的 `bin` / `obj` / `dist` / 各种临时目录默认在资源管理器与搜索里隐藏（`.vscode\settings.json`），
+  文件树只剩源码。
+
+`.vscode\` 里只提交 `tasks.json` / `settings.json` / `extensions.json` 三个文件，其余本机配置照旧被 `.gitignore` 忽略
+（这三个文件**不含任何机器路径**，任务里一律用 `${workspaceFolder}` 相对引用）。
+**故意不放 `launch.json`**：WinUI 3 自包含 exe 的 F5 调试不可靠，要断点请用「启动 Debug」任务跑起来后
+`Ctrl+Shift+P` → `Debug: Attach to Process` 附加 `PdxLauncher.App.exe`。
 
 发布给别人用：
 
@@ -133,6 +164,28 @@ dotnet build "PdxLauncher.sln" -c Release -m:1
 > **2026-10-26 实测补记**：本机 SDK 10.0.402 环境下，**不带 `-m:1` 也能构建成功**
 > （`dotnet build PdxLauncher.sln -c Release` 跑了两遍，均 0 警告 0 错误）。所以这是**环境相关**的
 > 坑，不一定必然复现；保留 `-m:1` 只为稳妥，代价是慢几秒。
+
+### 安装包与自动更新
+
+安装器用 **Inno Setup 7.1.1+**，默认每用户安装（无 UAC），安装模式页可切换为每机器
+（Program Files + UAC）。每机器安装的数据回退到 `%LOCALAPPDATA%\PdxNext-Data`，不写
+Program Files。
+
+```bat
+winget install --id JRSoftware.InnoSetup.7 -e -s winget
+publish.cmd
+python tools\build-installer.py
+:: 产物：dist\installer\PdxNext-Setup-<version>.exe + update.json
+```
+
+自动更新清单默认是
+`https://github.com/lyxc6/pdxnext-releases/releases/latest/download/update.json`，发布仓库
+必须公开；上传用 `tools\publish-release.ps1`。启动器检查 24 小时节流、下载时边写边算
+SHA-256、校验长度/摘要后按安装模式静默安装或提权安装。
+
+版本号唯一来源是 `version.props`；安装器排除 `data\`、`data-root.txt`、`*.log` 和
+`update-cache\`，升级不覆盖用户数据。完整流程、MSIX 取舍和实机验证清单见
+[docs/INSTALLER.md](docs/INSTALLER.md)。
 
 ---
 
@@ -222,8 +275,14 @@ Cities: Skylines 则是**本体根本不读任何加载文件**——它的 mod 
   metadata.json 的 `supported_game_version`，原样显示不做换算）、以及「在 N 个播放集中」（不在任何播放集时不占位）；
   本地 mod、官方库里状态不是 `ready_to_play` 的 mod、以及**声明的支持版本低于当前游戏版本**的 mod
   带三角提示标记，提示只讲「这个 mod 声明支持哪个版本、和当前游戏版本对不对得上」（登记情况与库里的状态作为补充说明）；
+  订阅来源的行还会显示**真实 Steam 状态徽标**（已在 Steam 安装 / Steam 有更新 / Steam 下载中 N% / Steam 排队中 /
+  Steam 本地已禁用，取自 Steamworks `GetItemState` 等接口，见 `docs/DATA-FORMATS.md` §18.5），
+  状态未知（子进程刚 Init 还没同步、或本来就查不到）时不显示，绝不当成「没订阅」；
   行尾**四个图标按钮**分别是打开工坊详情页（复用创意工坊那个详情子页）、
-  打开本地文件夹、在 Steam 中打开、在浏览器中打开（拿不到目录或工坊编号时对应按钮置灰）；支持搜索（名称 / 注册 ID / 目录）、
+  打开本地文件夹、在 Steam 中打开、在浏览器中打开（拿不到目录或工坊编号时对应按钮置灰），
+  后面还有两个按需出现的按钮：**让 Steam 下载**（`DownloadItem`，没装或需要更新时可用）与
+  **在 Steam 中禁用 / 启用**（`SetItemsDisabledLocally`，工坊层的「订阅但本地禁用」，和退订是两件事，
+  要先用设置里打开「Steam 工坊直连订阅」）；支持搜索（名称 / 注册 ID / 目录）、
   **按来源筛选（全部 / 本地 / 订阅）**、按名称 / 大小 / 订阅时间排序、刷新；数量徽标 = 当前筛选下的行数。
   行操作的地址由 `SteamWorkshop` 拼装：创意工坊 id 优先取 `mods.steamId`，为空时回退从
   `mod/ugc_<id>.mod` 解析；打开动作是 `Process.Start` + `UseShellExecute`（资源管理器 / `steam://` / https），
@@ -233,6 +292,38 @@ Cities: Skylines 则是**本体根本不读任何加载文件**——它的 mod 
   `WorkshopDetailPage`；编号解析不出来的行按钮置灰，提示文案直接说明为什么（本地 mod / 没有工坊编号）。
   详情子页的返回按钮回到**发起方那一页**（`WorkshopDetailNavigationRequest.ReturnTag`），
   左栏选中项也停在发起方。
+- Mod 创建页：列出本地 mod、按游戏格式新建描述符、把 mod 上传到 Steam 创意工坊（走 `--steam-host workshop-publish`
+  子进程，进程内不调 Steamworks）。上传表单对齐 Steam 客户端能改的面：
+  - **可见性四档**：公开 / 仅限好友 / 隐藏 / 非公开（`SetItemVisibility`，对应 `ERemoteStoragePublishedFileVisibility` 的 0/1/2/3）；
+  - **内容描述词五项**：裸露画面、频繁暴力血腥、仅限成人色情、频繁裸露、常见成人内容（`AddContentDescriptor` / `RemoveContentDescriptor`，
+    每次提交先全删 1..5 再按勾选加，取消勾选才能真正生效）；
+  - **预览**：主封面之外还能加最多 8 张附加图（`.png/.jpg/.jpeg/.bmp/.gif/.webp`，**单张必须 < 1 MB**，
+    这是 Steam 的硬限制，启动器在提交前就按文件名拦掉），以及 YouTube 视频预览（贴 watch / youtu.be / shorts 链接均可，
+    `AddItemPreviewVideo`）；每次提交先清空已有附加预览再从 0 顺序追加，所以顺序由列表的上移 / 下移决定；
+  - **多语言标题与描述**（`SetItemUpdateLanguage`）：照 Steam 客户端的「编辑标题与描述」对话框，上传表单里从上到下是
+    **语言下拉（默认 english）→ 标题 → 描述**。切语言时把当前文本存进该语言的槽位、再载入目标语言已有的文本，
+    所以界面上永远只有一份标题/描述框，不会铺成一堆语言行；非 english 的文本只影响对应语言的用户看到什么。
+    之所以仍然逐语言提交：`SetItemUpdateLanguage` 的语言绑定在 update handle 上，**一个 handle 只能承载一种语言**，
+    N 种语言必然是 N 次「起 update → 设语言 → 设标题/描述 → 提交」，这是 API 强制的顺序。
+    每次只改标题与描述、不重传内容也不重设可见性；部分语言失败只会带回一段「有 N 种语言未写入」的说明，不会把主上传报成失败。
+    这条是实验性的 —— Steam 没把「同一 handle 多次设语言」的行为写清楚，被拒时就是这个降级表现；
+  - **封面**：新建 mod 默认写入项目自带的品牌封面（内嵌在 `PdxLauncher.Core` 的 `default-cover.png`，
+    取自 App 的 `Square150x150Logo.scale-200.png`），不再是原来的 1×1 透明占位图；上传页还有「使用内置封面」一键填回。
+  发布记录存在自有库里（`ModPublication`），再次打开上传页会回填上次的可见性 / 描述词 / 附加图 / 视频 / 语言；
+  老记录只有 `public: true|false`，读取时按「true→公开、false→隐藏」兼容。
+  - **列表徽标只说状态**：已发布的 mod 右侧挂一个「已发布」短徽标（`PublicationBadgeText`），工坊 id 由副标题
+    与详情面板的「发布状态」行显示；带 `{0}` 的文案不能直接绑到 XAML（`Localizer.Format` 无参时原样返回模板），
+    否则界面上会出现字面的 `{0}`，`LocalizationBindingChecks` 专门守这条；
+  - **上传面板有出口**：上传成功、取消上传、或在上传页点左侧另一个 mod 都会回到详情面板（失败时故意留在上传页，
+    保留表单与错误信息好重试）；取消正在进行的上传时状态栏先显示「正在取消上传…」。
+  - **描述是 BBCode，不是纯文本**：Steam 工坊描述走社区方言 BBCode（`[h1]`–`[h3]`、`[b]`、`[i]`、`[u]`、`[strike]`、
+    `[list]`/`[olist]`、`[hr]`、`[url=地址]文字[/url]`、`[img]`、`[code]`、`[quote]`、`[spoiler]`，
+    以及**裸链接自动生成小部件**）。上传页描述框上方有一条 11 个按钮的工具条（B I U S H2 • 1. — Link Img Code），
+    按光标位置插入或包裹标记，焦点自动回到描述框；下方是「预览（读者看到的样子）」，用 `SteamBbCodeParser`
+    把 BBCode 解析成与详情页同一棵 `MarkdownDocument` 再用 `MarkdownView` 渲染，描述为空时整块不显示。
+  - **标题与描述按字节限长**：Steam 是定长字符缓冲（标题 128、描述 8000、更新说明 8000），启动器按 **UTF-8 字节**
+    判（一个汉字算 3 字节），上传页实时显示「已用 / 上限」并在超限时把提示置红，提交前在视图模型与 Steamworks
+    宿主子进程里各拦一道；`ModPublishLimits` 的错误文案会告诉你实际字节数。
 - DLC 页：纵向列表，**左侧固定 208×117 缩略图，右侧标题 + 两行简介**（文字再长也不会把图片压小，超出两行省略、鼠标悬停看全文），逐项启用禁用，写 `playsets_dlcs` 并同步加载文件。简介优先用本地描述（Victoria 3 的 `.dlc.json` 自带 `description`），CK3 / Stellaris 的 `.dlc` 没有简介字段，联网时按 Steam appid 查商店简介补全并缓存 7 天（设置页可关）
 
 播放集 / Mod 库 / DLC 三页**只对「完整适配」的游戏生效**；选中「仅启动」的游戏时，左侧这三项置灰、左栏底部常驻一行说明（禁用的导航项收不到指针事件，所以不用悬停提示），主页的播放集下拉隐藏、改显示一行「由游戏本体管理」的说明，不会去读它的 sqlite，也不会扫 DLC 目录。
@@ -290,7 +381,7 @@ Cities: Skylines 则是**本体根本不读任何加载文件**——它的 mod 
 CK3 是深炭纹理 + 米色字、Victoria 3 是紫红大理石 + 金珠边框 + 近白字、Stellaris 是暗青纯色 + 白字，切游戏即随之切换；其余控件保持系统 Fluent 样式。
 
 ### 界面
-`TitleBar` + `NavigationView` + `Frame`，6 个页面：游戏库 / 当前游戏 / 播放集 / Mod库 / DLC / 设置。
+`TitleBar` + `NavigationView` + `Frame`，左栏页面：游戏库 / 当前游戏 / 播放集 / Mod库 / Mod创建 / 创意工坊 / DLC / 账号 / 设置。
 另外有两个不带左栏菜单项的子页：创意工坊详情页、**「添加模组」子页**（从播放集页进入，左栏选中态停在「播放集」）。
 全中文，跟随系统亮/暗主题，卡片式游戏库。
 
@@ -372,6 +463,8 @@ BMP/PNG 帧策略、32px 帧的金色占比与圆角透明、8 张 PNG 的魔数
   12 小时内重开同一个 mod 详情是 0 请求；联网失败时退回旧副本，画廊/作者/首屏评论仍然可见。
 - 评论首屏直接用物品页内嵌的前 10 条，不再单独请求第 1 页；要继续翻页才走评论接口。
 - 列表页缓存 15 分钟内算新鲜、2 小时内过期仍先显示；同一页 2 分钟内不重复静默刷新；换游戏不再清空其它游戏的页。
+- 搜索只在**回车**或点刷新时发起：打字过程中不发请求（旧实现每敲一个字符就排一次 1–3 MB 的列表页请求，
+  限流下页面看起来像卡死）；新查询会取消上一轮在途请求，迟到的结果按查询代号丢掉。
 - 被限流时状态栏/详情页会给「已暂停约 N 分钟」「请约 N 分钟后重试」，刷新按钮在冷却期不再发请求；
   图片下载遇到限流立即放弃（其它瞬时失败仍是 500 ms / 1500 ms 三次重试）。
 - 「在浏览器打开创意工坊」走系统浏览器，不经过闸门，但仍然占同一 IP 的配额。
@@ -393,15 +486,25 @@ Mod 库、播放集里的 mod 行、工坊详情页的简介与更新日志、�
   - 「谷歌云翻译」——填 Google Cloud Translation 的 **API Key**，走
     `POST https://translation.googleapis.com/language/translate/v2`（免费层每月 50 万字符）；
   - 「谷歌免费翻译」——用谷歌公开网页接口兜底，**无需任何配置**（非官方公开端点，随时可能变，可用性不保证）；
+    按 `translate.google.com` → `clients5.google.com` → `translate.googleapis.com` 顺序挑能连的主机
+    （部分网络对 `translate.googleapis.com` 按主机名阻断 TLS，换成前两台就能用）；
+    一段文本里的多段会**合成一个请求**（每次最多 8 段、URL 不超过 1500 字符），翻译评论时不至于一段一个请求把出口 IP 打到限流；
+    连不上的主机进 5 分钟冷却、返回 HTTP 429 的主机进 60 秒冷却，冷却期间直接跳过，不让每段译文都白等一次超时；
   - 「自动」是默认档：按 **自填接口 → 微软 → 谷歌云 → 谷歌免费** 依次尝试，前一个失败或没配齐就回落下一个；
     「仅自填」「仅微软」「仅谷歌云」「仅谷歌免费」是专档位，**失败就是失败，不回落**。
 - **目标语言默认跟随界面语言**（界面中文→译成中文，界面英文→译成英文），也可以在设置里固定成中文或英文。
 - **原文与译文同时显示**：列表行在原标题下方多出一块**带描边框**的译文，详情页的简介 / 更新日志 / 评论在原文下方
-  多出一块带「译文」小标题的**带描边框**译文，**不覆盖原文**。框内是保留 Markdown 结构的渲染结果。
+  多出一块**带描边框**的译文正文——**不覆盖原文**，也**不加「译文」小标题**（框里就是译文本身）。框内是保留 Markdown 结构的渲染结果。
 - 四个范围开关可以分别关掉名称 / 简介 / 更新日志 / 评论的翻译。
+- **翻译在途有提示**：只要还有翻译请求没回来（含排队等并发的批次），窗口标题栏右侧显示一个小号环形进度 +
+  「正在翻译…」，最后一批结束后约 0.4 秒消失；详情页在译文将来出现的位置先显示「正在翻译简介…／更新日志…／评论…」，
+  译文到了原地替换。评论是逐条译的，一条译好就挂一条，整段译完提示才收。
 - 译文有本地缓存（`cache:translations` 库键，保留天数可配，默认 30 天），命中缓存就不再发请求；
   设置页「缓存」分类里多一行「译文缓存」，可单独清空。
-- 翻译是**弱依赖**：请求失败、限流、返回格式不对都只记日志并在界面上保留原文，绝不把内容清空。
+- 翻译是**弱依赖**：请求失败、限流、返回格式不对都只记日志并在界面上保留原文，绝不把内容清空；
+  一条都没译出来时，页面顶部的提示会**逐条列出每个引擎各自的原因**（如「mymemory: 免费额度已用完，约 2 小时后恢复」），
+  而不是只报第一个失败者。MyMemory 的免费额度用完（HTTP 429）后，本进程内**立刻停止再请求**并显示恢复时间，
+  不会每段译文都白打一次；额度恢复后自动重新尝试。
 - Markdown 结构在翻译后保持不变：标题层级、列表序号、链接地址、强调样式原样保留，代码块 / 图片 / 分隔线不翻译。
 
 域名口径：微软翻译、谷歌云翻译与谷歌免费翻译的域名都在白名单里；**自填接口的域名按用户填的地址精确授权**（只放行该主机本身，
@@ -413,13 +516,21 @@ Mod 库、播放集里的 mod 行、工坊详情页的简介与更新日志、�
 
 ```
 PdxLauncher.sln
+start.cmd                      :: 一键启动（增量构建 + 运行），双击即可，见 §1「日常命令」
 build.cmd / build-debug.cmd / run.cmd / run-debug.cmd
 publish.cmd                    :: 构建 + 自检 + 发布到 dist\PdxNext\（可传目标目录）
 scripts/
   msg.cmd                      :: 顶层 .cmd 取中文提示用的小助手（纯 ASCII）
   messages.txt                 :: 全部中文提示，UTF-8 无 BOM，KEY:文本 格式
+.vscode/                       :: 只提交 tasks.json / settings.json / extensions.json
+  tasks.json                   :: 默认任务＝一键启动 start.cmd，另有构建 / 自检 / 发布
+  settings.json                :: 隐藏 bin/obj/dist 等产物目录，编码与换行约定
+  extensions.json              :: 推荐 ms-dotnettools.csdevkit / .csharp
 Directory.Build.props          :: 统一可空/语言版本/告警策略
+version.props                  :: 版本号唯一来源（安装器/程序集/update.json）
 NuGet.config                   :: <clear/>，全离线
+installer/
+  PdxNext.iss                  :: Inno Setup 7 双模式安装器脚本
 src/
   PdxLauncher.Core/            :: 205 个 .cs，无任何 WinUI 依赖，可单测
     Abstractions/              :: 接口（IGameCatalog / IPlaySetRepository / IGameLauncher / INewsFeedService ...）
@@ -434,19 +545,23 @@ src/
     Themes/                    :: 主题 JSON 解析 + HSL/RGB 颜色
     Online/                    :: GraphQL 元数据、素材下载、代理（三模式解析 / 系统代理 / 环境变量）、DLC 简介、官方公告
     Online/Translation/        :: 翻译引擎（自填 OpenAI 兼容 API + 微软 Azure Translator + 谷歌 Cloud Translation + 谷歌公开免费接口）、译文缓存、引擎模式回落
+    Updates/                   :: 更新清单解析、版本比较、下载校验、按安装模式启动安装器
     Parsing/                   :: Clausewitz 与 Valve KeyValues 解析器
     Patch/                     :: 补丁素材（内嵌 loader + cream_api.ini）、目标目录判定、打补丁 / 还原
-  PdxLauncher.App/             :: 101 个 .cs + 16 个 .xaml，WinUI 3 层
+    ModStudio/                 :: Mod 创建：描述符规则/读取、legacy 与 V3 metadata 生成、本地清单、发布记录、内嵌默认封面（Assets/）
+  PdxLauncher.App/             :: 117 个 .cs + 17 个 .xaml，WinUI 3 层
     Assets/                    :: AppIcon.ico（9 帧 16→256）+ 8 张模板同名 PNG，全部由 tools/gen-app-icon.py 生成
-    Views/                     :: GameLibraryPage / HomePage / ModsPage（播放集） / ModLibraryPage（Mod库） / DlcPage / SettingsPage / WorkshopDetailPage（工坊详情子页） / AddModsPage（添加模组子页）
+    Views/                     :: GameLibraryPage / HomePage / ModsPage（播放集） / ModLibraryPage（Mod库） / ModStudioPage（Mod创建/上传） / DlcPage / SettingsPage / WorkshopDetailPage（工坊详情子页） / AddModsPage（添加模组子页）
     ViewModels/                :: VM（全部不含 Microsoft.UI.Xaml 类型）
+    Controls/                  :: 自绘控件：ConfirmOverlay（全局「确认 / 取消」浮层，取消在左、确认在右）、SettingsCard、SettingsValueCard、MarkdownView
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
 tests/
-  PdxLauncher.Checks/          :: 61 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 83 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
   DATA-FORMATS.md              :: 所有数据格式的真机实测记录（含自有库表字典，见第 20 节）
+  INSTALLER.md                 :: 安装包、双安装模式、自动更新与发版流程
   app-icon.png                 :: 应用图标接触表（深/浅底，16→256，由生成器写出）
   screenshot-home.png          :: 当前游戏（整窗主题背景）
   screenshot-library.png       :: 游戏库
@@ -457,6 +572,8 @@ docs/
 tools/
   manual-build.py              :: 完全绕过 MSBuild 的 Roslyn + XamlCompiler 手工构建链
   package-app.py               :: 打包脚本
+  build-installer.py           :: 用 Inno Setup 7 打安装包并生成 update.json
+  publish-release.ps1          :: 上传 Setup 与 update.json 到公开 GitHub Releases
   gen-app-icon.py              :: 应用图标唯一生成源（Pillow + numpy 自绘 → ico / 8 张 PNG / 接触表）
 ```
 
@@ -465,7 +582,7 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**379 个 .cs + 16 个 .xaml**（不含 `obj/` 生成物；2026-10-30 实测：Core 205 / App 101+16 / Imaging 9 / Checks 64 —— Checks 的 64 个文件是 61 个检查类 + Program + ChecksContext + GlobalUsings）。
+**476 个 .cs + 17 个 .xaml**（不含 `obj/` 生成物；2026-11-03 实测：Core 257 / App 124+17 / Imaging 9 / Checks 86 —— Checks 的 86 个文件是 83 个检查类 + Program + ChecksContext + GlobalUsings）。
 
 ---
 
@@ -475,8 +592,11 @@ tools/
 dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 61，失败: 0，断言失败总数: 0` 即通过。覆盖：Steam 探测与
-launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取
+输出 `检查类: 83，失败: 0，断言失败总数: 0` 即通过（2026-11-03 实测 83 类）。覆盖：Steam 探测与
+launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取、
+Mod 创建（legacy `.mod`/`descriptor.mod` 与 V3 `.metadata/metadata.json` 生成、非法输入拒绝、本地清单合并、发布记录与发布协议参数、
+工坊发布面：可见性四档映射、1 MB 与张数上限、五种 YouTube 链接解析、30 种语言码与归一化、请求 JSON 全字段往返、旧 `public` 记录回显、内嵌默认封面的 PNG 签名与落盘一致、
+描述 BBCode 解析（标题 / 列表 / 分隔线 / 链接 / 图片 / 视频缩略图 / `[noparse]` / 未知标签原样保留 / 超长截断）、标题与描述的 UTF-8 字节上限（汉字 3 字节、emoji 4 字节、128 与 8000 的边界））
 （mods 全量、size / subscribedDate 解析、播放集归属、requiredVersion 兼容判断）、创意工坊 id 解析、启动参数拼装、路径大小写不敏感处理；
 自有库 `pdxnext.sqlite`（建表幂等 / schema 版本 / 事务回滚 / 损坏自愈 / `documents` 键空间与前缀统计）、
 官方库双向投射（导入带来源与工坊 id、投射回写新行、**官方库缺席时绝不创建 `launcher-v2.sqlite`**、pending 补投）、
@@ -505,7 +625,13 @@ csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cm
 以及机翻引擎：档位归一化（`microsoft` / `google-cloud`）、微软翻译的请求形状（`api-version=3.0`、`to=zh-Hans`、
 订阅密钥与区域两个头齐全、正文是 JSON 数组）与译文解析、谷歌云翻译的请求形状（`key` 走查询参数、
 正文含 `q` / `target` / `format`）与译文解析、两者的失败只记状态码且**密钥不写进日志**、
-凭据不全时不发请求，以及自动模式下失败项由下一个引擎补齐而专档位不回落。
+凭据不全时不发请求，以及自动模式下失败项由下一个引擎补齐而专档位不回落；
+还有免费引擎的主机回落与合批：首选 `translate.google.com` 抛网络异常时换 `clients5.google.com` 拿到译文、
+坏主机进冷却后只打备用主机、冷却解除后重新先试首选、全冷却时返回 null 且不发请求；
+3 段文本只发一个请求且译文保序、20 段按每批 8 段切成不超过 3 个请求；
+首选主机 429 时换下一台并进 60 秒冷却、三台都 429 时返回 null 且原因里带主机名；
+以及 MyMemory 的 429：记额度耗尽与恢复时间、本进程内不再请求、恢复时间过后重新尝试，
+和「多个引擎都失败时提示里逐条列名」。
 
 ---
 
@@ -564,6 +690,15 @@ settings.json / dlc-descriptions.json / theme-cache / news-cache / mod-cache，�
    `content_load.json` 里写得再对也不生效，且游戏日志不报任何错。启动器会在播放集页给出警告，
    并可用「修复 mod 路径」把本地 mod 目录改成 `mod_<id 前 8 位>`。父目录含非 ASCII（如 `C:\Users\张三\…`）时
    不自动改名，只提示——那种情况得改 `launcher-settings.json` 的 `gameDataPath`。CK3 / Stellaris / EU4 无此限制。
+9. **所有原生 Steamworks 调用都在子进程里跑**：DLC 授权探测、创意工坊直连订阅都需要以游戏 appId 调
+   `SteamAPI_Init`，而 Steam 会把「调过它的进程」登记成该游戏的 game process（`SteamAPI_Shutdown` 不撤销）。
+   2026-10-31 之前启动器自己调，导致游戏退出后 Steam 仍显示「运行中」，点 Steam 的「退出游戏」还会把启动器杀掉；
+   现在改成同一个 exe 的隐藏宿主模式（`PdxLauncher.App.exe --steam-host probe|workshop-…`），探测约 1 s、订阅最多 25 s、
+   订阅集合（`workshop-subscribed`）最多 60 s、批量写（`workshop-batch`：下载 / 本地禁用 / 启用）最多 45 s，
+   子进程一退 Steam 立刻除名。上传工坊条目最多 20 分钟，开了多语言时按语言数放大到 `20 分钟 ×（1 + 语言数）`。
+   所以偶尔在 Steam 库里闪一下「运行中」是子进程，属预期；主窗口不会被登记，也不会被连坐。
+   设置页把「读状态」和「改订阅」拆成两个开关：读状态（默认开）每次只起一个只读子进程；
+   写动作（默认关）才允许订阅 / 退订 / 触发下载 / 本地禁用。
 
 ---
 
@@ -573,6 +708,11 @@ settings.json / dlc-descriptions.json / theme-cache / news-cache / mod-cache，�
 
 **启动后白窗口 / 闪退** → 看 `%LOCALAPPDATA%\PdxNext\logs\pdxnext.log`。
 如果日志目录根本没建出来，说明权限不足（例如在低完整性级别进程里跑）。
+
+**游戏退了 Steam 还显示运行中 / Steam 点「退出游戏」把启动器关了** → 2026-10-31 已修（见 HANDOFF §0.59）：
+根因是启动器进程内调了 `SteamAPI_Init` 被 Steam 登记成游戏进程。确认两点：①用的是 2026-10-31 之后构建的 exe；
+②日志里应有 `Steam 宿主 probe：exit=0，耗时 … ms` 这样的行（说明探测走的是子进程）。
+若仍复现，先在 `D:\app\Steam\logs\console_log.txt` 里 grep `Game process added`，看被登记的 PID 是不是主窗口那个。
 
 **找不到游戏** → 确认游戏装在某个 Steam 库里，或在官方启动器的独立库路径里，且安装目录下真有
 `launcher-settings.json`。改完路径点右上角「刷新」；日志里会打印扫描结果（`游戏发现完成，共 N 个`）。

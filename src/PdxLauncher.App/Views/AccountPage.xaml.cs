@@ -4,10 +4,14 @@ using System.ComponentModel;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 
+using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
+
+using Windows.System;
 
 /// <summary>
 /// 账号页：Paradox 账号登录 / 退出（左栏导航里的独立页面）。
@@ -21,11 +25,16 @@ public sealed partial class AccountPage : Page
     /// <summary>页面生命周期令牌；NavigationCacheMode=Required 会在返回页面时重建。</summary>
     private CancellationTokenSource _lifetime = new();
 
+    /// <summary>成功提示自动收起的计时器；错误提示必须由用户自己关掉。</summary>
+    private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(8) };
+
     public AccountPage()
     {
         InitializeComponent();
 
         _viewModel = new AccountViewModel();
+
+        _statusTimer.Tick += OnStatusTimerTick;
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -59,6 +68,7 @@ public sealed partial class AccountPage : Page
     {
         AppServices.Account.SessionChanged -= OnSessionChanged;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        _statusTimer.Stop();
         _lifetime.Cancel();
     }
 
@@ -87,7 +97,28 @@ public sealed partial class AccountPage : Page
         EmailBox.Focus(FocusState.Programmatic);
     }
 
-    private async void OnAccountSignInClick(object sender, RoutedEventArgs e)
+    private async void OnAccountSignInClick(object sender, RoutedEventArgs e) => await SignInAsync();
+
+    /// <summary>邮箱框 / 密码框里按回车等于点「登录」。</summary>
+    /// <remarks>
+    /// 直接绑 Button 当默认按钮在 WinUI 里不可靠（TextBox 会自己吃掉回车），
+    /// 所以显式处理：回车被消费掉，不往文本框里插换行，也不触发别的默认行为。
+    /// </remarks>
+    private void OnCredentialKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Enter)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (_viewModel.CanSignIn)
+        {
+            _ = SignInAsync();
+        }
+    }
+
+    private async Task SignInAsync()
     {
         try
         {
@@ -121,17 +152,12 @@ public sealed partial class AccountPage : Page
     {
         try
         {
-            var dialog = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = L.AccountDialogSignOutTitle,
-                Content = L.AccountDialogSignOutBody,
-                PrimaryButtonText = L.AccountSignOut,
-                CloseButtonText = L.CommonCancel,
-                DefaultButton = ContentDialogButton.Close,
-            };
-
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            var confirmed = await ConfirmOverlay.ConfirmAsync(
+                L.AccountDialogSignOutTitle,
+                L.AccountDialogSignOutBody,
+                L.AccountSignOut,
+                L.CommonCancel);
+            if (!confirmed)
             {
                 return;
             }
@@ -162,5 +188,18 @@ public sealed partial class AccountPage : Page
             AccountStatusLevel.Error => InfoBarSeverity.Error,
             _ => InfoBarSeverity.Informational,
         };
+
+        // 成功提示看一眼就够了，留着只会把下面的表单往下挤；错误必须留着等用户读。
+        _statusTimer.Stop();
+        if (_viewModel.StatusLevel == AccountStatusLevel.Success && _viewModel.HasStatusMessage)
+        {
+            _statusTimer.Start();
+        }
+    }
+
+    private void OnStatusTimerTick(object? sender, object e)
+    {
+        _statusTimer.Stop();
+        infoAccountStatus.IsOpen = false;
     }
 }

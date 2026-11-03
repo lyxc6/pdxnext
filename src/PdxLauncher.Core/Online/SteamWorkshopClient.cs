@@ -69,23 +69,33 @@ public sealed class SteamWorkshopClient
         var pageSize = Math.Clamp(query.PageSize, 1, MaxPageSize);
         var page = Math.Max(query.Page, 0) + 1;
         var keyword = query.SearchText?.Trim();
-        var sort = string.IsNullOrEmpty(keyword) ? SortValue(query.Sort) : "textsearch";
+        var hasKeyword = !string.IsNullOrEmpty(keyword);
+
+        // 关键词与排序可以并存：服务端在有 searchtext 时照样按 browsesort 排序。
+        // 只有「textsearch 这一档」在没有关键词时才无意义 —— 那时回退成 trend。
+        var sort = SortValue(query.Sort);
+        if (query.Sort == SteamWorkshopSort.TextSearch && !hasKeyword)
+        {
+            sort = SortValue(SteamWorkshopSort.Trend);
+        }
 
         var builder = new StringBuilder(OnlineHosts.SteamWorkshopBrowseEndpoint.AbsoluteUri);
         builder.Append("?appid=").Append(appId.ToString(CultureInfo.InvariantCulture));
         builder.Append("&section=readytouseitems&browsesort=").Append(sort);
         builder.Append("&num_per_page=").Append(pageSize.ToString(CultureInfo.InvariantCulture));
         builder.Append("&p=").Append(page.ToString(CultureInfo.InvariantCulture));
-        if (!string.IsNullOrEmpty(keyword))
+        if (hasKeyword)
         {
-            // 参数名是 searchtext（没有下划线），配 browsesort=textsearch 才生效。
-            builder.Append("&searchtext=").Append(Uri.EscapeDataString(keyword));
+            // 参数名是 searchtext（没有下划线）。
+            builder.Append("&searchtext=").Append(Uri.EscapeDataString(keyword!));
         }
-        else if (query.Days is { } days && SupportsDays(query.Sort))
+
+        // 时间范围只对「最热门 / 最受好评」生效（Steam 的时间范围下拉也只在这两档排序下出现）；
+        // 参数名是 days（服务端回显成 trend_days）。-1 = Steam 自己的「All time / 发布至今」，
+        // 原样透传（服务端把 0 当成「不传」，会回落成默认 7 天）。
+        if (query.Days is { } days && SupportsDays(query.Sort))
         {
-            // 时间范围只对「最热门 / 最受好评」生效（Steam 的时间范围下拉也只在这两档排序下出现）；
-            // 参数名是 days（服务端回显成 trend_days）。0 是合法值（发布至今）。
-            builder.Append("&days=").Append(Math.Max(days, 0).ToString(CultureInfo.InvariantCulture));
+            builder.Append("&days=").Append(days.ToString(CultureInfo.InvariantCulture));
         }
 
         return new Uri(builder.ToString());
@@ -514,8 +524,11 @@ public sealed class SteamWorkshopClient
     {
         SteamWorkshopSort.TopRated => "toprated",
         SteamWorkshopSort.MostRecent => "mostrecent",
-        SteamWorkshopSort.MostUpdated => "mostupdated",
-        SteamWorkshopSort.MostSubscribed => "mostsubscribed",
+        // Steam 现行 browse 端点只认这四个排序值：trend / toprated / mostrecent / lastupdated，
+        // 外加「不重复订阅者总计」= totaluniquesubscribers。旧文档里的 mostupdated / mostsubscribed
+        // 服务端不认，会静默回落成 trend（列表与「最热门」逐项相同），所以必须用真实值。
+        SteamWorkshopSort.MostUpdated => "lastupdated",
+        SteamWorkshopSort.MostSubscribed => "totaluniquesubscribers",
         SteamWorkshopSort.TextSearch => "textsearch",
         _ => "trend",
     };

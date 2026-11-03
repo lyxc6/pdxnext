@@ -42,9 +42,12 @@ sdk/
 steam_api64.dll
 steam_appid.txt
 
-# 编辑器
+# 编辑器（.vscode 只放行任务面板与工程设置，其余本机配置照旧忽略）
 .idea/
-.vscode/
+.vscode/*
+!.vscode/tasks.json
+!.vscode/settings.json
+!.vscode/extensions.json
 
 # agent 工作区（含链接 worktree，动辄数百 MB；不能靠 .agents/worktrees/.gitignore 挡，
 # 那是本机产物、不会进仓）

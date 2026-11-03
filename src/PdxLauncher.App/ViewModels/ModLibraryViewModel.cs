@@ -9,6 +9,7 @@ using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Playsets;
+using PdxLauncher.Core.Steam;
 
 /// <summary>
 /// Mod 库页的视图模型：把当前游戏的全部 mod（mods 表 + 磁盘本地 mod）整理成行，
@@ -57,6 +58,10 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     /// <summary>是否正在加载。</summary>
     [ObservableProperty]
     private bool _isBusy;
+
+    /// <summary>是否正在跑一次 Steam 写操作（触发下载 / 本地禁用）；期间按钮置灰。</summary>
+    [ObservableProperty]
+    private bool _isSteamActionBusy;
 
     /// <summary>是否已完成过一次加载（未完成时不弹空状态，避免闪一下提示）。</summary>
     [ObservableProperty]
@@ -125,6 +130,16 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
 
     /// <summary>是否需要显示空状态面板。</summary>
     public bool ShowEmptyState => ShowNoGameHint || ShowNoModsHint;
+
+    /// <summary>
+    /// 当前游戏能不能读 Steam 工坊状态（决定是否显示「刷新 Steam 状态」与行内写操作按钮）。
+    /// Steam 不在、没直连条件、或用户在设置里关掉了状态读取时为 false。
+    /// </summary>
+    public bool HasSteamStates => HasGame && _service.HasSteamStates(Game);
+
+    /// <summary>行内 Steam 写操作是否可用（读得到状态 + 用户打开了写开关）。</summary>
+    public bool CanWriteSteam =>
+        HasSteamStates && AppServices.Settings.SteamWorkshopSubscribeEnabled && !IsSteamActionBusy;
 
     /// <summary>加载 Mod 库：读快照 → 应用搜索 / 排序 → 刷新计数与状态栏。</summary>
     /// <param name="game">当前游戏；null 表示还没在游戏库里选游戏。</param>
@@ -247,6 +262,129 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
 
     /// <summary>刷新：按当前游戏重新加载一次。</summary>
     public Task RefreshAsync() => LoadAsync(Game, CancellationToken.None);
+
+    /// <summary>
+    /// 重新问一次 Steam 的工坊状态（丢掉缓存后重载）。
+    /// 用户点「刷新 Steam 状态」或在 Steam 里改过订阅后调用。
+    /// </summary>
+    /// <returns>异步任务。</returns>
+    public async Task RefreshSteamStatesAsync()
+    {
+        if (Game is null)
+        {
+            return;
+        }
+
+        if (WorkshopSourceChooser.ResolveAppId(Game.SteamAppId, Game.GameId) is { } appId and > 0)
+        {
+            AppServices.WorkshopStates.Invalidate(appId);
+        }
+
+        await LoadAsync(Game, CancellationToken.None).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 让 Steam 立刻下载这一条。写操作受「Steam 工坊直连订阅」开关约束（默认关）。
+    /// </summary>
+    /// <param name="row">要下载的行。</param>
+    /// <returns>异步任务。</returns>
+    public async Task TriggerSteamDownloadAsync(ModLibraryRowViewModel row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        if (!AppServices.Settings.SteamWorkshopSubscribeEnabled)
+        {
+            SetStatus(T(Keys.ModlibSteamWriteDisabled));
+            return;
+        }
+
+        if (row.WorkshopId is not { Length: > 0 } workshopId || !ulong.TryParse(workshopId, out var fileId))
+        {
+            return;
+        }
+
+        await RunSteamActionAsync(
+            fileId,
+            static (source, id, ct) => source.TriggerDownloadAsync(id, ct),
+            () => T(Keys.ModlibSteamDownloadRequested, row.Name)).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 在 Steam 里把这一条设为本地禁用 / 解除禁用（订阅保留）。
+    /// 写操作同样受「Steam 工坊直连订阅」开关约束。
+    /// </summary>
+    /// <param name="row">目标行。</param>
+    /// <returns>异步任务。</returns>
+    public async Task SetSteamDisabledLocallyAsync(ModLibraryRowViewModel row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        if (!AppServices.Settings.SteamWorkshopSubscribeEnabled)
+        {
+            SetStatus(T(Keys.ModlibSteamWriteDisabled));
+            return;
+        }
+
+        if (row.WorkshopId is not { Length: > 0 } workshopId || !ulong.TryParse(workshopId, out var fileId))
+        {
+            return;
+        }
+
+        var disable = !row.IsSteamDisabledLocally;
+        await RunSteamActionAsync(
+            fileId,
+            (source, id, ct) => source.SetDisabledLocallyAsync(id, disable, ct),
+            null).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 跑一次 Steam 写操作：置忙 → 调后端 → 丢缓存 → 重载（徽标跟着变）。
+    /// 失败只落状态栏，不抛给界面。
+    /// </summary>
+    private async Task RunSteamActionAsync(
+        ulong publishedFileId,
+        Func<IWorkshopStateSource, ulong, CancellationToken, Task<WorkshopBatchItem>> action,
+        Func<string>? successText)
+    {
+        var source = _service.ResolveStateSource(Game);
+        if (source is null)
+        {
+            SetStatus(T(Keys.ModlibSteamWriteDisabled));
+            return;
+        }
+
+        IsSteamActionBusy = true;
+        try
+        {
+            var item = await action(source, publishedFileId, CancellationToken.None).ConfigureAwait(true);
+            if (!item.Ok)
+            {
+                SetStatus(T(Keys.ModlibSteamActionFailed, item.Error ?? T(Keys.CommonUnknown)));
+                return;
+            }
+
+            if (WorkshopSourceChooser.ResolveAppId(Game?.SteamAppId, Game?.GameId) is { } appId and > 0)
+            {
+                AppServices.WorkshopStates.Invalidate(appId);
+            }
+
+            if (successText is not null)
+            {
+                SetStatus(successText());
+            }
+
+            await LoadAsync(Game, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("Mod 库：Steam 写操作失败（id=" + publishedFileId + "）：" + ex.Message);
+            SetStatus(T(Keys.ModlibSteamActionFailed, ex.Message));
+        }
+        finally
+        {
+            IsSteamActionBusy = false;
+        }
+    }
 
     /// <summary>
     /// 覆盖状态栏文案。页面上的行操作（打开文件夹 / 打开创意工坊）不在本类里执行，
@@ -437,29 +575,36 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         _ = TranslateNamesAsync(pending, cancellationToken);
     }
 
-    /// <summary>逐行翻译 mod 名称；译好一行刷一行。</summary>
+    /// <summary>整页名称一次性批翻（引擎内部并发），译完统一回填。</summary>
     private async Task TranslateNamesAsync(
         IReadOnlyList<ModLibraryRowViewModel> rows,
         CancellationToken cancellationToken)
     {
         try
         {
-            foreach (var row in rows)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    return;
-                }
+            var names = rows.Select(static row => row.Name).ToList();
+            var translated = await AppServices.Translation
+                .TranslateBatchAsync(names, cancellationToken)
+                .ConfigureAwait(true);
 
-                var translated = await AppServices.Translation
-                    .TranslateAsync(row.Name, cancellationToken)
-                    .ConfigureAwait(true);
-                if (translated is null || string.IsNullOrWhiteSpace(translated))
+            var anyTranslated = false;
+            for (var i = 0; i < rows.Count && i < translated.Count; i++)
+            {
+                var translatedName = translated[i];
+                if (string.IsNullOrWhiteSpace(translatedName))
                 {
                     continue;
                 }
 
-                row.TranslatedName = translated;
+                rows[i].TranslatedName = translatedName;
+                anyTranslated = true;
+            }
+
+            if (!anyTranslated)
+            {
+                // 这一页没有状态条，失败只落日志；原因带上引擎与错误，便于排查。
+                _logger.Warn("Mod 库名称全部未翻译（" + rows.Count + " 条）："
+                    + (AppServices.Translation.LastFailure ?? T(Keys.CommonUnknown)));
             }
         }
         catch (OperationCanceledException)
@@ -559,5 +704,12 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(ShowNoGameHint));
         OnPropertyChanged(nameof(ShowNoModsHint));
         OnPropertyChanged(nameof(ShowEmptyState));
+        OnPropertyChanged(nameof(HasSteamStates));
+        OnPropertyChanged(nameof(CanWriteSteam));
+    }
+
+    partial void OnIsSteamActionBusyChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanWriteSteam));
     }
 }

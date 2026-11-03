@@ -16,6 +16,11 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <EnableDefaultApplicationDefinition>true</EnableDefaultApplicationDefinition>
+    <!--
+      自己写 Program.Main（见 Program.cs）：WinUI 生成的主入口无法在 Application.Start 之前
+      拦命令行，而「Steam 宿主子进程」模式必须在初始化 WinUI 之前就分流退出。
+    -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
@@ -70,6 +75,7 @@
       <_WinUIPublishRootXaml Include="$(OutDir)*.xbf" />
       <!-- Views\ 下的页面 XAML 编译产物 -->
       <_WinUIPublishViewXaml Include="$(OutDir)Views\*.xbf" />
+      <_WinUIPublishControlXaml Include="$(OutDir)Controls\*.xbf" />
       <!-- 资源索引（makepri 在 build 阶段合并生成，只在 $(OutDir) 里） -->
       <_WinUIPublishPri Include="$(OutDir)$(AssemblyName).pri" />
       <!-- Assets\（含多级子目录） -->
@@ -82,6 +88,9 @@
       </_WinUIPublishXamlArtifact>
       <_WinUIPublishXamlArtifact Include="@(_WinUIPublishViewXaml)">
         <RelativePath>Views\%(Filename)%(Extension)</RelativePath>
+      </_WinUIPublishXamlArtifact>
+      <_WinUIPublishXamlArtifact Include="@(_WinUIPublishControlXaml)">
+        <RelativePath>Controls\%(Filename)%(Extension)</RelativePath>
       </_WinUIPublishXamlArtifact>
       <_WinUIPublishXamlArtifact Include="@(_WinUIPublishPri)">
         <RelativePath>%(Filename)%(Extension)</RelativePath>

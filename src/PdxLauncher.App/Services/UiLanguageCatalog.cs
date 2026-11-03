@@ -30,7 +30,7 @@ public sealed class UiLanguageOption : LocalizedObservableObject
     public string Description => T(_descriptionKey);
 }
 
-/// <summary>界面语言的可选项目录；Resolve 返回目录中的同一实例，ComboBox 才能按引用相等匹配。</summary>
+/// <summary>界面语言的可选项目录；Resolve 返回目录中的同一实例，下拉控件才能按引用相等匹配。</summary>
 public static class UiLanguageCatalog
 {
     public static IReadOnlyList<UiLanguageOption> All { get; } = new[]

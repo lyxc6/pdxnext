@@ -57,6 +57,10 @@
                     <SolidColorBrush x:Key="PdxOriginLocalForegroundBrush" Color="#FF8FD9AC" />
                     <SolidColorBrush x:Key="PdxOriginSubscribedBackgroundBrush" Color="#334C8DFF" />
                     <SolidColorBrush x:Key="PdxOriginSubscribedForegroundBrush" Color="#FFA8C8FF" />
+                    <!-- DLC 授权徽标：已拥有 / 未拥有 / 授权未知。三套主题各一份。 -->
+                    <SolidColorBrush x:Key="PdxOwnedForegroundBrush" Color="#FF8FD9AC" />
+                    <SolidColorBrush x:Key="PdxUnownedForegroundBrush" Color="#FFE7B96B" />
+                    <SolidColorBrush x:Key="PdxUnknownForegroundBrush" Color="#FF9A9AA2" />
 
                     <StaticResource x:Key="NavigationViewDefaultPaneBackground" ResourceKey="PdxPaneGlassBrush" />
                     <StaticResource x:Key="NavigationViewExpandedPaneBackground" ResourceKey="PdxPaneGlassBrush" />
@@ -90,6 +94,10 @@
                     <SolidColorBrush x:Key="PdxOriginLocalForegroundBrush" Color="#FF1F6B3B" />
                     <SolidColorBrush x:Key="PdxOriginSubscribedBackgroundBrush" Color="#334C8DFF" />
                     <SolidColorBrush x:Key="PdxOriginSubscribedForegroundBrush" Color="#FF1B4E9E" />
+                    <!-- DLC 授权徽标：已拥有 / 未拥有 / 授权未知。三套主题各一份。 -->
+                    <SolidColorBrush x:Key="PdxOwnedForegroundBrush" Color="#FF1F6B3B" />
+                    <SolidColorBrush x:Key="PdxUnownedForegroundBrush" Color="#FF8A5A00" />
+                    <SolidColorBrush x:Key="PdxUnknownForegroundBrush" Color="#FF5F5F66" />
 
                     <StaticResource x:Key="NavigationViewDefaultPaneBackground" ResourceKey="PdxPaneGlassBrush" />
                     <StaticResource x:Key="NavigationViewExpandedPaneBackground" ResourceKey="PdxPaneGlassBrush" />
@@ -116,6 +124,10 @@
                     <SolidColorBrush x:Key="PdxOriginLocalForegroundBrush" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="PdxOriginSubscribedBackgroundBrush" Color="#FF000000" />
                     <SolidColorBrush x:Key="PdxOriginSubscribedForegroundBrush" Color="#FFFFFFFF" />
+                    <!-- DLC 授权徽标：高对比度只用系统前景色，靠文字与图标区分。 -->
+                    <SolidColorBrush x:Key="PdxOwnedForegroundBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="PdxUnownedForegroundBrush" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="PdxUnknownForegroundBrush" Color="#FFFFFFFF" />
 
                     <StaticResource x:Key="NavigationViewDefaultPaneBackground" ResourceKey="PdxPaneGlassBrush" />
                     <StaticResource x:Key="NavigationViewExpandedPaneBackground" ResourceKey="PdxPaneGlassBrush" />

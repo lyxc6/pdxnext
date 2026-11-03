@@ -5,7 +5,8 @@ using PdxLauncher.Core.Parsing;
 
 /// <summary>
 /// 读取 Steam 的 <c>appmanifest_&lt;appid&gt;.acf</c>（Valve KeyValues 格式），
-/// 取出 appid / name / installdir / StateFlags / SizeOnDisk。坏文件跳过并记 Warn，不抛异常。
+/// 取出 appid / name / installdir / StateFlags / SizeOnDisk / LastOwner / DisabledDLC。
+/// 坏文件跳过并记 Warn，不抛异常。
 /// </summary>
 public sealed class AppManifestReader
 {
@@ -72,7 +73,9 @@ public sealed class AppManifestReader
                 installDir,
                 installPath,
                 ParseInt(appState.GetValue("StateFlags")),
-                ParseLong(appState.GetValue("SizeOnDisk")));
+                ParseLong(appState.GetValue("SizeOnDisk")),
+                ParseLastOwner(appState.GetValue("LastOwner")),
+                ParseDisabledDlc(appState.GetValue("DisabledDLC")));
         }
         catch (IOException ex)
         {
@@ -109,6 +112,50 @@ public sealed class AppManifestReader
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// <c>LastOwner</c>：最后一次写入这份清单的 SteamID64。官方启动器拿它跟当前账号比对，
+    /// 只有一致时才相信 <c>DisabledDLC</c>（防止跨账号残留的旧数据）。
+    /// </summary>
+    private static string? ParseLastOwner(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var value = text.Trim();
+        foreach (var ch in value)
+        {
+            if (ch < '0' || ch > '9')
+            {
+                return null;
+            }
+        }
+
+        return value.Length == 0 ? null : value;
+    }
+
+    /// <summary><c>DisabledDLC</c>：逗号分隔的 appid 列表；没有这一项时返回 null。</summary>
+    private static IReadOnlyList<string>? ParseDisabledDlc(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var items = new List<string>();
+        foreach (var part in text.Split(','))
+        {
+            var trimmed = part.Trim();
+            if (trimmed.Length != 0)
+            {
+                items.Add(trimmed);
+            }
+        }
+
+        return items.Count == 0 ? null : items;
     }
 
     private static int ParseInt(string? text) =>

@@ -112,6 +112,28 @@ DLC 对象字段：FilePathRelativeToDlcPath = 相对 dlcPath 的 POSIX 路径�
 
 DLC 列表**不来自 sqlite**（CK3 的 dlc 表 0 行）——必须扫盘。
 
+### 3.1 DLC 归属判定（Steam 授权探测）
+
+原版启动器（`launcher-v2.2026.13` → `app.asar` 里的 `SteamService.getDlcList()`）判定「是否拥有某个 DLC」的口径：
+
+```
+isOwned = isSubscribedApp(id) || 可信DisabledDLC.contains(id) || isDLCInstalled(id)
+```
+
+- `isSubscribedApp` / `isDLCInstalled` = Steamworks 的 `ISteamApps::BIsSubscribedApp` / `BIsDlcInstalled`。
+- 「可信 DisabledDLC」= 从 `<游戏安装目录>\..\..\appmanifest_<appid>.acf` 读 `DisabledDLC`（逗号分隔的 appid 列表），但**只有该文件里的 `LastOwner` 等于当前登录的 SteamID64 时才采信**，否则整份忽略（换账号后残留的 DisabledDLC 会把真实拥有的 DLC 误判成「拥有」）。
+- 清单键位：`AppState { appid, name, StateFlags, LastOwner, InstalledDepots {…}, DisabledDLC "a,b,c" }`；`DisabledDLC` 只在有禁用项时才出现（没有该键是常态）。
+- appid 通过环境变量 `SteamAppId` 传给 DLL（原版对应 `steamAppIdOverride`）。
+
+本项目 `SteamOwnershipService` 的做法：**用游戏目录里那份 `steam_api64.dll` 去问 Steam**。补丁生效时那份 DLL 就是 CreamAPI loader，所以它报出来的授权 == 游戏实际看到的授权 —— 这样「DLC 页全绿」就等于「补丁真的用上了」，而不是仅仅「账号里有这些 DLC」。
+
+- 探测链：`NativeLibrary.Load(<ApiDirectory>\steam_api64.dll)` → `SteamAPI_Init` → `SteamAPI_SteamApps_v008` / `SteamAPI_SteamUser_v021` → `GetDLCCount` / `BGetDLCDataByIndex` / `BIsSubscribedApp` / `BIsDlcInstalled` → `SteamAPI_Shutdown` + `Free`。刻意不用 `DllImport` 解析器：全进程只能绑一个 DLL 路径。
+- 32 位游戏的 `steam_api.dll` 在 x64 进程里会 `BadImageFormat` → 直接报「无法判定（32 位游戏不支持）」。
+- 同一个 DLL 的 Steamworks 只能有一个持有者：`SteamNativeSession` 做进程内闸门（DLC 授权探测 ↔ 创意工坊订阅）。
+- 结果缓存 30 秒（key = DLL 路径 + 字节数 + appid），DLC 页的「重新检测」会 `Invalidate()` 强制重探。
+- 真机 Stellaris（appid 281990，SteamID64 76561198370719182）：打完补丁 → `GetDLCCount` 490、拥有 490（判定「补丁已生效」）；用原版 `steam_api64_o.dll` → 53 个、拥有 26（判定「未打补丁，26/53 有授权」）。
+- 失败键（UI 侧 `dlc.ownershipError*`）：`noAppId` / `noDll` / `x86` / `notWindows` / `busy` / `steamNotRunning` / `initFailed` / `native`。
+
 ## 4. launcher-v2.sqlite
 
 路径：<gameDataDir>\launcher-v2.sqlite。CK3 233 KB / V3 / Stellaris 都有；EU5 无。
@@ -161,6 +183,7 @@ CK3 的 playsets_dlcs 为空 ⇒ disabled_dlcs: []，与真机文件一致。
 - .mod 键：name→displayName、version、tags、picture、supported_version→requiredVersion、path→dirPath、archive→archivePath、remote_file_id→steamId。
 - 命名：ugc_<steamId>.mod / pdx_<pdxId>.mod / <dirname>.mod；本地目录 mod 目录内有 descriptor.mod。
 - V3 workshop mod 无 .mod：元数据在 <modDir>\.metadata\metadata.json，键 name, id, version, supported_game_version, short_description, **picture**（封面的相对路径，相对 `.metadata` 目录；历史写法 `thumbnail` 本项目仍兼容读取）, tags, relationships, game_custom_data。EU5 实测 22 个 mod 里 13 个带 `picture`，值多为 `thumbnail.png`，`thumbnail` 键一次都没出现。
+- **启动器新建 mod 的写法**（`ModCreator`，2026-10-31）：legacy 游戏写 `<modDir>/<folder>.mod`（带绝对 `path`，正斜杠）+ `<folder>/descriptor.mod`（同字段但**不带** `path`）+ `<folder>/thumbnail.png`；V3/EU5 写 `<folder>/.metadata/metadata.json`（`id` 为空串、`tags` 数组、`relationships: []`、`game_custom_data.multiplayer_synchronized = true`）+ `.metadata/thumbnail.png`，`picture` 固定 `thumbnail.png`。名称/文件夹名限制 ASCII `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`；V3 目标路径含非 ASCII 直接拒绝。
 - 缩略图解析（`ModThumbnailResolver`，Mod 库与播放集共用一套）：候选**目录**依次是 `dirPath` → `archivePath` 所在目录 → 把 `dirPath` 里 `steamapps\workshop\content\<appid>\<modId>` 这段尾巴重新拼到每个 Steam 库根 → `steamapps\workshop\content\<game.SteamAppId>\<steamId 或 gameRegistryId 里的 ugc_<id>>` → `InstallRoot\..\..` 当 steamapps 根再试一遍（Stellaris 的 `dirPath` 停在旧盘 E:\，mod 实际在 F:\，靠这一层重定位）。**每个候选目录内**先试 `picture`，再扫目录，两级顺序都是「先 mod 根目录，再 `.metadata` 子目录」：① `<dir>\<picture>` → ② `<dir>\<picture 的文件名>`（picture 带子目录但被摊平）→ ③ `<dir>\.metadata\<picture>` → ④ `<dir>\.metadata\<picture 的文件名>` → ⑤ `<dir>\thumbnail*` → ⑥ `<dir>\.metadata\thumbnail*`；`thumbnail*` 里精确的 `thumbnail.png` 优先，其它 `thumbnail.<jpg|jpeg|bmp|gif|webp|dds>` 次之（`.pdn/.psd/.xcf` 不算图）。全 miss 才用 sqlite 的 `thumbnailPath`（官方 `.launcher-cache`，须真实存在）。**EU5 的封面 22/22 都在 `.metadata\thumbnail.png`**，只有 6 个在根目录另有副本 —— 所以 `.metadata` 这一级是必需的；CK3 / Stellaris / EU4 的工坊目录里没有任何 `.metadata`，这一级在它们那里不产生枚举。**不改写 `dirPath`**：加载文件 V1_1 与播放集 `dir:` 匹配键都依赖它。
 - 联网补图（可选，`ModThumbnailService`）：本地解析不到时用 `mods.thumbnailUrl` 下载（域名
   `images.steamusercontent.com`，已加入 `OnlineHosts` 白名单），落 `<程序目录>\data\mod-cache\mod-thumbnails\<modId N>.<ext>`，
@@ -457,7 +480,7 @@ Mod 缩略图：`ModThumbnailSizes.Pixels()` 返回 DIP（32 / 48 / 72），XAML
 
 - 清理是**尽力而为**：文件被占用/无权限时只写 Warn 日志，界面提示「清理失败」，不会抛到 UI。
 - 清理后立即重算该行与总计；状态栏给出「已清空 <行名>，释放 <大小>」。
-- 「清空全部缓存」需要二次确认（ContentDialog），只删上表五个位置，**不动** `pdxnext.sqlite` 里的 `settings` / `session` / 播放集与 mod 表、`logs`、游戏安装目录与存档。
+- 「清空全部缓存」需要二次确认（自绘 `ConfirmOverlay` 浮层，取消在左、确认在右），只删上表五个位置，**不动** `pdxnext.sqlite` 里的 `settings` / `session` / 播放集与 mod 表、`logs`、游戏安装目录与存档。
 - 这五行与「Mod 缩略图缓存天数」「DLC 简介缓存天数」相互独立：清空不会改设置，改设置也不会立刻删已有缓存（过期判定在读取时进行）。
 
 ## 16. DDS 图像（EU5 的 DLC / mod 缩略图）
@@ -615,9 +638,13 @@ CS2 的 `launcher-settings.json` 写的也是 `formatVersion=1.1`，与 V3 的 `
 
 ```
 GET https://steamcommunity.com/workshop/browse/?appid=<appId>&section=readytouseitems
-    &browsesort=<mostpopular|trend|mostrecent|toprated|mostsubscribed|textsearch>
-    &num_per_page=<n>&p=<1-based>&searchtext=<关键词>
+    &browsesort=<trend|toprated|mostrecent|lastupdated|totaluniquesubscribers|textsearch>
+    &num_per_page=<n>&p=<1-based>&searchtext=<关键词>&days=<1|7|30|90|180|365|-1>
 ```
+
+- `browsesort` **只认这五个排序值**（2026-11-03 实测 5 个 appid）：`trend`（最热门）/ `toprated`（最受好评）/ `mostrecent`（最近发行）/ `lastupdated`（最新更新）/ `totaluniquesubscribers`（不重复订阅者总计）。写 `mostupdated` / `mostsubscribed` / `mostpopular` 服务端**不报错、静默回落成 `trend`**（列表与「最热门」逐项相同），所以别按老文档猜参数名。
+- 关键词与排序**并存**：`searchtext=` 与 `browsesort=` 可以同时给，服务端照样按 `browsesort` 排序并在 SSR 的 `browse_sort` 里回显。
+- `days` 只对 `trend` / `toprated` 有意义；`days=0` 会被当成「不传」（回落成默认 7 天），「发布至今」要用 `days=-1`（Steam 网页自己的 All time 就是 -1）。
 
 - `User-Agent: ParadoxLauncher/1.0` 实测可用；必须跟随重定向（`/workshop/browse` 会 302）。
 - 数据在 `<script type="application/json" id="valve-ssr-data">` 里。`parse` 两条路径都要试：
@@ -656,6 +683,140 @@ GET https://store.steampowered.com/api/appdetails?appids=<appId>&filters=categor
 ### 18.4 白名单
 
 `OnlineHosts` 里新增两个精确主机（禁子域）：`steamcommunity.com`、`api.steampowered.com`。`images.steamusercontent.com`（封面图 CDN）与 `store.steampowered.com` 原本就在。`XamlImage` 只认本地文件，封面仍要先经 `AssetDownloader` 落到 `data\workshop-info\steam\` 或 `data\workshop-info\pdx\`（见 §19）。
+
+### 18.5 订阅 / 安装状态（Steamworks 宿主子进程，keyless 网页拿不到）
+
+上面 18.1–18.4 三路网页接口**都只能看公开数据**：某个条目有多少订阅、描述是什么，但拿不到「当前账号订阅了哪些」「装没装」「要不要更新」「本地是否禁用」。这些只有 Steamworks 自己的 `ISteamUGC` 知道，必须以游戏的 appId 调 `SteamAPI_Init`。
+
+实现：`src/PdxLauncher.Core/Steam/SteamWorkshopHostOperation.cs`（原生绑定）+ `SteamHostRunner.cs`（子进程入口）+ `src/PdxLauncher.App/Services/SteamHostClient.cs`（起进程）。**一次查询一个短命子进程**，子进程退 Steam 立刻除名（原因见 README 第 6 节第 9 条）。
+
+```
+PdxLauncher.App.exe --steam-host workshop-subscribed --api <steam_api64.dll> --appid <appId>
+PdxLauncher.App.exe --steam-host workshop-batch --api <dll> --appid <appId> --request <base64 json>
+PdxLauncher.App.exe --steam-host workshop-state --api <dll> --appid <appId> --fileid <id>
+```
+
+`workshop-batch` 的 `--request` 是 `WorkshopBatchRequest(Op, Ids, Flag)` 的 camelCase JSON 再 base64：`Op` ∈ `state` / `download` / `disable` / `enable`（`WorkshopBatchOps`），`Ids` 最多 512 条。
+
+| 用的导出 | 拿到的信息 |
+| --- | --- |
+| `GetNumSubscribedItems(false)` + `GetSubscribedItems` | 当前账号在该 appId 下订阅的全部工坊 id（上限 4000，超出置 `Truncated`） |
+| `GetItemState` | `EItemState` 位：Subscribed(1) / Installed(4) / NeedsUpdate(8) / Downloading(16) / DownloadPending(32) / DisabledLocally(64) |
+| `GetItemInstallInfo` | 磁盘占用、安装目录名、安装时间 |
+| `GetItemDownloadInfo` | 已下载 / 总字节（算得出百分比） |
+| `DownloadItem(id, true)` | 主动让 Steam 开始下载（高优先级） |
+| `SetItemsDisabledLocally(ids, n, bool)` | 工坊层的「订阅但本地禁用」，和退订是两件事 |
+
+位映射只在 `src/PdxLauncher.Core/Steam/WorkshopItemStateBits.cs` 一处，产出 `WorkshopInstallState`（`IsSubscribed` / `IsInstalled` / `IsDownloading` / `NeedsUpdate` / `IsDisabledLocally` / `IsDownloadPending` / `SizeOnDisk` / `Folder` / `BytesDownloaded` / `BytesTotal`）。
+
+**`GetItemState` 返回 0 不能当成「确定没订阅」**：子进程刚 Init、Steam 还没把订阅集合同步过来时也会是 0。所以 `ReadStateDetail` 在 `raw == 0` 时返回 `WorkshopInstallState.Unknown`（null ≠ false），只有订阅动作确认（`ReadStateForConfirm`）才把 0 当「确实没订阅」。前端的未知态由 `WorkshopStateText.Resolve` 映射成不显示徽标。
+
+**缓存**：`src/PdxLauncher.Core/Online/WorkshopStateCache.cs`，内存、TTL 60 秒、按 appId 分桶，不落盘（状态变化太快，落盘没意义且要处理失效）。Mod 库页只在缓存过期时才起一次子进程，行内「下载 / 本地禁用」成功后立刻 `Invalidate` 重载。
+
+**降级**：宿主不可用（没有 `steam_api64.dll`、Steam 没运行、设置里关掉了）时，详情页仍回退 `WorkshopSubscriptionReader` 读 `steamapps/workshop/appworkshop_<appid>.acf`（只有 subscribed / installed 两个布尔），Mod 库页则整列不显示 Steam 状态。
+
+### 18.6 发布请求的扩展字段（`workshop-publish`）
+
+发布同样走宿主子进程，请求体是 `ModPublishRequest` 的 camelCase JSON 再 base64，放在 `--request`：
+
+```
+PdxLauncher.App.exe --steam-host workshop-publish --api <steam_api64.dll> --appid <appId> --request <base64 json>
+```
+
+```jsonc
+{
+  "appId": 1158310,
+  "publishedFileId": null,          // null = 新建条目（走 CreateItem + 法律协议检查）
+  "contentPath": "D:\\mods\\MyMod",
+  "previewPath": "D:\\mods\\cover.png",   // 主封面，单张
+  "title": "……",
+  "description": "……",
+  "changeNote": "……",
+  "tags": ["Gameplay"],
+  "visibility": 0,                  // 0 公开 / 1 仅限好友 / 2 隐藏 / 3 非公开
+  "contentDescriptors": [2],        // 1 裸露 2 暴力血腥 3 仅限成人色情 4 频繁裸露 5 常见成人内容
+  "previewPaths": ["D:\\mods\\a.png", "D:\\mods\\b.png"],
+  "previewVideoIds": ["dQw4w9WgXcQ"],
+  "localizations": [{ "language": "schinese", "title": "……", "description": "……" }]
+}
+```
+
+| 字段 | 落到哪个导出 | 约束 |
+| --- | --- | --- |
+| `visibility` | `SetItemVisibility(handle, uint)` | `ERemoteStoragePublishedFileVisibility` 四档，越界被宿主拒绝 |
+| `contentDescriptors` | 先对 1..5 逐个 `RemoveContentDescriptor`，再 `AddContentDescriptor` | 1..5，越界跳过；全删后重建是为了让「取消勾选」生效 |
+| `previewPaths` | 先 `RemoveItemPreview(handle, 0)` 反复删到 false，再 `AddItemPreviewFile(handle, path, 0)` | 单张 **< 1 MB**（Steam 硬限制）；最多 8 张；`ModPublishLimits` |
+| `previewVideoIds` | `AddItemPreviewVideo(handle, id)` | 只支持 YouTube，`YouTubeVideoId.TryParse` 认 watch / youtu.be / embed / shorts / live / 裸 ID |
+| `localizations` | 主提交成功后，每语言一次 `StartItemUpdate` → `SetItemUpdateLanguage` → `SetItemTitle/Description` → `SubmitItemUpdate` | 最多 12 种；**不重设 content / preview / visibility / tags / 描述词**；单语言失败不中断 |
+
+`localizations` 为什么必须逐语言提交：`SetItemUpdateLanguage(handle, language)` 的语言是**绑定在 update handle 上的**
+（官方文档原文：「设置标题的语言并提供将在此次项目更新中使用的描述」），一个 handle 只能承载一种语言，
+所以 N 种语言必然是 N 轮「起 handle → 设语言 → 设标题/描述 → 提交」。UI 侧因此对齐 Steam 客户端的
+「编辑标题与描述」对话框：表单上只有**一个**语言下拉 + 标题 + 描述，默认 english；切语言时把当前文本写进
+该语言的槽位（`Dictionary<string, ModLocalizedText>`）再载入目标语言，提交时只取「非 english 且填了标题」的那些。
+
+`ModPublication`（本地发布记录）额外保存同一批字段，供再次打开上传页时回填；旧记录只有 `public: true|false`，
+读取时由 `EffectiveVisibility => Visibility ?? (Public ? Public : Private)` 兼容（0 / 2 两档，与改造前行为一致）。
+
+宿主总超时 = `PublishTimeout × (1 + min(语言数, 12))`，见 `SteamHostRunner.RunPublish`。
+
+### 18.7 发布结果回到界面时的展示（纯 App 侧，无新增数据格式）
+
+发布协议本身没变，但界面呈现有三条约定（真机反馈后定下，见 HANDOFF §0.72）：
+
+- **徽标 ≠ 副标题**：列表行右侧徽标只显示状态短文案「已发布」（`modstudio.rowPublishedShort`，经
+  `ModStudioRowViewModel.PublicationBadgeText` 计算后绑定）；带工坊 id 的「已发布 · {0}」
+  （`modstudio.rowPublished`）只用于副标题 `SubtitleText` 与详情面板的「发布状态」行。
+  原因：`Localizer.Format(key)` 在 `args` 为空时**原样返回模板**，把带占位符的键直接绑到 XAML 会在界面上
+  打出字面的 `{0}`；`LocalizationBindingChecks` 现在扫描所有 `{x:Bind L.Xxx}` 并断言模板里没有 `{n}`。
+- **上传面板的出口**：`Pane` 的三个值（Detail / Create / Upload）互斥，发布**成功**、**取消**、以及
+  **在上传页切换选中的 mod** 都会回到 `Detail`；只有发布**失败**留在 `Upload`，以保留表单与错误信息供重试。
+  页面是 `NavigationCacheMode="Required"`，实例常驻，所以复位必须写在视图模型里（`PublishAsync` 的取消分支、
+  `OnSelectedRowChanged`），不能指望离开页面时自动清状态。
+- **详情面板只有一个标题**：mod 名（`SelectedName`，Title 样式）。原先顶部还有一个「Mod 详情」小标题，
+  与它重复，已删除（`modstudio.detailTitle`、`modstudio.backToDetail` 两个键一并移除）。
+
+### 18.8 描述文本的格式与长度（BBCode + UTF-8 字节上限）
+
+工坊条目的标题 / 描述**不是 Markdown、也不是 HTML**，而是 Steam 社区方言的 BBCode（协议里就是一段原文，
+`ISteamUGC::SetItemDescription` 存什么、页面就渲染什么）。我们的处理分三层：
+
+**一、长度按 UTF-8 字节判**（`ModPublishLimits`，`src/PdxLauncher.Core/Steam/SteamHostProtocol.cs`）：
+
+| 字段 | 上限 | 依据 |
+| --- | --- | --- |
+| 标题 | 128 字节（`MaxTitleBytes`） | `sdk/public/steam/isteamremotestorage.h:52` `k_cchPublishedDocumentTitleMax = 128 + 1` |
+| 描述 | 8000 字节（`MaxDescriptionBytes`） | 同文件 `:53` `k_cchPublishedDocumentDescriptionMax = 8000` |
+| 更新说明 | 8000 字节（`MaxChangeNoteBytes`） | 同文件 `:54` `k_cchPublishedDocumentChangeDescriptionMax = 8000` |
+
+`Utf8Length(string?)` 用 `Encoding.UTF8.GetByteCount`；`TryValidateTitle` / `TryValidateDescription` /
+`TryValidateChangeNote` 返回 `false` 并带一段「实际字节 / 上限 / 一个汉字按 3 字节算」的文案。
+拦截点有三处：`ModStudioViewModel.PublishAsync`（给用户看）、`SteamWorkshopHostOperation.Publish`
+与 `SubmitLocalizationCore`（防绕过 UI 的调用）。**注意**：判的是字节不是字符，40 个汉字就已经 120 字节。
+
+**二、BBCode → `MarkdownDocument`**（`src/PdxLauncher.Core/Text/SteamBbCodeParser.cs`）：
+
+- 块级：`[h1]`–`[h6]` → `MarkdownHeading`；`[hr]`（含 `[/hr]`、`[hr/]`）→ `MarkdownRule`；
+  `[code]`（可带 `=lang`）→ `MarkdownCodeBlock`；`[quote]` / `[quote=作者]` / `[spoiler]` → `MarkdownQuote`（嵌套上限 4）；
+  `[list]` / `[olist]` → `MarkdownListItem`（按 `[*]` 切条目，可嵌套一层）。
+- 行内：`[b]/[i]/[u]/[s]/[strike]` → `MarkdownStyledInline`；`[url=地址]文字[/url]` 与 `[url]地址[/url]` →
+  `MarkdownLinkInline`；`[img]URL[/img]` → `MarkdownImageInline`；`[previewyoutube=ID]` →
+  `MarkdownImageInline("https://img.youtube.com/vi/<ID>/0.jpg")`；`[code]…[/code]` → `MarkdownCodeInline`；
+  `[noparse]…[/noparse]` → 原文；词首的裸 `http(s)://` 链接也会被识别（句末标点剔除）。
+- **不认识的 `[…]` 原样保留**：正文里真实存在 `[1.13]` 这类方括号内容，不能一刀切。
+- `MaxInputLength = 20000`，超出后 `IsTruncated = true`（与 `MarkdownParser` / `HtmlDescriptionParser` 一致）。
+
+产出的 AST 与详情页共用：上传页的「预览（读者看到的样子）」直接把它交给 `Controls/MarkdownView`；
+详情页在拿不到物品页 HTML 时也走这条（`WorkshopDetailViewModel` 的兜底分支），因此不会再出现
+`[hr]`、`[olist]` 这类标记直接漏到界面上的情况。
+
+**三、去标记的两份实现合一**：`PdxLauncher.App/Services/WorkshopText.ToPlainText` 现在只是委托
+`PdxLauncher.Core/Text/WorkshopHtml.ToPlainText`。后者用**白名单**正则
+（`\[/?(?:previewyoutube|strike|spoiler|noparse|olist|list|quote|code|h[1-6]|hr|b|i|u|s|\*)(?:=[^\]]*)?\]`
+与 `\[/?(?:url|img)(?:=[^\]]*)?\]`），长标签排在短标签之前（否则 `[s]` 会把 `[spoiler]` 拦腰截断），
+**绝不使用 `\[[^\]]*\]`**。
+
+补充：`HtmlDescriptionParser` 现在把 Steam 渲染出的 `<hr>` 也映射成 `MarkdownRule`（之前该标签被静默丢弃）。
 
 ## 19. 创意工坊信息缓存（`data\workshop-info\`）
 

@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
 
+using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
@@ -23,7 +24,7 @@ namespace PdxLauncher.App.Views;
 public sealed partial class WorkshopDetailPage : Page
 {
     private readonly WorkshopDetailViewModel _viewModel;
-    private readonly SteamWorkshopBridge? _steamBridge;
+    private readonly SteamWorkshopHostBackend? _steamBackend;
     private WorkshopRowViewModel? _row;
 
     /// <summary>
@@ -39,7 +40,7 @@ public sealed partial class WorkshopDetailPage : Page
     {
         InitializeComponent();
 
-        _steamBridge = CreateSteamBridge();
+        _steamBackend = CreateSteamBackend();
 
         _viewModel = new WorkshopDetailViewModel(
             new WorkshopDetailSource(
@@ -61,7 +62,7 @@ public sealed partial class WorkshopDetailPage : Page
                 AppServices.DataRoot,
                 AppServices.Logger),
             AppServices.Logger,
-            _steamBridge,
+            _steamBackend,
             new WorkshopSubscriptionReader(
                 AppServices.FileSystem,
                 new SteamLibraryLocator(AppServices.FileSystem, AppServices.Logger),
@@ -84,45 +85,39 @@ public sealed partial class WorkshopDetailPage : Page
     }
 
     /// <summary>
-    /// 只在设置里明确打开「Steam 工坊直连订阅」时才初始化 Steamworks：
-    /// 初始化要以当前游戏的 appid 调 SteamAPI_InitFlat，属于借用游戏的 Steam 凭据，默认绝不做。
+    /// 建 Steam 直连后端：读状态与写订阅两个开关分开管。
+    /// 只开了「读取状态」（默认开）时后端仍然可用，只用来读订阅/安装/下载状态；
+    /// 真正下发订阅动作用的是写开关，没开就在视图模型里拒绝。
     /// 返回 null 表示走「打开 Steam 客户端」的降级路径。
+    /// <para>
+    /// 真正的原生调用在短命子进程里做（<see cref="SteamHostClient"/>），本进程不初始化 Steamworks，
+    /// 因此不会被 Steam 当成「游戏正在运行」。
+    /// </para>
     /// </summary>
-    private static SteamWorkshopBridge? CreateSteamBridge()
+    private static SteamWorkshopHostBackend? CreateSteamBackend()
     {
-        if (!AppServices.Settings.SteamWorkshopSubscribeEnabled)
+        if (!AppServices.Settings.SteamWorkshopSubscribeEnabled
+            && !AppServices.Settings.SteamWorkshopStateEnabled)
         {
             return null;
         }
 
         try
         {
-            var bridge = new SteamWorkshopBridge(
-                AppServices.FileSystem,
-                AppServices.Logger,
-                new SteamApiLocator(AppServices.FileSystem, AppServices.Logger));
+            var backend = AppServices.Settings.SteamWorkshopSubscribeEnabled
+                ? SteamWorkshopBackends.CreateForSubscribe(AppServices.CurrentGame)
+                : SteamWorkshopBackends.CreateForState(AppServices.CurrentGame);
 
-            var appId = WorkshopSourceChooser.ResolveAppId(
-                AppServices.CurrentGame?.SteamAppId,
-                AppServices.CurrentGame?.GameId);
-
-            if (appId is null)
+            if (backend is null)
             {
-                AppServices.Logger.Warn("Steam 直连订阅已开启，但当前游戏没有 Steam appid，退回打开客户端");
-                return null;
+                AppServices.Logger.Warn("Steam 直连不可用，退回打开客户端");
             }
 
-            bridge.TryInitialize(
-                appId.Value,
-                AppServices.Settings.SteamApiDllPath,
-                AppServices.CurrentGame,
-                out _);
-
-            return bridge;
+            return backend;
         }
         catch (Exception ex)
         {
-            AppServices.Logger.Error("初始化 Steam 直连订阅失败，退回打开客户端", ex);
+            AppServices.Logger.Error("初始化 Steam 直连失败，退回打开客户端", ex);
             return null;
         }
     }
@@ -175,9 +170,8 @@ public sealed partial class WorkshopDetailPage : Page
         _viewModel.GalleryImageReady -= OnGalleryImageReady;
         _lifetime?.Cancel();
 
-        // Steamworks 只应在这个页面存活期间初始化：离开页面就停回调泵并 Shutdown，
-        // 免得把「借来的 appid」一直挂在 Steam 客户端上。
-        _steamBridge?.Dispose();
+        // 原生 Steamworks 会话本来就在子进程里，随进程退出自动结束；
+        // 这里没有要显式关掉的东西（后端是无状态的一次性调用封装）。
     }
 
     private async void OnRetryClick(object sender, RoutedEventArgs e)
@@ -283,21 +277,13 @@ public sealed partial class WorkshopDetailPage : Page
 
         var subscribe = !_viewModel.IsInstalled;
         var action = subscribe ? L.WorkshopDetailSubscribe : L.WorkshopDetailUnsubscribe;
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = action,
-            Content = new TextBlock
-            {
-                Text = L.WorkshopDetailSubscribePlaysetHint,
-                TextWrapping = TextWrapping.Wrap,
-            },
-            PrimaryButtonText = action,
-            CloseButtonText = L.CommonCancel,
-            DefaultButton = ContentDialogButton.Close,
-        };
 
-        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        var confirmed = await ConfirmOverlay.ConfirmAsync(
+            action,
+            L.WorkshopDetailSubscribePlaysetHint,
+            action,
+            L.CommonCancel);
+        if (!confirmed)
         {
             return;
         }
@@ -324,17 +310,12 @@ public sealed partial class WorkshopDetailPage : Page
                 ? L.WorkshopDetailSteamSubscribeConfirm
                 : L.WorkshopDetailSteamUnsubscribeConfirm;
 
-            var dialog = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = actionText,
-                Content = new TextBlock { Text = message, TextWrapping = TextWrapping.Wrap },
-                PrimaryButtonText = actionText,
-                CloseButtonText = L.CommonCancel,
-                DefaultButton = ContentDialogButton.Close,
-            };
-
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            var confirmed = await ConfirmOverlay.ConfirmAsync(
+                actionText,
+                message,
+                actionText,
+                L.CommonCancel);
+            if (!confirmed)
             {
                 return;
             }

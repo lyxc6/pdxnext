@@ -4,6 +4,7 @@ using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
@@ -70,6 +71,9 @@ public sealed partial class SettingsPage : Page
 
             // 缓存占用只看文件属性，独立于设置加载，失败不该影响整页。
             await _viewModel.RefreshCacheStatsAsync(_lifetime.Token).ConfigureAwait(true);
+
+            // 本地模型与术语词典是独立于设置文件的状态，进入页面时读一次。
+            _viewModel.RefreshLocalTranslationState();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -141,7 +145,12 @@ public sealed partial class SettingsPage : Page
         ShowSection(CurrentSectionIndex());
     }
 
-    /// <summary>左侧分类用 NavigationViewItem.Tag 携带序号（"0"–"5"），与 XAML 顺序一致。</summary>
+    private async void OnCheckUpdatesClick(object sender, RoutedEventArgs e)
+    {
+        await _viewModel.CheckForUpdatesAsync();
+    }
+
+    /// <summary>左侧分类用 NavigationViewItem.Tag 携带序号（"0"–"7"），与 XAML 顺序一致。</summary>
     private int CurrentSectionIndex()
     {
         if (navSettingsSections.SelectedItem is NavigationViewItem item
@@ -157,7 +166,7 @@ public sealed partial class SettingsPage : Page
     {
         var sections = new FrameworkElement?[]
         {
-            secAppearance, secLaunch, secPaths, secOnline, secCache, secAdvanced, secTranslation,
+            secAppearance, secLaunch, secPaths, secOnline, secCache, secAdvanced, secTranslation, secAbout,
         };
 
         for (var i = 0; i < sections.Length; i++)
@@ -225,6 +234,79 @@ public sealed partial class SettingsPage : Page
             "SettingsPage 立即检查主题失败",
             () => _viewModel.RefreshThemeAsync(_lifetime.Token),
             ex => ShowMessageAsync(T(Keys.SettingsThemeDialogFailedTitle), ex.Message));
+
+    // ------------------------------------------------------------ 翻译区
+
+    /// <summary>Azure 门户的「创建翻译器资源」页（申请微软翻译密钥的入口）。</summary>
+    private const string MicrosoftTranslatePortalUrl =
+        "https://portal.azure.com/#create/Microsoft.CognitiveServicesTextTranslation";
+
+    /// <summary>Google Cloud 控制台的「凭据 / API 密钥」页（申请谷歌云翻译密钥的入口）。</summary>
+    private const string GoogleCloudTranslatePortalUrl =
+        "https://console.cloud.google.com/apis/credentials";
+
+    /// <summary>逐个引擎翻一句探针，把结果写进翻译区（不弹窗，失败也不崩页面）。</summary>
+    private async void OnTranslateTestClick(object sender, RoutedEventArgs e) =>
+        await RunGuardedAsync(
+            "SettingsPage 测试翻译失败",
+            () => _viewModel.TestTranslationAsync(_lifetime.Token));
+
+    /// <summary>「打开 Azure 门户创建翻译器资源」。</summary>
+    private void OnTranslateMicrosoftPortalClick(object sender, RoutedEventArgs e) =>
+        OpenTranslatePortal(MicrosoftTranslatePortalUrl, "微软翻译");
+
+    /// <summary>「打开 Google Cloud 控制台创建 API 密钥」。</summary>
+    private void OnTranslateGoogleCloudPortalClick(object sender, RoutedEventArgs e) =>
+        OpenTranslatePortal(GoogleCloudTranslatePortalUrl, "谷歌云翻译");
+
+    /// <summary>把申请页交给默认浏览器；打不开就在状态里说明，不弹窗打断填写。</summary>
+    /// <param name="url">申请页地址。</param>
+    /// <param name="who">中文引擎名，用于日志与提示。</param>
+    private void OpenTranslatePortal(string url, string who)
+    {
+        if (ShellLauncher.TryOpenUrl(url, "SettingsPage 打开" + who + "申请页"))
+        {
+            return;
+        }
+
+        _viewModel.SetStatus(Keys.SettingsTranslateStatusPortalFailed, who);
+    }
+
+    // -------------------------------------------------- 本地离线翻译
+
+    /// <summary>下载某个本地离线模型（行内进度条会转）。</summary>
+    private async void OnDownloadLocalModelClick(object sender, RoutedEventArgs e) =>
+        await RunGuardedAsync(
+            "SettingsPage 下载本地模型失败",
+            () => sender is FrameworkElement { DataContext: LocalModelRowViewModel row }
+                ? _viewModel.DownloadLocalModelAsync(row, _lifetime.Token)
+                : Task.CompletedTask);
+
+    /// <summary>删除某个已安装的本地离线模型。</summary>
+    private void OnRemoveLocalModelClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: LocalModelRowViewModel row })
+        {
+            _viewModel.RemoveLocalModel(row);
+        }
+    }
+
+    /// <summary>把输入框里的词条追加到词典列表（写盘由「保存词典」负责）。</summary>
+    private void OnAddGlossaryEntryClick(object sender, RoutedEventArgs e) =>
+        _viewModel.AddGlossaryEntry();
+
+    /// <summary>从词典列表里删掉一条词条（写盘由「保存词典」负责）。</summary>
+    private void OnRemoveGlossaryEntryClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: GlossaryEntryViewModel entry })
+        {
+            _viewModel.RemoveGlossaryEntry(entry);
+        }
+    }
+
+    /// <summary>把词典列表写盘。</summary>
+    private void OnSaveGlossaryClick(object sender, RoutedEventArgs e) =>
+        _viewModel.SaveGlossary();
 
     private void OnProxyUrlChanged(object sender, TextChangedEventArgs e)
     {
@@ -425,18 +507,12 @@ public sealed partial class SettingsPage : Page
                 return;
             }
 
-            var confirm = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = T(Keys.SettingsPatchApplyDialogTitle),
-                Content = T(Keys.SettingsPatchApplyDialogContent),
-                PrimaryButtonText = T(Keys.SettingsPatchApplyConfirm),
-                CloseButtonText = T(Keys.CommonCancel),
-                DefaultButton = ContentDialogButton.Close,
-            };
-
-            var result = await confirm.ShowAsync();
-            if (result != ContentDialogResult.Primary)
+            var confirmed = await ConfirmOverlay.ConfirmAsync(
+                T(Keys.SettingsPatchApplyDialogTitle),
+                T(Keys.SettingsPatchApplyDialogContent),
+                T(Keys.SettingsPatchApplyConfirm),
+                T(Keys.CommonCancel));
+            if (!confirmed)
             {
                 return;
             }
@@ -464,18 +540,12 @@ public sealed partial class SettingsPage : Page
                 return;
             }
 
-            var confirm = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = T(Keys.SettingsPatchRemoveDialogTitle),
-                Content = T(Keys.SettingsPatchRemoveDialogContent),
-                PrimaryButtonText = T(Keys.SettingsPatchRemoveConfirm),
-                CloseButtonText = T(Keys.CommonCancel),
-                DefaultButton = ContentDialogButton.Close,
-            };
-
-            var result = await confirm.ShowAsync();
-            if (result != ContentDialogResult.Primary)
+            var confirmed = await ConfirmOverlay.ConfirmAsync(
+                T(Keys.SettingsPatchRemoveDialogTitle),
+                T(Keys.SettingsPatchRemoveDialogContent),
+                T(Keys.SettingsPatchRemoveConfirm),
+                T(Keys.CommonCancel));
+            if (!confirmed)
             {
                 return;
             }
@@ -537,20 +607,14 @@ public sealed partial class SettingsPage : Page
 
     // ------------------------------------------------------------ 对话框 / 护栏
 
-    /// <summary>统一的两键确认框：主按钮确认、关闭按钮取消，默认焦点落在取消上。</summary>
+    /// <summary>统一的两键确认框：左边取消、右边确认，默认焦点落在确认上。</summary>
     private async Task<bool> ConfirmAsync(string title, string content, string primaryText)
     {
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot,
-            Title = title,
-            Content = content,
-            PrimaryButtonText = primaryText,
-            CloseButtonText = T(Keys.CommonCancel),
-            DefaultButton = ContentDialogButton.Close,
-        };
-
-        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+        return await ConfirmOverlay.ConfirmAsync(
+            title,
+            content,
+            primaryText,
+            T(Keys.CommonCancel));
     }
 
     /// <summary>
@@ -583,15 +647,7 @@ public sealed partial class SettingsPage : Page
     {
         try
         {
-            var dialog = new ContentDialog
-            {
-                XamlRoot = XamlRoot,
-                Title = title,
-                Content = message,
-                CloseButtonText = T(Keys.CommonClose),
-            };
-
-            await dialog.ShowAsync();
+            await ConfirmOverlay.ShowMessage(title, message, T(Keys.CommonClose));
         }
         catch (Exception ex)
         {

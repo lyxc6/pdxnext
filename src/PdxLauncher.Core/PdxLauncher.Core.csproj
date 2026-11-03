@@ -7,6 +7,18 @@
   </PropertyGroup>
 
   <!--
+    本地翻译引擎依赖：
+    BergamotTranslatorSharp 提供 Firefox 同款 NMT 的托管封装 + bergamot.dll；
+    LLamaSharp 提供进程内 GGUF 推理（Index-Translate-2B），原生库在 Backend.Cpu 包里。
+    两个包都已在离线 NuGet 缓存中，NuGet.config 是全离线源，不会去联网。
+  -->
+  <ItemGroup>
+    <PackageReference Include="BergamotTranslatorSharp" Version="0.7.0" />
+    <PackageReference Include="LLamaSharp" Version="0.30.0" />
+    <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.30.0" />
+  </ItemGroup>
+
+  <!--
     补丁素材（DLC 解锁 loader + cream_api.ini 模板）内嵌进 PdxLauncher.Core.dll，
     发布时整个目录拷走即可用，不依赖外部文件。LogicalName 必须与
     Patch/PatchAssets.cs 里的常量、tools/manual-build.py 的 -resource: 参数一致。
@@ -20,6 +32,10 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Patch\Assets\cream_api.ini">
       <LogicalName>PdxLauncher.Patch.cream_api.ini</LogicalName>
+    </EmbeddedResource>
+    <!-- 新建 mod 的默认封面；LogicalName 必须与 ModStudio/ModCoverAssets.cs 里的常量一致。 -->
+    <EmbeddedResource Include="ModStudio\Assets\default-cover.png">
+      <LogicalName>PdxLauncher.ModStudio.default-cover.png</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 </Project>

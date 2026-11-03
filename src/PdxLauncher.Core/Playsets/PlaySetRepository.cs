@@ -3,6 +3,7 @@ namespace PdxLauncher.Core.Playsets;
 using System.Globalization;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Mods.Sorting;
 
 /// <summary>
 /// <see cref="IPlaySetRepository"/> 的 SQLite 实现（winsqlite3.dll）。
@@ -58,6 +59,78 @@ public sealed class PlaySetRepository : IPlaySetRepository
 
     /// <summary>计算写前备份文件的路径。</summary>
     public static string GetBackupPath(string databasePath) => databasePath + BackupSuffix;
+
+    /// <summary>
+    /// 读取 mods_dependencies 表（官方声明依赖），映射为自动排序的硬边：
+    /// modId 依赖 dependencyId，则 dependencyId 必须先于 modId 加载（Before=dependencyId，After=modId）。
+    /// <para>列名容错：缺列的行整行跳过（不同游戏版本列不齐时不炸）；库不存在 / 无表 / 读失败一律降级为空结果并记日志，绝不抛给调用方。</para>
+    /// <para>静态入口、只读打开，不动 <see cref="IPlaySetRepository"/> 接口。</para>
+    /// </summary>
+    public static IReadOnlyList<SortEdge> ReadModDependencyEdges(GameInstallation game, IFileSystem fileSystem, IAppLogger logger)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(fileSystem);
+        ArgumentNullException.ThrowIfNull(logger);
+
+        var databasePath = GetDatabasePath(game);
+        try
+        {
+            if (!fileSystem.FileExists(databasePath))
+            {
+                logger.Warn("读取 mods_dependencies：数据库不存在，按空结果处理：" + databasePath);
+                return Array.Empty<SortEdge>();
+            }
+
+            using var connection = SqliteConnection.OpenReadOnly(databasePath);
+            if (!connection.TableExists("mods_dependencies"))
+            {
+                return Array.Empty<SortEdge>();
+            }
+
+            var rows = connection.Query("SELECT * FROM mods_dependencies");
+            var edges = new List<SortEdge>(rows.Count);
+            foreach (var row in rows)
+            {
+                var modIdText = ReadNullableString(row, "modId");
+                var dependencyIdText = ReadNullableString(row, "dependencyId");
+                if (string.IsNullOrEmpty(modIdText) || string.IsNullOrEmpty(dependencyIdText))
+                {
+                    continue;
+                }
+
+                if (!Guid.TryParse(modIdText, out var modId) || !Guid.TryParse(dependencyIdText, out var dependencyId))
+                {
+                    logger.Warn("表 mods_dependencies 的 modId/dependencyId 不是合法 GUID，已跳过该行：" + modIdText + " → " + dependencyIdText);
+                    continue;
+                }
+
+                if (modId == dependencyId)
+                {
+                    continue;
+                }
+
+                var detail = ReadNullableString(row, "dependencyName") ?? ReadNullableString(row, "dependencyType");
+                edges.Add(new SortEdge(dependencyId, modId, SortEdgeKind.DeclaredDependency, detail));
+            }
+
+            return edges;
+        }
+        catch (SqliteException exception)
+        {
+            logger.Warn("读取 mods_dependencies 失败（" + databasePath + "）：" + exception.Message);
+            return Array.Empty<SortEdge>();
+        }
+        catch (IOException exception)
+        {
+            logger.Warn("读取 mods_dependencies 读取失败（" + databasePath + "）：" + exception.Message);
+            return Array.Empty<SortEdge>();
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            logger.Warn("读取 mods_dependencies 无权限（" + databasePath + "）：" + exception.Message);
+            return Array.Empty<SortEdge>();
+        }
+    }
 
     /// <inheritdoc />
     public Task<IReadOnlyList<PlaySet>> GetPlaySetsAsync(GameInstallation game, CancellationToken cancellationToken)

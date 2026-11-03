@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:svc="using:PdxLauncher.App.Services"
     xmlns:vm="using:PdxLauncher.App.ViewModels"
+    xmlns:controls="using:PdxLauncher.App.Controls"
     NavigationCacheMode="Required"
     Background="{ThemeResource PdxPageVeilBrush}">
 
@@ -59,25 +60,25 @@
                      AutomationProperties.AutomationId="txtModLibrarySearch"
                      AutomationProperties.Name="{x:Bind L.ModlibSearchName, Mode=OneWay}" />
 
-            <ComboBox Grid.Column="2"
-                      x:Name="SortBox"
-                      MinWidth="150"
-                      VerticalAlignment="Center"
-                      ItemsSource="{x:Bind ViewModel.SortModes, Mode=OneWay}"
-                      SelectedItem="{x:Bind ViewModel.SelectedSortMode, Mode=OneWay}"
-                      SelectionChanged="OnSortSelectionChanged"
-                      AutomationProperties.AutomationId="cmbModLibrarySort"
-                      AutomationProperties.Name="{x:Bind L.ModlibSortName, Mode=OneWay}" />
+            <controls:PdxDropDown Grid.Column="2"
+                                 x:Name="SortBox"
+                                 MinWidth="150"
+                                 VerticalAlignment="Center"
+                                 ItemsSource="{x:Bind ViewModel.SortModes, Mode=OneWay}"
+                                 SelectedItem="{x:Bind ViewModel.SelectedSortMode, Mode=OneWay}"
+                                 SelectionChanged="OnSortSelectionChanged"
+                                 AutomationProperties.AutomationId="cmbModLibrarySort"
+                                 AutomationProperties.Name="{x:Bind L.ModlibSortName, Mode=OneWay}" />
 
-            <ComboBox Grid.Column="3"
-                      x:Name="SourceBox"
-                      MinWidth="130"
-                      VerticalAlignment="Center"
-                      ItemsSource="{x:Bind ViewModel.SourceFilterModes, Mode=OneWay}"
-                      SelectedItem="{x:Bind ViewModel.SelectedSourceFilter, Mode=OneWay}"
-                      SelectionChanged="OnSourceFilterChanged"
-                      AutomationProperties.AutomationId="cmbModLibrarySource"
-                      AutomationProperties.Name="{x:Bind L.ModlibSourceFilterName, Mode=OneWay}" />
+            <controls:PdxDropDown Grid.Column="3"
+                                 x:Name="SourceBox"
+                                 MinWidth="130"
+                                 VerticalAlignment="Center"
+                                 ItemsSource="{x:Bind ViewModel.SourceFilterModes, Mode=OneWay}"
+                                 SelectedItem="{x:Bind ViewModel.SelectedSourceFilter, Mode=OneWay}"
+                                 SelectionChanged="OnSourceFilterChanged"
+                                 AutomationProperties.AutomationId="cmbModLibrarySource"
+                                 AutomationProperties.Name="{x:Bind L.ModlibSourceFilterName, Mode=OneWay}" />
 
             <ProgressRing Grid.Column="4"
                           Width="20"
@@ -164,7 +165,7 @@
                                                    Foreground="{ThemeResource PdxOriginSubscribedForegroundBrush}" />
                                     </Border>
                                 </StackPanel>
-                                <!-- 译名：原文与译文同显，译文在标题下方的描边框里（决策：不做二选一切换）。 -->
+                                <!-- 译名：原文与译文同显，译文在标题下方的描边框里（决策：不做二选一切换；不加「译文」标题）。 -->
                                 <Border Margin="0,6,0,0"
                                         Padding="6,4"
                                         CornerRadius="6"
@@ -172,15 +173,10 @@
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                         BorderThickness="1"
                                         Visibility="{x:Bind svc:XamlVisibility.FromString(TranslatedName), Mode=OneWay}">
-                                    <StackPanel Spacing="2">
-                                        <TextBlock Text="{x:Bind L.WorkshopTranslateLabel, Mode=OneWay}"
-                                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                        <TextBlock Text="{x:Bind TranslatedName, Mode=OneWay}"
-                                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                                   TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
+                                    <TextBlock Text="{x:Bind TranslatedName, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                               TextTrimming="CharacterEllipsis" />
                                 </Border>
                                 <TextBlock Text="{x:Bind SubtitleText, Mode=OneWay}"
                                            Style="{StaticResource CaptionTextBlockStyle}"
@@ -217,6 +213,22 @@
                                            TextTrimming="CharacterEllipsis"
                                            AutomationProperties.Name="{x:Bind L.ModlibPlaySetName, Mode=OneWay}"
                                            Visibility="{x:Bind svc:XamlVisibility.FromString(PlaySetText), Mode=OneWay}" />
+
+                                <!-- Steam 侧真实状态：下载中 / 需要更新 / 已安装 / 本地禁用。
+                                     数据来自 steam-host 子进程的一次整库查询，拿不到就整块不显示。 -->
+                                <Border Padding="6,1"
+                                        CornerRadius="3"
+                                        VerticalAlignment="Center"
+                                        Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
+                                        AutomationProperties.AutomationId="{x:Bind SteamStateAutomationId, Mode=OneTime}"
+                                        AutomationProperties.Name="{x:Bind L.ModlibSteamStateName, Mode=OneWay}"
+                                        AutomationProperties.HelpText="{x:Bind SteamStateBadgeText, Mode=OneWay}"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowSteamStateBadge), Mode=OneTime}">
+                                    <TextBlock Text="{x:Bind SteamStateBadgeText, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </Border>
 
                                 <!-- 行操作：四个图标按钮，一个动作一个按钮，不用再展开菜单 -->
                                 <StackPanel Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
@@ -267,6 +279,35 @@
                                             AutomationProperties.AutomationId="{x:Bind OpenBrowserAutomationId, Mode=OneTime}"
                                             AutomationProperties.Name="{x:Bind L.ModlibOpenBrowser, Mode=OneWay}">
                                         <FontIcon Glyph="&#xE774;" FontSize="16" />
+                                    </Button>
+
+                                    <!-- 让 Steam 立刻下载这条（工坊条目 + 尚未安装 + 不在下载中） -->
+                                    <Button Width="32"
+                                            Height="32"
+                                            Padding="0"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Click="OnSteamDownloadClick"
+                                            IsEnabled="{x:Bind CanTriggerSteamDownload, Mode=OneTime}"
+                                            ToolTipService.ToolTip="{x:Bind L.ModlibSteamDownloadName, Mode=OneWay}"
+                                            AutomationProperties.AutomationId="{x:Bind SteamDownloadAutomationId, Mode=OneTime}"
+                                            AutomationProperties.Name="{x:Bind L.ModlibSteamDownloadName, Mode=OneWay}"
+                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(HasWorkshopPage), Mode=OneTime}">
+                                        <FontIcon Glyph="&#xE896;" FontSize="16" />
+                                    </Button>
+
+                                    <!-- 在 Steam 里本地禁用 / 解除禁用（订阅保留，只是游戏不加载） -->
+                                    <Button Width="32"
+                                            Height="32"
+                                            Padding="0"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Click="OnSteamDisableClick"
+                                            ToolTipService.ToolTip="{x:Bind SteamDisableActionText, Mode=OneWay}"
+                                            AutomationProperties.AutomationId="{x:Bind SteamDisableAutomationId, Mode=OneTime}"
+                                            AutomationProperties.Name="{x:Bind SteamDisableActionText, Mode=OneWay}"
+                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(HasWorkshopPage), Mode=OneTime}">
+                                        <FontIcon Glyph="&#xE8D8;" FontSize="16" />
                                     </Button>
                                 </StackPanel>
                             </StackPanel>

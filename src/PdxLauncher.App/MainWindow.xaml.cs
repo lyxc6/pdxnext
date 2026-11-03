@@ -3,11 +3,13 @@ namespace PdxLauncher.App;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
+using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
@@ -78,15 +80,36 @@ public sealed partial class MainWindow : Window
 
     private bool _isStarted;
 
+    /// <summary>翻译提示的显示延时：命中缓存的批次几十毫秒就结束，不值得让标题栏闪一下。</summary>
+    private static readonly TimeSpan TranslationIndicatorShowDelay = TimeSpan.FromMilliseconds(150);
+
+    /// <summary>
+    /// 翻译提示的隐藏延时：整份文档是逐段翻的，段与段之间会有短暂空隙，
+    /// 直接按计数显隐会让标题栏忽隐忽现。
+    /// </summary>
+    private static readonly TimeSpan TranslationIndicatorHideDelay = TimeSpan.FromMilliseconds(400);
+
+    private DispatcherQueueTimer? _translationIndicatorShowTimer;
+    private DispatcherQueueTimer? _translationIndicatorHideTimer;
+
     /// <summary>是否已挂上标题栏留白的重算回调（DPI / 尺寸变化时重算）。</summary>
     private bool _captionPaddingHooked;
 
     /// <summary>XAML 里取界面文案的入口（切语言时由 Localizer 的属性变更驱动）。</summary>
     public Localizer L => Localizer.Instance;
 
+    /// <summary>
+    /// 全局确认浮层：所有「确认 / 取消」对话框都走它，
+    /// 这样「取消」在左、「确认（主色）」在右在所有页面保持一致。
+    /// </summary>
+    public ConfirmOverlay ConfirmOverlayHost { get; private set; }
+
     public MainWindow()
     {
         InitializeComponent();
+
+        ConfirmOverlayHost = ConfirmOverlayLayer;
+        ConfirmOverlay.Host = ConfirmOverlayHost;
 
         Title = Localizer.Instance.AppName;
 
@@ -124,6 +147,15 @@ public sealed partial class MainWindow : Window
         AppServices.BackgroundDisplayChanged += OnBackgroundDisplayChanged;
         AlwaysOnTopService.Changed += OnAlwaysOnTopChanged;
         Localizer.Instance.LanguageChanged += OnLanguageChanged;
+
+        // 翻译在途提示：计数点在 TranslationCoordinator.TranslateBatchAsync，这里只负责显示 / 隐藏。
+        if (AppServices.IsInitialized)
+        {
+            AppServices.Translation.Activity.Changed += OnTranslationActivityChanged;
+        }
+
+        CreateTranslationIndicatorTimers();
+
         Closed += OnWindowClosed;
     }
 
@@ -190,6 +222,9 @@ public sealed partial class MainWindow : Window
             {
                 NavigateTo(NavigationService.LibraryTag);
             }
+
+            // 自动检查更新放在首屏完成之后；fire-and-forget，绝不让网络拖慢冷启动。
+            _ = UpdateFlow.CheckOnStartupAsync();
         }
         catch (Exception ex)
         {
@@ -438,6 +473,13 @@ public sealed partial class MainWindow : Window
             Localizer.Instance.LanguageChanged -= OnLanguageChanged;
             RootGrid.ActualThemeChanged -= OnRootGridActualThemeChanged;
 
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Translation.Activity.Changed -= OnTranslationActivityChanged;
+            }
+
+            StopTranslationIndicatorTimers();
+
             if (_captionPaddingHooked)
             {
                 _captionPaddingHooked = false;
@@ -530,6 +572,114 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>建立翻译提示的两只一次性定时器：一只管显示去抖，一只管隐藏去抖。</summary>
+    private void CreateTranslationIndicatorTimers()
+    {
+        var queue = DispatcherQueue;
+        if (queue is null)
+        {
+            return;
+        }
+
+        _translationIndicatorShowTimer = queue.CreateTimer();
+        _translationIndicatorShowTimer.Interval = TranslationIndicatorShowDelay;
+        _translationIndicatorShowTimer.IsRepeating = false;
+        _translationIndicatorShowTimer.Tick += OnTranslationIndicatorShowTimerTick;
+
+        _translationIndicatorHideTimer = queue.CreateTimer();
+        _translationIndicatorHideTimer.Interval = TranslationIndicatorHideDelay;
+        _translationIndicatorHideTimer.IsRepeating = false;
+        _translationIndicatorHideTimer.Tick += OnTranslationIndicatorHideTimerTick;
+    }
+
+    /// <summary>停掉并解绑两只定时器（窗口关闭时调用）。</summary>
+    private void StopTranslationIndicatorTimers()
+    {
+        if (_translationIndicatorShowTimer is not null)
+        {
+            _translationIndicatorShowTimer.Tick -= OnTranslationIndicatorShowTimerTick;
+            _translationIndicatorShowTimer.Stop();
+            _translationIndicatorShowTimer = null;
+        }
+
+        if (_translationIndicatorHideTimer is not null)
+        {
+            _translationIndicatorHideTimer.Tick -= OnTranslationIndicatorHideTimerTick;
+            _translationIndicatorHideTimer.Stop();
+            _translationIndicatorHideTimer = null;
+        }
+    }
+
+    /// <summary>翻译在途计数变了：切回 UI 线程再动控件（计数可能来自翻译线程）。</summary>
+    private void OnTranslationActivityChanged(object? sender, EventArgs e)
+    {
+        if (DispatcherQueue is null)
+        {
+            return;
+        }
+
+        DispatcherQueue.TryEnqueue(ApplyTranslationIndicator);
+    }
+
+    /// <summary>按当前在途状态安排显示 / 隐藏（都带延时，避免缓存命中和分段翻译时闪烁）。</summary>
+    private void ApplyTranslationIndicator()
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return;
+        }
+
+        if (AppServices.Translation.Activity.IsActive)
+        {
+            _translationIndicatorHideTimer?.Stop();
+
+            if (TranslationIndicator.Visibility != Visibility.Visible)
+            {
+                _translationIndicatorShowTimer?.Start();
+            }
+
+            return;
+        }
+
+        _translationIndicatorShowTimer?.Stop();
+
+        if (TranslationIndicator.Visibility == Visibility.Visible)
+        {
+            _translationIndicatorHideTimer?.Start();
+        }
+    }
+
+    private void OnTranslationIndicatorShowTimerTick(DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        ShowTranslationIndicator();
+    }
+
+    private void OnTranslationIndicatorHideTimerTick(DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+        HideTranslationIndicator();
+    }
+
+    /// <summary>显示标题栏的「正在翻译…」：环形进度在动，文字是说明。</summary>
+    private void ShowTranslationIndicator()
+    {
+        // 显示延时到点时这一批可能已经结束，别再补一次提示。
+        if (!AppServices.IsInitialized || !AppServices.Translation.Activity.IsActive)
+        {
+            return;
+        }
+
+        ringTranslating.IsActive = true;
+        TranslationIndicator.Visibility = Visibility.Visible;
+    }
+
+    private void HideTranslationIndicator()
+    {
+        ringTranslating.IsActive = false;
+        TranslationIndicator.Visibility = Visibility.Collapsed;
+    }
+
     /// <summary>
     /// 内容管理导航项（播放集 / Mod 库 / DLC）只在当前游戏能管理内容时才出现；
     /// 仅启动的游戏（如 Prison Architect）下直接隐藏，并把停在这些页上的用户送回主页。
@@ -546,6 +696,7 @@ public sealed partial class MainWindow : Window
             var contentVisibility = manageable ? Visibility.Visible : Visibility.Collapsed;
             NavPlaySets.Visibility = contentVisibility;
             NavModLibrary.Visibility = contentVisibility;
+            NavModStudio.Visibility = contentVisibility;
             NavWorkshop.Visibility = contentVisibility;
             NavDlc.Visibility = contentVisibility;
 
@@ -557,6 +708,7 @@ public sealed partial class MainWindow : Window
             if (_navigation.CurrentTag is string tag
                 && (string.Equals(tag, NavigationService.PlaySetsTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.ModLibraryTag, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(tag, NavigationService.ModStudioTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.WorkshopTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.WorkshopDetailTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.AddModsTag, StringComparison.OrdinalIgnoreCase)

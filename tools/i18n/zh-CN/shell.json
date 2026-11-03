@@ -17,6 +17,7 @@
   "shell.nav.home": "当前游戏",
   "shell.nav.library": "游戏库",
   "shell.nav.modLibrary": "Mod 库",
+  "shell.nav.modStudio": "Mod 创建",
   "shell.nav.playSets": "播放集",
   "shell.nav.settings": "设置",
   "shell.nav.workshop": "创意工坊",
@@ -32,5 +33,6 @@
   "shell.status.gamesFound": "已发现 {0} 个游戏",
   "shell.status.noGames": "未发现已安装的游戏，请检查 Steam 库路径",
   "shell.support.managedByGame": "该游戏的模组与 DLC 由游戏本体管理（游戏内 MOD 菜单 / Steam 创意工坊），本启动器不接管",
+  "shell.translating": "正在翻译…",
   "shell.version": "版本 {0}"
 }

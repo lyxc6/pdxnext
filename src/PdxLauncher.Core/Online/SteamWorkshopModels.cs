@@ -3,10 +3,11 @@ namespace PdxLauncher.Core.Online;
 /// <summary>
 /// 创意工坊的排序档位，对齐 Steam 创意工坊网页自己的「排序依据」下拉框：
 /// 最热门（<c>trend</c>）、最受好评（<c>toprated</c>）、最近发行（<c>mostrecent</c>）、
-/// 最新更新（<c>mostupdated</c>）、不重复订阅者总计（<c>mostsubscribed</c>）。
+/// 最新更新（<c>lastupdated</c>）、不重复订阅者总计（<c>totaluniquesubscribers</c>）。
 /// <para>
 /// PDX Mods 只有「最热门 / 最新更新 / 评分最高」三档，映射关系见 <c>WorkshopViewModel</c>。
-/// 带关键词时 Steam 把排序固定成 <c>textsearch</c>，所以留了这个内部值。
+/// <c>TextSearch</c> 是 Steam 自己的「搜索相关度」这一档（<c>textsearch</c>）；
+/// 有关键词时搜索与排序可以并存，服务端照样按 <c>browsesort</c> 排序。
 /// </para>
 /// </summary>
 public enum SteamWorkshopSort
@@ -20,13 +21,13 @@ public enum SteamWorkshopSort
     /// <summary>最近发行（Steam <c>mostrecent</c>）。</summary>
     MostRecent,
 
-    /// <summary>最新更新（Steam <c>mostupdated</c> / PDX <c>updated</c>）。</summary>
+    /// <summary>最新更新（Steam <c>lastupdated</c> / PDX <c>updated</c>）。</summary>
     MostUpdated,
 
-    /// <summary>不重复订阅者总计（Steam <c>mostsubscribed</c>）。</summary>
+    /// <summary>不重复订阅者总计（Steam <c>totaluniquesubscribers</c>）。</summary>
     MostSubscribed,
 
-    /// <summary>关键词搜索专用（Steam 把排序固定在 <c>textsearch</c>）。</summary>
+    /// <summary>搜索相关度（Steam <c>textsearch</c>）。</summary>
     TextSearch,
 }
 
@@ -37,8 +38,8 @@ public enum SteamWorkshopSort
 /// <param name="PageSize">每页条数。</param>
 /// <param name="Days">
 /// 时间范围（Steam 的「时间范围」下拉框，服务端参数名 <c>days</c>）：
-/// 1 = 今天、7 = 1 周、30 = 30 天、90 = 3 个月、180 = 6 个月、365 = 1 年、0 = 发布至今。
-/// 只对最热门/最受好评有意义；null 表示不传（服务端默认 30 天）。
+/// 1 = 今天、7 = 1 周、30 = 30 天、90 = 3 个月、180 = 6 个月、365 = 1 年、-1 = 发布至今。
+/// 只对最热门/最受好评有意义；null 表示不传（服务端默认 7 天）。
 /// </param>
 public sealed record SteamWorkshopQuery(
     string? SearchText,

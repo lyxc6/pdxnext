@@ -1,4 +1,7 @@
 <Project>
+  <!-- 版本号统一来自 version.props（安装器与 update.json 也读它）。 -->
+  <Import Project="$(MSBuildThisFileDirectory)version.props" />
+
   <PropertyGroup>
     <Nullable>enable</Nullable>
     <!-- 关闭隐式 using：手工 csc 构建不会注入它们，统一改用各项目的 GlobalUsings.cs，

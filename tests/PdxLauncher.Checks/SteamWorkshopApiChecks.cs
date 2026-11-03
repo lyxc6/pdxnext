@@ -64,14 +64,14 @@ public static class SteamWorkshopApiChecks
         var updated = SteamWorkshopClient.BuildBrowseUri(
             Ck3AppId,
             new SteamWorkshopQuery(null, SteamWorkshopSort.MostUpdated, 0)).AbsoluteUri;
-        ChecksContext.Check("URI：最新更新排序", updated.Contains("browsesort=mostupdated", StringComparison.Ordinal), updated);
+        ChecksContext.Check("URI：最新更新排序", updated.Contains("browsesort=lastupdated", StringComparison.Ordinal), updated);
 
         var subscribed = SteamWorkshopClient.BuildBrowseUri(
             Ck3AppId,
             new SteamWorkshopQuery(null, SteamWorkshopSort.MostSubscribed, 0)).AbsoluteUri;
-        ChecksContext.Check("URI：订阅者排序", subscribed.Contains("browsesort=mostsubscribed", StringComparison.Ordinal), subscribed);
+        ChecksContext.Check("URI：订阅者排序", subscribed.Contains("browsesort=totaluniquesubscribers", StringComparison.Ordinal), subscribed);
 
-        // 时间范围只跟最热门/最受好评一起用；0 是「发布至今」，必须原样传出去。
+        // 时间范围只跟最热门/最受好评一起用；-1 是「发布至今」，必须原样传出去。
         var weekly = SteamWorkshopClient.BuildBrowseUri(
             Ck3AppId,
             new SteamWorkshopQuery(null, SteamWorkshopSort.Trend, 0, 30, 7)).AbsoluteUri;
@@ -79,22 +79,35 @@ public static class SteamWorkshopApiChecks
 
         var allTime = SteamWorkshopClient.BuildBrowseUri(
             Ck3AppId,
-            new SteamWorkshopQuery(null, SteamWorkshopSort.TopRated, 0, 30, 0)).AbsoluteUri;
-        ChecksContext.Check("URI：发布至今 days=0", allTime.Contains("days=0", StringComparison.Ordinal), allTime);
+            new SteamWorkshopQuery(null, SteamWorkshopSort.TopRated, 0, 30, -1)).AbsoluteUri;
+        ChecksContext.Check("URI：发布至今 days=-1", allTime.Contains("days=-1", StringComparison.Ordinal), allTime);
 
         var noDays = SteamWorkshopClient.BuildBrowseUri(
             Ck3AppId,
             new SteamWorkshopQuery(null, SteamWorkshopSort.MostUpdated, 0, 30, 30)).AbsoluteUri;
         ChecksContext.Check("URI：非热门排序不传 days", !noDays.Contains("days=", StringComparison.Ordinal), noDays);
 
-        // 有关键词时排序必须切成 textsearch，参数名是 searchtext（无下划线）。
+        // 关键词与排序并存：服务端带 searchtext 时照样按 browsesort 排序，
+        // 所以这里不能把排序改成 textsearch。
         var search = SteamWorkshopClient.BuildBrowseUri(
             Ck3AppId,
             new SteamWorkshopQuery("my mod+y", SteamWorkshopSort.Trend, 2, 40)).AbsoluteUri;
-        ChecksContext.Check("URI：关键词强制 textsearch", search.Contains("browsesort=textsearch", StringComparison.Ordinal));
+        ChecksContext.Check("URI：关键词时保留排序", search.Contains("browsesort=trend", StringComparison.Ordinal), search);
+        ChecksContext.Check("URI：关键词不改成 textsearch", !search.Contains("browsesort=textsearch", StringComparison.Ordinal), search);
         ChecksContext.Check("URI：searchtext 参数", search.Contains("searchtext=my%20mod%2By", StringComparison.Ordinal), search);
         ChecksContext.Check("URI：关键词时页码仍生效", search.Contains("p=3", StringComparison.Ordinal));
         ChecksContext.Check("URI：自定义每页条数", search.Contains("num_per_page=40", StringComparison.Ordinal));
+
+        // 显式要 textsearch 时保留它；没有关键词的 textsearch 没有意义，回退成 trend。
+        var explicitSearch = SteamWorkshopClient.BuildBrowseUri(
+            Ck3AppId,
+            new SteamWorkshopQuery("mod", SteamWorkshopSort.TextSearch, 0)).AbsoluteUri;
+        ChecksContext.Check("URI：显式 textsearch 保留", explicitSearch.Contains("browsesort=textsearch", StringComparison.Ordinal), explicitSearch);
+
+        var orphanSearch = SteamWorkshopClient.BuildBrowseUri(
+            Ck3AppId,
+            new SteamWorkshopQuery(null, SteamWorkshopSort.TextSearch, 0)).AbsoluteUri;
+        ChecksContext.Check("URI：无关键词的 textsearch 回退 trend", orphanSearch.Contains("browsesort=trend", StringComparison.Ordinal), orphanSearch);
 
         // 超过服务端上限要钳到 50，否则 Steam 会回落成 30 让分页对不上。
         var clamped = SteamWorkshopClient.BuildBrowseUri(

@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    单一版本源：构建、安装器、更新清单都读这里。
+    改版本时只改这一处；tools/build-installer.py 会用正则读取本文件。
+  -->
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+  </PropertyGroup>
+</Project>

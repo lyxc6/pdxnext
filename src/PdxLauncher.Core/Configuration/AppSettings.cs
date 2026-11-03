@@ -35,6 +35,17 @@ public sealed class AppSettings
     public bool SteamWorkshopSubscribeEnabled { get; set; }
 
     /// <summary>
+    /// 是否允许通过 Steamworks 读取工坊条目的真实状态（默认开）：订阅 / 已安装 / 需要更新 /
+    /// 下载中 / 在 Steam 里被本地禁用。Mod 库页与工坊详情页据此显示徽标。
+    /// <para>
+    /// 只读，不做任何写操作（订阅、触发下载、本地禁用仍受 <see cref="SteamWorkshopSubscribeEnabled"/> 控制）。
+    /// 每次查询都会拉起一个短命 <c>--steam-host</c> 子进程，代价与现有的 DLC 授权探测同级：
+    /// Steam 会在这几秒里把本进程登记成「游戏中」，进程退出即撤销。
+    /// </para>
+    /// </summary>
+    public bool SteamWorkshopStateEnabled { get; set; } = true;
+
+    /// <summary>
     /// 手动指定的 <c>steam_api64.dll</c> 路径；null/空表示自动查找（程序目录 → 仓库 sdk/ → 游戏目录）。
     /// 本启动器不分发 Valve 的二进制，所以要么用户手填，要么靠上面几处已存在的副本。
     /// </summary>
@@ -137,6 +148,15 @@ public sealed class AppSettings
     /// 页面重开（含冷启动）会回到这一节。
     /// </summary>
     public int? LastSettingsSection { get; set; }
+
+    /// <summary>启动后自动检查更新（默认开）。每机器安装仍会弹 UAC 才能升级。</summary>
+    public bool AutoCheckUpdates { get; set; } = true;
+
+    /// <summary>上次成功读取更新清单的 UTC 时间；自动检查用它做 24 小时节流。</summary>
+    public DateTimeOffset? LastUpdateCheckUtc { get; set; }
+
+    /// <summary>用户在本次版本上选择「稍后」时记下的版本号，自动检查不再重复提示。</summary>
+    public string? SkippedUpdateVersion { get; set; }
 
     /// <summary>
     /// 主窗口上次的位置（物理像素）。-1 表示还没记过，按系统默认居中。

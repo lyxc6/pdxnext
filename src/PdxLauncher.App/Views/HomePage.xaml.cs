@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
@@ -213,7 +214,6 @@ public sealed partial class HomePage : Page
             var game = AppServices.CurrentGame;
             await _viewModel.LoadAsync(game, token).ConfigureAwait(true);
             await ApplyThemeAsync(game, token).ConfigureAwait(true);
-            SyncPlaySetSelection();
         },
         _lifetime.Token,
         ex =>
@@ -269,21 +269,12 @@ public sealed partial class HomePage : Page
         }
     }
 
-    /// <summary>把视图模型里已经选好的播放集回填进列表，保证打开弹层时当前项高亮。</summary>
-    private void SyncPlaySetSelection() => PlaySetList.SelectedItem = _viewModel.SelectedPlaySet;
-
-    private void OnPlaySetFlyoutOpening(object sender, object e) => SyncPlaySetSelection();
-
-    private void OnPlaySetItemClick(object sender, ItemClickEventArgs e)
+    /// <summary>播放集下拉选择变化：写回视图模型。</summary>
+    private void OnPlaySetSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
     {
-        if (e.ClickedItem is PlaySet playSet)
+        if (e.SelectedItem is PlaySet playSet)
         {
             _viewModel.SelectedPlaySet = playSet;
-        }
-
-        if (PlaySetButton.Flyout is Flyout flyout)
-        {
-            flyout.Hide();
         }
     }
 

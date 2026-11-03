@@ -71,7 +71,7 @@ public sealed class WorkshopPageCache
     /// <param name="source">来源。</param>
     /// <param name="gameId">游戏 ID。</param>
     /// <param name="search">搜索词（空表示浏览全部）。</param>
-    /// <param name="sort">排序参数原值（例如 trend / mostupdated）。</param>
+    /// <param name="sort">排序参数原值（例如 trend / lastupdated）。</param>
     /// <param name="days">Steam 时间范围天数；非 Steam 传 null。</param>
     /// <param name="page">从 0 开始的页码。</param>
     /// <returns>稳定可比较的字符串键。</returns>

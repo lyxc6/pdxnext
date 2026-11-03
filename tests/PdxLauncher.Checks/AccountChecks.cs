@@ -178,10 +178,24 @@ public static class AccountChecks
             ChecksContext.Equal("账号: 落盘后能读回 token", "TK", reloaded?.SessionToken);
             ChecksContext.Equal("账号: 落盘后能读回邮箱", "a@b.c", reloaded?.Email);
 
+            // 登录之后再改「保持登录」开关也必须真的生效，否则这个开关只在登录那一刻有意义：
+            // 用户改完看不到任何变化，下次启动照样自动续期（或者照样要重登）。
+            keepService.ApplyRememberPreference(false);
+            ChecksContext.Check("账号: 登录后关掉保持登录 → 会话文件被清掉", !fs.FileExists(path));
+
+            keepService.ApplyRememberPreference(true);
+            ChecksContext.Check("账号: 登录后重新打开保持登录 → 会话重新落盘", fs.FileExists(path));
+            ChecksContext.Equal("账号: 重新落盘后仍能读回 token", "TK", store.Load()?.SessionToken);
+
             // 再以「不勾」登录一次，应把上一次的会话文件清掉。
             var clearService = new AccountService(new SilentLogger(), store, new FixedClock(), NewClient(new FakeTransport(200, body)));
             clearService.SignInAsync("a@b.c", "secret", rememberMe: false, CancellationToken.None).GetAwaiter().GetResult();
             ChecksContext.Check("账号: 改回不勾 → 旧会话文件被清掉", !fs.FileExists(path));
+
+            // 未登录时改开关只是记偏好，不能凭空造出一个会话文件。
+            var signedOut = new AccountService(new SilentLogger(), store, new FixedClock(), NewClient(new FakeTransport(200, body)));
+            signedOut.ApplyRememberPreference(true);
+            ChecksContext.Check("账号: 未登录时改保持登录 → 不写会话文件", !fs.FileExists(path));
         }
         finally
         {

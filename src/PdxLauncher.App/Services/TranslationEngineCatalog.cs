@@ -32,8 +32,8 @@ public sealed class TranslationEngineOption : LocalizedObservableObject
 }
 
 /// <summary>
-/// 翻译引擎模式的目录：自动（自填 API → 微软 → 谷歌云 → 内置免费，逐级回落）/
-/// 仅自填 API / 仅内置免费服务 / 仅微软翻译 / 仅谷歌云翻译。
+/// 翻译引擎模式的目录：自动（自填 API → 微软 → 谷歌云 → MyMemory → 内置免费，逐级回落）/
+/// 仅自填 API / 仅内置免费服务 / 仅 MyMemory / 仅微软翻译 / 仅谷歌云翻译。
 /// 与 <see cref="ProxyModeCatalog"/> 一样返回同一批实例，
 /// 这样下拉控件的 SelectedItem 能靠引用相等匹配上。
 /// </summary>
@@ -55,6 +55,10 @@ public static class TranslationEngineCatalog
             Keys.SettingsTranslateEngineBuiltinTitle,
             Keys.SettingsTranslateEngineBuiltinDesc),
         new TranslationEngineOption(
+            TranslationEngineModes.MyMemory,
+            Keys.SettingsTranslateEngineMymemoryTitle,
+            Keys.SettingsTranslateEngineMymemoryDesc),
+        new TranslationEngineOption(
             TranslationEngineModes.Microsoft,
             Keys.SettingsTranslateEngineMicrosoftTitle,
             Keys.SettingsTranslateEngineMicrosoftDesc),
@@ -62,6 +66,18 @@ public static class TranslationEngineCatalog
             TranslationEngineModes.GoogleCloud,
             Keys.SettingsTranslateEngineGoogleCloudTitle,
             Keys.SettingsTranslateEngineGoogleCloudDesc),
+        new TranslationEngineOption(
+            TranslationEngineModes.Local,
+            Keys.SettingsTranslateEngineLocalTitle,
+            Keys.SettingsTranslateEngineLocalDesc),
+        new TranslationEngineOption(
+            TranslationEngineModes.IndexTranslate,
+            Keys.SettingsTranslateEngineIndexTranslateTitle,
+            Keys.SettingsTranslateEngineIndexTranslateDesc),
+        new TranslationEngineOption(
+            TranslationEngineModes.Bergamot,
+            Keys.SettingsTranslateEngineBergamotTitle,
+            Keys.SettingsTranslateEngineBergamotDesc),
     };
 
     /// <summary>按 settings.json 里的值解析出对应项；未知值回落到「自动」。</summary>

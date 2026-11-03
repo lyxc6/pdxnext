@@ -126,6 +126,18 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     [ObservableProperty]
     private MarkdownDocument? _translatedChangelogDocument;
 
+    /// <summary>简介译文是否还在翻：界面在译文将来出现的位置显示「正在翻译简介…」。</summary>
+    [ObservableProperty]
+    private bool _isTranslatingDescription;
+
+    /// <summary>更新日志译文是否还在翻。</summary>
+    [ObservableProperty]
+    private bool _isTranslatingChangelog;
+
+    /// <summary>评论译文是否还在翻（评论是逐条翻的，整段期间都算）。</summary>
+    [ObservableProperty]
+    private bool _isTranslatingComments;
+
     /// <summary>标签拼成的单行文本。</summary>
     [ObservableProperty]
     private string _tagsText = string.Empty;
@@ -149,6 +161,13 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>正文来自缓存（断网兜底）时的提示；空串表示没有这回事。</summary>
     [ObservableProperty]
     private string _cachedHint = string.Empty;
+
+    /// <summary>翻译没出结果时的一句页面级提示；三个范围各提示一次，空串表示没这回事。</summary>
+    [ObservableProperty]
+    private string _translationNotice = string.Empty;
+
+    /// <summary>已经提示过失败的范围（简介 / 更新日志 / 评论），避免重复刷屏。</summary>
+    private readonly HashSet<string> _translateFailureScopes = new(StringComparer.Ordinal);
 
     /// <summary>是否正在读取详情。</summary>
     [ObservableProperty]
@@ -232,6 +251,14 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     [ObservableProperty]
     private bool _isSteamDirectAvailable;
 
+    /// <summary>Steam 那边已安装但内容比工坊新版本旧（Steam 会自己更新，这里只提示）。</summary>
+    [ObservableProperty]
+    private bool _isSteamNeedsUpdate;
+
+    /// <summary>Steam 下载进度文案（「下载中 42%」），没在下就空串。</summary>
+    [ObservableProperty]
+    private string _steamDownloadProgressText = string.Empty;
+
     /// <summary>图片墙（PDX 截图 + 描述里内嵌的图）。</summary>
     public ObservableCollection<WorkshopScreenshotViewModel> Screenshots { get; } = [];
 
@@ -261,6 +288,15 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     /// <summary>是否有可显示的更新日志译文。</summary>
     public bool HasTranslatedChangelog => TranslatedChangelogDocument is { IsEmpty: false };
+
+    /// <summary>是否在等简介译文：等的时候在译文将来出现的位置显示环形进度 + 「正在翻译简介…」。</summary>
+    public bool ShowTranslatingDescription => IsTranslatingDescription && !HasTranslatedDescription;
+
+    /// <summary>是否在等更新日志译文。</summary>
+    public bool ShowTranslatingChangelog => IsTranslatingChangelog && !HasTranslatedChangelog;
+
+    /// <summary>是否在等评论译文（评论逐条翻，整段期间都显示）。</summary>
+    public bool ShowTranslatingComments => IsTranslatingComments;
 
     /// <summary>是否有标签。</summary>
     public bool HasTags => !string.IsNullOrWhiteSpace(TagsText);
@@ -332,6 +368,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     /// <summary>是否有缓存兜底提示。</summary>
     public bool HasCachedHint => !string.IsNullOrWhiteSpace(CachedHint);
+
+    /// <summary>是否有「翻译没出结果」的页面级提示。</summary>
+    public bool HasTranslationNotice => !string.IsNullOrWhiteSpace(TranslationNotice);
 
     /// <summary>是否显示「已订阅」徽标。</summary>
     public bool ShowInstalled => IsInstalled;
@@ -434,16 +473,24 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             ? T(Keys.WorkshopDetailUnsubscribe)
             : T(Keys.WorkshopDetailSubscribe);
 
-    /// <summary>Steam 订阅按钮是否可点：直连可用、当前没有请求在飞。</summary>
+    /// <summary>Steam 订阅按钮是否可点：直连可用、写动作开关开着、当前没有请求在飞。</summary>
     public bool CanToggleSteamSubscription =>
-        ShowSteamSubscribeButton && IsSteamDirectAvailable && !IsSteamSubscribing;
+        ShowSteamSubscribeButton && IsSteamDirectAvailable && CanWriteSteam && !IsSteamSubscribing;
 
-    /// <summary>Steam 订阅框的说明（直连开没开）。</summary>
+    /// <summary>
+    /// 是否允许写 Steam（订阅/退订）。只读状态查询默认开着，
+    /// 真正改订阅要另一个开关，两个是分开的。
+    /// </summary>
+    public bool CanWriteSteam => AppServices.Settings.SteamWorkshopSubscribeEnabled;
+
+    /// <summary>Steam 订阅框的说明（直连开没开 / 只读还是可写）。</summary>
     public string SteamSubscribeHint => !ShowSteamSubscribeButton
         ? string.Empty
-        : IsSteamDirectAvailable
-            ? T(Keys.WorkshopDetailSteamSubscribeHintOn)
-            : T(Keys.WorkshopDetailSteamSubscribeHintOff);
+        : !IsSteamDirectAvailable
+            ? T(Keys.WorkshopDetailSteamSubscribeHintOff)
+            : CanWriteSteam
+                ? T(Keys.WorkshopDetailSteamSubscribeHintOn)
+                : T(Keys.WorkshopDetailSteamReadOnlyHint);
 
     /// <summary>是否有 Steam 订阅说明。</summary>
     public bool HasSteamSubscribeHint => !string.IsNullOrWhiteSpace(SteamSubscribeHint);
@@ -454,6 +501,12 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     /// <summary>只在「已确认且确实订阅着」时显示「已订阅」徽标，别把「未订阅」也标成已订阅。</summary>
     public bool ShowSteamSubscribeState => ShowSteamSubscribeButton && IsSteamStateKnown && IsSteamSubscribed;
+
+    /// <summary>Steam 侧内容落后于工坊版本（Steam 会自己更新，这里只是提示）。</summary>
+    public bool ShowSteamUpdateHint => ShowSteamSubscribeButton && IsSteamNeedsUpdate;
+
+    /// <summary>Steam 正在下载这条（显示进度）。</summary>
+    public bool HasSteamDownloadProgress => ShowSteamSubscribeButton && !string.IsNullOrWhiteSpace(SteamDownloadProgressText);
 
     /// <summary>加载指定行；重复调用会先清空上一次的内容。</summary>
     /// <param name="row">创意工坊列表行。</param>
@@ -713,9 +766,34 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
         try
         {
+            // 一层缓存：Mod 库列表刚整库查过一次（一次子进程拿全量），60 秒内直接复用，
+            // 别为了一个条目再拉起一次宿主。
+            if (TryReadCachedSteamState(fileId, out var cached))
+            {
+                ApplySteamInstallState(cached, "cache");
+                return;
+            }
+
             if (_steamBackend is { IsAvailable: true } backend)
             {
-                ApplySteamInstallState(backend.ReadState(fileId), "Steamworks");
+                // 宿主后端每次都要拉起一次子进程（约 1 秒），绝不能占着 UI 线程等。
+                var steamState = await Task
+                    .Run(() => backend.ReadState(fileId), cancellationToken)
+                    .ConfigureAwait(true);
+
+                if (steamState.IsKnown)
+                {
+                    ApplySteamInstallState(steamState, "Steamworks");
+                }
+                else if (_steamReader is not null && ResolveSteamAppId() is int fallbackAppId)
+                {
+                    // 宿主没给出结论（Steam 没运行、宿主超时等）时继续回退 acf，
+                    // 否则已经订阅过的条目会显示成「未确认」。
+                    var acf = await Task
+                        .Run(() => _steamReader.Read(fallbackAppId, row.Id), cancellationToken)
+                        .ConfigureAwait(true);
+                    ApplySteamInstallState(acf, "acf");
+                }
             }
             else if (_steamReader is not null && ResolveSteamAppId() is int appId)
             {
@@ -752,6 +830,12 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             return WorkshopSubscribeResult.Fail(T(Keys.WorkshopDetailSteamSubscribeHintOff));
         }
 
+        if (!CanWriteSteam)
+        {
+            // 只读档：能看状态，但不许改订阅，免得用户以为开关没生效。
+            return WorkshopSubscribeResult.Fail(T(Keys.WorkshopDetailSteamReadOnlyHint));
+        }
+
         if (Row is not { } row || !ulong.TryParse(row.Id, out var fileId))
         {
             return WorkshopSubscribeResult.Fail(T(Keys.WorkshopDetailErrorUnknown));
@@ -783,14 +867,19 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     /// <summary>把 acf / Steamworks 读到的状态落到界面上。</summary>
     /// <param name="state">读到的安装状态。</param>
-    /// <param name="source">状态来源（Steamworks / acf），只用于日志。</param>
+    /// <param name="source">状态来源（Steamworks / cache / acf），只用于日志。</param>
     private void ApplySteamInstallState(WorkshopInstallState state, string source)
     {
         _logger.Info(
             "Steam 订阅状态（" + source + "）：订阅=" + Describe(state.IsSubscribed)
             + " 安装=" + Describe(state.IsInstalled)
             + " 下载中=" + Describe(state.IsDownloading)
+            + " 需要更新=" + Describe(state.NeedsUpdate)
+            + " 本地禁用=" + Describe(state.IsDisabledLocally)
             + " acf=" + (state.AcfPath ?? "无"));
+
+        IsSteamNeedsUpdate = state.NeedsUpdate == true;
+        SteamDownloadProgressText = BuildDownloadProgressText(state);
 
         if (state.IsSubscribed is bool subscribed)
         {
@@ -803,6 +892,39 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             IsSteamSubscribed = installed;
             IsSteamStateKnown = false;
         }
+    }
+
+    /// <summary>下载进度文案：只有真的在下、且拿得到百分比时才出。</summary>
+    private string BuildDownloadProgressText(WorkshopInstallState state)
+    {
+        if (state.IsDownloading != true && state.IsDownloadPending != true)
+        {
+            return string.Empty;
+        }
+
+        return state.DownloadPercent is double percent
+            ? T(Keys.WorkshopDetailSteamDownloadProgress, (int)Math.Round(percent))
+            : string.Empty;
+    }
+
+    /// <summary>查 Mod 库那层 60 秒整库缓存里有没有这一条。</summary>
+    private static bool TryReadCachedSteamState(ulong publishedFileId, out WorkshopInstallState state)
+    {
+        state = WorkshopInstallState.Unknown;
+
+        if (ResolveSteamAppId() is not int appId)
+        {
+            return false;
+        }
+
+        if (!AppServices.WorkshopStates.TryGet(appId, out var states)
+            || !states.TryGetValue(publishedFileId, out var cached))
+        {
+            return false;
+        }
+
+        state = cached;
+        return state.IsKnown;
     }
 
     /// <summary>把三态布尔写成日志里能一眼看懂的中文。</summary>
@@ -836,11 +958,16 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         TranslatedDescriptionDocument = null;
         ChangelogDocument = null;
         TranslatedChangelogDocument = null;
+        IsTranslatingDescription = false;
+        IsTranslatingChangelog = false;
+        IsTranslatingComments = false;
         TagsText = string.Empty;
         DependencySummary = string.Empty;
         CommentsSummary = string.Empty;
         ErrorText = string.Empty;
         CachedHint = string.Empty;
+        TranslationNotice = string.Empty;
+        _translateFailureScopes.Clear();
         IsInstalled = false;
         HasError = false;
         IsLoaded = false;
@@ -858,6 +985,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         IsSteamSubscribed = false;
         IsSteamStateKnown = false;
         IsSteamSubscribing = false;
+        IsSteamNeedsUpdate = false;
+        SteamDownloadProgressText = string.Empty;
 
         // 列表里已经下好的封面先直接用，别在详情页再下一次。
         CoverPath = row.CoverPath;
@@ -979,10 +1108,11 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             CommentsStatusText = T(Keys.WorkshopCommentsUnavailable);
         }
 
-        // 描述优先用物品页的 HTML（有排版），退到接口给的 BBCode 纯文本。
+        // 描述优先用物品页的 HTML（有排版），退到接口给的 BBCode 原文 —— 兜底也要保留
+        // 标题 / 列表 / 分隔线，所以走 SteamBbCodeParser 而不是先压成纯文本再按 Markdown 解析。
         var document = !string.IsNullOrWhiteSpace(descriptionHtml)
             ? HtmlDescriptionParser.Parse(descriptionHtml)
-            : MarkdownParser.Parse(WorkshopText.ToPlainText(detail.Description));
+            : SteamBbCodeParser.Parse(detail.Description);
         ApplyDescription(document, cancellationToken);
 
         // 顶部图片区用物品页官方画廊（#highlight_player_area）里的截图；抓不到时退回预览图。
@@ -1110,6 +1240,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>翻译简介正文并写回译文属性。</summary>
     private async Task TranslateDescriptionAsync(MarkdownDocument document, CancellationToken cancellationToken)
     {
+        IsTranslatingDescription = true;
         try
         {
             var translated = await AppServices.Translation
@@ -1124,6 +1255,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             if (string.Equals(plain, document.ToPlainText(), StringComparison.Ordinal))
             {
                 // 没翻出不同内容，就不重复显示一遍原文。
+                ReportTranslationFailure("description");
                 return;
             }
 
@@ -1137,6 +1269,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         catch (Exception ex)
         {
             _logger.Warn("简介翻译失败：" + ex.Message);
+        }
+        finally
+        {
+            IsTranslatingDescription = false;
         }
     }
 
@@ -1156,6 +1292,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>翻译更新日志并写回译文属性。</summary>
     private async Task TranslateChangelogAsync(MarkdownDocument document, CancellationToken cancellationToken)
     {
+        IsTranslatingChangelog = true;
         try
         {
             var translated = await AppServices.Translation
@@ -1166,11 +1303,13 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                 return;
             }
 
+            // 更新日志没翻出不同内容时保留原文，并提示一次「翻译没出结果」。
             if (string.Equals(
                     translated.ToPlainText(),
                     document.ToPlainText(),
                     StringComparison.Ordinal))
             {
+                ReportTranslationFailure("changelog");
                 return;
             }
 
@@ -1183,6 +1322,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         catch (Exception ex)
         {
             _logger.Warn("更新日志翻译失败：" + ex.Message);
+        }
+        finally
+        {
+            IsTranslatingChangelog = false;
         }
     }
 
@@ -1201,6 +1344,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>逐条翻译评论正文。</summary>
     private async Task TranslateCommentsAsync(CancellationToken cancellationToken)
     {
+        var attempted = 0;
+        var translatedAny = false;
+        IsTranslatingComments = true;
         try
         {
             foreach (var comment in Comments)
@@ -1215,6 +1361,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                     continue;
                 }
 
+                attempted++;
                 var translated = await AppServices.Translation
                     .TranslateDocumentAsync(comment.Body, cancellationToken)
                     .ConfigureAwait(true);
@@ -1232,6 +1379,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
                 comment.TranslatedBody = translated;
                 comment.TranslatedBodyPlain = plain;
+                translatedAny = true;
             }
         }
         catch (OperationCanceledException)
@@ -1242,6 +1390,32 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         {
             _logger.Warn("评论翻译失败：" + ex.Message);
         }
+        finally
+        {
+            IsTranslatingComments = false;
+        }
+
+        if (attempted > 0 && !translatedAny)
+        {
+            ReportTranslationFailure("comments");
+        }
+    }
+
+    /// <summary>
+    /// 某个范围整片没翻出结果时，在详情页顶部提示一句，并说明可以去设置页测引擎。
+    /// 每个范围只提示一次，避免逐条失败刷屏。
+    /// </summary>
+    /// <param name="scope">范围标识：description / changelog / comments。</param>
+    private void ReportTranslationFailure(string scope)
+    {
+        if (!_translateFailureScopes.Add(scope))
+        {
+            return;
+        }
+
+        var reason = AppServices.Translation.LastFailure ?? T(Keys.CommonUnknown);
+        _logger.Warn("创意工坊详情翻译没有出结果（" + scope + "）：" + reason);
+        TranslationNotice = T(Keys.WorkshopTranslateUnavailable, reason);
     }
 
     /// <summary>图片墙：先按顺序建好行，下载留给 <see cref="DownloadGalleryAsync"/>。</summary>
@@ -1621,6 +1795,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasCommentsStatusText));
         OnPropertyChanged(nameof(HasCreated));
         OnPropertyChanged(nameof(HasCachedHint));
+        OnPropertyChanged(nameof(HasTranslationNotice));
         OnPropertyChanged(nameof(ShowInstalled));
         OnPropertyChanged(nameof(HasAuthorProfile));
         OnPropertyChanged(nameof(WebUrl));
@@ -1668,9 +1843,30 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     partial void OnChangelogDocumentChanged(MarkdownDocument? value) => OnPropertyChanged(nameof(HasChangelog));
 
+    partial void OnTranslatedDescriptionDocumentChanged(MarkdownDocument? value)
+    {
+        // 译文一到就立刻把描边框露出来（此前没人发这个通知，得切页才会刷新）。
+        OnPropertyChanged(nameof(HasTranslatedDescription));
+        OnPropertyChanged(nameof(ShowTranslatingDescription));
+    }
+
+    partial void OnTranslatedChangelogDocumentChanged(MarkdownDocument? value)
+    {
+        OnPropertyChanged(nameof(HasTranslatedChangelog));
+        OnPropertyChanged(nameof(ShowTranslatingChangelog));
+    }
+
+    partial void OnIsTranslatingDescriptionChanged(bool value) => OnPropertyChanged(nameof(ShowTranslatingDescription));
+
+    partial void OnIsTranslatingChangelogChanged(bool value) => OnPropertyChanged(nameof(ShowTranslatingChangelog));
+
+    partial void OnIsTranslatingCommentsChanged(bool value) => OnPropertyChanged(nameof(ShowTranslatingComments));
+
     partial void OnIsInstalledChanged(bool value) => OnPropertyChanged(nameof(ShowInstalled));
 
     partial void OnCachedHintChanged(string value) => OnPropertyChanged(nameof(HasCachedHint));
+
+    partial void OnTranslationNoticeChanged(string value) => OnPropertyChanged(nameof(HasTranslationNotice));
 
     partial void OnAuthorProfileUrlChanged(string? value) => OnPropertyChanged(nameof(HasAuthorProfile));
 
@@ -1752,4 +1948,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     }
 
     partial void OnSteamUnavailableReasonChanged(string value) => OnPropertyChanged(nameof(HasSteamUnavailableReason));
+
+    partial void OnIsSteamNeedsUpdateChanged(bool value) => OnPropertyChanged(nameof(ShowSteamUpdateHint));
+
+    partial void OnSteamDownloadProgressTextChanged(string value) =>
+        OnPropertyChanged(nameof(HasSteamDownloadProgress));
 }

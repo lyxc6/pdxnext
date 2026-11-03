@@ -26,6 +26,22 @@ public sealed class TranslationService
     private readonly IAppLogger _logger;
     private readonly SemaphoreSlim _builtinGate = new(MaxBuiltinConcurrency, MaxBuiltinConcurrency);
 
+    /// <summary>本批里各引擎失败的说明（形如 <c>mymemory: 免费额度已用完…</c>），按尝试顺序排列。</summary>
+    private readonly List<string> _engineFailureNotes = [];
+
+    /// <summary>失败说明的整体长度上限：太长会把界面顶部的提示条撑成一段论文。</summary>
+    private const int MaxFailureNoteLength = 300;
+
+    /// <summary>
+    /// 最近一次整批翻译「一条都没翻出来」时的原因；有任意一条成功就是 null。
+    /// <para>
+    /// 用来把「静默失败」变成可解释的提示：引擎不可用时用户至少知道去找设置页，
+    /// 而不是盯着没变化的创意工坊怀疑功能不存在。多个引擎都失败时逐条列出，
+    /// 免得只看到第一个引擎的笼统备注（例如额度用完的 MyMemory），却不知道后面那个为什么也不行。
+    /// </para>
+    /// </summary>
+    public string? LastFailure { get; private set; }
+
     /// <summary>创建翻译服务。</summary>
     /// <param name="engines">引擎列表，顺序即回落优先级；null 或空表示没有可用引擎。</param>
     /// <param name="cache">译文缓存；null 表示不缓存。</param>
@@ -126,11 +142,14 @@ public sealed class TranslationService
     {
         var mode = TranslationEngineModes.Normalize(options.EngineMode);
         var allowFallback = mode == TranslationEngineModes.Auto;
+        _engineFailureNotes.Clear();
+        LastFailure = null;
 
         var candidates = _engines.Where(engine => engine.IsConfigured).ToList();
         if (candidates.Count == 0)
         {
             _logger.Warn("翻译模式为「" + DescribeMode(mode) + "」，但没有配置完整的可用引擎");
+            LastFailure = "没有可用的翻译引擎（当前模式：" + DescribeMode(mode) + "）";
             return new TranslationOutcome[texts.Count];
         }
 
@@ -147,6 +166,7 @@ public sealed class TranslationService
             var batch = remaining.Select(index => texts[index]).ToList();
             var engineOutcomes = await RunEngineAsync(engine, batch, options, cancellationToken).ConfigureAwait(false);
             var stillMissing = new List<int>();
+            var succeeded = 0;
             for (var i = 0; i < remaining.Count && i < engineOutcomes.Length; i++)
             {
                 var outcome = engineOutcomes[i];
@@ -157,6 +177,14 @@ public sealed class TranslationService
                 }
 
                 outcomes[remaining[i]] = outcome;
+                succeeded++;
+            }
+
+            // 没抛异常但一条都没翻出来（HTTP 非 2xx、或响应格式变了）也要留个话，
+            // 否则界面只能显示「失败」，用户无从判断该改哪。
+            if (succeeded == 0 && batch.Count > 0)
+            {
+                AddFailureNote(engine, null);
             }
 
             if (!allowFallback)
@@ -167,7 +195,41 @@ public sealed class TranslationService
             remaining = stillMissing;
         }
 
+        var anySuccess = outcomes.Any(outcome => outcome.Text is not null);
+        if (!anySuccess && texts.Count > 0)
+        {
+            LastFailure = DescribeFailures();
+            _logger.Warn("翻译全部失败：" + LastFailure);
+        }
+
         return outcomes;
+    }
+
+    /// <summary>
+    /// 记下某个引擎这轮为什么没译出来（优先用它自己报的原因）。
+    /// </summary>
+    /// <param name="engine">引擎。</param>
+    /// <param name="exceptionMessage">引擎抛异常时的消息；null 表示没抛异常、只是没拿到译文。</param>
+    private void AddFailureNote(ITranslationEngine engine, string? exceptionMessage)
+    {
+        var reason = exceptionMessage ?? engine.LastFailure ?? "未返回译文";
+        var note = engine.Id + ": " + reason;
+        if (!_engineFailureNotes.Contains(note, StringComparer.Ordinal))
+        {
+            _engineFailureNotes.Add(note);
+        }
+    }
+
+    /// <summary>把各引擎的失败原因拼成一句提示（超长时截断）。</summary>
+    private string DescribeFailures()
+    {
+        if (_engineFailureNotes.Count == 0)
+        {
+            return "所有可用引擎都没有返回译文";
+        }
+
+        var text = string.Join("；", _engineFailureNotes);
+        return text.Length <= MaxFailureNoteLength ? text : text[..MaxFailureNoteLength] + "…";
     }
 
     /// <summary>走一个引擎（限并发）。</summary>
@@ -199,6 +261,7 @@ public sealed class TranslationService
         catch (Exception ex)
         {
             _logger.Warn("翻译引擎「" + engine.Id + "」调用失败：" + ex.Message);
+            AddFailureNote(engine, ex.Message);
             return new TranslationOutcome[texts.Count];
         }
         finally
@@ -290,6 +353,9 @@ public sealed class TranslationService
         TranslationEngineModes.Builtin => "仅内置免费服务",
         TranslationEngineModes.Microsoft => "仅微软翻译",
         TranslationEngineModes.GoogleCloud => "仅谷歌云翻译",
+        TranslationEngineModes.Local => "仅本地离线引擎",
+        TranslationEngineModes.IndexTranslate => "仅本地 Index-Translate",
+        TranslationEngineModes.Bergamot => "仅本地 Bergamot",
         _ => "自动",
     };
 }

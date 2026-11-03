@@ -11,7 +11,7 @@
 ## 0. 一句话现状
 
 启动器外壳与主页已从「照官方 Paradox 启动器截图逐像素自绘」**改成 WinUI 3 标准控件 UI**（用户明确要求），
-Release **0 警告 0 错误**，自检 **61 个检查类 / 0 失败**（2026-10-30 实测；最近一轮新增 `TranslationChecks`；此前还有 `ConfirmOverlayChecks`、`PdxDatabaseChecks`、`JsonDocumentStoreChecks`、`OwnPlaysetRepositoryChecks`、`LauncherDbProjectionChecks`、`ModPathChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
+Release **0 警告 0 错误**，自检 **80 个检查类 / 0 失败**（2026-11-03 实测；最近一轮新增 `SteamBbCodeParserChecks` 与 `ModPublishLimitsChecks`（钉住 BBCode 解析与字节上限），再往前是 `LocalizationBindingChecks` 与 `ModStudioPaneChecks`（钉住 `{0}` 裸绑与上传面板出口），再往前是 `ModPublishExtrasChecks`（含多语言语言池的 `PickUnused` / `IsDuplicate` 断言），再往前是 `WorkshopItemStateBitsChecks`、`WorkshopStateTextChecks`、`WorkshopStateCacheChecks`、`WorkshopSubscribedProtocolChecks`；此前还有 `ConfirmOverlayChecks`、`ModLibraryWarningChecks`、`PdxDatabaseChecks`、`JsonDocumentStoreChecks`、`OwnPlaysetRepositoryChecks`、`LauncherDbProjectionChecks`、`ModPathChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
 **2026-10-26 已完成：窗口置顶开关（§0.2）+ 整窗背景「方案 B」（§0.3）**——游戏主题背景图现在连标题栏条和左侧
 NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统一纱 + 卡片/列表玻璃底衬），主页那条 260 高、被裁掉一半的
 主题横幅已删除。剩下的活：Light / HighContrast 真机切主题跑一遍（§0.3 唯一视觉盲区）、真机复验 settings.json 与置顶持久化、
@@ -40,6 +40,365 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-10-29 20:20 追加：自有 SQLite 事实源落地（`data\pdxnext.sqlite`）+ 官方库双向投射 + settings/session/六份缓存索引全部入库 + mod 来源徽标与筛选 + 加载文件跳过规则与路径修复，见 §0.29。**
 **2026-10-29 22:20 追加：播放集页的「添加模组」多选对话框已改成独立子页（`AddModsPage`，左栏选中态停在「播放集」），候选列表带搜索 / 勾选 / 计数，返回后由播放集页统一写库并自动保存，见 §0.52。**
 **2026-10-30 08:30 追加：Cities: Skylines 1 从「未适配」变「仅启动」——根因是官方启动器给它写的 `gameId` 是 `cities_v2`，而所有 id 表只认 `cities_skylines`；现按「发现阶段归一 + 公告接口反向特例」处理，补丁链路顺带打通（独立安装也能拿到 appId 255710），见 §0.54。**
+**2026-10-30 10:40 追加：13 处 ComboBox 全换成统一下拉控件 `controls:PdxDropDown`（WinUI DropDownButton + Flyout + ListView），含主页播放集；自写 AutomationPeer 保住 UI 自动化脚本契约，见 §0.57。**
+**2026-10-30 09:40 追加：DLC 页新增「Steam 授权判定条」——用游戏目录那份 `steam_api64.dll` 现场问 Steam，补丁生效显示 490/490 全绿、没打补丁显示真实授权（实测 26/53），每行还带「已拥有 / 未拥有 / 授权未知」徽标，见 §0.30。**
+**2026-10-30 17:10 追加：Cities: Skylines II 的 DLC 页不再空白 —— CS2 没有 `.dlc` 描述文件，`DlcCatalog` 对 `PlaysetConfigV1` 直接返回空、页面又把整块清空；现改为在 DLC 页 VM 里用 Steam 报告生成清单（37 条带授权徽标、开关与保存按钮按需隐藏），`IDlcCatalog` 保持只扫磁盘，见 §0.58。**
+**2026-10-31 12:55 追加：退出游戏后 Steam 仍显示「运行中」、且 Steam 的「退出游戏」会连启动器一起杀 ——
+根因是启动器自己在进程内调了 `SteamAPI_Init`，Steam 就把它登记成该 appid 的 game process；现把全部原生 Steamworks 调用
+搬进同一个 exe 的短命宿主子进程（`--steam-host`），启动器本体不再被登记，见 §0.59。**
+**2026-10-31 17:00 追加：左栏新增「Mod 创建」页 —— 列出本地 mod、按游戏格式新建 `.mod`/`metadata.json`、经 `--steam-host` 子进程上传创意工坊；见 §0.60。**
+**2026-11-03 12:20 追加：译文块去掉「译文 / Translation」小标题 —— 六处翻译块只留译文正文（描边框保留），孤儿文案键 `workshop.translateLabel` 一并删除；见 §0.62。**
+**2026-11-03 12:55 追加：翻译在途提示 —— 窗口标题栏加「正在翻译…」小号环形进度（150ms 显示、400ms 隐藏去抖），详情页简介 / 更新日志 / 评论在译文位置先显示「正在翻译…」占位，译好原地替换；顺带补上 `HasTranslatedDescription / HasTranslatedChangelog` 从不发变更通知（译文块要切页才出现）的缺陷；见 §0.63。**
+**2026-11-03 13:20 追加：创意工坊接上 Steam 真实状态 —— Mod 库页与详情页显示「已在 Steam 安装 / 有更新 / 下载中 N% / 排队中 / 本地已禁用」，行内可触发 `DownloadItem` 与 `SetItemsDisabledLocally`；宿主新增 `workshop-subscribed` 与 `workshop-batch` 两个动词（动词表 5→7），设置页把「读状态」与「改订阅」拆成两个开关；见 §0.65。**
+**2026-11-03 14:05 追加：Mod 创建页补齐工坊发布面 —— 可见性四档（公开 / 仅限好友 / 隐藏 / 非公开）、5 个内容描述词、附加预览图（多图，单张 <1 MB）与 YouTube 视频预览、多语言标题与描述（当时收进「高级」折叠区，后来按用户反馈改成表单内的「其他语言」一节，见 §0.68）、新建 mod 改用内置封面而不是 1×1 透明占位图；见 §0.66。**
+**2026-11-03 14:10 追加：一键启动 `start.cmd` —— 仓库根一个脚本包办「增量构建 + 运行」，支持 `debug` / `check` / `new` / `/?` 四种参数，已有实例在跑就跳过启动；同时补 `.vscode/` 工程入口（默认任务一键启动、构建错误进问题面板、不建 launch.json），并新增自检 `StartScriptChecks` 守住脚本纯 ASCII / 提示键齐全 / exe 路径 TFM 与 csproj 一致；见 §0.67。**
+**2026-11-03 14:45 追加：上传页多语言改成「选语言 → 填该语言」——删掉「高级」折叠区、移进描述字段正下方，并补 `PickUnused` / `IsDuplicate`；提交仍逐语言一次，因为 `SetItemUpdateLanguage` 绑在 update handle 上。第一版是「一种语言一行」的行列表，被用户否掉，最终形态见 §0.69（照 Steam 客户端：语言下拉 + 标题 + 描述三段）。**
+**2026-11-03 15:05 追加：多语言最终形态照 Steam 客户端的「编辑标题与描述」——一块表单里从上到下依次是语言下拉（默认 english）、标题、描述；切语言时把当前文本存进该语言的草稿槽位、再载入目标语言，删掉 `ModLocalizationRow` 行模型与「添加/删除语言」按钮；见 §0.69。**
+**2026-11-03 15:30 追加：翻译「没有出结果」的根因不在界面 —— MyMemory 免费额度耗尽回 429、谷歌免费端点主用主机在本机 TLS 握手直接失败；现让免费引擎按主机回落（`translate.googleapis.com` → `clients5.google.com`）、把坏主机与额度耗尽记在**进程级**健康状态里（协调器每批 new 引擎，实例内记忆活不过一批）、失败提示逐引擎列原因；见 §0.70。**
+**2026-11-03 15:45 追加：用户问「我连着系统代理，为什么谷歌翻译连不上」——代理是通的（CONNECT 200、同代理下 `translate.google.com` / `clients5.google.com` 都 200），是 `translate.googleapis.com` 被 DNS 污染到 192.179.26.95 且按 SNI 阻断；现把首选主机换成 `translate.google.com`、批量走 `translate_a/t`（≤8 段一个请求）、429 主机进 60 秒冷却；见 §0.71。**
+**2026-11-03 17:50 追加：创意工坊描述支持 BBCode 与字节上限 —— Steam 的标题 / 描述是定长字符缓冲（128 / 8000），描述格式是社区方言 BBCode（`[h1]`–`[h3]`、`[list]`、`[url=]`、`[img]`、`[hr]`、裸链接自动小部件），此前我们既没校验长度也没做任何富文本；现按 UTF-8 字节三层拦截（`ModPublishLimits` → 宿主 → 上传页）、新增 `SteamBbCodeParser`（BBCode → 现有 `MarkdownDocument` AST，详情页兜底与上传页预览共用）并顺手修掉 `[hr]` / `[olist]` 残留与两份 `ToPlainText` 分叉；上传页描述框上方加 11 键工具条、下方加实时预览，自检 73→80；见 §0.73。**
+**2026-11-03 16:40 追加：Mod 创建页三处 UI 修正 —— 列表徽标不再原样显示 `{0}`（改为短文案 `PublicationBadgeText`，根因是 `Localizer.Format` 无参返回模板原文）、删掉详情面板顶部多余的小标题、上传成功 / 取消 / 切换选中都能回到详情面板（此前成功分支走 `resetPane: false`、取消分支不切面板，进去就出不来）；顺带新增 `LocalizationBindingChecks`（裸绑 `{x:Bind L.Xxx}` 的键模板不许含 `{n}`）与 `ModStudioPaneChecks`，自检 71→73；见 §0.72。**
+**2026-11-03 20:00 追加：Windows 安装包与自动更新落地 —— Inno Setup 7.1.1 双模式安装器（默认每用户无 UAC / 可选每机器）、公开 GitHub Releases 的 `update.json`、启动检查 + 下载校验 + 静默/提权安装、设置页「关于与更新」、每机器数据回退到 `%LOCALAPPDATA%\PdxNext-Data`；自检 83 类全过；见 §0.74。**
+
+## 0.74 最新一轮（2026-11-03 19:00–20:00）：安装包与自动更新
+
+> 用户诉求原话（m00001）：「问题：1.该怎么实现Windows的软件安装包；2.该如何实现软件的更新」
+> 后续拍板（m00047/m00132/m00155）：安装包讲 MSIX 和 Inno；更新走 GitHub 公开 Releases；
+> 下载 + 校验 + 静默安装重启；每用户 + 每机器双模式；Inno 用 7.1.1。
+
+### 0.74.1 安装器（Inno Setup 7.1.1）
+
+- `installer/PdxNext.iss`：`AppId={{A2E3D5E1-5133-46BA-A846-1388A878E1A7}`、
+  `DefaultDirName={autopf}\PdxNext`、`PrivilegesRequired=lowest` +
+  `PrivilegesRequiredOverridesAllowed=commandline dialog`、`SetupArchitecture=x64`、
+  `ArchitecturesAllowed=x64compatible`、`MinVersion=10.0.17763`、`CloseApplications=yes`。
+- `[Files]` 排除 `data\*`、`data-root.txt`、`*.log`、`update-cache\*`、`install-mode.txt`，
+  升级不覆盖用户数据。
+- `[Code]`：`ssPostInstall` 写 `install-mode.txt`（`perUser`/`perMachine`）；
+  `PrepareToInstall` 检测另一模式的默认安装目录，要求先卸载，避免双装。
+- `[Run]`：`postinstall` / `skipifnotsilent` 两路都用 `runasoriginaluser`，每机器安装后启动器
+  不以管理员令牌运行。
+- `tools/build-installer.py`：校验 `dist\PdxNext` 的 `.xbf` / `.pri`、定位 ISCC、编译、
+  算 SHA-256、写 `dist\installer\update.json`。产物 65 MB（238 MB payload）。
+- 版本唯一源 `version.props`，`Directory.Build.props` 导入；安装器、程序集、清单三处一致。
+
+### 0.74.2 自动更新
+
+- `Core/Updates/UpdateVersion.cs`：1–3 段数字，忽略 `v`、`+commit`、`-preview`。
+- `Core/Updates/UpdateManifest.cs`：schemaVersion=1、HTTPS + 白名单、`.exe`、64 位 sha256、
+  size>0、notes URL HTTPS。
+- `Core/Updates/UpdateService.cs`：24 小时节流、`ReadManifestTextAsync`（128 KB 上限）、
+  流式下载 + 边写边算 SHA-256、长度/摘要校验、`.part` 清理、`/ALLUSERS|/CURRENTUSER`、
+  每机器 `runas` + 1223 取消处理。
+- `Core/Online/HttpFetcher.cs` 新增 `GetDownloadAsync`（返回流 + Content-Length）；
+  `OnlineHosts` 加 `github.com` / `objects.githubusercontent.com`。
+- `App/Services/UpdateFlow.cs`：启动静默检查（失败只 Warn）、手动检查、`ConfirmOverlay`
+  更新提示、`ProgressBar` 下载进度、取消下载、启动安装器后保存设置并关闭主窗。
+- `MainWindow.xaml.cs` 的 `OnRootGridLoaded` 末尾 fire-and-forget；
+  `AppSettings` 新增 `AutoCheckUpdates`（默认 true）、`LastUpdateCheckUtc`、
+  `SkippedUpdateVersion`。
+
+### 0.74.3 双模式数据目录
+
+- `PdxDataRoot` 新增 `install-mode.txt` 与 `%LOCALAPPDATA%\PdxNext-Data` 回退；
+  每机器安装不再尝试写 Program Files 下的 `data`。
+- `DataRootMigrator.MigrateFirstAvailable`：每机器首次启动依次尝试旧的每用户程序目录与
+  `%LOCALAPPDATA%\PdxNext`，只复制不删除。
+- 设置页新增「关于与更新」（Tag=7）：版本、安装模式、上次检查、自动检查开关、立即检查、
+  状态文本；`scripts/verify-settings-sections.ps1` 同步 `navSettingsAbout`。
+
+### 0.74.4 验证
+
+- `dotnet build PdxLauncher.sln -c Release -m:1`：0 警告 0 错误。
+- `dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"`：
+  83 类 / 0 失败（新增 `UpdateChecks`：版本、清单、安装模式 marker）。
+- `python tools\build-installer.py`：成功生成 `PdxNext-Setup-1.0.0.exe` + `update.json`。
+- 尚未做：真实安装/卸载、每机器 UAC 更新、GitHub 发布仓库创建与上传、代码签名。
+
+### 0.74.5 下一步
+
+1. 刷新 `publish.cmd` 后重新打安装包（安装器 payload 必须是修过文案的最新 `dist\PdxNext`）。
+2. 在 GitHub 建公开仓库 `lyxc6/pdxnext-releases`，用 `tools\publish-release.ps1` 上传。
+3. 按 `docs/INSTALLER.md` §7 做每用户/每机器安装、升级、取消 UAC、校验失败实机验证。
+4. 如需对外分发，补 Authenticode 证书与 `SignTool` / `SignedUninstaller=yes`。
+
+## 0.60 最新一轮（2026-10-31 13:00–17:00）：新增「Mod 创建」页
+
+> 用户诉求原话：「添加mod创建页面，用于显示本地mod、创建mod和上传mod到创意工坊」
+
+### 0.60.1 页面
+
+- 左栏 `NavModStudio`（Tag=`modstudio`，图标 `E7B8`，在「Mod 库」后）；`NavigationService` 映射到
+  `PdxLauncher.App.Views.ModStudioPage`，`MainWindow.UpdateContentNavState` 与其它内容页一起显隐，
+  不可管理游戏会重定向主页。
+- `ModStudioPage`：左 360 DIP 本地 mod 列表（搜索、刷新、缩略图、已发布徽标），右侧详情/新建/上传三态面板，
+  底部状态条与上传进度条；新建/上传用页内表单，不用 `ContentDialog`；发布确认才用 `ConfirmOverlay`。
+- 自动化 Id：`modStudioList`、`modStudioSearch`、`modStudioCreate`、`modStudioUpload`、`modStudioRefresh`、
+  `txtModStudioName/Folder/Version/SupportedVersion/Tags/Description`、`btnModStudioCreateConfirm/Cancel`、
+  `rdoModStudioTargetSteam/Pdx`、`txtModStudioUploadDirectory/ModId/Title/Description/ChangeNote`、`modStudioUploadTags`、
+  `btnModStudioUploadConfirm/Cancel`、`modStudioProgress`、`modStudioLegalLink`。
+
+### 0.60.2 创建
+
+- `Core/ModStudio/ModDescriptorRules`：ck3/stellaris/eu4/hoi4/imperator_rome 走 legacy，victoria3/eu5 走 metadata，
+  其余不支持；`CanPublish` 还要求 `SteamWorkshopGames.TryGet(gameId)==true`。
+- `ModCreator`：
+  - legacy：`<modDir>/<folder>.mod`（带绝对 `path`）+ `<folder>/descriptor.mod`（不带 `path`）+ `thumbnail.png`；
+  - metadata：`<folder>/.metadata/metadata.json` + `.metadata/thumbnail.png`，`picture` 写相对 `.metadata` 的 `thumbnail.png`；
+  - 校验名称/文件夹名（`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`）、V3 非 ASCII、路径长度、目标已存在；失败清理半成品。
+- `LocalModInventory` 只列本地（排除 `steamapps/workshop/content` 与 `workshop/content`），DB 行强制 `source=local`、
+  `steamId=null`，归档行可见但不可上传。
+- 发布记录写 `IJsonDocumentStore`（键 `modstudio.publish.<gameId>.<sha256(path)[..16]>`），**不写 `mods.steamId`**，
+  避免本地 mod 被来源判定成订阅 mod。
+
+### 0.60.3 上传
+
+- 仍遵守 §0.59：主进程不 `SteamAPI_Init`；上传走 `PdxLauncher.App.exe --steam-host workshop-publish --api … --appid … --request <base64 json>`。
+- `SteamHostProtocol` 增至 5 个动词，新增进度行前缀 `PDXNEXT-STEAM-HOST-PROGRESS ` 与 `ModPublishRequest/Progress/Result`。
+- `SteamWorkshopHostOperation`：UGC 访问器候选 `v021…v012`（实测 V3/Stellaris 只有 v014、CK3 只有 v016），
+  `CreateItem → StartItemUpdate → SetItemTitle/Description/Content/Preview/Visibility/Tags → SubmitItemUpdate`；
+  用 `SteamAPI_ManualDispatch_*` 等 `CreateItemResult_t`(3403)/`SubmitItemUpdateResult_t`(3404)，`GetItemUpdateProgress` 推百分比。
+- 法律协议：结果为 `NeedsLegalAgreement` 时页面给 `https://steamcommunity.com/sharedfiles/workshoplegalagreement` 链接。
+- 上传前需 Steam 运行且已登录；失败会保留已拿到的工坊 id 和 `LastError`，便于重试。
+- 上传目标对齐官方页：Steam / Paradox 两个单选；当前只接通 Steam，Paradox 选项保留但确认按钮禁用并显示未接入提示。
+- `Mod ID` 对齐官方语义：留空=新建条目；填数字=更新该 `PublishedFileId`。初值从 `ModPublication.PublishedFileId` 回填，
+  `ModIdInput.TryParse` 拦截 0/非数字/溢出。
+- 标签改为游戏固定清单复选框（`ModTagCatalog`；V3 用官方 24 项，其他游戏用常用清单），保留描述符里未知标签。
+  官方清单来自 Paradox games API，离线实现无法复刻，采用本地清单。
+
+### 0.60.4 验证与未验证项
+
+- `dotnet build PdxLauncher.sln -c Debug -m:1` → 0 警告 0 错误。
+- 自检 → `检查类: 63，失败: 0，断言失败总数: 0`（新增 `ModStudioChecks`，含规则、legacy/metadata 创建、非法输入、
+  本地清单、发布记录、发布协议、宿主参数）。
+- `python tools/gen-i18n.py --check` → 960 键。
+- UIA 真机：左栏可见「Mod 创建」；CS2 列出 53 个本地 mod 且创建/上传禁用；CK3 列出 5 个本地 mod，
+  详情、缩略图、新建表单、上传表单与确认浮层均正常；上传表单可见目录、Steam/Paradox 单选、Mod ID、
+  名称、描述与标签复选；Steam 目标确认按钮可用，Paradox 目标禁用并提示未接入。
+- **发布链路只做了静态/参数自检，没有真机完成一次创意工坊上传**（会创建真实公开条目，未擅自执行）。
+  若后续真机上传失败，先查 Steam 是否运行/登录、是否接受法律协议，再查 `SteamAPI_ManualDispatch_*` 的管道参数与回调 id。
+
+## 0.59 最新一轮（2026-10-31 12:10–13:00）：退出游戏后 Steam 仍说游戏在跑，点「退出游戏」还把启动器杀了
+
+> 用户诉求原话：「我启动vic3后，退出游戏，steam仍然处于识别到游戏运行中，在steam点击退出游戏还会把启动器一起退出」
+
+### 0.59.1 根因：Steam 把「启动器」登记成了「vic3」
+
+两个症状同一个源头。证据在 Steam 自己的客户端日志 `D:\app\Steam\logs\console_log.txt`：
+
+```
+[2026-10-31 12:09:24] Game process added : AppID 529340 "...\win-x64\PdxLauncher.App.exe", ProcID 35008
+[2026-10-31 12:10:04] STARTUP SlowJSMethodCall Apps.TerminateApp took 12.6ms     ← 用户点了「退出游戏」
+[2026-10-31 12:10:07] Game process removed: AppID 529340 "...\win-x64\PdxLauncher.App.exe", ProcID 35008
+```
+
+启动器日志同一秒给出了触发者：`12:09:24.684 [INFO] Steamworks 已初始化：appid=529340，dll=…\win-x64\steam_api64.dll`
+（`SteamWorkshopBridge`，用户在创意工坊详情页）。历史上 DLC 授权探测也会触发，而且**残留很久**：
+10-30 `21:23:11` 探测 → Steam `Game process added … ProcID 39280` → 直到 `22:06:27` 才 `removed`（≈43 分钟）。
+
+机制：**任何进程用游戏 appid 调 `SteamAPI_Init`，Steam 就把它登记为该 app 的 game process**，
+`SteamAPI_Shutdown()` **不会**撤销登记（清一色只在进程退出/被 `Apps.TerminateApp` 时消失）。于是：
+
+- Steam 库显示「游戏运行中」＝ 启动器还活着（哪怕游戏早退出了）；
+- Steam 的「退出游戏」＝ 结束那个「游戏进程」＝ 杀启动器，游戏本身根本不在。
+
+### 0.59.2 修法：同一个 exe 的隐藏宿主模式
+
+不新增可执行文件（`publish.cmd` 的 `AddWinUIXamlArtifactsToPublish` 已被记为易坏，多一个要同步发布的 exe 只会持续漂移），
+改成「同一个 exe，两种启动方式」：
+
+- `src/PdxLauncher.App/PdxLauncher.App.csproj` 定义 `DISABLE_XAML_GENERATED_MAIN`，关掉 XAML 生成的 `Program`；
+- `src/PdxLauncher.App/Program.cs` 自己当入口：`args[0] == "--steam-host"` 时不初始化 WinUI，只跑 `SteamHostRunner`
+  并把结果写一行 `PDXNEXT-STEAM-HOST {json}` 到 stdout；否则原样 `InitializeComWrappers` + `Application.Start`；
+- 触发 `SteamAPI_Init` 的活全在子进程里，**探测约 0.4–1.5 秒、订阅最多 25 秒**，子进程结束即被 Steam 除名；
+  Steam 的「退出游戏」最多杀掉这个短命子进程，启动器不受影响。
+
+### 0.59.3 新增/删除的文件
+
+| 文件 | 作用 |
+| --- | --- |
+| `src/PdxLauncher.Core/Steam/SteamHostProtocol.cs` | 命令行契约（`--steam-host probe\|workshop-state\|workshop-subscribe\|workshop-unsubscribe`）、结果行前缀 `PDXNEXT-STEAM-HOST `、JSON 编解码、`SteamHostProbeResult` / `SteamHostWorkshopResult` |
+| `src/PdxLauncher.Core/Steam/SteamHostRunner.cs` | 子进程入口分发、参数解析、退出码（0 成功 / 1 失败）、工坊确认超时 25 s |
+| `src/PdxLauncher.Core/Steam/SteamWorkshopHostOperation.cs` | 手工 `NativeLibrary` 绑定（`InitFlat` / `Shutdown` / `RunCallbacks` / `SteamUGC` / `SubscribeItem` / `UnsubscribeItem` / `GetItemState`），250 ms 轮询等状态位翻转 |
+| `src/PdxLauncher.Core/Steam/SteamClientLocator.cs` | 注册表 + 默认路径找 Steam 安装根，兜底拿 Steam 自带 `steam_api64.dll` |
+| `src/PdxLauncher.App/Program.cs` | 双模式入口（见上） |
+| `src/PdxLauncher.App/Services/SteamHostClient.cs` | 拉起子进程、并发读 stdout/stderr、超时 `Kill(entireProcessTree: true)`、解码结果、日志 `Steam 宿主 <verb>：exit=…，耗时 … ms` |
+| `src/PdxLauncher.App/Services/SteamHostProbe.cs` | `ISteamDllProbe` 的宿主实现，默认接到 `SteamOwnershipService` |
+| `src/PdxLauncher.App/Services/SteamWorkshopHostBackend.cs` | `IWorkshopSubscribeBackend` 的宿主实现，替代原来的进程内桥 |
+| ~~`src/PdxLauncher.App/Services/SteamWorkshopBridge.cs`~~ | 删除（进程内长会话，最严重的一处） |
+| ~~`src/PdxLauncher.App/Services/SteamNativeApi.cs`~~ | 删除（`DllImport` 只能绑进程内调用） |
+
+`SteamDllProbe` 保留，但现在**只被 `SteamHostRunner` 在子进程里用**；主进程里没有任何 `SteamAPI_*` 的 P/Invoke
+（`grep -rn "SteamAPI_\|DllImport(\"steam_api" src/PdxLauncher.App` 只剩注释命中）。
+
+### 0.59.4 顺带修的坑
+
+- 创意工坊「订阅状态」以前只要后端可用就只信 Steamworks，宿主模式下 `ReadState` 可能返回 Unknown（没在运行的进程读不到实时状态），
+  现在 `WorkshopDetailViewModel.RefreshSteamSubscriptionAsync` 在 `!state.IsKnown` 时回退到 acf 文件，不再把「已订阅」显示成未知。
+- 新增错误键 `hostFailed`（`SteamProbeError.HostFailed`）+ 文案 `dlc.ownershipErrorHostFailed`，宿主被杀/超时/输出损坏时 DLC 页给出可读原因。
+- `tools/gen-i18n.py` 用严格 UTF-8 解码，i18n 的 json 源文件**不能带 BOM**（否则 `Unexpected UTF-8 BOM`）。
+- `tools/manual-build.py` 的 app 编译参数补了 `-define:DISABLE_XAML_GENERATED_MAIN`，离线构建路线不会漏。
+
+### 0.59.5 真机验证（2026-10-31 12:51–12:55）
+
+- 宿主冒烟：`PdxLauncher.App.exe --steam-host probe --api "<vic3>\binaries\steam_api64.dll" --appid 529340`
+  → 1.4 s 返回 `"initialized":true, "steamRunning":true, steamId64=76561198370719182` + DLC 列表；Steam 日志
+  `12:51:43 Game process added … --steam-host probe … ProcID 21236` → `12:51:46 Game process removed`（子进程退出即除名）。
+- 端到端：启动器 GUI（PID 22948）打开 CV3 的 DLC 页 → 日志 `12:55:07 Steam 宿主 probe：exit=0，耗时 402 ms`、
+  `DLC 授权探测（gameId=ck3）：state=Succeeded，Steam 37 个 DLC、29 个已拥有`；Steam 日志同秒 `added … ProcID 35748`
+  （子进程）→ `12:55:09 removed`，**启动器自身 PID 从未出现**。
+- 自检：`dotnet tests/PdxLauncher.Checks/bin/Release/net10.0/PdxLauncher.Checks.dll` → `检查类: 63，失败: 0`；
+  新增 `SteamHostProtocolChecks`（动词识别 / 结果往返 / 缺参数退出码 / 缺 DLL 返回 `noDll` / JSON 驼峰 / `LooksLikeSteamRoot`）。
+
+### 0.59.6 以后别再犯
+
+- **不要在启动器主进程里调 `SteamAPI_Init`**（哪怕立刻 `Shutdown`）：登记不撤销，就会瘫在 Steam 的「运行中」里，并被「退出游戏」连坐。
+  需要 Steamworks 一律走 `SteamHostClient`（`--steam-host` 子进程）。
+- 如果哪个功能非要长会话 Steamworks（比如实时订阅状态推送），就接受「用的时候才会被登记」并明确告诉用户，别默认开着。
+
+## 0.57 最新一轮（2026-10-30 09:20–11:00）：15 处 ComboBox 全换成统一下拉控件 PdxDropDown
+
+> 用户诉求原话：「目前是用什么下拉选框，怎么感觉不是winui的选框，我倒是看到winui有个DropDownButton的下拉选框」
+> 用户决策（ask_user_question 两轮）：①外观用**标准 WinUI 按钮式**（填充底 + 描边 + 右侧 chevron），不做 ComboBox 输入框式外观；
+> ②**全部 13 处 ComboBox 都换**（放弃「只做 ComboBox 主题化」与「混合」）；③**主页播放集一起重构**，全项目只留一套下拉实现。
+> 收尾时又发现「翻译」分区（§0.56 新增）还有 2 处 ComboBox，一并换掉 → **源码里 ComboBox 已清零**。
+
+### 0.57.1 为什么不用 ComboBox
+
+ComboBox 的下拉列表**永远把选中项居中展示**：选中最后一项时下拉会向上展开，`MaxDropDownHeight` 改不了这个定位模型
+（WinUI 源码 `ComboBox_Partial.cpp` 的 `GetNonPannablePopupLayout`）。§0.13 已就主页播放集验证过这一条。
+`MenuFlyout` 会忽略 `Placement`，所以播放集那一版用的是普通 `Flyout`（`Placement=BottomEdgeAlignedLeft`）。
+
+### 0.57.2 新控件
+
+- `src/PdxLauncher.App/Controls/PdxDropDown.xaml`（UserControl）→ `DropDownButton`（默认 WinUI 模板，自带右侧 chevron）
+  + `Flyout`（`Placement=BottomEdgeAlignedLeft`，presenter 样式 Padding=0 / CornerRadius=8 / BorderThickness=0）
+  + `ListView`（`MaxHeight=320`、`Margin=4`、`SelectionMode=Single`、`IsItemClickEnabled=True`，
+  ItemContainerStyle 关掉系统焦点白框并设 `MinHeight=40 / Padding=12,0`）。
+- `src/PdxLauncher.App/Controls/PdxDropDown.xaml.cs`：DP = `ItemsSource` / `SelectedItem` / `DisplayMemberPath` /
+  `ItemTemplate` / `PlaceholderText` / `DropDownWidth`（NaN = 与按钮等宽）；事件 `SelectionChanged`（参数 `PdxDropDownSelectionChangedEventArgs.SelectedItem`）。
+  展开/收起走 `Button.Flyout` 的 `ShowAt` / `Hide` —— **`DropDownButton` 没有 `IsDropDownOpen` 属性**，展开态只能读 `FlyoutBase.IsOpen`（只读）。
+  选中项若是 `INotifyPropertyChanged`（各选项目录对象都实现了它），控件会订阅其 `PropertyChanged`，
+  **切换界面语言后按钮上的文字会跟着变**，不会停留在旧语言。
+- `src/PdxLauncher.App/Controls/PdxDropDownAutomationPeer.cs`：自写 peer，见下。
+
+### 0.57.3 自动化 peer（这是本轮最难的一块）
+
+UI 自动化脚本 `scripts/verify-settings-regression.ps1` 依赖 ComboBox 的两个模式：
+
+- `ComboText` 走 `SelectionPattern.GetSelection()[0].Current.Name` → 需要 **ISelectionProvider**；
+- `ComboSelectIndex` 走 `ExpandCollapsePattern.Expand` + `$el.FindAll(Descendants, ControlType=ListItem)`
+  + `SelectionItemPattern.Select()` → 需要 **IExpandCollapseProvider**，而且**选项必须是下拉控件自身的 UIA 后代**。
+
+换成 DropDownButton 后默认只暴露 Invoke 模式，所以自写 `PdxDropDownAutomationPeer : FrameworkElementAutomationPeer,
+IExpandCollapseProvider, ISelectionProvider`，`GetAutomationControlTypeCore()` 返回 `AutomationControlType.ComboBox`。
+
+踩过的坑（都已在代码里规避）：
+
+1. `SelectorAutomationPeer` 的构造函数要的是 `Microsoft.UI.Xaml.Controls.Primitives.Selector`，
+   `UserControl` 不是 → 只能从 `FrameworkElementAutomationPeer` 派生并自己实现 `ISelectionProvider`。
+2. `IRawElementProviderSimple` 是 **Public Sealed class**（不是接口）→ 没法自己实现；
+   peer→raw provider 的转换只能用基类的 `ProviderFromPeer`。
+3. `AutomationElementIdentifiers` **没有** `ExpandCollapseStateProperty` → 调 `RaisePropertyChangedEvent` 会报
+   `error CS0117`，干脆不调。
+4. `ExpandCollapseState` 枚举在 `Microsoft.UI.Xaml.Automation` 命名空间，不在 `.Automation.Provider` → 要补 using。
+5. **Flyout 内容在独立的弹窗宿主里，不在按钮的自动化子树中** → 脚本 `FindAll(Descendants, ListItem)` 取不到任何选项，
+   一开始报 `Failed=[bgMode-not-changed]`。
+   解法：`GetChildrenCore()` 显式把 Flyout 里 `ListView` 的**原生 peer** 挂成下拉控件的子节点
+   （`FrameworkElementAutomationPeer.CreatePeerForElement(ItemsList)`），
+   选项于是以原生 ListItem 形态出现，并保留 WinUI 原生的 `SelectionItem` 模式。
+   自造的项 peer（host 指向控件自身）会让所有选项 runtime id 相同，UIA 只回 1 项 —— 这条路不通。
+
+### 0.57.4 替换清单（15 处 ComboBox → `controls:PdxDropDown`，AutomationId 全部保持不变）
+
+- 设置页 10 处：`cmbUiLanguage` / `cmbPlaySetPageDisplayMode` / `cmbBackgroundDisplayMode` / `cmbModThumbnailSize` /
+  `cmbAlternativeExecutable` / `cmbProxyMode` / `cmbDlcDescriptionRetention` / `cmbModThumbnailRetention` /
+  `cmbTranslateEngineMode` / `cmbTranslateTargetLanguage`（`src/PdxLauncher.App/Views/SettingsPage.xaml`；
+  最后两处在「翻译」分区，是 §0.56 之后加的，收尾时一并换掉）。
+- 播放集页 1 处：`cmbPlaySets`（保留原 ItemTemplate，含「激活」徽标）。
+- Mod 库页 2 处：`cmbModLibrarySort` / `cmbModLibrarySource`。
+- 创意工坊页 2 处：`cmbWorkshopSort` / `cmbWorkshopTimeRange`。
+- 主页播放集 1 处：`btnHomePlaySets` —— 原来手写的 DropDownButton + Flyout + ListView 三件套删掉，改用同一控件；
+  `HomePage.xaml.cs` 里 `SyncPlaySetSelection` / `OnPlaySetFlyoutOpening` / `OnPlaySetItemClick` 一并删除。
+
+代码后置同步改造：`ModLibraryPage.xaml.cs` / `WorkshopPage.xaml.cs` / `ModsPage.xaml.cs` / `HomePage.xaml.cs`
+的处理器签名由 `SelectionChangedEventArgs` 改为 `PdxDropDownSelectionChangedEventArgs`，取值改为 `e.SelectedItem`。
+
+### 0.57.5 验证（全部实际执行）
+
+- `dotnet build "PdxLauncher.sln" -c Release -m:1` → **0 警告 0 错误**（必须 `-m:1`：解决方案混了 x64 与 Any CPU）。
+- `dotnet tests/PdxLauncher.Checks/bin/Release/net10.0/PdxLauncher.Checks.dll` → **检查类 58，失败 0**。
+- `pwsh -NoProfile -File scripts/verify-settings-regression.ps1` → **DONE**（无 FAILED）。
+  实测 `CHANGE_BG = picked=（艺术）`、`AFTER_CHANGE` 里背景显示方式确实变了而其它下拉没被重置、控件 BoundingRectangle 不变。
+- `pwsh -NoProfile -File scripts/verify-settings-sections.ps1` → **DONE**（7 节 missing 全空，FAILED_SECTIONS=0）。
+  首次跑曾报 `MISSING_NAV=navSettingsAdvanced/navSettingsTranslation`，复查是脚本在「缓存」节滚动到底后
+  NavigationView 侧栏被重建导致的偶发找不到，与本次改造无关；重跑即恢复。
+
+### 0.57.6 遗留
+
+- `PdxDropDown` 目前只在设置/播放集/Mod 库/创意工坊/主页五处使用；翻译页等其它页面若要用同一控件直接套用即可。
+- 下拉项的显示文本走 `DisplayMemberPath` 反射读取（带类型缓存）；`AlternativeExecutable` 等 record 依赖属性名 `DisplayLabel`。
+- 源码里已无 `ComboBox` 控件实例（`ops_grep` 只剩注释与 `obj/` 生成物）；各选项目录类与 ViewModel 里
+  「ComboBox 的 SelectedItem 才能按引用相等匹配」一类的注释已统一改成「下拉控件」。
+
+## 0.30 最新一轮（2026-10-30）：DLC 页显示 Steam 授权 —— 一眼看出补丁有没有用上
+
+> 用户诉求原话：「给DLC页面添加是否拥有dlc的判定，你翻下原版启动器的判定条件，方便user确认dlc补丁是否用上」
+
+### 先取证：原版启动器怎么判「拥有」
+
+`C:\Users\17147\AppData\Local\Programs\Paradox Interactive\launcher\launcher-v2.2026.13\resources\app.asar`
+（29,170,265 B）里 `SteamService.getDlcList()` + `getDataForDlc()` 的合取式：
+
+```
+isOwned = isSubscribedApp(id) || 可信DisabledDLC.contains(id) || isDLCInstalled(id)
+```
+
+- `isSubscribedApp` / `isDLCInstalled` 就是 Steamworks 的 `ISteamApps::BIsSubscribedApp` / `BIsDlcInstalled`（greenworks 调的）。
+- 「可信 DisabledDLC」来自 `<安装目录>\..\..\appmanifest_<appid>.acf` 的 `DisabledDLC`（逗号分隔），但**必须先验 `LastOwner` == 当前 SteamID64**，不匹配就整份丢弃 —— 官方这里是 `if (!lastOwner || lastOwner !== steamId) return new Set()`，防的是换账号后残留。
+- appid 用环境变量 `SteamAppId` 灌进 DLL（对应官方 `zt.steamAppIdOverride`）。
+- 每个 DLC 项还带 `isInstalled`（来自 `getInstalledDepots()`，与「拥有」是两件事）和 `distPlatform`（STEAM / PDX / MS Store 三套适配器），UI 对 `isOwned === false` 显示 `DLC_NOT_OWNED` 提示。
+
+### 再定方案：判定要落在「游戏实际看到的那份授权」上
+
+本项目已经有完整 CreamAPI 式补丁（`Core/Patch`），所以不能只问 SDK 里那份 DLL —— 那样只能说明「账号里有没有」，说明不了「补丁生效没」。改成**加载游戏目录里那份 `steam_api64.dll`**：补丁生效时它本身就是 loader，它报出来的授权就是游戏进程里看到的授权。
+
+真机实测（python ctypes 先验证 ABI，再用 C# 复核，两者一致）：
+
+| 被加载的 DLL | `GetDLCCount` | 拥有 | 结论 |
+| --- | --- | --- | --- |
+| `F:\SteamLibrary\steamapps\common\Stellaris\steam_api64.dll`（已打补丁） | 490 | 490 | `PatchedEffective` |
+| 同目录 `steam_api64_o.dll`（原版备份） | 53 | 26 | `VanillaPartial` |
+
+SteamID64 = 76561198370719182，与 appmanifest 的 `LastOwner` 一致，`TrustedDisabledDlc = 0`。
+
+### 改了什么
+
+**Core（新增 6 个文件 + 2 处增强）**
+
+- `Steam/SteamOwnership.cs`：契约 —— `SteamOwnershipState{Unavailable,SteamNotRunning,InitFailed,Succeeded}`、`SteamDlcOwnership`、`DlcOwnershipCandidate`、`SteamOwnershipReport`、`SteamDllProbeResult`、`ISteamDllProbe`、`ISteamOwnershipService`、`SteamProbeError` 常量键。
+- `Steam/SteamNativeSession.cs`：进程内独占闸门（`TryEnter(owner, out IDisposable)`），Steamworks 只能有一个持有者。
+- `Steam/SteamDllProbe.cs`：`NativeLibrary.Load` + `TryGetExport` + `Marshal.GetDelegateForFunctionPointer`；进闸门 → 备份并设 `SteamAppId` → `SteamAPI_IsSteamRunning` → `SteamAPI_Init`（InitFlat → Init → InitSafe 依次回退，loader 没有 InitFlat 也能跑）→ 读 SteamID → 枚举 DLC → `Shutdown` + `Free` + 还原环境变量。异常映射 `DllNotFound→noDll`、`BadImageFormat→x86`、其余 `native`。**Core 的 `AllowUnsafeBlocks=false`，清零缓冲区走 `Marshal.Copy`。**
+- `Steam/SteamOwnershipService.cs`：定 appId（game.SteamAppId → GameSteamAppIds → 补丁报告）→ 定 DLL（补丁报告的 `ApiDirectory/ApiFileName`）→ 32 位直接拒 → 30 秒缓存 → 探测 → 读 appmanifest → 合并。
+- `Steam/AppManifestLookup.cs`：从安装目录往上推 `steamapps` 库根；已知库补找时**严格要求 `InstallPath` 归一化后等于 `InstallRoot`**；`TrustedDisabledDlc(manifest, steamId64)` 实现官方的 LastOwner 校验。
+- `Steam/DlcOwnershipVerdict.cs`：把「补丁状态 + 探测结果 + 盘上 DLC」压成一档结论 —— `PatchedEffective` / `PatchedIncomplete` / `VanillaAllOwned` / `VanillaPartial` / `Unknown`，未授权名单最多留 6 条。
+- `AppManifest` / `AppManifestReader`：补 `LastOwner` 与 `DisabledDlc`（`DisabledDlcSet` 做 `Ordinal` 集合），坏键读成 null 而不是抛。
+
+**App**
+
+- `AppServices.DlcOwnership` + `App.xaml.cs` 装配（`SteamLibraryLocator` 延迟求值，只有探测真要用时才枚举库）。
+- `Services/XamlBrush.cs`：`FromVerdict` / `FromOwnership` 把 kind 映射成主题画刷（`PdxOwnedForegroundBrush` 等三色加进 Default/Light/HighContrast 三套字典），查不到退回 Gray 而不是 null（`Foreground=null` 会让文字直接消失）。
+- `DlcViewModel`：`RefreshOwnershipAsync(force, ct)`（`Task.Run` 里跑探测，不占 UI 线程）、`OwnershipHeadline` / `OwnershipDetail` / `OwnershipKind` / `IsRecheckEnabled`、每行 `SetOwnership(bool?)`；`LoadAsync` 主路径在填简介前跑一次探测，三个提前返回分支都 `ResetOwnership()`。
+- `DlcPage.xaml`：根 Grid 三行改四行，新增「授权判定条」（判定句 + 证据句 `路径 · appid · SteamID64 · 补丁状态 · LastOwner 是否匹配` + 重新检测按钮 + ProgressRing），列表行加「已拥有 / 未拥有 / 授权未知」徽标。
+- `SteamWorkshopBridge` 接闸门：拿不到就报「Steam 正被其他功能占用（例如 DLC 授权探测）」，`ShutdownCore` 里释放。
+- i18n：zh/en 各 31 个 `dlc.ownership*` / `dlc.owned*` 键，`python tools/gen-i18n.py` 生成（共 770 键）。
+
+### 验证
+
+- `tests/PdxLauncher.Checks/SteamOwnershipChecks.cs`（新增，约 560 行）：清单字段解析、LastOwner 可信/不可信两侧、库根推导与路径不匹配不采信、拥有合并（含 DisabledDLC 升级）、五种 verdict、八种失败键、闸门互斥、30 秒缓存与 `Invalidate`。全仓自检 0 失败。
+- 真机两个场景都跑通（补丁 490/490、原版 26/53，见上表）。
+- 构建坑提醒：改完 Core 之后直接增量 `dotnet build src/PdxLauncher.App/...` 可能报 `CS0246 SteamOwnershipService`（XamlCompiler 还会连带刷 `WMC1509/WMC9999`），那是无效缓存 —— `-t:Rebuild` 或 `build.cmd` 全量构建即消失。
+- 跑自检不要 `dotnet ...dll | head`：提前关管道会把进程留在后台并锁住 `bin` 里的 dll，下一次构建就 `MSB3021`。重定向到文件再 grep。
 
 ## 0.29 最新一轮（2026-10-29 03:00–20:20）：自有 SQLite 事实源 + 来源徽标 + 修本地 mod 加载
 
@@ -377,7 +736,7 @@ User said (m00003)：「eu5的图片解析似乎又坏了，修一下」。附�
 
 判定缓存按 appId 记在 `SteamWorkshopClient` 里（`ConcurrentDictionary<int,bool>`），一次进程只查一次。纯函数抽在 `src/PdxLauncher.Core/Online/WorkshopSourceChooser.cs`（`Resolve(int? steamAppId, bool? hasWorkshop)`），自检直接覆盖。
 
-两平台共用同一套三档排序：Steam `mostpopular/mostrecent/toprated`（有搜索词时强制 `browsesort=textsearch` + `searchtext=`），PDX `popularity/updated/rating`。页大小 30 / 24，翻页、搜索、刷新复用同一个 VM。
+两平台共用同一套档位：Steam `trend/toprated/mostrecent/lastupdated/totaluniquesubscribers`（关键词用 `searchtext=`，与 `browsesort` 并存、不改写排序），PDX `popularity/updated/rating`。页大小 30 / 24，翻页、搜索、刷新复用同一个 VM。
 
 ### 0.26.3 批次与文件
 
@@ -2022,6 +2381,8 @@ magic 阈值改为「拒绝 <1 KB 或 >40 MB」并写明 3,818 B 的实测依据
 - 五个顶层脚本全部改写为**纯 ASCII（0 个 >127 字节）、CRLF**：
   `build.cmd` 1699 B / `build-debug.cmd` 642 B / `run.cmd` 382 B /
   `run-debug.cmd` 380 B / `publish.cmd` 2975 B。
+  （2026-11-03 补注：`publish.cmd` 之后又改到 3906 B；新增第六个顶层脚本 `start.cmd` 4338 B，
+  同样是纯 ASCII + CRLF，中文同样全走 `msg.cmd`，见 §0.67。）
   所有中文改成 `call "%~dp0scripts\msg.cmd" KEY`，`rem` 注释全部改英文。
 - 备份：`.scratch\rework\backup\2026-10-26-ascii-msgs\`（五个改前原件：1366 / 545 / 373 / 325 / 3011 B）。
 
@@ -3158,15 +3519,17 @@ Steam 网页把排序分成三块：排序顺序 + 时间范围 + 分类筛选�
 | 最热门（默认） | `trend` | 是 |
 | 最受好评 | `toprated` | 是 |
 | 最近发行 | `mostrecent` | 否 |
-| 最新更新 | `mostupdated` | 否 |
-| 不重复订阅者总计 | `mostsubscribed` | 否 |
-| （有关键词时）搜索 | `textsearch` + `searchtext=` | 否 |
+| 最新更新 | `lastupdated` | 否 |
+| 不重复订阅者总计 | `totaluniquesubscribers` | 否 |
+| （有关键词时）搜索 | 仍用上面选中的排序 + `searchtext=` | 否 |
 
-时间范围下拉 7 档：今天 / 1 周 / 30 天（默认）/ 3 个月 / 6 个月 / 1 年 / 发布至今，对应 `&days=1|7|30|90|180|365|0`。
+时间范围下拉 7 档：今天 / 1 周 / 30 天（默认）/ 3 个月 / 6 个月 / 1 年 / 发布至今，对应 `&days=1|7|30|90|180|365|-1`（**「发布至今」是 -1 不是 0**：`days=0` 会被服务端当成「不传」，回落成默认 7 天）。
+
+> 2026-11-03 更正：本节原表写的 `mostupdated` / `mostsubscribed` 是错的 —— Steam 现行 browse 端点不认这两个值，会**静默回落成 `trend`**，表现就是「换了排序列表一模一样」。真实值见上表（依据是 Steam 网页自己的 SSR JS 白名单与 5 个 appid 的实测）。
 
 - `WorkshopViewModel.ShowTimeRange` **必须按当前排序判断**（`IsTimeRangeSort()` 查 `Keys.WorkshopSortTrend`/`Keys.WorkshopSortTopRated`），只判断来源会把「最新更新 + 6 个月」这种无效组合露出来。真机验证：切到「最新更新」后 `cmbWorkshopTimeRange` 从 UIA 树里消失。
 - PDX 侧对应三档：最热门 `Popularity` / 最新更新 `Updated` / 评分 `Rating`，没有时间范围。
-- `src/PdxLauncher.Core/Online/SteamWorkshopClient.cs` 的 `BuildBrowseUri` 只在**没有关键词**且 `Days` 有值时追加 `days`；关键词搜索时 Steam 固定 `textsearch`，多传 `days` 无效。
+- `src/PdxLauncher.Core/Online/SteamWorkshopClient.cs` 的 `BuildBrowseUri`：`searchtext` 与 `browsesort` **并存**（服务端带关键词时照样按 `browsesort` 排序并回显，别再把排序改写成 `textsearch`）；`days` 只在排序是 `trend` / `toprated` 时追加，且必须原样透传（-1 表示「发布至今」）。
 
 ### 17.2 缓存：按「来源 + id」复用
 
@@ -3185,6 +3548,8 @@ Steam 网页把排序分成三块：排序顺序 + 时间范围 + 分类筛选�
 2. **旧 exe 骗人**：真机脚本启动的是 `bin\x64\Release\...\win-x64\PdxLauncher.App.exe`，而构建产物同时存在于 `bin\Release\...`。第一轮看到排序只有 3 档，其实是旧 exe —— 先比对 exe 与 `PdxLauncher.App.dll` 的时间戳，再用 UI 树确认。排查时临时加的「排序档位重建」日志帮了大忙（`source=Steam, count=5, first=最热门`），验证完已删。
 3. **`total_count` 不随筛选变化**（Steam 行为）：时间范围切到 1 周后状态栏仍显示 17,718（总条数），切「最新更新」也一样；判断筛选是否生效要看列表内容而不是计数。
 4. **`star_rating = -1` 表示无人评分**：行里要过滤 `StarRating > 0 && TotalVotes > 0`，否则会出现「-1 分」。
+5. **服务端不认的 `browsesort` 会静默回落**（2026-11-03）：`mostupdated` / `mostsubscribed` / `mostpopular` 都不会 400，而是回落成 `trend`，列表与「最热门」逐项相同 —— 用户看到的就是「改了排序没变化」。判定方式：读 SSR 里 `queryKey[1].browse_sort` 的回显值，或直接比对首屏 `publishedfileid`。合法值只有 `trend` / `toprated` / `mostrecent` / `lastupdated` / `totaluniquesubscribers`（外加 `textsearch` 与 `playtime_*` 实验项）。
+6. **限流冷却期换排序会被误判成「排序没生效」**：`ShowFailureOrCache` 用 `WorkshopInfoCache.Snapshot`（按 `UpdatedUtc` 倒序）兜底，列表内容与所选排序无关。现在 `QueryAsync` 在联网前先查冷却，冷却期**不覆盖已有行**，只在列表为空时用离线缓存兜底，状态栏说明剩余分钟。
 
 ### 17.4 验收
 
@@ -4584,6 +4949,125 @@ CS1 的远端主题第一次真正被抓取，暴露了 `AssetDownloader` 的两
   `data\theme-cache\cities_skylines-*` 出现（旧的 `cities_v2-*` 若存在会变成孤儿文件，可手删）。
 - 公告：CS1 仍显示 3 张官方公告卡（走 `cities_v2` URL）。
 
+
+## 0.55 2026-10-30：确认 / 取消按钮换位（自绘 ConfirmOverlay，取消在左、确认在右）
+
+### 起因
+
+用户原话（m00001）：「把订阅页面的确认和取消换下位置」。
+
+工坊详情页点「订阅」/「取消订阅」会弹二次确认框，用户觉得「确认」在左、「取消」在右不顺手，
+要求把两者左右换位。用户随后拍板三项：
+
+1. **范围**：不只订阅页，**全应用**所有「确认 / 取消」对话框一起换位。
+2. **键盘与焦点**：Esc = 取消、Enter = 确认，**右侧的确认键高亮（Accent）**。
+3. **代码落点**：抽成**通用控件 `ConfirmOverlay`**，不只在本页内实现。
+
+### 根因（框架限制，不是笔误）
+
+WinUI 3 的 `ContentDialog` **没有交换 Primary / Close 左右的能力**。它的默认模板
+（`generic.xaml` 的 `DefaultContentDialogStyle`）把命令区固定成 5 列：
+
+```
+PrimaryColumn(*) | FirstSpacer(0) | SecondaryColumn(0) | SecondSpacer(8) | CloseColumn(*)
+   PrimaryButton ↑列0                                              CloseButton ↑列4
+```
+
+`ButtonsVisibilityStates` 的 `PrimaryAndCloseVisible` 状态只隐藏 SecondaryButton，
+Primary 留在列 0、Close 留在列 4；`PrimaryVisible` / `SecondaryVisible` 也只是把「唯一那个按钮」
+挪到列 4。换句话说：**只要用了 `ContentDialog`，视觉顺序永远是「确认在左、取消在右」**，
+框架层没有 API 可以翻转，也没有「把 CloseButton 画到左边」的办法。
+
+同时 `ContentDialogResult` 的语义绑定在按钮角色上：ESC / 系统返回 / 手柄 B 一律触发 CloseButton，
+`DefaultButton` 指定谁谁就拿 Accent 外观并响应 Enter。原本代码写的是
+`DefaultButton = ContentDialogButton.Close`，即**「取消」才是 Accent 主色、Enter 触发的是取消**——
+这本身也是个反直觉的设计。
+
+### 改动
+
+**新增 `src/PdxLauncher.App/Controls/ConfirmOverlay.xaml(.cs)`**（自绘对话框）：
+
+- 视觉照抄 ContentDialog 的主题资源，保持观感一致：
+  `ContentDialogSmokeFill` 遮罩、`ContentDialogBackground` 卡片底、
+  `ContentDialogBorderBrush` + `ContentDialogBorderWidth` 描边、`OverlayCornerRadius` 圆角、
+  `ContentDialogMinWidth/MaxWidth/MinHeight/MaxHeight` 尺寸、`ContentDialogPadding` 内边距、
+  `ContentDialogSeparator*` 分隔线、`ContentDialogButtonMinWidth` 按钮最小宽。
+- 按钮条：`StackPanel Orientation=Horizontal Spacing=8`，**左「取消」**（`btnConfirmOverlayCancel`）
+  **右「确认」**（`btnConfirmOverlayConfirm`，`AccentButtonStyle`）。
+- 语义：Esc = 取消、Enter = 确认；焦点必须落在浮层内部按键事件才会冒泡，
+  所以显示后主动把焦点移进浮层（内容是输入控件时优先聚焦输入框，否则聚焦确认键）；
+  关闭后焦点回投给打开它的那个控件；点遮罩不关闭；同一时刻只允许一个浮层。
+- 内容支持任意 `UIElement`（不只是字符串），`Content` 传字符串时自动包成可换行 TextBlock。
+- `IsConfirmEnabled` 可动态启停确认键（「修复 mod 路径」需要按勾选状态联动）。
+
+**宿主**：`src/PdxLauncher.App/MainWindow.xaml` 根 `RootGrid` 末尾加
+`<controls:ConfirmOverlay x:Name="ConfirmOverlayLayer" Grid.RowSpan="2" />`（跨页面覆盖，含标题栏），
+`MainWindow.xaml.cs` 构造时登记 `ConfirmOverlay.Host`。
+
+**13 处 `new ContentDialog` 全部迁移**：
+
+| 文件 | 场景 |
+| --- | --- |
+| `Views/WorkshopDetailPage.xaml.cs` | PDX 订阅、Steam 直连订阅（用户最初点名的两处） |
+| `Views/SettingsPage.xaml.cs` | 打补丁、移除补丁、`ConfirmAsync`（清理旧 C 盘数据 / 清空全部缓存 / 重算 dlc_signature）、`ShowMessageAsync` |
+| `Views/ModsPage.xaml.cs` | 删除播放集、重命名播放集（`PromptForNameAsync`）、`ShowMessageAsync` |
+| `Views/AccountPage.xaml.cs` | 账号登出 |
+| `Views/DlcPage.xaml.cs` | `ShowMessageAsync`（仅「关闭」键） |
+| `Views/ModPathRepairDialog.cs` | 修复 mod 路径（勾选联动启用确认键） |
+| `Services/CrashReporter.cs` | 崩溃弹框（「复制详情」= 确认键，回调写剪贴板） |
+
+**`PdxLauncher.App.csproj`**：publish target 补 `Controls\*.xbf`（原先只补根目录与 `Views\*.xbf`，
+新控件的 `.xbf` 进不了发布包）。
+
+**`tests/PdxLauncher.Checks/ConfirmOverlayChecks.cs`**（新增，第 56 个检查类）：
+断言取消键在 XAML 里排在确认键之前、确认键用 Accent 样式、代码里处理了 Escape / Enter、
+7 个调用点不再有 `new ContentDialog`、`MainWindow` 挂了宿主、csproj 会发布 `Controls\*.xbf`。
+
+### 自检
+
+- `dotnet build "PdxLauncher.sln" -c Release -m:1 --nologo` → **0 个警告 0 个错误**。
+- `dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"` → **检查类: 56，失败: 0，断言失败总数: 0**。
+
+### 真机复核（2026-10-30，winapp ui / UIA）
+
+| 场景 | 取消 | 确认 | 结论 |
+| --- | --- | --- | --- |
+| 播放集页「重命名播放集」 | 取消 x=1072 | 确定 x=1279（Accent） | 顺序正确；焦点落进 `txtPlaySetName`；Esc 关闭、Enter 确认均生效 |
+| 播放集页「删除播放集」 | 取消 x=1227 | 删除 x=1434 | 顺序正确；Esc 关闭生效 |
+| 工坊详情页「订阅」（Steam 直连） | 取消 x=1422 | 订阅 x=1629 | 顺序正确（用户最初点名的那处） |
+| 设置 → 缓存「清除全部缓存」 | 取消 x=1416 | 清除 x=1623 | 顺序正确；Esc 关闭生效 |
+| 播放集页「修复 mod 路径」（无待修复项） | — | 关闭 x=1461 | 单键形态正确 |
+
+截图证据：`ui-test-artifacts/confirm-overlay/01-rename-overlay.png`、`02-delete-overlay.png`、
+`03-subscribe-overlay.png`、`04-settings-clear.png`、`05-publish-settings-clear.png`（最后一张是**发布版**
+`dist\PdxNext\PdxLauncher.App.exe` 的实拍）。
+
+**发布版复核（2026-10-30 10:32–10:40）**：`publish.cmd` 跑通（EXIT=0），
+`publish/` 与 `dist/PdxNext/` 下都出现了 `Controls\ConfirmOverlay.xbf`（同时补齐了 `PdxDropDown.xbf` 等
+此前也漏掉的 `Controls\` 产物）。用 `dist\PdxNext\PdxLauncher.App.exe` 起进程复核：
+设置 → 缓存 → 「清除全部缓存」→ 浮层里 `取消` 在 x=1356、`清除`（Accent）在 x=1563，
+焦点初始落在确认键，`Esc` 关闭浮层、`Enter` 确认生效。`publish.cmd` 的产物兜底校验也补了一条
+`Controls\ConfirmOverlay.xbf` 存在性检查（原来只查 `App.xbf` / `.pri` / `Views\HomePage.xbf` / 图标，
+`Controls\` 漏了也照样能发布出「浮层是空壳」的坏包）。
+
+### 明确非目标 / 未做
+
+- **没有覆写 `ContentDialog` 模板**：那要复制框架内部模板并交换列，会影响全应用所有对话框、
+  且 WinUI 升级时极易碎。自绘浮层只影响自己这一个控件。
+- **没有改框架的 ESC 语义**：ContentDialog 里 ESC 恒等于 CloseButton，所以「取消」必须放在 Close 角色上，
+  而 Close 恒在最右——这正是必须自绘的原因。
+- **没有改任何文案**：复用 `common.cancel` / `common.close` / `common.ok` 等既有 i18n 键，
+  `tools/gen-i18n.py` 无需重跑。
+- **没有动其他浮层**：工坊详情页的图片查看器浮层（`ImageOverlay`）保持原样。
+
+### 预期验收路径
+
+- 任意「确认 / 取消」对话框：**取消在左、确认在右**，确认键为 Accent 主色。
+- Esc = 取消（不弹任何东西、直接关掉），Enter = 确认。
+- 关闭对话框后，焦点回到打开它的那个按钮。
+- 崩溃弹框点「复制详情」后，崩溃详情进剪贴板（`onConfirm` 回调路径）。
+- 「修复 mod 路径」不勾选任何条目时确认键是灰的，勾选后点亮。
+
 ## 0.56 2026-10-30：设置页新增「翻译」分区（工坊与 Mod 名称 / 简介 / 更新日志 / 评论）
 
 ### 起因
@@ -4660,6 +5144,160 @@ CS1 的远端主题第一次真正被抓取，暴露了 `AssetDownloader` 的两
 - `dotnet build PdxLauncher.sln -c Release -m:1` → 0 警告 0 错误。
 - 自检 → `检查类: 61，失败: 0，断言失败总数: 0`（新增 `TranslationChecks` 49 条断言）。
 - i18n：`tools/gen-i18n.py` 产出 836 条文案（翻译相关新增 66 键）。
+
+---
+
+## 0.58 2026-10-30：Cities: Skylines II 的 DLC 页不再是空白（清单改由 Steam 报告生成）
+
+> 用户诉求原话：「天际线2的DLC为什么无法显示」
+
+### 根因（三处叠加，全部有源码坐标）
+
+1. `src/PdxLauncher.Core/Dlc/DlcCatalog.cs:125-132`：CS2 是 `LoadFileFormat.PlaysetConfigV1`，`Discover()`
+   直接 `return Array.Empty<DlcInfo>()`（CS2 安装根没有 `.dlc` / `.dlc.json`；`PlaysetConfigRepository.GetPlaySetDlcsAsync`
+   也恒返回空、`SavePlaySetDlcsAsync` 是 no-op —— 这条链路上根本没有 DLC 概念）。
+2. `src/PdxLauncher.App/ViewModels/DlcViewModel.cs` 旧 190-198 行：`catalog.Count == 0 && PlaysetConfigV1` 时清空列表、
+   写「该游戏没有 DLC 描述文件，无法列出 DLC」并 `ResetOwnership()` 直接 return。
+3. 旧 `HasOwnershipStrip` 要求 `Dlcs.Count > 0`，于是 §0.30 刚做好的「Steam 授权判定条」也一起被藏掉 ——
+   明明 `SteamDllProbe` 已经问出 37 个 DLC 的名字和授权状态，界面上一条都看不见。
+
+### 改动（只在 DLC 页 VM 里拼，不碰 `IDlcCatalog`）
+
+有意**没有**给 `IDlcCatalog` 加「Steam 回退」：`ModsViewModel`（autosave 的 `MergeDlcs`）与
+`SettingsViewModel`（`dlc_signature` 重算）也消费同一个目录，全局回退会让 CS2 的 mod 自动保存与签名
+悄悄多出一批 `steam:*` 条目。清单生成因此留在页面层。
+
+- 新增 `src/PdxLauncher.Core/Steam/SteamDlcListBuilder.cs`：`SteamDlcOwnership` → `DlcInfo` 的纯函数映射。
+  `PopsId` 留空（CS2 没有 pops_id，因此 `CanBeDisabledInContentLoad=false`），`FilePathRelativeToDlcPath` 用
+  `steam:<appid>` 当唯一 id（重名 DLC 不会互相覆盖），`RawBytes` 空，不参与任何磁盘签名。
+- `DlcViewModel`：新增 `IsSteamDlcList` / `CanEditDlcToggles`，加 `LoadSteamDlcListAsync` / `FillSteamRows` /
+  `SetSteamStatus` / `ProbeOwnershipAsync`；`RefreshOwnershipAsync` 收敛成「探一次 → 同时喂判定条与列表」。
+  Steam 清单下「启用全部 / 禁用全部 / 保存」直接返回（`dlc.saveSteamManaged`），因为 CS2 没有任何可写状态。
+- `DlcRowViewModel`：新增第 5 个 ctor 参数 `showsToggle`（默认 `true`，四个既有调用点不动），Steam 行传 `false`。
+- `DlcPage.xaml`：工具条三个按钮包进内层 `StackPanel`，`Visibility` 绑 `CanEditDlcToggles`；行内 `ToggleSwitch`
+  绑 `ShowsToggle`。判定条可见性改 `CanRecheckOwnership && (Dlcs.Count > 0 || _ownership is not null)`。
+- i18n：新增 5 键（`dlc.countsTextSteam` / `dlc.statusSteamList` / `dlc.statusSteamEmpty` /
+  `dlc.statusSteamUnavailable` / `dlc.saveSteamManaged`），`gen-i18n.py` 产出 825 条。
+
+### 验证（本轮实跑）
+
+- `dotnet build PdxLauncher.sln -c Release -m:1` → 0 警告 0 错误。
+- 自检 → `检查类: 61，失败: 0，断言失败总数: 0`（新增 `SteamDlcListChecks` 25 条断言：映射、去重、重名 id 唯一、
+  `CanBeDisabledInContentLoad` 全 false、`BuildDlcId` 校验，以及「没有磁盘清单时判定按 Steam 报告计数」）。
+- `python tools/gen-i18n.py --check` → 通过。
+- **真机 UIA**（Steam 正在运行；CS2 的 `steam_api64.dll` 补丁状态＝未加载）：
+  - CS2 DLC 页：`共 37 个 DLC（清单来自 Steam）`，37 行带「未拥有」徽标（本机该账号确实 0 个 CS2 DLC：
+    日志 `state=Succeeded，Steam 37 个 DLC、0 个已拥有，结论=VanillaPartial`），工具条按钮 **0 个**、开关 **0 个**，
+    判定条在（`探测 DLL：…\Cities2_Data\Plugins\x86_64\steam_api64.dll · AppID 949230 · 补丁：未加载`）。
+  - 简介链路顺带确认真能跑：日志 `DLC 简介：联网补齐 31/37 个（语言 schinese）`。
+  - Stellaris 回归：`共 31 个 DLC，已启用 31 个`（仍是旧的磁盘口径），工具条 3 个按钮在、行内开关在、
+    可见行全部「已拥有」——说明 Steam 分支没有串到 Clausewitz 游戏上。
+
+### 明确非目标 / 未做
+
+- **CS2 DLC 缩略图**：Steam 图片 CDN（`cdn.cloudflare.steamstatic.com` 等）不在 `OnlineHosts` 白名单里，
+  要做得先扩白名单，属另一件事；现在 CS2 行仍是占位图。
+- 不做 Steam 清单的排序 / 搜索 / 分组，也不写 `playsets_dlcs`（CS2 那边本来就没有可写状态）。
+- 「Steam 没开」的失败路径按代码推导（`SetSteamStatus` 走 `dlc.statusSteamUnavailable` + 现有错误文案），
+  本轮没有为了它专门关一次 Steam 做真机回归。
+
+### 预期验收路径
+
+1. `build.cmd` 或 `dotnet build PdxLauncher.sln -c Release -m:1` → 0 错。
+2. `tests\PdxLauncher.Checks` 的 Release exe → `检查类: 61，失败: 0`。
+3. 开 Steam，`run.cmd` → 游戏库选 Cities: Skylines II → 左栏「DLC」→ 应看到 37 行带授权徽标、
+   判定条可见、没有开关与工具条按钮；切回 Stellaris 仍是磁盘口径 + 开关可用。
+4. 关掉 Steam 再进 CS2 的 DLC 页：列表为空、状态栏给出「未能从 Steam 读取 DLC 清单：…」并保留「重新检测」按钮。
+
+## 0.59 2026-10-30：账号页版式打磨（布局口径对齐、状态条单行、会话偏好真落盘）
+
+> 用户诉求原话：「这个ui给我调好（东西是在账号页面）」，附一张 Paradox 账号页截图。
+
+### 根因（九处叠加，除第 8 条外都只影响观感）
+
+1. `src/PdxLauncher.App/ViewModels/AccountViewModel.cs` 旧 `Initials`：取 `Session.DisplayName` 的
+   **第一个字符**。Paradox 的显示名就是邮箱，于是头像上出现一个「1」；改过一次后又变成域名里的「q」
+   （看起来像放大镜图标）。现在 `Services/AccountDisplayText.cs` 只在**本地段**里找**字母**，找不到就留空串，
+   由 `PersonPicture` 画系统人像占位。
+2. `StatusText` 走 `account.statusSignedIn`（`已登录：{0}（{1}）`）把显示名和邮箱各印一遍 —— 两者相同时
+   就是「已登录：a@b（a@b）」。现在 `AccountDisplayText.SameIdentity` 判定两者相同就换成
+   `account.statusSessionAuto` / `account.statusSessionOnce`（只说续期口径，不复读邮箱）。
+3. `AccountPage.xaml` 的 `InfoBar` 同时有 `Title="登录状态"` 和 `Content`，WinUI 把它排成「标题行 + 内容行」，
+   两行之间空一大截。现在只留 `Content`（`txtAccountStatusBar`），标题去掉。
+4. 身份卡用 `PdxCardGlassBrush` + `CardStrokeColorDefaultBrush`，与 `Controls/SettingsCard.xaml` 的
+   `PdxCardBackgroundBrush` + `PdxCardStrokeBrush` 不是一套，玻璃感更重、描边更亮。现在统一取 SettingsCard 那套。
+5. 页面 `Padding="24,20,24,24"`，其它页都是 `Padding="24"`。
+6. `ToggleSwitch` 不写 `OnContent`/`OffContent` 时**平台会补默认的「开 / 关」**（不是「留空 = 不显示」）。
+   必须显式写 `OnContent=""` `OffContent=""`。
+7. 内容列 `StackPanel` 同时设了 `MaxWidth="880"` 和 `HorizontalAlignment="Left"`：`StackPanel` 在纵向布局里
+   按内容宽度收缩，`Left` 让 `MaxWidth` 只剩上限作用，卡片被挤成一条窄带、右侧空掉一大片。
+   改成 `HorizontalAlignment="Stretch"`，`MaxWidth` 才变成实际宽度。
+8. 「保持登录」原先只在**登录那一刻**决定要不要写 `pdx-session.json`，登录之后再拨开关只改配置项，
+   和 `account.rememberHint` 承诺的「下次启动可自动续期」不符。现在 `AccountService.ApplyRememberPreference`
+   会当场补写或清掉会话文件。
+9. `ProfileName` 在「已登录但显示名为空」时回落成「未登录」，口径自相矛盾；改为回落到邮箱。
+
+### 改动
+
+- 新增 `src/PdxLauncher.App/Services/AccountDisplayText.cs`（纯函数，无 UI 类型）：`Initials` / `ProfileName` /
+  `SameIdentity`。`Initials` 的候选顺序是「显示名本地段 → 邮箱本地段」，只认字母，没有就返回空串。
+- `src/PdxLauncher.App/Views/AccountPage.xaml`：`Padding="24"`；身份卡换刷子、`MinHeight="72"`、`Padding="16,12"`；
+  `PersonPicture` 缩到 48 并用 `AccentFillColorDefaultBrush` / `TextOnAccentFillColorPrimaryBrush`；
+  名字行 `BodyStrongTextBlockStyle`、状态行 `CaptionTextBlockStyle`（去掉写死的 `MaxWidth` 420/440）；
+  `btnAccountSignOut` 挂 `ToolTipService.ToolTip="{x:Bind L.AccountSignOutHint}"`（这个键此前一直没人用）；
+  `EmailBox` / `PasswordBoxControl` 挂 `KeyDown="OnCredentialKeyDown"`。
+- `src/PdxLauncher.App/Views/AccountPage.xaml.cs`：登录主体抽成 `private async Task SignInAsync()`；
+  新增 `OnCredentialKeyDown`（`VirtualKey.Enter` → 走登录且 `e.Handled=true`，`CanSignIn` 为假时不发请求）；
+  新增 8 秒 `DispatcherTimer`，只在 `AccountStatusLevel.Success` 时启动，到点把 `infoAccountStatus.IsOpen` 置 false
+  （错误不自动消失），`OnUnloaded` 里停表。
+- `src/PdxLauncher.App/ViewModels/AccountViewModel.cs`：`Initials` / `ProfileName` / `StatusText` 改走
+  `AccountDisplayText`；`OnRememberChanged` 增加 `AppServices.Account.ApplyRememberPreference(value)` 并重算 `StatusText`。
+- `src/PdxLauncher.App/Services/AccountService.cs`：新增 `ApplyRememberPreference(bool remember)`
+  —— 无会话时什么都不做，有会话时 `_store.Save` / `_store.Clear`。**有意不取 `_gate`**：
+  调用点在 UI 线程的开关回调里，只是落一个文件，取锁反而会和登录中的请求互相等待。
+- i18n：新增 `account.statusSessionAuto`（`已登录 · 下次启动自动续期` / `Signed in · renews automatically next launch`）、
+  `account.statusSessionOnce`（`已登录 · 仅本次运行有效` / `Signed in · valid for this run only`），
+  `gen-i18n.py` 产出 836 条键。
+
+### 自检
+
+- 新增 `tests/PdxLauncher.Checks/AccountDisplayTextChecks.cs`：首字母（纯数字邮箱→空串、不拿域名凑、中文取字、
+  小写转大写、空白/全空→空串）、`ProfileName` 回落、`SameIdentity` 大小写与空白，以及两个新键在 zh-CN/en-US
+  都真的存在。
+- 新增 `tests/PdxLauncher.Checks/AccountPageLayoutChecks.cs`（读 XAML 源码断言）：`InfoBar` 块内没有 `Title=`、
+  全文没有非空 `OnContent`/`OffContent` 且两个开关都显式赋了空串、身份卡用的是 SettingsCard 那对刷子、
+  内容列 `HorizontalAlignment="Stretch"`、全文没有硬编码 `#RRGGBB`、14 个 AutomationId 一个不少。
+- `AccountChecks.CheckPersistence` 扩展：登录后关掉「保持登录」→ 会话文件被清；再打开 → 重新落盘且能读回 token；
+  未登录时调用不产生文件。
+- `tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj` 链接进 `AccountDisplayText.cs`（Checks 引用不了 WinExe 工程）。
+
+### 验证（本轮实跑）
+
+- `dotnet build PdxLauncher.sln -c Release -m:1` → 0 警告 0 错误。
+- 自检 → `检查类: 61，失败: 0，断言失败总数: 0`。
+- `python tools/gen-i18n.py --check` → `文案源合法，836 个键，生成物已是最新`。
+- **真机 UIA**（复核脚本 `ui-test-artifacts/account-nav-shot.ps1 -Mode signed-in|fresh|validation`，截图在 `ui-test-artifacts/account-polish/`）：
+  - `20-account-signed-in.png`：已登录态。身份卡与「保持登录」卡同宽同刷子，头像是人像占位（不再是「1」/「q」），
+    状态行 `已登录 · 下次启动自动续期`，开关右侧没有「开」。
+  - `24-account-validation-error.png`：干净的 `data-root`（`data-root.txt` 覆盖到 `.tmp\account-ui-empty`）下
+    未登录态＋**键盘回车提交**（密码留空）→ 状态条是单行 `请先填写密码。`，不再有「登录状态」标题行。
+  - `22-account-signed-out.png` / `23-account-login-failed.png`：同一轮里的「正在登录…」忙碌态
+    （本机到 Paradox 登录接口的请求超时较久，20 秒时仍未见失败回包）。
+
+### 明确非目标 / 未做
+
+- 没碰协议层、会话存储格式、`AccountFormState` 语义、`AccountService` 的并发结构。
+- Light / HighContrast 两套主题只做了「只用 ThemeResource、无硬编码颜色」的源码级保证，本轮没有做这两套主题的
+  真机截图（Dark 与 Default 一致，本轮截图都是 Dark）。
+- 「成功」类状态条 8 秒自动收起需要真的登录成功才会出现，本轮没有用真账号复验这一条；错误/提示类不自动收起。
+
+### 预期验收路径
+
+1. `build.cmd` 或 `dotnet build PdxLauncher.sln -c Release -m:1` → 0 错 → 自检 `检查类: 61，失败: 0`。
+2. `run.cmd` → 左栏「账号」：已登录时身份卡第二行只说续期口径（不再复读邮箱）、头像不是数字；
+   把「保持登录」拨掉再拨回，`data\pdx-session.json` 应随之消失 / 重新出现。
+3. 未登录时点「登录」或直接在密码框按回车：状态条是单行、且没有标题行。
+4. 退出登录按钮悬停应显示「只清除本机的登录状态，不会注销其它设备上的会话。」
 
 ---
 
@@ -4780,3 +5418,951 @@ Background {ThemeResource CardBackgroundFillColorDefaultBrush}}`，内含「译�
 - 自检 → `检查类: 61，失败: 0，断言失败总数: 0`。
 - `python tools/gen-i18n.py --check` → 836 个键（翻译相关新增 18 键）。
 - `scripts/verify-settings-sections.ps1` → 7 节全过（translation count=48 missing=[]，FAILED_SECTIONS=0）。
+
+## 0.61 2026-10-31：工坊里「看不到翻译」→ 换可达的兜底引擎 + 让失败可见
+
+用户原话：「目前的翻译功能真有用吗，我怎么进创意工坊没看到翻译呢」。
+§0.60 交付的翻译层代码是全的（引擎、缓存、译名/简介/更新日志/评论渲染、设置分区都在），
+但在这台机器上**一行译文都出不来**，而且界面上没有任何提示——看起来就像功能不存在。
+
+### 现象与定位
+
+- `dist/PdxNext/data/logs/pdxnext.log` 里没有任何 `翻译` / `MyMemory` / `translate` 相关行，
+  说明请求根本没走到「有结果」或「记过一条日志」的地方。
+- 默认档位 `auto` 在没填任何密钥时，唯一可用引擎是**谷歌免费翻译**（`translate.googleapis.com`，
+  免密钥）。实测这台机器上该主机**直连与走代理都不通**：
+
+  | 目标 | 直连 | 走代理 10.31.2.50:7890 |
+  | --- | --- | --- |
+  | `translate.googleapis.com`（内置免费引擎） | 超时 | TLS 握手失败 |
+  | `translation.googleapis.com`（谷歌云，需 Key） | 超时 | 404 可达 |
+  | `api.mymemory.translated.net`（本轮新接入） | **200** | 200 |
+  | `edge.microsoft.com/translate/auth`（免密钥 Edge 端点） | 404 且正文为空 | 不可用 |
+  | `lingva.ml`（社区替代） | 200 但原样返回原文 | — |
+
+- 引擎失败返回 `null`，`TranslationService` 只写一条 `Warn`，Coordinator 把 `null` 原样交给
+  ViewModel，ViewModel 不写 `StatusMessage`、详情页也没有提示位 → **静默失败**。
+  这就是「功能在、但用户看不到」的全部原因；结论是**代码没坏，链路是死的**。
+
+### 改了什么
+
+1. **新增免密钥兜底引擎 `MyMemoryTranslationEngine`**（`Core/Online/Translation/`）：
+   `GET https://api.mymemory.translated.net/get?q=…&langpair=Autodetect|<zh-CN|en>`；
+   单请求上限 500 字符 → `MaxChunkChars = 450`，超长按句读符号切块（切点留在块尾，拼回不丢字）；
+   多块并发 4、任一块失败整段算失败（不拼半截译文）；`RequestTimeout = 20s`。
+2. **回落链改成「自填 API → 微软 → 谷歌云 → MyMemory → 谷歌免费」**：
+   谷歌免费在本机 100% 不通，排最后就不会每次先赔一次超时。`builtin` 专档位语义不变。
+   `TranslationEngineModes` 新增 `mymemory`，`All` 变六项；`OnlineHosts` 加主机白名单。
+3. **内置免费引擎补并发与超时**：原来逐条串行、单请求吃满 60 s 传输超时，30 行列表要等半小时；
+   现在并发 4、单请求 15 s、首错短路。
+   同一轮把**工坊列表 / Mod 页 / Mod 库页**的译名从「一行一次 `TranslateAsync`」改成
+   「整页一次 `TranslateBatchAsync`」，译完统一回填（原来是边译边刷）。
+4. **失败可见**：
+   - `TranslationService.LastFailure` → `TranslationCoordinator.LastFailure`，形如 `mymemory: …`。
+   - 工坊列表与 Mod 页：一批译名一条都没成功时，状态条写 `workshop.translateUnavailable` /
+     `mods.translateUnavailable`（按页去重，只提示一次）；Mod 库页没有状态条，只记
+     `Mod 库名称全部未翻译（N 条）：<LastFailure>`。
+   - 工坊详情页：简介 / 更新日志 / 评论三个范围各自最多提示一次，提示条在缓存提示下方
+     （`txtWorkshopDetailTranslationNotice`）。
+5. **设置 → 翻译新增「测试翻译」按钮**（`btnTranslateTest`）：逐引擎各译一句
+   `Hello, this is a translation test.`，把每个引擎的 ✓/✗ 与原因写进 `txtTranslateTestResult`。
+   这是用户自查「哪个引擎在我这通」的入口。探测过程日志：`探测翻译引擎：<id>` /
+   `探测结果（<id>）：有译文|无译文`。
+6. **启动日志**：`翻译已启用：模式=…，目标语言=…，自填 API=已配置|未配置`，失败时另有
+   `翻译全部失败：<LastFailure>`，下次再遇到「没反应」先看日志。
+7. **微软 / 谷歌云补「怎么申请 + 快速前往」**（用户后续要求，见下节）：选到这两个引擎时，
+   密钥输入框下方各出现一段申请说明与一个 `HyperlinkButton`，直接打开对应的申请页。
+
+### MyMemory 协议里的三个坑（实测）
+
+- **单请求 500 字符**，超了返回 `{"responseData":"QUERY LENGTH LIMIT EXCEEDED. MAX ALLOWED QUERY : 500 CHARS","responseStatus":"403"}`。
+- **源语言不能写 `auto`**（403 `'AUTO' IS AN INVALID SOURCE LANGUAGE`），必须写 `Autodetect`；
+  且它**不做真正的语言检测**：`langpair=en|zh-CN` 传德文会原样返回，只有 `Autodetect` 才按实际语言处理。
+- **类型不稳定**：成功时 `responseStatus` 是数字、`responseData` 是对象；出错时前者变字符串、
+  后者变一段说明文字。解析必须两种都容。
+
+### 偏差与已知限制
+
+- **评论仍是逐条翻译**（`TranslateDocumentAsync`），没有改成批量：评论要保 markdown 结构，
+  批量协议按分隔符切分，改起来得不偿失。只在失败时补一次提示。
+- **Mod 库页没有状态条**，所以标题译名全失败只写日志，不弹提示；Mod 页有状态条，复用状态条提示。
+- MyMemory 是社区公共服务（免费额度按天），**不保证可用性**；它只是让「没有密钥、谷歌又连不上」
+  的网络有一个能用的默认值，不是长期方案。真要稳定还是填自填 API / 微软 / 谷歌云。
+- 目标语言仍只支持 `zh-CN` 与 `en-US`；译文与原文仍同时显示。
+- 界面文案排序由 `tools/gen-i18n.py` 决定：键 `settings.translate.engine.mymemory.title`
+  生成的标识符是 **`SettingsTranslateEngineMymemoryTitle`**（`Mymemory`，不是 `MyMemory`），
+  手写代码引用时必须按生成结果来，否则编译报 `CS0117`（本轮踩过一次）。
+
+### 验证（本轮实跑）
+
+- `dotnet build PdxLauncher.sln -c Release -m:1` → **0 警告 0 错误**。
+- 自检 → `检查类: 62，失败: 0，断言失败总数: 0`（新增 MyMemory 解析/切块/批量保序/首错短路
+  与 `LastFailure` 共 2 个检查方法、20 余条断言）。
+- `python tools/gen-i18n.py --check` → 845 个键，无缺失。
+- `scripts/verify-settings-sections.ps1` → `FAILED_SECTIONS=0`，翻译区 count=54 missing=[]
+  （`btnTranslateTest` / `txtTranslateTestResult` 已进 want 列表）。
+- 探针自检（UIA 点按钮 + 读结果）：临时脚本起 `bin\x64\Release` 的 exe，进设置 → 翻译 →
+  `Invoke` `btnTranslateTest`，约 5 秒后 `txtTranslateTestResult` 变成
+  `✓ MyMemory 翻译（免密钥）：您好，这是翻译测试。` /
+  `✗ 谷歌免费翻译（无需密钥）：free: 未返回译文`；日志同步出现 `探测翻译引擎：mymemory` →
+  `探测结果（mymemory）：有译文` → `内置翻译服务请求失败：The SSL connection could not be established`
+  → `翻译全部失败：free: 未返回译文`。临时脚本与一次性 harness 已删。
+
+### 本轮两个 XAML 小修
+
+- `txtTranslateTestResult` 原本带 `Visibility="{x:Bind …XamlVisibility.FromString(...)}"`，没结果时是
+  Collapsed → UIA 树里根本没有该元素，`verify-settings-sections.ps1` 报
+  `translation: count=49 missing=[txtTranslateTestResult]`。改成**常驻空 TextBlock**（空串不占高度）。
+- 同一元素上的 `AutomationProperties.Name` 原本写死为「测试各翻译引擎是否可用」，会把真实结果盖掉
+  （UIA 的 Name 恒为那句固定文案，读屏也读不到结果）。已移除，让 Name 回落到正文。
+
+### 补充：微软 / 谷歌云的「快速前往」与使用说明
+
+起因：用户问「翻译功能真有用吗」之后又要「给微软、谷歌云留个快速前往的链接和使用说明」。
+原来设置页只给了三个空密码框，用户既不知道去哪拿密钥，也不知道免费额度有多少。
+
+- 文案（`tools/i18n/{zh-CN,en-US}/settings.json`，按行插入保持字母序，未重排全文件）：
+  - `settings.translate.microsoft.hint`：Azure 订阅里「创建资源 → Translator（翻译器）→ 定价层 F0
+    （每月 200 万字符免费）→ 复制 KEY 1」，区域填资源位置（如 `eastasia`、`global`）。
+  - `settings.translate.microsoft.portal`：打开 Azure 门户创建翻译器资源。
+  - `settings.translate.googleCloud.hint`：Cloud Console 里「启用 Cloud Translation API → 凭据 →
+    创建凭据 → API 密钥」，每月前 50 万字符免费，**只填密钥、不用填项目名**。
+  - `settings.translate.googleCloud.portal`：打开 Google Cloud 控制台创建 API 密钥。
+  - `settings.translate.statusPortalFailed`：`打不开浏览器：{0}`（打不开时写状态条，不弹窗）。
+- `Views/SettingsPage.xaml`：说明与链接各自包在 `Visibility="{x:Bind …HasMicrosoftFields /
+  HasGoogleCloudFields}"` 的 `StackPanel` 里，**只在选到对应引擎时出现**，自动/免费档不占版面。
+  元素 `txtTranslateMicrosoftHint`、`btnTranslateMicrosoftPortal`、`txtTranslateGoogleCloudHint`、
+  `btnTranslateGoogleCloudPortal`。
+- `Views/SettingsPage.xaml.cs`：`OnTranslateMicrosoftPortalClick` / `OnTranslateGoogleCloudPortalClick`
+  → `OpenTranslatePortal(url, who)` → `ShellLauncher.TryOpenUrl`。走 `Process.Start` + `UseShellExecute`，
+  属于 shell 动作，**不受 `OnlineHosts` 域名白名单约束**（这两个域名不需要进白名单）。
+  地址：`https://portal.azure.com/#create/Microsoft.CognitiveServicesTextTranslation`、
+  `https://console.cloud.google.com/apis/credentials`。
+- 验证：构建 0 警告 0 错误；自检 `检查类: 62，失败: 0`；`gen-i18n --check` → 851 键；
+  `scripts/verify-settings-sections.ps1` → `FAILED_SECTIONS=0`（新元素条件显示，未进 want 列表）；
+  UIA 实测下拉切到「微软翻译」时两个新元素在、谷歌云那段不在，切到「谷歌云翻译」时反之。
+- 教训：含中文的临时 PowerShell 脚本必须写成 **UTF-8 带 BOM**，否则 Windows PowerShell 5.1 按 ANSI
+  读文件，中文字面量全成乱码、条件永远不匹配（本轮先在探针脚本上踩过，又差点重踩）。
+
+顺带修的一条（不在翻译范围内，但挡住了发布）：`tests/PdxLauncher.Checks/SteamHostProtocolChecks.cs`
+里「动词表恰好四个」的断言已过时——`SteamHostProtocol.Verbs` 早前多了 `workshop-publish`（创建/更新
+条目并上传内容），实际是五个。断言同步成五个并补一条「末位是 workshop-publish」，`publish.cmd`
+的自检门才放行。若后续又加动词，这条断言要跟着改，或者改成「必须包含全部已知动词常量」。
+
+## 0.62 2026-11-03：译文块去掉「译文」小标题
+
+用户原话：「翻译功能的翻译不要带上译文这个字」。截图里工坊 / mod 列表行的译文框顶部有一行灰色 Caption「译文」，
+下面才是中文译名；用户要的是**框里只出现译文本身**。
+
+### 决策
+
+- 删标题、**保留**带描边框与「原文在上、译文在下」的双显示——只去掉那行字，不动布局语义。
+- 设置页 / 缓存 / 失败提示里的「译文」措辞**不动**（`settings.cache.row.translations.title`「译文缓存」、
+  `settings.translate.*`、`workshop.translateUnavailable` 等）：那些指功能名，不是译文内容。
+- 顺手删掉随之变成孤儿的文案键 `workshop.translateLabel`；`workshop.translateOriginalLabel`（原文 / Original）
+  本来就没人绑，属既有遗留债，本轮不碰。`Strings.g.cs` 由 `tools/gen-i18n.py` 重新生成，未手改。
+
+### 改动清单
+
+六处翻译块结构都是 `Border > StackPanel(Spacing=2|4) > [Caption「译文」, 正文]`：删掉 Caption，
+并把正文提为 `Border` 的直接子元素（只剩一个子元素时 StackPanel 没有意义）：
+
+| 文件 | Caption 原行 | 正文元素 |
+| --- | --- | --- |
+| `src/PdxLauncher.App/Views/WorkshopPage.xaml` | 212 | 译名 `TranslatedName`（`FromString(TranslatedName)`） |
+| `src/PdxLauncher.App/Views/ModsPage.xaml` | 264 | 同上 |
+| `src/PdxLauncher.App/Views/ModLibraryPage.xaml` | 177 | 同上 |
+| `src/PdxLauncher.App/Views/WorkshopDetailPage.xaml` | 417 | 简介 `ctl:MarkdownView x:Name="TranslatedDescriptionView"`（`AutomationId=txtWorkshopDetailTranslatedDescription`） |
+| `src/PdxLauncher.App/Views/WorkshopDetailPage.xaml` | 518 | 更新日志 `TranslatedChangelogView`（`txtWorkshopDetailTranslatedChangelog`） |
+| `src/PdxLauncher.App/Views/WorkshopDetailPage.xaml` | 647 | 评论 `TranslatedBody`（`HasTranslation`） |
+
+保留项：`Border` 的 Margin / Padding / CornerRadius / Background / BorderBrush / BorderThickness、各可见性条件、
+`x:Name` 与 `AutomationId`。六处的代码注释都补了「不加『译文』标题」，防止下一轮又加回去。
+
+文案源同步：`tools/i18n/zh-CN/workshop.json`、`tools/i18n/en-US/workshop.json` 删除 `workshop.translateLabel`；
+`README.md:399-400` 的「带『译文』小标题」描述改成「带描边框的译文正文、不加小标题」。
+
+### 验证
+
+- `grep -rn "WorkshopTranslateLabel\|translateLabel" src tests tools`（排除 obj / bin）→ **0 命中**。
+- `python tools/gen-i18n.py --check` → 文案源合法，**959 个键**（当前键数，比上一轮少 1 键）。
+- x64 Release 构建 `bash tools/build-app.sh -v q -p:Platform=x64` → **0 警告 0 错误**；产物
+  `PdxLauncher.App.dll` / `PdxLauncher.App.pri` 里已搜不到 `translateLabel`，`Views\WorkshopPage.xbf`
+  等也随 XAML 改动重新生成。
+- 自检 → `检查类: 63，失败: 0，断言失败总数: 0`。Checks 工程不引用 App，XAML 结构靠构建兜底：
+  漏删任何一处都会因找不到 `L.WorkshopTranslateLabel` 而编译失败。
+
+### 坑（本轮踩过）
+
+- **重建前必须关掉正在运行的启动器**：进程锁着 `bin\x64\Release\...\*.dll`，MSBuild 会
+  `MSB3027 / MSB3021`「文件被 PdxLauncher.App (PID) 锁定」重试 10 次后失败。
+- **`build-app.sh` 要带 `-p:Platform=x64`**：不带时 Platform 退回 AnyCPU，产物落到
+  `src\PdxLauncher.App\bin\Release\...`（不是运行用的 `bin\x64\Release\...`），看起来构建成功、
+  实际要运行的 exe 没更新。`build.cmd` 走 sln 没这个问题。
+
+### 注意
+
+- 旧章节（如 0.60「译文改带框呈现」）描述的是当时状态，作为历史记录不改写。
+- 若将来要做「显示原文 / 显示译文」二选一切换，可复用 `workshop.translateOriginalLabel` 这个现成键。
+
+## 0.63 2026-11-03：翻译在途时的「正在翻译…」提示
+
+> 用户诉求：先问「winui 有什么东西可以显示软件正在翻译」，紧接着补一句「在这种等待的时候的 progressring 加上一点文字说明」。
+
+### 决策
+
+- 用 **ProgressRing + 文字**（不用 InfoBar / ContentDialog / 任务栏进度 / 骨架屏）：这是 Windows 应用里「后台在跑、界面还能用」的既有语言，列表页的 `ringWorkshopBusy`、详情页的 `IsLoading` 都已经是这个形态。
+- **两级提示**：全局一处（窗口标题栏）+ 局部三处（简介 / 更新日志 / 评论在译文将来出现的位置）。列表行的标题翻译只靠全局提示，不做行级占位 —— 行级占位会把整列标题撑成占位条，反而更吵。
+- **计数放在 `TranslationCoordinator.TranslateBatchAsync`**：列表页批量翻标题、详情页逐段翻正文都会经过这一处，切页也不会漏；排队等并发的批次也算在途（`Activity.Begin()` 在 `_gate.WaitAsync` 之前）。设置页的「测试翻译」走 `service` 直连，**不经过**这里，所以点测试不会闪出「正在翻译」。
+- **去抖**：显示延迟 150ms、隐藏延迟 400ms。前者压掉「缓存命中、几毫秒就回来」的闪烁，后者让逐段翻译的多批请求之间不闪。
+- **顺带修的缺陷**：`HasTranslatedDescription / HasTranslatedChangelog` 之前只有声明、没有任何地方发变更通知（XAML 用的是 `Mode=OneWay`），译文译好了要切页才出现。这次在译文文档的 `OnXxxChanged` 里补通知。
+
+### 改动
+
+| 位置 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.App/Services/TranslationActivityMonitor.cs`（新） | 线程安全的在途计数器：`Begin()` 返回 `Lease`（`IDisposable`），只在 0→1 / 1→0 发 `Changed`；重复 Dispose 不会把计数减成负数 |
+| `src/PdxLauncher.App/Services/TranslationCoordinator.cs:101`、`:150` | `public TranslationActivityMonitor Activity`；`TranslateBatchAsync` 里 `using var activity = Activity.Begin();` |
+| `src/PdxLauncher.App/MainWindow.xaml:149-171` | `TitleBar.Content` 里放 14px ProgressRing + 「正在翻译…」，默认 `Collapsed` |
+| `src/PdxLauncher.App/MainWindow.xaml.cs:154`、`:157`、`:475`、`:573-620`、`:622-700` | 订阅 `Activity.Changed` → `DispatcherQueue.TryEnqueue` 去抖后显示 / 收起；两只 `DispatcherQueueTimer` 在关窗时停掉并退订 |
+| `src/PdxLauncher.App/ViewModels/WorkshopDetailViewModel.cs:285-291`、`:887`、`:1166`、`:1198`、`:1272`、`:1318`、`:1769-1786` | 三个 `[ObservableProperty] bool IsTranslating*`、三个 `ShowTranslating*` 派生属性、两组 `partial void OnXxxChanged` 通知；翻译路径 `finally` 里复位，切 mod 的重置路径一起清 |
+| `src/PdxLauncher.App/Views/WorkshopDetailPage.xaml:409-431`、`:526-548`、`:638-657` | 三处占位：简介 / 更新日志用带描边框的同尺寸卡（和最终译文块同位置），评论用一条无边框横排（在「共 N 条评论」下方、列表上方） |
+| `tools/i18n/{zh-CN,en-US}/shell.json:36`、`workshop.json:57-59` | 新增 `shell.translating`（「正在翻译…」）与 `workshop.detailTranslating{Changelog,Comments,Description}`；键数 959 → 963 |
+| `tests/PdxLauncher.Checks/TranslationActivityChecks.cs`（新）、`PdxLauncher.Checks.csproj` | 链接 `TranslationActivityMonitor.cs` 进来做自检：单层 / 嵌套 / 重复 Dispose / 64 路并发，只发一对 `Changed` |
+| `README.md:402` | 翻译功能说明补一条「翻译在途有提示」 |
+
+### 验证
+
+- `bash tools/build-app.sh -v q -p:Platform=x64`：0 警告 0 错误（先关掉运行中的启动器，否则 dll 被锁）。
+- `gen-i18n --check` 通过；生成物 963 键。
+- `dotnet tests/PdxLauncher.Checks/bin/Release/net10.0/PdxLauncher.Checks.dll`：**检查类 64**、失败 0、断言失败总数 0（上一轮是 63）。
+- 真机（`winapp ui` 截图，`ui-test-artifacts\translating\`）：
+  - `17-placeholder.png` 是这一轮的最佳证据：标题栏环 +「正在翻译…」，简介框里「正在翻译简介…」，评论区「正在翻译评论…」，三者同屏。
+  - `11/13/15/16` 逐张对着 `winapp ui search 正在翻译` 核过：翻译结束后三处占位从 UIA 树里消失（`element_not_found`），标题栏那处回到 `Collapsed`。
+  - 译文/cache 命中时不会闪：显示延迟 150ms 把这些批次完全滤掉。
+- 本轮环境里 `mymemory` 引擎时好时坏，失败时界面照旧保留原文并显示「翻译没有出结果」，提示也会正常收起 —— 失败路径没有把提示卡在「永远在翻」。
+
+### 坑
+
+- **`HasTranslated*` 从来没人通知过**：这类只读派生属性如果只声明不 `OnPropertyChanged`，`x:Bind Mode=OneWay` 永远不会更新。表现为「译好了但不显示，切个页回来就有了」——很容易被当成翻译失败。
+- **不要把计数加在 ViewModel 里**：名称翻译在三个列表页 VM、正文翻译在详情页 VM、逐段翻译还会再拆批，任何一处漏加都会让提示提前消失；统一放在 `TranslateBatchAsync` 才只有一个口径。
+- 计数用 `int` + `lock`（不是 `Interlocked` 自增后比较）：0→1 / 1→0 的判定和递增必须在同一把锁里，否则并发下会多发或少发 `Changed`，界面表现为提示偶发不出现。
+
+## 0.64 2026-11-03：创意工坊页工具条收成一行 + 搜索改成回车/刷新触发
+
+用户原话：「创意工坊这玩意能不能整成一行，方便查看，而且目前的搜索不太好用，似乎是实时搜索，容易卡住未响应」。
+截图里页头是两行：第一行「创意工坊」标题 + 游戏名 + 「11,247 个结果」+ 右侧来源徽标 / 打开网页，
+第二行是搜索框 + 最热门 + 30 天 + 刷新 —— 两行各占一条，列表被压得很矮。
+
+### 决策
+
+- **布局**：只留一行工具条，页面内标题整块去掉（左侧导航栏已经有「创意工坊」）；游戏名与结果数移到下方状态栏，
+  与播放集页 §0.14「工具条收成一行」的做法一致。工具条从左到右：搜索框（`*`，最小 160）→ 排序（150–220）→
+  时间范围（130–170，仅 Steam 且按时间排序时出现）→ 忙碌环 → 刷新 → 1×20 分隔线 → 来源徽标 → 打开网页。
+  `workshop.title` 没有变成孤儿键：改为 `Page` 的 `AutomationProperties.Name`，读屏仍能报页面名。
+- **搜索**：打字不查询，只有**回车**或**刷新**提交。旧实现每个字符都排一次 1–3 MB 的 SSR 列表页请求，
+  而 `steamcommunity.com` 的出口闸门是并发 2 / 最小间隔 1 秒，且这些请求带着 `CancellationToken.None`
+  **不可取消**；输入十个字符就是十几秒的请求洪峰，先发后到的结果还会互相覆盖 —— 这就是「像实时搜索、
+  容易卡住未响应」的来源，不是 UI 线程被 HTML 解析卡住（解析本来就在后台线程）。
+- **一期不做防抖计时器**：回车语义已经消掉洪峰，不再引入 `DispatcherQueueTimer`，也不改 `PdxLauncher.Core`
+  （`RequestThrottle.AcquireAsync` 本来就尊重取消令牌，取消后请求不会出网）。搜索词用一个**已提交**副本
+  `_appliedSearch` 参与查询与页缓存键，输入框只负责编辑。
+- **抢占式查询**：每次查询拿一个自增代号（`_queryVersion`）和一个链接到页面令牌的取消源；新查询先取消旧的，
+  旧查询在 `await` 返回、落列表、复位 `IsBusy` 之前都要比对代号，过期结果整段丢掉。
+- **刷新语义**：搜索词变了 → 回第 1 页；没变 → 只刷新当前页。冷却期内点刷新既不发请求、也不提交搜索词
+  （避免列表内容与搜索框文字对不上）。
+
+### 改动清单
+
+- `src/PdxLauncher.App/Views/WorkshopPage.xaml`：外层 `Grid` 从 5 行改 4 行（`RowSpacing` 12→10）；
+  行 0 换成唯一的工具栏（8 列），`SearchBox` 增 `KeyDown="OnSearchKeyDown"`；原行 2/3/4 顺移为 1/2/3；
+  状态栏改三列（游戏名 + 结果数 / 状态文案 / 封面进度），`txtWorkshopGame`、`txtWorkshopCount` 从页头移入；
+  `Page` 增 `AutomationProperties.Name`。
+- `src/PdxLauncher.App/Views/WorkshopPage.xaml.cs`：`OnUnloaded` 先 `_viewModel.CancelPendingQuery()` 再取消页面令牌；
+  新增 `OnSearchKeyDown`（`VirtualKey.Enter` → `CommitSearchAsync()`，整段 try/catch，取消静默）；
+  `OnSearchTextChanged` 注释与日志文案改为「只回写文本」。
+- `src/PdxLauncher.App/ViewModels/WorkshopViewModel.cs`：新增 `_appliedSearch` / `_pageToken` / `_queryCts` /
+  `_queryVersion` / `_queryTask`；新增 `CommitSearchAsync()`、`CancelPendingQuery()`、
+  `RunQueryAsync(bool resetPage, bool force)`、`FlushInfoCacheAsync()`；`QueryAsync` 与 `QuerySteamAsync` /
+  `QueryPdxAsync` 增加 `int version` 护栏（过期即丢，`IsBusy` 只由最新一代复位）；`BuildPageKey()` 改用
+  `_appliedSearch`；`OnSearchTextChanged` 不再发起查询，删除 `OnFilterChangedAsync()`；排序 / 时间范围切换
+  改走 `RunQueryAsync(resetPage: true, force: true)`；`_info.Flush()`（UI 线程同步写 JSON）改成
+  `await FlushInfoCacheAsync()`（`Task.Run`）。
+- `tools/i18n/{zh-CN,en-US}/workshop.json`：`workshop.searchPlaceholder` 改成「搜索创意工坊内容（回车搜索）」/
+  「Search workshop items (press Enter)」；新增 `workshop.statusSearching`「正在搜索…」/「Searching…」。
+- `tests/PdxLauncher.Checks/WorkshopPageChecks.cs`（新增）：用源码文本断言钉住本轮结论 —— 工具条只有一行、
+  页面内无标题样式、回车提交、外层 4 行、状态栏含游戏名与计数、14 个 AutomationId 齐全、打字不查询、
+  查询代号护栏、缓存键用 `_appliedSearch`、落盘在后台线程、卸载时取消在途查询。
+- `README.md`：「请求预算与 429 行为」补一条搜索触发方式与取消行为。
+
+### 验证
+
+- `python tools/gen-i18n.py --check` → 文案源合法，**964 个键**（并行会话的翻译在途提示先加 4 键，见 §0.63；
+  本轮新增 `workshop.statusSearching` 1 键）。
+- `cmd /c build.cmd` → 构建成功；自检 **检查类: 65，失败: 0，断言失败总数: 0**（上一轮 64，本轮新增
+  `WorkshopPageChecks` 1 类）。
+- `bash tools/build-app.sh -v q -p:Platform=x64` → **0 警告 0 错误**（增量 22.5 s）。
+- 行为（读码核对）：连打字符 0 请求；回车 1 次请求；连按回车只保留最后一次结果；换排序 / 时间范围立即查询；
+  页面卸载取消在途请求；慢磁盘落盘不再占 UI 线程。
+- **未做**：UIA 实测工具条行宽（需要先在应用里选游戏再进创意工坊页，本轮没有跑自动化）。
+  按控件预算估算右固定区 ≈ 551 DIP（150 + 130 + 20 + 40 + 1 + 4 + 徽标约 110 + 40 与 7 个 8 DIP 间距），
+  1040 DIP 窗口的内容宽 ≈ 771 DIP → 搜索框 ≈ 220 DIP；1200 DIP 窗口 → ≈ 380 DIP，均高于 160 的最小值。
+
+### 坑
+
+- **重建前必须关掉正在运行的启动器**：本轮 `PdxLauncher.App.exe`（PID 32156）正跑在
+  `bin\x64\Release\...\win-x64\` 下，不关就是 MSB3027 / MSB3021 文件占用。
+- 改完 `tools/i18n/*.json` 必须先跑 `python tools/gen-i18n.py`：`--check` 只会告诉你「文案源已过期」，
+  不会顺手生成，直接构建也会在 `gen-i18n.py || exit 1` 这一步失败。
+- **并行会话会同时写 HANDOFF**：本轮开工时文件是 §0.62 收尾，收工时另一个会话已经占用了 §0.63（翻译在途提示），
+  所以这一节编到 §0.64；动笔前先 `tail` 一下，别把章节号写重。
+
+### 注意
+
+- 翻页仍是缓存优先（`force: false`）；回车、刷新、换筛选条件都是 `force: true`，跳过 15 分钟新鲜期。
+- 状态栏与旧页头都在展示结果数（用户明确选择把计数放状态栏），别把它当成重复渲染的 bug 删掉。
+- `workshop.title` 仍在使用（Page 读屏名）；以后要删这个键，得先给页面换一个可访问名称。
+
+## 0.65 2026-11-03：创意工坊接上 Steam 真实状态（订阅集合 / 安装 / 更新 / 本地禁用）
+
+> 用户原话：「我认为p社它自己写的原版启动器没有对创意工坊实现完全的适配和接入，你先翻翻Steam的接口看看」
+
+### 决策
+
+- **先把 Steam 接口面摸清再动手**：`sdk/public/steam/isteamugc.h` + `steam_api_flat.h` 里 `ISteamUGC` 一共 60 多个导出，
+  原版启动器与本项目此前只用了 5 个（`SubscribeItem` / `UnsubscribeItem` / `GetItemState` / `CreateItem` / `SubmitItemUpdate` 系）。
+  §18.1–18.4 那三路 keyless 网页接口**拿不到**「我订阅了哪些 / 装没装 / 要不要更新 / 本地禁用」——那是账号私有状态，
+  只有 Steamworks 自己知道。
+- **只补「读状态 + 两个写动作」，不做查询族替换列表**：`CreateQuery*UGC*` 能顶掉列表页的 HTML+SSR 抓取，
+  但列表页已有请求闸门、在途合并、12 小时页面缓存，换引擎等于把整套缓存与限流结论作废；而查询族还有个额外代价 ——
+  每翻一页都要再起一次子进程（Steam 会有「游戏中」登记）。这一轮只补真正缺的、网页做不到的部分。
+- **批量而非逐条**：`GetNumSubscribedItems` + `GetSubscribedItems` 一次拿全量（本项目实测 CK3 384 项），
+  逐条 `GetItemState` 就是 384 次跨进程调用 —— 所以状态刷新是「一个子进程拿全部」，不是「每行一个子进程」。
+- **`GetItemState` 返回 0 必须当 Unknown，不能当「没订阅」**：子进程刚 `SteamAPI_Init`、Steam 还没把订阅集合同步过来时也是 0。
+  详情页原来把 0 当「确定未订阅」，这是「已订阅却显示未订阅」偶发误报的根因；现在 `ReadStateDetail` 对 `raw == 0` 返回
+  `WorkshopInstallState.Unknown`，只有**订阅动作确认**（`ReadStateForConfirm`）才把 0 当「确实没有」。
+- **缓存 60 秒、只放内存**：状态变化快（下载进度每几秒就变），落盘得处理失效，得不偿失；
+  Mod 库页刷新、行内写动作成功后 `Invalidate` 一次，其余时间读缓存，避免每次进页面都闪一次「游戏中」。
+- **读状态与改订阅拆成两个设置开关**：读（`SteamWorkshopStateEnabled`，默认**开**）是只读的，代价只有一次短命子进程；
+  写（`SteamWorkshopSubscribeEnabled`，仍是默认**关**）才允许订阅 / 退订 / 触发下载 / 本地禁用。
+  这样「只想看到状态」的用户不必打开实验性的写开关。
+- **未知态什么都不显示**（`WorkshopStateText.Resolve` 返回 `None`），不画灰色徽标、不写「状态未知」——
+  用户看的是「我该不该点下载」，不是诊断信息。
+
+### 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.Core/Steam/WorkshopItemStateBits.cs`（新） | `EItemState` 位常量（Subscribed 1 / LegacyItem 2 / Installed 4 / NeedsUpdate 8 / Downloading 16 / DownloadPending 32 / DisabledLocally 64）+ `ToInstallState(...)` / `HasUpdate` / `IsDisabled`；`IsDownloadPending` 定义为「排队位开且下载位关」 |
+| `src/PdxLauncher.Core/Steam/WorkshopInstallState.cs` | 追加带默认值的 `NeedsUpdate` / `IsDisabledLocally` / `IsDownloadPending` / `SizeOnDisk` / `Folder` / `BytesDownloaded` / `BytesTotal`（带默认值才不用改旧构造点）；新增 `HasNativeDetail`、`DownloadPercent` |
+| `src/PdxLauncher.Core/Steam/WorkshopStateText.cs`（新） | `WorkshopStateBadge` 枚举 + `Resolve(state)`（本地禁用 → 排队中 → 下载中 → 需要更新 → 已安装）+ 文案键常量；`ShowsUpdateHint` |
+| `src/PdxLauncher.Core/Steam/SteamHostProtocol.cs` | `Verbs` 5→7：新增 `WorkshopSubscribedVerb="workshop-subscribed"`、`WorkshopBatchVerb="workshop-batch"`；新增 `WorkshopBatchOps`（state/download/disable/enable + `IsWrite`）、`WorkshopSubscribedItem`、`SteamHostSubscribedResult`（`MaxItems=4000`、`Truncated`）、`WorkshopBatchRequest`、`WorkshopBatchItem`、`WorkshopBatchResult`（`MaxItems=512`） |
+| `src/PdxLauncher.Core/Steam/SteamWorkshopHostOperation.cs` | 新增 6 个导出绑定（`GetNumSubscribedItems` / `GetSubscribedItems` / `GetItemInstallInfo` / `GetItemDownloadInfo` / `DownloadItem` / `SetItemsDisabledLocally`）+ `EnsureSubscriptionBindings()`；新增 `ReadSubscribed` / `RunBatch` / `ReadStateDetail` / `ReadStateForConfirm` / `IsSettled` / `SafeGetNumSubscribedItems`；`MapState` 改调 `WorkshopItemStateBits.ToInstallState` |
+| `src/PdxLauncher.Core/Steam/SteamHostRunner.cs` | 用法行改成 7 动词；新增 `RunSubscribed` / `RunBatch` 两个分流，**放在 `RunWorkshop` 的 `--fileid` 校验之前**（批量动词不带 `--fileid`）；新增 `WorkshopListTimeout = 60 s`、`TryDecodeRequest<T>` |
+| `src/PdxLauncher.App/Services/SteamHostClient.cs` | 新增 `ReadSubscribedAsync` / `BatchAsync` / `WorkshopListTimeout = 90 s`；抽出 `ExecuteWithRequestAsync<TRequest>`（`--request` base64，与 `PublishAsync` 同口径的起进程 / 超时 / `Describe`） |
+| `src/PdxLauncher.App/Services/IWorkshopStateSource.cs`（新） | `IsAvailable` / `UnavailableReason` / `ReadSubscribedAsync` / `TriggerDownloadAsync` / `SetDisabledLocallyAsync` |
+| `src/PdxLauncher.App/Services/SteamWorkshopHostBackend.cs` | 实现 `IWorkshopStateSource`（`RunBatchAsync(op, id, ct)` 包 `workshop-batch`），仍保留 `IWorkshopSubscribeBackend` |
+| `src/PdxLauncher.App/Services/SteamWorkshopBackends.cs`（新） | `CreateForState(game)` / `CreateForSubscribe(game)` 两个工厂，按设置开关决定是否可用；原来只在 `WorkshopDetailPage` 里 new 一遍 |
+| `src/PdxLauncher.Core/Online/WorkshopStateCache.cs`（新） | 内存缓存，TTL 60 s，按 appId 分桶，`TryGet` / `TryGetStale` / `Set` / `Invalidate` / `Clear`；挂在 `AppServices.WorkshopStates` |
+| `src/PdxLauncher.App/Services/ModLibraryService.cs` | 加可选 `Func<GameInstallation, IWorkshopStateSource?>` + `WorkshopStateCache`；`LoadAsync` 在排序前 `InjectSteamStatesAsync`（缓存 → 子进程 → 失败退旧副本），按 `WorkshopId` 把 `SteamState` 回填到 `ModLibraryEntry` |
+| `src/PdxLauncher.Core/Contracts/ModLibraryEntry.cs` | 追加 `WorkshopInstallState? SteamState = null` |
+| `src/PdxLauncher.Core/Configuration/AppSettings.cs` | 新增 `SteamWorkshopStateEnabled`（默认 true，只读状态） |
+| `src/PdxLauncher.App/ViewModels/ModLibraryRowViewModel.cs` | `SteamState` / `ShowSteamStateBadge` / `SteamStateBadgeText` / `CanTriggerSteamDownload` / `IsSteamDisabledLocally` / `SteamDisableActionText` + 三个 AutomationId |
+| `src/PdxLauncher.App/ViewModels/ModLibraryViewModel.cs` | `IsSteamActionBusy` / `HasSteamStates` / `CanWriteSteam` / `RefreshSteamStatesAsync` / `TriggerSteamDownloadAsync` / `SetSteamDisabledLocallyAsync` / `RunSteamActionAsync`（写开关关着时只给状态栏提示，不弹框） |
+| `src/PdxLauncher.App/Views/ModLibraryPage.xaml`、`.xaml.cs` | 行内加状态徽标（`PlaySetText` 之后）+ 下载 / 本地禁用两个图标按钮；`OnSteamDownloadClick` / `OnSteamDisableClick` |
+| `src/PdxLauncher.App/ViewModels/WorkshopDetailViewModel.cs` | `IsSteamNeedsUpdate` / `SteamDownloadProgressText` / `ShowSteamUpdateHint` / `HasSteamDownloadProgress` / `CanWriteSteam`；`ApplySteamInstallState` 消费新字段；`RefreshSteamSubscriptionAsync` 先读 `WorkshopStates` 缓存 |
+| `src/PdxLauncher.App/Views/WorkshopDetailPage.xaml`、`.xaml.cs` | 「需要更新」警示条 + 下载进度文本；`CreateSteamBackend()` 改走两个工厂 |
+| `src/PdxLauncher.App/Views/SettingsPage.xaml`、`ViewModels/SettingsViewModel.cs` | 新增 `tglSteamWorkshopState`（读状态，默认开）卡片，在写开关之前；`SteamStateEnabled` + `SettingsSteamStateOn/Off/Hint` |
+| `tools/i18n/{zh-CN,en-US}/modlib.json`、`settings.json`、`workshop.json` | modlib 13 键 + settings 3 键 + workshop 2 键 + `workshop.detailSteamReadOnlyHint`；959 → 983 键 |
+| `tests/PdxLauncher.Checks/WorkshopItemStateBitsChecks.cs`、`WorkshopStateTextChecks.cs`、`WorkshopStateCacheChecks.cs`、`WorkshopSubscribedProtocolChecks.cs`（新） | 位值、优先级映射、TTL、7 动词与新记录的 JSON 往返 |
+| `tests/PdxLauncher.Checks/SteamHostProtocolChecks.cs` | 动词断言 5→7（含 `Verbs[4..6]` 逐项）；`CheckWorkshopResultRoundTrip` 补扩展字段往返 |
+| `README.md:225`、`:585`、`:491`、`docs/DATA-FORMATS.md` §18.5（新） | Mod 库页两个新按钮与状态徽标、宿主超时与两个开关、检查类计数、Steamworks 订阅状态接口全表 |
+
+### 验证
+
+- `dotnet build src/PdxLauncher.App/PdxLauncher.App.csproj -c Release -m:1 --nologo -v q -p:Platform=x64` → **0 警告 0 错误**。
+- `dotnet build tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj -c Release -m:1 --nologo -v q` → **0 警告 0 错误**。
+- `dotnet run --project tests/PdxLauncher.Checks -c Release --no-build` → **检查类: 69，失败: 0，断言失败总数: 0**（上一轮 65）。
+- `python tools/gen-i18n.py --check` → 通过，**983 个键**。
+- 两个真 bug 是自检抓出来的：`WorkshopStateText.Resolve` 里 `IsDownloadPending` 必须排在 `IsDownloading` 之前（否则排队分支永远走不到）；
+  `WorkshopBatchOps.IsWrite(null)` 原来返回 true（未知动作被当成写动作）。
+
+### 坑
+
+- **`GetItemState` 的 0 不等于「没订阅」**——见上面决策，这是本轮最重要的一条。
+- **新增宿主动词要改三处**：`Verbs` 数组、`SteamHostRunner.Run` 的用法行、`SteamHostProtocolChecks` 里的「恰好 N 个」断言。
+  批量化动词还必须在 `RunWorkshop` 的 `--fileid` 校验**之前**分流，否则会被「缺少或非法的 --fileid」挡下。
+- **XAML 注释里不能出现 `--`**（WMC9997）：写 `steam-host` 而不是 `--steam-host`，否则整个页面编译失败。
+- **`DownloadPercent` 是 `double?`**，写成 `is int` 直接 CS8121。
+- **`FirstOrDefault(id => ...)` 的 lambda 不能加 `static`**：CS8820，会引用外层的 `publishedFileId`。
+- `TranslationActivityChecks.CheckConcurrentLeases` 偶发失败（`期望 2，实际 4`，5 次里 1 次）：
+  `Parallel.For` + `Thread.SpinWait(200)` 的时序抖动，属既有检查，与本轮改动无关，别去改 `TranslationActivityMonitor`。
+
+### 注意
+
+- **未做**（下一轮可接）：`SetSubscriptionsLoadOrder`（Steam 侧加载顺序）、查询族 `CreateQuery*UGC*`（替代列表页抓取）、
+  投票 / 收藏 / 依赖增删 / `DeleteItem` / EULA / PlaytimeTracking。
+- `GetItemInstallInfo` 的目录串是**工坊条目目录名**（即 publishedFileId），不是绝对路径；要拼完整路径仍走
+  `ModThumbnailResolver` 那套「按库根重定位」的逻辑。
+- 徽标只提示，不拦截启动：没装 / 有更新都照样能启动游戏（游戏自己会提示）。
+
+## 0.66 2026-11-03：Mod 创建页补齐工坊发布面（可见性 / 描述词 / 多图与视频 / 多语言 / 内置封面）
+
+> 用户原话：「我打开steam看到一堆功能没有支持，而且似乎没有使用项目内自带的封面图片，还有没有添加和编辑图片/视频的功能」
+> 配四张 Steam 客户端截图：可见性下拉（公开 / 仅限好友 / 隐藏 / 非公开，当前勾的是「隐藏」）、
+> 「更新内容描述词」五个勾选项、「编辑标题与描述」的语言下拉（英语 / 简体中文 / …）。
+> 用户对范围的答复：「多语言设置成高级模式行，看你这描述很复杂而且有问题，似乎会被steam拦住的可能」。
+
+### 决策
+
+- **只补 Steam 客户端能改、而上游 API 也允许改的面**：可见性、内容描述词、附加预览、多语言标题描述这五样都有
+  对应导出（`SetItemVisibility` / `AddContentDescriptor` / `AddItemPreviewFile` / `AddItemPreviewVideo` / `SetItemUpdateLanguage`），
+  所以是「我们把已有能力接出来」，不是猜。查询族 `CreateQuery*UGC*`（拿回官方渲染的附加预览）仍然不接，理由见 §0.65。
+- **可见性用真枚举替换 `bool Public`**：`ModPublishRequest.Public` 只能表达 0/2 两档，而 Steam 是
+  `Public 0 / FriendsOnly 1 / Private 2 / Unlisted 3` 四档。新字段 `SteamWorkshopVisibility Visibility` 是位置参数，
+  旧字段直接删掉；`ModPublication` 保留了旧的 `bool Public`（老记录还得读），但新写入时 `Public = visibility == Public`，
+  读取一律走派生 `EffectiveVisibility => Visibility ?? Effective(Public)`，所以旧记录仍能正确回显。
+- **描述词先全删再按勾选加**：`AddContentDescriptor` 没有「查询当前有哪些」的配套（那要走查询族），
+  而 `RemoveContentDescriptor` 对没设过的 id 是无害 no-op，所以每次提交都对 1..5 全部 remove 一遍再 add 目标集，
+  这样「取消勾选」才能真正生效，也不需要读回。
+- **附加预览先清空再从 0 追加**：`RemoveItemPreview(index)` 从 0 开始反复删到返回 false，然后按用户顺序
+  `AddItemPreviewFile` / `AddItemPreviewVideo` 逐个加。代价是顺序完全由我们控制，不依赖 Steam 的排序规则。
+- **多语言是「主提交成功后的追加提交」**：每种语言单独 `StartItemUpdate` → `SetItemUpdateLanguage` →
+  只设 Title/Description → `SubmitItemUpdate`。**绝不重设 Content / Preview / Visibility / Tags / 描述词** ——
+  重设内容等于把整个 mod 再传一遍，重设可见性等于把用户的选择覆盖成本次语言的值。
+- **多语言默认关、收在「高级」Expander 里、失败降级为警告**：用户明确担心「似乎会被 Steam 拦住」。
+  所以：开关默认 false；语言数计入宿主总超时（`PublishTimeout * (1 + min(count, 12))`）；
+  部分语言失败仍返回 `Ok = true`，只在结果里带一段「有 N 种语言未写入」的说明，不让主上传显示成失败。
+- **单图 1 MB 是 Steam 的硬限制，先在本地拦**：`AddItemPreviewFile` 头文件注释写明「must be under 1MB in size」。
+  与其让用户在一个 800 MB 的 mod 传到 99% 时才失败，不如在 `ModStudioService.PublishAsync` 一开始就检查每张附加图
+  （`ModPublishLimits.IsPreviewFileAcceptable`），错误里带文件名。上限 8 张、12 种语言同理属于「先在本地说清楚」。
+- **封面改用内嵌默认图**：`ModCreator` 原来的 `PlaceholderPng` 是 1×1 透明 PNG，写进 `thumbnail.png` / `metadata.json` 的
+  `picture` 后 Steam 侧就是一片空白。现在把项目自带的 `Square150x150Logo.scale-200.png`（24 KB，远小于 1 MB）
+  作为 `EmbeddedResource` 嵌进 `PdxLauncher.Core`（`LogicalName = PdxLauncher.ModStudio.default-cover.png`），
+  由 `ModCoverAssets.Default` 读取、`WriteDefault` 落盘；新建 mod 与上传页的「使用内置封面」按钮共用这一份字节。
+  选择嵌资源而不是读 App 的 `Assets\`：`ModCreator` 在 Core 层，Core 不能依赖 App 的目录结构。
+- **视频只接受 YouTube 链接**：`AddItemPreviewVideo` 收的就是 video id，Steam 客户端也只支持 YouTube。
+  `YouTubeVideoId.TryParse` 统一处理 watch?v= / youtu.be / embed / shorts / live / 裸 ID 五种写法，其他域直接拒绝并提示。
+
+### 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.Core/Steam/SteamWorkshopVisibility.cs`（新） | 四档枚举（0/1/2/3）+ `All` / `ToNative` / `FromNative(int)` / `Effective(bool)` |
+| `src/PdxLauncher.Core/Steam/ModLocalizedText.cs`（新） | `ModLocalizedText(Language, Title, Description)`；`SteamWorkshopLanguages` 30 种语言码与显示名、`Normalize`（未知 → english）、`DisplayName` |
+| `src/PdxLauncher.Core/Steam/YouTubeVideoId.cs`（新） | `TryParse` 五种链接形式 + 纯 ID；只认 `[A-Za-z0-9_-]{11}` 与 YouTube 域 |
+| `src/PdxLauncher.Core/ModStudio/ModCoverAssets.cs`（新） | 内嵌默认封面的读取与 `WriteDefault(IFileSystem, path)`；失败返回 false 不抛 |
+| `src/PdxLauncher.Core/ModStudio/Assets/default-cover.png`（新） | 24863 字节，取自 App 的 `Square150x150Logo.scale-200.png` |
+| `src/PdxLauncher.Core/PdxLauncher.Core.csproj` | 新增第 4 个 `EmbeddedResource` + `LogicalName` |
+| `src/PdxLauncher.Core/ModStudio/ModCreator.cs` | 删掉 `PlaceholderPng`；`WritePreview` 兜底改调 `ModCoverAssets.WriteDefault` |
+| `src/PdxLauncher.Core/Steam/SteamHostProtocol.cs` | `ModPublishRequest` 的 `bool Public` → `SteamWorkshopVisibility Visibility`，追加 `ContentDescriptors` / `PreviewPaths` / `PreviewVideoIds` / `Localizations`（都带默认值）；新增 `ModPublishLimits`（`MaxPreviewBytes` / `MaxAdditionalPreviews=8` / `MaxLocalizations=12` / `IsPreviewFileAcceptable`） |
+| `src/PdxLauncher.Core/ModStudio/ModPublication.cs` | 追加 `Visibility` / `ContentDescriptors` / `PreviewPaths` / `PreviewVideoIds` / `Localizations`（带默认值），保留旧 `Public`；派生 `EffectiveVisibility` / `Descriptors` / `ExtraPreviews` / `Videos` / `ExtraLocalizations` |
+| `src/PdxLauncher.Core/Steam/SteamWorkshopHostOperation.cs` | 新增 6 个导出绑定（`SetItemUpdateLanguage` / `AddItemPreviewFile` / `AddItemPreviewVideo` / `RemoveItemPreview` / `AddContentDescriptor` / `RemoveContentDescriptor`）+ `EnsureExtrasBindings(...)`；`Publish` 改为按四档设置可见性、`ApplyContentDescriptors`、`ApplyExtraPreviews`；主提交成功后 `SubmitLocalizations`（逐语言独立 `StartItemUpdate`，失败收集不中断） |
+| `src/PdxLauncher.Core/Steam/SteamHostRunner.cs` | `RunPublish` 增加可见性越界校验；宿主总超时按语言数放大 |
+| `src/PdxLauncher.App/Services/ModStudioService.cs` | `PublishAsync` 改成 15 参（可见性枚举 + 描述词 + 附加图 + 视频 + 多语言）；提交前逐张校验附加图存在且 <1 MB；写回 `ModPublication` 时带上全部扩展字段 |
+| `src/PdxLauncher.App/ViewModels/ModStudioViewModel.cs` | `UploadVisibility` + `VisibilityOptions` / `SelectedVisibilityOption`；5 个描述词 bool；`UploadPreviewItems` / `UploadVideoItems` / `UploadLocalizations` 三个集合与增删移动方法；`UseBuiltInCover()`；`UploadLocalizationEnabled` / `UploadAdvancedExpanded`；`ResetUploadForm` 回填扩展字段；`ApplyProgress` 认 `localizing` 阶段 |
+| `src/PdxLauncher.App/ViewModels/ModUploadPreviewItem.cs`、`ModUploadVideoItem.cs`、`ModLocalizationRow.cs`、`VisibilityOption.cs`（新） | 三个列表行 VM 与一个下拉项 VM；行 VM 继承 `LocalizedObservableObject`（提供 `L` / `T`，见「坑」） |
+| `src/PdxLauncher.App/Views/ModStudioPage.xaml` | 上传面板重排：标签之后插入可见性下拉、5 个描述词勾选、主封面 +「使用内置封面」、附加图列表（上移 / 下移 / 删除）、视频链接输入与列表、`Expander` 高级区（多语言开关 + 语言行 + 警告文案 + 添加按钮）；删掉旧的「公开」ToggleSwitch |
+| `src/PdxLauncher.App/Views/ModStudioPage.xaml.cs` | `PickImageAsync(multiple)` 支持 `.bmp/.gif/.webp` 与多选；新增 9 个行内按钮处理器；确认框按语言数选用 `ModstudioUploadConfirmMulti` |
+| `tools/i18n/{zh-CN,en-US}/modstudio.json` | 各 +35 键（可见性四档、5 个描述词、预览与视频、高级与多语言、`stageLocalizing`、`uploadConfirmMulti`）；983 → 1018 键 |
+| `tests/PdxLauncher.Checks/ModPublishExtrasChecks.cs`（新） | 可见性映射、1 MB 与张数上限、五种 YouTube 链接、语言表与 `Normalize`、请求 JSON 全字段往返、旧 `Public` 记录回显、内嵌封面 PNG 签名与 `ModCreator` 落盘一致 |
+| `tests/PdxLauncher.Checks/ModStudioChecks.cs` | 两处 `new ModPublishRequest(...)` 改用可见性枚举 |
+| `README.md`、`docs/DATA-FORMATS.md` §18.6（新） | Mod 创建页功能说明、发布请求扩展字段表 |
+
+### 验证
+
+- `dotnet build src/PdxLauncher.App/PdxLauncher.App.csproj -c Release -m:1 --nologo -v q -p:Platform=x64` → **0 警告 0 错误**。
+- `dotnet build tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj -c Release -m:1 --nologo -v q` → **0 警告 0 错误**。
+- `dotnet run --project tests/PdxLauncher.Checks -c Release --no-build` → **检查类: 71，失败: 0，断言失败总数: 0**（上一轮 69）。
+- `python tools/gen-i18n.py --check` → 通过，**1018 个键**。
+
+### 坑
+
+- **`WMC9999`「未能找到任何适合于指定的区域性…ErrorMessages.resources」不是真的缺资源**：本轮它真实原因是
+  `ModStudioPage.xaml` 里三个新 `DataTemplate` 用了 `{x:Bind L.SomeKey}`，而三个行 VM 没有 `L` 属性 ——
+  WinUI 的 XAML 编译器遇到无法解析的 `x:Bind` 路径时会以这种误导性的「资源缺失」形式崩溃，不报普通的绑定错误。
+  改成继承 `LocalizedObservableObject` 后立刻通过。**以后见到 WMC9999 先查 x:Bind 路径里的成员存不存在。**
+- **XAML 注释里不能出现 `--`**（WMC9997），写 `steam-host` 而不是 `--steam-host`，否则整页编译失败。
+- **`ModCreateRequest` 是 7 参**（`Name` / `FolderName` / `Version` / `SupportedVersion` / `Tags` / `Description` /
+  `PreviewSourcePath`），`ModCreateResult` 是 `(Ok, DirPath, ErrorCode)` —— 写自检时最容易照旧印象写错。
+- **V3（Victoria 3 / EU5）的封面在 `<modDir>\.metadata\thumbnail.png`**，legacy 系（CK3 / Stellaris / EU4 / HOI4 /
+  Imperator）才在 mod 根目录；断言封面路径时别写死根目录。
+- **`ModStudioPage` 没有 `_logger` 字段**，日志一律 `AppServices.Logger.Error(...)`；页面只有一个
+  `public Localizer L => Localizer.Instance;`。
+- 改 XAML / 重建前必须 `taskkill //IM PdxLauncher.App.exe //F`（MSB3027 文件锁）。
+
+### 注意
+
+- **未做**：`UpdateItemPreviewFile` / `UpdateItemPreviewVideo`（现在走「全删重建」，功能等价但会重传图片）；
+  查询族读回官方渲染的附加预览与描述词（要在详情页展示别人的预览壁纸，得接 `GetQueryUGCNumAdditionalPreviews` 那一族）；
+  开发分支用的 `SetRequiredGameVersions` / `SetItemMetadata`。
+- **多语言是实验性功能**：Steam 对「同一 handle 多次 `SetItemUpdateLanguage` + `SubmitItemUpdate`」的行为没在文档里写全，
+  真机上如果被拒，表现是主上传成功、结果里带「有 N 种语言未写入」。用户界面已按此降级，不会误报整体失败。
+- **附加预览目前只写不读**：上传后本启动器看不到自己刚设的图（要靠 Steam 客户端或以后接查询族），
+  再次打开上传页时列表来自 `ModPublication` 的本地记录，不是从 Steam 拉回来的。
+
+## 0.67 2026-11-03：一键启动 `start.cmd` + VS Code 工程入口
+
+用户原话（2026-11-03）：「有没有更好的项目打开方式，目前的启动方式不太方便我查看，给我给一键启用的方式查看」。
+痛点是改完一行代码要先 `build.cmd`、再 `run.cmd`，程序还藏在
+`src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\` 里，双击要一路点进去。
+
+经确认，用户选的是「两条都要」+「只要根目录 `start.cmd`，不要桌面快捷方式」+「每次都跑增量构建」。
+
+### 1. 根目录 `start.cmd`（123 行 / 4338 B，纯 ASCII、CRLF）
+
+```
+start.cmd        :: 一键启动：Release 增量构建后直接运行（已有实例在跑就跳过启动）
+start.cmd debug  :: 同上，但用 Debug 配置
+start.cmd check  :: 构建 + 跑一遍自检，再启动（等价于原来的 build.cmd + run.cmd）
+start.cmd new    :: 忽略「已在运行」判断，强制再开一个窗口
+start.cmd /?     :: 打印用法
+```
+
+流程：`chcp 65001` → `cd /d "%~dp0"`（双击时当前目录是 `System32`，必须自己切回仓库根）→ 解析参数 →
+`where dotnet` 检查 → `dotnet build "PdxLauncher.sln" -c %CONFIG% -m:1 --nologo -v:m` →（`check` 时）
+`dotnet "tests\PdxLauncher.Checks\bin\%CONFIG%\net10.0\PdxLauncher.Checks.dll` → 检查 exe 是否存在 → `start ""` 启动。
+中文全部走 `scripts\msg.cmd` 的 18 个新键（`S_USAGE1..4 S_TITLE S_CONFIG S_BUILDING S_NODOTNET S_FAILBUILD
+S_STEPCHECK S_FAILCHECK S_CHECKOK S_NOEXE S_EXPECT S_STARTING S_EXE S_ALREADY S_PRESSKEY`），脚本本身 0 个 >127 字节。
+
+- **不做时间戳短路**：用户明确要「每次都跑增量构建」。`dotnet build` 自己就是增量的（无改动约 1 s，
+  改一行约 5–15 s），加 `if exist` 判断反而会在切分支、改 csproj、删 `obj` 之后给一个过期 exe。
+- **必须 `-m:1`**：见 §「构建为什么必须 `-m:1`」。并行 MSBuild 会让 WinUI 的 XAML 编译偶发 0 错 0 警告地不产出 xbf。
+- **不创建桌面快捷方式**：是用户选的。仓库根双击 `start.cmd` 已经是一步，`.lnk` 还要处理路径失效与「未知发布者」提示。
+
+### 2. `.vscode/`（只提交三个文件，不含任何机器路径）
+
+- `tasks.json`：6 个 `type: process` 任务，`windows.command` 是 `cmd /c <脚本>`，`presentation.panel: "shared"`。
+  默认任务 `PdxNext: 一键启动（增量构建 + 运行）` → `start.cmd`（`group.isDefault: true`，`Ctrl+Shift+B` 直达）；
+  另有 `构建 + 自检 (Release)`（带 `$msbuild` problemMatcher）、`构建 (Debug)`、`启动 Debug`、`自检`、`发布到 dist`。
+- `settings.json`：`files.encoding: utf8`、`files.eol: "\r\n"`、`files.exclude` 与 `search.exclude` 隐藏
+  `bin/obj/dist/.scratch/.tmp/.backup/.agents/ui-test-artifacts/.nuget`、`[csharp].editor.tabSize: 4`。
+- `extensions.json`：推荐 `ms-dotnettools.csdevkit` 与 `ms-dotnettools.csharp`。
+- **`.gitignore` 配合**：原 `.vscode/` 整目录忽略，改成 `.vscode/*` 再 `!` 放行这三个文件，其余本机配置照旧忽略。
+- **故意不放 `launch.json`**：WinUI 3 + 自包含 + WindowsAppSDKSelfContained 的 F5 经常起不来（宿主进程/包标识都对不上）。
+  断点调试走「启动 Debug」任务 + `Debug: Attach to Process` 附加 `PdxLauncher.App.exe`，可靠得多。
+
+### 3. 自检 `StartScriptChecks.cs`
+
+`public static int Run(IFileSystem fs)`，断言：`start.cmd` 存在、逐字节 <0x80（失败报行号）、
+脚本里每个 `msg.cmd KEY` 的 KEY 都已在 `messages.txt` 定义（正则 `scripts\\msg\.cmd"\s+([A-Za-z0-9_]+)`）、
+两条 exe 路径的 TFM 与 `PdxLauncher.App.csproj` 的 `<TargetFramework>` 一致、含 `-m:1`、
+`.vscode/tasks.json` 可被 `System.Text.Json` 解析且第一个任务是默认一键启动。
+这样以后改 TFM 或改脚本忘了同步提示键，`build.cmd` 会直接红。
+
+### 4. 验证记录
+
+- 干净 worktree（`G:\Work\pdx-verify-oneclick`，基于 ad4f712）全量构建：0 警告 0 错误，27 s；
+  自检 `检查类: 57，失败: 0`（该基线还没有后来并发会话加的检查类）；`start.cmd check` 完整走完并启动成功。
+- 「已在运行」分支：先开实例再 `call start.cmd` → 打印「PdxNext 已在运行，本次不重复启动…」，退出码 0。
+- 「exe 缺失」分支：把 exe 改名后跑 → 打印「找不到可执行文件，未启动程序」+ 期望路径，退出码 1。
+- 期间排查到一个既有 flaky 自检 `TranslationActivityChecks.CheckConcurrentLeases()`：原来 `Parallel.For(0, 64, …)`
+  的租约常常不重叠，导致 `Changed` 触发次数随机是 6 而不是 2，`build.cmd` 随机红。改成 64 个独立线程 +
+  `CountdownEvent` / `ManualResetEventSlim` 卡住重叠窗口后连跑 10 次全绿。
+- 源码树当时被另一个并发会话改着（`ModPublishRequest.Public` → `Visibility` 等），所以上面的编译验证都在
+  worktree 里做；这类跨会话改写不属于本轮。
+
+### 5. 已知边界
+
+- 没有单实例 Mutex：`start.cmd` 用 `tasklist` 查同名进程来避免重复开窗，`new` 参数可以绕过。
+- 查进程用 `findstr` 而不是 `find`：PATH 里 Git 的 GNU `find.exe` 会抢在前面且不认 `/i`，会恒判「没在跑」。
+
+## 0.68 2026-11-03：多语言改成「选语言 → 填该语言」+ 从「高级」折叠区移进上传表单
+
+用户原话（2026-11-03）：「高级设置放错地方了，是上传页面里面塞」，
+追加：「你目前的多语言实现不是选择语言实现，怎么是一个个顺序实现，你不能看看 steam 的 api 看看是怎么实现没」。
+
+### 1. 先说查到的 API 事实
+
+`ISteamUGC` 里与语言有关的导出只有两个：查询侧 `SetLanguage(UGCQueryHandle_t, const char*)`，
+发布侧 `SetItemUpdateLanguage(UGCUpdateHandle_t, const char*)`。官方文档（`partner.steamgames.com/doc/api/ISteamUGC`）原文：
+`SetItemUpdateLanguage` 是「设置标题的语言并提供**将在此次项目更新中**使用的描述」，`SetItemTitle` / `SetItemDescription`
+则说明「可以使用 `SetItemUpdateLanguage` 来设置此描述用于哪种语言，如果没有设置语言，那么则默认为 english」。
+
+**语言是绑在 update handle 上的，一个 handle 只能承载一种语言**，所以 N 种语言必然是 N 轮
+「起 handle → 设语言 → 设标题/描述 → 提交」。这层顺序提交是 API 强制，改不了。
+用户的不满其实落在 UI：原来是「点一下加一行，语言由程序自动轮着挑」，用户没法选语言，也无法对照 Steam 客户端
+「编辑标题与描述」对话框的心智模型。所以这轮只改呈现层，提交路径原样保留。
+
+### 2. 改了什么
+
+- **位置**：删掉上传面板底部那个 `<Expander AutomationId="expModStudioAdvanced">`（原来的「高级」折叠区），
+  整块移到「描述 `txtModStudioUploadDescription`」字段正下方，成为「其他语言（可选）」一节 ——
+  小标题 + 一行说明 + 语言行列表 + 「添加语言」下拉 + 添加按钮 + 实验性提示。默认就是可见的普通表单字段，不再是折叠的「高级」。
+- **语言可选**：`ModLocalizationRow` 的 `Language` 从只读变成可变，新增 `SelectedLanguage`（ComboBox 绑定）
+  与 `LanguageOptions => SteamWorkshopLanguages.All`（30 种）。改下拉 → 写回 `Language`；反之亦然（两边互相回写，用 Ordinal 比较防循环）。
+- **添加语言**：新增 `ModStudioViewModel.UploadAvailableLanguages`（把已用语言剔掉的剩余列表，供下拉用）与
+  `UploadNewLocalizationLanguage`；`AddUploadLocalization(string? language = null)` 显式语言优先，
+  传空才用 `SteamWorkshopLanguages.PickUnused(...)` 兜底推荐；重复或全用尽返回 null，页面提示 `modstudio.localizationDuplicate`。
+- **去掉开关**：`UploadLocalizationEnabled`、`UploadAdvancedExpanded` 两个属性删掉（列表非空即提交，无列表就不提交），
+  `tglModStudioLocalization` 一并删除。校验从「开关开着才查空标题」改成「有任何一行空标题就拦，并把语言名带进提示」，
+  另外新增「语言重复」检查（`SteamWorkshopLanguages.IsDuplicate`，先归一化再比，`klingon` 与 `english` 视为同一个）。
+- **协议零改动**：`ModPublishRequest.Localizations`、`SteamWorkshopHostOperation.SubmitLocalizations`、
+  `ModPublishLimits.MaxLocalizations` 都没动。`core` 只加了 `SteamWorkshopLanguages.PickUnused` / `IsDuplicate` 两个纯函数。
+
+### 3. 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.Core/Steam/ModLocalizedText.cs` | 新增 `PickUnused(IEnumerable<string>?)`（按 `All` 顺序挑第一个未占用语言码，全占用返回 null）与 `IsDuplicate(IEnumerable<string>?, string?)`（归一化后 Ordinal 比较） |
+| `src/PdxLauncher.App/ViewModels/ModLocalizationRow.cs` | `_language` 变可变 + 新增 `_selectedLanguage`；`LanguageOptions` / `DisplayName` / `IsTitleEmpty`；`OnLanguageChanged` / `OnSelectedLanguageChanged` 互相回写；保留 `ToLocalizedText()` |
+| `src/PdxLauncher.App/ViewModels/ModStudioViewModel.cs` | 删 `UploadLocalizationEnabled` / `UploadAdvancedExpanded`；加 `UploadNewLocalizationLanguage`、`UploadAvailableLanguages`、`HasDuplicateLocalizationLanguage()`；`AddUploadLocalization(string?)` 支持显式语言；`ClearUploadExtras` / `ApplyPublicationExtras` / `PublishAsync` 三处校验同步改写 |
+| `src/PdxLauncher.App/Views/ModStudioPage.xaml` | 删 `Expander`（含 `tglModStudioLocalization`、`ModstudioLocalizationWarning`、旧 `lstModStudioLocalizations`），在描述字段后插入「其他语言（可选）」一节：语言 ComboBox（`DisplayMemberPath="DisplayName"`）+ 标题 TextBox + 删除按钮、`cmbModStudioNewLocalization` + `btnModStudioAddLocalization`、实验性提示 |
+| `src/PdxLauncher.App/Views/ModStudioPage.xaml.cs` | `languageCount` 直接读 `UploadLocalizations.Count`（不再看开关）；`OnAddLocalizationClick` 传 `UploadNewLocalizationLanguage?.Code`，返回 null 时 `SetStatus(L.T(Keys.ModstudioLocalizationDuplicate))` |
+| `tools/i18n/{zh-CN,en-US}/modstudio.json` | 加 `localizationSection` / `localizationHint` / `localizationPick` / `localizationDuplicate` / `localizationNote`（各 5 个 = 10 个），删已无引用的 `advanced` / `localizationEnable` / `localizationWarning` / `localizationDescription` / `localizationLanguage` / `localizationDescriptionPlaceholder`；两文件各 144 键，全局 1021 键 |
+| `tests/PdxLauncher.Checks/ModPublishExtrasChecks.cs` | `CheckLanguages()` 追加 6 条：空集合挑到 `schinese`、跳过已用、全占用返回 null、判重忽略大小写、未知码归一后判重、不同语言不判重 |
+
+### 4. 验证
+
+- `dotnet build src/PdxLauncher.App/PdxLauncher.App.csproj -c Release -m:1 --nologo -v q -p:Platform=x64` → 0 警告 0 错误。
+- `dotnet build tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj -c Release -m:1 --nologo -v q` → 0 警告 0 错误；
+  `dotnet run --project tests/PdxLauncher.Checks -c Release --no-build` → `检查类: 71，失败: 0，断言失败总数: 0`。
+- `python tools/gen-i18n.py --check` → 退出码 0，`1021` 个键。
+- `pwsh -NoProfile -File scripts/verify-settings-sections.ps1` → 七节 `missing=[]`，`FAILED_SECTIONS=0`。
+
+### 5. 坑（本轮踩过）
+
+- **`[ObservableProperty]` 需要 `using CommunityToolkit.Mvvm.ComponentModel;`**：给 `ModLocalizationRow` 换基类成
+  `LocalizedObservableObject` 时顺手把这行 using 删了，结果整片 `CS0246: 未能找到类型或命名空间名"ObservableProperty"`，
+  而 WinUI 的 XAML 编译器跟着报 `WMC9999: 未将对象引用设置到对象的实例`。**WMC9999 十有八九是别处 C# 编译错引起的二次故障**，
+  先看 C# 错误列表，别去改 XAML。
+- **`XamlCompiler.exe` 会占住 `obj\...\intermediatexaml\PdxLauncher.App.dll`**：连续两次构建太快会撞
+  `CS2012 ... being used by another process`。`taskkill //IM XamlCompiler.exe //F` 再重建即可。
+- 删文案键要用脚本按 JSON 整体重排写回（`json.dump(..., ensure_ascii=False, indent=2)` + 末尾换行），
+  手改容易漏掉 en-US 那份，`--check` 会报键数不一致。
+
+### 6. 注意
+
+- 提交顺序没有变，也不打算变：`SetItemUpdateLanguage` 绑在 handle 上，一次一种语言是 API 的硬约束。
+- 仍然不读回「Steam 上已存了哪些语言」：要读回得接查询族（`CreateQueryUGCDetailsRequest` + `SetLanguage` 逐语言拉），
+  超出本轮范围；因此再次打开上传页时，语言行只来自本地 `ModPublication` 记录。
+- 空标题的语言行会被前端直接拦下（提示里带语言名），不会静默跳过，避免用户以为某种语言已经提交成功。
+- 上面这条在 §0.69 已作废：语言行模型整体删掉，改成「当前语言」单槽编辑。
+
+---
+
+## 0.69 2026-11-03：多语言最终形态照 Steam 客户端（语言下拉 + 标题 + 描述）
+
+用户原话（2026-11-03）：「你这个是错误修改，你按照steam的显示修改吧，上面是语言选择（默认就是steam设置的英文），
+中间是标题，下面是描述；然后steam的标题和描述是不限语言的，只是影响对应语言的用户看到的东西」，
+并附了 Steam 客户端「编辑标题与描述」对话框截图（顶部面包屑 + 语言下拉「英语」+ 标题框 + 描述框 + 右下「保存」）。
+
+### 1. 决策：一行都不许再铺
+
+§0.68 那版把语言做成「点一下加一行、每行一个语言下拉 + 标题框」，用户看截图后判定为错。Steam 客户端的模型是
+**同一块表单只显示一种语言的内容**：语言下拉在最上面，标题居中，描述在下；切语言时内容整体换掉。
+所以改成：
+
+- 表单里只保留**一个**语言下拉（`cmbModStudioUploadLanguage`）+ 原有的标题框 + 描述框，位置顺序照截图。
+- 语言不再「添加 / 删除」，而是**随时可切**：切走时把当前标题与描述存进该语言的槽位，切回来再载入。
+- 槽位表是 VM 里的私有字典 `Dictionary<string, ModLocalizedText> _localizedDrafts`（键为归一化语言码），
+  english 永远有一项（即使为空），其余语言只有填了标题才留下。
+- 提交给宿主的仍然只有「english 之外、且填了标题」的那些语言（`CollectLocalizations()`），
+  Core 的 `SubmitLocalizations` 一行没改 —— 一次提交一种语言是 `SetItemUpdateLanguage` 绑 handle 的硬约束。
+
+删除的东西：`ModLocalizationRow` 整个类（连同 XAML 里的 `DataTemplate x:DataType="vm:ModLocalizationRow"`）、
+`UploadLocalizations` 集合、`AddUploadLocalization` / `RemoveUploadLocalization` /
+`UploadAvailableLanguages` / `HasDuplicateLocalizationLanguage`、页面上「添加语言」下拉与按钮、删除行按钮。
+
+### 2. 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.App/ViewModels/ModStudioViewModel.cs` | 删 `UploadNewLocalizationLanguage`；新增 `[ObservableProperty] SteamWorkshopLanguage? _uploadSelectedLanguage`、`UploadLanguageOptions`（= `SteamWorkshopLanguages.All`）、`UploadExtraLanguageSummary`（「另有 N 种语言已填标题」）、`UploadLanguageCount`；新增 `ChangeUploadLanguage(SteamWorkshopLanguage?)`（带 `_changingLanguage` 重入护栏，先存后载）、`ResetLanguageEditing(title, description)`（english 落槽 + 选中 english）、`SaveCurrentLanguageDraft()`、`LoadLanguageDraft(code)`、`CollectLocalizations()`、`IsDefaultLanguage` / `IsFilled` / `CurrentLanguageCode`；`ClearUploadExtras` 去掉语言相关清理；`ApplyPublicationExtras` 把 `ExtraLocalizations` 灌进字典；`ResetUploadForm` 两个分支都调 `ResetLanguageEditing`；`PublishAsync` 开头 `SaveCurrentLanguageDraft()`，删掉空标题与重复语言两段校验；新增 `partial void OnUploadSelectedLanguageChanged` |
+| `src/PdxLauncher.App/Views/ModStudioPage.xaml` | 「名称」字段前插入语言 `ComboBox`（`ItemsSource=UploadLanguageOptions`、`SelectedItem=UploadSelectedLanguage` 单向 + `SelectionChanged="OnUploadLanguageChanged"`、`DisplayMemberPath="DisplayName"`、AutomationId `cmbModStudioUploadLanguage`）；删掉整段「其他语言（可选）」（`lstModStudioLocalizations` + `cmbModStudioNewLocalization` + `btnModStudioAddLocalization`）；描述框后只留两行说明：`UploadExtraLanguageSummary`（警示色，AutomationId `txtModStudioLocalizationCount`）与改写后的 `ModstudioLocalizationNote` |
+| `src/PdxLauncher.App/Views/ModStudioPage.xaml.cs` | `languageCount` 改读 `_viewModel.UploadLanguageCount`；删 `OnAddLocalizationClick` / `OnRemoveLocalizationClick`；新增 `OnUploadLanguageChanged(object, SelectionChangedEventArgs)`（`sender is ComboBox { SelectedItem: SteamWorkshopLanguage language }` → `ChangeUploadLanguage`） |
+| `src/PdxLauncher.App/ViewModels/ModLocalizationRow.cs` | **整个文件删除** |
+| `tools/i18n/{zh-CN,en-US}/modstudio.json` | 加 `fieldLanguage`（语言 / Language）、`localizationCount`（「另有 {0} 种语言已填标题」）；删 `localizationAdd` / `localizationPick` / `localizationDuplicate` / `localizationSection` / `localizationHint` / `localizationTitle` / `localizationTitleRequired`；改写 `localizationNote` 为「切换语言只改变下面这对标题与描述…上传时每种语言各提交一次」；各 **139 键**，全局 **1014 键** |
+
+未改：`ModPublishRequest.Localizations`、`SteamWorkshopHostOperation.SubmitLocalizations` / `SubmitLocalizationCore`、
+`ModPublishLimits.MaxLocalizations`、`SteamWorkshopLanguages` 全线（`PickUnused` / `IsDuplicate` 留着给自检与将来用）。
+
+### 3. 验证
+
+- `dotnet build src/PdxLauncher.App/PdxLauncher.App.csproj -c Release -m:1 --nologo -v q -p:Platform=x64` → 0 警告 0 错误。
+- `dotnet build tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj -c Release -m:1 --nologo -v q` → 0 警告 0 错误；
+  `dotnet run --project tests/PdxLauncher.Checks -c Release --no-build` → `检查类: 71，失败: 0，断言失败总数: 0`。
+- `python tools/gen-i18n.py --check` → 退出码 0，`1014` 个键。
+- `pwsh -NoProfile -File scripts/verify-settings-sections.ps1` → 七节 `missing=[]`，`FAILED_SECTIONS=0`。
+
+### 4. 坑（本轮踩过）
+
+- **切语言的时序**：`ComboBox.SelectedItem` 若双向绑定，`PropertyChanged` 先于用户改完文本触发，会把「新语言」的
+  旧文本盖回去。做法是 `SelectedItem` 只做 `Mode=OneWay`，真正切换走 `SelectionChanged` → `ChangeUploadLanguage()`，
+  在方法里先 `SaveCurrentLanguageDraft()`（用切换前的 `CurrentLanguageCode`）再改选中项。
+- **重入**：`ChangeUploadLanguage` 内部改 `UploadSelectedLanguage` 会再触发一次通知，加了 `_changingLanguage`
+  布尔护栏挡住，避免「存 → 载 → 再存」把刚载入的文本当成用户输入。
+- **english 空标题也要落槽**：`SaveCurrentLanguageDraft` 里只有「非默认语言且标题为空」才删槽，
+  否则 english 空着切走再切回会丢东西（默认语言的槽位始终存在）。
+- 删类前先在 XAML 里删掉 `DataTemplate` 与事件处理器，否则 `WMC9999` / 缺 `OnRemoveLocalizationClick` 编译错。
+
+### 5. 注意
+
+- 提交顺序没变：N 种语言仍 N 次「起 handle → 设语言 → 设标题/描述 → 提交」，这是 API 硬约束。
+- 仍不读回 Steam 上已存的语言：`_localizedDrafts` 只来自本地 `ModPublication.ExtraLocalizations`；
+  要读回得接查询族（`CreateQueryUGCDetailsRequest` + `SetLanguage` 逐语言），超出本轮。
+- 切换语言时报文面 `UploadExtraLanguageSummary` 只数「非 english 且填了标题」的语言，空着的语言不占名额也不提示。
+
+
+## 0.70 2026-11-03：翻译「没有出结果」→ 免费引擎换得动主机 + 原因逐条可见
+
+用户报告（2026-11-03 14:36）：「翻译遇到点问题」，附详情页截图：顶部红字
+「翻译没有出结果：mymemory: 未返回译文。可在「设置 → 翻译」里点「测试翻译」查看各引擎状态。」
+下方「描述」区仍是英文原文。
+
+### 1. 根因（实测，不是在代码里猜的）
+
+- `api.mymemory.translated.net` 返回 **HTTP 429**，body 原文：
+  「MYMEMORY WARNING: YOU USED ALL AVAILABLE FREE TRANSLATIONS FOR TODAY. NEXT AVAILABLE IN  02 HOURS 21 MINUTES 29 SECONDS」。
+  代码对 429 返回 `(null, false)`（非 fatal），于是每一段译文都从头再打一遍额度已空的接口。
+- `translate.googleapis.com` 在本机 **TLS 握手直接失败**（`curl: (35) schannel: failed to receive handshake`），
+  免费引擎没有第二个主机可退。
+- 同一套谷歌公开接口在 `clients5.google.com` 上 **200 且返回结构完全一致**（`[["你好","en"]]`）；
+  `translate_a/single?client=gtx&dt=t` 在该主机上同样可用（长短文本、双向都试过）。
+- 提示为何只提 mymemory：`TranslationService` 的 `_engineFailureNote` 只在 null 时写，而「自动」模式下
+  mymemory 先失败，后面 free 的 TLS 失败被吞掉 —— 用户看到的是第一个失败者，不是全部真相。
+- 另一个隐藏约束：`TranslationCoordinator` **每批都 `CreateService` 新建引擎**，
+  所以「记住这台主机坏了」不能放引擎实例里，否则下一段译文又白等一次超时。
+
+### 2. 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.Core/Online/Translation/TranslationEndpointHealth.cs` | **新增**。进程级端点健康状态（`static Shared`）：`MarkDead(host, ttl)` / `MarkHealthy` / `IsDead` / `MarkQuotaExhaustedUntil` / `QuotaResumeAt` / `IsQuotaExhausted` / `Reset`；`Func<DateTimeOffset>? now` 供自检注入时钟 |
+| `src/PdxLauncher.Core/Online/OnlineHosts.cs` | 新增 `Clients5TranslationHost = "clients5.google.com"` 并加进 `IsAllowedHost` 精确白名单；`TranslationHost` 注释改为「主用主机」 |
+| `src/PdxLauncher.Core/Online/Translation/ITranslationEngine.cs` | 新增默认成员 `string? LastFailure => null;`（最近一次失败的人话原因，成功置 null） |
+| `src/PdxLauncher.Core/Online/Translation/FreeTranslationEngine.cs` | `Hosts`（主用 + 备用）、`DeadHostTtl = 5min`；构造注入 `TranslationEndpointHealth`；`RequestAsync` 按主机顺序尝试：网络异常 / 超时拉黑该主机，HTTP 非 2xx 与解析失败只记原因不拉黑；成功清空 `LastFailure` |
+| `src/PdxLauncher.Core/Online/Translation/MyMemoryTranslationEngine.cs` | `QuotaMarker` / 等待时间正则（`NEXT AVAILABLE IN N HOURS M MINUTES`，解析不出按 30 分钟）；429 或 body 命中标记 → 记额度耗尽 + 恢复时间并返回 fatal；之后的请求直接跳过、不再打接口；`LastFailure` 形如「免费额度已用完，约 2 小时后恢复」 |
+| `src/PdxLauncher.Core/Online/Translation/TranslationService.cs` | `_engineFailureNote` → `List<string> _engineFailureNotes`；`AddFailureNote` 逐引擎记「id: 原因」（异常优先、否则取 `engine.LastFailure`），`DescribeFailures()` 用「；」拼接、超 300 字符截断；每批开头清空 |
+| `tests/PdxLauncher.Checks/TranslationChecks.cs` | 新增 `CheckFreeEngineHostFallback` / `CheckMyMemoryQuota` / `CheckMultiEngineFailureNotes` 与 `HostRoutingTransport`（按主机抛网络异常或返回 body） |
+| `README.md` | 翻译节补主机回落 / 冷却 / 额度耗尽 / 逐引擎原因；自检清单同步 |
+| `tools/i18n/*` | 无新键 |
+
+未改：设置页结构、`TranslationOptions`、缓存键格式、`TranslationCoordinator` 的引擎顺序（自填 → 微软 → 谷歌云 → mymemory → free）。
+
+### 3. 验证
+
+- `dotnet build src/PdxLauncher.Core/PdxLauncher.Core.csproj -c Release -v q` → 0 警告 0 错误。
+- `bash tools/build-app.sh -v q -p:Platform=x64` → 0 警告 0 错误；`python tools/gen-i18n.py --check` → 1014 键、生成物最新。
+- `PdxLauncher.Checks` → `检查类: 71，失败: 0，断言失败总数: 0`，其中新增断言包括：
+  「免费引擎主机回落出译文 / 冷却后只发一条请求 / 冷却解除后先试主用主机 / 两台主机都冷却时返回 null」、
+  「MyMemory 429 记为额度耗尽 / 额度耗尽后不重复请求 / 恢复时间过后重新翻译」、
+  「多引擎失败时列出 alpha / beta」。
+- 真机：启动器打开 Iceland mod 详情页，描述区出中文译文、顶部无红字。
+
+### 4. 坑
+
+- **健康状态不能放引擎实例**：协调器每批 `CreateService`，实例字段等于只记一批；额度和坏主机都必须进程级。
+- **429 要当 fatal 处理**：配额耗尽不是「这条没译出来」，继续逐条重试只会把等待时间拖满一页。
+- **HTTP 非 2xx 不该拉黑主机**：400/404 是请求本身的问题，拉黑 5 分钟会让本来能用的主机被无端跳过。
+- **失败原因要逐条列**：只报第一个引擎会把用户指错方向（本次就是只报额度用完的 mymemory，掩盖了 free 的 TLS 失败）。
+- 新增主机必须同时进 `OnlineHosts.IsAllowedHost` 白名单，否则 `TranslationHttpTransport` 会以 `host-not-allowed` 拦掉。
+
+## 0.71 2026-11-03：谷歌免费翻译换首选主机 + 合批 + 429 短冷却
+
+用户报告（2026-11-03 15:05）：「我不是联网连着系统代理吗，为什么谷歌翻译连不上」。
+
+### 实测：代理没坏，是那个主机名坏了
+
+- 应用确实在用系统代理：`data/pdxnext.sqlite` 里 `proxyMode` = `system`，日志反复出现「跟随系统代理 http://10.31.2.50:7890」；
+  Windows 注册表 `ProxyEnable=1`、`ProxyServer=10.31.2.50:7890`、没有 PAC。
+- 经同一代理 `curl -v https://translate.googleapis.com/...`：`CONNECT` 先回 `HTTP/1.1 200 Connection established`，
+  随后客户端发出 471 字节 ClientHello，**服务端一直不回**，5.0 秒后 schannel 报「failed to receive handshake」；
+  应用日志里的 `The SSL connection could not be established` 与此一致。
+- 同代理下别的域名都通：`www.google.com` 200、`translate.google.com` 200、`translation.googleapis.com` 404、
+  `clients5.google.com` 200；对这个域名发明文 HTTP，代理直接回 502（自己也没连上游）。
+- DNS 被污染：`translate.googleapis.com` 解析到 **192.179.26.95**（不是谷歌网段），`clients5.google.com` 是 142.250.73.142；
+  用 `--resolve translate.googleapis.com:443:142.250.73.142` 强制真实 IP，经代理和直连**都仍然失败** —— 所以不只是 DNS，
+  是按主机名 / SNI 的阻断，代理对这个域名大概率走直连。
+- `clients5.google.com` 会间歇 429（14:55 探测成功，15:07 翻评论时日志刷 `HTTP 429`），而 curl 单独打是 200 —— 出口 IP 被限流，
+  当时的实现是「一段文本一个请求」，评论一多必然撞。
+
+### 改动
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.Core/Online/OnlineHosts.cs` | 新增 `GoogleTranslateWebHost = "translate.google.com"` 并加进 `IsAllowedHost` 精确白名单 |
+| `src/PdxLauncher.Core/Online/Translation/FreeTranslationEngine.cs` | 主机顺序 `translate.google.com` → `clients5.google.com` → `translate.googleapis.com`；改用 `/translate_a/t?client=dict-chrome-ex&q=…&q=…` 合批（≤8 段、URL ≤1500 字符一组，组内保序，最多 4 组并发）；429 → 记 `HTTP 429（host）` 并 `MarkDead(host, 60s)` 后换下一台（网络异常/超时仍 5 分钟冷却）；429 时把响应体前 120 字符写日志；失败原因保留**第一台**主机的（`lastFailure ??=`），用户先看到首选主机的真实原因 |
+| `tests/PdxLauncher.Checks/TranslationChecks.cs` | 重写 `CheckFreeEngineHostFallback`；新增 `CheckFreeEngineBatching`、`CheckFreeEngineRateLimit` 与 `StatusRoutingTransport` / `BatchEchoTransport` 替身 |
+| `README.md` | 翻译节改主机顺序 / 合批 / 两种冷却；自检清单补三条 |
+| `docs/HANDOFF.md` | 本节 |
+
+### 验证
+
+- `dotnet build src/PdxLauncher.Core` → 0 警告 0 错误。
+- `dotnet build tests/PdxLauncher.Checks -c Release` → 0 警告 0 错误；跑 dll → **检查类 71，失败 0，断言失败总数 0**。
+  新断言：3 段只发一个请求且保序、20 段 ≤3 个请求且每组 ≤8 段、首选主机 429 时换下一台并进 60 秒冷却、三台都 429 时返回 null 且原因带主机名。
+- 真机（2026-11-03 15:22–15:26，PID 53352，`winapp ui`）：创意工坊连开 3 个 mod 的详情页，中文译文都出现在原文下方的描边框里
+  （Environmental Engineering / Custom Subjects / Smart Treaties），页面顶部不再出现红字，标题栏的「正在翻译…」译完即收；
+  同一时段日志里只有启动时那一条 mymemory 429，没有 clients5 的 429 刷屏（旧版 15:07 一次评论翻译刷了 7 条）。
+  UIA 读到的译文示例：「右键单击状态打开环境工程界面，然后选择是否添加或删除状态特征……」。截图 `ui-test-artifacts/transfix2/01–05*.png`。
+- 设置 → 翻译 → 「测试翻译」实测（15:28）：`✗ MyMemory 翻译（免密钥）：mymemory: 免费额度已用完，约 2 小时后恢复`
+  + `✓ 谷歌免费翻译（无需密钥）：您好，这是翻译测试。` —— 与修复目标一致（免费引擎打勾、额度原因带恢复时间）。
+- 现象备注：长简介（Smart Treaties）逐段翻译约 30 秒，是先等 mymemory 429 再落到免费引擎 + 每段一个请求的结果；
+  文字量大的 mod 首屏译文会晚十几秒，属预期，不是卡死。
+
+### 坑
+
+- **失败原因别取最后一台**：`lastFailure = …` 会让三台全 429 时把兜底主机的错报给用户，改成 `??=` 保留首选主机。
+- **新增主机必须进白名单**：`TranslationHttpTransport` 对未授权主机直接 `host-not-allowed`，表现像「连不上」。
+- **429 不等于网络坏**：拉黑 5 分钟太重，60 秒足够让它换出口 IP；但网络异常/超时仍然 5 分钟。
+- **合批要看 URL 长度**：`translate_a/t` 走 GET，2000 字符可用但保守取 1500，超了拆组而不是丢段。
+- **评论翻译是逐条的**：`TranslateDocumentAsync` 逐段调 `TranslateBatchAsync([text])`，合批只在同一次调用的多段间生效，
+  所以评论页的请求数仍等于「条数 ÷ 1」——本轮没有改协调器把多条评论合批，靠 429 短冷却兜住。
+
+## 0.72 2026-11-03：Mod 创建页三处 UI 修正（`{0}` / 冗余标题 / 上传面板关不掉）
+
+用户原话（2026-11-03）：「1.这个{0}是啥？；2.mod详情这个几个字多余了；3.打开上传到创意工坊页面后，怎么点击它关不掉，看不了mod详情」，
+并附两张截图：列表行徽标写着字面的「已发布 · {0}」，以及详情面板顶部「Mod 详情」小标题压在 mod 名大标题上方。
+
+### 1. 根因
+
+| # | 现象 | 根因 |
+| --- | --- | --- |
+| 1 | 徽标显示字面 `{0}` | `ModStudioPage.xaml` 里行模板裸绑 `{x:Bind L.ModstudioRowPublished}`，而 `modstudio.rowPublished` 的值是「已发布 · {0}」。生成的属性是 `Format("modstudio.rowPublished")`，**`Localizer.Format` 在 `args` 为空时直接返回模板原文**（`Localization/Localizer.cs:117-129`），于是占位符原样上屏。同一行 `SubtitleText` 已经含带 id 的 `PublicationText`，徽标再带一次 id 也是重复。 |
+| 2 | 「Mod 详情」多余 | 详情面板顶部有一个 `L.ModstudioDetailTitle` 小标题（Subtitle 样式），紧跟着就是 `SelectedName` 的 Title 大标题。该键全仓只有这一处引用。 |
+| 3 | 上传面板关不掉 | `PublishAsync` 成功分支用 `LoadAsync(..., resetPane: false)`，面板停在上传页；`catch (OperationCanceledException)` 分支只写状态、从不切面板；`OnSelectedRowChanged` 只重置表单不切面板。于是上传结束（或取消）后既看不到详情，在上传面板里点左侧另一个 mod 也仍然停在上传页 —— 页面又是 `NavigationCacheMode="Required"`，实例常驻，感觉就是「关不掉」。 |
+
+### 2. 决策
+
+- 徽标只说「已发布」：工坊 id 已经在副标题与详情面板的「发布状态」里，列表行右侧宽度有限，不该再挤一遍。
+  新增短键 `modstudio.rowPublishedShort`，由行视图模型算好再绑；带 `{0}` 的 `modstudio.rowPublished` 保留给 `PublicationText`。
+- 详情面板只留一个标题（mod 名）。「Mod 详情」和从未被引用的「返回详情」两个键一起删掉，不留死键。
+- 上传面板的三条出口统一回详情：**成功**（`resetPane: true` + 显式 `Pane = Detail`）、**取消**（取消分支切回详情）、
+  **切换选中项**（`OnSelectedRowChanged` 在非发布中时切回详情）。**失败仍然留在上传面板** —— 表单与错误信息要留给用户重试。
+
+### 3. 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.App/ViewModels/ModStudioRowViewModel.cs` | 新增 `PublicationBadgeText => HasPublication ? T(Keys.ModstudioRowPublishedShort) : string.Empty`（带注释说明为什么不复用 `PublicationText`）；`PublicationText` / `SubtitleText` / `HasPublication` 不变 |
+| `src/PdxLauncher.App/Views/ModStudioPage.xaml` | 行模板徽标改绑 `{x:Bind PublicationBadgeText}`；删详情面板顶部的 `L.ModstudioDetailTitle` TextBlock |
+| `src/PdxLauncher.App/ViewModels/ModStudioViewModel.cs` | `PublishAsync` 成功分支 `LoadAsync(..., resetPane: true)` + `SelectByPath` 之后 `Pane = ModStudioPane.Detail`；取消分支补 `Pane = ModStudioPane.Detail`（带注释说明原因）；`OnSelectedRowChanged` 在 `!IsPublishing && Pane != Detail` 时切回详情 |
+| `src/PdxLauncher.App/Views/ModStudioPage.xaml.cs` | `OnUploadCancelClick` 在发布中除 `Cancel()` 外再 `SetStatus(L.T(Keys.ModstudioUploadCanceling))`，让点击立刻有反馈 |
+| `tools/i18n/{zh-CN,en-US}/modstudio.json` | 加 `rowPublishedShort`（已发布 / Published）、`uploadCanceling`（正在取消上传… / Canceling upload…）；删死键 `detailTitle`、`backToDetail`；各仍 **139 键**，全局仍 **1014 键** |
+| `tests/PdxLauncher.Checks/LocalizationBindingChecks.cs` | **新增**。扫 `Views/` 与 `Controls/` 下所有 `.xaml` 的 `{x:Bind L.Xxx}`，按 `tools/gen-i18n.py` 的 `identifier_for` 规则（点分各段首字母大写拼接）反查 zh-CN 模板，断言**裸绑键的模板里不含 `{n}`**；顺带断言键表规模 > 500、扫到的裸绑定 > 20（防止正则失效后静默全绿） |
+| `tests/PdxLauncher.Checks/ModStudioPaneChecks.cs` | **新增**。源码断言：XAML 含 `PublicationBadgeText` 且不再含 `L.ModstudioRowPublished` / `L.ModstudioDetailTitle`；VM 里 `LoadAsync(Game, cancellationToken, resetPane: true)` 存在、`catch (OperationCanceledException)` 块里有 `Pane = ModStudioPane.Detail`、`OnSelectedRowChanged` 里有面板复位；code-behind 含 `ModstudioUploadCanceling` |
+
+未改：Core 的发布协议、`PublishAsync` 的失败分支、`ModStudioRowViewModel.PublicationText` 的格式。
+
+### 4. 验证
+
+- `dotnet build src/PdxLauncher.App/PdxLauncher.App.csproj -c Release -m:1 --nologo -v q -p:Platform=x64` → 0 警告 0 错误。
+- `dotnet build tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj -c Release -m:1 --nologo -v q` → 0 警告 0 错误；
+  `dotnet run --project tests/PdxLauncher.Checks -c Release --no-build` → `检查类: 73，失败: 0，断言失败总数: 0`。
+- `python tools/gen-i18n.py` / `--check` → 退出码 0，`1014` 个键（modstudio 各 139）。
+- `pwsh -NoProfile -File scripts/verify-settings-sections.ps1` → 七节 `missing=[]`，`FAILED_SECTIONS=0`。
+
+### 5. 坑
+
+- **`Localizer.Format` 无参返回原文**：`Format(key, args = null)` 在 `args` 为 null 或空数组时**直接返回模板**，不做占位符替换。
+  所以任何带 `{n}` 的键都不能裸绑 `{x:Bind L.Xxx}`，必须在视图模型里用 `T(Keys.X, args)` 拼好再绑 —— 编译期不会报错，
+  自检也不会报错，只有真机才看得见 `{0}`。`LocalizationBindingChecks` 就是为这条钉的。
+- **`x:Bind` 的裸绑属性名与 key 的映射**：`modstudio.rowPublishedShort` ↔ `ModstudioRowPublishedShort`，
+  规则是各段首字母大写后拼接（与 `tools/gen-i18n.py` 的 `identifier_for` 一致），自检里必须照抄这个规则，否则反查不到。
+- **面板复位要放在 `catch` 里而不是只有一个 `finally`**：成功、取消、失败三种结局对面板的期望不同，
+  统一在 `finally` 里回详情会把失败时用户填好的表单一起丢掉。
+- **`NavigationCacheMode="Required"` 会放大状态 bug**：页面实例常驻，`Pane` 不会因为离开页面而复位，
+  凡是「进去一次就回不去」的观感，先查视图模型里有没有出口。
+
+### 6. 注意
+
+- 上传失败仍停留在上传面板，这是有意的；只有成功 / 取消 / 切换选中三条路径回详情。
+- 徽标文案与副标题的分工：徽标 =「已发布」状态，副标题 = 「大小 · 已发布 · <工坊 id>」，详情面板的「发布状态」行同样带 id。
+- 自检类数 71 → 73，HANDOFF 与 README 的计数要一起改。
+
+## 0.73 2026-11-03：创意工坊描述支持 BBCode + 字节上限 + 上传页工具条与实时预览
+
+用户原话（2026-11-03）：「steam的描述功能限制有什么，我看外国那些mod都很复杂，是支持什么特殊格式吗」。
+
+### 1. 查到的硬限制与格式
+
+- Steam 的标题 / 描述是**定长字符缓冲**：`sdk/public/steam/isteamremotestorage.h:52` `k_cchPublishedDocumentTitleMax = 128 + 1`、
+  `:53` `k_cchPublishedDocumentDescriptionMax = 8000`、`:54` `k_cchPublishedDocumentChangeDescriptionMax = 8000`、
+  `:58` `k_cchPublishedFileURLMax = 256`。预览图另有 1 MB 上限（`isteamugc.h:307` / `:312`）。
+- 描述**不是 Markdown 也不是 HTML**，是 Steam 社区方言的 BBCode：
+  `[h1]`–`[h3]`、`[b]`、`[i]`、`[u]`、`[strike]`、`[spoiler]`、`[noparse]`、`[hr]`、`[url=…]文字[/url]`、
+  `[list][*]…[/list]`、`[olist][*]…[/olist]`、`[quote=作者]`、`[code]`、`[img]URL[/img]`、`[previewyoutube=ID][/previewyoutube]`；
+  **裸 URL 会自动生成小部件**（YouTube 视频卡、Steam 商店卡、工坊条目卡）——「外国 mod 看起来复杂」主要来自这里。
+- 实测 30 个 Victoria 3 热门条目（`ISteamRemoteStorage/GetPublishedFileDetails/v1/`）：标题最长 60 字符、描述最长 7259 字符；
+  标签频次 `b 298`、`* 225`、`h2 130`、`list 104`、`url 96`、`i 54`、`h1 44`、`hr 24`、`img 14`、`h3 12`、`olist 6`，
+  图片基本都在 `images.steamusercontent.com`。
+
+### 2. 根因（我们的缺口）
+
+| # | 现象 | 根因 |
+| --- | --- | --- |
+| 1 | 超长标题 / 描述会被 Steam 静默截断或只回一个「设置失败」 | 发布侧把 `request.Title` / `request.Description` 原样交给 `SetItemTitle` / `SetItemDescription`（`SteamWorkshopHostOperation.cs:418` / `:423`，多语言在 `:743` / `:748`），**没有任何字节校验** |
+| 2 | 上传页只能写纯文本，不知道 Steam 认什么标记 | 上传页描述是一个裸 `TextBox`，没有工具条、没有计数、没有预览 |
+| 3 | 兜底路径把 BBCode 原样露出来 | 详情页描述在拿不到物品页 HTML 时退到 `MarkdownParser.Parse(WorkshopText.ToPlainText(...))`；`ToPlainText` 的正则只覆盖 `b/i/u/h1-6/list/*/url/img`，实测 30 条真实描述里残留 `[hr]` 12 次、`[olist]` 3 次 |
+| 4 | 两份 `ToPlainText` 已分叉 | App 的 `Services/WorkshopText.cs:20` 与 Core 的 `Text/WorkshopHtml.cs:39` 各写一份，正则还不完全一样 |
+| 5 | Steam 渲染出的 `<hr>` 被吞掉 | `HtmlDescriptionParser` 的 `StartTag` switch 没有 `hr` 分支，`MarkdownRule` 在 AST 与 `MarkdownView` 里都已支持 |
+
+### 3. 决策
+
+- **按 UTF-8 字节判长度**，不按字符数：Steam 那边是 `char` 缓冲，但中文经 UTF-8 传输会被算成 3 字节，
+  用户看到「128」时写 43 个汉字就该被挡。提示文案里直说「一个汉字按 3 字节算」。
+- **三层设防**：`ModPublishLimits.TryValidate*`（可复用、可测）→ 宿主 `SteamWorkshopHostOperation` 提交前再拦一次
+  （防绕过 UI 的调用）→ 上传页提交前拦并给本地化提示（用户可读）。
+- **自己写一个 BBCode 解析器转成现有 `MarkdownDocument`**，而不是新写一套渲染：详情页兜底、上传页预览、
+  未来渲染都用同一棵 AST，`MarkdownView` 直接能画标题 / 列表 / 分隔线 / 链接 / 图片 / 代码块。
+- **`WorkshopHtml.ToPlainText` 用白名单正则扩全标签**，绝不写成 `\[[^\]]*\]`：正文里真实存在 `[1.13]` 这种方括号，
+  一刀切会把正文吃掉。标签名长的排前面（`spoiler` 先于 `s`），否则 `[spoiler]` 会被 `s` 规则拦腰截断。
+- **App 的 `ToPlainText` 改成委托 Core**，结束两份分叉；`WorkshopText` 类本身保留（还有 `Join` / `FormatDate` / `TryParseSteamId`）。
+- 工具条只做**插标记**，不做富文本编辑器：Steam 侧存的本来就是 BBCode 原文，所见即所得会带来「界面里的样子 ≠ 提交后的样子」。
+  预览放在描述框下面，明确标注「读者看到的样子」。
+
+### 4. 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.Core/Steam/SteamHostProtocol.cs` | `ModPublishLimits` 加 `MaxTitleBytes = 128`、`MaxDescriptionBytes = 8000`、`MaxChangeNoteBytes = 8000`、`Utf8Length(string?)`、`TryValidateTitle/Description/ChangeNote`（统一走 `TryValidateText`，错误文案带实际字节与上限） |
+| `src/PdxLauncher.Core/Steam/SteamWorkshopHostOperation.cs` | `Publish` 在 `_startItemUpdate` 之前校验标题与描述，失败直接 `ModPublishResult.Fail`；`SubmitLocalizationCore` 开头同样先校验该语言的标题与描述 |
+| `src/PdxLauncher.Core/Text/SteamBbCodeParser.cs` | **新增**。`Parse(string?) → MarkdownDocument`，`MaxInputLength = 20000` 并记录 `IsTruncated`；块级支持 `[h1]`–`[h6]`、`[hr]`、`[code]`、`[quote]`/`[spoiler]`（嵌套上限 4）、`[list]`/`[olist]`（按 `[*]` 切条目、可嵌套）；行内支持 `[noparse]`、`[code]`、`[img]`、`[previewyoutube=ID]`（转 `img.youtube.com/vi/<id>/0.jpg` 缩略图）、`[url=…]`/`[url]…[/url]`、`[b]/[i]/[u]/[s]/[strike]`、词首裸 URL；**不认识的 `[…]` 原样保留**；有「索引未前进就强行前进」的死循环保护 |
+| `src/PdxLauncher.Core/Text/WorkshopHtml.cs` | `BbCodeBlockRegex` 扩为 `\[/?(?:previewyoutube|strike|spoiler|noparse|olist|list|quote|code|h[1-6]|hr|b|i|u|s|\*)(?:=[^\]]*)?\]`，`BbCodeMediaRegex` 扩为 `\[/?(?:url|img)(?:=[^\]]*)?\]`（长标签在前） |
+| `src/PdxLauncher.Core/Text/HtmlDescriptionParser.cs` | `StartTag` 加 `case "hr":` → 非 `<pre>` 内时 `Flush()` 并追加 `MarkdownRule` |
+| `src/PdxLauncher.App/Services/WorkshopText.cs` | `ToPlainText` 改为一行委托 `WorkshopHtml.ToPlainText(source)`；其余成员不动 |
+| `src/PdxLauncher.App/ViewModels/WorkshopDetailViewModel.cs` | 描述兜底从 `MarkdownParser.Parse(WorkshopText.ToPlainText(...))` 改为 `SteamBbCodeParser.Parse(detail.Description)` |
+| `src/PdxLauncher.App/ViewModels/ModStudioViewModel.cs` | 加 `UploadTitleBytes` / `UploadDescriptionBytes` / `UploadTitleCountText` / `UploadDescriptionCountText` / `IsUploadTitleTooLong` / `IsUploadDescriptionTooLong` / `UploadTitleWarningText` / `UploadDescriptionWarningText` / `UploadDescriptionPreview` / `HasUploadDescriptionPreview`；`OnUploadTitleChanged`、`OnUploadDescriptionChanged` 里通知派生属性；`PublishAsync` 在标题非空校验之后加两道字节拦截 |
+| `src/PdxLauncher.App/Views/ModStudioPage.xaml` | 标题 / 描述各加「已用 / 上限」计数与超限提示；描述加 11 个按钮的 BBCode 工具条（B I U S H2 • 1. — Link Img Code）与「预览（读者看到的样子）」卡片（`ctl:MarkdownView`，`MaxHeight=320` 内部滚动，描述为空时整块隐藏） |
+| `src/PdxLauncher.App/Views/ModStudioPage.xaml.cs` | 新增 `OnBbCodeClick` 与四个静态辅助：`ApplyWrap`（包裹 / 插入，可指定光标落在开标记内几个字符处）、`ApplyLineBlock`（整行加 `[h2]`）、`ApplyList`（整行转 `[list]`/`[olist]`）、`InsertAtCaret`；操作后 `box.Focus(...)` 把焦点还给描述框 |
+| `tools/i18n/{zh-CN,en-US}/modstudio.json` | 各加 16 键：`bytesCounter`、`titleTooLong`、`descriptionTooLong`、`bbcodeHint`、`bbcodeBold/Italic/Underline/Strike/Heading/BulletList/NumberedList/Rule/Link/Image/Code`、`previewHeader`；各 **139 → 155 键** |
+| `tests/PdxLauncher.Checks/SteamBbCodeParserChecks.cs` | **新增**。36 条断言：纯文本、`[h1]`–`[h6]`、`[hr]`（含 `[/hr]`、`[hr/]`）、两种列表与嵌套、粗体 / 删除线、链接（`[url=X]文字[/url]` 与 `[url]X[/url]`）、图片、`[previewyoutube]` 缩略图、JSON 风格未知标签保留、`[noparse]`、超长截断 |
+| `tests/PdxLauncher.Checks/ModPublishLimitsChecks.cs` | **新增**。21 条断言：ASCII / 汉字 3 字节 / emoji 4 字节的字节口径、128 与 8000 的边界值（恰好通过、+1 被挡）、42 个汉字通过而 43 个被挡、含 BBCode 标记时按原文计字节 |
+
+未改：发布协议字段与动词、`Localizer`、`gen-i18n.py`。
+
+### 5. 验证
+
+- `dotnet build src/PdxLauncher.App/PdxLauncher.App.csproj -c Release -m:1 --nologo -v q -p:Platform=x64` → 0 警告 0 错误。
+- `dotnet build tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj -c Release -m:1 --nologo -v q` → 0 警告 0 错误；
+  `dotnet run --project tests/PdxLauncher.Checks -c Release --no-build` → `检查类: 80，失败: 0，断言失败总数: 0`。
+- `python tools/gen-i18n.py --check` → 退出码 0；modstudio 各 155 键（本轮 +16）。
+- `pwsh -NoProfile -File scripts/verify-settings-sections.ps1` → 七节 `missing=[]`，`FAILED_SECTIONS=0`。
+- 真机（`winapp ui`）：上传页名称行「25 / 128 字节」、描述行「0 / 8000 字节」；描述为空时预览整块不出现；
+  填入含 `[h2]/[b]/[i]/[strike]/[list]/[olist]/[hr]/[url=]/[code]` 的描述后计数变「271 / 8000 字节」，
+  预览按标题 / 加粗斜体删除线 / 圆点列表 / 有序列表 / 分隔线 / 蓝色链接 / 代码块正确渲染；
+  点 `Code` 按钮在光标处插入 `[code]` + 空行 + `[/code]`（见下方第 5 条坑）。
+
+### 6. 坑
+
+- **`get-value` 会吞空行**：`winapp ui get-value` 读回的文本看似 `[code][/code]…`，实际截图里是
+  `[code]`、空行、`[/code]`。判断插入结果对不对，要截图看，别只信 `get-value`。
+- **工具条按钮会抢焦点**：点按钮时 `TextBox` 失去焦点，`SelectionStart/SelectionLength` 是「失去焦点那一刻」的值。
+  改完 `Text` 必须显式 `box.Focus(FocusState.Programmatic)`，并把选区回设，否则用户下一次点击会从 0 开始。
+- **`[s]` 会吃掉 `[spoiler]`**：白名单正则里短标签必须排在长标签之后（`spoiler` 在 `s` 之前），
+  否则 `[spoiler]` 被 `[s]` 规则截成 `poiler]`。
+- **绝不能写 `\[[^\]]*\]`**：正文里有 `[1.13]` 这种真实方括号内容，一刀切会把正文吃掉；只能枚举已知标签。
+- **并发会话会污染构建**：本轮构建中途出现过 `src/PdxLauncher.Core/Online/Translation/Local/` 目录下
+  另一个会话正在写的文件留下的 CS0101/CS0111/CS0246，以及 `Keys` 未包含新键导致的 CS0117 + 连带 `WMC9999`。
+  判断方法：错误集中在自己没碰过的目录、文件 mtime 是「现在」、`git status --porcelain` 显示整个目录 `??`。
+  正确做法是**等**（轮询 build 直到对方写完），不要顺手去改别人的文件，也不要 `git checkout` 覆盖。
+- **`SteamBbCodeParser` 里局部变量重名会 CS0136**：`linkUrl` 与 `imageUrl` 分开命名即可。
+- **自检类的签名必须是 `public static int Run(IFileSystem fs)`**：`Program.Discover()` 用反射找这个签名，写成无参 `Run()` 不会被发现，会静默少跑。
+
+### 7. 注意
+
+- 描述上限按**字节**，`modstudio.bytesCounter` 展示的也是字节；用户写英文时看起来「才 300 多」是正常的。
+- 预览是只读的 `MarkdownView`，不参与提交；提交的永远是描述框里的 BBCode 原文。
+- 上传页在这个版本**没有做「所见即所得」**，也**不做** `[table]`（Steam 描述里实测无人使用，解析器也不认，会原样保留）。
+- 自检类数 73 → 80（本轮 +2，其余是并发会话新增的播放集排序相关类）。HANDOFF 与 README 的计数要一起改。

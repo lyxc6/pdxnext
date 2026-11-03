@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
+using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.Core.Playsets;
 
@@ -53,20 +54,17 @@ internal static class ModPathRepairDialog
         };
         panel.Children.Add(error);
 
-        var dialog = new ContentDialog
+        var overlay = ConfirmOverlay.Host;
+        if (overlay is null)
         {
-            XamlRoot = xamlRoot,
-            Title = localizer.ModsRepairDialogTitle,
-            Content = new ScrollViewer { Content = panel, MaxHeight = 420 },
-            PrimaryButtonText = localizer.ModsRepairApply,
-            CloseButtonText = localizer.CommonCancel,
-            DefaultButton = ContentDialogButton.Primary,
-        };
+            return Array.Empty<ModPathRepair>();
+        }
 
+        // 确认键可用性跟着勾选状态走：没勾任何一项（或改名非法）时不能点「应用」。
         void Refresh()
         {
             var invalid = entries.Any(entry => entry.Include.IsChecked == true && !entry.IsNameValid);
-            dialog.IsPrimaryButtonEnabled = entries.Any(entry => entry.Include.IsChecked == true) && !invalid;
+            overlay.IsConfirmEnabled = entries.Any(entry => entry.Include.IsChecked == true) && !invalid;
             error.Visibility = invalid ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -84,10 +82,16 @@ internal static class ModPathRepairDialog
             }
         }
 
+        var showTask = overlay.ShowAsync(
+            localizer.ModsRepairDialogTitle,
+            new ScrollViewer { Content = panel, MaxHeight = 420 },
+            localizer.ModsRepairApply,
+            localizer.CommonCancel);
+
         Refresh();
 
-        var result = await dialog.ShowAsync();
-        if (result != ContentDialogResult.Primary)
+        var confirmedResult = await showTask;
+        if (!confirmedResult)
         {
             return Array.Empty<ModPathRepair>();
         }

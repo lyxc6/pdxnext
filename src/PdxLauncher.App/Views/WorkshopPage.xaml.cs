@@ -2,12 +2,15 @@ namespace PdxLauncher.App.Views;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using PdxLauncher.App.Controls;
 
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Online;
+using Windows.System;
 
 /// <summary>
 /// 创意工坊页：按当前游戏显示 Steam 创意工坊或 Paradox Mods（二选一，没有来源切换页签）。
@@ -74,7 +77,7 @@ public sealed partial class WorkshopPage : Page
             AppServices.CurrentGameChanged -= OnCurrentGameChanged;
             AppServices.CurrentGameChanged += OnCurrentGameChanged;
 
-            // x:Bind 在 InitializeComponent 里按属性顺序赋值，ComboBox 的 SelectedItem 可能先于
+            // x:Bind 在 InitializeComponent 里按属性顺序赋值，下拉控件的 SelectedItem 可能先于
             // ItemsSource 生效而被清空；这里兜底补一次，保证排序框初始显示当前排序方式。
             if (SortBox.SelectedItem is null)
             {
@@ -116,6 +119,7 @@ public sealed partial class WorkshopPage : Page
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
+        _viewModel.CancelPendingQuery();
         _lifetime.Cancel();
     }
 
@@ -188,7 +192,8 @@ public sealed partial class WorkshopPage : Page
 
     /// <summary>
     /// 搜索框输入。x:Bind 不支持 UpdateSourceTrigger，所以 Text 只做 OneWay 绑定，
-    /// 由这里把用户输入写回 ViewModel（写回会触发回到第一页重查）。
+    /// 由这里把用户输入写回 ViewModel。写回只更新文本，**不发请求**：
+    /// 真正提交的是回车（<see cref="OnSearchKeyDown"/>）或刷新按钮。
     /// </summary>
     private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
     {
@@ -209,16 +214,43 @@ public sealed partial class WorkshopPage : Page
         }
         catch (Exception ex)
         {
-            AppServices.Logger.Error("WorkshopPage 搜索失败", ex);
+            AppServices.Logger.Error("WorkshopPage 搜索框回写失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 搜索框回车：提交当前文本并重查第一页。
+    /// 打字过程中不查询 —— 每个字符都会排一次 1–3 MB 的工坊页请求，页面看起来就像卡死。
+    /// </summary>
+    private async void OnSearchKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (e.Key != VirtualKey.Enter)
+        {
+            return;
+        }
+
+        e.Handled = true;
+
+        try
+        {
+            await _viewModel.CommitSearchAsync().ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面已关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("WorkshopPage 搜索提交失败", ex);
         }
     }
 
     /// <summary>排序下拉框选择变化：写回 ViewModel 触发重查。</summary>
-    private void OnSortSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OnSortSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
     {
         try
         {
-            if (sender is not ComboBox box || box.SelectedItem is not string mode)
+            if (e.SelectedItem is not string mode)
             {
                 return;
             }
@@ -237,11 +269,11 @@ public sealed partial class WorkshopPage : Page
     }
 
     /// <summary>时间范围下拉框选择变化：写回 ViewModel 触发重查（仅 Steam）。</summary>
-    private void OnTimeRangeSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OnTimeRangeSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
     {
         try
         {
-            if (sender is not ComboBox box || box.SelectedItem is not string range)
+            if (e.SelectedItem is not string range)
             {
                 return;
             }

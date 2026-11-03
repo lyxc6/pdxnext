@@ -42,6 +42,49 @@ public sealed class DataRootMigrator
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "PdxNext");
 
+    /// <summary>
+    /// 旧的每用户安装数据目录（安装到 %LOCALAPPDATA%\Programs\PdxNext 时的 data\）。
+    /// 从每用户升级为每机器安装后，用它把数据搬到新的每用户数据目录。
+    /// </summary>
+    public static string PerUserInstallDataRoot =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Programs",
+            "PdxNext",
+            "data");
+
+    /// <summary>
+    /// 依次尝试多个源目录，第一个成功复制的源即停止。
+    /// 用于每机器安装时同时兼容旧版每用户安装数据与更早的 %LOCALAPPDATA%\PdxNext。
+    /// </summary>
+    public static DataMigrationResult MigrateFirstAvailable(
+        IFileSystem fileSystem,
+        IAppLogger logger,
+        string targetRoot,
+        params string[] sourceRoots)
+    {
+        ArgumentNullException.ThrowIfNull(fileSystem);
+        ArgumentNullException.ThrowIfNull(logger);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetRoot);
+
+        foreach (var sourceRoot in sourceRoots.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (string.IsNullOrWhiteSpace(sourceRoot) ||
+                string.Equals(sourceRoot, targetRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var result = new DataRootMigrator(fileSystem, logger, sourceRoot, targetRoot).Migrate();
+            if (result.Migrated)
+            {
+                return result;
+            }
+        }
+
+        return new DataMigrationResult(false, 0, 0, null);
+    }
+
     public DataMigrationResult Migrate()
     {
         if (string.Equals(_sourceRoot, _targetRoot, StringComparison.OrdinalIgnoreCase))

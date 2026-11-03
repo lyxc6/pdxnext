@@ -376,6 +376,16 @@ public static class HtmlDescriptionParser
                     return;
                 }
 
+                case "hr":
+                    // Steam 把 BBCode 的 [hr] 渲染成 <hr>；此前没有分支，分隔线被静默丢掉，
+                    // 于是「同一段描述走 HTML 路径和走 BBCode 路径排版不一样」。
+                    if (!_inPre)
+                    {
+                        Flush();
+                        Blocks.Add(new MarkdownRule());
+                    }
+
+                    return;
                 case "pre":
                     Flush();
                     _inPre = true;

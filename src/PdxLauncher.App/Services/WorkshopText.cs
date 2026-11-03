@@ -19,66 +19,10 @@ public static class WorkshopText
     /// <param name="source">原始描述；null 或空白返回空串。</param>
     public static string ToPlainText(string? source)
     {
-        if (string.IsNullOrWhiteSpace(source))
-        {
-            return string.Empty;
-        }
-
-        var text = source;
-
-        // HTML 换行先转成真换行，再统一剥离标签。
-        text = text
-            .Replace("<br />", "\n", StringComparison.OrdinalIgnoreCase)
-            .Replace("<br/>", "\n", StringComparison.OrdinalIgnoreCase)
-            .Replace("<br>", "\n", StringComparison.OrdinalIgnoreCase)
-            .Replace("</p>", "\n\n", StringComparison.OrdinalIgnoreCase)
-            .Replace("<p>", string.Empty, StringComparison.OrdinalIgnoreCase);
-
-        // Steam 描述是 BBCode：[b]x[/b]、[h1]x[/h1]、[url=…]x[/url]、[list][*]x[/list]。
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\[/?(b|i|u|h[1-6]|list|\*)\]", string.Empty);
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\[/?(url|img)[^\]]*\]", string.Empty);
-
-        var stripped = new System.Text.StringBuilder(text.Length);
-        var inTag = false;
-        foreach (var ch in text)
-        {
-            if (ch == '<')
-            {
-                inTag = true;
-            }
-            else if (ch == '>')
-            {
-                inTag = false;
-            }
-            else if (!inTag)
-            {
-                stripped.Append(ch);
-            }
-        }
-
-        text = System.Net.WebUtility.HtmlDecode(stripped.ToString());
-
-        // [文字](地址) → 文字（地址）；裸地址保持原样。
-        text = System.Text.RegularExpressions.Regex.Replace(
-            text,
-            @"\[([^\]]+)\]\((https?://[^)\s]+)\)",
-            "$1（$2）");
-
-        // 行首井号：### 标题 → 标题。只吃行内空格，绝不能跨行。
-        text = System.Text.RegularExpressions.Regex.Replace(
-            text,
-            @"(?m)^[ \t]{0,3}#{1,6}[ \t]*",
-            string.Empty);
-
-        text = text
-            .Replace("**", string.Empty, StringComparison.Ordinal)
-            .Replace("__", string.Empty, StringComparison.Ordinal)
-            .Replace("`", string.Empty, StringComparison.Ordinal);
-
-        // 收掉三行以上的连续空行。
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"(\r?\n){3,}", "\n\n");
-
-        return text.Trim();
+        // 清洗规则只有一份，放在 Core 里：详情页的 BBCode 兜底路径、上传页的字节计数、
+        // 这里的纯文本摘要必须对同一段描述得出同一个结果，否则「预览里有分隔线、
+        // 详情里却露出一截 [hr]」这种分叉会反复出现。
+        return PdxLauncher.Core.Text.WorkshopHtml.ToPlainText(source);
     }
 
     /// <summary>把多个片段拼成一行：空白段丢弃、逐段 Trim、重复段只留第一个。</summary>

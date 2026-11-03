@@ -23,6 +23,8 @@
   "account.status": "登录状态",
   "account.statusHint": "登录后可以浏览 PDX Mods 平台、查看订阅与收藏的 mod。",
   "account.statusNotReady": "启动器尚未完成初始化",
+  "account.statusSessionAuto": "已登录 · 下次启动自动续期",
+  "account.statusSessionOnce": "已登录 · 仅本次运行有效",
   "account.statusSignInOk": "Paradox 账号登录成功",
   "account.statusSignOutOk": "已退出 Paradox 账号",
   "account.statusSignedIn": "已登录：{0}（{1}）",

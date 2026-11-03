@@ -5,6 +5,7 @@ using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Online.Translation;
+using PdxLauncher.Core.Online.Translation.Local;
 using PdxLauncher.Core.Text;
 
 /// <summary>
@@ -27,6 +28,7 @@ public sealed class TranslationCoordinator : IDisposable
     private readonly ITranslationTransport _transport;
     private readonly TranslationCache? _cache;
     private readonly IAppLogger _logger;
+    private readonly LocalTranslationRuntime? _local;
     private readonly SemaphoreSlim _gate = new(MaxConcurrency, MaxConcurrency);
     private readonly object _stateLock = new();
 
@@ -37,10 +39,12 @@ public sealed class TranslationCoordinator : IDisposable
     /// <param name="transport">翻译专用 HTTP 传输。</param>
     /// <param name="cache">译文缓存；null 表示不缓存。</param>
     /// <param name="logger">日志。</param>
+    /// <param name="local">本地离线翻译运行时；null 表示不提供本地引擎。</param>
     public TranslationCoordinator(
         ITranslationTransport transport,
         TranslationCache? cache,
-        IAppLogger logger)
+        IAppLogger logger,
+        LocalTranslationRuntime? local = null)
     {
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(logger);
@@ -48,6 +52,7 @@ public sealed class TranslationCoordinator : IDisposable
         _transport = transport;
         _cache = cache;
         _logger = logger;
+        _local = local;
 
         // 界面语言变了，目标语言（默认跟随界面）也会变：作废在途批次并重新授权主机。
         Localizer.Instance.LanguageChanged += OnLanguageChanged;
@@ -81,6 +86,24 @@ public sealed class TranslationCoordinator : IDisposable
 
     /// <summary>翻译功能当前是否开启。</summary>
     public bool IsEnabled => CurrentOptions.Enabled;
+
+    /// <summary>
+    /// 探针文本：设置页「测试翻译」用它让每个引擎各翻一句。
+    /// 短句 + 不写缓存，重复点击不会污染真实译文缓存。
+    /// </summary>
+    public const string ProbeText = "Hello, this is a translation test.";
+
+    /// <summary>
+    /// 最近一次批次「一条都没翻出来」时的原因（形如 <c>mymemory: 未返回译文</c>）；
+    /// 有任意一条成功就是 null。界面据此决定要不要提示用户去设置页。
+    /// </summary>
+    public string? LastFailure { get; private set; }
+
+    /// <summary>
+    /// 在途状态：只用来看「此刻有没有翻译请求在跑」，界面据此显示「正在翻译…」的环形进度与文字。
+    /// 计数点在 <see cref="TranslateBatchAsync"/>，所有翻译调用都会经过那里。
+    /// </summary>
+    public TranslationActivityMonitor Activity { get; } = new();
 
     /// <summary>清空译文缓存（设置页的「清理缓存」用）；没有缓存时什么都不做。</summary>
     public void ClearCache() => _cache?.Clear();
@@ -127,6 +150,10 @@ public sealed class TranslationCoordinator : IDisposable
         // 自填 API 的主机每次都确认一遍授权：设置改了地址、或者协调器先于设置装配时都靠这一步兜住。
         AuthorizeCustomHost();
 
+        // 从这里到批次返回都算「在途」：排队等并发闸门的批次也计入，
+        // 否则并发 4 以外排队的那些批次会让界面的提示提前消失。
+        using var activity = Activity.Begin();
+
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, SettingsToken());
         try
         {
@@ -140,7 +167,12 @@ public sealed class TranslationCoordinator : IDisposable
         try
         {
             var service = CreateService(options);
-            return await service.TranslateAsync(texts, options, linked.Token).ConfigureAwait(false);
+            var translated = await service.TranslateAsync(texts, options, linked.Token).ConfigureAwait(false);
+
+            // 整批失败的原因留在协调器上，页面用它拼一句可读提示；
+            // 成功时置空，免得旧原因一直挂着。
+            LastFailure = service.LastFailure;
+            return translated;
         }
         catch (OperationCanceledException)
         {
@@ -200,16 +232,128 @@ public sealed class TranslationCoordinator : IDisposable
     }
 
     /// <summary>
+    /// 逐个引擎各译一句探针文本，供设置页「测试翻译」判断到底哪个引擎能用。
+    /// <para>
+    /// 每个引擎单独起一个服务、且不带缓存：这里要的是真实连通性，不是缓存命中；
+    /// 探测不看当前模式（模式只决定正式翻译走哪条链），所有「已配置」的引擎都会试一次。
+    /// </para>
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<IReadOnlyList<TranslationProbeResult>> ProbeAsync(CancellationToken cancellationToken)
+    {
+        AuthorizeCustomHost();
+
+        // 探测与「翻译开关」无关：关着也能测，否则用户没法先验证再开启。
+        var options = CurrentOptions with { Enabled = true };
+        var candidates = CreateProbeEngines(options);
+
+        var results = new List<TranslationProbeResult>(candidates.Count);
+        foreach (var (key, engine) in candidates)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+
+            var service = new TranslationService([engine], cache: null, _logger);
+            string? text = null;
+            _logger.Info("探测翻译引擎：" + engine.Id);
+            try
+            {
+                var translated = await service.TranslateAsync([ProbeText], options, cancellationToken)
+                    .ConfigureAwait(false);
+                text = translated.Count > 0 ? translated[0] : null;
+                _logger.Info("探测结果（" + engine.Id + "）：" + (text is null ? "无译文" : "有译文"));
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn("翻译探测失败（" + engine.Id + "）：" + ex.Message);
+            }
+
+            var ok = !string.IsNullOrWhiteSpace(text);
+            results.Add(new TranslationProbeResult(key, ok, ok ? text! : (service.LastFailure ?? "未返回译文")));
+        }
+
+        return results;
+    }
+
+    /// <summary>探测用引擎清单：每个引擎单独一项，与当前模式无关。</summary>
+    private List<(string Key, ITranslationEngine Engine)> CreateProbeEngines(TranslationOptions options)
+    {
+        var engines = new List<(string Key, ITranslationEngine Engine)>();
+
+        if (options.HasCustomConfiguration)
+        {
+            engines.Add((TranslationEngineModes.Custom, new OpenAiCompatibleTranslationEngine(
+                _transport,
+                _logger,
+                options.BaseUrl,
+                options.ApiKey,
+                options.Model)));
+        }
+
+        if (options.HasMicrosoftConfiguration)
+        {
+            engines.Add((TranslationEngineModes.Microsoft, new MicrosoftTranslatorEngine(
+                _transport,
+                _logger,
+                options.MicrosoftKey,
+                options.MicrosoftRegion)));
+        }
+
+        if (options.HasGoogleCloudConfiguration)
+        {
+            engines.Add((TranslationEngineModes.GoogleCloud, new GoogleCloudTranslationEngine(
+                _transport,
+                _logger,
+                options.GoogleKey)));
+        }
+
+        engines.Add((TranslationEngineModes.MyMemory, new MyMemoryTranslationEngine(_transport, _logger)));
+        engines.Add((TranslationEngineModes.Builtin, new FreeTranslationEngine(_transport, _logger)));
+
+        return engines;
+    }
+
+    /// <summary>
     /// 按当前设置临时构建翻译服务（引擎随设置变，不能提前烤好）。
     /// <para>
-    /// 引擎列表的顺序即回落优先级：「自动」按 自填 API → 微软 → 谷歌云 → 内置免费 依次尝试；
+    /// 引擎列表的顺序即回落优先级：「自动」按 本地离线 → 自填 API → 微软 → 谷歌云 → MyMemory → 内置免费 依次尝试；
     /// 其余模式只放对应的引擎，失败不回落。
+    /// MyMemory 排在谷歌免费前面，是因为谷歌那个公开端点在不少网络里根本连不上
+    /// （TLS 握手失败），排在前面等于每页都先白等一次超时。
     /// </para>
     /// </summary>
     private TranslationService CreateService(TranslationOptions options)
     {
         var engines = new List<ITranslationEngine>();
         var mode = TranslationEngineModes.Normalize(options.EngineMode);
+
+        // 本地离线引擎排在最前：装好模型后不需要联网，也不需要任何凭据。
+        if (_local is not null &&
+            (mode == TranslationEngineModes.Auto ||
+             mode == TranslationEngineModes.Local ||
+             mode == TranslationEngineModes.IndexTranslate ||
+             mode == TranslationEngineModes.Bergamot))
+        {
+            var local = _local.CreateEngines();
+            if (mode == TranslationEngineModes.IndexTranslate)
+            {
+                engines.AddRange(local.Where(engine => engine.Id == IndexTranslateEngine.EngineId));
+            }
+            else if (mode == TranslationEngineModes.Bergamot)
+            {
+                engines.AddRange(local.Where(engine => engine.Id == BergamotTranslationEngine.EngineId));
+            }
+            else
+            {
+                engines.AddRange(local);
+            }
+        }
 
         if (mode == TranslationEngineModes.Auto || mode == TranslationEngineModes.Custom)
         {
@@ -245,6 +389,11 @@ public sealed class TranslationCoordinator : IDisposable
                     _logger,
                     options.GoogleKey));
             }
+        }
+
+        if (mode == TranslationEngineModes.Auto || mode == TranslationEngineModes.MyMemory)
+        {
+            engines.Add(new MyMemoryTranslationEngine(_transport, _logger));
         }
 
         if (mode == TranslationEngineModes.Auto || mode == TranslationEngineModes.Builtin)

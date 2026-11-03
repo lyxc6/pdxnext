@@ -272,6 +272,21 @@
                                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                                Style="{StaticResource CaptionTextBlockStyle}" />
                                 </Border>
+                                <Border Padding="8,3"
+                                        HorizontalAlignment="Left"
+                                        Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                                        CornerRadius="4"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSteamUpdateHint), Mode=OneWay}">
+                                    <TextBlock Text="{x:Bind L.WorkshopDetailSteamNeedsUpdate, Mode=OneWay}"
+                                               Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                               Style="{StaticResource CaptionTextBlockStyle}" />
+                                </Border>
+                                <TextBlock Text="{x:Bind ViewModel.SteamDownloadProgressText, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"
+                                           AutomationProperties.AutomationId="txtWorkshopDetailSteamDownloadProgress"
+                                           Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasSteamDownloadProgress), Mode=OneWay}" />
                                 <ProgressRing Width="16"
                                               Height="16"
                                               HorizontalAlignment="Left"
@@ -376,6 +391,19 @@
                                    TextWrapping="Wrap" />
                     </Border>
 
+                    <!-- 翻译没出结果：说明原因，并指路到设置页的「测试翻译」。 -->
+                    <Border Padding="12"
+                            CornerRadius="8"
+                            BorderThickness="1"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasTranslationNotice), Mode=OneWay}">
+                        <TextBlock Text="{x:Bind ViewModel.TranslationNotice, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   TextWrapping="Wrap"
+                                   AutomationProperties.AutomationId="txtWorkshopDetailTranslationNotice" />
+                    </Border>
+
                     <!-- 4. 描述（Markdown / HTML 富文本） -->
                     <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -392,7 +420,28 @@
                                               AutomationProperties.AutomationId="txtWorkshopDetailDescription"
                                               AutomationProperties.Name="{x:Bind ViewModel.DescriptionText, Mode=OneWay}"
                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasDescription), Mode=OneWay}" />
-                            <!-- 译文：原文与译文同显，译文块放在原文下方的描边框里（决策：不做二选一切换）。 -->
+                            <!-- 翻译在途：等译文时先在译文位置显示环形进度 + 说明，译好原地替换（原文始终可见）。 -->
+                            <Border Margin="0,8,0,0"
+                                    Padding="10"
+                                    CornerRadius="6"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowTranslatingDescription), Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <ProgressRing Width="16"
+                                                  Height="16"
+                                                  IsActive="{x:Bind ViewModel.ShowTranslatingDescription, Mode=OneWay}"
+                                                  AutomationProperties.AutomationId="ringTranslatingDescription" />
+                                    <TextBlock Text="{x:Bind L.WorkshopDetailTranslatingDescription, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               VerticalAlignment="Center"
+                                               AutomationProperties.AutomationId="txtTranslatingDescription"
+                                               AutomationProperties.LiveSetting="Polite" />
+                                </StackPanel>
+                            </Border>
+                            <!-- 译文：原文与译文同显，译文块放在原文下方的描边框里（决策：不做二选一切换；只显示译文正文，不加「译文」标题）。 -->
                             <Border Margin="0,8,0,0"
                                     Padding="10"
                                     CornerRadius="6"
@@ -400,17 +449,12 @@
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1"
                                     Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasTranslatedDescription), Mode=OneWay}">
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="{x:Bind L.WorkshopTranslateLabel, Mode=OneWay}"
-                                               Style="{StaticResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <ctl:MarkdownView x:Name="TranslatedDescriptionView"
-                                                      Markdown="{x:Bind ViewModel.TranslatedDescriptionDocument, Mode=OneWay}"
-                                                      LinkRequested="OnMarkdownLinkRequested"
-                                                      ImageRequested="OnMarkdownImageRequested"
-                                                      AutomationProperties.AutomationId="txtWorkshopDetailTranslatedDescription"
-                                                      AutomationProperties.Name="{x:Bind ViewModel.TranslatedDescriptionText, Mode=OneWay}" />
-                                </StackPanel>
+                                <ctl:MarkdownView x:Name="TranslatedDescriptionView"
+                                                  Markdown="{x:Bind ViewModel.TranslatedDescriptionDocument, Mode=OneWay}"
+                                                  LinkRequested="OnMarkdownLinkRequested"
+                                                  ImageRequested="OnMarkdownImageRequested"
+                                                  AutomationProperties.AutomationId="txtWorkshopDetailTranslatedDescription"
+                                                  AutomationProperties.Name="{x:Bind ViewModel.TranslatedDescriptionText, Mode=OneWay}" />
                             </Border>
                             <TextBlock Text="{x:Bind L.WorkshopDetailNoDescription, Mode=OneWay}"
                                        Style="{StaticResource CaptionTextBlockStyle}"
@@ -493,7 +537,28 @@
                                               LinkRequested="OnMarkdownLinkRequested"
                                               ImageRequested="OnMarkdownImageRequested"
                                               AutomationProperties.AutomationId="txtWorkshopDetailChangelog" />
-                            <!-- 译文：原文与译文同显，译文放在描边框里。 -->
+                            <!-- 翻译在途：更新日志也是一次整篇翻译，先在译文位置给一条带文字的环形进度。 -->
+                            <Border Margin="0,8,0,0"
+                                    Padding="10"
+                                    CornerRadius="6"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowTranslatingChangelog), Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <ProgressRing Width="16"
+                                                  Height="16"
+                                                  IsActive="{x:Bind ViewModel.ShowTranslatingChangelog, Mode=OneWay}"
+                                                  AutomationProperties.AutomationId="ringTranslatingChangelog" />
+                                    <TextBlock Text="{x:Bind L.WorkshopDetailTranslatingChangelog, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               VerticalAlignment="Center"
+                                               AutomationProperties.AutomationId="txtTranslatingChangelog"
+                                               AutomationProperties.LiveSetting="Polite" />
+                                </StackPanel>
+                            </Border>
+                            <!-- 译文：原文与译文同显，译文放在描边框里（只显示译文正文，不加「译文」标题）。 -->
                             <Border Margin="0,8,0,0"
                                     Padding="10"
                                     CornerRadius="6"
@@ -501,16 +566,11 @@
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1"
                                     Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasTranslatedChangelog), Mode=OneWay}">
-                                <StackPanel Spacing="4">
-                                    <TextBlock Text="{x:Bind L.WorkshopTranslateLabel, Mode=OneWay}"
-                                               Style="{StaticResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                    <ctl:MarkdownView x:Name="TranslatedChangelogView"
-                                                      Markdown="{x:Bind ViewModel.TranslatedChangelogDocument, Mode=OneWay}"
-                                                      LinkRequested="OnMarkdownLinkRequested"
-                                                      ImageRequested="OnMarkdownImageRequested"
-                                                      AutomationProperties.AutomationId="txtWorkshopDetailTranslatedChangelog" />
-                                </StackPanel>
+                                <ctl:MarkdownView x:Name="TranslatedChangelogView"
+                                                  Markdown="{x:Bind ViewModel.TranslatedChangelogDocument, Mode=OneWay}"
+                                                  LinkRequested="OnMarkdownLinkRequested"
+                                                  ImageRequested="OnMarkdownImageRequested"
+                                                  AutomationProperties.AutomationId="txtWorkshopDetailTranslatedChangelog" />
                             </Border>
                         </StackPanel>
                     </Border>
@@ -595,6 +655,22 @@
                                        Style="{StaticResource CaptionTextBlockStyle}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowNoComments), Mode=OneWay}" />
+                            <!-- 翻译在途：评论是逐条翻的（一条几秒），用一条带文字的环形进度概括整段，译好一条挂一条。 -->
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="10"
+                                        Margin="0,0,0,2"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowTranslatingComments), Mode=OneWay}">
+                                <ProgressRing Width="16"
+                                              Height="16"
+                                              IsActive="{x:Bind ViewModel.ShowTranslatingComments, Mode=OneWay}"
+                                              AutomationProperties.AutomationId="ringTranslatingComments" />
+                                <TextBlock Text="{x:Bind L.WorkshopDetailTranslatingComments, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           VerticalAlignment="Center"
+                                           AutomationProperties.AutomationId="txtTranslatingComments"
+                                           AutomationProperties.LiveSetting="Polite" />
+                            </StackPanel>
                             <ItemsControl ItemsSource="{x:Bind ViewModel.Comments, Mode=OneWay}"
                                           AutomationProperties.AutomationId="lstWorkshopComments">
                                 <ItemsControl.ItemTemplate>
@@ -622,7 +698,7 @@
                                                                   LinkRequested="OnMarkdownLinkRequested"
                                                                   ImageRequested="OnMarkdownImageRequested"
                                                                   AutomationProperties.Name="{x:Bind BodyPlain}" />
-                                                <!-- 译文：原文与译文同显；评论模板按 x:DataType 绑定，L 取自 LocalizedObservableObject。 -->
+                                                <!-- 译文：原文与译文同显，只显示译文正文（不加「译文」标题）；评论模板按 x:DataType 绑定，L 取自 LocalizedObservableObject。 -->
                                                 <Border Margin="0,6,0,0"
                                                         Padding="10"
                                                         CornerRadius="6"
@@ -630,15 +706,10 @@
                                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                                         BorderThickness="1"
                                                         Visibility="{x:Bind svc:XamlVisibility.FromBool(HasTranslation), Mode=OneWay}">
-                                                    <StackPanel Spacing="4">
-                                                        <TextBlock Text="{x:Bind L.WorkshopTranslateLabel, Mode=OneWay}"
-                                                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                                        <ctl:MarkdownView Markdown="{x:Bind TranslatedBody, Mode=OneWay}"
-                                                                          LinkRequested="OnMarkdownLinkRequested"
-                                                                          ImageRequested="OnMarkdownImageRequested"
-                                                                          AutomationProperties.Name="{x:Bind TranslatedBodyPlain}" />
-                                                    </StackPanel>
+                                                    <ctl:MarkdownView Markdown="{x:Bind TranslatedBody, Mode=OneWay}"
+                                                                      LinkRequested="OnMarkdownLinkRequested"
+                                                                      ImageRequested="OnMarkdownImageRequested"
+                                                                      AutomationProperties.Name="{x:Bind TranslatedBodyPlain}" />
                                                 </Border>
                                             </StackPanel>
                                         </Border>

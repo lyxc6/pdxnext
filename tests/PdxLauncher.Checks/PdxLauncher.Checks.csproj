@@ -61,5 +61,35 @@
       这种错不会崩，只在真机上表现为「登录坏了」，所以口径要能被 AccountChecks 钉住。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\AccountErrorText.cs" Link="Linked\AccountErrorText.cs" />
+    <!--
+      账号页身份卡的取值规则（首字母 / 名字 / 显示名是否就是邮箱）。它只依赖 System.*，
+      可以原样链接进来。规则错了不会崩，只会在真机上表现为「头像上是个 1」「状态行把同一个
+      邮箱写两遍」「已登录却写着未登录」，编译器看不见，所以必须由 AccountDisplayTextChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\AccountDisplayText.cs" Link="Linked\AccountDisplayText.cs" />
+    <!--
+      翻译在途计数器（标题栏「正在翻译…」的唯一数据源）。它只依赖 System.Threading，不碰 UI 类型，
+      可以原样链接进来。计数漏减，界面会永远显示「正在翻译」；重复减，提示会提前消失——
+      两种都不会崩，只在真机上表现为「提示一直转」或「看不见提示」，所以由 TranslationActivityChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\TranslationActivityMonitor.cs" Link="Linked\TranslationActivityMonitor.cs" />
+    <!--
+      自动排序服务（扫描 mod 实际文件足迹 → 分层分类 → 冲突图 → Kahn 排序 → 预览）。
+      只用 Core 的 IFileSystem / IAppLogger / GameInstallation / Core.Mods.Sorting，
+      不碰任何 UI 类型，可以原样链接进来，由 PlaySetAutoSortServiceChecks
+      用临时目录 + 临时 launcher-v2.sqlite 钉住边映射与降级口径。
+    -->
+    <Compile Include="..\\..\\src\\PdxLauncher.App\\Services\\PlaySetAutoSortService.cs" Link="Linked\\PlaySetAutoSortService.cs" />
+    <!--
+      自动排序预览产物（足迹/边/冲突/结果/重排行）是纯不可变 record，
+      随服务一起链接，供预览对话框与自检共用同一套字段口径。
+    -->
+    <Compile Include="..\\..\\src\\PdxLauncher.App\\Services\\AutoSortPreview.cs" Link="Linked\\AutoSortPreview.cs" />
+    <!--
+      自动排序差异模型（预览结果 → 「谁移到哪 + 理由」的排版行）。纯不可变 record + 纯映射，
+      只依赖 Core 的 record 类型，不碰 UI，可以原样链接进来。行序、Moved 标记或理由映射错了
+      不会崩，只在预览对话框里给出错误的排序理由，编译器看不见，所以由 AutoSortDiffChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\AutoSortDiff.cs" Link="Linked\AutoSortDiff.cs" />
   </ItemGroup>
 </Project>

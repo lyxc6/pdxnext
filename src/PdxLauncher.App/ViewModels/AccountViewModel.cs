@@ -77,7 +77,12 @@ public sealed partial class AccountViewModel : LocalizedObservableObject
     /// <summary>已登录时显示退出面板。</summary>
     public bool ShowSignedInPanel => IsSignedIn;
 
-    /// <summary>账号状态文案：未登录 / 正在登录 / 已登录（含显示名与邮箱）。</summary>
+    /// <summary>账号状态文案：未登录 / 正在登录 / 已登录。</summary>
+    /// <remarks>
+    /// 已登录时不再固定拼「已登录：{显示名}（{邮箱}）」：Paradox 返回的 DisplayName 通常**就是**邮箱，
+    /// 那样会写成「已登录：1714769724@qq.com（1714769724@qq.com）」，同一个地址重复两遍。
+    /// 显示名与邮箱相同时改说这次登录的有效期（对应「保持登录」开关），信息量更大也不重复。
+    /// </remarks>
     public string StatusText
     {
         get
@@ -90,7 +95,18 @@ public sealed partial class AccountViewModel : LocalizedObservableObject
             var account = AppServices.Account;
             if (account.IsSignedIn && account.Session is { } session)
             {
-                return T(Keys.AccountStatusSignedIn, session.DisplayName, session.Email);
+                if (AccountDisplayText.SameIdentity(session.DisplayName, session.Email))
+                {
+                    return Remember
+                        ? T(Keys.AccountStatusSessionAuto)
+                        : T(Keys.AccountStatusSessionOnce);
+                }
+
+                var name = AccountDisplayText.ProfileName(
+                    session.DisplayName,
+                    session.Email,
+                    T(Keys.AccountNotSignedInTitle));
+                return T(Keys.AccountStatusSignedIn, name, session.Email);
             }
 
             return account.IsBusy
@@ -106,7 +122,8 @@ public sealed partial class AccountViewModel : LocalizedObservableObject
     public AccountStatusLevel StatusLevel => _statusLevel;
 
     /// <summary>
-    /// 头像首字母：已登录取显示名首字，否则取邮箱首字，都没有就用占位的 P。
+    /// 头像首字母：显示名里的第一个字母，取不到就退回邮箱本地段（规则见 <see cref="AccountDisplayText"/>）；
+    /// 都取不到时返回空串，让 PersonPicture 画通用的默认人像。
     /// </summary>
     public string Initials
     {
@@ -114,31 +131,26 @@ public sealed partial class AccountViewModel : LocalizedObservableObject
         {
             if (!AppServices.IsInitialized)
             {
-                return "P";
+                return string.Empty;
             }
 
             var account = AppServices.Account;
-            var name = account.IsSignedIn ? account.Session?.DisplayName : Email;
-            var trimmed = (name ?? string.Empty).Trim();
-            return trimmed.Length == 0
-                ? "P"
-                : char.ToUpperInvariant(trimmed[0]).ToString();
+            return account.IsSignedIn
+                ? AccountDisplayText.Initials(account.Session?.DisplayName, account.Session?.Email)
+                : AccountDisplayText.Initials(null, Email);
         }
     }
 
-    /// <summary>身份卡上的名字：已登录用显示名，未登录用「未登录」。</summary>
+    /// <summary>身份卡上的名字：显示名 → 邮箱 → 「未登录」。</summary>
     public string ProfileName
     {
         get
         {
-            if (AppServices.IsInitialized
-                && AppServices.Account.Session is { } session
-                && !string.IsNullOrWhiteSpace(session.DisplayName))
-            {
-                return session.DisplayName;
-            }
-
-            return T(Keys.AccountNotSignedInTitle);
+            var session = AppServices.IsInitialized ? AppServices.Account.Session : null;
+            return AccountDisplayText.ProfileName(
+                session?.DisplayName,
+                session?.Email,
+                T(Keys.AccountNotSignedInTitle));
         }
     }
 
@@ -212,7 +224,8 @@ public sealed partial class AccountViewModel : LocalizedObservableObject
     }
 
     /// <summary>会话状态可能变了（启动恢复完成 / 别的页面登录）：通知所有派生属性。</summary>
-    public void RaiseAccountProps()    {
+    public void RaiseAccountProps()
+    {
         OnPropertyChanged(nameof(IsBusy));
         OnPropertyChanged(nameof(IsSignedIn));
         OnPropertyChanged(nameof(CanEditCredentials));
@@ -272,6 +285,13 @@ public sealed partial class AccountViewModel : LocalizedObservableObject
 
         AppServices.Settings.PdxRememberMe = value;
         AppServices.SaveSettingsDeferred();
+
+        // 已登录时这个开关必须立刻生效：开就落盘、关就删掉磁盘上的会话。
+        // 光记偏好是不够的 —— 下次启动能不能自动续期只取决于登录那一刻有没有勾，改开关等于没反应。
+        AppServices.Account.ApplyRememberPreference(value);
+
+        // 状态行会跟着有效期说法变化（「自动续期」↔「仅本次运行有效」）。
+        OnPropertyChanged(nameof(StatusText));
     }
 
     /// <summary>语言切换后：状态文案与状态栏都要按新语言重建。</summary>

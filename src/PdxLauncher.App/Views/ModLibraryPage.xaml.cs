@@ -3,6 +3,7 @@ namespace PdxLauncher.App.Views;
 using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
@@ -27,7 +28,12 @@ public sealed partial class ModLibraryPage : Page
         InitializeComponent();
 
         _viewModel = new ModLibraryViewModel(
-            new ModLibraryService(AppServices.PlaySets, AppServices.Mods, AppServices.Logger),
+            new ModLibraryService(
+                AppServices.PlaySets,
+                AppServices.Mods,
+                AppServices.Logger,
+                SteamWorkshopBackends.CreateForState,
+                AppServices.WorkshopStates),
             AppServices.ModThumbnails,
             AppServices.Logger);
 
@@ -60,7 +66,7 @@ public sealed partial class ModLibraryPage : Page
             AppServices.CurrentGameChanged -= OnCurrentGameChanged;
             AppServices.CurrentGameChanged += OnCurrentGameChanged;
 
-            // x:Bind 在 InitializeComponent 里按属性顺序赋值，ComboBox 的 SelectedItem 可能先于
+            // x:Bind 在 InitializeComponent 里按属性顺序赋值，下拉控件的 SelectedItem 可能先于
             // ItemsSource 生效而被清空；这里兜底补一次，保证排序框初始显示当前排序方式。
             if (SortBox.SelectedItem is null)
             {
@@ -185,11 +191,11 @@ public sealed partial class ModLibraryPage : Page
     }
 
     /// <summary>排序下拉框选择变化：写回 ViewModel 触发重新排序。</summary>
-    private void OnSortSelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OnSortSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
     {
         try
         {
-            if (sender is not ComboBox box || box.SelectedItem is not string mode)
+            if (e.SelectedItem is not string mode)
             {
                 return;
             }
@@ -208,11 +214,11 @@ public sealed partial class ModLibraryPage : Page
     }
 
     /// <summary>来源下拉框选择变化：写回 ViewModel 触发重新过滤。</summary>
-    private void OnSourceFilterChanged(object sender, SelectionChangedEventArgs e)
+    private void OnSourceFilterChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
     {
         try
         {
-            if (sender is not ComboBox box || box.SelectedItem is not string mode)
+            if (e.SelectedItem is not string mode)
             {
                 return;
             }
@@ -262,9 +268,40 @@ public sealed partial class ModLibraryPage : Page
         }
     }
 
-    /// <summary>行尾「在浏览器中打开」：用默认浏览器打开该 mod 的创意工坊页面。</summary>
-    private void OnOpenBrowserClick(object sender, RoutedEventArgs e)
+    /// <summary>行尾「让 Steam 下载」：触发一次工坊条目的高优先级下载。</summary>
+    private async void OnSteamDownloadClick(object sender, RoutedEventArgs e)
     {
+        try
+        {
+            if (sender is FrameworkElement { DataContext: ModLibraryRowViewModel row })
+            {
+                await _viewModel.TriggerSteamDownloadAsync(row);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModLibraryPage 触发 Steam 下载失败", ex);
+        }
+    }
+
+    /// <summary>行尾「在 Steam 中禁用 / 启用」：切换工坊条目的本地禁用位。</summary>
+    private async void OnSteamDisableClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is FrameworkElement { DataContext: ModLibraryRowViewModel row })
+            {
+                await _viewModel.SetSteamDisabledLocallyAsync(row);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModLibraryPage 切换 Steam 本地禁用失败", ex);
+        }
+    }
+
+    /// <summary>行尾「在浏览器中打开」：用默认浏览器打开该 mod 的创意工坊页面。</summary>
+    private void OnOpenBrowserClick(object sender, RoutedEventArgs e)    {
         try
         {
             if (sender is FrameworkElement { DataContext: ModLibraryRowViewModel row })
