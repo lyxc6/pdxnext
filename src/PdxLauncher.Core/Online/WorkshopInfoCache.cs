@@ -1,5 +1,6 @@
 namespace PdxLauncher.Core.Online;
 
+using System.Linq;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -22,9 +23,19 @@ public sealed class WorkshopInfoCache
     /// <summary>详情正文的默认新鲜期；超过后下次打开详情会重新抓取。</summary>
     public static readonly TimeSpan DefaultDetailTtl = TimeSpan.FromDays(7);
 
+    /// <summary>
+    /// 索引最多保留的条目数；超出后按抓取时间淘汰最旧的。
+    /// 真实库里通常只有几百条，2000 条是给「换游戏 / 重装」留的余量，
+    /// 同时把最坏内存占用钉住（单条正文另有 <see cref="MaxDetailChars"/> 上限）。
+    /// </summary>
+    public const int MaxEntries = 2000;
+
+    /// <summary>详情正文最多保留的字符数；正文已清洗成纯文本，截断只影响极长帖子的尾巴。</summary>
+    public const int MaxDetailChars = 16 * 1024;
+
     private static readonly JsonSerializerOptions Options = new()
     {
-        WriteIndented = true,
+        WriteIndented = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
@@ -142,6 +153,7 @@ public sealed class WorkshopInfoCache
 
             target.FetchedUtc = _clock.UtcNow;
             _dirty = true;
+            TrimLocked();
         }
     }
 
@@ -301,7 +313,7 @@ public sealed class WorkshopInfoCache
                 _entries[key] = target;
             }
 
-            target.DetailText = text;
+            target.DetailText = ClampDetail(text);
             target.DetailScreenshots = screenshots is { Count: > 0 } ? [.. screenshots] : null;
 
             // 追加的元数据只在这次真拿到时才覆盖：PDX 详情没有这些字段，
@@ -412,6 +424,43 @@ public sealed class WorkshopInfoCache
         {
             _logger.Warn("创意工坊缓存索引写入失败：" + exception.Message);
         }
+    }
+
+    /// <summary>索引超限时按抓取时间丢掉最旧的条目；调用方必须已持有 <see cref="_gate"/>。</summary>
+    private void TrimLocked()
+    {
+        int overflow = _entries.Count - MaxEntries;
+        if (overflow <= 0)
+        {
+            return;
+        }
+
+        var stale = _entries
+            .OrderBy(pair => pair.Value.FetchedUtc ?? DateTimeOffset.MinValue)
+            .Take(overflow)
+            .Select(pair => pair.Key)
+            .ToList();
+        foreach (var key in stale)
+        {
+            _entries.Remove(key);
+        }
+    }
+
+    /// <summary>截断超长正文，且不把代理对切成半个字符。</summary>
+    private static string? ClampDetail(string? text)
+    {
+        if (string.IsNullOrEmpty(text) || text.Length <= MaxDetailChars)
+        {
+            return text;
+        }
+
+        int length = MaxDetailChars;
+        if (char.IsHighSurrogate(text[length - 1]))
+        {
+            length--;
+        }
+
+        return text[..length];
     }
 
     private static WorkshopInfoCacheEntry Clone(WorkshopInfoCacheEntry source) => new()

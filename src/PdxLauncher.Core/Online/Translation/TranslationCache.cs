@@ -17,8 +17,12 @@ using PdxLauncher.Core.Storage;
 /// </summary>
 public sealed class TranslationCache
 {
-    /// <summary>缓存条目上限；超出后淘汰最旧的条目。</summary>
-    public const int MaxEntries = 5000;
+    /// <summary>
+    /// 缓存条目上限；超出后淘汰最旧的条目。
+    /// 5000 条对译文缓存没有实际收益（真实库只有几百条），却让整份序列化变大，
+    /// 所以收到 2000——仍然远超日常使用量，最坏内存占用却小一半以上。
+    /// </summary>
+    public const int MaxEntries = 2000;
 
     /// <summary>缓存文档结构版本；结构变了就整份作废（老结构解析不出来自然回落）。</summary>
     public const int CacheVersion = 1;

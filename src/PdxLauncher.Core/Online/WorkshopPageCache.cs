@@ -24,8 +24,12 @@ public sealed class WorkshopPageCache
     /// <summary>保留期：超过这个时间的页直接丢弃（过期页仍可先显示，但不能无限堆在内存里）。</summary>
     public static readonly TimeSpan Retention = TimeSpan.FromHours(2);
 
-    /// <summary>最多保留的页数；超出后按抓取时间淘汰最旧的。</summary>
-    public const int MaxPages = 120;
+    /// <summary>
+    /// 最多保留的页数；超出后按抓取时间淘汰最旧的。
+    /// 120 页（约 3600 条）对「翻一会儿就回来」的用法太多，40 页足够覆盖一次浏览会话，
+    /// 也把内存里堆的整页正文压到原来的三分之一。
+    /// </summary>
+    public const int MaxPages = 40;
 
     private readonly IClock _clock;
     private readonly object _gate = new();

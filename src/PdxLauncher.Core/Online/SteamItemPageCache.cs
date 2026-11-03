@@ -26,15 +26,19 @@ public sealed class SteamItemPageCache
     /// <summary>条目页的默认新鲜期；超过后下次打开详情会重新抓取。</summary>
     public static readonly TimeSpan DefaultPageTtl = TimeSpan.FromHours(12);
 
-    /// <summary>最多保留的条目数；超出后按抓取时间淘汰最旧的。</summary>
-    public const int MaxEntries = 400;
+    /// <summary>
+    /// 最多保留的条目数；超出后按抓取时间淘汰最旧的。
+    /// 条目页是整页正文，最坏情况按单条上限算：150 × 128KB ≈ 19MB，
+    /// 比原来的 400 × 512KB（最坏 200MB）小一个数量级。
+    /// </summary>
+    public const int MaxEntries = 150;
 
     /// <summary>单条序列化后超过这个字节数就不落盘（描述里塞满 base64 图片的极端条目）。</summary>
-    public const int MaxEntryBytes = 512 * 1024;
+    public const int MaxEntryBytes = 128 * 1024;
 
     private static readonly JsonSerializerOptions Options = new()
     {
-        WriteIndented = true,
+        WriteIndented = false,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
