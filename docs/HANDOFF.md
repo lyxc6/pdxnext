@@ -62,6 +62,55 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-11-03 20:45 追加：发布链路改 GitHub Actions —— 推 `v*` tag 自动构建、自检、生成 Inno 安装器并上传 Release；新增 SemVer 版本规范 `docs/VERSIONING.md`、`CHANGELOG.md`、CI 工作流；发布仓库统一为公开的 `lyxc6/pdxnext`；见 §0.75。**
 **2026-11-03 23:55 追加：已发布到创意工坊却仍显示「未发布」—— 根因是隐藏条目对匿名 API 回 `EResult 9`（FileNotFound，**不等于不存在**），而启动器只认「自己发起的上传」；现给宿主加 `workshop-mine` / `workshop-mine-detail` 两个动词（回调 1312/1318，走本机登录态读自己发布的条目），Mod 创建页加「绑定已有条目…」入口、发布状态改四态（未发布 / 发布未完成 / 已发布（未公开）/ 已发布）并显示 Steam 真实可见性；自检 93→94；见 §0.76。**
 **2026-11-04 13:30 追加：创意工坊「搜不出来」—— 不是搜索坏了，是连不上 Steam 而错误被当成「用户取消」吞掉；根因是本机 DNS 被污染（steamcommunity.com → 104.244.46.21）+ 直连模式不读 `http_proxy`；现把连接超时翻译成 `NetworkTimeoutException`、工坊失败码分「结构变了 / 连不上」，状态栏写明原因并提示检测到的代理，设置页加「检测到的代理 → 使用」一键切换；自检 94→95；见 §0.77。**
+**2026-11-04 14:50 追加：工坊排序下拉缺「搜索相关度」—— Core 早就支持 `browsesort=textsearch`，但界面只列了 5 档、`ResolveSteamSort` 也永远返回不到 `TextSearch`；现补成 6 档（与网页同序），无关键词时回落「最热门」并在状态栏说明；自检 96→97；见 §0.79。**
+
+## 0.79 最新一轮（2026-11-04 14:45–15:05）：工坊排序下拉补上「搜索相关度」
+
+> 用户原话（m04069）：「steam搜索有个搜索相关度，怎么没有」
+> 截图对比：Steam 网页的排序菜单有 6 项 —— 最热门 / 最受好评（发布至今）/ 最近发行 / 最新更新 / **搜索相关度** / 不重复订阅者总计；本启动器的下拉只有 5 项，缺「搜索相关度」。
+
+### 0.79.1 结论先说：不是服务端不支持，是界面没接上
+
+| 层 | 状态 |
+| --- | --- |
+| `SteamWorkshopSort` 枚举 | 早就有 `TextSearch`（`src/PdxLauncher.Core/Online/SteamWorkshopModels.cs:13-32`） |
+| `SteamWorkshopClient.SortValue` | 早就映射 `TextSearch => "textsearch"`（`src/PdxLauncher.Core/Online/SteamWorkshopClient.cs:621-632`） |
+| `BuildBrowseUri` | 关键词与排序并存、`browsesort=textsearch` 原样透传；**只有**「要 textsearch 却没关键词」才回落 trend（`:76-80`） |
+| `WorkshopViewModel.SteamSortKeys` | **只有 5 项** —— 界面缺口的直接原因 |
+| `WorkshopViewModel.ResolveSteamSort()` | **只映射到 TopRated/MostRecent/MostUpdated/MostSubscribed/Trend**，永远返回不到 `TextSearch` |
+
+所以这一轮**没有改 Core**（改了只会平白增加回归面），只补了 UI 的两处映射 + 一条「没有关键词」的提示。
+
+### 0.79.2 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.App/ViewModels/WorkshopViewModel.cs` | `SteamSortKeys` 5→6 项，`Keys.WorkshopSortRelevance` 插在「最新更新」与「不重复订阅者总计」之间（与网页同序）；`ResolveSteamSort()` 加 `WorkshopSortRelevance => SteamWorkshopSort.TextSearch`；新增 `IsRelevanceWithoutKeyword()`；`QuerySteamAsync` 尾部状态栏三分支（空结果 / 相关度无关键词 / 正常条数） |
+| `tools/i18n/{zh-CN,en-US}/workshop.json` | 新增 `workshop.sortRelevance`、`workshop.sortRelevanceNeedsKeyword`（按键名字母序插入 `sortRating` 之后） |
+| `src/PdxLauncher.App/Localization/Strings.g.cs` | 重新生成，1161→1163 键（机器产物） |
+| `tests/PdxLauncher.Checks/WorkshopPageChecks.cs` | 新增 `CheckSteamSortsIncludeRelevance`：目录含该项且顺序正确、`ResolveSteamSort` 能映射到 `TextSearch`、`QuerySteamAsync` 带无关键词提示（3 条断言） |
+| `tests/PdxLauncher.Checks/SteamWorkshopApiChecks.cs` | `CheckBrowseUri` 补 3 条：`TextSearch` + 关键词 → 含 `browsesort=textsearch`、含 `searchtext=`、**不含** `days=` |
+
+### 0.79.3 三个设计决定（都写进了注释或自检）
+
+1. **常驻显示，不做「只有关键词才出现」**：`SortModes` 是按下标反查排序键（`ResolveSortKey` / `CurrentSortIndex`），动态增删档位会让选中项漂移，切换来源时更明显。
+2. **提交搜索时不自动切到「搜索相关度」**：用户可能就是想按「最受好评」筛关键词结果（网页也允许这两者并存）；自动切换等于替用户改筛选条件。
+3. **无关键词时按「最热门」显示并在状态栏写明**：服务端对没有 `searchtext` 的 `textsearch` 不做相关度排序（Core 已回落 trend），静默回落会让人以为排序坏了。
+
+### 0.79.4 验证
+
+- `dotnet build tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj -c Release -m:1` → 0 警告 0 错误。
+- `dotnet "tests/PdxLauncher.Checks/bin/Release/net10.0/PdxLauncher.Checks.dll"` → `检查类: 96，失败: 0`。
+- 实测生成的 URL：`...&browsesort=textsearch&num_per_page=30&p=1&searchtext=morgenrote`（无 `days=`）。
+- 隔离 worktree 全量构建 + 自检 + `python tools/gen-i18n.py --check`（见提交记录）。
+- 真机：选「搜索相关度」输入关键词回车，列表与「最热门」明显不同；清空关键词后状态栏出现提示、列表回落到热门。**升级后需重启程序**（旧进程持有旧 exe）。
+
+### 0.79.5 坑
+
+- **`SortModes` 是下标反查**：以后想加档位只加在末尾、或者同时改 `ResolveSortKey`，别在中途插队——这一轮插在倒数第二位是因为要和网页保持同序。
+- **`QuerySteamAsync` 与 `QueryPdxAsync` 有逐字相同的状态栏三元表达式**：改一处时不能用全局替换，靠上方「30 条累加后只落盘一次」注释区分。
+- **相关度排序下时间范围会自动隐藏**（`IsTimeRangeSort()` 只认 trend/toprated）；这是有意为之：Steam 只对这两种排序认 `days`。
+- 排序**没有持久化**（`PageStateSnapshot` 只存 Mod 库与 Mod 创建），所以新增档位不会让旧存档错位。
 
 ## 0.77 最新一轮（2026-11-04 00:00–13:30）：创意工坊搜不出来 —— 「加载失败」被当成了「用户取消」
 

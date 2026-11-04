@@ -91,6 +91,8 @@
   "workshop.sortMostUpdated": "最新更新",
   "workshop.sortName": "排序方式",
   "workshop.sortRating": "评分最高",
+  "workshop.sortRelevance": "搜索相关度",
+  "workshop.sortRelevanceNeedsKeyword": "「搜索相关度」需要先输入关键词再回车；没有关键词时按「最热门」显示。",
   "workshop.sortTopRated": "最受好评",
   "workshop.sortTrend": "最热门",
   "workshop.sourceDetecting": "正在判断该游戏有没有 Steam 创意工坊…",

@@ -91,6 +91,8 @@
   "workshop.sortMostUpdated": "Most updated",
   "workshop.sortName": "Sort by",
   "workshop.sortRating": "Highest rated",
+  "workshop.sortRelevance": "Search relevance",
+  "workshop.sortRelevanceNeedsKeyword": "Search relevance needs a keyword — press Enter to search; without one the list falls back to Most popular.",
   "workshop.sortTopRated": "Top rated",
   "workshop.sortTrend": "Most popular",
   "workshop.sourceDetecting": "Checking whether this game has a Steam Workshop…",

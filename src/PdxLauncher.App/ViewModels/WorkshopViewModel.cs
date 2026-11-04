@@ -38,13 +38,14 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>Steam 每页条数。</summary>
     private const int SteamPageSize = SteamWorkshopClient.DefaultPageSize;
 
-    /// <summary>Steam 的排序档位（与网页一致）。</summary>
+    /// <summary>Steam 的排序档位（与网页一致，含「搜索相关度」）。</summary>
     private static readonly string[] SteamSortKeys =
     [
         Keys.WorkshopSortTrend,
         Keys.WorkshopSortTopRated,
         Keys.WorkshopSortMostRecent,
         Keys.WorkshopSortMostUpdated,
+        Keys.WorkshopSortRelevance,
         Keys.WorkshopSortMostSubscribed,
     ];
 
@@ -1053,7 +1054,9 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         await FlushInfoCacheAsync().ConfigureAwait(true);
         StatusMessage = rows.Count == 0
             ? T(Keys.WorkshopStatusEmpty, _appliedSearch)
-            : T(Keys.WorkshopStatusLoaded, _totalCount);
+            : IsRelevanceWithoutKeyword()
+                ? T(Keys.WorkshopSortRelevanceNeedsKeyword)
+                : T(Keys.WorkshopStatusLoaded, _totalCount);
         RaiseDerived();
 
         _ = FillCoversAsync(cancellationToken);
@@ -1328,9 +1331,21 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         var key when key == Keys.WorkshopSortTopRated => SteamWorkshopSort.TopRated,
         var key when key == Keys.WorkshopSortMostRecent => SteamWorkshopSort.MostRecent,
         var key when key == Keys.WorkshopSortMostUpdated => SteamWorkshopSort.MostUpdated,
+        var key when key == Keys.WorkshopSortRelevance => SteamWorkshopSort.TextSearch,
         var key when key == Keys.WorkshopSortMostSubscribed => SteamWorkshopSort.MostSubscribed,
         _ => SteamWorkshopSort.Trend,
     };
+
+    /// <summary>
+    /// 选了「搜索相关度」却没有生效的关键词。
+    /// <para>
+    /// 服务端对没有 <c>searchtext</c> 的 <c>browsesort=textsearch</c> 不做相关度排序
+    /// （<see cref="SteamWorkshopClient.BuildBrowseUri"/> 会回退成 trend），
+    /// 所以这里要能识别出来，给状态栏一句「需要先输入关键词」，而不是让人以为选了没反应。
+    /// </para>
+    /// </summary>
+    private bool IsRelevanceWithoutKeyword() =>
+        ResolveSteamSort() == SteamWorkshopSort.TextSearch && _appliedSearch.Length == 0;
 
     /// <summary>把当前选中文案反查成 PDX Mods 的排序枚举。</summary>
     private PdxModsSort ResolvePdxSort() => ResolveSortKey() switch
@@ -1406,7 +1421,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
     partial void OnSourceChanged(WorkshopSource value)
     {
-        // 来源换了，排序档位跟着换（Steam 5 档 / PDX 3 档）；重置到第一档避免选中项越界。
+        // 来源换了，排序档位跟着换（Steam 6 档 / PDX 3 档）；重置到第一档避免选中项越界。
         RebuildSortModes(value);
         OnPropertyChanged(nameof(ShowTimeRange));
         RaiseDerived();

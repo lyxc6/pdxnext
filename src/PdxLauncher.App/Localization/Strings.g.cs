@@ -1142,6 +1142,8 @@ public sealed partial class Localizer
         ["workshop.sortMostUpdated"] = "最新更新",
         ["workshop.sortName"] = "排序方式",
         ["workshop.sortRating"] = "评分最高",
+        ["workshop.sortRelevance"] = "搜索相关度",
+        ["workshop.sortRelevanceNeedsKeyword"] = "「搜索相关度」需要先输入关键词再回车；没有关键词时按「最热门」显示。",
         ["workshop.sortTopRated"] = "最受好评",
         ["workshop.sortTrend"] = "最热门",
         ["workshop.sourceDetecting"] = "正在判断该游戏有没有 Steam 创意工坊…",
@@ -2307,6 +2309,8 @@ public sealed partial class Localizer
         ["workshop.sortMostUpdated"] = "Most updated",
         ["workshop.sortName"] = "Sort by",
         ["workshop.sortRating"] = "Highest rated",
+        ["workshop.sortRelevance"] = "Search relevance",
+        ["workshop.sortRelevanceNeedsKeyword"] = "Search relevance needs a keyword — press Enter to search; without one the list falls back to Most popular.",
         ["workshop.sortTopRated"] = "Top rated",
         ["workshop.sortTrend"] = "Most popular",
         ["workshop.sourceDetecting"] = "Checking whether this game has a Steam Workshop…",
@@ -3472,6 +3476,8 @@ public sealed partial class Localizer
         ("workshop.sortMostUpdated", "WorkshopSortMostUpdated"),
         ("workshop.sortName", "WorkshopSortName"),
         ("workshop.sortRating", "WorkshopSortRating"),
+        ("workshop.sortRelevance", "WorkshopSortRelevance"),
+        ("workshop.sortRelevanceNeedsKeyword", "WorkshopSortRelevanceNeedsKeyword"),
         ("workshop.sortTopRated", "WorkshopSortTopRated"),
         ("workshop.sortTrend", "WorkshopSortTrend"),
         ("workshop.sourceDetecting", "WorkshopSourceDetecting"),
@@ -4635,6 +4641,8 @@ public sealed partial class Localizer
     public string WorkshopSortMostUpdated => Format("workshop.sortMostUpdated");
     public string WorkshopSortName => Format("workshop.sortName");
     public string WorkshopSortRating => Format("workshop.sortRating");
+    public string WorkshopSortRelevance => Format("workshop.sortRelevance");
+    public string WorkshopSortRelevanceNeedsKeyword => Format("workshop.sortRelevanceNeedsKeyword");
     public string WorkshopSortTopRated => Format("workshop.sortTopRated");
     public string WorkshopSortTrend => Format("workshop.sortTrend");
     public string WorkshopSourceDetecting => Format("workshop.sourceDetecting");
@@ -5801,6 +5809,8 @@ internal static class Keys
     public const string WorkshopSortMostUpdated = "workshop.sortMostUpdated";
     public const string WorkshopSortName = "workshop.sortName";
     public const string WorkshopSortRating = "workshop.sortRating";
+    public const string WorkshopSortRelevance = "workshop.sortRelevance";
+    public const string WorkshopSortRelevanceNeedsKeyword = "workshop.sortRelevanceNeedsKeyword";
     public const string WorkshopSortTopRated = "workshop.sortTopRated";
     public const string WorkshopSortTrend = "workshop.sortTrend";
     public const string WorkshopSourceDetecting = "workshop.sourceDetecting";
