@@ -19,7 +19,7 @@ using PdxLauncher.Core.Online;
 public sealed class GamePatchService : IGamePatchService
 {
     /// <summary>原文件备份后缀：<c>steam_api64.dll</c> → <c>steam_api64_o.dll</c>（CreamAPI 的约定）。</summary>
-    private const string BackupSuffix = "_o";
+    public const string BackupSuffix = "_o";
 
     /// <summary>ini 首行标记；移除补丁时只删带这个标记的文件，用户自备的 ini 不动。</summary>
     private const string Marker = "; PdxNext 自动生成 — 可在「设置·高级」一键移除";

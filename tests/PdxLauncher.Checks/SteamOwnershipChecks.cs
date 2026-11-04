@@ -33,6 +33,7 @@ public static class SteamOwnershipChecks
             CheckOwnershipMerge(fs, logger, root, lastOwner: RealSteamId, expectTrusted: true);
             CheckOwnershipMerge(fs, logger, root, lastOwner: 76561190000000000, expectTrusted: false);
             CheckVerdictTable();
+            CheckAccountProbe(fs, logger, root);
             CheckUnavailablePaths(fs, logger, root);
             CheckSessionGate();
             CheckCache(fs, logger, root);
@@ -275,6 +276,14 @@ public static class SteamOwnershipChecks
         ChecksContext.Check("已打补丁 + 部分拥有 → 不完整", incomplete.Kind == DlcOwnershipVerdictKind.PatchedIncomplete);
         ChecksContext.Equal("不完整判定已授权磁盘数", 1, incomplete.OwnedDiskDlcCount);
 
+        // 别人打的补丁（没有 PdxNext 标记）同样是 loader 在岗，不能落进「未打补丁」。
+        ChecksContext.Check(
+            "他人补丁 + 全拥有 → 生效",
+            DlcOwnershipVerdict.Evaluate(GamePatchStatus.PatchedOther, full, disk).Kind == DlcOwnershipVerdictKind.PatchedEffective);
+        ChecksContext.Check(
+            "更新覆盖了补丁文件 → 按未打补丁算",
+            DlcOwnershipVerdict.Evaluate(GamePatchStatus.SteamOverwrote, full, disk).Kind == DlcOwnershipVerdictKind.VanillaAllOwned);
+
         ChecksContext.Check(
             "没打补丁 + 部分拥有 → 未生效",
             DlcOwnershipVerdict.Evaluate(GamePatchStatus.Vanilla, partial, disk).Kind == DlcOwnershipVerdictKind.VanillaPartial);
@@ -300,6 +309,202 @@ public static class SteamOwnershipChecks
         var trimmed = DlcOwnershipVerdict.Evaluate(GamePatchStatus.Patched, Report(SteamOwnershipState.Succeeded, dlcs), many);
         ChecksContext.Equal("未授权名单最多留 6 条", 6, trimmed.UnownedNames.Count);
         ChecksContext.Equal("未授权磁盘条目数仍是 9", 9, trimmed.UnownedDiskDlcCount);
+    }
+
+    /// <summary>
+    /// 补丁 loader 在岗时的双探测：主探测拿到加载器整表（490 条，含其他游戏），
+    /// 原版备份拿到账号真实拥有（23 条）。界面上的「补丁生效」和「账号真实拥有」是两条线。
+    /// </summary>
+    private static void CheckAccountProbe(IFileSystem fs, IAppLogger logger, string root)
+    {
+        var installRoot = Path.Combine(root, "account-probe", "steamapps", "common", "Victoria 3");
+        fs.EnsureDirectory(installRoot);
+        fs.WriteAllBytesAtomic(Path.Combine(installRoot, "steam_api64.dll"), new byte[64]);
+        fs.WriteAllBytesAtomic(Path.Combine(installRoot, "steam_api64_o.dll"), new byte[128]);
+
+        var disk = new List<DlcOwnershipCandidate>();
+        for (var i = 0; i < 17; i++)
+        {
+            disk.Add(new DlcOwnershipCandidate(
+                "5" + i.ToString("D3", System.Globalization.CultureInfo.InvariantCulture),
+                "Vic3 D" + i));
+        }
+
+        var loaderDlcs = new List<SteamDlcOwnership>();
+        foreach (var dlc in disk)
+        {
+            loaderDlcs.Add(new SteamDlcOwnership(dlc.SteamId, dlc.DisplayName, IsOwned: true, IsInstalled: true));
+        }
+
+        for (var i = 0; i < 473; i++)
+        {
+            loaderDlcs.Add(new SteamDlcOwnership(
+                "9" + i.ToString("D3", System.Globalization.CultureInfo.InvariantCulture),
+                "Foreign " + i,
+                IsOwned: true,
+                IsInstalled: true));
+        }
+
+        var accountDlcs = new List<SteamDlcOwnership>(disk.Count + 6);
+        foreach (var dlc in disk)
+        {
+            accountDlcs.Add(new SteamDlcOwnership(dlc.SteamId, dlc.DisplayName, IsOwned: true, IsInstalled: true));
+        }
+
+        for (var i = 0; i < 6; i++)
+        {
+            accountDlcs.Add(new SteamDlcOwnership(
+                "6" + i.ToString("D3", System.Globalization.CultureInfo.InvariantCulture),
+                "Account " + i,
+                IsOwned: true,
+                IsInstalled: true));
+        }
+
+        SteamDllProbeResult Ok(IReadOnlyList<SteamDlcOwnership> dlcs)
+            => new(true, true, RealSteamId, dlcs, null);
+
+        var probes = new List<string>();
+        var probe = new FakeProbe(path =>
+        {
+            probes.Add(path);
+            return Ok(path.EndsWith("steam_api64_o.dll", StringComparison.OrdinalIgnoreCase) ? accountDlcs : loaderDlcs);
+        });
+
+        var game = NewInstall(root, installRoot: installRoot, appId: StellarisAppId);
+        var service = new SteamOwnershipService(
+            fs,
+            logger,
+            new FakePatchService(GamePatchStatus.PatchedOther, StellarisAppId, installRoot, "steam_api64.dll"),
+            null,
+            probe);
+        var report = service.Inspect(game, CancellationToken.None);
+
+        ChecksContext.Check("他人补丁也算 loader 在岗", report.IsLoaderActive);
+        ChecksContext.Check("主报告成功", report.HasOwnership);
+        ChecksContext.Equal("主探测拿到加载器整表", 490, report.Dlcs.Count);
+        ChecksContext.Check("账号视图可用", report.Account is { HasOwnership: true });
+        ChecksContext.Equal("账号视图只含 Steam 目录", 23, report.Account?.Dlcs.Count ?? 0);
+        ChecksContext.Equal(
+            "账号探测用的是原版备份",
+            Path.Combine(installRoot, "steam_api64_o.dll"),
+            report.Account?.ApiFilePath ?? string.Empty);
+        ChecksContext.Equal("两次探测（loader + 备份）", 2, probes.Count);
+
+        var verdict = DlcOwnershipVerdict.Evaluate(report.PatchStatus, report, disk);
+        ChecksContext.Check("他人补丁 + 磁盘全授权 → 补丁生效", verdict.Kind == DlcOwnershipVerdictKind.PatchedEffective);
+        ChecksContext.Check("结论标记 loader 在岗", verdict.IsLoaderActive);
+        ChecksContext.Equal("探测到的 DLC 数来自加载器", 490, verdict.ProbeDlcCount);
+        ChecksContext.Equal("账号 DLC 数", 23, verdict.AccountDlcCount ?? 0);
+        ChecksContext.Equal("账号已拥有数", 23, verdict.AccountOwnedCount ?? 0);
+        ChecksContext.Equal("磁盘中账号确实拥有的数量", 17, verdict.AccountOwnedDiskDlcCount ?? 0);
+        ChecksContext.Equal("加载器表里的外区条目", 467, verdict.ForeignDlcCount);
+
+        // CS2 这类没有 .dlc 文件的游戏：loader 在岗时必须用账号清单，而不是 490 条的加载器表。
+        var cs2 = DlcOwnershipVerdict.Evaluate(report.PatchStatus, report, Array.Empty<DlcOwnershipCandidate>());
+        ChecksContext.Equal("CS2 回退用账号清单", 23, cs2.DiskDlcCount);
+        ChecksContext.Equal("CS2 回退计数也来自账号视图", 23, cs2.OwnedDiskDlcCount);
+
+        // 缓存命中时第二次 Inspect 不应再拉起任何探测。
+        service.Inspect(game, CancellationToken.None);
+        ChecksContext.Equal("缓存命中不重复双探", 2, probes.Count);
+        service.Invalidate();
+        service.Inspect(game, CancellationToken.None);
+        ChecksContext.Equal("Invalidate 之后重新双探", 4, probes.Count);
+
+        // 备份缺失：只探一次，账号视图为 null，界面据此提示「缺少原版备份」。
+        var missingRoot = Path.Combine(root, "account-missing", "steamapps", "common", "Victoria 3");
+        fs.EnsureDirectory(missingRoot);
+        fs.WriteAllBytesAtomic(Path.Combine(missingRoot, "steam_api64.dll"), new byte[64]);
+        var missingCalls = 0;
+        var missingService = new SteamOwnershipService(
+            fs,
+            logger,
+            new FakePatchService(GamePatchStatus.PatchedOther, StellarisAppId, missingRoot, "steam_api64.dll"),
+            null,
+            new FakeProbe(_ =>
+            {
+                missingCalls++;
+                return Ok(loaderDlcs);
+            }));
+        var missing = missingService.Inspect(
+            NewInstall(root, installRoot: missingRoot, appId: StellarisAppId),
+            CancellationToken.None);
+        ChecksContext.Check("没有备份就没有账号视图", missing.Account is null);
+        ChecksContext.Equal("没有备份只探一次", 1, missingCalls);
+        ChecksContext.Check(
+            "没有备份时结论仍标 loader 在岗",
+            DlcOwnershipVerdict.Evaluate(missing.PatchStatus, missing, disk).IsLoaderActive);
+
+        // 备份与当前文件字节相同：说明备份本身也是 loader，不能白探，直接标 backupNotOriginal。
+        var sameRoot = Path.Combine(root, "account-same", "steamapps", "common", "Victoria 3");
+        fs.EnsureDirectory(sameRoot);
+        var loaderBytes = new byte[64];
+        fs.WriteAllBytesAtomic(Path.Combine(sameRoot, "steam_api64.dll"), loaderBytes);
+        fs.WriteAllBytesAtomic(Path.Combine(sameRoot, "steam_api64_o.dll"), loaderBytes);
+        var sameCalls = 0;
+        var sameService = new SteamOwnershipService(
+            fs,
+            logger,
+            new FakePatchService(GamePatchStatus.PatchedOther, StellarisAppId, sameRoot, "steam_api64.dll"),
+            null,
+            new FakeProbe(_ =>
+            {
+                sameCalls++;
+                return Ok(loaderDlcs);
+            }));
+        var same = sameService.Inspect(NewInstall(root, installRoot: sameRoot, appId: StellarisAppId), CancellationToken.None);
+        ChecksContext.Equal("同字节备份不探测", 1, sameCalls);
+        ChecksContext.Check("同字节备份不算账号视图", same.Account is { HasOwnership: false });
+        ChecksContext.Equal(
+            "同字节备份的错误键",
+            SteamProbeError.BackupNotOriginal,
+            same.Account?.ErrorKey ?? string.Empty);
+
+        // 备份内容不同但返回同一张表：同样按「备份也是 loader」处理。
+        var sameTableRoot = Path.Combine(root, "account-same-table", "steamapps", "common", "Victoria 3");
+        fs.EnsureDirectory(sameTableRoot);
+        fs.WriteAllBytesAtomic(Path.Combine(sameTableRoot, "steam_api64.dll"), new byte[64]);
+        fs.WriteAllBytesAtomic(Path.Combine(sameTableRoot, "steam_api64_o.dll"), new byte[96]);
+        var sameTableCalls = 0;
+        var sameTableService = new SteamOwnershipService(
+            fs,
+            logger,
+            new FakePatchService(GamePatchStatus.PatchedOther, StellarisAppId, sameTableRoot, "steam_api64.dll"),
+            null,
+            new FakeProbe(_ =>
+            {
+                sameTableCalls++;
+                return Ok(loaderDlcs);
+            }));
+        var sameTable = sameTableService.Inspect(
+            NewInstall(root, installRoot: sameTableRoot, appId: StellarisAppId),
+            CancellationToken.None);
+        ChecksContext.Equal("同表备份会探一次", 2, sameTableCalls);
+        ChecksContext.Equal(
+            "同表备份的错误键",
+            SteamProbeError.BackupNotOriginal,
+            sameTable.Account?.ErrorKey ?? string.Empty);
+
+        // 备份探测本身失败：账号视图置为不可用，但不影响主报告。
+        var brokenRoot = Path.Combine(root, "account-broken", "steamapps", "common", "Victoria 3");
+        fs.EnsureDirectory(brokenRoot);
+        fs.WriteAllBytesAtomic(Path.Combine(brokenRoot, "steam_api64.dll"), new byte[64]);
+        fs.WriteAllBytesAtomic(Path.Combine(brokenRoot, "steam_api64_o.dll"), new byte[96]);
+        var broken = new SteamOwnershipService(
+            fs,
+            logger,
+            new FakePatchService(GamePatchStatus.PatchedOther, StellarisAppId, brokenRoot, "steam_api64.dll"),
+            null,
+            new FakeProbe(path => path.EndsWith("steam_api64_o.dll", StringComparison.OrdinalIgnoreCase)
+                ? SteamDllProbeResult.Fail(SteamProbeError.InitFailed, "backup broken")
+                : Ok(loaderDlcs)))
+            .Inspect(NewInstall(root, installRoot: brokenRoot, appId: StellarisAppId), CancellationToken.None);
+        ChecksContext.Check("主报告不受账号探测失败影响", broken.HasOwnership);
+        ChecksContext.Check("账号探测失败 → 账号视图不可用", broken.Account is { HasOwnership: false });
+        ChecksContext.Equal(
+            "账号探测失败保留错误键",
+            SteamProbeError.InitFailed,
+            broken.Account?.ErrorKey ?? string.Empty);
     }
 
     private static void CheckUnavailablePaths(IFileSystem fs, IAppLogger logger, string root)
@@ -429,7 +634,10 @@ public static class SteamOwnershipChecks
 
     // ------------------------------------------------------------------ 助手
 
-    private static SteamOwnershipReport Report(SteamOwnershipState state, IReadOnlyList<SteamDlcOwnership> dlcs)
+    private static SteamOwnershipReport Report(
+        SteamOwnershipState state,
+        IReadOnlyList<SteamDlcOwnership> dlcs,
+        GamePatchStatus patchStatus = GamePatchStatus.Patched)
     {
         var owned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var dlc in dlcs)
@@ -442,7 +650,7 @@ public static class SteamOwnershipChecks
 
         return new SteamOwnershipReport(
             state,
-            GamePatchStatus.Patched,
+            patchStatus,
             1,
             @"C:\game",
             "steam_api64.dll",

@@ -127,12 +127,16 @@ isOwned = isSubscribedApp(id) || 可信DisabledDLC.contains(id) || isDLCInstalle
 
 本项目 `SteamOwnershipService` 的做法：**用游戏目录里那份 `steam_api64.dll` 去问 Steam**。补丁生效时那份 DLL 就是 CreamAPI loader，所以它报出来的授权 == 游戏实际看到的授权 —— 这样「DLC 页全绿」就等于「补丁真的用上了」，而不是仅仅「账号里有这些 DLC」。
 
-- 探测链：`NativeLibrary.Load(<ApiDirectory>\steam_api64.dll)` → `SteamAPI_Init` → `SteamAPI_SteamApps_v008` / `SteamAPI_SteamUser_v021` → `GetDLCCount` / `BGetDLCDataByIndex` / `BIsSubscribedApp` / `BIsDlcInstalled` → `SteamAPI_Shutdown` + `Free`。刻意不用 `DllImport` 解析器：全进程只能绑一个 DLL 路径。
+**但 loader 在岗时，这个数字不是 Steam 目录。** CreamAPI 的 `GetDLCCount` / `BGetDLCDataByIndex` 读的是同目录 `cream_api.ini` 的 `[dlc]` 表，而且不按当前 appid 过滤；仓库素材那份表是 11 款 Paradox 游戏共用的 490 条模板（CS1 94 / EU4 93 / CK2 74 / HoI4 59 / Stellaris 56 / CK3 37 / CS2 29 / V3 23 / V2 11 / Imperator 9 / EU5 5）。所以 V3 真机看到「磁盘 17 个 DLC / 游戏读到 490 个」——490 是模板行数，不是账号拥有数，也不是 V3 的 DLC 数。判定条在 loader 在岗时必须写「游戏读到 N 个」，不能写「Steam 报告 N 个」。
+
+- 主探测（游戏可用）：`NativeLibrary.Load(<ApiDirectory>\steam_api64.dll)` → `SteamAPI_Init` → `SteamAPI_SteamApps_v008` / `SteamAPI_SteamUser_v021` → `GetDLCCount` / `BGetDLCDataByIndex` / `BIsSubscribedApp` / `BIsDlcInstalled` → `SteamAPI_Shutdown` + `Free`。刻意不用 `DllImport` 解析器：全进程只能绑一个 DLL 路径。
+- **账号视图（账号真实拥有）**：当 `GamePatchReport.IsLoaderActive`（`Patched` 或 `PatchedOther`）且同目录存在 `steam_api64_o.dll` 时，**再探一次原版备份**，把「账号里到底有哪些」与「游戏实际能用哪些」分开。两份报告都套同一个 `TrustedDisabledDlc` 采信闸门。降级：备份缺失 → 无账号视图（UI 写「缺少原版备份」）；备份与当前文件字节相同、或返回与 loader 完全相同的 id 集合 → 「备份看起来也是加载器」（`backupNotOriginal`）；备份探测失败 → 账号视图不可用并带上失败键。
+- 判定口径：`Patched` / `PatchedOther` 都算已打补丁（`GamePatchReport.IsLoaderActive`），只有 `SteamOverwrote`（当前 API 已是原版、备份是 loader）不算在岗；`Vanilla*` 分支保留「Steam 目录」措辞，`Patched*` 分支写「游戏读到」。
 - 32 位游戏的 `steam_api.dll` 在 x64 进程里会 `BadImageFormat` → 直接报「无法判定（32 位游戏不支持）」。
-- 同一个 DLL 的 Steamworks 只能有一个持有者：`SteamNativeSession` 做进程内闸门（DLC 授权探测 ↔ 创意工坊订阅）。
-- 结果缓存 30 秒（key = DLL 路径 + 字节数 + appid），DLC 页的「重新检测」会 `Invalidate()` 强制重探。
-- 真机 Stellaris（appid 281990，SteamID64 76561198370719182）：打完补丁 → `GetDLCCount` 490、拥有 490（判定「补丁已生效」）；用原版 `steam_api64_o.dll` → 53 个、拥有 26（判定「未打补丁，26/53 有授权」）。
-- 失败键（UI 侧 `dlc.ownershipError*`）：`noAppId` / `noDll` / `x86` / `notWindows` / `busy` / `steamNotRunning` / `initFailed` / `native`。
+- 同一个 DLL 的 Steamworks 只能有一个持有者：`SteamNativeSession` 做进程内闸门（DLC 授权探测 ↔ 创意工坊订阅）；主探测与账号探测**顺序执行**，不并发（同一 appid 两个 `SteamAPI_Init` 会互相打架）。
+- 结果缓存 30 秒（key = DLL 路径 + 字节数 + appid + 补丁状态 + 备份路径 + 备份字节数），DLC 页的「重新检测」与设置页打/撤补丁成功后会 `Invalidate()`。
+- 真机 Stellaris（appid 281990，SteamID64 76561198370719182）：打完补丁 → loader 表 490、拥有 490；用原版 `steam_api64_o.dll` → 53 个、拥有 26。V3 真机（appid 529340）：loader 表 490、账号视图 23、磁盘 17 个 `.dlc.json` → 判定「补丁已生效：游戏读到 490 个、490 个已拥有；账号真实拥有 17/23（加载器表里 467 条不属于本游戏）」。
+- 失败键（UI 侧 `dlc.ownershipError*`）：`noAppId` / `noDll` / `x86` / `notWindows` / `busy` / `steamNotRunning` / `initFailed` / `native` / `backupNotOriginal`。
 
 ## 4. launcher-v2.sqlite
 
@@ -184,6 +188,10 @@ CK3 的 playsets_dlcs 为空 ⇒ disabled_dlcs: []，与真机文件一致。
 - 命名：ugc_<steamId>.mod / pdx_<pdxId>.mod / <dirname>.mod；本地目录 mod 目录内有 descriptor.mod。
 - V3 workshop mod 无 .mod：元数据在 <modDir>\.metadata\metadata.json，键 name, id, version, supported_game_version, short_description, **picture**（封面的相对路径，相对 `.metadata` 目录；历史写法 `thumbnail` 本项目仍兼容读取）, tags, relationships, game_custom_data。EU5 实测 22 个 mod 里 13 个带 `picture`，值多为 `thumbnail.png`，`thumbnail` 键一次都没出现。
 - **启动器新建 mod 的写法**（`ModCreator`，2026-10-31）：legacy 游戏写 `<modDir>/<folder>.mod`（带绝对 `path`，正斜杠）+ `<folder>/descriptor.mod`（同字段但**不带** `path`）+ `<folder>/thumbnail.png`；V3/EU5 写 `<folder>/.metadata/metadata.json`（`id` 为空串、`tags` 数组、`relationships: []`、`game_custom_data.multiplayer_synchronized = true`）+ `.metadata/thumbnail.png`，`picture` 固定 `thumbnail.png`。名称/文件夹名限制 ASCII `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`；V3 目标路径含非 ASCII 直接拒绝。
+- **启动器编辑 mod 的写法**（`ModDescriptorEditor`，2026-11-04）：只改 name / version / supported_version / tags（V3 另加 short_description），其余原样保留。
+  - legacy：`.mod` 是行级替换 —— `LegacyDescriptorText` 解析出顶层 `key=value` 的**值区间**单独替换，注释、未知键、`path` 与缩进都不动；缺的键补在 `name` 所在行之后（没有 name 就补在文件头）。外层 `<folder>.mod` 与 `<folder>/descriptor.mod` 两份一起写（顺序：先内层后外层），内容没变的文件不重写；
+  - V3/EU5：`JsonNode` 解析后只 set 上面几个属性，`id`、`relationships`、`game_custom_data` 等未知键保留；坏 JSON 返回 `invalid-json` 且不写盘；
+  - 写盘走 `IFileSystem.WriteAllTextAtomic`（临时文件 + rename），双文件时第二个失败会把已写的回滚；JSON 缩进后统一成 `\n` 结尾（System.Text.Json 在 Windows 默认缩进是 `\r\n`，不归一会让同一文件在不同机器上反复整篇改写）。
 - 缩略图解析（`ModThumbnailResolver`，Mod 库与播放集共用一套）：候选**目录**依次是 `dirPath` → `archivePath` 所在目录 → 把 `dirPath` 里 `steamapps\workshop\content\<appid>\<modId>` 这段尾巴重新拼到每个 Steam 库根 → `steamapps\workshop\content\<game.SteamAppId>\<steamId 或 gameRegistryId 里的 ugc_<id>>` → `InstallRoot\..\..` 当 steamapps 根再试一遍（Stellaris 的 `dirPath` 停在旧盘 E:\，mod 实际在 F:\，靠这一层重定位）。**每个候选目录内**先试 `picture`，再扫目录，两级顺序都是「先 mod 根目录，再 `.metadata` 子目录」：① `<dir>\<picture>` → ② `<dir>\<picture 的文件名>`（picture 带子目录但被摊平）→ ③ `<dir>\.metadata\<picture>` → ④ `<dir>\.metadata\<picture 的文件名>` → ⑤ `<dir>\thumbnail*` → ⑥ `<dir>\.metadata\thumbnail*`；`thumbnail*` 里精确的 `thumbnail.png` 优先，其它 `thumbnail.<jpg|jpeg|bmp|gif|webp|dds>` 次之（`.pdn/.psd/.xcf` 不算图）。全 miss 才用 sqlite 的 `thumbnailPath`（官方 `.launcher-cache`，须真实存在）。**EU5 的封面 22/22 都在 `.metadata\thumbnail.png`**，只有 6 个在根目录另有副本 —— 所以 `.metadata` 这一级是必需的；CK3 / Stellaris / EU4 的工坊目录里没有任何 `.metadata`，这一级在它们那里不产生枚举。**不改写 `dirPath`**：加载文件 V1_1 与播放集 `dir:` 匹配键都依赖它。
 - 联网补图（可选，`ModThumbnailService`）：本地解析不到时用 `mods.thumbnailUrl` 下载（域名
   `images.steamusercontent.com`，已加入 `OnlineHosts` 白名单），落 `<程序目录>\data\mod-cache\mod-thumbnails\<modId N>.<ext>`，
@@ -688,7 +696,7 @@ GET https://store.steampowered.com/api/appdetails?appids=<appId>&filters=categor
 
 上面 18.1–18.4 三路网页接口**都只能看公开数据**：某个条目有多少订阅、描述是什么，但拿不到「当前账号订阅了哪些」「装没装」「要不要更新」「本地是否禁用」。这些只有 Steamworks 自己的 `ISteamUGC` 知道，必须以游戏的 appId 调 `SteamAPI_Init`。
 
-实现：`src/PdxLauncher.Core/Steam/SteamWorkshopHostOperation.cs`（原生绑定）+ `SteamHostRunner.cs`（子进程入口）+ `src/PdxLauncher.App/Services/SteamHostClient.cs`（起进程）。**一次查询一个短命子进程**，子进程退 Steam 立刻除名（原因见 README 第 6 节第 9 条）。
+实现：`src/PdxLauncher.Core/Steam/SteamWorkshopHostOperation.cs`（原生绑定）+ `SteamHostRunner.cs`（子进程入口）+ `src/PdxLauncher.App/Services/SteamHostClient.cs`（起进程）。**一次查询一个短命子进程**，子进程退 Steam 立刻除名（原因见 `DEVELOPMENT.md` 的「已知限制」第 9 条）。
 
 ```
 PdxLauncher.App.exe --steam-host workshop-subscribed --api <steam_api64.dll> --appid <appId>

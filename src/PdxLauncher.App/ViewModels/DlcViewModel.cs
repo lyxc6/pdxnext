@@ -1,4 +1,4 @@
-﻿namespace PdxLauncher.App.ViewModels;
+namespace PdxLauncher.App.ViewModels;
 
 using System.Collections.ObjectModel;
 
@@ -382,7 +382,7 @@ public sealed class DlcViewModel : LocalizedObservableObject
         await FillDescriptionsAsync(cancellationToken).ConfigureAwait(true);
     }
 
-    /// <summary>按 Steam 报告重建 CS2 的 DLC 行；报告不可用时清空。</summary>
+    /// <summary>按探测报告重建 CS2 的 DLC 行；报告不可用时清空。</summary>
     private void FillSteamRows(SteamOwnershipReport? report)
     {
         Dlcs.Clear();
@@ -391,7 +391,13 @@ public sealed class DlcViewModel : LocalizedObservableObject
             return;
         }
 
-        foreach (var info in SteamDlcListBuilder.FromOwnership(report.Dlcs))
+        // loader 在岗时 report.Dlcs 是 cream_api.ini 的大表（含其他游戏），不能拿来当本游戏的清单；
+        // 有账号视图就用账号视图，没有就退回主清单（至少还能展示）。
+        var source = report is { IsLoaderActive: true, Account: { HasOwnership: true } account }
+            ? account.Dlcs
+            : report.Dlcs;
+
+        foreach (var info in SteamDlcListBuilder.FromOwnership(source))
         {
             // 没有 pops_id、也没有播放集条目 ⇒ 开关无处落地，整列隐藏，而不是给一个置灰的无效控件。
             Dlcs.Add(new DlcRowViewModel(
@@ -461,10 +467,15 @@ public sealed class DlcViewModel : LocalizedObservableObject
             row.SetOwnership(owned);
         }
 
+        var accountText = report.Account is { } account
+            ? "，账号视图 state=" + account.State + "、" + account.Dlcs.Count + " 个 DLC、" + account.OwnedAppIds.Count + " 个已拥有"
+            : "，无账号视图";
         AppServices.Logger.Info(
             "DLC 授权探测（gameId=" + (Game?.GameId ?? "<null>") + "）：state=" + report.State
-            + "，Steam " + report.Dlcs.Count + " 个 DLC、" + report.OwnedAppIds.Count + " 个已拥有，"
-            + "结论=" + (_ownershipVerdict?.Kind.ToString() ?? "<null>"));
+            + "，loader 在岗=" + report.IsLoaderActive
+            + "，主探测 " + report.Dlcs.Count + " 个 DLC、" + report.OwnedAppIds.Count + " 个已拥有"
+            + accountText
+            + "，结论=" + (_ownershipVerdict?.Kind.ToString() ?? "<null>"));
     }
 
     private void ResetOwnership()
@@ -517,32 +528,49 @@ public sealed class DlcViewModel : LocalizedObservableObject
         var verdict = _ownershipVerdict
             ?? DlcOwnershipVerdict.Evaluate(report.PatchStatus, report, null);
 
-        return verdict.Kind switch
+        var headline = verdict.Kind switch
         {
             DlcOwnershipVerdictKind.PatchedEffective => T(
                 Keys.DlcOwnershipPatchedEffective,
-                verdict.SteamDlcCount,
-                verdict.SteamOwnedCount,
+                verdict.ProbeDlcCount,
+                verdict.ProbeOwnedCount,
                 verdict.DiskDlcCount),
             DlcOwnershipVerdictKind.PatchedIncomplete => T(
                 Keys.DlcOwnershipPatchedIncomplete,
                 verdict.DiskDlcCount,
                 verdict.UnownedDiskDlcCount,
-                verdict.SteamDlcCount,
-                verdict.SteamOwnedCount),
+                verdict.ProbeDlcCount,
+                verdict.ProbeOwnedCount),
             DlcOwnershipVerdictKind.VanillaAllOwned => T(
                 Keys.DlcOwnershipVanillaAllOwned,
                 verdict.DiskDlcCount,
-                verdict.SteamDlcCount,
-                verdict.SteamOwnedCount),
+                verdict.ProbeDlcCount,
+                verdict.ProbeOwnedCount),
             DlcOwnershipVerdictKind.VanillaPartial => T(
                 Keys.DlcOwnershipVanillaPartial,
                 verdict.DiskDlcCount,
                 verdict.UnownedDiskDlcCount,
-                verdict.SteamDlcCount,
-                verdict.SteamOwnedCount),
+                verdict.ProbeDlcCount,
+                verdict.ProbeOwnedCount),
             _ => T(Keys.DlcOwnershipUnknown),
         };
+
+        // 只判「游戏看到的授权」会让人把 loader 报的数字当 Steam 数字；loader 在岗时补一句账号真实拥有。
+        return verdict.IsLoaderActive ? headline + " " + BuildAccountSentence(verdict) : headline;
+    }
+
+    /// <summary>loader 在岗时的第二句：账号本身拥有多少，或者为什么判断不了。</summary>
+    private string BuildAccountSentence(DlcOwnershipVerdict verdict)
+    {
+        if (verdict.AccountDlcCount is int count && verdict.AccountOwnedCount is int owned)
+        {
+            return T(Keys.DlcOwnershipAccountOwned, owned, count);
+        }
+
+        var reason = verdict.AccountErrorKey is { Length: > 0 } key
+            ? DescribeProbeError(key)
+            : T(Keys.DlcOwnershipErrorNoBackup);
+        return T(Keys.DlcOwnershipAccountUnknown, reason);
     }
 
     private string BuildOwnershipDetail()
@@ -552,7 +580,7 @@ public sealed class DlcViewModel : LocalizedObservableObject
             return string.Empty;
         }
 
-        var parts = new List<string>(5);
+        var parts = new List<string>(8);
         if (!string.IsNullOrWhiteSpace(report.ApiFilePath))
         {
             parts.Add(T(Keys.DlcOwnershipDetailApi, report.ApiFilePath!));
@@ -568,9 +596,14 @@ public sealed class DlcViewModel : LocalizedObservableObject
             parts.Add(T(Keys.DlcOwnershipDetailSteamId, report.SteamId64));
         }
 
-        parts.Add(report.PatchStatus is GamePatchStatus.Patched or GamePatchStatus.PatchedOther
-            ? T(Keys.DlcOwnershipDetailPatchOn)
-            : T(Keys.DlcOwnershipDetailPatchOff));
+        // 四种状态分开说，尤其「他人补丁」不能和「本工具打的补丁」混成一句。
+        parts.Add(report.PatchStatus switch
+        {
+            GamePatchStatus.Patched => T(Keys.DlcOwnershipDetailPatchOn),
+            GamePatchStatus.PatchedOther => T(Keys.DlcOwnershipDetailPatchOnByOther),
+            GamePatchStatus.SteamOverwrote => T(Keys.DlcOwnershipDetailPatchOverwritten),
+            _ => T(Keys.DlcOwnershipDetailPatchOff),
+        });
 
         if (report.HasOwnership && report.SteamId64 != 0)
         {
@@ -583,10 +616,34 @@ public sealed class DlcViewModel : LocalizedObservableObject
             parts.Add(FirstLine(report.Detail!));
         }
 
+        var verdict = _ownershipVerdict
+            ?? DlcOwnershipVerdict.Evaluate(report.PatchStatus, report, null);
+        if (verdict.IsLoaderActive)
+        {
+            // 把「这个数字从哪来」写在脸上：loader 的表来自 cream_api.ini，不是 Steam 目录。
+            parts.Add(T(Keys.DlcOwnershipDetailLoaderSource));
+            if (verdict.ForeignDlcCount > 0 && verdict.AccountDlcCount is int accountCount)
+            {
+                parts.Add(T(
+                    Keys.DlcOwnershipDetailForeignDlc,
+                    verdict.ProbeDlcCount,
+                    verdict.ForeignDlcCount,
+                    accountCount));
+            }
+        }
+
+        if (report.Account is { ApiFilePath: { Length: > 0 } accountApi })
+        {
+            parts.Add(T(Keys.DlcOwnershipDetailAccountApi, accountApi));
+        }
+
         return string.Join(" · ", parts);
     }
 
-    private string DescribeOwnershipError(SteamOwnershipReport report) => report.ErrorKey switch
+    private string DescribeOwnershipError(SteamOwnershipReport report) => DescribeProbeError(report.ErrorKey);
+
+    /// <summary>把探测错误键翻成人话；主报告与账号视图共用，避免两套说法。</summary>
+    private string DescribeProbeError(string? errorKey) => errorKey switch
     {
         SteamProbeError.NoAppId => T(Keys.DlcOwnershipErrorNoAppId),
         SteamProbeError.NoDll => T(Keys.DlcOwnershipErrorNoDll),
@@ -596,6 +653,7 @@ public sealed class DlcViewModel : LocalizedObservableObject
         SteamProbeError.SteamNotRunning => T(Keys.DlcOwnershipErrorSteamNotRunning),
         SteamProbeError.InitFailed => T(Keys.DlcOwnershipErrorInitFailed),
         SteamProbeError.HostFailed => T(Keys.DlcOwnershipErrorHostFailed),
+        SteamProbeError.BackupNotOriginal => T(Keys.DlcOwnershipErrorBackupNotOriginal),
         _ => T(Keys.DlcOwnershipErrorNative),
     };
 

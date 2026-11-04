@@ -44,4 +44,26 @@ public sealed record GamePatchReport(
     /// <summary>是否已经有补丁痕迹（不论是不是本启动器打的）。</summary>
     public bool IsPatched =>
         Status is GamePatchStatus.Patched or GamePatchStatus.PatchedOther or GamePatchStatus.SteamOverwrote;
+
+    /// <summary>
+    /// 当前 <c>steam_api64.dll</c> 是否就是 loader。它决定了授权探测拿到的 DLC 列表
+    /// 来自 loader 的 <c>cream_api.ini</c> 还是 Steam 目录，界面必须据此标注来源。
+    /// <para>
+    /// <see cref="GamePatchStatus.SteamOverwrote"/> 不算：那时磁盘上的 api 已被 Steam 覆盖回原版，
+    /// 而 <see cref="IsPatched"/> 仍为 true，两者语义不同。
+    /// </para>
+    /// </summary>
+    public bool IsLoaderActive =>
+        Status is GamePatchStatus.Patched or GamePatchStatus.PatchedOther;
+
+    /// <summary>
+    /// CreamAPI 约定的原版备份全路径（<c>steam_api64_o.dll</c>）；无法从报告推导时为 null。
+    /// 授权服务用它做第二份「账号真实拥有」探测。
+    /// </summary>
+    public string? BackupApiFilePath =>
+        ApiDirectory is null || string.IsNullOrWhiteSpace(ApiFileName)
+            ? null
+            : Path.Combine(
+                ApiDirectory,
+                Path.GetFileNameWithoutExtension(ApiFileName) + GamePatchService.BackupSuffix + Path.GetExtension(ApiFileName));
 }
