@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Specialized;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -164,12 +165,19 @@ public sealed partial class WorkshopDetailPage : Page
         }
 
         UpdateGalleryLayout(ActualWidth, ActualHeight);
+
+        // 截图是在加载过程中逐条落进集合的：集合一变就选首张、补计数，
+        // 不再等整页加载结束（那时缩略图可能早就出完了，大图却还是黑的）。
+        _viewModel.Screenshots.CollectionChanged -= OnScreenshotsChanged;
+        _viewModel.Screenshots.CollectionChanged += OnScreenshotsChanged;
+
         await RunAsync(_row);
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _viewModel.GalleryImageReady -= OnGalleryImageReady;
+        _viewModel.Screenshots.CollectionChanged -= OnScreenshotsChanged;
         _lifetime?.Cancel();
 
         // 原生 Steamworks 会话本来就在子进程里，随进程退出自动结束；
@@ -210,20 +218,33 @@ public sealed partial class WorkshopDetailPage : Page
         EnsureGallerySelection();
     }
 
+    /// <summary>集合变化（换 mod 清空、逐条落地）时维护选中项与右上角计数。</summary>
+    private void OnScreenshotsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        EnsureGallerySelection();
+
     private void EnsureGallerySelection()
     {
         if (_viewModel.Screenshots.Count == 0)
         {
+            // 换 mod / 重新加载会先清空集合：把上一份的选中与计数一起复位，
+            // 否则计数器会停在旧值、FlipView 也会留着上一份的最后选中项。
+            if (FlipWorkshopScreenshots.SelectedIndex >= 0)
+            {
+                FlipWorkshopScreenshots.SelectedIndex = -1;
+            }
+
+            txtWorkshopInlineCounter.Text = string.Empty;
             return;
         }
 
-        // 内联 FlipView 与缩略图条共用同一份集合；这里显式兜一次 ItemsSource，
-        // 避免 x:Bind 早于集合填充时 FlipView 拿不到条目（会显示成一块空白）。
+        // 正常路径下 ItemsSource 由 XAML 的 x:Bind 绑定；这里只在它没绑上时补一次，
+        // 避免 FlipView 拿不到条目（会显示成一块空白）。
         if (FlipWorkshopScreenshots.ItemsSource is null)
         {
             FlipWorkshopScreenshots.ItemsSource = _viewModel.Screenshots;
         }
 
+        // 只在「还没有选中项」时选第一张，用户已经翻到别的页时不要打断。
         if (FlipWorkshopScreenshots.SelectedIndex < 0)
         {
             FlipWorkshopScreenshots.SelectedIndex = 0;

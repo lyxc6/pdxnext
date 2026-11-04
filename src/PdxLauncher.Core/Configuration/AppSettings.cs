@@ -259,4 +259,11 @@ public sealed class AppSettings
         get => _translateCacheDays;
         set => _translateCacheDays = value < 1 ? 1 : (value > 365 ? 365 : value);
     }
+
+    /// <summary>
+    /// 创意工坊搜索框的最近提交词（最新的在前，最多 8 条，大小写不敏感去重）。
+    /// 空列表表示还没提交过搜索；旧设置文件里没有这个键，读到的是默认空列表，
+    /// 但文档里若显式写了 null，调用点要按 <c>?? []</c> 兜底。
+    /// </summary>
+    public List<string> WorkshopSearchHistory { get; set; } = [];
 }

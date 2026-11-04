@@ -39,6 +39,8 @@
   "workshop.detailNoComments": "No comments yet",
   "workshop.detailNoDescription": "The author left no description",
   "workshop.detailRetry": "Retry",
+  "workshop.detailScreenshotDownloading": "Downloading this screenshot…",
+  "workshop.detailScreenshotFailed": "Screenshot failed to download",
   "workshop.detailScreenshots": "{0} screenshots",
   "workshop.detailScreenshotsLoading": "Downloading screenshots…",
   "workshop.detailScreenshotsTitle": "Screenshots",

@@ -43,7 +43,7 @@
                     <FontIcon Glyph="&#xE72B;" FontSize="14" />
                 </Button>
 
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                     <TextBlock Text="{x:Bind ViewModel.Title, Mode=OneWay}"
                                Style="{StaticResource SubtitleTextBlockStyle}"
                                TextWrapping="Wrap"
@@ -128,6 +128,7 @@
                             <Grid>
                                 <FlipView x:Name="FlipWorkshopScreenshots"
                                           Height="360"
+                                          ItemsSource="{x:Bind ViewModel.Screenshots, Mode=OneWay}"
                                           AutomationProperties.AutomationId="flipWorkshopScreenshots"
                                           AutomationProperties.Name="{x:Bind L.WorkshopDetailScreenshotsTitle, Mode=OneWay}"
                                           SelectionChanged="OnInlineGallerySelectionChanged">
@@ -141,12 +142,43 @@
                                     <FlipView.ItemTemplate>
                                         <DataTemplate x:DataType="vm:WorkshopScreenshotViewModel">
                                             <Grid Background="Transparent" Tapped="OnInlineImageTapped">
+                                                <!-- 既没在下载、也没失败、又没本地图：中性占位图案。 -->
                                                 <FontIcon Glyph="&#xE8B9;"
                                                          FontSize="32"
                                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                          HorizontalAlignment="Center"
                                                          VerticalAlignment="Center"
-                                                         Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasPath), Mode=OneWay}" />
+                                                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowPlaceholder), Mode=OneWay}" />
+                                                <!--
+                                                    下载中：只看这一张自己的状态。
+                                                    以前 FlipView 根本没有 ItemsSource、要等整批下完才补，
+                                                    于是下面的缩略图都出来了，这里还是一块黑。
+                                                -->
+                                                <StackPanel HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            Spacing="8"
+                                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowPending), Mode=OneWay}">
+                                                    <ProgressRing IsActive="{x:Bind ShowPending, Mode=OneWay}"
+                                                                  Width="24"
+                                                                  Height="24" />
+                                                    <TextBlock Text="{x:Bind L.WorkshopDetailScreenshotDownloading, Mode=OneWay}"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                               HorizontalAlignment="Center" />
+                                                </StackPanel>
+                                                <!-- 失败：说清楚这一张没下来，不再无限「下载中」。 -->
+                                                <StackPanel HorizontalAlignment="Center"
+                                                            VerticalAlignment="Center"
+                                                            Spacing="8"
+                                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowFailed), Mode=OneWay}">
+                                                    <FontIcon Glyph="&#xE783;"
+                                                              FontSize="24"
+                                                              Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                    <TextBlock Text="{x:Bind L.WorkshopDetailScreenshotFailed, Mode=OneWay}"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                               HorizontalAlignment="Center" />
+                                                </StackPanel>
                                                 <Image Source="{x:Bind svc:XamlImage.FromPath(Path, 1024), Mode=OneWay}"
                                                        Stretch="Uniform"
                                                        Margin="8"
@@ -157,8 +189,8 @@
                                 </FlipView>
                                 <Border HorizontalAlignment="Right"
                                         VerticalAlignment="Top"
-                                        Margin="0,10,10,0"
-                                        Padding="8,3"
+                                        Margin="0,12,12,0"
+                                        Padding="8,4"
                                         CornerRadius="4"
                                         Background="#99000000">
                                     <TextBlock x:Name="txtWorkshopInlineCounter"
@@ -201,7 +233,7 @@
                                                                      Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasPath), Mode=OneWay}" />
                                                             <Image Source="{x:Bind svc:XamlImage.FromPath(Path, 200), Mode=OneWay}"
                                                                    Stretch="Uniform"
-                                                                   Margin="6"
+                                                                   Margin="8"
                                                                    Visibility="{x:Bind svc:XamlVisibility.FromBool(HasPath), Mode=OneWay}" />
                                                         </Grid>
                                                     </Border>
@@ -234,11 +266,11 @@
                                 Padding="16"
                                 VerticalAlignment="Stretch"
                                 Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSubscribeCard), Mode=OneWay}">
-                            <StackPanel Spacing="10">
+                            <StackPanel Spacing="12">
                                 <TextBlock Text="{x:Bind L.WorkshopDetailSubscribe, Mode=OneWay}"
                                            Style="{StaticResource BodyStrongTextBlockStyle}" />
                                 <Border HorizontalAlignment="Left"
-                                        Padding="8,3"
+                                        Padding="8,4"
                                         CornerRadius="4"
                                         BorderThickness="1"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -263,7 +295,7 @@
                                         IsEnabled="{x:Bind ViewModel.CanToggleSteamSubscription, Mode=OneWay}"
                                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSteamSubscribeButton), Mode=OneWay}"
                                         AutomationProperties.AutomationId="btnWorkshopDetailSubscribeSteam" />
-                                <Border Padding="8,3"
+                                <Border Padding="8,4"
                                         HorizontalAlignment="Left"
                                         Background="{ThemeResource AccentFillColorDefaultBrush}"
                                         CornerRadius="4"
@@ -272,7 +304,7 @@
                                                Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
                                                Style="{StaticResource CaptionTextBlockStyle}" />
                                 </Border>
-                                <Border Padding="8,3"
+                                <Border Padding="8,4"
                                         HorizontalAlignment="Left"
                                         Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
                                         CornerRadius="4"
@@ -369,7 +401,7 @@
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasError), Mode=OneWay}">
-                        <StackPanel Spacing="10">
+                        <StackPanel Spacing="12">
                             <TextBlock Text="{x:Bind ViewModel.ErrorText, Mode=OneWay}"
                                        Style="{StaticResource BodyTextBlockStyle}"
                                        TextWrapping="Wrap"
@@ -422,13 +454,13 @@
                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasDescription), Mode=OneWay}" />
                             <!-- 翻译在途：等译文时先在译文位置显示环形进度 + 说明，译好原地替换（原文始终可见）。 -->
                             <Border Margin="0,8,0,0"
-                                    Padding="10"
-                                    CornerRadius="6"
+                                    Padding="12"
+                                    CornerRadius="8"
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1"
                                     Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowTranslatingDescription), Mode=OneWay}">
-                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                <StackPanel Orientation="Horizontal" Spacing="12">
                                     <ProgressRing Width="16"
                                                   Height="16"
                                                   IsActive="{x:Bind ViewModel.ShowTranslatingDescription, Mode=OneWay}"
@@ -443,8 +475,8 @@
                             </Border>
                             <!-- 译文：原文与译文同显，译文块放在原文下方的描边框里（决策：不做二选一切换；只显示译文正文，不加「译文」标题）。 -->
                             <Border Margin="0,8,0,0"
-                                    Padding="10"
-                                    CornerRadius="6"
+                                    Padding="12"
+                                    CornerRadius="8"
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1"
@@ -484,8 +516,8 @@
                                           AutomationProperties.AutomationId="lstWorkshopDependencies">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:WorkshopDependencyViewModel">
-                                        <Grid Padding="0,6"
-                                              ColumnSpacing="10"
+                                        <Grid Padding="0,8"
+                                              ColumnSpacing="8"
                                               AutomationProperties.AutomationId="{x:Bind AutomationId}">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
@@ -496,7 +528,7 @@
                                                      FontSize="14"
                                                      VerticalAlignment="Center"
                                                      Visibility="{x:Bind svc:XamlVisibility.FromBool(NeedsAttention), Mode=OneWay}" />
-                                            <StackPanel Grid.Column="1" Spacing="2">
+                                            <StackPanel Grid.Column="1" Spacing="4">
                                                 <TextBlock Text="{x:Bind Name}"
                                                            Style="{StaticResource BodyTextBlockStyle}"
                                                            TextWrapping="Wrap" />
@@ -506,7 +538,7 @@
                                                            TextWrapping="Wrap" />
                                             </StackPanel>
                                             <Border Grid.Column="2"
-                                                    Padding="8,3"
+                                                    Padding="8,4"
                                                     CornerRadius="4"
                                                     BorderThickness="1"
                                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -539,13 +571,13 @@
                                               AutomationProperties.AutomationId="txtWorkshopDetailChangelog" />
                             <!-- 翻译在途：更新日志也是一次整篇翻译，先在译文位置给一条带文字的环形进度。 -->
                             <Border Margin="0,8,0,0"
-                                    Padding="10"
-                                    CornerRadius="6"
+                                    Padding="12"
+                                    CornerRadius="8"
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1"
                                     Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowTranslatingChangelog), Mode=OneWay}">
-                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                <StackPanel Orientation="Horizontal" Spacing="12">
                                     <ProgressRing Width="16"
                                                   Height="16"
                                                   IsActive="{x:Bind ViewModel.ShowTranslatingChangelog, Mode=OneWay}"
@@ -560,8 +592,8 @@
                             </Border>
                             <!-- 译文：原文与译文同显，译文放在描边框里（只显示译文正文，不加「译文」标题）。 -->
                             <Border Margin="0,8,0,0"
-                                    Padding="10"
-                                    CornerRadius="6"
+                                    Padding="12"
+                                    CornerRadius="8"
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1"
@@ -589,7 +621,7 @@
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:WorkshopLinkViewModel">
                                         <Button Margin="0,0,0,4"
-                                                Padding="10,6"
+                                                Padding="12,8"
                                                 HorizontalAlignment="Stretch"
                                                 HorizontalContentAlignment="Left"
                                                 Click="OnLinkClick"
@@ -619,8 +651,8 @@
                             CornerRadius="8"
                             Padding="16"
                             Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowCommentsSection), Mode=OneWay}">
-                        <StackPanel Spacing="10">
-                            <Grid ColumnSpacing="10">
+                        <StackPanel Spacing="12">
+                            <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
@@ -657,8 +689,8 @@
                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowNoComments), Mode=OneWay}" />
                             <!-- 翻译在途：评论是逐条翻的（一条几秒），用一条带文字的环形进度概括整段，译好一条挂一条。 -->
                             <StackPanel Orientation="Horizontal"
-                                        Spacing="10"
-                                        Margin="0,0,0,2"
+                                        Spacing="12"
+                                        Margin="0,0,0,4"
                                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowTranslatingComments), Mode=OneWay}">
                                 <ProgressRing Width="16"
                                               Height="16"
@@ -680,7 +712,7 @@
                                                 CornerRadius="8"
                                                 Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                                 AutomationProperties.AutomationId="{x:Bind AutomationId}">
-                                            <StackPanel Spacing="6">
+                                            <StackPanel Spacing="8">
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <HyperlinkButton Padding="0"
                                                                      Click="OnCommentAuthorClick"
@@ -699,9 +731,9 @@
                                                                   ImageRequested="OnMarkdownImageRequested"
                                                                   AutomationProperties.Name="{x:Bind BodyPlain}" />
                                                 <!-- 译文：原文与译文同显，只显示译文正文（不加「译文」标题）；评论模板按 x:DataType 绑定，L 取自 LocalizedObservableObject。 -->
-                                                <Border Margin="0,6,0,0"
-                                                        Padding="10"
-                                                        CornerRadius="6"
+                                                <Border Margin="0,8,0,0"
+                                                        Padding="12"
+                                                        CornerRadius="8"
                                                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                                         BorderThickness="1"
@@ -724,7 +756,7 @@
                                         Margin="0,4,0,0"
                                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasCommentsPaging), Mode=OneWay}">
                                 <Button x:Name="btnCommentsPrev"
-                                        Padding="10,4"
+                                        Padding="12,4"
                                         Click="OnCommentsPrevClick"
                                         IsEnabled="{x:Bind ViewModel.CanCommentsPrev, Mode=OneWay}"
                                         ToolTipService.ToolTip="{x:Bind L.WorkshopCommentsPrev, Mode=OneWay}"
@@ -738,7 +770,7 @@
                                            VerticalAlignment="Center"
                                            AutomationProperties.AutomationId="txtWorkshopCommentsPage" />
                                 <Button x:Name="btnCommentsNext"
-                                        Padding="10,4"
+                                        Padding="12,4"
                                         Click="OnCommentsNextClick"
                                         IsEnabled="{x:Bind ViewModel.CanCommentsNext, Mode=OneWay}"
                                         ToolTipService.ToolTip="{x:Bind L.WorkshopCommentsNext, Mode=OneWay}"
@@ -798,28 +830,56 @@
                       KeyDown="OnGalleryKeyDown">
                 <FlipView.ItemTemplate>
                     <DataTemplate x:DataType="vm:WorkshopScreenshotViewModel">
-                        <ScrollViewer ZoomMode="Enabled"
-                                      MinZoomFactor="1"
-                                      MaxZoomFactor="4"
-                                      Padding="16"
-                                      HorizontalScrollBarVisibility="Auto"
-                                      VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollMode="Disabled"
-                                      VerticalScrollMode="Disabled"
-                                      DoubleTapped="OnViewerDoubleTapped"
-                                      PointerWheelChanged="OnViewerPointerWheelChanged">
-                            <!--
-                                缩放开启后 ScrollViewer 按内容自身尺寸测量，工坊画廊给的是 imw=5000 的原图，
-                                不限制就会被裁掉一大块（1x 也不能拖）。MaxWidth/MaxHeight 由页面按浮层尺寸算好，
-                                1x 刚好整张放进窗口，放大后才滚动。
-                            -->
-                            <Image Source="{x:Bind svc:XamlImage.FromPath(Path, 1600), Mode=OneWay}"
-                                   Stretch="Uniform"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
-                                   MaxWidth="{x:Bind ViewerMaxWidth, Mode=OneWay}"
-                                   MaxHeight="{x:Bind ViewerMaxHeight, Mode=OneWay}" />
-                        </ScrollViewer>
+                        <Grid>
+                            <ScrollViewer ZoomMode="Enabled"
+                                          MinZoomFactor="1"
+                                          MaxZoomFactor="4"
+                                          Padding="16"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollMode="Disabled"
+                                          VerticalScrollMode="Disabled"
+                                          DoubleTapped="OnViewerDoubleTapped"
+                                          PointerWheelChanged="OnViewerPointerWheelChanged">
+                                <!--
+                                    缩放开启后 ScrollViewer 按内容自身尺寸测量，工坊画廊给的是 imw=5000 的原图，
+                                    不限制就会被裁掉一大块（1x 也不能拖）。MaxWidth/MaxHeight 由页面按浮层尺寸算好，
+                                    1x 刚好整张放进窗口，放大后才滚动。
+                                -->
+                                <Image Source="{x:Bind svc:XamlImage.FromPath(Path, 1600), Mode=OneWay}"
+                                       Stretch="Uniform"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       MaxWidth="{x:Bind ViewerMaxWidth, Mode=OneWay}"
+                                       MaxHeight="{x:Bind ViewerMaxHeight, Mode=OneWay}" />
+                            </ScrollViewer>
+                            <!-- 全屏打开时这一张可能还没下完：给出与内联大图一致的「下载中 / 失败」说明。 -->
+                            <StackPanel HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Spacing="8"
+                                        IsHitTestVisible="False"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowPending), Mode=OneWay}">
+                                <ProgressRing IsActive="{x:Bind ShowPending, Mode=OneWay}"
+                                              Width="32"
+                                              Height="32"
+                                              Foreground="White" />
+                                <TextBlock Text="{x:Bind L.WorkshopDetailScreenshotDownloading, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center" />
+                            </StackPanel>
+                            <StackPanel HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Spacing="8"
+                                        IsHitTestVisible="False"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowFailed), Mode=OneWay}">
+                                <FontIcon Glyph="&#xE783;" FontSize="28" Foreground="White" />
+                                <TextBlock Text="{x:Bind L.WorkshopDetailScreenshotFailed, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
                     </DataTemplate>
                 </FlipView.ItemTemplate>
             </FlipView>

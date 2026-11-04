@@ -109,7 +109,7 @@ public static class WorkshopPageChecks
             xaml.Contains("AutomationProperties.Name=\"{x:Bind L.WorkshopTitle", StringComparison.Ordinal));
     }
 
-    /// <summary>搜索框回车提交；TextChanged 只回写文本，不触发查询。</summary>
+    /// <summary>搜索框是带放大镜的 AutoSuggestBox：QuerySubmitted 才提交；TextChanged 只回写文本，不触发查询。</summary>
     private static void CheckToolbarSubmitsOnEnter(string xaml)
     {
         if (!TryGetBlock(
@@ -123,11 +123,20 @@ public static class WorkshopPageChecks
         }
 
         ChecksContext.Check(
-            "创意工坊页: 搜索框挂 KeyDown",
-            toolbar.Contains("KeyDown=\"OnSearchKeyDown\"", StringComparison.Ordinal));
+            "创意工坊页: 搜索框是 AutoSuggestBox",
+            toolbar.Contains("<AutoSuggestBox", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 搜索框带放大镜",
+            toolbar.Contains("QueryIcon=\"Find\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 提交走 QuerySubmitted",
+            toolbar.Contains("QuerySubmitted=\"OnSearchQuerySubmitted\"", StringComparison.Ordinal));
         ChecksContext.Check(
             "创意工坊页: 搜索框仍靠 TextChanged 回写文本",
             toolbar.Contains("TextChanged=\"OnSearchTextChanged\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 不再自己接 KeyDown 判回车",
+            !toolbar.Contains("KeyDown=", StringComparison.Ordinal));
     }
 
     /// <summary>顶层 Grid 四行：工具条 / 未登录提示 / 列表 / 分页状态栏。</summary>
@@ -387,15 +396,23 @@ public static class WorkshopPageChecks
     {
         if (TryGetBlock(
                 codeBehind,
-                "private async void OnSearchKeyDown",
+                "private async void OnSearchQuerySubmitted",
                 "private void OnSortSelectionChanged",
-                "创意工坊页: 找到 OnSearchKeyDown",
-                out var keyDown))
+                "创意工坊页: 找到 OnSearchQuerySubmitted",
+                out var querySubmitted))
         {
             ChecksContext.Check(
-                "创意工坊页: 回车才提交搜索",
-                keyDown.Contains("VirtualKey.Enter", StringComparison.Ordinal)
-                    && keyDown.Contains("CommitSearchAsync", StringComparison.Ordinal));
+                "创意工坊页: 提交才查工坊",
+                querySubmitted.Contains("CommitSearchAsync", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 提交成功记进最近搜索",
+                querySubmitted.Contains("SearchSuggestions.Push", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 最近搜索只延迟写盘一次",
+                querySubmitted.Contains("SaveSettingsDeferred", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 不再自己判回车键",
+                !querySubmitted.Contains("VirtualKey.Enter", StringComparison.Ordinal));
         }
 
         if (TryGetBlock(

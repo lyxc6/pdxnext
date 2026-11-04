@@ -187,26 +187,35 @@ public sealed partial class Localizer
         ["dlc.noGameHint"] = "请先在游戏库里选择一款游戏",
         ["dlc.noGameTitle"] = "（未选择游戏）",
         ["dlc.ownedBadge"] = "已拥有",
+        ["dlc.ownershipAccountOwned"] = "账号真实拥有 {0}/{1}",
+        ["dlc.ownershipAccountUnknown"] = "账号真实拥有无法判定（{0}）",
         ["dlc.ownershipChecking"] = "正在查询 Steam 授权…",
+        ["dlc.ownershipDetailAccountApi"] = "账号探测 DLL：{0}",
         ["dlc.ownershipDetailApi"] = "探测 DLL：{0}",
         ["dlc.ownershipDetailAppId"] = "AppID {0}",
+        ["dlc.ownershipDetailForeignDlc"] = "加载器报告 {0} 条，其中 {1} 条不属于本游戏（Steam 目录 {2} 条）",
+        ["dlc.ownershipDetailLoaderSource"] = "DLC 列表来自加载器 cream_api.ini，不是 Steam 目录",
         ["dlc.ownershipDetailOwnerMatch"] = "appmanifest 归属与当前账号一致",
         ["dlc.ownershipDetailOwnerMismatch"] = "appmanifest 归属为 {0}，与当前账号不一致（其 DisabledDLC 不采用）",
         ["dlc.ownershipDetailPatchOff"] = "补丁：未加载",
         ["dlc.ownershipDetailPatchOn"] = "补丁：已加载",
+        ["dlc.ownershipDetailPatchOnByOther"] = "补丁：已加载（其他工具/整合包）",
+        ["dlc.ownershipDetailPatchOverwritten"] = "补丁：曾被替换，已被 Steam 更新覆盖",
         ["dlc.ownershipDetailSteamId"] = "SteamID64 {0}",
+        ["dlc.ownershipErrorBackupNotOriginal"] = "备份的 steam_api64_o.dll 看起来也是加载器",
         ["dlc.ownershipErrorBusy"] = "Steam 正被其他页面占用，请稍后重试",
         ["dlc.ownershipErrorHostFailed"] = "Steam 查询进程没有正常返回（可能被 Steam 退出、被杀或超时），请重试",
         ["dlc.ownershipErrorInitFailed"] = "Steam 初始化失败（可能未登录）",
         ["dlc.ownershipErrorNative"] = "Steam 接口调用失败",
         ["dlc.ownershipErrorNoAppId"] = "无法确定 Steam AppID，跳过授权探测",
+        ["dlc.ownershipErrorNoBackup"] = "缺少原版 steam_api64_o.dll 备份",
         ["dlc.ownershipErrorNoDll"] = "游戏目录里没有可探测的 steam_api64.dll",
         ["dlc.ownershipErrorNotWindows"] = "只有 Windows 能查询 Steam 授权",
         ["dlc.ownershipErrorSteamNotRunning"] = "Steam 客户端没有运行，无法查询授权",
         ["dlc.ownershipErrorX86"] = "32 位游戏的 steam_api.dll 无法在 64 位进程里查询，暂不支持",
         ["dlc.ownershipName"] = "Steam 授权状态",
-        ["dlc.ownershipPatchedEffective"] = "补丁已生效：Steam 报告 {0} 个 DLC（{1} 个已拥有），磁盘上的 {2} 个 DLC 全部有授权",
-        ["dlc.ownershipPatchedIncomplete"] = "补丁已加载但没完全生效：磁盘上的 {0} 个 DLC 有 {1} 个拿不到授权（Steam 报告 {2} 个 DLC、{3} 个已拥有）",
+        ["dlc.ownershipPatchedEffective"] = "补丁已生效：磁盘上的 {2} 个 DLC 全部有授权（游戏读到 {0} 个 DLC、{1} 个已拥有）",
+        ["dlc.ownershipPatchedIncomplete"] = "补丁已加载但没完全生效：磁盘上的 {0} 个 DLC 有 {1} 个拿不到授权（游戏读到 {2} 个 DLC、{3} 个已拥有）",
         ["dlc.ownershipRecheck"] = "重新检测",
         ["dlc.ownershipRecheckFailed"] = "重新检测失败：{0}",
         ["dlc.ownershipRecheckName"] = "重新检测 Steam 授权",
@@ -214,8 +223,8 @@ public sealed partial class Localizer
         ["dlc.ownershipRowToolTip"] = "Steam AppID {0}",
         ["dlc.ownershipUnavailable"] = "无法判定授权：{0}",
         ["dlc.ownershipUnknown"] = "授权状态未知",
-        ["dlc.ownershipVanillaAllOwned"] = "未打补丁：磁盘上的 {0} 个 DLC 都有 Steam 授权（Steam 报告 {1} 个 DLC、{2} 个已拥有）",
-        ["dlc.ownershipVanillaPartial"] = "未打补丁：磁盘上的 {0} 个 DLC 有 {1} 个缺 Steam 授权（Steam 报告 {2} 个 DLC、{3} 个已拥有）",
+        ["dlc.ownershipVanillaAllOwned"] = "未打补丁：磁盘上的 {0} 个 DLC 都有 Steam 授权（Steam 目录 {1} 个 DLC、{2} 个已拥有）",
+        ["dlc.ownershipVanillaPartial"] = "未打补丁：磁盘上的 {0} 个 DLC 有 {1} 个缺 Steam 授权（Steam 目录 {2} 个 DLC、{3} 个已拥有）",
         ["dlc.saveFailed"] = "保存失败：{0}",
         ["dlc.saveFailedShort"] = "保存失败",
         ["dlc.saveName"] = "保存 DLC 状态",
@@ -590,6 +599,16 @@ public sealed partial class Localizer
         ["modstudio.detailSupportedVersion"] = "支持版本",
         ["modstudio.detailTags"] = "标签",
         ["modstudio.detailVersion"] = "版本",
+        ["modstudio.editDescriptionLabel"] = "简介",
+        ["modstudio.editFailed"] = "保存描述符失败：{0}",
+        ["modstudio.editHint"] = "只更新下面的字段；文件里的注释、其它键与 path 会原样保留。",
+        ["modstudio.editNameLabel"] = "名称",
+        ["modstudio.editSuccess"] = "描述符已保存。",
+        ["modstudio.editSupportedLabel"] = "支持的游戏版本",
+        ["modstudio.editTagsLabel"] = "标签（逗号分隔）",
+        ["modstudio.editTitle"] = "编辑描述符",
+        ["modstudio.editUnavailable"] = "这个 Mod 没有可编辑的描述符文件。",
+        ["modstudio.editVersionLabel"] = "版本",
         ["modstudio.fieldChangeNote"] = "更新说明",
         ["modstudio.fieldDescription"] = "简介",
         ["modstudio.fieldDescriptors"] = "内容描述词",
@@ -629,6 +648,7 @@ public sealed partial class Localizer
         ["modstudio.noWorkshopHint"] = "这款游戏没有 Steam 创意工坊，无法上传。",
         ["modstudio.openFolder"] = "打开文件夹",
         ["modstudio.openFolderUnavailable"] = "这个 Mod 没有可打开的本地目录。",
+        ["modstudio.openSteam"] = "在 Steam 中打开",
         ["modstudio.openWorkshop"] = "在浏览器中打开工坊页面",
         ["modstudio.openWorkshopUnavailable"] = "这个 Mod 还没有创意工坊页面。",
         ["modstudio.pickPreview"] = "选择图片…",
@@ -1195,6 +1215,8 @@ public sealed partial class Localizer
         ["workshop.detailNoComments"] = "还没有人留言",
         ["workshop.detailNoDescription"] = "作者没有填写简介",
         ["workshop.detailRetry"] = "重试",
+        ["workshop.detailScreenshotDownloading"] = "正在下载这张截图…",
+        ["workshop.detailScreenshotFailed"] = "截图下载失败",
         ["workshop.detailScreenshots"] = "截图 {0} 张",
         ["workshop.detailScreenshotsLoading"] = "正在下载截图…",
         ["workshop.detailScreenshotsTitle"] = "截图",
@@ -1459,26 +1481,35 @@ public sealed partial class Localizer
         ["dlc.noGameHint"] = "Select a game in your library first",
         ["dlc.noGameTitle"] = "(No game selected)",
         ["dlc.ownedBadge"] = "Owned",
+        ["dlc.ownershipAccountOwned"] = "the account truly owns {0}/{1}",
+        ["dlc.ownershipAccountUnknown"] = "account ownership cannot be determined ({0})",
         ["dlc.ownershipChecking"] = "Querying Steam ownership…",
+        ["dlc.ownershipDetailAccountApi"] = "Account probe DLL: {0}",
         ["dlc.ownershipDetailApi"] = "Probed DLL: {0}",
         ["dlc.ownershipDetailAppId"] = "AppID {0}",
+        ["dlc.ownershipDetailForeignDlc"] = "loader reports {0} entries, {1} of them are not for this game (Steam catalog: {2})",
+        ["dlc.ownershipDetailLoaderSource"] = "DLC list comes from the loader's cream_api.ini, not the Steam catalog",
         ["dlc.ownershipDetailOwnerMatch"] = "appmanifest belongs to the current account",
         ["dlc.ownershipDetailOwnerMismatch"] = "appmanifest belongs to {0}, not the current account (its DisabledDLC list is ignored)",
         ["dlc.ownershipDetailPatchOff"] = "Patch: not loaded",
         ["dlc.ownershipDetailPatchOn"] = "Patch: loaded",
+        ["dlc.ownershipDetailPatchOnByOther"] = "Patch: loaded (by another tool / mod pack)",
+        ["dlc.ownershipDetailPatchOverwritten"] = "Patch: was applied, overwritten by a Steam update",
         ["dlc.ownershipDetailSteamId"] = "SteamID64 {0}",
+        ["dlc.ownershipErrorBackupNotOriginal"] = "the steam_api64_o.dll backup also looks like a loader",
         ["dlc.ownershipErrorBusy"] = "Steam is in use by another page, try again shortly",
         ["dlc.ownershipErrorHostFailed"] = "The Steam query process did not return normally (exited, killed or timed out). Please retry.",
         ["dlc.ownershipErrorInitFailed"] = "Steam initialisation failed (not signed in?)",
         ["dlc.ownershipErrorNative"] = "The Steam API call failed",
         ["dlc.ownershipErrorNoAppId"] = "Cannot determine the Steam AppID, so the ownership probe was skipped",
+        ["dlc.ownershipErrorNoBackup"] = "the original steam_api64_o.dll backup is missing",
         ["dlc.ownershipErrorNoDll"] = "No probeable steam_api64.dll was found in the game folder",
         ["dlc.ownershipErrorNotWindows"] = "Steam ownership can only be queried on Windows",
         ["dlc.ownershipErrorSteamNotRunning"] = "The Steam client is not running, so ownership cannot be queried",
         ["dlc.ownershipErrorX86"] = "32-bit games use steam_api.dll, which cannot be queried from a 64-bit process",
         ["dlc.ownershipName"] = "Steam ownership",
-        ["dlc.ownershipPatchedEffective"] = "Patch is active: Steam reports {0} DLCs ({1} owned) and all {2} DLCs on disk are licensed",
-        ["dlc.ownershipPatchedIncomplete"] = "Patch is loaded but not fully effective: {0} DLCs on disk, {1} of them are unlicensed (Steam reports {2} DLCs, {3} owned)",
+        ["dlc.ownershipPatchedEffective"] = "Patch is active: all {2} DLCs on disk are licensed (the game sees {0} DLCs, {1} owned)",
+        ["dlc.ownershipPatchedIncomplete"] = "Patch is loaded but not fully effective: {0} DLCs on disk, {1} of them are unlicensed (the game sees {2} DLCs, {3} owned)",
         ["dlc.ownershipRecheck"] = "Re-check",
         ["dlc.ownershipRecheckFailed"] = "Re-check failed: {0}",
         ["dlc.ownershipRecheckName"] = "Re-check Steam ownership",
@@ -1486,8 +1517,8 @@ public sealed partial class Localizer
         ["dlc.ownershipRowToolTip"] = "Steam AppID {0}",
         ["dlc.ownershipUnavailable"] = "Ownership unknown: {0}",
         ["dlc.ownershipUnknown"] = "Ownership unknown",
-        ["dlc.ownershipVanillaAllOwned"] = "No patch: all {0} DLCs on disk are licensed (Steam reports {1} DLCs, {2} owned)",
-        ["dlc.ownershipVanillaPartial"] = "No patch: {0} DLCs on disk, {1} of them are not licensed (Steam reports {2} DLCs, {3} owned)",
+        ["dlc.ownershipVanillaAllOwned"] = "No patch: all {0} DLCs on disk are licensed (Steam catalog: {1} DLCs, {2} owned)",
+        ["dlc.ownershipVanillaPartial"] = "No patch: {0} DLCs on disk, {1} of them are not licensed (Steam catalog: {2} DLCs, {3} owned)",
         ["dlc.saveFailed"] = "Save failed: {0}",
         ["dlc.saveFailedShort"] = "Save failed",
         ["dlc.saveName"] = "Save DLC states",
@@ -1862,6 +1893,16 @@ public sealed partial class Localizer
         ["modstudio.detailSupportedVersion"] = "Supported version",
         ["modstudio.detailTags"] = "Tags",
         ["modstudio.detailVersion"] = "Version",
+        ["modstudio.editDescriptionLabel"] = "Description",
+        ["modstudio.editFailed"] = "Saving the descriptor failed: {0}",
+        ["modstudio.editHint"] = "Only the fields below are updated; comments, other keys and path in the file are kept as-is.",
+        ["modstudio.editNameLabel"] = "Name",
+        ["modstudio.editSuccess"] = "Descriptor saved.",
+        ["modstudio.editSupportedLabel"] = "Supported game version",
+        ["modstudio.editTagsLabel"] = "Tags (comma separated)",
+        ["modstudio.editTitle"] = "Edit descriptor",
+        ["modstudio.editUnavailable"] = "This mod has no descriptor file that can be edited.",
+        ["modstudio.editVersionLabel"] = "Version",
         ["modstudio.fieldChangeNote"] = "Change note",
         ["modstudio.fieldDescription"] = "Description",
         ["modstudio.fieldDescriptors"] = "Content descriptors",
@@ -1901,6 +1942,7 @@ public sealed partial class Localizer
         ["modstudio.noWorkshopHint"] = "This game has no Steam Workshop, so it cannot publish.",
         ["modstudio.openFolder"] = "Open folder",
         ["modstudio.openFolderUnavailable"] = "This mod has no local folder to open.",
+        ["modstudio.openSteam"] = "Open in Steam",
         ["modstudio.openWorkshop"] = "Open the Workshop page in a browser",
         ["modstudio.openWorkshopUnavailable"] = "This mod does not have a Steam Workshop page yet.",
         ["modstudio.pickPreview"] = "Choose image…",
@@ -2467,6 +2509,8 @@ public sealed partial class Localizer
         ["workshop.detailNoComments"] = "No comments yet",
         ["workshop.detailNoDescription"] = "The author left no description",
         ["workshop.detailRetry"] = "Retry",
+        ["workshop.detailScreenshotDownloading"] = "Downloading this screenshot…",
+        ["workshop.detailScreenshotFailed"] = "Screenshot failed to download",
         ["workshop.detailScreenshots"] = "{0} screenshots",
         ["workshop.detailScreenshotsLoading"] = "Downloading screenshots…",
         ["workshop.detailScreenshotsTitle"] = "Screenshots",
@@ -2731,19 +2775,28 @@ public sealed partial class Localizer
         ("dlc.noGameHint", "DlcNoGameHint"),
         ("dlc.noGameTitle", "DlcNoGameTitle"),
         ("dlc.ownedBadge", "DlcOwnedBadge"),
+        ("dlc.ownershipAccountOwned", "DlcOwnershipAccountOwned"),
+        ("dlc.ownershipAccountUnknown", "DlcOwnershipAccountUnknown"),
         ("dlc.ownershipChecking", "DlcOwnershipChecking"),
+        ("dlc.ownershipDetailAccountApi", "DlcOwnershipDetailAccountApi"),
         ("dlc.ownershipDetailApi", "DlcOwnershipDetailApi"),
         ("dlc.ownershipDetailAppId", "DlcOwnershipDetailAppId"),
+        ("dlc.ownershipDetailForeignDlc", "DlcOwnershipDetailForeignDlc"),
+        ("dlc.ownershipDetailLoaderSource", "DlcOwnershipDetailLoaderSource"),
         ("dlc.ownershipDetailOwnerMatch", "DlcOwnershipDetailOwnerMatch"),
         ("dlc.ownershipDetailOwnerMismatch", "DlcOwnershipDetailOwnerMismatch"),
         ("dlc.ownershipDetailPatchOff", "DlcOwnershipDetailPatchOff"),
         ("dlc.ownershipDetailPatchOn", "DlcOwnershipDetailPatchOn"),
+        ("dlc.ownershipDetailPatchOnByOther", "DlcOwnershipDetailPatchOnByOther"),
+        ("dlc.ownershipDetailPatchOverwritten", "DlcOwnershipDetailPatchOverwritten"),
         ("dlc.ownershipDetailSteamId", "DlcOwnershipDetailSteamId"),
+        ("dlc.ownershipErrorBackupNotOriginal", "DlcOwnershipErrorBackupNotOriginal"),
         ("dlc.ownershipErrorBusy", "DlcOwnershipErrorBusy"),
         ("dlc.ownershipErrorHostFailed", "DlcOwnershipErrorHostFailed"),
         ("dlc.ownershipErrorInitFailed", "DlcOwnershipErrorInitFailed"),
         ("dlc.ownershipErrorNative", "DlcOwnershipErrorNative"),
         ("dlc.ownershipErrorNoAppId", "DlcOwnershipErrorNoAppId"),
+        ("dlc.ownershipErrorNoBackup", "DlcOwnershipErrorNoBackup"),
         ("dlc.ownershipErrorNoDll", "DlcOwnershipErrorNoDll"),
         ("dlc.ownershipErrorNotWindows", "DlcOwnershipErrorNotWindows"),
         ("dlc.ownershipErrorSteamNotRunning", "DlcOwnershipErrorSteamNotRunning"),
@@ -3134,6 +3187,16 @@ public sealed partial class Localizer
         ("modstudio.detailSupportedVersion", "ModstudioDetailSupportedVersion"),
         ("modstudio.detailTags", "ModstudioDetailTags"),
         ("modstudio.detailVersion", "ModstudioDetailVersion"),
+        ("modstudio.editDescriptionLabel", "ModstudioEditDescriptionLabel"),
+        ("modstudio.editFailed", "ModstudioEditFailed"),
+        ("modstudio.editHint", "ModstudioEditHint"),
+        ("modstudio.editNameLabel", "ModstudioEditNameLabel"),
+        ("modstudio.editSuccess", "ModstudioEditSuccess"),
+        ("modstudio.editSupportedLabel", "ModstudioEditSupportedLabel"),
+        ("modstudio.editTagsLabel", "ModstudioEditTagsLabel"),
+        ("modstudio.editTitle", "ModstudioEditTitle"),
+        ("modstudio.editUnavailable", "ModstudioEditUnavailable"),
+        ("modstudio.editVersionLabel", "ModstudioEditVersionLabel"),
         ("modstudio.fieldChangeNote", "ModstudioFieldChangeNote"),
         ("modstudio.fieldDescription", "ModstudioFieldDescription"),
         ("modstudio.fieldDescriptors", "ModstudioFieldDescriptors"),
@@ -3173,6 +3236,7 @@ public sealed partial class Localizer
         ("modstudio.noWorkshopHint", "ModstudioNoWorkshopHint"),
         ("modstudio.openFolder", "ModstudioOpenFolder"),
         ("modstudio.openFolderUnavailable", "ModstudioOpenFolderUnavailable"),
+        ("modstudio.openSteam", "ModstudioOpenSteam"),
         ("modstudio.openWorkshop", "ModstudioOpenWorkshop"),
         ("modstudio.openWorkshopUnavailable", "ModstudioOpenWorkshopUnavailable"),
         ("modstudio.pickPreview", "ModstudioPickPreview"),
@@ -3739,6 +3803,8 @@ public sealed partial class Localizer
         ("workshop.detailNoComments", "WorkshopDetailNoComments"),
         ("workshop.detailNoDescription", "WorkshopDetailNoDescription"),
         ("workshop.detailRetry", "WorkshopDetailRetry"),
+        ("workshop.detailScreenshotDownloading", "WorkshopDetailScreenshotDownloading"),
+        ("workshop.detailScreenshotFailed", "WorkshopDetailScreenshotFailed"),
         ("workshop.detailScreenshots", "WorkshopDetailScreenshots"),
         ("workshop.detailScreenshotsLoading", "WorkshopDetailScreenshotsLoading"),
         ("workshop.detailScreenshotsTitle", "WorkshopDetailScreenshotsTitle"),
@@ -4001,19 +4067,28 @@ public sealed partial class Localizer
     public string DlcNoGameHint => Format("dlc.noGameHint");
     public string DlcNoGameTitle => Format("dlc.noGameTitle");
     public string DlcOwnedBadge => Format("dlc.ownedBadge");
+    public string DlcOwnershipAccountOwned => Format("dlc.ownershipAccountOwned");
+    public string DlcOwnershipAccountUnknown => Format("dlc.ownershipAccountUnknown");
     public string DlcOwnershipChecking => Format("dlc.ownershipChecking");
+    public string DlcOwnershipDetailAccountApi => Format("dlc.ownershipDetailAccountApi");
     public string DlcOwnershipDetailApi => Format("dlc.ownershipDetailApi");
     public string DlcOwnershipDetailAppId => Format("dlc.ownershipDetailAppId");
+    public string DlcOwnershipDetailForeignDlc => Format("dlc.ownershipDetailForeignDlc");
+    public string DlcOwnershipDetailLoaderSource => Format("dlc.ownershipDetailLoaderSource");
     public string DlcOwnershipDetailOwnerMatch => Format("dlc.ownershipDetailOwnerMatch");
     public string DlcOwnershipDetailOwnerMismatch => Format("dlc.ownershipDetailOwnerMismatch");
     public string DlcOwnershipDetailPatchOff => Format("dlc.ownershipDetailPatchOff");
     public string DlcOwnershipDetailPatchOn => Format("dlc.ownershipDetailPatchOn");
+    public string DlcOwnershipDetailPatchOnByOther => Format("dlc.ownershipDetailPatchOnByOther");
+    public string DlcOwnershipDetailPatchOverwritten => Format("dlc.ownershipDetailPatchOverwritten");
     public string DlcOwnershipDetailSteamId => Format("dlc.ownershipDetailSteamId");
+    public string DlcOwnershipErrorBackupNotOriginal => Format("dlc.ownershipErrorBackupNotOriginal");
     public string DlcOwnershipErrorBusy => Format("dlc.ownershipErrorBusy");
     public string DlcOwnershipErrorHostFailed => Format("dlc.ownershipErrorHostFailed");
     public string DlcOwnershipErrorInitFailed => Format("dlc.ownershipErrorInitFailed");
     public string DlcOwnershipErrorNative => Format("dlc.ownershipErrorNative");
     public string DlcOwnershipErrorNoAppId => Format("dlc.ownershipErrorNoAppId");
+    public string DlcOwnershipErrorNoBackup => Format("dlc.ownershipErrorNoBackup");
     public string DlcOwnershipErrorNoDll => Format("dlc.ownershipErrorNoDll");
     public string DlcOwnershipErrorNotWindows => Format("dlc.ownershipErrorNotWindows");
     public string DlcOwnershipErrorSteamNotRunning => Format("dlc.ownershipErrorSteamNotRunning");
@@ -4404,6 +4479,16 @@ public sealed partial class Localizer
     public string ModstudioDetailSupportedVersion => Format("modstudio.detailSupportedVersion");
     public string ModstudioDetailTags => Format("modstudio.detailTags");
     public string ModstudioDetailVersion => Format("modstudio.detailVersion");
+    public string ModstudioEditDescriptionLabel => Format("modstudio.editDescriptionLabel");
+    public string ModstudioEditFailed => Format("modstudio.editFailed");
+    public string ModstudioEditHint => Format("modstudio.editHint");
+    public string ModstudioEditNameLabel => Format("modstudio.editNameLabel");
+    public string ModstudioEditSuccess => Format("modstudio.editSuccess");
+    public string ModstudioEditSupportedLabel => Format("modstudio.editSupportedLabel");
+    public string ModstudioEditTagsLabel => Format("modstudio.editTagsLabel");
+    public string ModstudioEditTitle => Format("modstudio.editTitle");
+    public string ModstudioEditUnavailable => Format("modstudio.editUnavailable");
+    public string ModstudioEditVersionLabel => Format("modstudio.editVersionLabel");
     public string ModstudioFieldChangeNote => Format("modstudio.fieldChangeNote");
     public string ModstudioFieldDescription => Format("modstudio.fieldDescription");
     public string ModstudioFieldDescriptors => Format("modstudio.fieldDescriptors");
@@ -4443,6 +4528,7 @@ public sealed partial class Localizer
     public string ModstudioNoWorkshopHint => Format("modstudio.noWorkshopHint");
     public string ModstudioOpenFolder => Format("modstudio.openFolder");
     public string ModstudioOpenFolderUnavailable => Format("modstudio.openFolderUnavailable");
+    public string ModstudioOpenSteam => Format("modstudio.openSteam");
     public string ModstudioOpenWorkshop => Format("modstudio.openWorkshop");
     public string ModstudioOpenWorkshopUnavailable => Format("modstudio.openWorkshopUnavailable");
     public string ModstudioPickPreview => Format("modstudio.pickPreview");
@@ -5009,6 +5095,8 @@ public sealed partial class Localizer
     public string WorkshopDetailNoComments => Format("workshop.detailNoComments");
     public string WorkshopDetailNoDescription => Format("workshop.detailNoDescription");
     public string WorkshopDetailRetry => Format("workshop.detailRetry");
+    public string WorkshopDetailScreenshotDownloading => Format("workshop.detailScreenshotDownloading");
+    public string WorkshopDetailScreenshotFailed => Format("workshop.detailScreenshotFailed");
     public string WorkshopDetailScreenshots => Format("workshop.detailScreenshots");
     public string WorkshopDetailScreenshotsLoading => Format("workshop.detailScreenshotsLoading");
     public string WorkshopDetailScreenshotsTitle => Format("workshop.detailScreenshotsTitle");
@@ -5274,19 +5362,28 @@ internal static class Keys
     public const string DlcNoGameHint = "dlc.noGameHint";
     public const string DlcNoGameTitle = "dlc.noGameTitle";
     public const string DlcOwnedBadge = "dlc.ownedBadge";
+    public const string DlcOwnershipAccountOwned = "dlc.ownershipAccountOwned";
+    public const string DlcOwnershipAccountUnknown = "dlc.ownershipAccountUnknown";
     public const string DlcOwnershipChecking = "dlc.ownershipChecking";
+    public const string DlcOwnershipDetailAccountApi = "dlc.ownershipDetailAccountApi";
     public const string DlcOwnershipDetailApi = "dlc.ownershipDetailApi";
     public const string DlcOwnershipDetailAppId = "dlc.ownershipDetailAppId";
+    public const string DlcOwnershipDetailForeignDlc = "dlc.ownershipDetailForeignDlc";
+    public const string DlcOwnershipDetailLoaderSource = "dlc.ownershipDetailLoaderSource";
     public const string DlcOwnershipDetailOwnerMatch = "dlc.ownershipDetailOwnerMatch";
     public const string DlcOwnershipDetailOwnerMismatch = "dlc.ownershipDetailOwnerMismatch";
     public const string DlcOwnershipDetailPatchOff = "dlc.ownershipDetailPatchOff";
     public const string DlcOwnershipDetailPatchOn = "dlc.ownershipDetailPatchOn";
+    public const string DlcOwnershipDetailPatchOnByOther = "dlc.ownershipDetailPatchOnByOther";
+    public const string DlcOwnershipDetailPatchOverwritten = "dlc.ownershipDetailPatchOverwritten";
     public const string DlcOwnershipDetailSteamId = "dlc.ownershipDetailSteamId";
+    public const string DlcOwnershipErrorBackupNotOriginal = "dlc.ownershipErrorBackupNotOriginal";
     public const string DlcOwnershipErrorBusy = "dlc.ownershipErrorBusy";
     public const string DlcOwnershipErrorHostFailed = "dlc.ownershipErrorHostFailed";
     public const string DlcOwnershipErrorInitFailed = "dlc.ownershipErrorInitFailed";
     public const string DlcOwnershipErrorNative = "dlc.ownershipErrorNative";
     public const string DlcOwnershipErrorNoAppId = "dlc.ownershipErrorNoAppId";
+    public const string DlcOwnershipErrorNoBackup = "dlc.ownershipErrorNoBackup";
     public const string DlcOwnershipErrorNoDll = "dlc.ownershipErrorNoDll";
     public const string DlcOwnershipErrorNotWindows = "dlc.ownershipErrorNotWindows";
     public const string DlcOwnershipErrorSteamNotRunning = "dlc.ownershipErrorSteamNotRunning";
@@ -5677,6 +5774,16 @@ internal static class Keys
     public const string ModstudioDetailSupportedVersion = "modstudio.detailSupportedVersion";
     public const string ModstudioDetailTags = "modstudio.detailTags";
     public const string ModstudioDetailVersion = "modstudio.detailVersion";
+    public const string ModstudioEditDescriptionLabel = "modstudio.editDescriptionLabel";
+    public const string ModstudioEditFailed = "modstudio.editFailed";
+    public const string ModstudioEditHint = "modstudio.editHint";
+    public const string ModstudioEditNameLabel = "modstudio.editNameLabel";
+    public const string ModstudioEditSuccess = "modstudio.editSuccess";
+    public const string ModstudioEditSupportedLabel = "modstudio.editSupportedLabel";
+    public const string ModstudioEditTagsLabel = "modstudio.editTagsLabel";
+    public const string ModstudioEditTitle = "modstudio.editTitle";
+    public const string ModstudioEditUnavailable = "modstudio.editUnavailable";
+    public const string ModstudioEditVersionLabel = "modstudio.editVersionLabel";
     public const string ModstudioFieldChangeNote = "modstudio.fieldChangeNote";
     public const string ModstudioFieldDescription = "modstudio.fieldDescription";
     public const string ModstudioFieldDescriptors = "modstudio.fieldDescriptors";
@@ -5716,6 +5823,7 @@ internal static class Keys
     public const string ModstudioNoWorkshopHint = "modstudio.noWorkshopHint";
     public const string ModstudioOpenFolder = "modstudio.openFolder";
     public const string ModstudioOpenFolderUnavailable = "modstudio.openFolderUnavailable";
+    public const string ModstudioOpenSteam = "modstudio.openSteam";
     public const string ModstudioOpenWorkshop = "modstudio.openWorkshop";
     public const string ModstudioOpenWorkshopUnavailable = "modstudio.openWorkshopUnavailable";
     public const string ModstudioPickPreview = "modstudio.pickPreview";
@@ -6282,6 +6390,8 @@ internal static class Keys
     public const string WorkshopDetailNoComments = "workshop.detailNoComments";
     public const string WorkshopDetailNoDescription = "workshop.detailNoDescription";
     public const string WorkshopDetailRetry = "workshop.detailRetry";
+    public const string WorkshopDetailScreenshotDownloading = "workshop.detailScreenshotDownloading";
+    public const string WorkshopDetailScreenshotFailed = "workshop.detailScreenshotFailed";
     public const string WorkshopDetailScreenshots = "workshop.detailScreenshots";
     public const string WorkshopDetailScreenshotsLoading = "workshop.detailScreenshotsLoading";
     public const string WorkshopDetailScreenshotsTitle = "workshop.detailScreenshotsTitle";
