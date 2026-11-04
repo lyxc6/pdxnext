@@ -75,8 +75,10 @@ public static class ModsPageLayoutChecks
         CheckCandidateIsCheckToAdd(xaml);
         CheckHeaderSearchFillsColumn(xaml);
         CheckSplitterKept(xaml);
+        CheckColumnsNotOverConstrained(xaml);
         CheckHintRemoved(xaml);
         CheckCodeBehind(code);
+        CheckSplitterUsesEventSize(root);
         CheckIncrementalUpdates(root);
         CheckLegacySubpageKept(root);
         CheckDisplayModeValue(root);
@@ -228,6 +230,79 @@ public static class ModsPageLayoutChecks
             "播放集页: 分隔条接线在代码后置",
             xaml.Contains("x:Name=\"ColumnSplitter\"", StringComparison.Ordinal)
                 && xaml.Contains("AutomationId=\"splitTwoColumns\"", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 双列的两个列定义不许带 <c>MinWidth</c>：窗口拉窄时左栏必须能低于 280 让位给右栏，
+    /// 而 XAML 的 MinWidth 会把代码算好的让位宽度顶回去，整张 Grid 超出可用宽度，
+    /// 右栏就被窗口边缘裁掉（用户反馈的「左右列状态」就是这么来的）。
+    /// 上下限的唯一真源是 <c>Services/ColumnResize.cs</c>，这里钉住它别再长回来。
+    /// </summary>
+    private static void CheckColumnsNotOverConstrained(string xaml)
+    {
+        var start = xaml.IndexOf("x:Name=\"TwoColumnLeftColumn\"", StringComparison.Ordinal);
+        if (!ChecksContext.Check("播放集页: 找到双列左栏列定义", start >= 0, "TwoColumnLeftColumn"))
+        {
+            return;
+        }
+
+        // 从右栏列定义开始到 Grid.ColumnDefinitions 结束，覆盖两栏的完整定义区间。
+        var leftLineStart = xaml.LastIndexOf('<', start);
+        var end = xaml.IndexOf("</Grid.ColumnDefinitions>", start, StringComparison.Ordinal);
+        var columns = end > start ? xaml[leftLineStart..end] : xaml[leftLineStart..];
+
+        ChecksContext.Check(
+            "播放集页: 双列左栏列定义不写 MinWidth",
+            !columns.Contains("MinWidth=", StringComparison.Ordinal),
+            columns.Trim());
+        ChecksContext.Check(
+            "播放集页: 双列左栏仍有硬上限 MaxWidth",
+            columns.Contains("MaxWidth=\"900\"", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 窗口尺寸变化必须用事件自带的 <c>e.NewSize.Width</c>：在 SizeChanged 处理里读
+    /// <c>TwoColumnGrid.ActualWidth</c> 拿到的是上一次 arrange 的旧宽度，钳制会算回原值、
+    /// 命中「值没变」早退，左栏不让位，右栏被挤成负宽（用户缩小窗口的那次反馈）。
+    /// </summary>
+    private static void CheckSplitterUsesEventSize(string root)
+    {
+        var path = Path.Combine(root, "src", "PdxLauncher.App", "Views", "ModsPage.xaml.cs");
+        if (!ChecksContext.Check("播放集页: ModsPage.xaml.cs 存在", File.Exists(path), path))
+        {
+            return;
+        }
+
+        var source = File.ReadAllText(path);
+        var body = SliceMethod(source, "private void OnTwoColumnGridSizeChanged(");
+        ChecksContext.Check(
+            "播放集页: 尺寸变化用 e.NewSize.Width",
+            body.Contains("e.NewSize.Width", StringComparison.Ordinal),
+            body.Trim());
+        ChecksContext.Check(
+            "播放集页: 尺寸变化不再读 ActualWidth",
+            !body.Contains("ActualWidth", StringComparison.Ordinal),
+            body.Trim());
+
+        var apply = SliceMethod(source, "private void ApplyLeftColumnWidth(");
+        ChecksContext.Check(
+            "播放集页: 渲染宽度按意图宽度钳制",
+            apply.Contains("ColumnResize.Clamp(_preferredLeftColumnWidth", StringComparison.Ordinal)
+                && apply.Contains("TwoColumnLeftColumn.Width", StringComparison.Ordinal),
+            apply.Trim());
+
+        var dragged = SliceMethod(source, "private void OnSplitterDragged(");
+        ChecksContext.Check(
+            "播放集页: 拖动按「起点宽度 + 总位移」算，不累加增量",
+            dragged.Contains("_dragStartLeftColumnWidth + offset", StringComparison.Ordinal)
+                && dragged.Contains("ColumnResize.Clamp(", StringComparison.Ordinal),
+            dragged.Trim());
+
+        var dragStarted = SliceMethod(source, "private void OnSplitterDragStarted(");
+        ChecksContext.Check(
+            "播放集页: 按下时记住起点宽度",
+            dragStarted.Contains("_dragStartLeftColumnWidth = _preferredLeftColumnWidth", StringComparison.Ordinal),
+            dragStarted.Trim());
     }
 
     /// <summary>

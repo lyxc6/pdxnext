@@ -26,25 +26,18 @@ public sealed partial class ModsPage : Page
     /// <summary>双列左栏的初始宽度（DIP）。XAML 里 ColumnDefinition 的 Width 初值必须与它一致。</summary>
     private const double DefaultLeftColumnWidth = ColumnResize.DefaultWidth;
 
-    /// <summary>双列左栏的可拖范围下限；与 XAML 的 MinWidth 一致。</summary>
-    private const double MinimumLeftColumnWidth = ColumnResize.MinimumWidth;
-
-    /// <summary>双列左栏的可拖范围上限；与 XAML 的 MaxWidth 一致。</summary>
-    private const double MaximumLeftColumnWidth = ColumnResize.MaximumWidth;
-
-    /// <summary>右栏至少要留多宽（DIP）：再窄搜索框和开关就挤成一团，这个值同时决定左栏能拖多宽。</summary>
-    private const double MinimumRightColumnWidth = ColumnResize.MinimumRightWidth;
-
-    /// <summary>分隔条所在列的宽度；与 XAML 中间列的 Width 一致。</summary>
-    private const double SplitterColumnWidth = ColumnResize.SplitterWidth;
-
     private readonly ModsViewModel _viewModel;
 
     /// <summary>
-    /// 双列左栏当前宽度（DIP）。只活在页面实例里：页面 NavigationCacheMode=Required，
-    /// 切页回来仍是用户拖过的宽度；没有写进 settings，是为了不为一个纯视觉宽度动设置 schema。
+    /// 用户想要的双列左栏宽度（DIP），只在拖动分隔条与双击复位时改写。
+    /// 窗口拉窄时渲染宽度会被压小，但这个意图值保持不变：窗口拉回去后左栏能回到用户拖出来的宽度，
+    /// 不会被缩放过程永久改小。页面 NavigationCacheMode=Required，切页回来仍是拖过的宽度；
+    /// 没有写进 settings，是为了不为一个纯视觉宽度动设置 schema。
     /// </summary>
-    private double _leftColumnWidth = DefaultLeftColumnWidth;
+    private double _preferredLeftColumnWidth = ColumnResize.DefaultWidth;
+
+    /// <summary>按下分隔条那一刻的左栏宽度；拖动过程中的宽度 = 它 + 指针相对按下点的总位移。</summary>
+    private double _dragStartLeftColumnWidth = ColumnResize.DefaultWidth;
 
     /// <summary>页面生命周期令牌；NavigationCacheMode=Required 会在返回页面时重建。</summary>
     private CancellationTokenSource _lifetime = new();
@@ -89,6 +82,7 @@ public sealed partial class ModsPage : Page
 
         // 分隔条的事件用代码接线：PdxColumnSplitter 的 Dragged/ResetRequested 是普通事件，
         // 不是依赖属性，XAML 编译器绑不上（也没有对应的 RoutedEvent）。
+        ColumnSplitter.DragStarted += OnSplitterDragStarted;
         ColumnSplitter.Dragged += OnSplitterDragged;
         ColumnSplitter.ResetRequested += OnSplitterReset;
 
@@ -442,23 +436,39 @@ public sealed partial class ModsPage : Page
     /// <summary>
     /// 搜索框实时过滤。x:Bind 不支持 UpdateSourceTrigger，所以 Text 只做 OneWay 绑定，
     /// 由这里把用户输入写回 ViewModel（写回会触发 RebuildVisibleMods）。
+    /// 建议只跟"手打"走：程序化改 Text 也会触发 TextChanged（比如原版/双列两个框共用同一个
+    /// SearchText，一者回写另一者就跟着变），那时弹下拉就是和用户抢焦点。
     /// </summary>
-    private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
+    private void OnSearchTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
         try
         {
-            if (sender is not TextBox box)
+            if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
             {
                 return;
             }
 
-            var text = box.Text ?? string.Empty;
-            if (string.Equals(text, _viewModel.SearchText, StringComparison.Ordinal))
+            var text = sender.Text ?? string.Empty;
+            if (!string.Equals(text, _viewModel.SearchText, StringComparison.Ordinal))
             {
-                return;
+                _viewModel.SearchText = text;
             }
 
-            _viewModel.SearchText = text;
+            SearchSuggestBox.Update(sender, _viewModel.Mods.Select(mod => mod.Name), text);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 搜索过滤失败", ex);
+        }
+    }
+
+    /// <summary>回车 / 放大镜 / 选中建议：过滤用的就是当前文本，收起下拉即可。</summary>
+    private void OnSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        try
+        {
+            _viewModel.SearchText = (args.QueryText ?? string.Empty).Trim();
+            sender.IsSuggestionListOpen = false;
         }
         catch (Exception ex)
         {
@@ -470,22 +480,36 @@ public sealed partial class ModsPage : Page
     /// 双列左栏的搜索框：只过滤「可添加的 mod」，和右栏的 SearchText 互不影响。
     /// 与 <see cref="OnSearchTextChanged"/> 一样，x:Bind 只能 OneWay，输入由这里写回。
     /// </summary>
-    private void OnCandidateSearchTextChanged(object sender, TextChangedEventArgs e)
+    private void OnCandidateSearchTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
         try
         {
-            if (sender is not TextBox box)
+            if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
             {
                 return;
             }
 
-            var text = box.Text ?? string.Empty;
-            if (string.Equals(text, _viewModel.CandidateSearchText, StringComparison.Ordinal))
+            var text = sender.Text ?? string.Empty;
+            if (!string.Equals(text, _viewModel.CandidateSearchText, StringComparison.Ordinal))
             {
-                return;
+                _viewModel.CandidateSearchText = text;
             }
 
-            _viewModel.CandidateSearchText = text;
+            SearchSuggestBox.Update(sender, _viewModel.Candidates.Select(row => row.Name), text);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 候选搜索过滤失败", ex);
+        }
+    }
+
+    /// <summary>双列左栏搜索框的提交（回车 / 放大镜 / 选中建议）：收起下拉即可。</summary>
+    private void OnCandidateSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        try
+        {
+            _viewModel.CandidateSearchText = (args.QueryText ?? string.Empty).Trim();
+            sender.IsSuggestionListOpen = false;
         }
         catch (Exception ex)
         {
@@ -534,53 +558,76 @@ public sealed partial class ModsPage : Page
     // ------------------------------------------------------------ 双列分栏
 
     /// <summary>
-    /// 拖动分隔条：<see cref="PdxColumnSplitter"/> 已经做了指针捕获与位移累计，
-    /// 这里拿到的 delta 就是相对上一次的 DIP 增量，直接加在左栏当前宽度上。
+    /// 拖动分隔条：<see cref="PdxColumnSplitter"/> 给的是**相对按下点**的总位移，
+    /// 所以这里用拖动开始时的宽度加上位移，而不是在旧值上累加增量——
+    /// 重复投递的移动事件、或控件自身被挤动，都不会让宽度越推越大。
     /// </summary>
-    private void OnSplitterDragged(object? sender, double delta)
+    private void OnSplitterDragged(object? sender, double offset)
     {
-        ResizeLeftColumn(_leftColumnWidth + delta);
+        var available = TwoColumnGrid.ActualWidth;
+        _preferredLeftColumnWidth = ColumnResize.Clamp(
+            _dragStartLeftColumnWidth + offset,
+            available);
+        ApplyLeftColumnWidth(available);
+    }
+
+    /// <summary>记住按下时的宽度：拖动过程中的宽度全部由「起点宽度 + 总位移」算出。</summary>
+    private void OnSplitterDragStarted(object? sender, EventArgs e)
+    {
+        _dragStartLeftColumnWidth = _preferredLeftColumnWidth;
     }
 
     /// <summary>双击分隔条复位到默认宽度：拖窄之后想一次回到能看见完整名字的状态。</summary>
     private void OnSplitterReset(object? sender, EventArgs e)
     {
-        ResizeLeftColumn(DefaultLeftColumnWidth);
+        _preferredLeftColumnWidth = ColumnResize.DefaultWidth;
+        ApplyLeftColumnWidth(TwoColumnGrid.ActualWidth);
     }
 
     /// <summary>
     /// 窗口尺寸变化时重新钳一次。左栏是像素宽度，窗口拉窄时右栏会先被挤掉，
-    /// 所以宽度上限要随总宽重算，不能只在拖动那一刻算。
+    /// 所以宽度上限必须随总宽重算。
     /// </summary>
+    /// <remarks>
+    /// 这里必须用事件自带的 <see cref="SizeChangedEventArgs.NewSize"/>，不能读
+    /// <c>TwoColumnGrid.ActualWidth</c>：在 SizeChanged 处理里 ActualWidth 还是上一次 arrange 的旧值，
+    /// 拿旧总宽去钳制会算回和原来一样的宽度，于是「值没变」早退、左栏不让位，
+    /// 右栏被挤成负宽、整张 Grid 撑出窗口——用户缩小窗口后看到的右栏被裁就是这个原因。
+    /// </remarks>
     private void OnTwoColumnGridSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        ResizeLeftColumn(_leftColumnWidth);
+        ApplyLeftColumnWidth(e.NewSize.Width);
     }
 
     /// <summary>
-    /// 把左栏设到指定宽度（DIP），并钳进 [280, min(900, 总宽 - 分隔条 - 右栏下限)]。
-    /// 布局还没测量（ActualWidth 为 0）时什么都不做，否则会被当成「窗口太窄」直接压到下限。
+    /// 按可用宽度把左栏渲染到「意图宽度」钳制后的值（钳制规则见 <see cref="ColumnResize.Clamp"/>）。
+    /// 不写回 <see cref="_preferredLeftColumnWidth"/>：窗口变窄只是临时让位，不是用户改了宽度。
     /// </summary>
-    private void ResizeLeftColumn(double width)
+    private void ApplyLeftColumnWidth(double availableWidth)
     {
-        var available = TwoColumnGrid.ActualWidth;
-        if (available <= 0)
+        if (!double.IsFinite(availableWidth) || availableWidth <= 0)
         {
+            // 布局还没测量：什么都不做，否则会被当成「窗口太窄」直接压到 0。
             return;
         }
 
-        var clamped = ColumnResize.Clamp(width, available);
+        var clamped = ColumnResize.Clamp(_preferredLeftColumnWidth, availableWidth);
 
         // 值没变就别写：SizeChanged 会反复进来，每次写 Width 都白排一次版。
-        if (Math.Abs(_leftColumnWidth - clamped) < 0.5
-            && TwoColumnLeftColumn.Width.GridUnitType == GridUnitType.Pixel
+        if (TwoColumnLeftColumn.Width.GridUnitType == GridUnitType.Pixel
             && Math.Abs(TwoColumnLeftColumn.Width.Value - clamped) < 0.5)
         {
             return;
         }
 
-        _leftColumnWidth = clamped;
         TwoColumnLeftColumn.Width = new GridLength(clamped);
+
+        if (Math.Abs(clamped - _preferredLeftColumnWidth) >= 0.5)
+        {
+            // 只有「让位」时才记：拖动过程中 clamped 恒等于期望宽度，不会刷日志。
+            AppServices.Logger.Info(
+                $"双列分栏：总宽 {availableWidth:0.#}，左栏让位到 {clamped:0.#}（期望 {_preferredLeftColumnWidth:0.#}）");
+        }
     }
 
     private void OnEnableAllClick(object sender, RoutedEventArgs e)

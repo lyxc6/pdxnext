@@ -22,6 +22,7 @@ using Microsoft.UI.Xaml.Media;
 public sealed class PdxColumnSplitter : Grid
 {
     private uint _pointerId;
+    private double _pressX;
     private double _lastX;
     private bool _dragging;
 
@@ -39,7 +40,13 @@ public sealed class PdxColumnSplitter : Grid
         DoubleTapped += OnSplitterDoubleTapped;
     }
 
-    /// <summary>拖动中每次指针移动触发一次，参数是相对上一次的水平位移（DIP，向右为正）。</summary>
+    /// <summary>按下左键开始一次拖动：调用方据此记住「拖动开始时的宽度」，后续位移都相对它计算。</summary>
+    public event EventHandler? DragStarted;
+
+    /// <summary>
+    /// 拖动中每次指针移动触发一次，参数是**相对按下点**的总水平位移（DIP，向右为正）。
+    /// 用绝对位移而不是逐次增量，重复投递同一条 PointerMoved 也不会把宽度越推越大。
+    /// </summary>
     public event EventHandler<double>? Dragged;
 
     /// <summary>双击请求把宽度复位到默认值。</summary>
@@ -54,8 +61,14 @@ public sealed class PdxColumnSplitter : Grid
         }
 
         _pointerId = point.PointerId;
-        _lastX = RootX(e);
+        _pressX = RootX(e);
+        _lastX = _pressX;
         _dragging = CapturePointer(e.Pointer);
+        if (_dragging)
+        {
+            DragStarted?.Invoke(this, EventArgs.Empty);
+        }
+
         e.Handled = true;
     }
 
@@ -67,13 +80,13 @@ public sealed class PdxColumnSplitter : Grid
         }
 
         var x = RootX(e);
-        var delta = x - _lastX;
-        _lastX = x;
-        if (delta != 0)
+        var offset = x - _pressX;
+        if (offset != _lastX - _pressX)
         {
-            // 拖动期间分栏宽度变化会让本控件跟着平移，但增量语义不受影响：
-            // 指针被捕获后坐标仍相对本控件，累计位移与「宽度累计变化」始终一致。
-            Dragged?.Invoke(this, delta);
+            // 总位移语义：分栏宽度变化会让本控件跟着平移，但按下点是固定的根部坐标，
+            // 所以 offset 不会因控件自身移动而漂移；同一位置的重复事件也不会叠加。
+            _lastX = x;
+            Dragged?.Invoke(this, offset);
         }
 
         e.Handled = true;

@@ -394,17 +394,19 @@
                         AutomationProperties.Name="{x:Bind L.ModsAutoSortUndo, Mode=OneWay}" />
             </controls:PdxWrapPanel>
 
-            <TextBox Grid.Column="1"
-                     x:Name="SearchBox"
-                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsOfficialLayout), Mode=OneWay}"
-                     Width="200"
-                     HorizontalAlignment="Right"
-                     VerticalAlignment="Center"
-                     PlaceholderText="{x:Bind L.ModsToolbarSearchPlaceholder, Mode=OneWay}"
-                     Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
-                     TextChanged="OnSearchTextChanged"
-                     AutomationProperties.AutomationId="txtModSearch"
-                     AutomationProperties.Name="{x:Bind L.ModsToolbarSearchPlaceholder, Mode=OneWay}" />
+            <AutoSuggestBox Grid.Column="1"
+                            x:Name="SearchBox"
+                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsOfficialLayout), Mode=OneWay}"
+                            Width="200"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            QueryIcon="Find"
+                            PlaceholderText="{x:Bind L.ModsToolbarSearchPlaceholder, Mode=OneWay}"
+                            Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
+                            TextChanged="OnSearchTextChanged"
+                            QuerySubmitted="OnSearchQuerySubmitted"
+                            AutomationProperties.AutomationId="txtModSearch"
+                            AutomationProperties.Name="{x:Bind L.ModsToolbarSearchPlaceholder, Mode=OneWay}" />
 
             <Button Grid.Column="2"
                 Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsOfficialLayout), Mode=OneWay}"
@@ -459,11 +461,15 @@
             <Grid.ColumnDefinitions>
                 <!-- 左栏比 Mod 库页的 360 宽一档：候选名普遍很长（「Chinese IG Traits Overview」），
                      左栏默认 400 DIP、还能往右拖，扣掉勾选框与缩略图后仍放得下常见 mod 名。
-                     Width 由 code-behind 按拖动结果写（400 是初值，MaxWidth 900 是硬上限）；
-                     MinWidth 同时是拖动下限，改这里要同步改 ModsPage.xaml.cs 里的常量。 -->
-                <ColumnDefinition x:Name="TwoColumnLeftColumn" Width="400" MinWidth="280" MaxWidth="900" />
+                     Width 由 code-behind 按拖动结果写（400 是初值），上下限统一放在
+                     Services/ColumnResize.cs 里。这里刻意不写 MinWidth：窗口拉窄时左栏必须能低于
+                     280 让位给右栏，XAML 的 MinWidth 会把算好的让位宽度顶回去，整张 Grid 超出可用宽度，
+                     右栏就被窗口边缘裁掉（用户缩小窗口时看到的正是这个样子）。 -->
+                <ColumnDefinition x:Name="TwoColumnLeftColumn" Width="400" MaxWidth="900" />
                 <ColumnDefinition Width="12" />
-                <ColumnDefinition Width="*" MinWidth="320" />
+                <!-- 右栏下限（400 DIP）同样由 ColumnResize.MinimumRightWidth 保证，这里也不写 MinWidth，
+                     理由同上：硬顶住的列宽会让 Grid 在窗口变窄时溢出，而不是让左栏先让位。 -->
+                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
             <!-- 左栏：可添加的 mod。勾选即调用 AddMods，该行立刻从左栏消失、出现在右栏末尾。 -->
@@ -493,13 +499,15 @@
                                VerticalAlignment="Center" />
                 </Grid>
 
-                <TextBox Grid.Row="1"
-                         x:Name="CandidateSearchBox"
-                         PlaceholderText="{x:Bind L.ModsAddPageSearchPlaceholder, Mode=OneWay}"
-                         Text="{x:Bind ViewModel.CandidateSearchText, Mode=OneWay}"
-                         TextChanged="OnCandidateSearchTextChanged"
-                         AutomationProperties.AutomationId="txtCandidateSearch"
-                         AutomationProperties.Name="{x:Bind L.ModsAddPageSearchName, Mode=OneWay}" />
+                <AutoSuggestBox Grid.Row="1"
+                                x:Name="CandidateSearchBox"
+                                QueryIcon="Find"
+                                PlaceholderText="{x:Bind L.ModsAddPageSearchPlaceholder, Mode=OneWay}"
+                                Text="{x:Bind ViewModel.CandidateSearchText, Mode=OneWay}"
+                                TextChanged="OnCandidateSearchTextChanged"
+                                QuerySubmitted="OnCandidateSearchQuerySubmitted"
+                                AutomationProperties.AutomationId="txtCandidateSearch"
+                                AutomationProperties.Name="{x:Bind L.ModsAddPageSearchName, Mode=OneWay}" />
 
                 <Grid Grid.Row="2">
                     <Border Background="{ThemeResource PdxCardGlassBrush}" CornerRadius="8" />
@@ -608,13 +616,15 @@
                                VerticalAlignment="Center" />
                 </Grid>
 
-                <TextBox Grid.Row="1"
-                         x:Name="TwoColumnSearchBox"
-                         PlaceholderText="{x:Bind L.ModsToolbarSearchPlaceholder, Mode=OneWay}"
-                         Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
-                         TextChanged="OnSearchTextChanged"
-                         AutomationProperties.AutomationId="txtModSearchTwoCol"
-                         AutomationProperties.Name="{x:Bind L.ModsToolbarSearchPlaceholder, Mode=OneWay}" />
+                <AutoSuggestBox Grid.Row="1"
+                                x:Name="TwoColumnSearchBox"
+                                QueryIcon="Find"
+                                PlaceholderText="{x:Bind L.ModsToolbarSearchPlaceholder, Mode=OneWay}"
+                                Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
+                                TextChanged="OnSearchTextChanged"
+                                QuerySubmitted="OnSearchQuerySubmitted"
+                                AutomationProperties.AutomationId="txtModSearchTwoCol"
+                                AutomationProperties.Name="{x:Bind L.ModsToolbarSearchPlaceholder, Mode=OneWay}" />
 
                 <Grid Grid.Row="2">
                     <Border Background="{ThemeResource PdxCardGlassBrush}" CornerRadius="8" />
