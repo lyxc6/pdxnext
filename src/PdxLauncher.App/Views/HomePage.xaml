@@ -123,7 +123,7 @@
                             <Border
                                 x:Name="ContinueBottomLine"
                                 Height="1"
-                                Margin="2,0,2,1"
+                                Margin="0"
                                 VerticalAlignment="Bottom"
                                 Background="#54FFFFFF"
                                 IsHitTestVisible="False" />
@@ -168,7 +168,7 @@
                             <Border
                                 x:Name="StartBottomLine"
                                 Height="1"
-                                Margin="2,0,2,1"
+                                Margin="0"
                                 VerticalAlignment="Bottom"
                                 Background="#54FFFFFF"
                                 IsHitTestVisible="False" />
@@ -274,7 +274,7 @@
                 Stretch="Uniform"
                 StretchDirection="DownOnly"
                 Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasNews), Mode=OneWay}">
-                <StackPanel Orientation="Horizontal" Spacing="21">
+                <StackPanel Orientation="Horizontal" Spacing="24">
 
                 <Button
                     x:Name="btnNewsMain"

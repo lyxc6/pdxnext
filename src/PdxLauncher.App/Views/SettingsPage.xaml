@@ -132,7 +132,7 @@
                     贴在 ScrollViewer 右边缘绘制、不占内容宽度。内容若一路撑到边缘，
                     轨道和滑块就会压在卡片的 1 px 描边与 8 px 圆角上（详见 docs/SETTINGS-REWORK.md）。
                 -->
-                <StackPanel Spacing="12" Margin="0,0,14,0">
+                <StackPanel Spacing="12" Margin="0,0,16,0">
 
                     <StackPanel x:Name="secAppearance" Spacing="8">
                         <TextBlock Text="{x:Bind L.SettingsSectionTheme, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
@@ -539,7 +539,7 @@
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsPatchStatusTitle, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
-                                <StackPanel Spacing="2" MaxWidth="440" HorizontalAlignment="Right">
+                                <StackPanel Spacing="4" MaxWidth="440" HorizontalAlignment="Right">
                                     <TextBlock AutomationProperties.AutomationId="txtPatchStatus"
                                                AutomationProperties.Name="{x:Bind L.SettingsPatchStatusTitle, Mode=OneWay}"
                                                Text="{x:Bind ViewModel.PatchStatusText, Mode=OneWay}"
@@ -701,7 +701,7 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
-                        <StackPanel Spacing="2"
+                        <StackPanel Spacing="4"
                                     Margin="0,0,0,8"
                                     Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasMicrosoftFields), Mode=OneWay}">
                             <TextBlock Text="{x:Bind L.SettingsTranslateMicrosoftHint, Mode=OneWay}"
@@ -724,7 +724,7 @@
                             </controls:SettingsCard.ActionContent>
                         </controls:SettingsCard>
 
-                        <StackPanel Spacing="2"
+                        <StackPanel Spacing="4"
                                     Margin="0,0,0,8"
                                     Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasGoogleCloudFields), Mode=OneWay}">
                             <TextBlock Text="{x:Bind L.SettingsTranslateGoogleCloudHint, Mode=OneWay}"
@@ -954,12 +954,12 @@
         <!-- 与滚动内容共用 14 DIP 右侧通道，整页右边缘保持对齐。 -->
         <Border Grid.Row="1"
                 Grid.ColumnSpan="2"
-                Margin="0,0,14,0"
+                Margin="0,0,16,0"
                 Background="{ThemeResource PdxCardBackgroundBrush}"
                 BorderBrush="{ThemeResource PdxCardStrokeBrush}"
                 BorderThickness="1"
                 CornerRadius="8"
-                Padding="16,10"
+                Padding="16,12"
                 Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasStatusMessage), Mode=OneWay}">
             <TextBlock AutomationProperties.AutomationId="txtSettingsStatus"
                        AutomationProperties.Name="{x:Bind L.SettingsStatusName, Mode=OneWay}"

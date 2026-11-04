@@ -107,7 +107,7 @@
                     x:Name="AlwaysOnTopButton"
                     Width="{ThemeResource TitleBarPaneToggleButtonWidth}"
                     Height="28"
-                    Margin="2"
+                    Margin="0"
                     Padding="0"
                     HorizontalContentAlignment="Center"
                     VerticalAlignment="Center"

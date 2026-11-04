@@ -55,7 +55,7 @@
                                    AutomationProperties.AutomationId="imgAccountAvatar"
                                    AutomationProperties.Name="{x:Bind L.AccountProfileTitle, Mode=OneWay}" />
 
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                         <TextBlock Text="{x:Bind ViewModel.ProfileName, Mode=OneWay}"
                                    Style="{StaticResource BodyStrongTextBlockStyle}"
                                    TextTrimming="CharacterEllipsis"

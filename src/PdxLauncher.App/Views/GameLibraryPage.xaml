@@ -129,7 +129,7 @@
                                     Visibility="{x:Bind svc:XamlVisibility.FromBool(HasNoCover), Mode=OneTime}" />
                                 <Border
                                     Margin="8"
-                                    Padding="6,2"
+                                    Padding="8,4"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Top"
                                     Background="{ThemeResource PdxOverlayBrush}"
@@ -142,12 +142,12 @@
                                 </Border>
                             </Grid>
 
-                            <Grid Grid.Row="1" Padding="12,8,12,10">
+                            <Grid Grid.Row="1" Padding="12,8,12,12">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-                                <StackPanel Grid.Row="0" Spacing="2">
+                                <StackPanel Grid.Row="0" Spacing="4">
                                     <TextBlock
                                         AutomationProperties.AutomationId="{x:Bind NameAutomationId, Mode=OneTime}"
                                         MaxLines="1"
