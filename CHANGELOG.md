@@ -3,6 +3,17 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)；版本号遵循
 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
+## [1.2.1] - 2026-11-05
+
+### Fixed
+
+- 自动排序会把几百个 mod 的顺序推得面目全非：以前只要两个 mod 共带一个新增文件，就按「谁文件多 / 谁总文件多 / 谁路径是超集」强行判定谁是基底并建硬边——实测本机 382 个 mod 的 294 条硬边里有 88 条（30%）与层位顺序相反，20 mod 的播放集 16 条边里 15 条来自同作者系列故意共带的 `common/on_action` 库文件，却把 18/20 行全挪了位，理由还都写成「作为其补丁排在后面」。现在跨层位的共享新增文件只进预览提示（新冲突 `SharedAddedFileTierDecided`）不再改序，同层位只在「一方新增路径严格包含另一方」时建基底边（新边型 `SortEdgeKind.FootprintOverlap`）；删除「文件多者在前 / 总文件多者在前」两条启发式。
+- 自动排序会挪动已禁用的 mod，还把禁用 mod 当成冲突源约束启用 mod：现在只扫描并排序启用的行，禁用行原地不动（加载文件本来也只写启用行）。
+- 自动排序的「撤销」在列表变过之后仍可用，一点就把排序后新加的 mod 删掉、把已删的 mod 复活并自动保存落库：撤销快照改为带输入指纹，增删 mod、拖位置、切启用后一律判定失效，提示「列表已变化，无法撤销」而不是整表覆盖。
+- 自动排序在原版索引扫不到时静默把所有 mod 当「纯新增」排出「无需调整」，目录缺失/无内容的 mod 也无声无息：预览现在会给出 `VanillaIndexMissing` 与 `EmptyFootprint` 警告；成环警告同时列出被违背的具体边（「甲 必须在 乙 之前」），不再只说涉及哪几个 mod。
+- Victoria 3 / EU5 的 mod 依赖被完全忽略，本地补丁被排到它依赖的内容包前面：这两个家族的 mod 目录没有 `descriptor.mod`、`mods_dependencies` 又是空表，依赖只写在 `.metadata/metadata.json` 的 `relationships` 里。现在解析 metadata.json（`id` + `rel_type=dependency`，按元数据 id 匹配、也接受 workshop id，BOM 由 `JsonBytes` 剥掉；坏 JSON 退化成空描述不中断预览），三路来源的边按 (Before, After, Kind) 去重；真机 V3 播放集「本地 mod 在 Tech & Res 之前」恢复成正确顺序。
+- 大体量但只覆盖少量玩法的内容包被误判成「微调」，排到所有纯新增 mod 之后：V3 的 `[1.13] Tech & Res` 有 2339 个文件（2043 个新增贴图）却只覆盖 2 处原版玩法，按覆盖数落进微调层（rank 5）。现在微调加了 200 文件体量门槛（`MaxTweakFiles`），超过门槛按以新增为主处理；本机 382 个 CK3 订阅 mod 只改判 15 个大内容包，20 行的「1.18」播放集 0 改判。
+
 ## [1.2.0] - 2026-11-04
 
 ### Changed
