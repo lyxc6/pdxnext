@@ -21,7 +21,7 @@
         </Grid.RowDefinitions>
 
         <!-- 顶部工具条 -->
-        <Grid Grid.Row="0" ColumnSpacing="10">
+        <Grid Grid.Row="0" ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -31,9 +31,9 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+            <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="4">
                 <TextBlock Text="{x:Bind L.ModstudioTitle, Mode=OneWay}" Style="{StaticResource TitleTextBlockStyle}" />
-                <StackPanel Orientation="Horizontal" Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="12">
                     <TextBlock Text="{x:Bind ViewModel.GameTitle, Mode=OneWay}"
                                Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -44,22 +44,25 @@
                 </StackPanel>
             </StackPanel>
 
-            <TextBox Grid.Column="1"
-                     MinWidth="180"
-                     MaxWidth="320"
-                     HorizontalAlignment="Right"
-                     VerticalAlignment="Center"
-                     PlaceholderText="{x:Bind L.ModstudioSearchPlaceholder, Mode=OneWay}"
-                     Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     AutomationProperties.AutomationId="modStudioSearch"
-                     AutomationProperties.Name="{x:Bind L.ModstudioSearchName, Mode=OneWay}" />
+            <AutoSuggestBox Grid.Column="1"
+                            MinWidth="180"
+                            MaxWidth="320"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            QueryIcon="Find"
+                            PlaceholderText="{x:Bind L.ModstudioSearchPlaceholder, Mode=OneWay}"
+                            Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
+                            TextChanged="OnSearchTextChanged"
+                            QuerySubmitted="OnSearchQuerySubmitted"
+                            AutomationProperties.AutomationId="modStudioSearch"
+                            AutomationProperties.Name="{x:Bind L.ModstudioSearchName, Mode=OneWay}" />
 
             <Button Grid.Column="2"
                     VerticalAlignment="Center"
                     Click="OnCreateClick"
                     IsEnabled="{x:Bind ViewModel.CanCreate, Mode=OneWay}"
                     AutomationProperties.AutomationId="modStudioCreate">
-                <StackPanel Orientation="Horizontal" Spacing="6">
+                <StackPanel Orientation="Horizontal" Spacing="8">
                     <FontIcon Glyph="&#xE710;" FontSize="14" />
                     <TextBlock Text="{x:Bind L.ModstudioCreateButton, Mode=OneWay}" />
                 </StackPanel>
@@ -70,7 +73,7 @@
                     Click="OnUploadClick"
                     IsEnabled="{x:Bind ViewModel.CanUploadSelected, Mode=OneWay}"
                     AutomationProperties.AutomationId="modStudioUpload">
-                <StackPanel Orientation="Horizontal" Spacing="6">
+                <StackPanel Orientation="Horizontal" Spacing="8">
                     <FontIcon Glyph="&#xE898;" FontSize="14" />
                     <TextBlock Text="{x:Bind L.ModstudioUploadButton, Mode=OneWay}" />
                 </StackPanel>
@@ -110,8 +113,8 @@
                           AutomationProperties.Name="{x:Bind L.ModstudioListName, Mode=OneWay}">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="vm:ModStudioRowViewModel">
-                            <Grid ColumnSpacing="10"
-                                  Padding="4,6"
+                            <Grid ColumnSpacing="8"
+                                  Padding="4,8"
                                   AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
                                   AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
                                 <Grid.ColumnDefinitions>
@@ -123,7 +126,7 @@
                                 <Border Grid.Column="0"
                                         Width="40"
                                         Height="40"
-                                        CornerRadius="6"
+                                        CornerRadius="8"
                                         Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                         BorderThickness="1">
@@ -138,7 +141,7 @@
                                     </Grid>
                                 </Border>
 
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                                     <TextBlock Text="{x:Bind Name, Mode=OneTime}"
                                                Style="{StaticResource BodyStrongTextBlockStyle}"
                                                TextTrimming="CharacterEllipsis" />
@@ -150,7 +153,7 @@
 
                                 <Border Grid.Column="2"
                                         VerticalAlignment="Center"
-                                        Padding="6,1"
+                                        Padding="8,4"
                                         CornerRadius="4"
                                         Background="{ThemeResource PdxOriginLocalBackgroundBrush}"
                                         Visibility="{x:Bind svc:XamlVisibility.FromBool(HasPublication), Mode=OneWay}">
@@ -196,7 +199,7 @@
             <!-- 右：详情 / 新建 / 上传 -->
             <Grid Grid.Column="1">
                 <Border Background="{ThemeResource PdxCardGlassBrush}" CornerRadius="8" />
-                <Grid Padding="18">
+                <Grid Padding="16">
 
                     <!-- 详情 -->
                     <ScrollViewer x:Name="DetailPaneScroll" Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsDetailPane), Mode=OneWay}">
@@ -213,7 +216,7 @@
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(ViewModel.HasSelection), Mode=OneWay}" />
 
-                            <StackPanel Spacing="10"
+                            <StackPanel Spacing="12"
                                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasSelection), Mode=OneWay}">
                                 <TextBlock Text="{x:Bind ViewModel.SelectedName, Mode=OneWay}"
                                            Style="{StaticResource TitleTextBlockStyle}"
@@ -268,11 +271,32 @@
                                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasSelectedSteamVisibility), Mode=OneWay}" />
                                 </Grid>
 
-                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                <!--
+                                    这一排在默认窗口宽下就已经超出可用宽度（五个按钮 ≈660 DIP，可用 ≈544 DIP），
+                                    而 WinUI 3 没有 WrapPanel、水平 StackPanel 不换行、外层 ScrollViewer 横向禁滚，
+                                    超出的按钮会被直接裁掉。这里用 PdxWrapPanel 按行折下去。
+                                -->
+                                <ctl:PdxWrapPanel Spacing="8">
+                                    <Button Click="OnOpenSteamClick"
+                                            IsEnabled="{x:Bind ViewModel.CanOpenSelectedWorkshop, Mode=OneWay}"
+                                            AutomationProperties.AutomationId="modStudioOpenSteam">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xE7FC;" FontSize="14" />
+                                            <TextBlock Text="{x:Bind L.ModstudioOpenSteam, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Click="OnEditDescriptorClick"
+                                            IsEnabled="{x:Bind ViewModel.CanEditSelectedDescriptor, Mode=OneWay}"
+                                            AutomationProperties.AutomationId="modStudioEditDescriptor">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <FontIcon Glyph="&#xE70F;" FontSize="14" />
+                                            <TextBlock Text="{x:Bind L.ModstudioEditTitle, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Button>
                                     <Button Click="OnOpenFolderClick"
                                             IsEnabled="{x:Bind ViewModel.CanOpenSelectedFolder, Mode=OneWay}"
                                             AutomationProperties.AutomationId="modStudioOpenFolder">
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
                                             <FontIcon Glyph="&#xE8B7;" FontSize="14" />
                                             <TextBlock Text="{x:Bind L.ModstudioOpenFolder, Mode=OneWay}" />
                                         </StackPanel>
@@ -280,7 +304,7 @@
                                     <Button Click="OnOpenWorkshopClick"
                                             IsEnabled="{x:Bind ViewModel.CanOpenSelectedWorkshop, Mode=OneWay}"
                                             AutomationProperties.AutomationId="modStudioOpenWorkshop">
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
                                             <FontIcon Glyph="&#xE774;" FontSize="14" />
                                             <TextBlock Text="{x:Bind L.ModstudioOpenWorkshop, Mode=OneWay}" />
                                         </StackPanel>
@@ -291,12 +315,12 @@
                                             IsEnabled="{x:Bind ViewModel.CanBindWorkshop, Mode=OneWay}"
                                             ToolTipService.ToolTip="{x:Bind ViewModel.BindWorkshopHint, Mode=OneWay}"
                                             AutomationProperties.AutomationId="modStudioBindWorkshop">
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
                                             <FontIcon Glyph="&#xE71B;" FontSize="14" />
                                             <TextBlock Text="{x:Bind L.ModstudioBindExisting, Mode=OneWay}" />
                                         </StackPanel>
                                     </Button>
-                                </StackPanel>
+                                </ctl:PdxWrapPanel>
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
@@ -319,7 +343,7 @@
                                      AutomationProperties.AutomationId="txtModStudioFolder" />
                             <TextBlock Text="{x:Bind ViewModel.CreateFolderHintText, Mode=OneWay}" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
-                            <Grid ColumnSpacing="10">
+                            <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
@@ -377,7 +401,7 @@
 
                     <!-- 上传 -->
                     <ScrollViewer x:Name="UploadPaneScroll" Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsUploadPane), Mode=OneWay}">
-                        <StackPanel Spacing="10" MaxWidth="620" HorizontalAlignment="Left">
+                        <StackPanel Spacing="12" MaxWidth="620" HorizontalAlignment="Left">
                             <TextBlock Text="{x:Bind L.ModstudioUploadTitle, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
                             <TextBlock Text="{x:Bind L.ModstudioUploadHint, Mode=OneWay}" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
@@ -459,8 +483,9 @@
                                        TextWrapping="Wrap"
                                        Style="{StaticResource CaptionTextBlockStyle}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            <StackPanel Orientation="Horizontal" Spacing="4"
-                                        AutomationProperties.AutomationId="modStudioBbcodeToolbar">
+                            <!-- 11 个按钮在窄窗口下同样超过可用宽度：换行，而不是把右边几个裁掉。 -->
+                            <ctl:PdxWrapPanel Spacing="4"
+                                              AutomationProperties.AutomationId="modStudioBbcodeToolbar">
                                 <Button Content="B"
                                         Tag="bold"
                                         MinWidth="36"
@@ -551,7 +576,7 @@
                                         ToolTipService.ToolTip="{x:Bind L.ModstudioBbcodeCode, Mode=OneWay}"
                                         Click="OnBbCodeClick"
                                         AutomationProperties.AutomationId="btnBbCodeCode" />
-                            </StackPanel>
+                            </ctl:PdxWrapPanel>
                             <TextBox x:Name="txtUgcDescription"
                                      Text="{x:Bind ViewModel.UploadDescription, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                      PlaceholderText="{x:Bind L.ModstudioUploadDescriptionPlaceholder, Mode=OneWay}"
@@ -566,7 +591,7 @@
                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsUploadDescriptionTooLong), Mode=OneWay}"
                                        AutomationProperties.AutomationId="txtModStudioDescriptionWarning" />
 
-                            <StackPanel Spacing="6"
+                            <StackPanel Spacing="8"
                                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasUploadDescriptionPreview), Mode=OneWay}">
                                 <TextBlock Text="{x:Bind L.ModstudioPreviewHeader, Mode=OneWay}"
                                            Style="{StaticResource CaptionTextBlockStyle}"
@@ -629,7 +654,7 @@
                                       AutomationProperties.AutomationId="cmbModStudioVisibility" />
 
                             <TextBlock Text="{x:Bind L.ModstudioFieldDescriptors, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" />
-                            <StackPanel Spacing="2">
+                            <StackPanel Spacing="4">
                                 <CheckBox Content="{x:Bind L.ModstudioDescriptorAdult, Mode=OneWay}"
                                           IsChecked="{x:Bind ViewModel.UploadDescriptorAdult, Mode=TwoWay}"
                                           AutomationProperties.AutomationId="chkModStudioDescriptorAdult" />
@@ -671,7 +696,7 @@
                                               AutomationProperties.AutomationId="lstModStudioPreviews">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:ModUploadPreviewItem">
-                                            <Grid ColumnSpacing="8" Margin="0,2,0,2">
+                                            <Grid ColumnSpacing="8" Margin="0,4,0,4">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
@@ -717,7 +742,7 @@
                                               AutomationProperties.AutomationId="lstModStudioVideos">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:ModUploadVideoItem">
-                                            <Grid ColumnSpacing="8" Margin="0,2,0,2">
+                                            <Grid ColumnSpacing="8" Margin="0,4,0,4">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
@@ -789,8 +814,8 @@
 
         <!-- 底栏：状态 + 上传进度条 -->
         <Border Grid.Row="2"
-                Padding="10,6"
-                CornerRadius="6"
+                Padding="12,8"
+                CornerRadius="8"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1">

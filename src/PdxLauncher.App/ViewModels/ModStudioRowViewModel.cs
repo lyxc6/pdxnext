@@ -132,6 +132,9 @@ public sealed partial class ModStudioRowViewModel : LocalizedObservableObject
     /// <summary>是否有可打开的工坊页面。</summary>
     public bool CanOpenWorkshop => Publication?.PublishedFileId is not null;
 
+    /// <summary>是否有可编辑的描述符文件（读到了家族且文件存在）。</summary>
+    public bool CanEditDescriptor => Descriptor is { Family: not ModDescriptorFamily.None, DescriptorPath.Length: > 0 };
+
     /// <summary>上方辅助行：大小 + 发布状态。</summary>
     public string SubtitleText
     {

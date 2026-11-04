@@ -49,6 +49,26 @@ public static class ModStudioPaneChecks
             "Mod 创建页: 上传中按「取消」给出「正在取消」提示",
             codeBehind.Contains("ModstudioUploadCanceling", StringComparison.Ordinal));
 
+        // ---- 4. 详情面板的 Steam 与描述符编辑入口 ----
+        var editDialog = Read(root, "src", "PdxLauncher.App", "Views", "EditModDescriptorDialog.cs");
+        ChecksContext.Check(
+            "Mod 创建页: 详情面板有「在 Steam 中打开」",
+            xaml.Contains("modStudioOpenSteam", StringComparison.Ordinal)
+                && codeBehind.Contains("SteamWorkshop.GetSteamAddress", StringComparison.Ordinal)
+                && codeBehind.Contains("ShellLauncher.TryOpenSteam", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "Mod 创建页: 详情面板有「编辑描述符」",
+            xaml.Contains("modStudioEditDescriptor", StringComparison.Ordinal)
+                && codeBehind.Contains("EditModDescriptorDialog.ShowAsync", StringComparison.Ordinal)
+                && codeBehind.Contains("SaveDescriptorAsync", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "Mod 创建页: 编辑入口只对有文件的描述符可用",
+            viewModel.Contains("CanEditSelectedDescriptor", StringComparison.Ordinal)
+                && viewModel.Contains("SaveDescriptorAsync", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "Mod 创建页: 编辑框只提交 ModDescriptorEdit",
+            editDialog.Contains("new ModDescriptorEdit(", StringComparison.Ordinal));
+
         return ChecksContext.Failures == before ? 0 : 1;
     }
 
