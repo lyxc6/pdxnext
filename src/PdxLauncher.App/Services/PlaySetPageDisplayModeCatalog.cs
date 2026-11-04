@@ -39,6 +39,10 @@ public static class PlaySetPageDisplayModeCatalog
             Keys.SettingsInterfacePlaysetOfficialTitle,
             Keys.SettingsInterfacePlaysetOfficialDesc),
         new PlaySetPageDisplayModeOption(
+            PlaySetPageDisplayModes.TwoColumn,
+            Keys.SettingsInterfacePlaysetTwoColumnTitle,
+            Keys.SettingsInterfacePlaysetTwoColumnDesc),
+        new PlaySetPageDisplayModeOption(
             PlaySetPageDisplayModes.Placeholder,
             Keys.SettingsInterfacePlaysetPlaceholderTitle,
             Keys.SettingsInterfacePlaysetPlaceholderDesc),

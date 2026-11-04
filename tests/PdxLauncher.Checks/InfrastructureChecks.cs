@@ -88,6 +88,18 @@ public static class InfrastructureChecks
                 "显示方式: IsPlaceholder 只认 placeholder",
                 PlaySetPageDisplayModes.IsPlaceholder(PlaySetPageDisplayModes.Placeholder)
                     && !PlaySetPageDisplayModes.IsPlaceholder(PlaySetPageDisplayModes.OfficialLauncher));
+            ChecksContext.Equal(
+                "显示方式: twoColumn 归一化（大小写 / 空白无关）",
+                PlaySetPageDisplayModes.TwoColumn,
+                PlaySetPageDisplayModes.Normalize(" TWOCOLUMN "));
+            ChecksContext.Equal(
+                "显示方式: twoColumn 不落回原版启动器",
+                PlaySetPageDisplayModes.TwoColumn,
+                PlaySetPageDisplayModes.Normalize(PlaySetPageDisplayModes.TwoColumn));
+            ChecksContext.Check(
+                "显示方式: IsTwoColumn 只认 twoColumn",
+                PlaySetPageDisplayModes.IsTwoColumn(PlaySetPageDisplayModes.TwoColumn)
+                    && !PlaySetPageDisplayModes.IsTwoColumn(PlaySetPageDisplayModes.Placeholder));
 
             // --- 背景显示方式五档 + Mod 图片大小三档
             ChecksContext.Equal(

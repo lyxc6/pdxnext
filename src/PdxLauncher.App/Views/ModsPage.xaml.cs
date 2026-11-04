@@ -15,9 +15,10 @@ using PdxLauncher.Core.Playsets;
 using Windows.System;
 
 /// <summary>
-/// 播放集页：原版启动器布局（工具条里切换播放集、条目自动保存）或留空占位。
-/// 页面只负责对话框、确认与生命周期；切换即激活、添加 / 移除 / 排序 / 启停后的自动保存等
-/// 业务全部在 <see cref="PlaySetEditor"/> 与 <see cref="ModsViewModel"/> 里完成。
+/// 播放集页：原版启动器布局（工具条里切换播放集、条目自动保存）、双列布局
+/// （左栏勾选即加入、右栏编辑当前播放集）或留空占位。三种布局共用同一套工具条、
+/// 保存状态与行模板；页面只负责对话框、确认与生命周期，切换即激活、添加 / 移除 / 排序 /
+/// 启停后的自动保存等业务全部在 <see cref="PlaySetEditor"/> 与 <see cref="ModsViewModel"/> 里完成。
 /// </summary>
 public sealed partial class ModsPage : Page
 {
@@ -43,6 +44,12 @@ public sealed partial class ModsPage : Page
     /// 必须在页面重载完成之后再写入，否则重载会用数据库里的内容覆盖掉刚加的 mod。
     /// </summary>
     private AddModsNavigationResult? _pendingAddResult;
+
+    /// <summary>
+    /// 当前布局里真正承载「播放集内 mod」的列表：原版启动器是 ModList，双列是右栏的
+    /// ModListTwoColumn。位次编辑与滚动定位都按这一栏取容器，两套布局共用同一段逻辑。
+    /// </summary>
+    private ListView ActiveModList => _viewModel.IsTwoColumnLayout ? ModListTwoColumn : ModList;
 
     public ModsPage()
     {
@@ -432,6 +439,71 @@ public sealed partial class ModsPage : Page
         }
     }
 
+    /// <summary>
+    /// 双列左栏的搜索框：只过滤「可添加的 mod」，和右栏的 SearchText 互不影响。
+    /// 与 <see cref="OnSearchTextChanged"/> 一样，x:Bind 只能 OneWay，输入由这里写回。
+    /// </summary>
+    private void OnCandidateSearchTextChanged(object sender, TextChangedEventArgs e)
+    {
+        try
+        {
+            if (sender is not TextBox box)
+            {
+                return;
+            }
+
+            var text = box.Text ?? string.Empty;
+            if (string.Equals(text, _viewModel.CandidateSearchText, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _viewModel.CandidateSearchText = text;
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 候选搜索过滤失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 双列左栏「勾选即加入」：勾上候选行就把这个 mod 追加到当前播放集末尾（走自动保存）。
+    /// 加入必须延后一帧——此刻仍在 CheckBox 的 Click 里，而 AddMods 会重建 Candidates，
+    /// 在绑定回调中途清空列表会让正在求值的这一行容器消失。
+    /// </summary>
+    private void OnCandidateChecked(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is not CheckBox { DataContext: AddModRowViewModel row }
+                || !row.IsSelected
+                || _viewModel.IsBusy)
+            {
+                return;
+            }
+
+            var entry = row.Entry;
+            if (!DispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    _viewModel.AddMods(new[] { entry });
+                }
+                catch (Exception ex)
+                {
+                    AppServices.Logger.Error("ModsPage 加入候选 mod 失败", ex);
+                }
+            }))
+            {
+                AppServices.Logger.Warn("ModsPage 无法派发候选 mod 加入");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 处理候选 mod 勾选失败", ex);
+        }
+    }
+
     private void OnEnableAllClick(object sender, RoutedEventArgs e)
     {
         try
@@ -519,7 +591,7 @@ public sealed partial class ModsPage : Page
     /// 行模板里只有这一个 TextBox（序号输入框），所以按类型找是唯一且稳定的。
     /// </summary>
     private TextBox? FindPositionEditor(ModRowViewModel row) =>
-        ModList.ContainerFromItem(row) is ListViewItem { ContentTemplateRoot: { } root }
+        ActiveModList.ContainerFromItem(row) is ListViewItem { ContentTemplateRoot: { } root }
             ? FindDescendant<TextBox>(root)
             : null;
 
@@ -624,7 +696,7 @@ public sealed partial class ModsPage : Page
                 var row = _viewModel.Mods.FirstOrDefault(m => m.ModId == modId);
                 if (row is not null)
                 {
-                    ModList.ScrollIntoView(row, ScrollIntoViewAlignment.Default);
+                    ActiveModList.ScrollIntoView(row, ScrollIntoViewAlignment.Default);
                 }
             }
             catch (Exception ex)

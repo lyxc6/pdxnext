@@ -146,6 +146,8 @@
   "settings.interface.playset.official.title": "原版启动器",
   "settings.interface.playset.placeholder.desc": "预留显示方式：播放集页面暂不显示内容",
   "settings.interface.playset.placeholder.title": "留空",
+  "settings.interface.playset.twoColumn.desc": "左栏是可添加的 mod，右栏是当前播放集的 mod；勾选左栏即加入，改动自动保存并写入游戏加载文件",
+  "settings.interface.playset.twoColumn.title": "双列（原版启动器式）",
   "settings.interface.size.large.desc": "72 像素：缩略图最清楚，行高随之变高",
   "settings.interface.size.large.title": "大",
   "settings.interface.size.medium.desc": "48 像素：默认，Mod 库与播放集两处的通用尺寸",

@@ -516,6 +516,12 @@ public sealed partial class Localizer
         ["mods.toolbar.renameName"] = "重命名播放集",
         ["mods.toolbar.searchPlaceholder"] = "搜索播放集内的 mod",
         ["mods.translateUnavailable"] = "翻译没有出结果：{0}。可在「设置 → 翻译」里点「测试翻译」查看各引擎状态。",
+        ["mods.twoColumn.addToolTip"] = "加入当前播放集",
+        ["mods.twoColumn.available"] = "可添加的 mod",
+        ["mods.twoColumn.hint"] = "勾选左侧的 mod 即加入当前播放集；右侧开关是启用 / 禁用，行尾图标把 mod 移出。",
+        ["mods.twoColumn.noPlaySet"] = "先在上方选择一个播放集，再把 mod 加进来",
+        ["mods.twoColumn.selectedEmpty"] = "该播放集还没有 mod：在左侧勾选即可加入",
+        ["mods.twoColumn.selectedNoMatch"] = "没有匹配的 mod，换个关键词试试",
         ["mods.warnMissingPath"] = "路径写进了加载文件，但磁盘上找不到这个目录或文件",
         ["mods.warnName"] = "这条 mod 在游戏里可能不会生效",
         ["mods.warnNoArchive"] = "这个游戏的加载文件只认压缩包路径，目录型 mod 无法表达",
@@ -839,6 +845,8 @@ public sealed partial class Localizer
         ["settings.interface.playset.official.title"] = "原版启动器",
         ["settings.interface.playset.placeholder.desc"] = "预留显示方式：播放集页面暂不显示内容",
         ["settings.interface.playset.placeholder.title"] = "留空",
+        ["settings.interface.playset.twoColumn.desc"] = "左栏是可添加的 mod，右栏是当前播放集的 mod；勾选左栏即加入，改动自动保存并写入游戏加载文件",
+        ["settings.interface.playset.twoColumn.title"] = "双列（原版启动器式）",
         ["settings.interface.size.large.desc"] = "72 像素：缩略图最清楚，行高随之变高",
         ["settings.interface.size.large.title"] = "大",
         ["settings.interface.size.medium.desc"] = "48 像素：默认，Mod 库与播放集两处的通用尺寸",
@@ -1778,6 +1786,12 @@ public sealed partial class Localizer
         ["mods.toolbar.renameName"] = "Rename Play Set",
         ["mods.toolbar.searchPlaceholder"] = "Search mods in this play set",
         ["mods.translateUnavailable"] = "Translation returned nothing: {0}. Use Settings > Translation > Test translation to check engines.",
+        ["mods.twoColumn.addToolTip"] = "Add to the current play set",
+        ["mods.twoColumn.available"] = "Addable mods",
+        ["mods.twoColumn.hint"] = "Tick a mod on the left to add it; the switch on the right enables or disables it and the trailing icon removes it.",
+        ["mods.twoColumn.noPlaySet"] = "Select a play set above before adding mods",
+        ["mods.twoColumn.selectedEmpty"] = "This play set has no mods yet — tick mods on the left to add them",
+        ["mods.twoColumn.selectedNoMatch"] = "No mods match that search — try another keyword",
         ["mods.warnMissingPath"] = "The path is written to the load file, but it does not exist on disk",
         ["mods.warnName"] = "This mod may not load in game",
         ["mods.warnNoArchive"] = "This game’s load file only accepts archive paths, so folder mods cannot be listed",
@@ -2101,6 +2115,8 @@ public sealed partial class Localizer
         ["settings.interface.playset.official.title"] = "Original launcher",
         ["settings.interface.playset.placeholder.desc"] = "Reserved layout: the playset page shows nothing",
         ["settings.interface.playset.placeholder.title"] = "Empty",
+        ["settings.interface.playset.twoColumn.desc"] = "Left column lists addable mods, right column lists the current play set's mods; ticking a mod adds it, and changes are saved and written to the game load file",
+        ["settings.interface.playset.twoColumn.title"] = "Two columns (launcher style)",
         ["settings.interface.size.large.desc"] = "72 px: sharpest thumbnails, taller rows",
         ["settings.interface.size.large.title"] = "Large",
         ["settings.interface.size.medium.desc"] = "48 px: the default used by both the mod library and playsets",
@@ -3040,6 +3056,12 @@ public sealed partial class Localizer
         ("mods.toolbar.renameName", "ModsToolbarRenameName"),
         ("mods.toolbar.searchPlaceholder", "ModsToolbarSearchPlaceholder"),
         ("mods.translateUnavailable", "ModsTranslateUnavailable"),
+        ("mods.twoColumn.addToolTip", "ModsTwoColumnAddToolTip"),
+        ("mods.twoColumn.available", "ModsTwoColumnAvailable"),
+        ("mods.twoColumn.hint", "ModsTwoColumnHint"),
+        ("mods.twoColumn.noPlaySet", "ModsTwoColumnNoPlaySet"),
+        ("mods.twoColumn.selectedEmpty", "ModsTwoColumnSelectedEmpty"),
+        ("mods.twoColumn.selectedNoMatch", "ModsTwoColumnSelectedNoMatch"),
         ("mods.warnMissingPath", "ModsWarnMissingPath"),
         ("mods.warnName", "ModsWarnName"),
         ("mods.warnNoArchive", "ModsWarnNoArchive"),
@@ -3363,6 +3385,8 @@ public sealed partial class Localizer
         ("settings.interface.playset.official.title", "SettingsInterfacePlaysetOfficialTitle"),
         ("settings.interface.playset.placeholder.desc", "SettingsInterfacePlaysetPlaceholderDesc"),
         ("settings.interface.playset.placeholder.title", "SettingsInterfacePlaysetPlaceholderTitle"),
+        ("settings.interface.playset.twoColumn.desc", "SettingsInterfacePlaysetTwoColumnDesc"),
+        ("settings.interface.playset.twoColumn.title", "SettingsInterfacePlaysetTwoColumnTitle"),
         ("settings.interface.size.large.desc", "SettingsInterfaceSizeLargeDesc"),
         ("settings.interface.size.large.title", "SettingsInterfaceSizeLargeTitle"),
         ("settings.interface.size.medium.desc", "SettingsInterfaceSizeMediumDesc"),
@@ -4300,6 +4324,12 @@ public sealed partial class Localizer
     public string ModsToolbarRenameName => Format("mods.toolbar.renameName");
     public string ModsToolbarSearchPlaceholder => Format("mods.toolbar.searchPlaceholder");
     public string ModsTranslateUnavailable => Format("mods.translateUnavailable");
+    public string ModsTwoColumnAddToolTip => Format("mods.twoColumn.addToolTip");
+    public string ModsTwoColumnAvailable => Format("mods.twoColumn.available");
+    public string ModsTwoColumnHint => Format("mods.twoColumn.hint");
+    public string ModsTwoColumnNoPlaySet => Format("mods.twoColumn.noPlaySet");
+    public string ModsTwoColumnSelectedEmpty => Format("mods.twoColumn.selectedEmpty");
+    public string ModsTwoColumnSelectedNoMatch => Format("mods.twoColumn.selectedNoMatch");
     public string ModsWarnMissingPath => Format("mods.warnMissingPath");
     public string ModsWarnName => Format("mods.warnName");
     public string ModsWarnNoArchive => Format("mods.warnNoArchive");
@@ -4623,6 +4653,8 @@ public sealed partial class Localizer
     public string SettingsInterfacePlaysetOfficialTitle => Format("settings.interface.playset.official.title");
     public string SettingsInterfacePlaysetPlaceholderDesc => Format("settings.interface.playset.placeholder.desc");
     public string SettingsInterfacePlaysetPlaceholderTitle => Format("settings.interface.playset.placeholder.title");
+    public string SettingsInterfacePlaysetTwoColumnDesc => Format("settings.interface.playset.twoColumn.desc");
+    public string SettingsInterfacePlaysetTwoColumnTitle => Format("settings.interface.playset.twoColumn.title");
     public string SettingsInterfaceSizeLargeDesc => Format("settings.interface.size.large.desc");
     public string SettingsInterfaceSizeLargeTitle => Format("settings.interface.size.large.title");
     public string SettingsInterfaceSizeMediumDesc => Format("settings.interface.size.medium.desc");
@@ -5563,6 +5595,12 @@ internal static class Keys
     public const string ModsToolbarRenameName = "mods.toolbar.renameName";
     public const string ModsToolbarSearchPlaceholder = "mods.toolbar.searchPlaceholder";
     public const string ModsTranslateUnavailable = "mods.translateUnavailable";
+    public const string ModsTwoColumnAddToolTip = "mods.twoColumn.addToolTip";
+    public const string ModsTwoColumnAvailable = "mods.twoColumn.available";
+    public const string ModsTwoColumnHint = "mods.twoColumn.hint";
+    public const string ModsTwoColumnNoPlaySet = "mods.twoColumn.noPlaySet";
+    public const string ModsTwoColumnSelectedEmpty = "mods.twoColumn.selectedEmpty";
+    public const string ModsTwoColumnSelectedNoMatch = "mods.twoColumn.selectedNoMatch";
     public const string ModsWarnMissingPath = "mods.warnMissingPath";
     public const string ModsWarnName = "mods.warnName";
     public const string ModsWarnNoArchive = "mods.warnNoArchive";
@@ -5886,6 +5924,8 @@ internal static class Keys
     public const string SettingsInterfacePlaysetOfficialTitle = "settings.interface.playset.official.title";
     public const string SettingsInterfacePlaysetPlaceholderDesc = "settings.interface.playset.placeholder.desc";
     public const string SettingsInterfacePlaysetPlaceholderTitle = "settings.interface.playset.placeholder.title";
+    public const string SettingsInterfacePlaysetTwoColumnDesc = "settings.interface.playset.twoColumn.desc";
+    public const string SettingsInterfacePlaysetTwoColumnTitle = "settings.interface.playset.twoColumn.title";
     public const string SettingsInterfaceSizeLargeDesc = "settings.interface.size.large.desc";
     public const string SettingsInterfaceSizeLargeTitle = "settings.interface.size.large.title";
     public const string SettingsInterfaceSizeMediumDesc = "settings.interface.size.medium.desc";

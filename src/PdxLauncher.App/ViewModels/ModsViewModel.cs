@@ -35,6 +35,9 @@ public sealed class ModsViewModel : LocalizedObservableObject
     private string _statusMessage = string.Empty;
     private bool _translateFailureReported;
     private string _searchText = string.Empty;
+
+    /// <summary>双列布局左栏（可添加的 mod）专用搜索词。</summary>
+    private string _candidateSearchText = string.Empty;
     private PlaySet? _selectedPlaySet;
     private IReadOnlyList<PlaySetMod> _allMods = Array.Empty<PlaySetMod>();
 
@@ -92,6 +95,12 @@ public sealed class ModsViewModel : LocalizedObservableObject
     /// <summary>当前播放集的 mod 行（已按搜索词过滤、按 position 排序）。</summary>
     public ObservableCollection<ModRowViewModel> Mods { get; } = new();
 
+    /// <summary>
+    /// 双列布局左栏的候选行：mod 库里还没加入当前播放集的 mod（已按左栏搜索词过滤）。
+    /// 勾选即加入——加入后这一行会从左栏消失并出现在右栏末尾。
+    /// </summary>
+    public ObservableCollection<AddModRowViewModel> Candidates { get; } = new();
+
     public GameInstallation? Game
     {
         get => _game;
@@ -114,6 +123,16 @@ public sealed class ModsViewModel : LocalizedObservableObject
     /// <summary>当前显示方式是否为留空布局。</summary>
     public bool IsPlaceholderLayout =>
         string.Equals(_displayMode, PlaySetPageDisplayModes.Placeholder, StringComparison.Ordinal);
+
+    /// <summary>当前显示方式是否为双列布局（左＝可添加，右＝已在播放集）。</summary>
+    public bool IsTwoColumnLayout =>
+        string.Equals(_displayMode, PlaySetPageDisplayModes.TwoColumn, StringComparison.Ordinal);
+
+    /// <summary>
+    /// 工具条与状态栏是否显示：原版启动器与双列两种布局共用同一套播放集操作，
+    /// 留空布局什么都不显示。页面根层用它控制这两块，避免把工具条复制两份。
+    /// </summary>
+    public bool ShowsPlaysetChrome => IsOfficialLayout || IsTwoColumnLayout;
 
     public bool IsBusy
     {
@@ -172,6 +191,59 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
     /// <summary>搜索时禁用上移/下移：可见顺序与真实 position 顺序不一致，移动会打乱排序。</summary>
     public bool CanMoveMods => string.IsNullOrWhiteSpace(SearchText);
+
+    /// <summary>双列布局左栏的搜索词；只影响 <see cref="Candidates"/>，与右栏搜索互不干扰。</summary>
+    public string CandidateSearchText
+    {
+        get => _candidateSearchText;
+        set
+        {
+            if (SetProperty(ref _candidateSearchText, value ?? string.Empty))
+            {
+                RebuildCandidates();
+            }
+        }
+    }
+
+    /// <summary>左栏候选计数，例如「共 12 个可添加的 mod」。带占位符的文案只在视图模型里拼。</summary>
+    public string CandidateCountText => T(Keys.ModsAddPageCandidateCount, Candidates.Count);
+
+    /// <summary>左栏列表是否可见（双列布局且左栏搜索框没被别的状态挤掉时恒为真）。</summary>
+    public bool ShowCandidateList => Candidates.Count > 0;
+
+    /// <summary>没有播放集时左栏显示「先选一个播放集」。</summary>
+    public bool ShowCandidateNoPlaySet => IsTwoColumnLayout && SelectedPlaySet is null;
+
+    /// <summary>左栏空状态：有播放集、没有搜索词、也确实没有可添加的 mod。</summary>
+    public bool ShowCandidateEmpty =>
+        IsTwoColumnLayout
+        && SelectedPlaySet is not null
+        && Candidates.Count == 0
+        && string.IsNullOrWhiteSpace(CandidateSearchText);
+
+    /// <summary>左栏无匹配：有播放集、有搜索词，但过滤后一行都不剩。</summary>
+    public bool ShowCandidateNoMatch =>
+        IsTwoColumnLayout
+        && SelectedPlaySet is not null
+        && Candidates.Count == 0
+        && !string.IsNullOrWhiteSpace(CandidateSearchText);
+
+    /// <summary>右栏没有播放集时的提示：两栏都空着，得先选一个播放集才知道右栏该显示什么。</summary>
+    public bool ShowSelectedNoPlaySet => IsTwoColumnLayout && SelectedPlaySet is null;
+
+    /// <summary>右栏空状态：播放集里确实没有 mod，且没有搜索词。</summary>
+    public bool ShowSelectedEmpty =>
+        IsTwoColumnLayout
+        && SelectedPlaySet is not null
+        && Mods.Count == 0
+        && string.IsNullOrWhiteSpace(SearchText);
+
+    /// <summary>右栏无匹配：播放集里有 mod，但当前搜索词把它们全滤掉了。</summary>
+    public bool ShowSelectedNoMatch =>
+        IsTwoColumnLayout
+        && SelectedPlaySet is not null
+        && Mods.Count == 0
+        && !string.IsNullOrWhiteSpace(SearchText);
 
     public PlaySet? SelectedPlaySet
     {
@@ -279,6 +351,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
             IsLoaded = false;
             StatusMessage = T(Keys.ModsStatusSelectGameFirst);
             RaiseCounts();
+            RebuildCandidates();
             return;
         }
 
@@ -295,6 +368,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
             IsLoaded = true;
             StatusMessage = SupportMessages.ManagedByGame;
             RaiseCounts();
+            RebuildCandidates();
             return;
         }
 
@@ -353,6 +427,10 @@ public sealed class ModsViewModel : LocalizedObservableObject
         _displayMode = mode;
         OnPropertyChanged(nameof(IsOfficialLayout));
         OnPropertyChanged(nameof(IsPlaceholderLayout));
+        OnPropertyChanged(nameof(IsTwoColumnLayout));
+        OnPropertyChanged(nameof(ShowsPlaysetChrome));
+        // 切到双列时左栏要立刻有内容；切走时把候选清空，避免下次进来先闪一帧旧数据。
+        RebuildCandidates();
     }
 
     /// <summary>选中一个播放集并加载它已保存的 mod 行（不再合并全库）。</summary>
@@ -379,6 +457,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
             _allMods = Array.Empty<PlaySetMod>();
             _modsBaseline = null;
             RebuildVisibleMods(cancellationToken);
+            RebuildCandidates();
             return;
         }
 
@@ -410,6 +489,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
                     .ConfigureAwait(true);
                 _entryByModId = BuildEntryMap(_librarySnapshot);
                 RebuildVisibleMods(cancellationToken);
+                RebuildCandidates();
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -429,6 +509,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
             _allMods = Array.Empty<PlaySetMod>();
             _modsBaseline = null;
             RebuildVisibleMods(cancellationToken);
+            RebuildCandidates();
         }
         finally
         {
@@ -478,6 +559,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
         _allMods = PlaySetEditor.Renumber(appended);
         RebuildVisibleMods();
+        RebuildCandidates();
         _logger.Info("播放集添加 " + added.ToString(CultureInfo.InvariantCulture) + " 个 mod（playSetId=" + (SelectedPlaySet?.Id.ToString("N") ?? "-") + "）");
         StatusMessage = T(Keys.ModsStatusModsAdded, added);
         RequestAutoSave();
@@ -498,6 +580,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
         _allMods = PlaySetEditor.Renumber(remaining);
         RebuildVisibleMods();
+        RebuildCandidates();
         _logger.Info("播放集移除 mod「" + row.Name + "」（playSetId=" + (SelectedPlaySet?.Id.ToString("N") ?? "-") + "）");
         StatusMessage = T(Keys.ModsStatusModRemoved, row.Name);
         RequestAutoSave();
@@ -560,6 +643,64 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
         RaiseCounts();
         StartNameTranslation(cancellationToken);
+    }
+
+    // ------------------------------------------------------------ 双列布局的左栏
+
+    /// <summary>
+    /// 重建双列布局左栏的候选行：mod 库快照减去当前播放集已有的 ModId，再按左栏搜索词过滤。
+    /// </summary>
+    /// <remarks>
+    /// 只在「成员集合变化」的地方调用（选播放集 / 加入 / 移除 / 切换布局），不挂在
+    /// <see cref="RebuildVisibleMods"/> 上：后者每敲一个字、每次自动保存都会跑，跟着重建会把
+    /// 左栏滚动位置和「刚点下去那一行」的勾选态一起丢掉。
+    /// </remarks>
+    private void RebuildCandidates()
+    {
+        Candidates.Clear();
+        if (!IsTwoColumnLayout || SelectedPlaySet is null || _librarySnapshot.Mods.Count == 0)
+        {
+            RaiseCandidateState();
+            return;
+        }
+
+        // 与 AddMods 的去重口径一致：按 ModId 判断是否已在播放集里。
+        var existingIds = _allMods.Select(static m => m.ModId).ToHashSet();
+        var query = CandidateSearchText.Trim();
+        foreach (var entry in _librarySnapshot.Mods)
+        {
+            if (existingIds.Contains(entry.ModId))
+            {
+                continue;
+            }
+
+            // 前缀 modCandidate：与「添加模组」子页的 addModCandidate 区分，UIA 脚本不会串。
+            var row = new AddModRowViewModel(
+                entry,
+                onSelectionChanged: null,
+                automationPrefix: "modCandidate");
+            if (query.Length > 0 && !row.Matches(query))
+            {
+                continue;
+            }
+
+            Candidates.Add(row);
+        }
+
+        RaiseCandidateState();
+    }
+
+    /// <summary>通知左栏计数/空状态与右栏空/无匹配状态。</summary>
+    private void RaiseCandidateState()
+    {
+        OnPropertyChanged(nameof(CandidateCountText));
+        OnPropertyChanged(nameof(ShowCandidateList));
+        OnPropertyChanged(nameof(ShowCandidateNoPlaySet));
+        OnPropertyChanged(nameof(ShowCandidateEmpty));
+        OnPropertyChanged(nameof(ShowCandidateNoMatch));
+        OnPropertyChanged(nameof(ShowSelectedNoPlaySet));
+        OnPropertyChanged(nameof(ShowSelectedEmpty));
+        OnPropertyChanged(nameof(ShowSelectedNoMatch));
     }
 
     /// <summary>
@@ -1358,7 +1499,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
     /// </summary>
     private void RequestAutoSave()
     {
-        if (!IsOfficialLayout || Game is not { SupportsContentManagement: true } || SelectedPlaySet is null)
+        if (!ShowsPlaysetChrome || Game is not { SupportsContentManagement: true } || SelectedPlaySet is null)
         {
             return;
         }
@@ -1507,6 +1648,11 @@ public sealed class ModsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(IsModListEmpty));
         OnPropertyChanged(nameof(DeleteFallbackPlaySet));
+        // 右栏（双列）的空 / 无匹配状态跟着可见行数走；左栏计数也在这里顺手刷一遍。
+        OnPropertyChanged(nameof(ShowSelectedNoPlaySet));
+        OnPropertyChanged(nameof(ShowSelectedEmpty));
+        OnPropertyChanged(nameof(ShowSelectedNoMatch));
+        OnPropertyChanged(nameof(CandidateCountText));
         RaiseActivationState();
     }
 

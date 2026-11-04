@@ -11,382 +11,706 @@
     NavigationCacheMode="Required"
     Background="{ThemeResource PdxPageVeilBrush}">
 
+
     <!--
-        播放集页（导航 Tag=playsets）。两种显示方式（设置 → 界面 → 播放集页面显示方式）：
-        1. 原版启动器：只有一条工具条——左侧是播放集切换器 + 新建 / 重命名 / 删除，
-           紧跟分隔线后是「激活播放集 / 启用全部 / 禁用全部」；中间搜索框，右侧「添加模组」。
+        播放集页（导航 Tag=playsets）。三种显示方式（设置 → 界面 → 播放集页面显示方式）：
+        1. 原版启动器（officialLauncher）：工具条只有一组控件——左侧是播放集切换器 + 新建 / 重命名 / 删除，
+           紧跟分隔线后是「激活播放集 / 启用全部 / 禁用全部 / 修复 mod 路径 / 自动排序」；
+           中间搜索框（固定 200 宽），右侧「添加模组」进独立子页（AddModsPage）勾选后一起加入。
+           左侧按钮簇在窗口变窄时自动折行，搜索框与「添加模组」始终完整可见，不再被挤没或裁掉。
            页面不再有第二行摘要（集名 / 计数 / 已激活提示），状态与计数改由下拉框的「● 激活」
            标记、激活按钮文字与底部状态栏承担；忙碌转圈也收在状态栏右端，不占工具条。
            切换播放集只切换查看/编辑目标，不改变激活状态；点「激活播放集」才更新 sqlite 的
            isActive 并写入游戏加载文件。改动总是自动保存到 sqlite，只有激活集才写加载文件；
            没有「设为激活」「保存」「保存并启动」按钮。
-        2. 留空：暂不显示任何内容，只留一行说明与切回方式的提示。
+        2. 双列（twoColumn）：一屏两栏——左栏是还没加入当前播放集的 mod（勾选即加入，直接走
+           ModsViewModel.Candidates，不经过子页），右栏是当前播放集内的 mod（序号 / 启用 / 移除就地
+           操作，行模板与原版共用）。两栏各有自己的搜索框：左栏只过滤候选，右栏仍用 SearchText。
+           工具条、状态栏、自动保存行为与原版启动器完全一致。
+        3. 留空：暂不显示任何内容，只留一行说明与切回方式的提示。
         所有交互控件都带 AutomationProperties.AutomationId，便于 UI 自动化与无障碍。
     -->
-    <Grid Padding="16" RowSpacing="12">
 
-        <!-- ==================== 原版启动器布局 ==================== -->
-        <Grid Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsOfficialLayout), Mode=OneWay}">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+    <Page.Resources>
 
-            <!-- 工具条（唯一一行）：播放集切换器 + 新建 / 重命名 / 删除 | 激活播放集 / 启用全部 / 禁用全部 | 搜索 | 添加模组 -->
-            <Grid Grid.Row="0" ColumnSpacing="6">
+        <!-- 原版启动器 / 双列右栏共用的「播放集内 mod」行模板：序号 / 缩略图 / 名称 / 开关 / 上下移 / 移除。
+             放在资源里，两个 ListView 共用同一套交互，改一处两栏同步。 -->
+        <DataTemplate x:Key="PlaysetModRowTemplate" x:DataType="vm:ModRowViewModel">
+            <Grid ColumnSpacing="8" Padding="4,8">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="40" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 序号：显示态是透明 Button（点击进入编辑；用 Button 而非 TextBlock 是为了保住
+                     Tab 可达与 ≥24×24 命中区），编辑态是就地 TextBox。两层按 IsEditingPosition 互斥显隐。
+                     列宽 24→40 是为容纳三位数序号与输入框（1040 最小窗宽 + 32/48/72 缩略图下不破版）。 -->
+                <Grid Grid.Column="0" VerticalAlignment="Center">
+                    <Button x:Name="PositionButton"
+                            Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(IsEditingPosition), Mode=OneWay}"
+                            IsEnabled="{x:Bind CanMove, Mode=OneWay}"
+                            Click="OnPositionEditClick"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Padding="4,0"
+                            MinWidth="0"
+                            MinHeight="0"
+                            ToolTipService.ToolTip="{x:Bind L.ModsRowPositionToolTip, Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind PositionButtonAutomationId, Mode=OneTime}"
+                            AutomationProperties.Name="{x:Bind PositionEditName, Mode=OneWay}">
+                        <TextBlock Text="{x:Bind PositionText, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextAlignment="Right" />
+                    </Button>
+                    <TextBox x:Name="PositionEditBox"
+                             Visibility="{x:Bind svc:XamlVisibility.FromBool(IsEditingPosition), Mode=OneWay}"
+                             MaxWidth="40"
+                             Padding="4,0"
+                             HorizontalContentAlignment="Right"
+                             MaxLength="4"
+                             InputScope="Number"
+                             KeyDown="OnPositionEditKeyDown"
+                             LostFocus="OnPositionEditLostFocus"
+                             AutomationProperties.AutomationId="{x:Bind PositionEditAutomationId, Mode=OneTime}"
+                             AutomationProperties.Name="{x:Bind PositionEditName, Mode=OneWay}" />
+                </Grid>
+
+                <!-- 缩略图 -->
+                <Border Grid.Column="1"
+                        Width="{x:Bind ThumbnailSize, Mode=OneTime}"
+                        Height="{x:Bind ThumbnailSize, Mode=OneTime}"
+                        CornerRadius="8"
+                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath, 72), Mode=OneWay}"
+                           Stretch="Uniform" />
+                </Border>
+
+                <!-- 名称 + 副标题（大小 / 注册 id） -->
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{x:Bind Name, Mode=OneTime}"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <!-- 来源徽标：本地 / 订阅，与 Mod 库页同一套画刷。 -->
+                        <Border VerticalAlignment="Center"
+                                Padding="8,4"
+                                CornerRadius="4"
+                                Background="{ThemeResource PdxOriginLocalBackgroundBrush}"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(IsLocalOrigin), Mode=OneWay}">
+                            <TextBlock Text="{x:Bind OriginText, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource PdxOriginLocalForegroundBrush}" />
+                        </Border>
+                        <Border VerticalAlignment="Center"
+                                Padding="8,4"
+                                CornerRadius="4"
+                                Background="{ThemeResource PdxOriginSubscribedBackgroundBrush}"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(IsLocalOrigin), Mode=OneWay}">
+                            <TextBlock Text="{x:Bind OriginText, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource PdxOriginSubscribedForegroundBrush}" />
+                        </Border>
+                        <!-- 加载警告：这一行在写加载文件时会被跳过（或只是提示），原因挂在提示里。 -->
+                        <FontIcon Glyph="&#xE7BA;"
+                                  FontSize="12"
+                                  VerticalAlignment="Center"
+                                  IsTabStop="False"
+                                  Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                  Visibility="{x:Bind svc:XamlVisibility.FromBool(HasWarning), Mode=OneWay}"
+                                  ToolTipService.ToolTip="{x:Bind WarningText, Mode=OneWay}" />
+                    </StackPanel>
+                    <!-- 译名：原文与译文同显，译文在标题下方的描边框里（不加「译文」标题）。 -->
+                    <Border Margin="0,8,0,0"
+                            Padding="8,4"
+                            CornerRadius="8"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            Visibility="{x:Bind svc:XamlVisibility.FromString(TranslatedName), Mode=OneWay}">
+                        <TextBlock Text="{x:Bind TranslatedName, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   TextTrimming="CharacterEllipsis" />
+                    </Border>
+                    <TextBlock Text="{x:Bind Subtitle, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+
+                <!-- 启用开关（改动自动保存） -->
+                <ToggleSwitch Grid.Column="3"
+                              VerticalAlignment="Center"
+                              IsOn="{x:Bind IsEnabled, Mode=TwoWay}"
+                              OnContent="{x:Bind L.CommonEnable, Mode=OneWay}"
+                              OffContent="{x:Bind L.CommonDisable, Mode=OneWay}"
+                              AutomationProperties.AutomationId="{x:Bind ToggleAutomationId, Mode=OneWay}"
+                              AutomationProperties.Name="{x:Bind Name, Mode=OneTime}" />
+
+                <!-- 上移 / 下移（搜索态与序号入口一起变灰：绑行上的 CanMove） -->
+                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                    <Button Command="{x:Bind MoveUpCommand, Mode=OneWay}"
+                            Content="↑"
+                            IsEnabled="{x:Bind CanMove, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind L.ModsRowMoveUpToolTip, Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind MoveUpAutomationId, Mode=OneWay}"
+                            AutomationProperties.Name="{x:Bind L.ModsRowMoveUp, Mode=OneWay}" />
+                    <Button Command="{x:Bind MoveDownCommand, Mode=OneWay}"
+                            Content="↓"
+                            IsEnabled="{x:Bind CanMove, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind L.ModsRowMoveDownToolTip, Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind MoveDownAutomationId, Mode=OneWay}"
+                            AutomationProperties.Name="{x:Bind L.ModsRowMoveDown, Mode=OneWay}" />
+                </StackPanel>
+
+                <!-- 移除（自动保存） -->
+                <Button Grid.Column="5"
+                        Command="{x:Bind RemoveCommand, Mode=OneWay}"
+                        Padding="8"
+                        VerticalAlignment="Center"
+                        ToolTipService.ToolTip="{x:Bind L.ModsRowRemoveToolTip, Mode=OneWay}"
+                        AutomationProperties.AutomationId="{x:Bind RemoveAutomationId, Mode=OneWay}"
+                        AutomationProperties.Name="{x:Bind L.ModsRowRemove, Mode=OneWay}">
+                    <FontIcon Glyph="&#xE74D;" FontSize="14" />
+                </Button>
+            </Grid>
+        </DataTemplate>
+
+        <!-- 双列左栏的候选行：勾选即加入当前播放集，加入后该行从左栏消失。 -->
+        <DataTemplate x:Key="PlaysetCandidateRowTemplate" x:DataType="vm:AddModRowViewModel">
+            <Grid ColumnSpacing="8"
+                  Padding="4,8"
+                  AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
+                  AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                    <controls:PdxDropDown x:Name="PlaySetSwitcher"
-                              MinWidth="150"
-                              MaxWidth="240"
-                              VerticalAlignment="Center"
-                              ItemsSource="{x:Bind ViewModel.PlaySets, Mode=OneWay}"
-                              SelectedItem="{x:Bind ViewModel.SelectedPlaySet, Mode=OneWay}"
-                              IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
-                              SelectionChanged="OnPlaySetSelectionChanged"
-                              ToolTipService.ToolTip="{x:Bind L.ModsPlaySetSwitcherToolTip, Mode=OneWay}"
-                              AutomationProperties.AutomationId="cmbPlaySets"
-                              AutomationProperties.Name="{x:Bind L.ModsPlaySetSwitcherName, Mode=OneWay}">
-                        <controls:PdxDropDown.ItemTemplate>
-                            <DataTemplate x:DataType="contracts:PlaySet">
-                                <Grid ColumnSpacing="6"
-                                      Padding="0,4"
-                                      AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0"
-                                               Text="{x:Bind Name, Mode=OneTime}"
-                                               TextTrimming="CharacterEllipsis"
-                                               VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="1"
-                                               Text="{x:Bind loc:Localizer.Instance.ModsPlaySetActiveBadge, Mode=OneWay}"
-                                               VerticalAlignment="Center"
-                                               Style="{StaticResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource SystemFillColorSuccessBrush}"
-                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(IsActive), Mode=OneTime}" />
-                                </Grid>
-                            </DataTemplate>
-                        </controls:PdxDropDown.ItemTemplate>
-                    </controls:PdxDropDown>
+                <!-- 勾选框：勾中的 mod 会被加入播放集 -->
+                <!-- 勾选即加入：Click 里把这一行加进播放集，勾选状态不留在左栏。
+                     MinWidth / Padding 必须显式收窄：CheckBox 默认样式带 120 DIP 最小宽度，
+                     左栏只有 380 DIP，这 120 DIP 的空白槽位会把 mod 名字挤成省略号。 -->
+                <CheckBox Grid.Column="0"
+                      MinWidth="0"
+                      Padding="0,0,8,0"
+                      VerticalAlignment="Center"
+                      IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
+                      Click="OnCandidateChecked"
+                      ToolTipService.ToolTip="{x:Bind L.ModsTwoColumnAddToolTip, Mode=OneWay}"
+                      AutomationProperties.AutomationId="{x:Bind CheckAutomationId, Mode=OneTime}"
+                      AutomationProperties.Name="{x:Bind L.ModsTwoColumnAddToolTip, Mode=OneWay}" />
 
-                    <Button Content="{x:Bind L.ModsToolbarNew, Mode=OneWay}"
-                            Click="OnNewPlaySetClick"
-                            IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
-                            AutomationProperties.AutomationId="btnNewPlaySet"
-                            AutomationProperties.Name="{x:Bind L.ModsToolbarNewPlaySetName, Mode=OneWay}" />
-                    <Button Content="{x:Bind L.ModsToolbarRename, Mode=OneWay}"
-                            Click="OnRenamePlaySetClick"
-                            IsEnabled="{x:Bind ViewModel.CanManageSelection, Mode=OneWay}"
-                            AutomationProperties.AutomationId="btnRenamePlaySet"
-                            AutomationProperties.Name="{x:Bind L.ModsToolbarRenameName, Mode=OneWay}" />
-                    <Button Content="{x:Bind L.CommonDelete, Mode=OneWay}"
-                            Click="OnDeletePlaySetClick"
-                            IsEnabled="{x:Bind ViewModel.CanManageSelection, Mode=OneWay}"
-                            AutomationProperties.AutomationId="btnDeletePlaySet"
-                            AutomationProperties.Name="{x:Bind L.ModsToolbarDeleteName, Mode=OneWay}" />
+                <!-- 缩略图 -->
+                <Border Grid.Column="1"
+                        Width="{x:Bind ThumbnailSize, Mode=OneTime}"
+                        Height="{x:Bind ThumbnailSize, Mode=OneTime}"
+                        CornerRadius="8"
+                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                    <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath, 72), Mode=OneWay}"
+                           Stretch="Uniform" />
+                </Border>
 
-                    <!-- 分组分隔线：左边改播放集本身，右边作用在当前播放集的 mod 与激活状态上 -->
-                    <Border Width="1"
-                            Height="20"
-                            Margin="1,0"
-                            VerticalAlignment="Center"
-                            Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-
-                    <Button Content="{x:Bind ViewModel.ActivateButtonText, Mode=OneWay}"
-                            IsEnabled="{x:Bind ViewModel.CanActivateSelected, Mode=OneWay}"
-                            Click="OnActivatePlaySetClick"
-                            ToolTipService.ToolTip="{x:Bind L.ModsHeaderActivateToolTip, Mode=OneWay}"
-                            AutomationProperties.AutomationId="btnActivatePlaySet"
-                            AutomationProperties.Name="{x:Bind L.ModsHeaderActivateName, Mode=OneWay}" />
-                    <Button Content="{x:Bind L.ModsHeaderEnableAll, Mode=OneWay}"
-                            Click="OnEnableAllClick"
-                            IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
-                            ToolTipService.ToolTip="{x:Bind L.ModsHeaderEnableAll, Mode=OneWay}"
-                            AutomationProperties.AutomationId="btnEnableAllMods"
-                            AutomationProperties.Name="{x:Bind L.ModsHeaderEnableAllName, Mode=OneWay}" />
-                    <Button Content="{x:Bind L.ModsHeaderDisableAll, Mode=OneWay}"
-                            Click="OnDisableAllClick"
-                            IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
-                            ToolTipService.ToolTip="{x:Bind L.ModsHeaderDisableAll, Mode=OneWay}"
-                            AutomationProperties.AutomationId="btnDisableAllMods"
-                            AutomationProperties.Name="{x:Bind L.ModsHeaderDisableAllName, Mode=OneWay}" />
-
-                    <Button Content="{x:Bind L.ModsRepairName, Mode=OneWay}"
-                            Click="OnRepairModPathsClick"
-                            IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
-                            ToolTipService.ToolTip="{x:Bind L.ModsRepairName, Mode=OneWay}"
-                            AutomationProperties.AutomationId="btnRepairModPaths"
-                            AutomationProperties.Name="{x:Bind L.ModsRepairName, Mode=OneWay}" />
-
-                    <Button Content="{x:Bind L.ModsAutoSortButton, Mode=OneWay}"
-                            Click="OnAutoSortClick"
-                            IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
-                            ToolTipService.ToolTip="{x:Bind L.ModsAutoSortTooltip, Mode=OneWay}"
-                            AutomationProperties.AutomationId="btnAutoSort"
-                            AutomationProperties.Name="{x:Bind L.ModsAutoSortButtonName, Mode=OneWay}" />
-                    <!-- 扫描期间才出现：不绑 IsEditorEnabled，否则 IsBusy 会把它一起禁用。 -->
-                    <Button Content="{x:Bind L.ModsAutoSortCancel, Mode=OneWay}"
-                            Click="OnAutoSortCancelClick"
-                            Visibility="{x:Bind ViewModel.IsAutoSortRunning, Mode=OneWay}"
-                            ToolTipService.ToolTip="{x:Bind L.ModsAutoSortCancel, Mode=OneWay}"
-                            AutomationProperties.AutomationId="btnAutoSortCancel"
-                            AutomationProperties.Name="{x:Bind L.ModsAutoSortCancel, Mode=OneWay}" />
-                    <Button Content="{x:Bind L.ModsAutoSortUndo, Mode=OneWay}"
-                            Click="OnUndoAutoSortClick"
-                            IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
-                            Visibility="{x:Bind ViewModel.HasAutoSortUndo, Mode=OneWay}"
-                            ToolTipService.ToolTip="{x:Bind L.ModsAutoSortUndo, Mode=OneWay}"
-                            AutomationProperties.AutomationId="btnUndoAutoSort"
-                            AutomationProperties.Name="{x:Bind L.ModsAutoSortUndo, Mode=OneWay}" />
-                </StackPanel>
-
-                <TextBox Grid.Column="1"
-                         x:Name="SearchBox"
-                         MaxWidth="320"
-                         MinWidth="96"
-                         HorizontalAlignment="Stretch"
-                         VerticalAlignment="Center"
-                         PlaceholderText="{x:Bind L.ModsToolbarSearchPlaceholder, Mode=OneWay}"
-                         Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
-                         TextChanged="OnSearchTextChanged"
-                         AutomationProperties.AutomationId="txtModSearch"
-                         AutomationProperties.Name="{x:Bind L.ModsToolbarSearchPlaceholder, Mode=OneWay}" />
-
-                <Button Grid.Column="2"
-                        Content="{x:Bind L.ModsToolbarAddMods, Mode=OneWay}"
-                        VerticalAlignment="Center"
-                        IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
-                        Style="{StaticResource AccentButtonStyle}"
-                        Click="OnAddModsClick"
-                        ToolTipService.ToolTip="{x:Bind L.ModsToolbarAddModsToolTip, Mode=OneWay}"
-                        AutomationProperties.AutomationId="btnAddMods"
-                        AutomationProperties.Name="{x:Bind L.ModsToolbarAddMods, Mode=OneWay}" />
-            </Grid>
-
-            <!-- 当前播放集已保存的 mod -->
-            <Grid Grid.Row="1">
-                <!-- 列表底衬：半透明玻璃面，压住整窗背景图保证行文字对比度 -->
-                <Border Background="{ThemeResource PdxCardGlassBrush}" CornerRadius="8" />
-
-                <ListView x:Name="ModList"
-                          ItemsSource="{x:Bind ViewModel.Mods, Mode=OneWay}"
-                          SelectionMode="None"
-                          AutomationProperties.AutomationId="lstMods"
-                          AutomationProperties.Name="{x:Bind L.ModsListName, Mode=OneWay}">
-                    <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ModRowViewModel">
-                            <Grid ColumnSpacing="10" Padding="4,6">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="40" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-
-                                <!-- 序号：显示态是透明 Button（点击进入编辑；用 Button 而非 TextBlock 是为了保住
-                                     Tab 可达与 ≥24×24 命中区），编辑态是就地 TextBox。两层按 IsEditingPosition 互斥显隐。
-                                     列宽 24→40 是为容纳三位数序号与输入框（1040 最小窗宽 + 32/48/72 缩略图下不破版）。 -->
-                                <Grid Grid.Column="0" VerticalAlignment="Center">
-                                    <Button x:Name="PositionButton"
-                                            Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(IsEditingPosition), Mode=OneWay}"
-                                            IsEnabled="{x:Bind CanMove, Mode=OneWay}"
-                                            Click="OnPositionEditClick"
-                                            Background="Transparent"
-                                            BorderThickness="0"
-                                            Padding="4,0"
-                                            MinWidth="0"
-                                            MinHeight="0"
-                                            ToolTipService.ToolTip="{x:Bind L.ModsRowPositionToolTip, Mode=OneWay}"
-                                            AutomationProperties.AutomationId="{x:Bind PositionButtonAutomationId, Mode=OneTime}"
-                                            AutomationProperties.Name="{x:Bind PositionEditName, Mode=OneWay}">
-                                        <TextBlock Text="{x:Bind PositionText, Mode=OneWay}"
-                                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                   TextAlignment="Right" />
-                                    </Button>
-                                    <TextBox x:Name="PositionEditBox"
-                                             Visibility="{x:Bind svc:XamlVisibility.FromBool(IsEditingPosition), Mode=OneWay}"
-                                             MaxWidth="40"
-                                             Padding="2,0"
-                                             HorizontalContentAlignment="Right"
-                                             MaxLength="4"
-                                             InputScope="Number"
-                                             KeyDown="OnPositionEditKeyDown"
-                                             LostFocus="OnPositionEditLostFocus"
-                                             AutomationProperties.AutomationId="{x:Bind PositionEditAutomationId, Mode=OneTime}"
-                                             AutomationProperties.Name="{x:Bind PositionEditName, Mode=OneWay}" />
-                                </Grid>
-
-                                <!-- 缩略图 -->
-                                <Border Grid.Column="1"
-                                        Width="{x:Bind ThumbnailSize, Mode=OneTime}"
-                                        Height="{x:Bind ThumbnailSize, Mode=OneTime}"
-                                        CornerRadius="6"
-                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        BorderThickness="1">
-                                    <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath, 72), Mode=OneWay}"
-                                           Stretch="Uniform" />
-                                </Border>
-
-                                <!-- 名称 + 副标题（大小 / 注册 id） -->
-                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <TextBlock Text="{x:Bind Name, Mode=OneTime}"
-                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
-                                                   TextTrimming="CharacterEllipsis" />
-                                        <!-- 来源徽标：本地 / 订阅，与 Mod 库页同一套画刷。 -->
-                                        <Border VerticalAlignment="Center"
-                                                Padding="6,1"
-                                                CornerRadius="4"
-                                                Background="{ThemeResource PdxOriginLocalBackgroundBrush}"
-                                                Visibility="{x:Bind svc:XamlVisibility.FromBool(IsLocalOrigin), Mode=OneWay}">
-                                            <TextBlock Text="{x:Bind OriginText, Mode=OneWay}"
-                                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                                       Foreground="{ThemeResource PdxOriginLocalForegroundBrush}" />
-                                        </Border>
-                                        <Border VerticalAlignment="Center"
-                                                Padding="6,1"
-                                                CornerRadius="4"
-                                                Background="{ThemeResource PdxOriginSubscribedBackgroundBrush}"
-                                                Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(IsLocalOrigin), Mode=OneWay}">
-                                            <TextBlock Text="{x:Bind OriginText, Mode=OneWay}"
-                                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                                       Foreground="{ThemeResource PdxOriginSubscribedForegroundBrush}" />
-                                        </Border>
-                                        <!-- 加载警告：这一行在写加载文件时会被跳过（或只是提示），原因挂在提示里。 -->
-                                        <FontIcon Glyph="&#xE7BA;"
-                                                  FontSize="12"
-                                                  VerticalAlignment="Center"
-                                                  IsTabStop="False"
-                                                  Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                                                  Visibility="{x:Bind svc:XamlVisibility.FromBool(HasWarning), Mode=OneWay}"
-                                                  ToolTipService.ToolTip="{x:Bind WarningText, Mode=OneWay}" />
-                                    </StackPanel>
-                                    <!-- 译名：原文与译文同显，译文在标题下方的描边框里（不加「译文」标题）。 -->
-                                    <Border Margin="0,6,0,0"
-                                            Padding="6,4"
-                                            CornerRadius="6"
-                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                            BorderThickness="1"
-                                            Visibility="{x:Bind svc:XamlVisibility.FromString(TranslatedName), Mode=OneWay}">
-                                        <TextBlock Text="{x:Bind TranslatedName, Mode=OneWay}"
-                                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                                   TextTrimming="CharacterEllipsis" />
-                                    </Border>
-                                    <TextBlock Text="{x:Bind Subtitle, Mode=OneWay}"
-                                               Style="{StaticResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                               TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-
-                                <!-- 启用开关（改动自动保存） -->
-                                <ToggleSwitch Grid.Column="3"
-                                              VerticalAlignment="Center"
-                                              IsOn="{x:Bind IsEnabled, Mode=TwoWay}"
-                                              OnContent="{x:Bind L.CommonEnable, Mode=OneWay}"
-                                              OffContent="{x:Bind L.CommonDisable, Mode=OneWay}"
-                                              AutomationProperties.AutomationId="{x:Bind ToggleAutomationId, Mode=OneWay}"
-                                              AutomationProperties.Name="{x:Bind Name, Mode=OneTime}" />
-
-                                <!-- 上移 / 下移（搜索态与序号入口一起变灰：绑行上的 CanMove） -->
-                                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-                                    <Button Command="{x:Bind MoveUpCommand, Mode=OneWay}"
-                                            Content="↑"
-                                            IsEnabled="{x:Bind CanMove, Mode=OneWay}"
-                                            ToolTipService.ToolTip="{x:Bind L.ModsRowMoveUpToolTip, Mode=OneWay}"
-                                            AutomationProperties.AutomationId="{x:Bind MoveUpAutomationId, Mode=OneWay}"
-                                            AutomationProperties.Name="{x:Bind L.ModsRowMoveUp, Mode=OneWay}" />
-                                    <Button Command="{x:Bind MoveDownCommand, Mode=OneWay}"
-                                            Content="↓"
-                                            IsEnabled="{x:Bind CanMove, Mode=OneWay}"
-                                            ToolTipService.ToolTip="{x:Bind L.ModsRowMoveDownToolTip, Mode=OneWay}"
-                                            AutomationProperties.AutomationId="{x:Bind MoveDownAutomationId, Mode=OneWay}"
-                                            AutomationProperties.Name="{x:Bind L.ModsRowMoveDown, Mode=OneWay}" />
-                                </StackPanel>
-
-                                <!-- 移除（自动保存） -->
-                                <Button Grid.Column="5"
-                                        Command="{x:Bind RemoveCommand, Mode=OneWay}"
-                                        Padding="8"
-                                        VerticalAlignment="Center"
-                                        ToolTipService.ToolTip="{x:Bind L.ModsRowRemoveToolTip, Mode=OneWay}"
-                                        AutomationProperties.AutomationId="{x:Bind RemoveAutomationId, Mode=OneWay}"
-                                        AutomationProperties.Name="{x:Bind L.ModsRowRemove, Mode=OneWay}">
-                                    <FontIcon Glyph="&#xE74D;" FontSize="14" />
-                                </Button>
-                            </Grid>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
-
-                <!-- 空状态 -->
-                <StackPanel VerticalAlignment="Center"
-                            HorizontalAlignment="Center"
-                            Spacing="6"
-                            IsHitTestVisible="False"
-                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsModListEmpty), Mode=OneWay}">
-                    <FontIcon Glyph="&#xE8B7;"
-                              FontSize="28"
-                              HorizontalAlignment="Center"
-                              Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                    <TextBlock Text="{x:Bind L.ModsEmptyText, Mode=OneWay}"
-                               HorizontalAlignment="Center"
+                <!-- 名称 + 副标题（大小 / 注册 id） -->
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="4">
+                    <!-- 名字列必须用星号列而不是横向 StackPanel：横向面板按内容测量，名字过长时既不省略也不让位，
+                         会把「订阅 / 本地」徽标顶出可见区；星号列才能先截断名字、徽标始终可见。 -->
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="{x:Bind Name, Mode=OneTime}"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTipService.ToolTip="{x:Bind Name, Mode=OneTime}" />
+                        <!-- 来源徽标：本地 / 订阅，与 Mod 库页同一套画刷。 -->
+                        <Border Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Padding="8,4"
+                                CornerRadius="4"
+                                Background="{ThemeResource PdxOriginLocalBackgroundBrush}"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(IsLocalOrigin), Mode=OneWay}">
+                            <TextBlock Text="{x:Bind OriginText, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource PdxOriginLocalForegroundBrush}" />
+                        </Border>
+                        <Border Grid.Column="2"
+                                VerticalAlignment="Center"
+                                Padding="8,4"
+                                CornerRadius="4"
+                                Background="{ThemeResource PdxOriginSubscribedBackgroundBrush}"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(IsLocalOrigin), Mode=OneWay}">
+                            <TextBlock Text="{x:Bind OriginText, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource PdxOriginSubscribedForegroundBrush}" />
+                        </Border>
+                    </Grid>
+                    <TextBlock Text="{x:Bind SubtitleText, Mode=OneWay}"
                                Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               AutomationProperties.AutomationId="txtModListEmpty"
-                               AutomationProperties.Name="{x:Bind L.ModsEmptyName, Mode=OneWay}" />
+                               TextTrimming="CharacterEllipsis" />
                 </StackPanel>
             </Grid>
+        </DataTemplate>
 
-            <!-- 状态栏 -->
-            <Border Grid.Row="2"
-                    Padding="10,6"
-                    CornerRadius="6"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1">
+    </Page.Resources>
+
+    <Grid Padding="16" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- 工具条：播放集切换器 + 新建 / 重命名 / 删除 | 激活播放集 / 启用全部 / 禁用全部 | 搜索 | 添加模组
+             第 0 列是 *，按钮簇用 PdxWrapPanel 在空间不足时自动折行；搜索框固定 200 宽、添加模组固定在右侧，
+             两者不参与挤压。窄窗口下工具条会变成两行，但不会再把搜索框压成 0 宽或裁掉右侧按钮。 -->
+        <Grid Grid.Row="0" ColumnSpacing="8"
+              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowsPlaysetChrome), Mode=OneWay}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <controls:PdxWrapPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+                <controls:PdxDropDown x:Name="PlaySetSwitcher"
+                          MinWidth="150"
+                          MaxWidth="240"
+                          VerticalAlignment="Center"
+                          ItemsSource="{x:Bind ViewModel.PlaySets, Mode=OneWay}"
+                          SelectedItem="{x:Bind ViewModel.SelectedPlaySet, Mode=OneWay}"
+                          IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
+                          SelectionChanged="OnPlaySetSelectionChanged"
+                          ToolTipService.ToolTip="{x:Bind L.ModsPlaySetSwitcherToolTip, Mode=OneWay}"
+                          AutomationProperties.AutomationId="cmbPlaySets"
+                          AutomationProperties.Name="{x:Bind L.ModsPlaySetSwitcherName, Mode=OneWay}">
+                    <controls:PdxDropDown.ItemTemplate>
+                        <DataTemplate x:DataType="contracts:PlaySet">
+                            <Grid ColumnSpacing="8"
+                                  Padding="0,4"
+                                  AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0"
+                                           Text="{x:Bind Name, Mode=OneTime}"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{x:Bind loc:Localizer.Instance.ModsPlaySetActiveBadge, Mode=OneWay}"
+                                           VerticalAlignment="Center"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                           Visibility="{x:Bind svc:XamlVisibility.FromBool(IsActive), Mode=OneTime}" />
+                            </Grid>
+                        </DataTemplate>
+                    </controls:PdxDropDown.ItemTemplate>
+                </controls:PdxDropDown>
+
+                <Button Content="{x:Bind L.ModsToolbarNew, Mode=OneWay}"
+                        Click="OnNewPlaySetClick"
+                        IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnNewPlaySet"
+                        AutomationProperties.Name="{x:Bind L.ModsToolbarNewPlaySetName, Mode=OneWay}" />
+                <Button Content="{x:Bind L.ModsToolbarRename, Mode=OneWay}"
+                        Click="OnRenamePlaySetClick"
+                        IsEnabled="{x:Bind ViewModel.CanManageSelection, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnRenamePlaySet"
+                        AutomationProperties.Name="{x:Bind L.ModsToolbarRenameName, Mode=OneWay}" />
+                <Button Content="{x:Bind L.CommonDelete, Mode=OneWay}"
+                        Click="OnDeletePlaySetClick"
+                        IsEnabled="{x:Bind ViewModel.CanManageSelection, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnDeletePlaySet"
+                        AutomationProperties.Name="{x:Bind L.ModsToolbarDeleteName, Mode=OneWay}" />
+
+                <!-- 分组分隔线：左边改播放集本身，右边作用在当前播放集的 mod 与激活状态上 -->
+                <!-- 竖线做成与按钮同高的 32 高边框，不再用 margin 做交叉轴居中 -->
+                <Border Width="1"
+                            Height="32"
+                            BorderThickness="1,0,0,0"
+                            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                <Button Content="{x:Bind ViewModel.ActivateButtonText, Mode=OneWay}"
+                        IsEnabled="{x:Bind ViewModel.CanActivateSelected, Mode=OneWay}"
+                        Click="OnActivatePlaySetClick"
+                        ToolTipService.ToolTip="{x:Bind L.ModsHeaderActivateToolTip, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnActivatePlaySet"
+                        AutomationProperties.Name="{x:Bind L.ModsHeaderActivateName, Mode=OneWay}" />
+                <Button Content="{x:Bind L.ModsHeaderEnableAll, Mode=OneWay}"
+                        Click="OnEnableAllClick"
+                        IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind L.ModsHeaderEnableAll, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnEnableAllMods"
+                        AutomationProperties.Name="{x:Bind L.ModsHeaderEnableAllName, Mode=OneWay}" />
+                <Button Content="{x:Bind L.ModsHeaderDisableAll, Mode=OneWay}"
+                        Click="OnDisableAllClick"
+                        IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind L.ModsHeaderDisableAll, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnDisableAllMods"
+                        AutomationProperties.Name="{x:Bind L.ModsHeaderDisableAllName, Mode=OneWay}" />
+
+                <Button Content="{x:Bind L.ModsRepairName, Mode=OneWay}"
+                        Click="OnRepairModPathsClick"
+                        IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind L.ModsRepairName, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnRepairModPaths"
+                        AutomationProperties.Name="{x:Bind L.ModsRepairName, Mode=OneWay}" />
+
+                <Button Content="{x:Bind L.ModsAutoSortButton, Mode=OneWay}"
+                        Click="OnAutoSortClick"
+                        IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind L.ModsAutoSortTooltip, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnAutoSort"
+                        AutomationProperties.Name="{x:Bind L.ModsAutoSortButtonName, Mode=OneWay}" />
+                <!-- 扫描期间才出现：不绑 IsEditorEnabled，否则 IsBusy 会把它一起禁用。 -->
+                <Button Content="{x:Bind L.ModsAutoSortCancel, Mode=OneWay}"
+                        Click="OnAutoSortCancelClick"
+                        Visibility="{x:Bind ViewModel.IsAutoSortRunning, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind L.ModsAutoSortCancel, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnAutoSortCancel"
+                        AutomationProperties.Name="{x:Bind L.ModsAutoSortCancel, Mode=OneWay}" />
+                <Button Content="{x:Bind L.ModsAutoSortUndo, Mode=OneWay}"
+                        Click="OnUndoAutoSortClick"
+                        IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.HasAutoSortUndo, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind L.ModsAutoSortUndo, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnUndoAutoSort"
+                        AutomationProperties.Name="{x:Bind L.ModsAutoSortUndo, Mode=OneWay}" />
+            </controls:PdxWrapPanel>
+
+            <TextBox Grid.Column="1"
+                     x:Name="SearchBox"
+                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsOfficialLayout), Mode=OneWay}"
+                     Width="200"
+                     HorizontalAlignment="Right"
+                     VerticalAlignment="Center"
+                     PlaceholderText="{x:Bind L.ModsToolbarSearchPlaceholder, Mode=OneWay}"
+                     Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
+                     TextChanged="OnSearchTextChanged"
+                     AutomationProperties.AutomationId="txtModSearch"
+                     AutomationProperties.Name="{x:Bind L.ModsToolbarSearchPlaceholder, Mode=OneWay}" />
+
+            <Button Grid.Column="2"
+                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsOfficialLayout), Mode=OneWay}"
+                    Content="{x:Bind L.ModsToolbarAddMods, Mode=OneWay}"
+                    VerticalAlignment="Center"
+                    IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
+                    Style="{StaticResource AccentButtonStyle}"
+                    Click="OnAddModsClick"
+                    ToolTipService.ToolTip="{x:Bind L.ModsToolbarAddModsToolTip, Mode=OneWay}"
+                    AutomationProperties.AutomationId="btnAddMods"
+                    AutomationProperties.Name="{x:Bind L.ModsToolbarAddMods, Mode=OneWay}" />
+        </Grid>
+
+        <!-- 原版启动器：单列表 = 当前播放集内的 mod -->
+        <Grid Grid.Row="1"
+              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsOfficialLayout), Mode=OneWay}">
+            <!-- 列表底衬：半透明玻璃面，压住整窗背景图保证行文字对比度 -->
+            <Border Background="{ThemeResource PdxCardGlassBrush}" CornerRadius="8" />
+
+            <ListView x:Name="ModList"
+                      ItemsSource="{x:Bind ViewModel.Mods, Mode=OneWay}"
+                      SelectionMode="None"
+                      ItemTemplate="{StaticResource PlaysetModRowTemplate}"
+                      AutomationProperties.AutomationId="lstMods"
+                      AutomationProperties.Name="{x:Bind L.ModsListName, Mode=OneWay}" />
+
+            <!-- 空状态 -->
+            <StackPanel VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        Spacing="8"
+                        IsHitTestVisible="False"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsModListEmpty), Mode=OneWay}">
+                <FontIcon Glyph="&#xE8B7;"
+                          FontSize="28"
+                          HorizontalAlignment="Center"
+                          Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                <TextBlock Text="{x:Bind L.ModsEmptyText, Mode=OneWay}"
+                           HorizontalAlignment="Center"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           AutomationProperties.AutomationId="txtModListEmpty"
+                           AutomationProperties.Name="{x:Bind L.ModsEmptyName, Mode=OneWay}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- 双列：左 = 还没加入当前播放集的 mod（勾选即加入），右 = 当前播放集内的 mod -->
+        <Grid Grid.Row="1"
+              ColumnSpacing="12"
+              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsTwoColumnLayout), Mode=OneWay}">
+            <Grid.ColumnDefinitions>
+                <!-- 左栏比 Mod 库页的 360 宽一档：候选名普遍很长（「Chinese IG Traits Overview」），
+                     360 DIP 下再扣掉勾选框与缩略图只剩十几字宽，几乎全被截断 -->
+                <ColumnDefinition Width="400" MinWidth="300" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 左栏：可添加的 mod。勾选即调用 AddMods，该行立刻从左栏消失、出现在右栏末尾。 -->
+            <Grid Grid.Column="0" RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- 表头两行：这一栏只有 360 DIP，标题 + 计数 + 搜索框挤一行时计数会被裁成「共 0 个可添加的 mc」，
+                     所以搜索框独占一行整行铺满 -->
                 <Grid ColumnSpacing="8">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <TextBlock x:Name="StatusText"
-                               Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                    <TextBlock Text="{x:Bind L.ModsTwoColumnAvailable, Mode=OneWay}"
+                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1"
+                               Text="{x:Bind ViewModel.CandidateCountText, Mode=OneWay}"
                                Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               TextWrapping="Wrap"
-                               AutomationProperties.LiveSetting="Assertive"
-                               AutomationProperties.AutomationId="txtModsStatus"
-                               AutomationProperties.Name="{x:Bind L.ModsStatusName, Mode=OneWay}" />
-
-                    <!-- 忙碌提示放状态栏，工具条只留交互控件，窄窗口时不会挤掉按钮 -->
-                    <ProgressRing Grid.Column="1"
-                                  Width="16"
-                                  Height="16"
-                                  VerticalAlignment="Center"
-                                  IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                                  AutomationProperties.AutomationId="ringModsBusy"
-                                  AutomationProperties.Name="{x:Bind L.ModsHeaderBusy, Mode=OneWay}" />
+                               VerticalAlignment="Center" />
                 </Grid>
-            </Border>
+
+                <TextBox Grid.Row="1"
+                         x:Name="CandidateSearchBox"
+                         PlaceholderText="{x:Bind L.ModsAddPageSearchPlaceholder, Mode=OneWay}"
+                         Text="{x:Bind ViewModel.CandidateSearchText, Mode=OneWay}"
+                         TextChanged="OnCandidateSearchTextChanged"
+                         AutomationProperties.AutomationId="txtCandidateSearch"
+                         AutomationProperties.Name="{x:Bind L.ModsAddPageSearchName, Mode=OneWay}" />
+
+                <Grid Grid.Row="2">
+                    <Border Background="{ThemeResource PdxCardGlassBrush}" CornerRadius="8" />
+
+                    <ListView x:Name="ModCandidateList"
+                              ItemsSource="{x:Bind ViewModel.Candidates, Mode=OneWay}"
+                              SelectionMode="None"
+                              ItemTemplate="{StaticResource PlaysetCandidateRowTemplate}"
+                              AutomationProperties.AutomationId="lstModCandidates"
+                              AutomationProperties.Name="{x:Bind L.ModsAddPageListName, Mode=OneWay}" />
+
+                    <!-- 三种空状态共用中间一块位置：没选播放集 / 库里没有可加的 / 搜索无匹配 -->
+                    <StackPanel VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Spacing="8"
+                                IsHitTestVisible="False"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowCandidateNoPlaySet), Mode=OneWay}">
+                        <FontIcon Glyph="&#xE8B7;"
+                                  FontSize="28"
+                                  HorizontalAlignment="Center"
+                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        <TextBlock Text="{x:Bind L.ModsTwoColumnNoPlaySet, Mode=OneWay}"
+                                   HorizontalAlignment="Center"
+                                   MaxWidth="280"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   AutomationProperties.AutomationId="txtCandidateNoPlaySet"
+                                   AutomationProperties.Name="{x:Bind L.ModsTwoColumnNoPlaySet, Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Spacing="8"
+                                IsHitTestVisible="False"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowCandidateEmpty), Mode=OneWay}">
+                        <FontIcon Glyph="&#xE8B7;"
+                                  FontSize="28"
+                                  HorizontalAlignment="Center"
+                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        <TextBlock Text="{x:Bind L.ModsAddPageEmpty, Mode=OneWay}"
+                                   HorizontalAlignment="Center"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   AutomationProperties.AutomationId="txtCandidateEmpty"
+                                   AutomationProperties.Name="{x:Bind L.ModsAddPageEmpty, Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Spacing="8"
+                                IsHitTestVisible="False"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowCandidateNoMatch), Mode=OneWay}">
+                        <FontIcon Glyph="&#xE721;"
+                                  FontSize="28"
+                                  HorizontalAlignment="Center"
+                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        <TextBlock Text="{x:Bind L.ModsAddPageNoMatch, Mode=OneWay}"
+                                   HorizontalAlignment="Center"
+                                   MaxWidth="280"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   AutomationProperties.AutomationId="txtCandidateNoMatch"
+                                   AutomationProperties.Name="{x:Bind L.ModsAddPageNoMatch, Mode=OneWay}" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Grid.Row="3"
+                           Text="{x:Bind L.ModsTwoColumnHint, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                           TextWrapping="Wrap" />
+            </Grid>
+
+            <!-- 右栏：当前播放集内的 mod（订阅 / 本地徽标、开关、上下移、移除与原版列表一致） -->
+            <Grid Grid.Column="1" RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- 与左栏同构：第一行播放集名 + 计数，第二行搜索框整行；名字过长由星号列负责截断 -->
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Text="{x:Bind ViewModel.SelectedPlaySetName, Mode=OneWay}"
+                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1"
+                               Text="{x:Bind ViewModel.CountsText, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               VerticalAlignment="Center" />
+                </Grid>
+
+                <TextBox Grid.Row="1"
+                         x:Name="TwoColumnSearchBox"
+                         PlaceholderText="{x:Bind L.ModsToolbarSearchPlaceholder, Mode=OneWay}"
+                         Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
+                         TextChanged="OnSearchTextChanged"
+                         AutomationProperties.AutomationId="txtModSearchTwoCol"
+                         AutomationProperties.Name="{x:Bind L.ModsToolbarSearchPlaceholder, Mode=OneWay}" />
+
+                <Grid Grid.Row="2">
+                    <Border Background="{ThemeResource PdxCardGlassBrush}" CornerRadius="8" />
+
+                    <ListView x:Name="ModListTwoColumn"
+                              ItemsSource="{x:Bind ViewModel.Mods, Mode=OneWay}"
+                              SelectionMode="None"
+                              ItemTemplate="{StaticResource PlaysetModRowTemplate}"
+                              AutomationProperties.AutomationId="lstModsTwoColumn"
+                              AutomationProperties.Name="{x:Bind L.ModsListName, Mode=OneWay}" />
+
+                    <!-- 没选播放集时右栏没有内容可显示，空着像加载失败，所以给一句引导 -->
+                    <StackPanel VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Spacing="8"
+                                IsHitTestVisible="False"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSelectedNoPlaySet), Mode=OneWay}">
+                        <FontIcon Glyph="&#xE8B7;"
+                                  FontSize="28"
+                                  HorizontalAlignment="Center"
+                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        <TextBlock Text="{x:Bind L.ModsTwoColumnNoPlaySet, Mode=OneWay}"
+                                   HorizontalAlignment="Center"
+                                   MaxWidth="360"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   AutomationProperties.AutomationId="txtTwoColumnNoPlaySet"
+                                   AutomationProperties.Name="{x:Bind L.ModsTwoColumnNoPlaySet, Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Spacing="8"
+                                IsHitTestVisible="False"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSelectedEmpty), Mode=OneWay}">
+                        <FontIcon Glyph="&#xE8B7;"
+                                  FontSize="28"
+                                  HorizontalAlignment="Center"
+                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        <TextBlock Text="{x:Bind L.ModsTwoColumnSelectedEmpty, Mode=OneWay}"
+                                   HorizontalAlignment="Center"
+                                   MaxWidth="360"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   AutomationProperties.AutomationId="txtTwoColumnEmpty"
+                                   AutomationProperties.Name="{x:Bind L.ModsTwoColumnSelectedEmpty, Mode=OneWay}" />
+                    </StackPanel>
+                    <StackPanel VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Spacing="8"
+                                IsHitTestVisible="False"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSelectedNoMatch), Mode=OneWay}">
+                        <FontIcon Glyph="&#xE721;"
+                                  FontSize="28"
+                                  HorizontalAlignment="Center"
+                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                        <TextBlock Text="{x:Bind L.ModsTwoColumnSelectedNoMatch, Mode=OneWay}"
+                                   HorizontalAlignment="Center"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   AutomationProperties.AutomationId="txtTwoColumnNoMatch"
+                                   AutomationProperties.Name="{x:Bind L.ModsTwoColumnSelectedNoMatch, Mode=OneWay}" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
         </Grid>
 
-        <!-- ==================== 留空布局 ==================== -->
-        <Grid Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsPlaceholderLayout), Mode=OneWay}">
+        <!-- 状态栏 -->
+        <Border Grid.Row="2"
+                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowsPlaysetChrome), Mode=OneWay}"
+                Padding="12,8"
+                CornerRadius="8"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1">
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock x:Name="StatusText"
+                           Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           AutomationProperties.LiveSetting="Assertive"
+                           AutomationProperties.AutomationId="txtModsStatus"
+                           AutomationProperties.Name="{x:Bind L.ModsStatusName, Mode=OneWay}" />
+
+                <!-- 忙碌提示放状态栏，工具条只留交互控件，窄窗口时不会挤掉按钮 -->
+                <ProgressRing Grid.Column="1"
+                              Width="16"
+                              Height="16"
+                              VerticalAlignment="Center"
+                              IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                              AutomationProperties.AutomationId="ringModsBusy"
+                              AutomationProperties.Name="{x:Bind L.ModsHeaderBusy, Mode=OneWay}" />
+            </Grid>
+        </Border>
+
+        <!-- ==================== 留空布局（铺满三行，盖住工具条与状态栏） ==================== -->
+        <Grid Grid.RowSpan="3"
+              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsPlaceholderLayout), Mode=OneWay}">
             <StackPanel HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Spacing="8">
