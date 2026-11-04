@@ -26,7 +26,7 @@ if errorlevel 1 (
 rem -m:1 is required: PdxLauncher.App declares Platforms=x64 while the solution
 rem configuration is Any CPU; a parallel MSBuild fails silently (0 errors) in
 rem _GetProjectReferenceTargetFrameworkProperties. Single node build is fine.
-rem See README section 1.
+rem See docs/DEVELOPMENT.md.
 call "%~dp0scripts\msg.cmd" B_STEP1
 dotnet build "PdxLauncher.sln" -c Release -m:1
 if errorlevel 1 (
