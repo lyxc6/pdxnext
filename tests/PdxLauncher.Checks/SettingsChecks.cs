@@ -23,6 +23,7 @@ public static class SettingsChecks
             CheckMissingFile(fs, path);
             CheckBrokenFile(fs, path);
             CheckDeferredFlush(fs, path);
+            CheckSingleSettingsInstance();
         }
         finally
         {
@@ -147,6 +148,50 @@ public static class SettingsChecks
 
         using var reload = new AppSettingsStore(fs, new SilentLogger(), path);
         ChecksContext.Equal("设置：Flush 后值已落盘", "victoria3", reload.Load().LastGameId);
+    }
+
+    /// <summary>
+    /// 全局只允许有一个 <see cref="AppSettings"/> 实例。
+    /// <para>
+    /// 出过的事：<c>AppServices.Initialize</c> 里又读了一遍设置，于是
+    /// <c>UpdateService</c> 拿的是 App.xaml.cs 读的那份、<c>AppServices.Settings</c> 却是另一份。
+    /// 谁后写盘谁赢——用户在设置页配好的代理就这样被整份覆盖抹掉，
+    /// 重启后又变成直连，然后工坊连不上 Steam（DNS 被污染）就永远转圈。
+    /// 这里把「只加载一次」钉成源码断言。
+    /// </para>
+    /// </summary>
+    private static void CheckSingleSettingsInstance()
+    {
+        var source = ReadWorkspaceFile("src", "PdxLauncher.App", "Services", "AppServices.cs");
+        if (source is null)
+        {
+            return;
+        }
+
+        ChecksContext.Check(
+            "设置：AppServices 用传入的设置实例",
+            source.Contains("Settings = settings;", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "设置：不再二次加载设置（会覆盖代理配置）",
+            !source.Contains("settingsStore.Load()", StringComparison.Ordinal));
+    }
+
+    /// <summary>读仓库里的一个源码文件；找不到返回 null（自检不因此失败）。</summary>
+    private static string? ReadWorkspaceFile(params string[] parts)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, "tests", "fixtures")))
+            {
+                var path = Path.Combine(new[] { dir.FullName }.Concat(parts).ToArray());
+                return File.Exists(path) ? File.ReadAllText(path) : null;
+            }
+
+            dir = dir.Parent;
+        }
+
+        return null;
     }
 
     private sealed class SilentLogger : IAppLogger

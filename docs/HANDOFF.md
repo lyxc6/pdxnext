@@ -61,6 +61,137 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-11-03 20:00 追加：Windows 安装包与自动更新落地 —— Inno Setup 7.1.1 双模式安装器（默认每用户无 UAC / 可选每机器）、公开 GitHub Releases 的 `update.json`、启动检查 + 下载校验 + 静默/提权安装、设置页「关于与更新」、每机器数据回退到 `%LOCALAPPDATA%\PdxNext-Data`；自检 83 类全过；见 §0.74。**
 **2026-11-03 20:45 追加：发布链路改 GitHub Actions —— 推 `v*` tag 自动构建、自检、生成 Inno 安装器并上传 Release；新增 SemVer 版本规范 `docs/VERSIONING.md`、`CHANGELOG.md`、CI 工作流；发布仓库统一为公开的 `lyxc6/pdxnext`；见 §0.75。**
 **2026-11-03 23:55 追加：已发布到创意工坊却仍显示「未发布」—— 根因是隐藏条目对匿名 API 回 `EResult 9`（FileNotFound，**不等于不存在**），而启动器只认「自己发起的上传」；现给宿主加 `workshop-mine` / `workshop-mine-detail` 两个动词（回调 1312/1318，走本机登录态读自己发布的条目），Mod 创建页加「绑定已有条目…」入口、发布状态改四态（未发布 / 发布未完成 / 已发布（未公开）/ 已发布）并显示 Steam 真实可见性；自检 93→94；见 §0.76。**
+**2026-11-04 13:30 追加：创意工坊「搜不出来」—— 不是搜索坏了，是连不上 Steam 而错误被当成「用户取消」吞掉；根因是本机 DNS 被污染（steamcommunity.com → 104.244.46.21）+ 直连模式不读 `http_proxy`；现把连接超时翻译成 `NetworkTimeoutException`、工坊失败码分「结构变了 / 连不上」，状态栏写明原因并提示检测到的代理，设置页加「检测到的代理 → 使用」一键切换；自检 94→95；见 §0.77。**
+
+## 0.77 最新一轮（2026-11-04 00:00–13:30）：创意工坊搜不出来 —— 「加载失败」被当成了「用户取消」
+
+> 用户诉求原话（m00003）：「现在创意工坊页面啥情况，给谁改炸了，怎么搜不出来了」
+> 补充（m00262）：「是 Vic3 遇到问题」；追问（m00418）：「是不是该缓存改炸了」。
+
+### 0.77.1 结论先说：搜索功能是好的，坏的是「连不上时没人说话」
+
+用复刻 `SteamWorkshopHtmlParser.Parse` 的脚本打真实页面（Vic3，appid=529340，走代理）：
+
+| 请求 | total_count | 判定 |
+| --- | --- | --- |
+| 无关键词 | 11252 | 基准 |
+| `&searchtext=morgenrote` | **51** | 关键词生效 |
+| `&searchtext=morgenrote&days=30` | 51 | `days` 不影响结果集，只改排序 |
+| `browsesort=textsearch&searchtext=morgenrote` | 51 | 与 `browsesort=trend` 等价 |
+| `&searchtext=zzzqqqnotexist` | 0 | 确实按关键词过滤 |
+
+日志里的请求 URL 也完全正确：
+`https://steamcommunity.com/workshop/browse/?appid=529340&section=readytouseitems&browsesort=trend&num_per_page=30&p=1&searchtext=morgenrote&days=30`。
+
+⇒ `docs/HANDOFF.md:3565` 那条「`searchtext` 与 `browsesort` 并存，别再把排序改写成 `textsearch`」**是对的**，
+`beca63d` 删掉「强制 textsearch」**不是 bug**（已实测等价）。用户看到的空白与搜索词无关。
+
+### 0.77.2 真正的根因：连接超时 → 被当成「用户取消」→ 静默吞掉
+
+截图事实：来源徽标=**Steam 创意工坊**、游戏=**Victoria 3**、列表**完全空白**、状态栏永远停在
+「**正在加载第 1 页…**」（既不是「已加载 N 条」，也不是失败文案）。
+
+日志（`src/PdxLauncher.App/bin/x64/Release/net10.0-windows10.0.26100.0/win-x64/data/logs/pdxnext.log`）：
+
+```
+22:05:59 [INFO] 请求合并：browse:529340|https://steamcommunity.com/workshop/browse/?appid=529340&…&searchtext=morgenrote&days=30
+22:08:05 [ERROR] 未观察的 Task 异常
+   System.AggregateException → System.TaskCanceledException
+   → System.TimeoutException: A connection could not be established within the configured ConnectTimeout.
+   at HttpFetcher.GetAsync(...) at SteamWorkshopClient.BrowseCoreAsync(...) at RequestCoalescer.RunAsync[T](...)
+   at WorkshopViewModel.QuerySteamAsync(...) at WorkshopViewModel.QueryAsync(...) at WorkshopViewModel.RunQueryAsync(...)
+```
+
+即：**请求发出去了、URL 也是对的，但 30 秒连不上**（`HttpFetcher.ConnectTimeout = 30s`）。
+接着异常被三层 catch 吃掉：
+
+1. `SteamWorkshopClient.BrowseCoreAsync` 只 `catch (HttpRequestException ex)` —— 但 .NET 连不上时抛的是
+   `TaskCanceledException`（内含 `TimeoutException`），**不是** `HttpRequestException` → 不被捕获。
+2. `RequestCoalescer.RunAsync` 的 `catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)`
+   不成立（token 没被取消）→ 走 `catch (Exception ex)` 以异常形式广播。
+3. `WorkshopViewModel.QueryAsync` 的 `catch (OperationCanceledException) { throw; }` 原样上抛，
+   `WorkshopViewModel.RunQueryAsync` 的 `catch (OperationCanceledException) { }`（空吞）把它当成
+   「被新查询或页面卸载取代」的正常路径 → **状态栏永远停在「正在加载第 1 页…」，`IsLoaded` 不置 true，
+   连空状态都不显示，列表空白**；Task 异常从未被 await/observed → 最终化线程抛「未观察的 Task 异常」。
+
+**为什么连不上**：本机 DNS 被污染 —— 默认 DNS 把 `steamcommunity.com` 解析到 **104.244.46.21**（Twitter 的 IP），
+公共 DNS 8.8.8.8 也给 **199.59.148.7**；Node 直连实测 `Connect Timeout Error`。同一台机器上
+GitHub 也连不上（`检查更新失败: …(github.com:443)`）→ **是全局的 DNS 污染，不是 Steam 的问题**。
+而本机明明配了 `http_proxy=https_proxy=HTTP_PROXY=http://10.31.2.50:7890`、WinINET `ProxyEnable=1`，
+走该代理访问 Steam **HTTP 200 / total_count=11252** —— **代理是通的，只是应用没用它**。
+
+**为什么应用没用它**：`ProxyResolver` 的 `Direct` 模式**故意不读环境变量也不读系统代理**
+（`HttpFetcher.BuildClient` 注释：「代理完全由调用方决定：这里再隐式读环境变量会让『直接连接』模式名不副实」），
+只有 `System` 模式才读。三个 sqlite（开发库 / Temp 安装测试 / 已安装版）的 `settings` JSON 里
+**从来就没有 `proxyMode` / `proxyUrl` 键** → 每次启动都是 Direct → 直连被污染的 DNS → 超时 → 空白。
+日志里 22:27–22:41 那 8 次「使用代理 http://10.31.2.50:7890」全部紧跟「服务装配完成」，
+说明那是**进程内临时改过、没落盘**的内存态（设置页改动只写内存，`Save()` 之前进程被杀就丢）。
+
+### 0.77.3 「给谁改炸了」
+
+| 提交 | 时间 | 贡献 | 定性 |
+| --- | --- | --- | --- |
+| `d88eb7a` | 2026-10-28 03:06 | 工坊页首版，`SteamWorkshopClient` 的网络 catch 就只捕 `HttpRequestException` | **老问题的源头**（漏捕超时） |
+| `a24cb5a` | 2026-10-29 16:44 | 新增 `RequestCoalescer`（在途去重） | 把超时异常广播给等待者，放大了症状 |
+| `beca63d` | 2026-11-03 20:03 | 引入 `_pageToken` + `CancelPendingQuery` + `RunQueryAsync`，其 `catch (OperationCanceledException) { }` 空吞 | **让「连不上」变成「永久转圈」的直接原因** |
+| `8b39092` | 2026-11-03 21:09 | 工坊缓存改 SQLite 真表 | **与本故障无关**（只动缓存层，不碰请求路径）——用户「是不是缓存改炸了」的猜测可以排除 |
+
+补充两点口径，避免下轮再走弯路：
+
+- `beca63d` 引入的「回车才提交搜索」**不是故障**（`ad4f712` 之前是打字即查询，Steam 1 秒限流下确实会卡）；
+  这次搜索失效与它无关，只是它让「取消」成为常态路径，从而把老问题放大成空白页。
+- `ProxyResolver` 自 `fab6981` 起**从未改过** —— 「直连不读环境变量」是设计语义，不是谁改炸的。
+  但它需要配套的「检测到代理 → 一键切换」，这轮补上了。
+
+### 0.77.4 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.Core/Online/NetworkTimeoutException.cs` | **新增**。`public sealed class NetworkTimeoutException : HttpRequestException`，构造 `(string host, string message, Exception? innerException = null)`，属性 `Host`。继承 `HttpRequestException` 是为了兼容既有调用点：所有已捕 `HttpRequestException` 的地方不改一行也能接住超时；真正的用户取消仍原样抛 `OperationCanceledException` |
+| `src/PdxLauncher.Core/Online/HttpFetcher.cs` | `GetAsync`（`:119`）与 `GetDownloadAsync`（`:180`）各加 `catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)` → `throw new NetworkTimeoutException(uri.Host, "连接超时（30 秒）：" + uri.Host, ex)`。`ConnectTimeout`(30s) / `DefaultTotalTimeout`(180s) / `IHttpFetcher` 接口均未改（6 个自检 fake 不动） |
+| `src/PdxLauncher.Core/Online/SteamWorkshopClient.cs` | 5 处网络入口各加两个 catch（`NetworkTimeoutException` 与 `catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)`），统一失败码 **`steam-workshop-network`**：`BrowseCoreAsync`、`GetDetailCoreAsync`、`GetItemPageCoreAsync`、`ProbeAppDetailsAsync`、`ProbeWorkshopPageAsync`。原有 `steam-workshop-parse` / `steam-workshop-http` / `steam-workshop-detail-*` 语义不变；评论 / 订阅类入口本轮不动；`BuildBrowseUri` 未改 |
+| `src/PdxLauncher.Core/Updates/UpdateService.cs` | `:175` catch 白名单加 `or TaskCanceledException`（超时 TaskCanceledException 原先不在名单里，会漏出未观察异常） |
+| `src/PdxLauncher.App/ViewModels/WorkshopViewModel.cs` | 新增 `DescribeWorkshopError(errorCode, kind)`（`steam-workshop-parse`/`Unsupported` → `WorkshopStatusParseFailed`；`steam-workshop-network` → `WorkshopStatusNetworkFailed`；其余 → `WorkshopStatusFailed`）；新增 `DescribeDetectedProxyHint()`（只读 `ProxyResolver.Describe(ProxyMode=System)`，命中则提示「检测到系统代理 X，可在设置里切过去」）；`QuerySteamAsync` 失败分支改走该映射；`RunQueryAsync` 改成三级 catch —— `when (version != _queryVersion || _pageToken.IsCancellationRequested)` 才静默，超时兜底分支写 `IsLoaded=true; IsBusy=false; StatusMessage=WorkshopStatusNetworkFailed`；`QueryAsync` 同样分级；`ShowFailureOrCache` 无缓存分支在网络失败时追加代理提示。**未改**：`:262 ShowEmptyState`、`:473-482 CommitSearchAsync`、`:351-380 RefreshAsync`、`partial void OnSearchTextChanged`（自检 `CheckViewModelNoQueryWhileTyping` 依赖「打字不查询」契约） |
+| `src/PdxLauncher.App/ViewModels/SettingsViewModel.cs` | 新增 `DetectedProxyText` / `HasDetectedProxy` / `UseDetectedProxy()`（切到 `manual` + 写地址 → `SaveSettings()` → `TryRebuildNetworkServices()`）；`RefreshProxyStatus()` 末尾调 `RefreshDetectedProxy(resolution)` 只读探测系统 / 环境变量代理；`ApplyProxySettings()` 成功后补一条「代理设置已写入并生效」日志 |
+| `src/PdxLauncher.App/Views/SettingsPage.xaml(.cs)` | 代理分区新增「检测到的代理」卡片（`controls:SettingsCard`，Visibility 由 `HasDetectedProxy` 驱动）：TextBlock `AutomationId="txtDetectedProxy"` + Button `AutomationId="btnUseDetectedProxy"`（Click=`OnUseDetectedProxyClick`） |
+| `tools/i18n/{zh-CN,en-US}/workshop.json` | 新增 `workshop.statusNetworkFailed`（zh「无法连接 Steam 创意工坊：{0}」/ en「Cannot reach Steam Workshop: {0}」）、`workshop.statusProxyHint`（zh「检测到系统代理 {0}，可在「设置 → 代理」里切换过去再试」） |
+| `tools/i18n/{zh-CN,en-US}/settings.json` | 新增 `settings.proxy.detected` / `detectedName` / `detectedHint` / `useDetected` / `useDetectedName`（各 5 键） |
+| `src/PdxLauncher.App/Localization/Strings.g.cs` | **机器产物**，由 `python tools/gen-i18n.py` 生成（1167 → 1172 键），不可手改 |
+| `tests/PdxLauncher.Checks/SteamWorkshopApiChecks.cs` | 新增 `CheckNetworkFailure()`：假 fetcher 抛 `TaskCanceledException(inner TimeoutException)` → `BrowseAsync` 返回失败 `steam-workshop-network`（不抛异常）；抛 `NetworkTimeoutException` → 同错误码；token 已取消时仍抛 `OperationCanceledException`。为此给 `CapturingHttpFetcher` 加可注入的 `GetException`（**没动 `IHttpFetcher` 接口**） |
+| `tests/PdxLauncher.Checks/HttpFetcherChecks.cs` | 新增 `CheckTimeoutExceptionContract()`：`NetworkTimeoutException` 必须是 `HttpRequestException`、`Host` 正确、`InnerException` 保留、源码里有「没被取消的取消 → 超时」的分支 |
+| `tests/PdxLauncher.Checks/WorkshopPageChecks.cs` | 新增 `CheckNetworkFailureIsVisible()` 源码断言：`RunQueryAsync` 块含 `when (version != _queryVersion || _pageToken.IsCancellationRequested)` 与 `WorkshopStatusNetworkFailed`；`DescribeWorkshopError` 区分 `steam-workshop-parse` / `steam-workshop-network`；`ShowFailureOrCache` 调 `DescribeDetectedProxyHint` |
+| `tests/PdxLauncher.Checks/ProxyChecks.cs` | 新增 `CheckDirectIgnoresEnvironment()`：直连不读环境变量也不读系统代理；跟随系统才能发现环境变量代理 |
+| `tests/PdxLauncher.Checks/SettingsChecks.cs` | 新增 `CheckSingleSettingsInstance()`：`AppServices.cs` 必须有 `Settings = settings;` 且**不得**再出现 `settingsStore.Load()`（二次加载会整份覆盖写回、把用户配好的代理抹掉） |
+| `CHANGELOG.md` / `docs/HANDOFF.md` | 本节与 `## [Unreleased]` 的 `### Fixed` 条目 |
+
+### 0.77.5 验证
+
+- `dotnet build PdxLauncher.sln -c Release -m:1` → **0 警告 0 错误**。
+- `dotnet tests/PdxLauncher.Checks/bin/Release/net10.0/PdxLauncher.Checks.dll` → **检查类: 95，失败: 0，断言失败总数: 0**（含新增 15 条断言：网络故障 5 条、连接超时契约 5 条、页面失败可见 4 条、代理直连语义 5 条、设置单实例 2 条）。
+- `python tools/gen-i18n.py --check` → 退出码 0，1172 键。
+- 未做真机验证：本机 DNS 仍被污染，必须先在设置页「代理」分区点「使用」切到检测到的代理，工坊页才能连上。
+  **用户需要重设一次代理**（旧库里的代理配置已被二次加载抹掉）。
+
+### 0.77.6 坑
+
+- **`.NET` 连不上时抛 `OperationCanceledException`（内含 `TimeoutException`），不是 `HttpRequestException`。**
+  只捕 `HttpRequestException` 的调用点会把「连不上」当成「用户取消了操作」——这正是本次空白页的成因。
+  全仓已按此排查过的点：`SteamWorkshopClient` 5 处、`UpdateService:175`（本轮已修）、`PdxModsClient:324`
+  （**已有正确先例**：`catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !cancellationToken.IsCancellationRequested)`）。
+- **「取消」要分两种**：用户真的取消了（token 已取消 → 静默、正常路径）vs 连接层超时（token 没取消 → 必须报错）。
+  判据统一用 `when (!cancellationToken.IsCancellationRequested)`。
+- **别把「代理不生效」归到 DNS 污染头上**：先查 `settings` 表里有没有 `proxyMode` / `proxyUrl`。
+  三个库都查过：**从来没有** → 说明用户设置从没落盘过，不是「配置被覆盖」，而是「根本没写进去」。
+- **`docs/HANDOFF.md:3565` 的「关键词与排序并存」结论是对的**，本轮已用真实页面复核（见 §0.77.1），别再往回改。
+
+### 0.77.7 下一步
+
+1. 让用户在设置页点「使用」切到检测到的代理（`http://10.31.2.50:7890`），再进 Vic3 工坊页搜 `morgenrote`，
+   预期状态栏显示「已加载 N 个结果」而不是空白。
+2. 真机复验「连接超时」的可见性：把代理指向一个不可达地址，确认状态栏显示「无法连接 Steam 创意工坊：steamcommunity.com」
+   而不是一直转圈。
+3. `SteamWorkshopClient` 的评论 / 订阅类入口（`:330/:335/:458/:522/:588`）本轮没动，仍只捕 `HttpRequestException`，
+   下轮可一并按同一模式补上。
 
 ## 0.74 最新一轮（2026-11-03 19:00–20:00）：安装包与自动更新
 

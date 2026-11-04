@@ -38,6 +38,10 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     private object?[] _statusArgs = Array.Empty<object?>();
     private string _proxyUrl = string.Empty;
     private string _proxyStatusText = string.Empty;
+    private string _detectedProxyText = string.Empty;
+
+    /// <summary>检测到的代理地址（null = 没检测到）。</summary>
+    private string? _detectedProxyUrl;
     private string _steamApiStatusText = string.Empty;
     private long _cacheTotalBytes;
     private ProxyModeOption _selectedProxyMode =
@@ -432,6 +436,45 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     {
         get => _proxyStatusText;
         private set => SetProperty(ref _proxyStatusText, value);
+    }
+
+    /// <summary>
+    /// 「检测到但没在用」的代理地址（只读探测系统代理 / 环境变量，不改任何设置）。
+    /// <para>
+    /// 很多人明明开着代理，程序却在直连 —— 直连遇到 DNS 被污染时会一直转圈。
+    /// 把检测到的地址摆出来并给一键切换，比让人自己猜要省事。
+    /// </para>
+    /// </summary>
+    public string DetectedProxyText
+    {
+        get => _detectedProxyText;
+        private set => SetProperty(ref _detectedProxyText, value);
+    }
+
+    /// <summary>检测到了可用代理但当前没在用：给「使用」按钮用。</summary>
+    public bool HasDetectedProxy => _detectedProxyUrl is not null;
+
+    /// <summary>
+    /// 一键使用检测到的代理：写成「手动配置」并立即重建联网链路。
+    /// 返回是否成功；失败原因写进状态栏（不抛异常）。
+    /// </summary>
+    public bool UseDetectedProxy()
+    {
+        var url = _detectedProxyUrl;
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+
+        _proxyUrl = url;
+        OnPropertyChanged(nameof(ProxyUrl));
+        AppServices.Settings.ProxyUrl = url;
+
+        _selectedProxyMode = ProxyModeCatalog.Resolve(ProxyModes.Manual, url);
+        OnPropertyChanged(nameof(SelectedProxyMode));
+        OnPropertyChanged(nameof(IsManualProxy));
+
+        return ApplyProxySettings();
     }
 
     /// <summary>把内存中的 AppSettings 落盘（页面失焦 / 卸载时调用）。</summary>
@@ -1422,6 +1465,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
         RefreshProxyStatus();
         SetStatus(Keys.SettingsProxyStatusApplied, ProxyStatusText);
+        AppServices.Logger.Info("代理设置已写入并生效：" + ProxyStatusText);
         RaiseThemeProps();
         return true;
     }
@@ -2246,6 +2290,38 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
 
         OnPropertyChanged(nameof(ProxyStatusText));
+
+        RefreshDetectedProxy(resolution);
+    }
+
+    /// <summary>
+    /// 探测「系统里有没有可用代理」，用于提示「明明有代理，程序却在直连」。
+    /// <para>
+    /// 只读探测：不写任何设置、不改当前生效的代理。已经生效的代理地址不算「检测到但没在用」，
+    /// 不然会显示一句自相矛盾的话。
+    /// </para>
+    /// </summary>
+    /// <param name="current">当前实际生效的解析结果。</param>
+    private void RefreshDetectedProxy(ProxyResolution current)
+    {
+        string? detected = null;
+        try
+        {
+            var probe = ProxyResolver.Describe(new AppSettings { ProxyMode = ProxyModes.System });
+            if (probe.Url is not null
+                && !string.Equals(probe.Url, current.Url, StringComparison.OrdinalIgnoreCase))
+            {
+                detected = probe.Url;
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppServices.Logger.Warn("探测系统代理失败: " + ex.Message);
+        }
+
+        _detectedProxyUrl = detected;
+        DetectedProxyText = detected ?? string.Empty;
+        OnPropertyChanged(nameof(HasDetectedProxy));
     }
 
     /// <summary>重建「标准可执行文件（默认）」这一项，让它的文案跟上当前语言；选中项按路径复位。</summary>

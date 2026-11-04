@@ -420,6 +420,55 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         return T(Keys.WorkshopStatusFailed, exception.Message);
     }
 
+    /// <summary>
+    /// 把后端给的错误码翻成状态栏文案。
+    /// <para>
+    /// 后端只回错误码（见 <c>AppResult.Fail</c>），界面要自己说清楚是哪一类失败：
+    /// 页面结构变了（Steam 改版）、连不上（DNS 被污染 / 代理没走）、还是别的请求错误。
+    /// 三种混成一句「加载失败：steam-workshop-http」，用户根本不知道该做什么。
+    /// </para>
+    /// </summary>
+    /// <param name="errorCode">后端错误码，例如 <c>steam-workshop-parse</c>。</param>
+    /// <param name="kind">错误种类。</param>
+    private string DescribeWorkshopError(string? errorCode, ErrorKind kind)
+    {
+        if (string.Equals(errorCode, "steam-workshop-parse", StringComparison.Ordinal)
+            || kind == ErrorKind.Unsupported)
+        {
+            return T(Keys.WorkshopStatusParseFailed);
+        }
+
+        if (string.Equals(errorCode, "steam-workshop-network", StringComparison.Ordinal))
+        {
+            return T(Keys.WorkshopStatusNetworkFailed, SteamCommunityHost);
+        }
+
+        return T(Keys.WorkshopStatusFailed, errorCode ?? "steam-workshop");
+    }
+
+    /// <summary>
+    /// 连不上 Steam 时，看看系统里是不是有代理却没在用；有就把地址报出来，
+    /// 让用户知道「不是没网，而是没走代理」。
+    /// </summary>
+    private string DescribeDetectedProxyHint()
+    {
+        try
+        {
+            // 只读探测：不改任何设置，也不改当前生效的代理。
+            var detection = ProxyResolver.Describe(new AppSettings { ProxyMode = ProxyModes.System });
+            if (detection.Url is null)
+            {
+                return string.Empty;
+            }
+
+            return T(Keys.WorkshopStatusProxyHint, detection.Url);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return string.Empty;
+        }
+    }
+
     /// <summary>把冷却剩余时间写成「请约 N 分钟后重试」的提示。</summary>
     private string DescribeRetryAfter(TimeSpan remaining)
     {
@@ -534,13 +583,32 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         {
             await QueryAsync(version, _queryCts.Token, force).ConfigureAwait(true);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (version != _queryVersion || _pageToken.IsCancellationRequested)
         {
-            // 被新查询或页面卸载取代：正常路径，不提示。
+            // 被新查询取代，或页面卸载：正常路径，不提示。
+        }
+        catch (OperationCanceledException ex)
+        {
+            // 页面没卸载、查询也没被取代，却收到取消 = 连接层超时
+            // （.NET 连不上时抛的是 OperationCanceledException，内含 TimeoutException）。
+            // 以前这里一律当成「正常取消」静默吞掉，页面就永远停在「正在加载第 1 页…」、
+            // 列表空白，日志里只剩一条「未观察的 Task 异常」。现在必须说清楚。
+            _logger.Error("创意工坊查询被中断（可能是连接超时，game=" + _gameId + "）", ex);
+            IsLoaded = true;
+            IsBusy = false;
+            StatusMessage = T(Keys.WorkshopStatusNetworkFailed, SteamCommunityHost);
+            RaiseDerived();
         }
         catch (Exception ex)
         {
             _logger.Error("创意工坊查询流程失败（game=" + _gameId + "）", ex);
+            if (version == _queryVersion)
+            {
+                IsLoaded = true;
+                IsBusy = false;
+                StatusMessage = DescribeFailure(ex);
+                RaiseDerived();
+            }
         }
     }
 
@@ -940,12 +1008,14 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
         if (!result.IsSuccess || result.Value is null)
         {
+            var errorCode = result.Kind == ErrorKind.Unsupported
+                ? "steam-workshop-parse"
+                : result.ErrorMessage ?? "steam-workshop";
             ShowFailureOrCache(
                 WorkshopSource.Steam,
-                result.Kind == ErrorKind.Unsupported
-                    ? "steam-workshop-parse"
-                    : result.ErrorMessage ?? "steam-workshop",
-                cancellationToken: cancellationToken);
+                errorCode,
+                DescribeWorkshopError(errorCode, result.Kind),
+                cancellationToken);
             RaiseDerived();
             return;
         }
@@ -1105,7 +1175,20 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             return;
         }
 
-        StatusMessage = statusOverride ?? T(Keys.WorkshopStatusFailed, reason);
+        var message = statusOverride ?? T(Keys.WorkshopStatusFailed, reason);
+
+        // 连不上 Steam 时补一句「系统里有代理但没在用」：这是本机上最常见的失败原因，
+        // 不说出来用户只会反复点刷新。
+        if (string.Equals(reason, "steam-workshop-network", StringComparison.Ordinal))
+        {
+            var hint = DescribeDetectedProxyHint();
+            if (hint.Length > 0)
+            {
+                message = message + " " + hint;
+            }
+        }
+
+        StatusMessage = message;
     }
 
     /// <summary>

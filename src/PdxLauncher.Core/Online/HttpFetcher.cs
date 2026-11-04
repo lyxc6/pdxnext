@@ -116,6 +116,18 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
                 .GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
         }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            // 连接超时（DNS 被污染 / 代理不可达 / 网络中断）：.NET 抛的是
+            // OperationCanceledException（内含 TimeoutException），不是 HttpRequestException。
+            // 不翻译成普通异常的话，调用点的「catch (HttpRequestException)」抓不到，
+            // 会被当成用户取消而静默吞掉。真正的用户取消（token 已取消）仍然原样抛。
+            slot?.Dispose();
+            throw new NetworkTimeoutException(
+                uri.Host,
+                "连接超时（" + (int)ConnectTimeout.TotalSeconds + " 秒）：" + uri.Host,
+                ex);
+        }
         catch
         {
             slot?.Dispose();
@@ -164,6 +176,15 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
             response = await Volatile.Read(ref _client)
                 .GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            // 同 GetAsync：连接超时翻译成 NetworkTimeoutException，别让它伪装成「用户取消」。
+            slot?.Dispose();
+            throw new NetworkTimeoutException(
+                uri.Host,
+                "连接超时（" + (int)ConnectTimeout.TotalSeconds + " 秒）：" + uri.Host,
+                ex);
         }
         catch
         {

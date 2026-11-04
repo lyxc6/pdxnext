@@ -32,7 +32,67 @@ public static class HttpFetcherChecks
         CheckStillEnforcesWhitelist();
         CheckSwapsWithProxyObjects();
         CheckDisposeIsIdempotent();
+        CheckTimeoutExceptionContract();
         return ChecksContext.Failures - before;
+    }
+
+    /// <summary>
+    /// 连接超时的异常契约。
+    /// <para>
+    /// .NET 连不上时抛的是 <see cref="OperationCanceledException"/>（内含 TimeoutException），
+    /// 不是 <see cref="HttpRequestException"/>。只捕 <see cref="HttpRequestException"/> 的调用点
+    /// 会把「连不上」当成「用户取消了操作」——创意工坊页就因此永远停在「正在加载…」且列表空白。
+    /// 所以 <see cref="HttpFetcher"/> 把超时翻译成 <see cref="NetworkTimeoutException"/>，
+    /// 而它必须仍然是 <see cref="HttpRequestException"/>，既有调用点才不用改也能接住。
+    /// </para>
+    /// </summary>
+    private static void CheckTimeoutExceptionContract()
+    {
+        var inner = new TimeoutException("connect timeout");
+        var ex = new NetworkTimeoutException("steamcommunity.com", "连接超时（30 秒）：steamcommunity.com", inner);
+
+        ChecksContext.Check(
+            "HttpFetcher.CheckTimeoutExceptionContract：超时也是 HttpRequestException",
+            ex is HttpRequestException);
+        ChecksContext.Equal("HttpFetcher.CheckTimeoutExceptionContract：保留目标主机", "steamcommunity.com", ex.Host);
+        ChecksContext.Check(
+            "HttpFetcher.CheckTimeoutExceptionContract：保留原始异常",
+            ReferenceEquals(inner, ex.InnerException));
+        ChecksContext.Check(
+            "HttpFetcher.CheckTimeoutExceptionContract：消息带上主机名",
+            ex.Message.Contains("steamcommunity.com", StringComparison.Ordinal));
+
+        // 取超时必须翻译成 NetworkTimeoutException：源码里必须有「没被取消却收到取消」的分支。
+        var source = ReadSource("src", "PdxLauncher.Core", "Online", "HttpFetcher.cs");
+        if (source is null)
+        {
+            return;
+        }
+
+        ChecksContext.Check(
+            "HttpFetcher.CheckTimeoutExceptionContract：超时被翻译成 NetworkTimeoutException",
+            source.Contains("NetworkTimeoutException", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "HttpFetcher.CheckTimeoutExceptionContract：只把「没被取消的取消」当成超时",
+            source.Contains("when (!cancellationToken.IsCancellationRequested)", StringComparison.Ordinal));
+    }
+
+    /// <summary>读仓库里的一个源码文件；找不到返回 null（自检不因此失败）。</summary>
+    private static string? ReadSource(params string[] parts)
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, "tests", "fixtures")))
+            {
+                var path = Path.Combine(new[] { dir.FullName }.Concat(parts).ToArray());
+                return File.Exists(path) ? File.ReadAllText(path) : null;
+            }
+
+            dir = dir.Parent;
+        }
+
+        return null;
     }
 
     /// <summary>换池前后是同一个对象（页面里缓存的引用继续有效）。</summary>

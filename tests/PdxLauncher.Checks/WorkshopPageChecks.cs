@@ -62,6 +62,7 @@ public static class WorkshopPageChecks
         CheckViewModelGuardsStaleResults(viewModel);
         CheckCacheKeyUsesAppliedSearch(viewModel);
         CheckFlushIsOffUiThread(viewModel);
+        CheckNetworkFailureIsVisible(viewModel);
         CheckCodeBehindHooks(codeBehind);
 
         return ChecksContext.Failures - before;
@@ -272,6 +273,59 @@ public static class WorkshopPageChecks
         ChecksContext.Check(
             "创意工坊页: 不再在 UI 线程同步落盘",
             !viewModel.Contains("_info.Flush();", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 连不上 Steam 时必须说清楚，不能把「连接超时」当成「用户取消」静默吞掉。
+    /// <para>
+    /// 出过的事：直连 steamcommunity.com 被 DNS 污染，.NET 抛的是
+    /// <c>OperationCanceledException</c>（内含 TimeoutException）。视图模型里
+    /// <c>catch (OperationCanceledException) { }</c> 把它当成「页面卸载」吞掉，
+    /// 页面永远停在「正在加载第 1 页…」、列表空白，日志里只剩一条
+    /// 「未观察的 Task 异常」。这里把结论钉成源码断言。
+    /// </para>
+    /// </summary>
+    private static void CheckNetworkFailureIsVisible(string viewModel)
+    {
+        if (TryGetBlock(
+                viewModel,
+                "private async Task RunQueryAsync(bool resetPage, bool force)",
+                "private async Task FlushInfoCacheAsync()",
+                "创意工坊页: 找到 RunQueryAsync",
+                out var runQuery))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 只有页面卸载或被新查询取代才算取消",
+                runQuery.Contains("when (version != _queryVersion || _pageToken.IsCancellationRequested)", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 连接超时要写状态栏而不是静默",
+                runQuery.Contains("WorkshopStatusNetworkFailed", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "private string DescribeWorkshopError(string? errorCode, ErrorKind kind)",
+                "private string DescribeDetectedProxyHint()",
+                "创意工坊页: 找到 DescribeWorkshopError",
+                out var describeError))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 错误码映射区分页面结构变了与连不上",
+                describeError.Contains("steam-workshop-parse", StringComparison.Ordinal)
+                    && describeError.Contains("steam-workshop-network", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "private void ShowFailureOrCache(",
+                "并发补封面",
+                "创意工坊页: 找到 ShowFailureOrCache",
+                out var failure))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 连不上时提示检测到的代理",
+                failure.Contains("DescribeDetectedProxyHint", StringComparison.Ordinal));
+        }
     }
 
     private static void CheckCodeBehindHooks(string codeBehind)

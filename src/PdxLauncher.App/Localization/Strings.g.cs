@@ -824,6 +824,9 @@ public sealed partial class Localizer
         ["settings.proxy.addressPlaceholder"] = "127.0.0.1:7890（留空为直连）",
         ["settings.proxy.current"] = "当前生效",
         ["settings.proxy.currentName"] = "当前生效的代理",
+        ["settings.proxy.detected"] = "检测到可用代理",
+        ["settings.proxy.detectedHint"] = "系统里有代理但当前是直连：直连遇到 DNS 被污染时会一直转圈。可点「使用」直接切过去。",
+        ["settings.proxy.detectedName"] = "检测到可用代理（当前未启用）",
         ["settings.proxy.hint"] = "修改后立即生效，会重建整条联网链路（进行中的下载会失败一次）；PAC 自动脚本不执行。",
         ["settings.proxy.mode"] = "连接方式",
         ["settings.proxy.mode.direct.desc"] = "不走任何代理；网络本身能直连 Paradox 服务时选这个。",
@@ -843,6 +846,8 @@ public sealed partial class Localizer
         ["settings.proxy.status.rebuildFailed"] = "联网链路重建失败，继续沿用旧代理：{0}",
         ["settings.proxy.status.resolved"] = "{0}：{1}",
         ["settings.proxy.status.resolvedWithWarning"] = "{0}：{1}（{2}）",
+        ["settings.proxy.useDetected"] = "使用",
+        ["settings.proxy.useDetectedName"] = "使用检测到的代理",
         ["settings.section.appData"] = "程序数据目录",
         ["settings.section.cache"] = "缓存",
         ["settings.section.danger"] = "危险操作",
@@ -1149,8 +1154,10 @@ public sealed partial class Localizer
         ["workshop.statusLoading"] = "正在加载创意工坊…",
         ["workshop.statusLoadingPage"] = "正在加载第 {0} 页…",
         ["workshop.statusName"] = "状态",
+        ["workshop.statusNetworkFailed"] = "无法连接 Steam 创意工坊：{0}",
         ["workshop.statusOffline"] = "网络不可用，显示缓存中的 {0} 个结果",
         ["workshop.statusParseFailed"] = "Steam 页面结构解析失败，暂时无法显示列表",
+        ["workshop.statusProxyHint"] = "检测到系统代理 {0}，可在「设置 → 代理」里切换过去再试",
         ["workshop.statusSearching"] = "正在搜索…",
         ["workshop.subscriptions"] = "{0} 订阅",
         ["workshop.throttlePaused"] = "Steam 提示请求过多，已暂停请求约 {0} 分钟，恢复后会自动继续",
@@ -1982,6 +1989,9 @@ public sealed partial class Localizer
         ["settings.proxy.addressPlaceholder"] = "127.0.0.1:7890 (empty for direct)",
         ["settings.proxy.current"] = "In effect",
         ["settings.proxy.currentName"] = "Proxy in effect",
+        ["settings.proxy.detected"] = "Detected proxy",
+        ["settings.proxy.detectedHint"] = "A proxy is configured on this machine but the launcher is connecting directly; direct connections can hang when DNS is hijacked. Use it to switch over.",
+        ["settings.proxy.detectedName"] = "Detected proxy (not in use)",
         ["settings.proxy.hint"] = "Applies immediately and rebuilds the whole network stack (an in-flight download may fail once); PAC scripts are never executed.",
         ["settings.proxy.mode"] = "Connection",
         ["settings.proxy.mode.direct.desc"] = "No proxy at all; pick this when Paradox services are reachable directly.",
@@ -2001,6 +2011,8 @@ public sealed partial class Localizer
         ["settings.proxy.status.rebuildFailed"] = "Could not rebuild the network stack, keeping the previous proxy: {0}",
         ["settings.proxy.status.resolved"] = "{0}: {1}",
         ["settings.proxy.status.resolvedWithWarning"] = "{0}: {1} ({2})",
+        ["settings.proxy.useDetected"] = "Use",
+        ["settings.proxy.useDetectedName"] = "Use the detected proxy",
         ["settings.section.appData"] = "App data folder",
         ["settings.section.cache"] = "Cache",
         ["settings.section.danger"] = "Risky actions",
@@ -2307,8 +2319,10 @@ public sealed partial class Localizer
         ["workshop.statusLoading"] = "Loading workshop…",
         ["workshop.statusLoadingPage"] = "Loading page {0}…",
         ["workshop.statusName"] = "Status",
+        ["workshop.statusNetworkFailed"] = "Cannot reach Steam Workshop: {0}",
         ["workshop.statusOffline"] = "Network unavailable, showing {0} cached results",
         ["workshop.statusParseFailed"] = "Steam page structure could not be parsed; the list is unavailable",
+        ["workshop.statusProxyHint"] = "Detected system proxy {0}; switch to it under Settings → Proxy and retry",
         ["workshop.statusSearching"] = "Searching…",
         ["workshop.subscriptions"] = "{0} subscriptions",
         ["workshop.throttlePaused"] = "Steam reports too many requests — pausing requests for about {0} minute(s); they resume automatically",
@@ -3140,6 +3154,9 @@ public sealed partial class Localizer
         ("settings.proxy.addressPlaceholder", "SettingsProxyAddressPlaceholder"),
         ("settings.proxy.current", "SettingsProxyCurrent"),
         ("settings.proxy.currentName", "SettingsProxyCurrentName"),
+        ("settings.proxy.detected", "SettingsProxyDetected"),
+        ("settings.proxy.detectedHint", "SettingsProxyDetectedHint"),
+        ("settings.proxy.detectedName", "SettingsProxyDetectedName"),
         ("settings.proxy.hint", "SettingsProxyHint"),
         ("settings.proxy.mode", "SettingsProxyMode"),
         ("settings.proxy.mode.direct.desc", "SettingsProxyModeDirectDesc"),
@@ -3159,6 +3176,8 @@ public sealed partial class Localizer
         ("settings.proxy.status.rebuildFailed", "SettingsProxyStatusRebuildFailed"),
         ("settings.proxy.status.resolved", "SettingsProxyStatusResolved"),
         ("settings.proxy.status.resolvedWithWarning", "SettingsProxyStatusResolvedWithWarning"),
+        ("settings.proxy.useDetected", "SettingsProxyUseDetected"),
+        ("settings.proxy.useDetectedName", "SettingsProxyUseDetectedName"),
         ("settings.section.appData", "SettingsSectionAppData"),
         ("settings.section.cache", "SettingsSectionCache"),
         ("settings.section.danger", "SettingsSectionDanger"),
@@ -3465,8 +3484,10 @@ public sealed partial class Localizer
         ("workshop.statusLoading", "WorkshopStatusLoading"),
         ("workshop.statusLoadingPage", "WorkshopStatusLoadingPage"),
         ("workshop.statusName", "WorkshopStatusName"),
+        ("workshop.statusNetworkFailed", "WorkshopStatusNetworkFailed"),
         ("workshop.statusOffline", "WorkshopStatusOffline"),
         ("workshop.statusParseFailed", "WorkshopStatusParseFailed"),
+        ("workshop.statusProxyHint", "WorkshopStatusProxyHint"),
         ("workshop.statusSearching", "WorkshopStatusSearching"),
         ("workshop.subscriptions", "WorkshopSubscriptions"),
         ("workshop.throttlePaused", "WorkshopThrottlePaused"),
@@ -4296,6 +4317,9 @@ public sealed partial class Localizer
     public string SettingsProxyAddressPlaceholder => Format("settings.proxy.addressPlaceholder");
     public string SettingsProxyCurrent => Format("settings.proxy.current");
     public string SettingsProxyCurrentName => Format("settings.proxy.currentName");
+    public string SettingsProxyDetected => Format("settings.proxy.detected");
+    public string SettingsProxyDetectedHint => Format("settings.proxy.detectedHint");
+    public string SettingsProxyDetectedName => Format("settings.proxy.detectedName");
     public string SettingsProxyHint => Format("settings.proxy.hint");
     public string SettingsProxyMode => Format("settings.proxy.mode");
     public string SettingsProxyModeDirectDesc => Format("settings.proxy.mode.direct.desc");
@@ -4315,6 +4339,8 @@ public sealed partial class Localizer
     public string SettingsProxyStatusRebuildFailed => Format("settings.proxy.status.rebuildFailed");
     public string SettingsProxyStatusResolved => Format("settings.proxy.status.resolved");
     public string SettingsProxyStatusResolvedWithWarning => Format("settings.proxy.status.resolvedWithWarning");
+    public string SettingsProxyUseDetected => Format("settings.proxy.useDetected");
+    public string SettingsProxyUseDetectedName => Format("settings.proxy.useDetectedName");
     public string SettingsSectionAppData => Format("settings.section.appData");
     public string SettingsSectionCache => Format("settings.section.cache");
     public string SettingsSectionDanger => Format("settings.section.danger");
@@ -4621,8 +4647,10 @@ public sealed partial class Localizer
     public string WorkshopStatusLoading => Format("workshop.statusLoading");
     public string WorkshopStatusLoadingPage => Format("workshop.statusLoadingPage");
     public string WorkshopStatusName => Format("workshop.statusName");
+    public string WorkshopStatusNetworkFailed => Format("workshop.statusNetworkFailed");
     public string WorkshopStatusOffline => Format("workshop.statusOffline");
     public string WorkshopStatusParseFailed => Format("workshop.statusParseFailed");
+    public string WorkshopStatusProxyHint => Format("workshop.statusProxyHint");
     public string WorkshopStatusSearching => Format("workshop.statusSearching");
     public string WorkshopSubscriptions => Format("workshop.subscriptions");
     public string WorkshopThrottlePaused => Format("workshop.throttlePaused");
@@ -5455,6 +5483,9 @@ internal static class Keys
     public const string SettingsProxyAddressPlaceholder = "settings.proxy.addressPlaceholder";
     public const string SettingsProxyCurrent = "settings.proxy.current";
     public const string SettingsProxyCurrentName = "settings.proxy.currentName";
+    public const string SettingsProxyDetected = "settings.proxy.detected";
+    public const string SettingsProxyDetectedHint = "settings.proxy.detectedHint";
+    public const string SettingsProxyDetectedName = "settings.proxy.detectedName";
     public const string SettingsProxyHint = "settings.proxy.hint";
     public const string SettingsProxyMode = "settings.proxy.mode";
     public const string SettingsProxyModeDirectDesc = "settings.proxy.mode.direct.desc";
@@ -5474,6 +5505,8 @@ internal static class Keys
     public const string SettingsProxyStatusRebuildFailed = "settings.proxy.status.rebuildFailed";
     public const string SettingsProxyStatusResolved = "settings.proxy.status.resolved";
     public const string SettingsProxyStatusResolvedWithWarning = "settings.proxy.status.resolvedWithWarning";
+    public const string SettingsProxyUseDetected = "settings.proxy.useDetected";
+    public const string SettingsProxyUseDetectedName = "settings.proxy.useDetectedName";
     public const string SettingsSectionAppData = "settings.section.appData";
     public const string SettingsSectionCache = "settings.section.cache";
     public const string SettingsSectionDanger = "settings.section.danger";
@@ -5780,8 +5813,10 @@ internal static class Keys
     public const string WorkshopStatusLoading = "workshop.statusLoading";
     public const string WorkshopStatusLoadingPage = "workshop.statusLoadingPage";
     public const string WorkshopStatusName = "workshop.statusName";
+    public const string WorkshopStatusNetworkFailed = "workshop.statusNetworkFailed";
     public const string WorkshopStatusOffline = "workshop.statusOffline";
     public const string WorkshopStatusParseFailed = "workshop.statusParseFailed";
+    public const string WorkshopStatusProxyHint = "workshop.statusProxyHint";
     public const string WorkshopStatusSearching = "workshop.statusSearching";
     public const string WorkshopSubscriptions = "workshop.subscriptions";
     public const string WorkshopThrottlePaused = "workshop.throttlePaused";

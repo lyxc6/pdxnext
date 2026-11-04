@@ -377,6 +377,26 @@
                                                     ValueAutomationId="txtProxyStatus"
                                                     ValueAutomationName="{x:Bind L.SettingsProxyCurrentName, Mode=OneWay}" />
 
+                        <controls:SettingsCard Header="{x:Bind L.SettingsProxyDetected, Mode=OneWay}"
+                                              Description="{x:Bind L.SettingsProxyDetectedHint, Mode=OneWay}"
+                                              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasDetectedProxy), Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                    <TextBlock AutomationProperties.AutomationId="txtDetectedProxy"
+                                               AutomationProperties.Name="{x:Bind L.SettingsProxyDetectedName, Mode=OneWay}"
+                                               Text="{x:Bind ViewModel.DetectedProxyText, Mode=OneWay}"
+                                               MaxWidth="240"
+                                               TextWrapping="NoWrap"
+                                               TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center" />
+                                    <Button AutomationProperties.AutomationId="btnUseDetectedProxy"
+                                            AutomationProperties.Name="{x:Bind L.SettingsProxyUseDetectedName, Mode=OneWay}"
+                                            Content="{x:Bind L.SettingsProxyUseDetected, Mode=OneWay}"
+                                            Click="OnUseDetectedProxyClick" />
+                                </StackPanel>
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
                         <TextBlock Text="{x:Bind L.SettingsProxyHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
 
                         <controls:SettingsCard Header="{x:Bind L.SettingsSteamStateOn, Mode=OneWay}">

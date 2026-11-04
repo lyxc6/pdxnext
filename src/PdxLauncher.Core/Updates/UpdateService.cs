@@ -172,8 +172,16 @@ public sealed class UpdateService
         {
             throw;
         }
-        catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or UnauthorizedAccessException or System.Net.Sockets.SocketException)
+        catch (Exception ex) when (
+            ex is HttpRequestException
+                or IOException
+                or InvalidDataException
+                or UnauthorizedAccessException
+                or System.Net.Sockets.SocketException
+                or TaskCanceledException)
         {
+            // TaskCanceledException 也要兜住：连接超时就是它抛出来的（内含 TimeoutException），
+            // 不接住的话会变成「未观察的 Task 异常」，界面上只剩一片空白。
             _logger.Warn("检查更新失败: " + ex.Message);
             return new UpdateCheckResult(UpdateCheckStatus.Failed, null, "检查更新失败: " + ex.Message);
         }

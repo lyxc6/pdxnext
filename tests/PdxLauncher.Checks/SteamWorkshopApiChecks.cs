@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Online;
 
 /// <summary>
@@ -32,6 +33,7 @@ public static class SteamWorkshopApiChecks
         CheckHasWorkshopCache();
         CheckHasWorkshopFallback();
         CheckOutboundWhitelist();
+        CheckNetworkFailure();
 
         return ChecksContext.Failures == before ? 0 : 1;
     }
@@ -367,6 +369,76 @@ public static class SteamWorkshopApiChecks
             deadProbe.ErrorMessage);
     }
 
+    // ------------------------------------------------------------ 网络故障
+
+    /// <summary>
+    /// 连不上 Steam 时（DNS 被污染 / 代理不可达），必须当成「网络故障」而不是「用户取消」。
+    /// <para>
+    /// .NET 连不上时抛的是 <see cref="TaskCanceledException"/>（内含 TimeoutException），
+    /// 不是 <see cref="HttpRequestException"/>。以前这里没人接，异常一路冒到视图模型，
+    /// 又被当成「正常取消」静默吞掉 —— 页面永远停在「正在加载第 1 页…」，列表空白。
+    /// </para>
+    /// </summary>
+    private static void CheckNetworkFailure()
+    {
+        // 超时（TaskCanceledException + TimeoutException）→ 失败码 steam-workshop-network，不抛异常。
+        var timedOut = new CapturingHttpFetcher
+        {
+            GetException = new TaskCanceledException("connect timeout", new TimeoutException("timeout")),
+        };
+        var client = new SteamWorkshopClient(timedOut, new NullLogger());
+        var result = client
+            .BrowseAsync(Ck3AppId, new SteamWorkshopQuery(null, SteamWorkshopSort.Trend, 0), CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        ChecksContext.Check("网络故障：超时返回失败而不是抛异常", !result.IsSuccess);
+        ChecksContext.Equal(
+            "网络故障：超时错误码",
+            "steam-workshop-network",
+            result.ErrorMessage);
+        ChecksContext.Equal("网络故障：超时算未知错误", ErrorKind.Unknown, result.Kind);
+
+        // 网络超时异常（HttpFetcher 翻译出来的那个）同样是网络故障。
+        var networkTimeout = new CapturingHttpFetcher
+        {
+            GetException = new NetworkTimeoutException("steamcommunity.com", "连接超时（30 秒）：steamcommunity.com"),
+        };
+        var timeoutResult = new SteamWorkshopClient(networkTimeout, new NullLogger())
+            .BrowseAsync(Ck3AppId, new SteamWorkshopQuery(null, SteamWorkshopSort.Trend, 0), CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        ChecksContext.Check("网络故障：连接超时返回失败", !timeoutResult.IsSuccess);
+        ChecksContext.Equal(
+            "网络故障：连接超时错误码",
+            "steam-workshop-network",
+            timeoutResult.ErrorMessage);
+
+        // 真正的用户取消必须继续往上抛，不能被当成「连不上」。
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        var cancelledFetcher = new CapturingHttpFetcher
+        {
+            GetException = new OperationCanceledException(cancelled.Token),
+        };
+        var cancelledClient = new SteamWorkshopClient(cancelledFetcher, new NullLogger());
+        var threw = false;
+        try
+        {
+            cancelledClient
+                .BrowseAsync(Ck3AppId, new SteamWorkshopQuery(null, SteamWorkshopSort.Trend, 0), cancelled.Token)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            threw = true;
+        }
+
+        ChecksContext.Check("网络故障：用户取消仍然抛取消异常", threw);
+    }
+
     // ------------------------------------------------------------ 白名单
 
     private static void CheckOutboundWhitelist()
@@ -619,6 +691,11 @@ public static class SteamWorkshopApiChecks
     {
         public Dictionary<string, string> Responses { get; } = new(StringComparer.Ordinal);
 
+        /// <summary>
+        /// 让 GetAsync 抛出的异常（模拟连不上 / 超时）。优先于 <see cref="Responses"/> 回放。
+        /// </summary>
+        public Exception? GetException { get; set; }
+
         public string? LastFormUri { get; private set; }
 
         public string? LastFormBody { get; private set; }
@@ -632,6 +709,11 @@ public static class SteamWorkshopApiChecks
         public Task<Stream> GetAsync(Uri uri, CancellationToken cancellationToken)
         {
             GetCalls++;
+            if (GetException is not null)
+            {
+                throw GetException;
+            }
+
             var key = uri.Host + uri.AbsolutePath;
             foreach (var pair in Responses)
             {

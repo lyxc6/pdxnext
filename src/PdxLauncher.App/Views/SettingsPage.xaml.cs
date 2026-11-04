@@ -363,6 +363,19 @@ public sealed partial class SettingsPage : Page
         }
     }
 
+    /// <summary>一键切到检测到的代理（系统代理 / 环境变量里那个）。</summary>
+    private void OnUseDetectedProxyClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _viewModel.UseDetectedProxy();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("SettingsPage 应用检测到的代理失败", ex);
+        }
+    }
+
     // ------------------------------------------------------------ 数据区
 
     private void OnOpenDataDirectoryClick(object sender, RoutedEventArgs e)

@@ -19,6 +19,7 @@ public static class ProxyChecks
         CheckModes();
         CheckManual();
         CheckSystem();
+        CheckDirectIgnoresEnvironment();
         CheckBypassPatterns();
         CheckLogging();
         return ChecksContext.Failures == before ? 0 : 1;
@@ -213,6 +214,41 @@ public static class ProxyChecks
                 && bypass.IsBypassed(new Uri("http://api.internal/"))
                 && bypass.IsBypassed(new Uri("http://localhost:8080/")),
             withBypass.Url ?? "<null>");
+    }
+
+    // ------------------------------------------------------------ 直连语义
+
+    /// <summary>
+    /// 「直连」必须真的直连：不读环境变量，也不读系统代理。
+    /// <para>
+    /// 这是有意的（<c>HttpFetcher.BuildClient</c> 的注释写明：再隐式读环境变量会让「直接连接」名不副实）。
+    /// 但它也意味着：机器上明明配了 <c>http_proxy</c>，启动器却连被污染的 DNS —— 工坊页因此超时。
+    /// 所以设置页要「检测到系统代理」并让用户一键切换（见 <c>SettingsViewModel.RefreshDetectedProxy</c>），
+    /// 这里钉住「直连不偷跑代理」这条语义，别让人哪次顺手给直连也读上环境变量。
+    /// </para>
+    /// </summary>
+    private static void CheckDirectIgnoresEnvironment()
+    {
+        var env = new Func<string, string?>(name =>
+            string.Equals(name, "http_proxy", StringComparison.OrdinalIgnoreCase) ? "http://10.0.0.1:3128" : null);
+
+        var direct = ProxyResolver.Describe(
+            new AppSettings { ProxyMode = ProxyModes.Direct },
+            env,
+            () => new SystemProxySettings(true, "127.0.0.1:7890", null, null));
+
+        ChecksContext.Check("直连: 不读环境变量", direct.Url is null);
+        ChecksContext.Check("直连: 不读系统代理", direct.Proxy is null);
+        ChecksContext.Equal("直连: 来源是直连", ProxySource.Direct, direct.Source);
+        ChecksContext.Equal("直连: 模式保持直连", ProxyModes.Direct, direct.Mode);
+
+        // 跟随系统才会读到环境变量 —— 这就是设置页「检测到的代理」用的那条路径。
+        var system = ProxyResolver.Describe(
+            new AppSettings { ProxyMode = ProxyModes.System },
+            env,
+            () => null);
+        ChecksContext.Equal("跟随系统: 能发现环境变量代理", "http://10.0.0.1:3128", system.Url);
+        ChecksContext.Equal("跟随系统: 来源是环境变量", ProxySource.EnvironmentVariable, system.Source);
     }
 
     // ------------------------------------------------------------ ProxyOverride

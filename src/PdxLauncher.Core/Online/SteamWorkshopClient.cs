@@ -142,6 +142,19 @@ public sealed class SteamWorkshopClient
 
             return AppResult<SteamWorkshopPage>.Ok(parsed);
         }
+        catch (NetworkTimeoutException ex)
+        {
+            // 连不上（DNS 被污染 / 代理不可达）：和「服务端返回了错误」是两种故障，
+            // 界面要分开说，否则用户只会看到一句含糊的「加载失败」。
+            _logger.Warn("Steam 创意工坊连接失败: appid=" + appId.ToString(CultureInfo.InvariantCulture) + " " + ex.Message);
+            return AppResult<SteamWorkshopPage>.Fail(ErrorKind.Unknown, "steam-workshop-network");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // 没被取消却收到取消 = 连接层超时。真正的用户取消继续往上抛。
+            _logger.Warn("Steam 创意工坊连接超时: appid=" + appId.ToString(CultureInfo.InvariantCulture));
+            return AppResult<SteamWorkshopPage>.Fail(ErrorKind.Unknown, "steam-workshop-network");
+        }
         catch (HttpRequestException ex)
         {
             _logger.Warn("Steam 创意工坊请求失败: appid=" + appId.ToString(CultureInfo.InvariantCulture) + " " + ex.Message);
@@ -186,6 +199,16 @@ public sealed class SteamWorkshopClient
             }
 
             return AppResult<SteamWorkshopItemDetail>.Ok(detail);
+        }
+        catch (NetworkTimeoutException ex)
+        {
+            _logger.Warn("Steam 创意工坊详情连接失败: " + ex.Message);
+            return AppResult<SteamWorkshopItemDetail>.Fail(ErrorKind.Unknown, "steam-workshop-network");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.Warn("Steam 创意工坊详情连接超时");
+            return AppResult<SteamWorkshopItemDetail>.Fail(ErrorKind.Unknown, "steam-workshop-network");
         }
         catch (HttpRequestException ex)
         {
@@ -242,6 +265,16 @@ public sealed class SteamWorkshopClient
             }
 
             return AppResult<SteamWorkshopItemPage>.Ok(parsed);
+        }
+        catch (NetworkTimeoutException ex)
+        {
+            _logger.Warn("Steam 创意工坊物品页连接失败: id=" + publishedFileId + " " + ex.Message);
+            return AppResult<SteamWorkshopItemPage>.Fail(ErrorKind.Unknown, "steam-workshop-network");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.Warn("Steam 创意工坊物品页连接超时: id=" + publishedFileId);
+            return AppResult<SteamWorkshopItemPage>.Fail(ErrorKind.Unknown, "steam-workshop-network");
         }
         catch (HttpRequestException ex)
         {
@@ -382,6 +415,18 @@ public sealed class SteamWorkshopClient
 
             return ParseHasWorkshop(json, appId);
         }
+        catch (NetworkTimeoutException ex)
+        {
+            _logger.Warn("Steam appdetails 探测连接失败: appid=" +
+                appId.ToString(CultureInfo.InvariantCulture) + " " + ex.Message);
+            return null;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.Warn("Steam appdetails 探测连接超时: appid=" +
+                appId.ToString(CultureInfo.InvariantCulture));
+            return null;
+        }
         catch (HttpRequestException ex)
         {
             _logger.Warn("Steam appdetails 探测失败: appid=" +
@@ -409,6 +454,18 @@ public sealed class SteamWorkshopClient
             var html = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
 
             return SteamWorkshopHtmlParser.Parse(html, 0, DefaultPageSize) is not null;
+        }
+        catch (NetworkTimeoutException ex)
+        {
+            _logger.Warn("Steam 创意工坊兜底探测连接失败: appid=" +
+                appId.ToString(CultureInfo.InvariantCulture) + " " + ex.Message);
+            return null;
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.Warn("Steam 创意工坊兜底探测连接超时: appid=" +
+                appId.ToString(CultureInfo.InvariantCulture));
+            return null;
         }
         catch (HttpRequestException ex)
         {
