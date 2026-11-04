@@ -79,7 +79,7 @@ public sealed partial class MarkdownView : ContentControl
     {
         _imageSlots.Clear();
 
-        var host = new StackPanel { Spacing = 2 };
+        var host = new StackPanel { Spacing = 4 };
         var document = Markdown;
 
         if (document is not null && !document.IsEmpty)
@@ -106,10 +106,10 @@ public sealed partial class MarkdownView : ContentControl
                     heading.Inlines,
                     HeadingSize(heading.Level),
                     FontWeights.SemiBold,
-                    new Thickness(0, heading.Level == 1 ? 14 : 10, 0, 2));
+                    new Thickness(0, heading.Level == 1 ? 16 : 12, 0, 4));
 
             case MarkdownParagraph paragraph:
-                return BuildFlow(paragraph.Inlines, 14, FontWeights.Normal, new Thickness(0, 2, 0, 2));
+                return BuildFlow(paragraph.Inlines, 14, FontWeights.Normal, new Thickness(0, 4, 0, 4));
 
             case MarkdownListItem item:
             {
@@ -119,8 +119,8 @@ public sealed partial class MarkdownView : ContentControl
                 var inlines = new List<MarkdownInline> { new MarkdownTextInline(marker) };
                 inlines.AddRange(item.Inlines);
 
-                var element = BuildFlow(inlines, 14, FontWeights.Normal, new Thickness(0, 2, 0, 2));
-                element.Margin = new Thickness(16 + (item.Level * 20), 1, 0, 1);
+                var element = BuildFlow(inlines, 14, FontWeights.Normal, new Thickness(0, 4, 0, 4));
+                element.Margin = new Thickness(16 + (item.Level * 20), 0, 0, 0);
                 return element;
             }
 
@@ -133,13 +133,13 @@ public sealed partial class MarkdownView : ContentControl
                     FontSize = 13,
                     IsTextSelectionEnabled = true,
                     TextWrapping = TextWrapping.NoWrap,
-                    Margin = new Thickness(2),
+                    Margin = new Thickness(4),
                 };
 
                 return new Border
                 {
-                    Margin = new Thickness(0, 6, 0, 6),
-                    Padding = new Thickness(10, 8, 10, 8),
+                    Margin = new Thickness(0, 8, 0, 8),
+                    Padding = new Thickness(12, 8, 12, 8),
                     CornerRadius = new CornerRadius(4),
                     Background = LookupBrush("SubtleFillColorSecondaryBrush"),
                     Child = new ScrollViewer
@@ -155,7 +155,7 @@ public sealed partial class MarkdownView : ContentControl
 
             case MarkdownQuote quote:
             {
-                var inner = new StackPanel { Spacing = 2 };
+                var inner = new StackPanel { Spacing = 4 };
                 if (depth < 4)
                 {
                     foreach (var child in quote.Blocks)
@@ -170,8 +170,8 @@ public sealed partial class MarkdownView : ContentControl
 
                 return new Border
                 {
-                    Margin = new Thickness(0, 4, 0, 6),
-                    Padding = new Thickness(10, 2, 0, 2),
+                    Margin = new Thickness(0, 4, 0, 8),
+                    Padding = new Thickness(12, 4, 0, 4),
                     BorderThickness = new Thickness(3, 0, 0, 0),
                     BorderBrush = LookupBrush("CardStrokeColorDefaultBrush"),
                     Child = inner,

@@ -96,7 +96,8 @@ public sealed class SteamOwnershipService : ISteamOwnershipService
         }
 
         var size = _fileSystem.GetFileSize(apiPath);
-        if (TryGetCached(apiPath, size, appId.Value, out var cached))
+        var cacheKey = BuildCacheKey(apiPath, size, appId.Value, patch);
+        if (TryGetCached(cacheKey, out var cached))
         {
             return cached;
         }
@@ -118,7 +119,17 @@ public sealed class SteamOwnershipService : ISteamOwnershipService
         }
 
         var report = Build(patch, appId.Value, apiPath, result, manifest);
-        Store(apiPath, size, appId.Value, report);
+        if (result.Succeeded && patch.IsLoaderActive && patch.BackupApiFilePath is not null)
+        {
+            // 主探测拿到的是 loader 的 [dlc] 表（含其他游戏，数字会虚高）。
+            // 再探一次原版备份，单独回答「账号本身拥有多少」——失败只降级这一行，不影响主判定。
+            report = report with
+            {
+                Account = ProbeAccount(patch, appId.Value, apiPath, size, manifest, report),
+            };
+        }
+
+        Store(cacheKey, report);
         return report;
     }
 
@@ -135,8 +146,106 @@ public sealed class SteamOwnershipService : ISteamOwnershipService
             && manifest?.LastOwner is { Length: > 0 } lastOwner
             && string.Equals(lastOwner.Trim(), ownerText, StringComparison.Ordinal);
 
-        var trusted = result.Succeeded
-            ? AppManifestLookup.TrustedDisabledDlc(manifest, steamId)
+        var (dlcs, ownedIds, trusted) = ApplyTrusted(result, manifest);
+
+        if (!result.Succeeded)
+        {
+            _logger.Warn("Steam 授权探测未成功: " + result.Error + " " + (result.ErrorDetail ?? string.Empty));
+        }
+
+        return new SteamOwnershipReport(
+            MapState(result),
+            patch.Status,
+            appId,
+            patch.ApiDirectory,
+            patch.ApiFileName,
+            apiPath,
+            steamId,
+            manifest?.LastOwner,
+            manifestOwnerMatches,
+            dlcs,
+            ownedIds,
+            trusted,
+            result.Succeeded ? null : result.Error,
+            result.ErrorDetail,
+            patch.IsLoaderActive);
+    }
+
+    /// <summary>
+    /// 用原版备份再探一次，得到「账号真实拥有」。返回 null 表示没有备份、无从判断。
+    /// </summary>
+    private DlcAccountOwnership? ProbeAccount(
+        GamePatchReport patch,
+        int appId,
+        string apiPath,
+        long primarySize,
+        AppManifest? manifest,
+        SteamOwnershipReport primary)
+    {
+        var backupPath = patch.BackupApiFilePath;
+        if (backupPath is null || !_fileSystem.FileExists(backupPath))
+        {
+            _logger.Info("没有原版备份（" + (backupPath ?? "<未知路径>") + "），跳过账号授权探测");
+            return null;
+        }
+
+        try
+        {
+            var backupSize = _fileSystem.GetFileSize(backupPath);
+            if (backupSize == primarySize
+                && _fileSystem.ReadAllBytes(apiPath).AsSpan().SequenceEqual(_fileSystem.ReadAllBytes(backupPath)))
+            {
+                _logger.Warn("原版备份与当前 API 文件字节相同，疑似本身就是 loader：" + backupPath);
+                return AccountUnavailable(backupPath, SteamProbeError.BackupNotOriginal, "备份与当前 API 文件字节相同");
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.Warn("检查原版备份失败：" + backupPath + " / " + ex.Message);
+            return AccountUnavailable(backupPath, SteamProbeError.Native, ex.Message);
+        }
+
+        var result = _probe.Probe(backupPath, appId);
+        if (!result.Succeeded)
+        {
+            _logger.Warn("账号授权探测未成功（备份 " + backupPath + "）：" + result.Error);
+            return new DlcAccountOwnership(
+                MapState(result),
+                backupPath,
+                0,
+                Array.Empty<SteamDlcOwnership>(),
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                result.Error ?? SteamProbeError.Native,
+                result.ErrorDetail);
+        }
+
+        if (result.Dlcs.Count > 0 && SameIds(result.Dlcs, primary.Dlcs))
+        {
+            _logger.Warn("原版备份返回了与 loader 相同的 DLC 表，疑似也是 loader：" + backupPath);
+            return AccountUnavailable(backupPath, SteamProbeError.BackupNotOriginal, "备份返回了与 loader 相同的 DLC 表");
+        }
+
+        var (dlcs, ownedIds, _) = ApplyTrusted(result, manifest);
+        _logger.Info(
+            "账号授权探测（" + backupPath + "）：Steam 目录 " + dlcs.Count + " 个 DLC、"
+            + ownedIds.Count + " 个已拥有");
+        return new DlcAccountOwnership(
+            SteamOwnershipState.Succeeded,
+            backupPath,
+            result.SteamId64,
+            dlcs,
+            ownedIds,
+            null,
+            result.ErrorDetail);
+    }
+
+    /// <summary>套用可信 <c>DisabledDLC</c> 升级；主报告与账号视图共用，避免两套口径。</summary>
+    private static (IReadOnlyList<SteamDlcOwnership> Dlcs, HashSet<string> OwnedAppIds, IReadOnlySet<string> TrustedDisabledDlc) ApplyTrusted(
+        SteamDllProbeResult result,
+        AppManifest? manifest)
+    {
+        IReadOnlySet<string> trusted = result.Succeeded
+            ? AppManifestLookup.TrustedDisabledDlc(manifest, result.SteamId64)
             : new HashSet<string>(StringComparer.Ordinal);
 
         var dlcs = new List<SteamDlcOwnership>(result.Dlcs.Count);
@@ -151,35 +260,51 @@ public sealed class SteamOwnershipService : ISteamOwnershipService
             }
         }
 
-        var state = result.Succeeded
-            ? SteamOwnershipState.Succeeded
-            : result.Error switch
-            {
-                SteamProbeError.SteamNotRunning => SteamOwnershipState.SteamNotRunning,
-                SteamProbeError.NoDll or SteamProbeError.X86 or SteamProbeError.NotWindows => SteamOwnershipState.Unavailable,
-                _ => SteamOwnershipState.InitFailed,
-            };
+        return (dlcs, ownedIds, trusted);
+    }
 
-        if (!result.Succeeded)
+    private static SteamOwnershipState MapState(SteamDllProbeResult result) => result.Succeeded
+        ? SteamOwnershipState.Succeeded
+        : result.Error switch
         {
-            _logger.Warn("Steam 授权探测未成功: " + result.Error + " " + (result.ErrorDetail ?? string.Empty));
+            SteamProbeError.SteamNotRunning => SteamOwnershipState.SteamNotRunning,
+            SteamProbeError.NoDll or SteamProbeError.X86 or SteamProbeError.NotWindows => SteamOwnershipState.Unavailable,
+            _ => SteamOwnershipState.InitFailed,
+        };
+
+    private static DlcAccountOwnership AccountUnavailable(string? apiFilePath, string errorKey, string? detail) =>
+        new(
+            SteamOwnershipState.Unavailable,
+            apiFilePath,
+            0,
+            Array.Empty<SteamDlcOwnership>(),
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            errorKey,
+            detail);
+
+    /// <summary>两份 DLC 列表的 appid 集合是否相同（用来识别「备份其实也是 loader」）。</summary>
+    private static bool SameIds(IReadOnlyList<SteamDlcOwnership> left, IReadOnlyList<SteamDlcOwnership> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
         }
 
-        return new SteamOwnershipReport(
-            state,
-            patch.Status,
-            appId,
-            patch.ApiDirectory,
-            patch.ApiFileName,
-            apiPath,
-            steamId,
-            manifest?.LastOwner,
-            manifestOwnerMatches,
-            dlcs,
-            ownedIds,
-            trusted,
-            result.Succeeded ? null : result.Error,
-            result.ErrorDetail);
+        var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var dlc in left)
+        {
+            ids.Add(dlc.AppId);
+        }
+
+        foreach (var dlc in right)
+        {
+            if (!ids.Contains(dlc.AppId))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private SteamOwnershipReport CreateUnavailable(
@@ -245,9 +370,40 @@ public sealed class SteamOwnershipService : ISteamOwnershipService
         return null;
     }
 
-    private bool TryGetCached(string apiPath, long size, int appId, out SteamOwnershipReport report)
+    /// <summary>
+    /// 缓存键要覆盖一切会改变结论的输入：补丁状态变了（打/还原补丁）以及 <c>_o</c> 备份变了，
+    /// 都必须立刻重新探测，不能被「文件大小没变」蒙过去。
+    /// </summary>
+    private string BuildCacheKey(string apiPath, long size, int appId, GamePatchReport patch)
     {
-        var key = apiPath + "|" + size.ToString(CultureInfo.InvariantCulture) + "|" + appId.ToString(CultureInfo.InvariantCulture);
+        var backup = patch.BackupApiFilePath;
+        var backupSize = "-";
+        if (backup is not null)
+        {
+            try
+            {
+                backupSize = _fileSystem.FileExists(backup)
+                    ? _fileSystem.GetFileSize(backup).ToString(CultureInfo.InvariantCulture)
+                    : "missing";
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                backupSize = "error";
+            }
+        }
+
+        return string.Join(
+            "|",
+            apiPath,
+            size.ToString(CultureInfo.InvariantCulture),
+            appId.ToString(CultureInfo.InvariantCulture),
+            patch.Status.ToString(),
+            backup ?? "-",
+            backupSize);
+    }
+
+    private bool TryGetCached(string key, out SteamOwnershipReport report)
+    {
         lock (_cacheGate)
         {
             if (_cacheReport is not null
@@ -263,9 +419,8 @@ public sealed class SteamOwnershipService : ISteamOwnershipService
         return false;
     }
 
-    private void Store(string apiPath, long size, int appId, SteamOwnershipReport report)
+    private void Store(string key, SteamOwnershipReport report)
     {
-        var key = apiPath + "|" + size.ToString(CultureInfo.InvariantCulture) + "|" + appId.ToString(CultureInfo.InvariantCulture);
         lock (_cacheGate)
         {
             _cacheKey = key;

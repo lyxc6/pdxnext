@@ -146,6 +146,8 @@
   "settings.interface.playset.official.title": "Original launcher",
   "settings.interface.playset.placeholder.desc": "Reserved layout: the playset page shows nothing",
   "settings.interface.playset.placeholder.title": "Empty",
+  "settings.interface.playset.twoColumn.desc": "Left column lists addable mods, right column lists the current play set's mods; ticking a mod adds it, and changes are saved and written to the game load file",
+  "settings.interface.playset.twoColumn.title": "Two columns (launcher style)",
   "settings.interface.size.large.desc": "72 px: sharpest thumbnails, taller rows",
   "settings.interface.size.large.title": "Large",
   "settings.interface.size.medium.desc": "48 px: the default used by both the mod library and playsets",

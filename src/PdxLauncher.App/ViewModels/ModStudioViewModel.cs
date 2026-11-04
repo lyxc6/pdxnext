@@ -343,6 +343,9 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
     /// <summary>选中行是否有本地目录可打开（归档 mod 没有目录）。</summary>
     public bool CanOpenSelectedFolder => SelectedRow?.DirPath is { Length: > 0 };
 
+    /// <summary>选中行是否有可编辑的描述符文件。</summary>
+    public bool CanEditSelectedDescriptor => SelectedRow?.CanEditDescriptor == true;
+
     /// <summary>是否已有发布记录。</summary>
     public bool HasSelectedPublication => SelectedRow?.HasPublication == true;
 
@@ -756,6 +759,48 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
         {
             StatusMessage = T(Keys.ModstudioCreateFailed, exception.Message);
             _logger.Error("创建本地 mod 失败", exception);
+        }
+        finally
+        {
+            IsBusy = false;
+            RaiseDerived();
+        }
+    }
+
+    /// <summary>
+    /// 把编辑后的字段写回选中 mod 的描述符文件，然后重新加载列表与详情。
+    /// <para>只改名称/版本/支持版本/标签/简介；文件里的注释、未知键与 path 原样保留。</para>
+    /// </summary>
+    /// <param name="edit">用户编辑后的字段。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>是否写入成功。</returns>
+    public async Task<bool> SaveDescriptorAsync(ModDescriptorEdit edit, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(edit);
+
+        if (Game is null || SelectedRow?.Descriptor is not { } descriptor || !CanEditSelectedDescriptor)
+        {
+            StatusMessage = T(Keys.ModstudioEditUnavailable);
+            return false;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var result = _service.SaveDescriptor(Game, descriptor, edit);
+            if (!result.Ok)
+            {
+                StatusMessage = T(Keys.ModstudioEditFailed, result.ErrorCode ?? T(Keys.CommonUnknown));
+                return false;
+            }
+
+            await LoadAsync(Game, cancellationToken, resetPane: false).ConfigureAwait(true);
+            StatusMessage = T(Keys.ModstudioEditSuccess);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         finally
         {
@@ -1539,6 +1584,7 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(CanOpenSelectedWorkshop));
         OnPropertyChanged(nameof(CanOpenSelectedFolder));
+        OnPropertyChanged(nameof(CanEditSelectedDescriptor));
         OnPropertyChanged(nameof(CanStartUpload));
         OnPropertyChanged(nameof(CanEditUploadFields));
         OnPropertyChanged(nameof(HasSelectedPublication));

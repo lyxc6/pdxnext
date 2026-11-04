@@ -161,6 +161,23 @@ public static class AppServices
     public static bool IsInitialized { get; private set; }
 
     /// <summary>
+    /// UI 线程卡顿看门狗；窗口建好后由 <see cref="App"/> 启动，退出时为 null。
+    /// 关闭窗口时汇总本次会话的停顿次数与最长停顿写进日志，业务代码用 <see cref="Breadcrumb"/> 留位置。
+    /// </summary>
+    public static UiThreadWatchdog? Watchdog { get; private set; }
+
+    /// <summary>接上看门狗（启动时调用一次）；传 null 表示停用。</summary>
+    /// <param name="watchdog">已启动的看门狗。</param>
+    public static void AttachWatchdog(UiThreadWatchdog? watchdog) => Watchdog = watchdog;
+
+    /// <summary>
+    /// 记一条「现在走到哪一步」的面包屑；看门狗没启动时静默忽略。
+    /// 只在可能出现长耗时的阶段边界调用，别放进循环内层。
+    /// </summary>
+    /// <param name="message">简短位置描述。</param>
+    public static void Breadcrumb(string message) => Watchdog?.Breadcrumb(message);
+
+    /// <summary>
     /// 当前联网连接池的属主。<b>改代理时原地换池，不换服务对象</b>：
     /// 页面在构造函数里缓存了 <see cref="SteamWorkshop"/> / <see cref="PdxMods"/> 等实例，
     /// 换对象会让这些引用指向已释放的 HttpClient（实测 <c>ObjectDisposedException</c>）。

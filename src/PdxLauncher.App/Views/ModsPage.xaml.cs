@@ -3,6 +3,7 @@ namespace PdxLauncher.App.Views;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
@@ -15,13 +16,28 @@ using PdxLauncher.Core.Playsets;
 using Windows.System;
 
 /// <summary>
-/// 播放集页：原版启动器布局（工具条里切换播放集、条目自动保存）或留空占位。
-/// 页面只负责对话框、确认与生命周期；切换即激活、添加 / 移除 / 排序 / 启停后的自动保存等
-/// 业务全部在 <see cref="PlaySetEditor"/> 与 <see cref="ModsViewModel"/> 里完成。
+/// 播放集页：原版启动器布局（工具条里切换播放集、条目自动保存）、双列布局
+/// （左栏勾选即加入、右栏编辑当前播放集）或留空占位。三种布局共用同一套工具条、
+/// 保存状态与行模板；页面只负责对话框、确认与生命周期，切换即激活、添加 / 移除 / 排序 /
+/// 启停后的自动保存等业务全部在 <see cref="PlaySetEditor"/> 与 <see cref="ModsViewModel"/> 里完成。
 /// </summary>
 public sealed partial class ModsPage : Page
 {
+    /// <summary>双列左栏的初始宽度（DIP）。XAML 里 ColumnDefinition 的 Width 初值必须与它一致。</summary>
+    private const double DefaultLeftColumnWidth = ColumnResize.DefaultWidth;
+
     private readonly ModsViewModel _viewModel;
+
+    /// <summary>
+    /// 用户想要的双列左栏宽度（DIP），只在拖动分隔条与双击复位时改写。
+    /// 窗口拉窄时渲染宽度会被压小，但这个意图值保持不变：窗口拉回去后左栏能回到用户拖出来的宽度，
+    /// 不会被缩放过程永久改小。页面 NavigationCacheMode=Required，切页回来仍是拖过的宽度；
+    /// 没有写进 settings，是为了不为一个纯视觉宽度动设置 schema。
+    /// </summary>
+    private double _preferredLeftColumnWidth = ColumnResize.DefaultWidth;
+
+    /// <summary>按下分隔条那一刻的左栏宽度；拖动过程中的宽度 = 它 + 指针相对按下点的总位移。</summary>
+    private double _dragStartLeftColumnWidth = ColumnResize.DefaultWidth;
 
     /// <summary>页面生命周期令牌；NavigationCacheMode=Required 会在返回页面时重建。</summary>
     private CancellationTokenSource _lifetime = new();
@@ -44,6 +60,12 @@ public sealed partial class ModsPage : Page
     /// </summary>
     private AddModsNavigationResult? _pendingAddResult;
 
+    /// <summary>
+    /// 当前布局里真正承载「播放集内 mod」的列表：原版启动器是 ModList，双列是右栏的
+    /// ModListTwoColumn。位次编辑与滚动定位都按这一栏取容器，两套布局共用同一段逻辑。
+    /// </summary>
+    private ListView ActiveModList => _viewModel.IsTwoColumnLayout ? ModListTwoColumn : ModList;
+
     public ModsPage()
     {
         InitializeComponent();
@@ -57,6 +79,12 @@ public sealed partial class ModsPage : Page
                 AppServices.Mods,
                 AppServices.Logger),
             AppServices.Logger);
+
+        // 分隔条的事件用代码接线：PdxColumnSplitter 的 Dragged/ResetRequested 是普通事件，
+        // 不是依赖属性，XAML 编译器绑不上（也没有对应的 RoutedEvent）。
+        ColumnSplitter.DragStarted += OnSplitterDragStarted;
+        ColumnSplitter.Dragged += OnSplitterDragged;
+        ColumnSplitter.ResetRequested += OnSplitterReset;
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -408,27 +436,197 @@ public sealed partial class ModsPage : Page
     /// <summary>
     /// 搜索框实时过滤。x:Bind 不支持 UpdateSourceTrigger，所以 Text 只做 OneWay 绑定，
     /// 由这里把用户输入写回 ViewModel（写回会触发 RebuildVisibleMods）。
+    /// 建议只跟"手打"走：程序化改 Text 也会触发 TextChanged（比如原版/双列两个框共用同一个
+    /// SearchText，一者回写另一者就跟着变），那时弹下拉就是和用户抢焦点。
     /// </summary>
-    private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
+    private void OnSearchTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
         try
         {
-            if (sender is not TextBox box)
+            if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
             {
                 return;
             }
 
-            var text = box.Text ?? string.Empty;
-            if (string.Equals(text, _viewModel.SearchText, StringComparison.Ordinal))
+            var text = sender.Text ?? string.Empty;
+            if (!string.Equals(text, _viewModel.SearchText, StringComparison.Ordinal))
             {
-                return;
+                _viewModel.SearchText = text;
             }
 
-            _viewModel.SearchText = text;
+            SearchSuggestBox.Update(sender, _viewModel.Mods.Select(mod => mod.Name), text);
         }
         catch (Exception ex)
         {
             AppServices.Logger.Error("ModsPage 搜索过滤失败", ex);
+        }
+    }
+
+    /// <summary>回车 / 放大镜 / 选中建议：过滤用的就是当前文本，收起下拉即可。</summary>
+    private void OnSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        try
+        {
+            _viewModel.SearchText = (args.QueryText ?? string.Empty).Trim();
+            sender.IsSuggestionListOpen = false;
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 搜索过滤失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 双列左栏的搜索框：只过滤「可添加的 mod」，和右栏的 SearchText 互不影响。
+    /// 与 <see cref="OnSearchTextChanged"/> 一样，x:Bind 只能 OneWay，输入由这里写回。
+    /// </summary>
+    private void OnCandidateSearchTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        try
+        {
+            if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
+            {
+                return;
+            }
+
+            var text = sender.Text ?? string.Empty;
+            if (!string.Equals(text, _viewModel.CandidateSearchText, StringComparison.Ordinal))
+            {
+                _viewModel.CandidateSearchText = text;
+            }
+
+            SearchSuggestBox.Update(sender, _viewModel.Candidates.Select(row => row.Name), text);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 候选搜索过滤失败", ex);
+        }
+    }
+
+    /// <summary>双列左栏搜索框的提交（回车 / 放大镜 / 选中建议）：收起下拉即可。</summary>
+    private void OnCandidateSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        try
+        {
+            _viewModel.CandidateSearchText = (args.QueryText ?? string.Empty).Trim();
+            sender.IsSuggestionListOpen = false;
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 候选搜索过滤失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 双列左栏「勾选即加入」：勾上候选行就把这个 mod 追加到当前播放集末尾（走自动保存）。
+    /// 加入延后一帧派发：此刻仍在 CheckBox 的 Click 里，而加入会把这行从 Candidates 里摘掉，
+    /// 在绑定回调中途移除「正在求值的这一行」容易让列表控件丢掉容器状态。
+    /// </summary>
+    private void OnCandidateChecked(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is not CheckBox { DataContext: AddModRowViewModel row }
+                || !row.IsSelected
+                || _viewModel.IsBusy)
+            {
+                return;
+            }
+
+            var entry = row.Entry;
+            if (!DispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    _viewModel.AddMods(new[] { entry });
+                }
+                catch (Exception ex)
+                {
+                    AppServices.Logger.Error("ModsPage 加入候选 mod 失败", ex);
+                }
+            }))
+            {
+                AppServices.Logger.Warn("ModsPage 无法派发候选 mod 加入");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 处理候选 mod 勾选失败", ex);
+        }
+    }
+
+    // ------------------------------------------------------------ 双列分栏
+
+    /// <summary>
+    /// 拖动分隔条：<see cref="PdxColumnSplitter"/> 给的是**相对按下点**的总位移，
+    /// 所以这里用拖动开始时的宽度加上位移，而不是在旧值上累加增量——
+    /// 重复投递的移动事件、或控件自身被挤动，都不会让宽度越推越大。
+    /// </summary>
+    private void OnSplitterDragged(object? sender, double offset)
+    {
+        var available = TwoColumnGrid.ActualWidth;
+        _preferredLeftColumnWidth = ColumnResize.Clamp(
+            _dragStartLeftColumnWidth + offset,
+            available);
+        ApplyLeftColumnWidth(available);
+    }
+
+    /// <summary>记住按下时的宽度：拖动过程中的宽度全部由「起点宽度 + 总位移」算出。</summary>
+    private void OnSplitterDragStarted(object? sender, EventArgs e)
+    {
+        _dragStartLeftColumnWidth = _preferredLeftColumnWidth;
+    }
+
+    /// <summary>双击分隔条复位到默认宽度：拖窄之后想一次回到能看见完整名字的状态。</summary>
+    private void OnSplitterReset(object? sender, EventArgs e)
+    {
+        _preferredLeftColumnWidth = ColumnResize.DefaultWidth;
+        ApplyLeftColumnWidth(TwoColumnGrid.ActualWidth);
+    }
+
+    /// <summary>
+    /// 窗口尺寸变化时重新钳一次。左栏是像素宽度，窗口拉窄时右栏会先被挤掉，
+    /// 所以宽度上限必须随总宽重算。
+    /// </summary>
+    /// <remarks>
+    /// 这里必须用事件自带的 <see cref="SizeChangedEventArgs.NewSize"/>，不能读
+    /// <c>TwoColumnGrid.ActualWidth</c>：在 SizeChanged 处理里 ActualWidth 还是上一次 arrange 的旧值，
+    /// 拿旧总宽去钳制会算回和原来一样的宽度，于是「值没变」早退、左栏不让位，
+    /// 右栏被挤成负宽、整张 Grid 撑出窗口——用户缩小窗口后看到的右栏被裁就是这个原因。
+    /// </remarks>
+    private void OnTwoColumnGridSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        ApplyLeftColumnWidth(e.NewSize.Width);
+    }
+
+    /// <summary>
+    /// 按可用宽度把左栏渲染到「意图宽度」钳制后的值（钳制规则见 <see cref="ColumnResize.Clamp"/>）。
+    /// 不写回 <see cref="_preferredLeftColumnWidth"/>：窗口变窄只是临时让位，不是用户改了宽度。
+    /// </summary>
+    private void ApplyLeftColumnWidth(double availableWidth)
+    {
+        if (!double.IsFinite(availableWidth) || availableWidth <= 0)
+        {
+            // 布局还没测量：什么都不做，否则会被当成「窗口太窄」直接压到 0。
+            return;
+        }
+
+        var clamped = ColumnResize.Clamp(_preferredLeftColumnWidth, availableWidth);
+
+        // 值没变就别写：SizeChanged 会反复进来，每次写 Width 都白排一次版。
+        if (TwoColumnLeftColumn.Width.GridUnitType == GridUnitType.Pixel
+            && Math.Abs(TwoColumnLeftColumn.Width.Value - clamped) < 0.5)
+        {
+            return;
+        }
+
+        TwoColumnLeftColumn.Width = new GridLength(clamped);
+
+        if (Math.Abs(clamped - _preferredLeftColumnWidth) >= 0.5)
+        {
+            // 只有「让位」时才记：拖动过程中 clamped 恒等于期望宽度，不会刷日志。
+            AppServices.Logger.Info(
+                $"双列分栏：总宽 {availableWidth:0.#}，左栏让位到 {clamped:0.#}（期望 {_preferredLeftColumnWidth:0.#}）");
         }
     }
 
@@ -519,7 +717,7 @@ public sealed partial class ModsPage : Page
     /// 行模板里只有这一个 TextBox（序号输入框），所以按类型找是唯一且稳定的。
     /// </summary>
     private TextBox? FindPositionEditor(ModRowViewModel row) =>
-        ModList.ContainerFromItem(row) is ListViewItem { ContentTemplateRoot: { } root }
+        ActiveModList.ContainerFromItem(row) is ListViewItem { ContentTemplateRoot: { } root }
             ? FindDescendant<TextBox>(root)
             : null;
 
@@ -624,7 +822,7 @@ public sealed partial class ModsPage : Page
                 var row = _viewModel.Mods.FirstOrDefault(m => m.ModId == modId);
                 if (row is not null)
                 {
-                    ModList.ScrollIntoView(row, ScrollIntoViewAlignment.Default);
+                    ActiveModList.ScrollIntoView(row, ScrollIntoViewAlignment.Default);
                 }
             }
             catch (Exception ex)

@@ -111,6 +111,15 @@ public static class SteamWorkshopApiChecks
             new SteamWorkshopQuery(null, SteamWorkshopSort.TextSearch, 0)).AbsoluteUri;
         ChecksContext.Check("URI：无关键词的 textsearch 回退 trend", orphanSearch.Contains("browsesort=trend", StringComparison.Ordinal), orphanSearch);
 
+        // 「搜索相关度」不该带时间范围：Steam 只对 trend/toprated 认 days，
+        // 传了也只是噪音，还可能被服务端当成非法参数把排序打回 trend。
+        var relevance = SteamWorkshopClient.BuildBrowseUri(
+            Ck3AppId,
+            new SteamWorkshopQuery("morgenrote", SteamWorkshopSort.TextSearch, 0, 30, 30)).AbsoluteUri;
+        ChecksContext.Check("URI：相关度排序带 browsesort=textsearch", relevance.Contains("browsesort=textsearch", StringComparison.Ordinal), relevance);
+        ChecksContext.Check("URI：相关度排序仍带关键词", relevance.Contains("searchtext=morgenrote", StringComparison.Ordinal), relevance);
+        ChecksContext.Check("URI：相关度排序不传 days", !relevance.Contains("days=", StringComparison.Ordinal), relevance);
+
         // 超过服务端上限要钳到 50，否则 Steam 会回落成 30 让分页对不上。
         var clamped = SteamWorkshopClient.BuildBrowseUri(
             Ck3AppId,

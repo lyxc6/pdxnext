@@ -30,6 +30,33 @@ public sealed record SteamDlcOwnership(string AppId, string Name, bool IsOwned, 
 public sealed record DlcOwnershipCandidate(string SteamId, string DisplayName);
 
 /// <summary>
+/// 用原版备份（<c>steam_api64_o.dll</c>）探测到的「账号真实拥有」视图。
+/// <para>
+/// 与主报告分开：主报告回答「游戏现在能用哪些 DLC」，这里回答「账号本身拥有哪些 DLC」。
+/// loader 在岗时两者会差很多（loader 的 ini 表常混入其他游戏），混在一起就会被误读成账号授权。
+/// </para>
+/// </summary>
+/// <param name="State">探测状态。</param>
+/// <param name="ApiFilePath">实际探测的备份 DLL 全路径（证据句里给用户核对）。</param>
+/// <param name="SteamId64">探测时 Steam 返回的账号；0 表示没拿到。</param>
+/// <param name="Dlcs">Steam 目录列出的 DLC。</param>
+/// <param name="OwnedAppIds">已授权的 appid 集合（同样经过可信 DisabledDLC 升级）。</param>
+/// <param name="ErrorKey">不可用原因键（见 <see cref="SteamProbeError"/>）；成功时为 null。</param>
+/// <param name="Detail">技术细节。</param>
+public sealed record DlcAccountOwnership(
+    SteamOwnershipState State,
+    string? ApiFilePath,
+    ulong SteamId64,
+    IReadOnlyList<SteamDlcOwnership> Dlcs,
+    IReadOnlySet<string> OwnedAppIds,
+    string? ErrorKey,
+    string? Detail)
+{
+    /// <summary>这份账号视图是否可信可用。</summary>
+    public bool HasOwnership => State == SteamOwnershipState.Succeeded;
+}
+
+/// <summary>
 /// 一次授权探测的完整结果。口径对齐官方启动器的 <c>SteamService</c>：
 /// 拥有 = <c>BIsSubscribedApp</c> || 可信 <c>DisabledDLC</c> || <c>BIsDlcInstalled</c>。
 /// </summary>
@@ -42,11 +69,13 @@ public sealed record DlcOwnershipCandidate(string SteamId, string DisplayName);
 /// <param name="SteamId64">Steam 返回的账号；0 表示没拿到。</param>
 /// <param name="ManifestLastOwner">appmanifest 的 <c>LastOwner</c>。</param>
 /// <param name="ManifestOwnerMatches">清单里的 <c>LastOwner</c> 是否等于当前账号（官方信不信 DisabledDLC 的闸门）。</param>
-/// <param name="Dlcs">Steam 列出的 DLC。</param>
+/// <param name="Dlcs">Steam 列出的 DLC（loader 在岗时来自 <c>cream_api.ini</c>，不是 Steam 目录）。</param>
 /// <param name="OwnedAppIds">已授权的 appid 集合（大小写不敏感的字符串形式）。</param>
 /// <param name="TrustedDisabledDlc">采信的 <c>DisabledDLC</c> 集合。</param>
 /// <param name="ErrorKey">失败原因键（见 <see cref="SteamProbeError"/>）；成功时为 null。</param>
 /// <param name="Detail">原生错误文本等技术细节。</param>
+/// <param name="IsLoaderActive">被探测的 DLL 是否就是 loader（决定 <paramref name="Dlcs"/> 的来源）。</param>
+/// <param name="Account">原版备份的账号视图；没有备份、备份疑似 loader 或未探测时为 null。</param>
 public sealed record SteamOwnershipReport(
     SteamOwnershipState State,
     GamePatchStatus PatchStatus,
@@ -61,7 +90,9 @@ public sealed record SteamOwnershipReport(
     IReadOnlySet<string> OwnedAppIds,
     IReadOnlySet<string> TrustedDisabledDlc,
     string? ErrorKey,
-    string? Detail)
+    string? Detail,
+    bool IsLoaderActive = false,
+    DlcAccountOwnership? Account = null)
 {
     /// <summary>探测是否可用（决定界面上显示「已拥有 / 未拥有」还是「授权未知」）。</summary>
     public bool HasOwnership => State == SteamOwnershipState.Succeeded;
@@ -136,6 +167,9 @@ public static class SteamProbeError
 
     /// <summary><c>SteamAPI_Init</c> 返回 false。</summary>
     public const string InitFailed = "initFailed";
+
+    /// <summary>原版备份 <c>steam_api64_o.dll</c> 与当前 loader 字节相同或吐出同一份表，疑似也不是原版。</summary>
+    public const string BackupNotOriginal = "backupNotOriginal";
 
     /// <summary>原生调用抛异常。</summary>
     public const string Native = "native";

@@ -128,6 +128,43 @@ public sealed class ModStudioService
         return result;
     }
 
+    /// <summary>
+    /// 把编辑后的字段写回描述符文件。
+    /// <para>
+    /// 只改用户可见的那几个字段：<c>.mod</c> 的注释、未知键与 <c>path</c>，
+    /// <c>metadata.json</c> 的 <c>id</c> / <c>relationships</c> / <c>game_custom_data</c>
+    /// 都由 Core 的编辑器原样保留。改名会影响列表中显示的 mod 名，所以成功后让扫描缓存失效。
+    /// </para>
+    /// </summary>
+    /// <param name="game">当前游戏（用于让 mod 扫描缓存失效）。</param>
+    /// <param name="descriptor">要编辑的描述符。</param>
+    /// <param name="edit">用户编辑后的字段。</param>
+    /// <returns>写入结果；失败原因在 <see cref="ModDescriptorEditResult.ErrorCode"/>。</returns>
+    public ModDescriptorEditResult SaveDescriptor(
+        GameInstallation game,
+        ModDescriptorInfo descriptor,
+        ModDescriptorEdit edit)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(descriptor);
+        ArgumentNullException.ThrowIfNull(edit);
+
+        var result = ModDescriptorEditor.Save(descriptor, edit, _fileSystem);
+        if (!result.Ok)
+        {
+            _logger.Warn("保存描述符失败：" + (result.ErrorCode ?? "未知原因") + "（" + descriptor.DescriptorPath + "）");
+            return result;
+        }
+
+        if (_mods is IScanCacheInvalidator invalidatable)
+        {
+            invalidatable.InvalidateCache(game);
+        }
+
+        _logger.Info("已保存描述符：" + string.Join("；", result.WrittenPaths));
+        return result;
+    }
+
     /// <summary>把本地 mod 发布到 Steam 创意工坊，并保存工坊 id 映射。</summary>
     public async Task<ModPublishResult> PublishAsync(
         GameInstallation game,

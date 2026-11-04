@@ -107,7 +107,7 @@
                     x:Name="AlwaysOnTopButton"
                     Width="{ThemeResource TitleBarPaneToggleButtonWidth}"
                     Height="28"
-                    Margin="2"
+                    Margin="0"
                     Padding="0"
                     HorizontalContentAlignment="Center"
                     VerticalAlignment="Center"
@@ -253,6 +253,14 @@
                     Tag="account">
                     <NavigationViewItem.Icon>
                         <SymbolIcon Symbol="Contact" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
+                    AutomationProperties.AutomationId="navDiagnostics"
+                    Content="{x:Bind L.ShellNavDiagnostics, Mode=OneWay}"
+                    Tag="diagnostics">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Repair" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem

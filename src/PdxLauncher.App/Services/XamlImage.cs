@@ -63,7 +63,12 @@ public static class XamlImage
                 path = png;
             }
 
-            int decodeWidth = ImageDecodeSize.Compute(displayWidthDip, DisplayScale, ImagePixelSize.ReadWidth(path));
+            // 宽度要开文件读 16 KB 头：列表每行每次求值都会走到这里，必须记下来，
+            // 否则滚动/刷新时这些同步 IO 成片压在 UI 线程上。
+            int decodeWidth = ImageDecodeSize.Compute(
+                displayWidthDip,
+                DisplayScale,
+                ImageProbeCache.GetWidth(path, ImagePixelSize.ReadWidth));
 
             // 下载时顺手生成的 96/256 小图优先：源图 1900px、列表只画 72px 时，
             // 直接读 96px 的变体比每次从原图缩一遍省 CPU，内存也更稳。
@@ -87,8 +92,12 @@ public static class XamlImage
         }
     }
 
-    /// <summary>清空解码缓存（切换游戏主题时调用）。</summary>
-    public static void ClearCache() => Cache.Clear();
+    /// <summary>清空解码缓存（切换游戏主题时调用）；宽度缓存一并作废，主题会覆盖同名文件。</summary>
+    public static void ClearCache()
+    {
+        Cache.Clear();
+        ImageProbeCache.Clear();
+    }
 
     /// <summary>屏幕缩放；窗口还没建好或拿不到 XamlRoot 时按 100% 处理。</summary>
     private static double DisplayScale

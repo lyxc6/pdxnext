@@ -11,7 +11,8 @@
 ## 0. 一句话现状
 
 启动器外壳与主页已从「照官方 Paradox 启动器截图逐像素自绘」**改成 WinUI 3 标准控件 UI**（用户明确要求），
-Release **0 警告 0 错误**，自检 **94 个检查类 / 0 失败**（2026-11-03 实测；最近一轮新增 `SteamBbCodeParserChecks` 与 `ModPublishLimitsChecks`（钉住 BBCode 解析与字节上限），再往前是 `LocalizationBindingChecks` 与 `ModStudioPaneChecks`（钉住 `{0}` 裸绑与上传面板出口），再往前是 `ModPublishExtrasChecks`（含多语言语言池的 `PickUnused` / `IsDuplicate` 断言），再往前是 `WorkshopItemStateBitsChecks`、`WorkshopStateTextChecks`、`WorkshopStateCacheChecks`、`WorkshopSubscribedProtocolChecks`；此前还有 `ConfirmOverlayChecks`、`ModLibraryWarningChecks`、`PdxDatabaseChecks`、`JsonDocumentStoreChecks`、`OwnPlaysetRepositoryChecks`、`LauncherDbProjectionChecks`、`ModPathChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
+Release **0 警告 0 错误**，自检 **108 个检查类 / 0 失败**（2026-11-04 实测；7 处搜索框已全部换成 `AutoSuggestBox`（本地名字联想 + 工坊最近搜索），见 §0.85；`PlaysetChecks` 原来按本机 Victoria 3 播放集写死的 `mod 行数 >= 22` 已改成结构断言，见 §0.85.5；
+最近一轮新增 `SearchSuggestionsChecks`、`SearchBoxChecks`、`SteamBbCodeParserChecks` 与 `ModPublishLimitsChecks`（钉住 BBCode 解析与字节上限），再往前是 `LocalizationBindingChecks` 与 `ModStudioPaneChecks`（钉住 `{0}` 裸绑与上传面板出口），再往前是 `ModPublishExtrasChecks`（含多语言语言池的 `PickUnused` / `IsDuplicate` 断言），再往前是 `WorkshopItemStateBitsChecks`、`WorkshopStateTextChecks`、`WorkshopStateCacheChecks`、`WorkshopSubscribedProtocolChecks`；此前还有 `ConfirmOverlayChecks`、`ModLibraryWarningChecks`、`PdxDatabaseChecks`、`JsonDocumentStoreChecks`、`OwnPlaysetRepositoryChecks`、`LauncherDbProjectionChecks`、`ModPathChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
 **2026-10-26 已完成：窗口置顶开关（§0.2）+ 整窗背景「方案 B」（§0.3）**——游戏主题背景图现在连标题栏条和左侧
 NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统一纱 + 卡片/列表玻璃底衬），主页那条 260 高、被裁掉一半的
 主题横幅已删除。剩下的活：Light / HighContrast 真机切主题跑一遍（§0.3 唯一视觉盲区）、真机复验 settings.json 与置顶持久化、
@@ -62,6 +63,181 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-11-03 20:45 追加：发布链路改 GitHub Actions —— 推 `v*` tag 自动构建、自检、生成 Inno 安装器并上传 Release；新增 SemVer 版本规范 `docs/VERSIONING.md`、`CHANGELOG.md`、CI 工作流；发布仓库统一为公开的 `lyxc6/pdxnext`；见 §0.75。**
 **2026-11-03 23:55 追加：已发布到创意工坊却仍显示「未发布」—— 根因是隐藏条目对匿名 API 回 `EResult 9`（FileNotFound，**不等于不存在**），而启动器只认「自己发起的上传」；现给宿主加 `workshop-mine` / `workshop-mine-detail` 两个动词（回调 1312/1318，走本机登录态读自己发布的条目），Mod 创建页加「绑定已有条目…」入口、发布状态改四态（未发布 / 发布未完成 / 已发布（未公开）/ 已发布）并显示 Steam 真实可见性；自检 93→94；见 §0.76。**
 **2026-11-04 13:30 追加：创意工坊「搜不出来」—— 不是搜索坏了，是连不上 Steam 而错误被当成「用户取消」吞掉；根因是本机 DNS 被污染（steamcommunity.com → 104.244.46.21）+ 直连模式不读 `http_proxy`；现把连接超时翻译成 `NetworkTimeoutException`、工坊失败码分「结构变了 / 连不上」，状态栏写明原因并提示检测到的代理，设置页加「检测到的代理 → 使用」一键切换；自检 94→95；见 §0.77。**
+**2026-11-04 15:20 追加：新增「性能与日志」页 —— 左栏底部（账号与设置之间）多一个入口，五个分区（概览 / 缓存 / 日志 / 网络 / 启动耗时）把内存与进程计数、七类缓存占用、日志尾部与轮转状态、Steam 各主机限流计数、五个启动里程碑放在一张页面里看，并按阈值自动列出「可以优化什么」；顺带把设置页的 7 行缓存定义抽成 `CacheRowCatalog` 两页共用、内存埋点与启动里程碑改成 Release 也记录；自检 96→100；见 §0.79。**
+**2026-11-04 15:30 追加：播放集工具条改成自动折行 —— 按钮簇换成 `PdxWrapPanel`、列序改为 `* / Auto / Auto`、搜索框固定 200 宽右对齐；1200 与 1040 DIP 下不再把搜索框挤没或裁掉「添加模组」，1600 DIP 仍是一行，见 §0.80。**
+**2026-11-04 14:40 追加：Mod 创建页详情那一排按钮在默认窗口宽下就被裁掉（截图里只剩半个「绑…」）—— 根因是详情右栏可用宽 ≈544 DIP 而五个按钮 ≈660 DIP，且 WinUI 3 没有 WrapPanel、水平 StackPanel 不换行、外层 ScrollViewer 横向禁滚；现新增纯算法 `WrapLayout` + 控件 `PdxWrapPanel`，详情按钮行与上传面板 BBCode 工具条都换成换行面板；自检 95→96；见 §0.78。**
+
+**2026-11-04 16:20 追加：UI 间距全量对齐 WinUI 官方 4px 网格 —— XAML 140 处、C# 11 处、`CornerRadius` 23 处归一化，新增 `SpacingChecks`（103 类）与 `docs/UI-SPACING.md`；见 §0.82。**
+**2026-11-04 16:10 追加：工坊详情截图改逐张结算 —— 大图 / 计数器不再等整批下完才出现，失败的那张会说话；见 §0.81。**
+**2026-11-04 16:35 追加：播放集页新增第三种显示方式「双列」—— 左栏是还没加入当前播放集的 mod（勾选即加入），右栏是已加入的 mod，两栏各有搜索框；原版启动器布局与「添加模组」子页一行没动，设置页下拉切换；自检 103 类全过、`scripts/verify-playset-twocolumn.ps1` 两轮 UIA 冒烟 PASS；见 §0.83。**
+**2026-11-04 18:50 追加：双列页分隔条可以左右拖动改宽度，窗口拉窄时左栏自动让位、右栏不再被窗口边缘裁掉（修 XAML 列 MinWidth 把 Grid 撑爆 + SizeChanged 读到旧 ActualWidth 两个根因）；见 §0.86。**
+**2026-11-04 16:45 追加：日志分区跟着窗口长 —— 以前日志框写死 `Height="340"`、又被塞在唯一的外层 `ScrollViewer` 里，窗口拉高它不变；现把右栏拆成「滚动容器（概览 / 缓存 / 网络 / 启动耗时）」与「独立 Grid（日志）」两个互斥元素，日志框落在 `*` 行随窗口伸缩（`MinHeight="160"`），过滤行右侧新增「自动换行」开关（默认关、写进设置 `DiagnosticsLogWrap`），并让两个开关的标签常显；见 §0.84。**
+
+## 0.81 最新一轮（2026-11-04 15:00–16:10）：工坊详情截图 —— 缩略图都出来了，上面大图还在转圈
+
+> 用户诉求原话（m00003）：「这是什么原因，下面的图片都出来了，上面还在下载？走的不一样的调用路径？」
+
+### 0.81.1 根因：确确实实是两条调用路径
+
+- 缩略图条是 XAML 直接 `ItemsSource="{x:Bind ViewModel.Screenshots}"`，每个 item 的 `Image` 绑 `Path`、
+  显隐绑 `HasPath` —— 集合里一加条目、一张下完就自己亮，跟批任务无关。
+- 内联大图 `FlipWorkshopScreenshots` 当时**没有** `ItemsSource`，由 code-behind 的 `EnsureGallerySelection()`
+  在 `LoadAsync` 返回**之后**才赋集合和 `SelectedIndex`；而 `LoadAsync` 的 Steam 路径把正文配图
+  `DownloadInlineImagesAsync` 也塞进 `Task.WhenAll` → 大图恒空、计数器空，顶部却一直转。
+- `IsLoadingScreenshots` 是页面级单标志，只在 WhenAll 的 finally 清零；单张失败只 `_logger.Warn`，
+  UI 没有任何「这张在传 / 这张挂了」的状态，所以「看起来一直在下载」。
+
+### 0.81.2 改动清单
+
+- 新增纯算法 `src/PdxLauncher.App/Services/ScreenshotLoadTracker.cs`（Total / Settled / Pending / IsBusy，
+  `Begin(int)` / `Settle()` / `FinishAll()` / `Reset()`，只约定 UI 线程、不加锁）。
+- `WorkshopScreenshotViewModel` 加 `IsPending`（默认 true）/ `IsFailed` 与派生 `ShowPending` / `ShowFailed` /
+  `ShowPlaceholder`，`MarkSettled(bool failed)`；`Path` 落盘后同步刷新这些派生属性。
+- `WorkshopDetailViewModel`：`BuildGallery` 后 `_galleryTracker.Begin(Screenshots.Count)`（去重后的条目数），
+  每张图片任务 finally 里 `MarkSettled` + `Settle()`，只要还没结清 `IsLoadingScreenshots` 就保持 true；
+  外层 finally `FinishAll()` 兜底（取消 / 提前返回不会把提示永久点亮）。
+- 详情页 XAML：hero `FlipView` 直接绑 `ViewModel.Screenshots`；模板加「下载中 / 下载失败」两层叠层，
+  全屏查看器同样加。
+- code-behind：`OnLoaded` 幂等订阅 `Screenshots.CollectionChanged`，集合一变就 `EnsureGallerySelection()`；
+  `Count == 0` 时把 `SelectedIndex` 复位成 -1 并清空计数器（`Clear()` 会把选中项打成 -1，旧逻辑会残留「3 / 4」）。
+- i18n 两条：`workshop.detailScreenshotDownloading`、`workshop.detailScreenshotFailed`（中英各一）。
+
+### 0.81.3 验证
+
+- `./build.cmd`：0 error，自检 101 个检查类 / 0 失败；新增 `ScreenshotLoadTrackerChecks`（26 条断言：
+  Begin(0)、四次 Settle、重复 Settle 不进负数、FinishAll、Begin 重置、Reset、Begin(-3) 钳 0）。
+- 真机（清空 `data/workshop-info/shots` 后打开未缓存的 Steam 工坊条目）：计数器在**首张落地那一刻**就变成
+  `1 / 6`，hero 同帧出图（`.scratch/gallery-verify/` 的采样截图）；顶部提示只在还有图没结清时存在。
+  本机下载太快（4–6 张 < 1 s），没截到「提示与大图同框」的瞬时帧，改以 UI 采样 + tracker 断言互相印证。
+
+### 0.81.4 坑与后续
+
+- `winapp ui focus` 在窗口不是前台时直接拒绝，必须先 `AttachThreadInput` + `SetForegroundWindow` 再发
+  `send-keys --via send-input`；`set-value` 不会触发提交，Enter 必须真发键。
+- 计数器 `txtWorkshopInlineCounter` 没有 AutomationId，UIA 只能按文本 `\d+ / \d+` 找，容易撞上日期
+  （`2026/10/30` 会被误匹配），采样时要排除。
+- 未做：单张重试按钮、缩略图逐张 spinner、失败占位点击重下；并发上限仍是 2，先不动。
+
+## 0.79 最新一轮（2026-11-04 14:45–15:20）：新增「性能与日志」页 —— 把优化点集中到一页
+
+> 用户诉求原话（m00001）：「能不能加一个[性能与日志]页面，给我看看有什么优化的地方」
+
+### 0.79.1 设计：五个只读分区 + 一组阈值规则
+
+页面挂在左栏最底部（`navDiagnostics`，排在「账号」之后、「设置」之前），`Tag="diagnostics"`；
+`NavigationService` 注册 `DiagnosticsTag` → `PdxLauncher.App.Views.DiagnosticsPage`，`TagForPageType` 自动反向映射，选中态无需额外代码。
+上次停留的分区记在 `AppSettings.LastDiagnosticsSection`（`int?`，0 起 5 项，null/越界落「概览」），
+与设置页的 `LastSettingsSection` 同一套路。
+
+| 分区 | 展示内容 | 数据来源 |
+| --- | --- | --- |
+| 概览 | 工作集 / 私有 / 托管 / 峰值（各带目标说明）、GC 0/1/2、线程 / 句柄、运行时长、工坊条目 / 分页 / mod 缩略图、缓存合计；下方是「优化建议」列表 | `MemoryDiagnostics.Capture` + `CacheRowCatalog.MeasureAsync` + `PerformanceHints.Evaluate` |
+| 缓存 | 合计 + 七行（主题 / 公告 / 缩略图 / DLC 描述 / 图片 / 工坊 / 翻译），逐行可清、可全部清除（先确认） | 与设置页「缓存」分区**同一份** `CacheRowCatalog`，不再各写一套清除 lambda |
+| 日志 | 当前文件大小 / 归档数 / 合计、最近写入时间、轮转阈值（`FileLogger.MaxBytes` / `MaxArchives`）、按「全部 / 警告 / 错误」过滤的最近 200 行、5 秒自动刷新开关、「打开日志目录」 | `LogTailReader.Measure` / `ReadTail` / `FilterNewestFirst` |
+| 网络 | 每主机一行：总请求 / 限流 / 拒发 / 冷却剩余 / 最近一次；代理模式与解析出的地址（带来源），有告警时显示 InfoBar | `AppServices.HttpThrottle.Snapshot()` + `ProxyResolver.Describe` |
+| 启动耗时 | 五个里程碑的绝对耗时与相邻差值：进程入口 / 服务装配 / 窗口激活 / 外壳就绪 / 首屏完成；下方注明「冷启动不联网」 | `StartupTimeline.Snapshot()` |
+
+「优化建议」是纯规则函数（无 UI、可单测），阈值都写成常量，命中才出现、按严重度排序：
+
+| 规则 | 阈值 | 级别 |
+| --- | --- | --- |
+| 工作集超详情预算 / 空载预算 | ≥ 550 MB → 高；≥ 250 MB → 中（内存只出一条） | 高 / 中 |
+| 有主机被限流器**拒发**过 | 拒发数 > 0（取最忙的主机） | 中 |
+| 冷启动到首屏超时 | ≥ 2500 ms | 中 |
+| 缓存合计偏大 | ≥ 500 MB | 低 |
+| 工坊缓存条目偏多 | 条目 + 分页 ≥ 2000 | 低 |
+| 日志接近轮转 | ≥ `FileLogger.MaxBytes` × 80% | 低 |
+| 历史日志已满 | 归档数 ≥ 3 | 低 |
+| 翻译模型常驻 | 翻译开 + `KeepTranslationModelLoaded` | 提示 |
+
+### 0.79.2 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.App/Views/DiagnosticsPage.xaml` / `.xaml.cs` | **新增**。左 `NavigationView`（216 DIP，5 个 `NavigationViewItem`）+ 右 `ScrollViewer`，结构与设置页同构；分区切换、清缓存（`ConfirmOverlay` 先确认）、日志过滤 / 自动刷新（`DispatcherTimer` 5 s，页面卸载即停）、打开日志目录（`ShellLauncher.TryStart("explorer.exe")`）、状态条 |
+| `src/PdxLauncher.App/ViewModels/DiagnosticsViewModel.cs` | **新增**。五个分区的采样与文案拼装；`Task.Run` 采样后回 UI 线程改集合；`Relocalize` 重建全部数字与句子；不新建服务，只用 `AppServices` 静态服务 |
+| `src/PdxLauncher.App/ViewModels/DiagnosticsRows.cs` | **新增**。四个不可变行模型：指标卡、建议、限流主机、启动里程碑 |
+| `src/PdxLauncher.App/ViewModels/CacheRowCatalog.cs` | **新增**。把设置页构造里的七行缓存定义、并行测量、全部清除搬出来，设置页与性能页共用（设置页 UI 与行为不变） |
+| `src/PdxLauncher.App/Services/StartupTimeline.cs` | **新增**。静态时间线，起点取 `Process.StartTime`（失败退回 `DateTimeOffset.Now`）；`Mark` 幂等、线程安全、上限 32 条、绝不抛；五个里程碑常量 |
+| `src/PdxLauncher.App/Services/LogTailReader.cs` | **新增**。用 `FileShare.ReadWrite` 加 `FileShare.Delete` 只读尾部 128 KB / 200 行（不锁写入方）、UTF-8 残字节与半行丢弃、按 `[WARN] / [ERROR]` 整块过滤（堆栈续行跟随）、最新在上；`Measure` 统计主文件 + 归档；`FileLogger.MaxBytes` / `MaxArchives` 改为 `public const` 供页面显示阈值 |
+| `src/PdxLauncher.App/Services/PerformanceHints.cs` | **新增**。`DiagnosticHintCode` 枚举 + `PerformanceHintInput` + `Evaluate`，阈值常量集中在此 |
+| `src/PdxLauncher.App/Services/MemoryDiagnostics.cs` | `MemorySnapshot` **嵌套 record** 保持 9 个位置参数不变，另加 `init` 属性：峰值工作集 / 线程数 / 句柄数 / 运行时长；`Describe` 文案一字未改（自检逐字断言） |
+| `src/PdxLauncher.App/Services/NavigationService.cs` | `DiagnosticsTag = "diagnostics"` + `TypeNames` 映射到 `DiagnosticsPage` |
+| `src/PdxLauncher.App/MainWindow.xaml` | 页脚新增 `navDiagnostics`（`SymbolIcon Symbol="Repair"`） |
+| `src/PdxLauncher.App/Program.cs`、`App.xaml.cs`、`MainWindow.xaml.cs` | 五个启动里程碑打点；启动 / 关窗的内存快照去掉 `#if DEBUG`，Release 也留一行 |
+| `src/PdxLauncher.Core/Configuration/AppSettings.cs` | 新增 `LastDiagnosticsSection` |
+| `src/PdxLauncher.Core/Infrastructure/FileLogger.cs` | `MaxBytes` / `MaxArchives` 改 `public const`（逻辑不变） |
+| `tools/i18n/{zh-CN,en-US}/diagnostics.json`、`shell.json` | **新增** 94 个 `diagnostics.*` 键 + `shell.nav.diagnostics`；`python tools/gen-i18n.py` 重新生成（合计 1280 键） |
+| `tests/PdxLauncher.Checks/{DiagnosticsPageChecks,PerformanceHintsChecks,LogTailReaderChecks,StartupTimelineChecks}.cs` | **新增** 4 个检查类（96→100）：阈值两侧取值与排序、日志尾部的半行 / 残字节 / 写入方占用 / 归档统计、时间线幂等与上限、页面静态结构（导航注册、19 个 AutomationId、5 个分区与 Tag 顺序、只读 TextBox、XAML 无硬编码中文、三处共享埋点、设置页已改用 `CacheRowCatalog`） |
+| `tests/PdxLauncher.Checks/MemoryDiagnosticsChecks.cs` | 扩充：逐字断言 `Describe` 全文、新 `init` 属性默认 0、活体快照峰值 / 线程 / 句柄 / 运行时长非 0 |
+
+**没有**新增 NuGet 依赖；页面只读本地状态与文件，不联网、不写游戏或官方启动器目录；没有清空日志的按钮（`FileLogger` 的句柄不含删除共享，清空会被写入方占用）。
+
+### 0.79.3 验证
+
+- `bash tools/build-app.sh -v q` → **0 警告 0 错误**；`dotnet build PdxLauncher.sln -c Release -m:1`（清掉 `src/PdxLauncher.App/obj/x64` 后）→ **0 警告 0 错误**。
+- `dotnet run --project tests/PdxLauncher.Checks -c Release` → `检查类: 100，失败: 0，断言失败总数: 0`。
+- `python tools/gen-i18n.py --check` → 通过（重新生成后合计 1280 键）。
+- **未做真机 UI 截图**：本机同时有两个别的会话在跑 `PdxLauncher.App.exe`，本轮没有抢占或杀进程；页面结构与绑定的验证靠编译 + 静态检查。
+
+### 0.79.4 坑与后续
+
+- **`MemorySnapshot` 是嵌套类型**：`MemoryDiagnostics.MemorySnapshot`，VM 里写裸 `MemorySnapshot` 会 CS0246；同时不能改它的 9 个位置参数，否则 `MemoryDiagnosticsChecks` 的命名参数构造全断——新字段一律走 `init` 属性。
+- **WinUI 3 的 `TextBox` 没有 `HorizontalScrollBarVisibility`**：要写 `ScrollViewer.HorizontalScrollBarVisibility` 附加属性（否则 WMC0011）。
+- **清掉 `obj/x64` 后 `dotnet build PdxLauncher.sln` 报 `XamlCompiler WMC9999`（参数超出范围）**：残留 `obj` 与并发实例的输出互相干扰；`rm -rf src/PdxLauncher.App/obj/x64` 后整解重建即通过（`tools/build-app.sh` 只构 App 工程，未受影响）。
+- **检查工程关 `ImplicitUsings`**：新检查文件里用到 `Path` / `Regex` 等要显式 `using System.Text.RegularExpressions;`，`IFileSystem` 要 `using PdxLauncher.Core.Abstractions;`。
+- 后续可做：真机截图核对五分区排版（尤其是 1040 DIP 最小宽下「概览」两张卡并排）、把 `DiagnosticsViewModel` 的格式化函数抽成可链接的纯静态类以便单测、在概览里补「本次会话相对启动涨了多少」。
+
+## 0.78 最新一轮（2026-11-04 14:20–14:45）：Mod 创建页按钮行被裁掉 —— 换成「排不下就换行」
+
+> 用户诉求原话（m00971）：「把自动换行加上，现在的也太抽象了」
+> 截图（m00969）：Mod 创建页详情面板最后一行只剩四个半按钮，第五个「绑定已有条目…」被裁成「绑…」。
+
+### 0.78.1 根因：可用宽度只有 ≈544 DIP，五个按钮要 ≈660 DIP
+
+| 项 | 值 | 出处 |
+| --- | --- | --- |
+| 窗口默认宽 / 最小宽 | 1200 / **1040** DIP | `src/PdxLauncher.App/MainWindow.xaml.cs:33` `MinimumWindowWidth` |
+| 左侧导航 | 216 DIP | `src/PdxLauncher.App/MainWindow.xaml:182` `OpenPaneLength` |
+| Mod 创建页左右列 | 360（MinWidth 280）+ ColumnSpacing 12 | `src/PdxLauncher.App/Views/ModStudioPage.xaml` 主体 Grid |
+| 页面 / 卡片内边距 | 16×2 / 18×2 | 同上 |
+| **详情右栏可用宽** | 1200 宽 ≈ **544**、1040 宽 ≈ **384** | 1200−216−32−360−12−36 |
+| 五按钮自然宽（zh-CN） | ≈ **660** | 实测截图比例；en-US 更长 |
+
+也就是说**默认窗口宽下就已经放不下**，不只是窄屏。而这一行原本是
+`<StackPanel Orientation="Horizontal" Spacing="8">` —— WinUI 3 **没有** WrapPanel（`CommunityToolkit.WinUI.Controls` 也不在本项目依赖里），
+水平 StackPanel 从不换行；外层 `DetailPaneScroll` 的横向滚动默认是 Disabled，于是超出的按钮被**直接裁掉**，看起来像「按钮没了」。
+上传面板的 BBCode 工具条（11 个 `MinWidth=36` 按钮 ≈670 DIP）是同一类问题，只是窄屏时才暴露。
+
+### 0.78.2 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.App/Services/WrapLayout.cs` | **新增**。纯算术：`WrapItem(Width,Height)` / `WrapPlacement(Index,X,Y,Width,Height)` / `WrapLayoutResult(Items,Width,Height)`，`Compute(items, availableWidth, spacing)`。规则：可用宽非有限或 ≤0 → 一行；间距非有限或 <0 → 0；尺寸非有限或 ≤0 的项跳过且**不产生间距**；换行判据 `x + width > limit` 只在行内判断（行首不判，避免单项超宽死循环）；行高取本行最高项；总高 = 各行高 + 行间距。不引用任何 XAML 类型（检查工程可链接断言） |
+| `src/PdxLauncher.App/Controls/PdxWrapPanel.cs` | **新增**。`public sealed class PdxWrapPanel : Panel`，`Spacing` 依赖属性默认 **8.0**（变更回调 `InvalidateMeasure`）；`MeasureOverride` 用 `(availableWidth, ∞)` 量子元素、跳过 `Visibility.Collapsed`、委托 `WrapLayout`；`ArrangeOverride` 用 `finalSize.Width` **重算一遍**再 Arrange（首次布局时量到的宽度可能被夹过）。纯代码控件，无 XAML |
+| `src/PdxLauncher.App/Views/ModStudioPage.xaml` | 详情动作行 `StackPanel Orientation="Horizontal" Spacing="8"` → `<ctl:PdxWrapPanel Spacing="8">`（5 个按钮、AutomationId、Click 全部原样，加注释说明原因）；BBCode 工具条 → `<ctl:PdxWrapPanel Spacing="4">`。其余行（新建预览 / 上传预览的「按钮 + 省略号文本」）不动 |
+| `tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj` | 链接 `WrapLayout.cs`（App 是 WinExe + windows TFM，检查工程引用不了，只能链接源码） |
+| `tests/PdxLauncher.Checks/WrapPanelChecks.cs` | **新增**检查类（95→96）。算法：单行总量、刚好放得下 / 差 1 DIP、行高取最高、0 宽项不产生间距、原始下标保留、空列表、∞/NaN/0 宽兜底、超宽单项、非法间距；接线：详情行 5 个 `</Button>` + 5 个 AutomationId 都在同一个 `ctl:PdxWrapPanel` 内、工具条 11 个 `btnBbCode*`、面板默认间距 `8.0`、`WrapLayout` 不含 `Microsoft.UI` / `Windows.Foundation` |
+
+**没有**新增 i18n 键（只改布局），`Strings.g.cs` 未重新生成；`python tools/gen-i18n.py --check` 通过（1172 键）。
+**没有**改 `MinimumWindowWidth`、左列宽、按钮文案与顺序、其他页面的横向按钮行，也没引 NuGet 依赖。
+
+### 0.78.3 验证
+
+- `dotnet build src/PdxLauncher.App/PdxLauncher.App.csproj -c Release -v m` → **0 警告 0 错误**。
+- `dotnet run --project tests/PdxLauncher.Checks -c Release` → `检查类: 96，失败: 0，断言失败总数: 0`。
+- `python tools/gen-i18n.py --check` → exit 0。
+- 真机实测（pwsh + UIA，本机 DPI 150%，窗口尺寸按 DIP 折算）：**1200×760 DIP → 详情按钮 2 行**（3 + 2，两行 y=418 / 458，行距 40 DIP）、**1040×600 DIP（最小宽）→ 3 行**（y=437 / 477 / 517），五个按钮的 AutomationId 全部可达，不再被裁到可视区外（第三行落在详情卡片底部，滚动可见）；默认启动尺寸 1329×815 DIP → 2 行。
+- 截图证据：`.scratch/wrap-b-1200.png`（1200 DIP 两行）、`.scratch/wrap-c-1040.png`（1040 DIP 三行）；`.scratch/` 已在 `.gitignore` 第 13 行，不入库。上传面板 BBCode 工具条在 1040 DIP 下由 11×36 DIP 的按钮自然折成 2 行（同一控件、同一算法）。
+
+### 0.78.4 坑与后续
+
+- **WinUI 没有 WrapPanel**：`Microsoft.UI.Xaml.Controls` 里只有 `ItemsRepeater + UniformGridLayout`（那是等宽网格，不适合按钮条），
+  `CommunityToolkit.WinUI.Controls` 也没被引用；所以自绘 `Panel` 是唯一「不引依赖 + 不重写按钮」的路。
+- **Panel 子类在 Measure 里必须给子元素「宽度受限、高度无限」**：否则按钮会被压成多行文本或按 ∞ 宽测量。
+- **Arrange 必须用最终宽度重算**：Measure 时的可用宽可能是 ∞（父级还没定宽）或已被夹过，缓存 measure 结果会导致首帧错位。
+- 这个面板可以复用到其他横向按钮行（工坊详情、DLC 页工具条等）——本轮只动了用户截图指到的那两处。
+- **重编 x64 时踩的两个坑**：① 应用正在运行会锁住 `bin\x64\...\PdxLauncher.Core.dll`，`MSB3021/MSB3027` 反复重试失败——先 `taskkill //F //IM PdxLauncher.App.exe`（Git-Bash 里必须写双斜杠，否则 `/IM` 被当成路径）。② 手删 `obj/x64` 后增量构建会报 `WMC0601 找不到 App.xaml`，必须 `dotnet build ... -p:Platform=x64 -t:Rebuild` 走完整重建；首次重建出现的 25 条 `PRI249 Invalid qualifier: THEME-CACHE` 警告是残留 PRI 引起的瞬态，再构建一次即归零。
 
 ## 0.77 最新一轮（2026-11-04 00:00–13:30）：创意工坊搜不出来 —— 「加载失败」被当成了「用户取消」
 
@@ -3053,6 +3229,8 @@ navLibrary / navPlaySets / navModLibrary / navDlc / navSettings / navHome 全部
 除播放集外五张图均为 2026-10-26 §0.3 之后重截（Release，1782x1191 物理 @1.33 DPI），sha256 互不相同。
 
 > 2026-10-27 04:19：`docs/screenshot-playsets.png` 已换成单行工具条后的新界面（`.scratch/rework/2026-10-27-playset-final.png`，1800x1200，@1.5 DPI）。与其余五张的尺寸/DPI 不一致，下次整体重截时一并统一；若并发会话正在改 Home/设置页，那些图可能也需同步重截。
+>
+> 2026-11-04：README 重写成对外介绍页，截图收敛到三张并整体重截（`home` / `library` / `settings`，1604x1002，客户端 1600x1000，UIA `SelectionItemPattern.Select()` 导航 + `DwmGetWindowAttribute` + `CopyFromScreen`，脚本 `.scratch/capture-readme4.ps1`）。`screenshot-playsets.png` / `screenshot-mod-library.png` 含使用者自己的 Mod 列表，`screenshot-dlc.png` 含 SteamID64 与 cream_api 解锁明细，三者已从 `docs/` 删除（历史仍在本文件的表格与 Git 记录里）。`docs/DEVELOPMENT.md` 的目录清单同步改为三张。
 
 截图方法（**关键经验**）：PrintWindow(hwnd, hdc, 2) 在 WinUI 3 / DWM 合成窗口上**返回陈旧帧** ——
 连截 7 张不同页面的 sha256 完全相同（730fa704f697…）。可用方案是
@@ -6615,3 +6793,390 @@ S_STEPCHECK S_FAILCHECK S_CHECKOK S_NOEXE S_EXPECT S_STARTING S_EXE S_ALREADY S_
 - 预览是只读的 `MarkdownView`，不参与提交；提交的永远是描述框里的 BBCode 原文。
 - 上传页在这个版本**没有做「所见即所得」**，也**不做** `[table]`（Steam 描述里实测无人使用，解析器也不认，会原样保留）。
 - 自检类数 73 → 80（本轮 +2，其余是并发会话新增的播放集排序相关类）。HANDOFF 与 README 的计数要一起改。
+
+## 0.74 2026-11-04：DLC 页「490 个 DLC」的真相（loader 表 ≠ Steam 目录）+ 账号真实拥有视图
+
+用户原话（2026-11-04）：「DLC页面是真的判断出是否拥有所有dlc吗，不会只是扫描本地dlc吧」；贴出 V3 截图后追问「vic3哪来的490个dlc」。
+
+### 1. 查到的硬限制
+
+- loader 在岗时 `GetDLCCount` / `BGetDLCDataByIndex` 读的是同目录 `cream_api.ini` 的 `[dlc]` 表，**不是 Steam 目录**，而且不按当前 appid 过滤。仓库素材那份表共 490 行，是 11 款 Paradox 游戏共用模板（CS1 94 / EU4 93 / CK2 74 / HoI4 59 / Stellaris 56 / CK3 37 / CS2 29 / V3 23 / V2 11 / Imperator 9 / EU5 5）。
+- V3 真机（appid 529340）：loader 表 490、账号真实 23、本地 `game/dlc/` 17 个 `.dlc.json`。所以「490/490」既不是 V3 的 DLC 数，也不是账号拥有数。
+- 想拿「账号真实拥有」只能探原版备份 `steam_api64_o.dll`（loader 834560 B，原版 298384 B）；同一 appid 同一时刻只能有一个 `SteamAPI_Init`，两次探测必须顺序执行。
+
+### 2. 根因
+
+| # | 现象 | 根因 |
+| --- | --- | --- |
+| 1 | 判定句写「未打补丁」，详情却写「补丁：已加载」 | `DlcOwnershipVerdict.Evaluate` 只把 `GamePatchStatus.Patched` 当已打补丁，`PatchedOther`（他人/整合包装的 loader）落进 `Vanilla*`；`DlcViewModel` 的详情却把 `Patched` 和 `PatchedOther` 都当「已加载」 |
+| 2 | 「Steam 报告 490 个 DLC」 | loader 在岗时 `GetDLCCount` 来自 `cream_api.ini`，文案却统一写「Steam 报告」 |
+| 3 | 「全部拥有」名不副实 | candidates 只取磁盘上带 steam_id 的条目；磁盘没有的 DLC 永远不会判未拥有，账号真实拥有也无从体现 |
+
+### 3. 决策
+
+- `GamePatchReport.IsLoaderActive = Status is Patched or PatchedOther`（`IsPatched` 语义不动，仍是「有补丁痕迹」）。
+- `SteamOwnershipReport` 追加 `IsLoaderActive` 与 `Account`（`DlcAccountOwnership?`，第二份「账号真实拥有」报告）；loader 在岗且备份存在时顺序再探一次备份，主报告失败不影响账号结论。
+- 判定条拆两条线：主句 = 游戏实际可用（loader 表/Steam 目录），账号句 = 账号真实拥有；`Patched*` 主句不再写「Steam 报告」。
+- CS2（磁盘 DLC 数为 0）回退时优先用账号表，避免拿 490 条 loader 整表对账。
+- 缓存 key 扩为「DLL 路径 + 字节数 + appid + 补丁状态 + 备份路径 + 备份字节数」；设置页打/撤补丁成功后 `Invalidate()`。
+- 降级显式化：备份缺失 / 备份与当前文件同字节 / 备份返回同样的表 / 备份探测失败，各有错误键，不再静默当成「没拥有」。
+
+### 4. 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.Core/Patch/GamePatchState.cs` | `GamePatchReport` 加 `IsLoaderActive`、`BackupApiFilePath`（由 ApiDirectory/ApiFileName 推出 `_o` 备份路径） |
+| `src/PdxLauncher.Core/Patch/GamePatchService.cs` | `BackupSuffix` 改为 `public const`，供报告拼备份路径 |
+| `src/PdxLauncher.Core/Steam/SteamOwnership.cs` | 新增 `DlcAccountOwnership`；`SteamOwnershipReport` 末尾追加 `IsLoaderActive`、`Account`（可选位置参数，源码兼容）；`SteamProbeError` 加 `BackupNotOriginal` |
+| `src/PdxLauncher.Core/Steam/SteamOwnershipService.cs` | 主探测后按 `IsLoaderActive` 再探 `_o` 备份；`ProbeAccount` 处理缺备份/同字节/同表/探测失败；`ApplyTrusted` 抽出来给两份报告共用；缓存 key 扩为六段 |
+| `src/PdxLauncher.Core/Steam/DlcOwnershipVerdict.cs` | `SteamDlcCount/SteamOwnedCount` → `ProbeDlcCount/ProbeOwnedCount`；新增 `IsLoaderActive`、`AccountDlcCount/AccountOwnedCount/AccountOwnedDiskDlcCount/AccountErrorKey/ForeignDlcCount`；`PatchedOther` 也算已打补丁；空磁盘回退优先账号表 |
+| `src/PdxLauncher.App/ViewModels/DlcViewModel.cs` | headline 用 `Probe*` 并追加账号句；detail 补丁状态四态（含「其他工具/整合包」「已被 Steam 更新覆盖」）、loader 来源、外区条数、账号探测 DLL；`FillSteamRows` 在 loader 在岗时用账号表；日志分段 |
+| `src/PdxLauncher.App/ViewModels/SettingsViewModel.cs` | `ApplyPatchAsync` / `RemovePatchAsync` 写回报告后 `AppServices.DlcOwnership.Invalidate()` |
+| `tools/i18n/{zh-CN,en-US}/dlc.json` | 4 条主句改写；新增 9 键（账号句 2、错误 2、详情 5） |
+| `src/PdxLauncher.App/Localization/Strings.g.cs` | `python tools/gen-i18n.py` 重新生成（1278 键） |
+| `tests/PdxLauncher.Checks/SteamOwnershipChecks.cs` | `CheckVerdictTable` 加 `PatchedOther`/`SteamOverwrote` 用例；新增 `CheckAccountProbe`（loader 490 / 账号 23 / 磁盘 17、CS2 回退、缓存 2→4、缺备份/同字节/同表/探测失败） |
+| `tests/PdxLauncher.Checks/SteamDlcListChecks.cs` | 字段更名 |
+| `tests/PdxLauncher.Checks/DlcPatchChecks.cs` | 断言 `IsLoaderActive` 三态 |
+| `docs/DATA-FORMATS.md` | §3.1 补「loader 表 ≠ Steam 目录」「账号视图」「降级矩阵」「缓存 key」与 V3 真机数据 |
+
+### 5. 验证
+
+- `dotnet build tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj -c Release -m:1 --nologo -v q`：成功，0 警告 0 错误。
+- `dotnet run --project tests/PdxLauncher.Checks -c Release --no-build`：`检查类: 99，失败: 2`，仅 `WrapPanelChecks` 失败（仓库里未提交的播放集工具条 WIP，与本改动无关）。本任务新增断言全部通过，例如：主探测 490 / 账号 23 / 外区 467、CS2 回退 23、缓存命中 2 次、`Invalidate` 后 4 次、缺备份只探 1 次。
+- `python tools/gen-i18n.py --check`：通过。
+- `dotnet build src/PdxLauncher.App/PdxLauncher.App.csproj -c Release -p:Platform=x64`：**当前工作区被无关 WIP 阻断**（`DiagnosticsRows.cs` / `DiagnosticsViewModel.cs` 找不到 `DiagnosticHintCode` / `MemorySnapshot` + WMC9999），与本改动无关；本改动涉及的 `DlcViewModel` / `SettingsViewModel` 已通过 Checks 工程对 Core 的编译链间接验证。
+
+### 6. 坑
+
+- **`gen-i18n.py` 要求占位符按 `{0}`、`{1}` 顺序出现**：en 里先写 `{1}` 再写 `{0}`（"1 of 3" 语序）会直接报错，只能改写句子。
+- **record 追加可选位置参数是源码兼容的**，但新参数必须排在最后并带默认值；`SteamOwnershipReport` 现有 3 处构造（服务 1 + 测试 2）都不用改。
+- **元组元素声明成 `IReadOnlySet<string>` 却返回 `HashSet`** 会 CS0029；`ApplyTrusted` 返回类型与解构声明要一致。
+- **`cream_api.ini` 的 490 是模板**，不是本游戏条目；Stellaris 打完补丁同样是 490/490，不要拿它当「DLC 总数」。
+- 判「备份也是 loader」不能只看字节：整包替换后备份可能被覆盖成同一份 loader；还要比对两次探测的 id 集合。
+
+### 7. 注意
+
+- 行徽标仍是「游戏实际可用」语义（`OwnedAppIds` + 可信 DisabledDLC），本轮没有给每行加「账号真实拥有」；账号信息只在判定条出现。
+- 若以后 CreamAPI 改成按 appid 过滤，`ForeignDlcCount` 会自然归零，文案不必再改。
+- 自检类数 99（本轮新增 `CheckAccountProbe`，其余是并发会话新增的播放集相关类）。README 的计数若落后于 99，另开一轮统一。
+
+## 0.80 2026-11-04：播放集页工具条自动折行 —— 搜索框不再被挤没、右侧按钮不再被裁掉
+
+> 用户诉求原话（m00003）：「播放集页面把自动换行加上」，附图为 1366×147 的工具条截图：搜索框整条不见、「添加模组」贴边。
+
+### 0.80.1 现象与根因
+
+工具条原本是「Auto / * / Auto」三列的第一列里塞一个水平 `StackPanel`，从不换行；窗口变窄时星号列（搜索框）先被压，
+压到 `MinWidth="96"` 以下就整个消失，同时右侧「添加模组」被裁。§0.14（2026-10-27）只做到「1200 DIP 一行刚好放下」，
+后来又加了「修复 mod 路径」「自动排序」两个按钮（≈110 + ≈78 DIP），按钮簇从 ≈600 涨到 ≈789 DIP，
+而 1200 DIP 窗口的内容宽只有 939 DIP —— 默认尺寸下一行就已经放不下，搜索框只剩零星几十 DIP，正是截图里的样子。
+
+| 元素 | 1200 DIP 实测宽 |
+| --- | --- |
+| 左侧按钮簇（含切换器与分隔线） | ≈789 |
+| 搜索框（`MaxWidth` 320） | 262 |
+| 「添加模组」 | 80 |
+| 列间距 6×2 | 12 |
+| 合计 | ≈1143 > 939 |
+
+### 0.80.2 方案
+
+- 列序换成 `* / Auto / Auto`：搜索框（固定 `Width="200"`）与「添加模组」先按自然宽度占位，剩下的宽度全给按钮簇。
+- 按钮簇由 `StackPanel` 换成上一轮已有的 `controls:PdxWrapPanel Spacing="4"`（`WrapLayout` 纯算法 + 有限宽测量），
+  放不下就整项换行；折叠中的「取消自动排序 / 撤销自动排序」不占位（面板本来就跳过 `Collapsed`）。
+- 搜索框从「星号列 + Min/Max 夹逼」改成固定 200 宽、右对齐：宽度可预期，不再随窗口伸缩去挤按钮，也不再依赖 `MinWidth` 兜底。
+- 分隔线保留在按钮簇里，`Margin` 由 `1,0` 改成 `1,6`（折行面板不做交叉轴居中，靠 margin 在 32 高的行里居中）。
+
+### 0.80.3 验证（真机 UIA，DPA 1.5）
+
+| 窗口宽 | 行数 | 观察 |
+| --- | --- | --- |
+| 1040 DIP（最小宽） | 2 | 第一行：切换器 + 新建/重命名/删除 + 激活播放集；第二行：启用全部/禁用全部/修复 mod 路径/自动排序；搜索框 200 宽在右侧完整可见 |
+| 1200 DIP（默认宽） | 2 | 第一行多出「启用全部」「禁用全部」，第二行剩「修复 mod 路径」「自动排序」 |
+| 1600 DIP | 1 | 全部控件一行排下，不折行 |
+
+每个宽度都断言了：11 个控件都在客户区内、两两不重叠、搜索框宽 = 200 ±1.5、添加模组右边缘 ≤ 内容右边界、行数符合预期。
+截图（gitignored）：`.scratch\playset-wrap-1040.png` / `-1200.png` / `-1600.png`；脚本 `.scratch\verify-playset-toolbar.ps1`。
+
+- `dotnet build "PdxLauncher.sln" -c Release -m:1`：成功，0 警告 0 错误。
+- `dotnet tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll`：`检查类: 101，失败: 0`（`WrapPanelChecks` 新增 8 条播放集工具条断言）。
+- `python tools/gen-i18n.py --check`：通过（1280 条一致），本轮没有新增 / 修改任何 i18n 键。
+
+### 0.80.4 改动的文件
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.App/Views/ModsPage.xaml` | 列序 `*/Auto/Auto`；`StackPanel` → `PdxWrapPanel`；搜索框 `Width=200` 右对齐；分隔线 `Margin="1,6"`；页头与工具条注释重写 |
+| `src/PdxLauncher.App/MainWindow.xaml.cs` | `MinimumWindowWidth` 的注释改写（1040 不再由「工具条一行」倒推，改作通用下限，常量不变） |
+| `tests/PdxLauncher.Checks/WrapPanelChecks.cs` | 新增 `CheckPlaysetToolbarWiring`（折行面板在、10 个按钮、11 个 AutomationId、首列是星号列、搜索框在面板之后且固定 200 宽、添加模组在搜索框之后） |
+
+### 0.80.5 坑
+
+- **单行阈值不是 1200 也不是 1366**：客户区比窗口矩形窄 ≈7 DIP（WinUI 自绘标题栏的不可见边框），再加上内容左缩进 240.7、
+  右 padding 16、搜索框 200 + 添加模组 80 + 间距，1366 DIP 窗口下按钮簇只有 ≈810 DIP，而整簇自然宽 ≈815 DIP —— 差 5 DIP 就折行。
+  想在大屏上保持一行请取 ≥1600 DIP，别再按「窗口宽」估算。
+- **`PdxWrapPanel` 不负责交叉轴对齐**：子元素各自按自然高度排在行首，需要垂直居中的（如 1×20 分隔线）自己给 `VerticalAlignment` + margin。
+- **折成两行后工具条变高**：页面行是 `Auto`，列表自然下移，无需改 `ScrollViewer`。
+- **自检里数按钮不要数 `</Button>`**：工具条按钮全是自闭合 `<Button ... />`，只能数 `"<Button"`。
+
+### 0.80.6 注意
+
+- 搜索框固定 200 宽是有意的：它一旦随窗口伸缩，宽屏下会把按钮簇挤到第二行、窄屏下又回到老问题。
+- 窗口被手动拖到 1040 以下时按钮簇继续折行，但搜索框 + 添加模组所在的自动列不会收缩，极端窄（<≈330 内容宽）仍会被裁；
+  这是既有的「不做自适应折叠」边界，本轮不处理。
+
+## 0.82 2026-11-04：UI 间距全量对齐 WinUI 官方 4px 网格
+
+> 用户诉求（m00365 → m00416）：「找找有没有 winui3 推荐的官方间隔推荐」→「对启动器进行完全的改动方案，按照官方推荐」。
+
+### 0.82.1 依据
+
+WinUI Gallery 的 Spacing 页（`WinUIGallery/Samples/Spacing/SpacingPage.xaml`，旧路径 `ControlPages/DesignGuidance/SpacingPage.xaml` 已不存在）
+原文只有一条硬规则：**any spacing or sizing should be a multiple of 4**（epx = DIP）；常用值 4 / 8 / 12 / 16 / 24 / 36 / 48
+分别对应紧凑、控件之间、控件与标题、列表/卡片、内容分区、页面边距、带标题分区。同页还有一句「这些值对应我们的圆角逻辑」。
+Learn 的同一份表述：<https://learn.microsoft.com/en-us/windows/apps/design/basics/content-basics>。
+
+### 0.82.2 审计（逐条枚举，不是估算）
+
+| 范围 | 非 4 倍数 |
+| --- | --- |
+| XAML（15 个文件，633 处间距属性） | **140 处**（WorkshopDetail 29、ModsPage 24、ModStudio 23、Workshop 14、ModLibrary 13、AddMods 10、Diagnostics 6、Settings 6、Dlc 5、GameLibrary 3、Home 3、MainWindow 1、PdxDropDown 1、SettingsCard 1、Account 1） |
+| C# | **11 处**（MarkdownView 9、UpdateFlow 1、AutoSortPreviewDialog 1） |
+| CornerRadius | **23 处**（`6`×22、`3`×1） |
+
+完整映射表、结构性处理与检查器用法写在 **`docs/UI-SPACING.md`**，这里只记结论：只改非 4 倍数，6/10 向上取整（保住点击区），
+页面根 Padding 16 / 20 / 24 与所有 0/4/8/12/16 原值不动；官方 36 的「页面内边距」不采用（1040 宽下会明显压缩列表与工具条）。
+
+### 0.82.3 三处结构性处理
+
+1. 播放集工具栏分隔线：`PdxWrapPanel` 不做交叉轴居中，原来的 `Height=20 + Margin="1,6"` 是在补偿「20 高竖线在 32 高行里居中」，
+   改为 `Width=1 Height=32 BorderThickness="1,0,0,0"` 的满行高竖线，间距归零。
+2. 主页 1px 装饰下划线 `Margin="2,0,2,1"` → `0`（`1` 是 1px 线的光学补偿）。
+3. 播放集「位置」输入框 `Padding="2,0"` → `"4,0"`（`MaxWidth=40`，4 位数字仍放得下）。
+
+### 0.82.4 自检（新增 `tests/PdxLauncher.Checks/SpacingChecks.cs`）
+
+- 扫 XAML（剥注释、跳过 obj/bin）：`Padding` / `Margin` / `Spacing` / `RowSpacing` / `ColumnSpacing` 与 `Setter Property=...`；
+- 扫 C#：`Spacing = 数字`、全数字字面量的 `new Thickness(...)`、`new CornerRadius(...)`；
+- `CornerRadius` 只允许 0/4/8；`BorderThickness` 明确排除（线宽不是间距）；
+- 同时断言 `docs/UI-SPACING.md` 存在并含 `content-basics` / `4epx` / `36epx`（防文档漂移）；
+- 自带 5 条「检查器自检」（6,1 违规、ThemeResource 跳过、8,4 合法、0 合法、Setter 也查）。
+
+### 0.82.5 验证
+
+- `dotnet build "PdxLauncher.sln" -c Release -m:1`：成功，**0 警告 0 错误**。
+- 自检：`检查类: 103，失败: 0`（新增 `SpacingChecks`，`间距 XAML / C# 非 4 倍数总数 = 0`）。
+- `python tools/gen-i18n.py --check`：通过（1288 条一致，本轮无 i18n 改动）。
+- 播放集工具条 UIA（`.scratch/verify-playset-toolbar.ps1`）：1040 / 1200 DIP 仍 2 行、1600 DIP 仍 1 行，
+  搜索框 200±1.5、「添加模组」完整可见、11 个控件两两不重叠 —— 间距归一化没有改变折行行为。
+- 九页截图（1200 宽请求，实际被 AppWindow 恢复成 1800×1200 DIP）：`.scratch/spacing-after-*.png`；
+  设置页、播放集页、Mod 创建页逐张目检无裁切、无文字截断；Mod 创建那张截图右半被 DWM 未绘制区域盖住（截图伪影，不是界面问题）。
+
+### 0.82.6 坑
+
+- **并发会话会覆盖归一化结果**：本轮的 `ModsPage.xaml` 被另一个会话（双列播放集）整份重写，22 处旧值随之回来；
+  `.scratch/normalize-spacing.py` 是幂等的，等对方写完重跑一次即可（本次重跑 22 处）。
+- **两个会话同时构建会锁文件**：`XamlCompiler` 持有 `intermediatexaml/*.dll`、运行中的 `PdxLauncher.App.exe` 持有 `apphost` 拷贝，
+  表现为 WMC0601 / CS0016 / MSB3027；等对方关窗口或先 `taskkill` 再 `-t:Rebuild`。
+- **`WrapPanelChecks` 曾把 `ColumnSpacing="6"` 写死**，归一化后首列断言直接失败；已改成匹配属性前缀、不依赖具体数值。
+- **`SetWindowPos` 会被 AppWindow 的尺寸恢复覆盖**：想固定宽度截图，要在窗口恢复之后再设一次。
+
+### 0.82.7 注意
+
+- 以后新增 UI，间距只用 4 的倍数（优先 4/8/12/16/24），圆角只用 0/4/8；表达式型 `Thickness` 检查器管不到，要人工确认。
+- 想让页面更宽松，改各页根 `Padding`（官方推荐 36），不是破坏规则；当前保留 16/20/24 三档。
+- 规则已写进项目规范：`docs/DEVELOPMENT.md` §8「界面规范（强制）：4px 间距与圆角」（含官方原文、必须项、自动校验与例外流程），`docs/UI-SPACING.md` 是它的对照表与历史记录。
+
+
+## 0.83 2026-11-04：播放集页第三种显示方式「双列」（左＝可添加、右＝已加入，勾选即加入）
+
+### 0.83.1 需求
+
+用户给了官方 Paradox 启动器「模组合集」编辑器的截图，要求播放集页做成双列：左栏未加入当前播放集的 mod，右栏已加入的 mod。
+中途明确两点（当天原话）：「这个子页面不是给原版启动器页面使用的吗，为什么要删除，我这是要两套播放集页面啊」——
+即**原版启动器布局与 `AddModsPage` 子页必须原样保留**，双列是**新增的第三种显示方式**，由设置页下拉切换；
+左栏交互选的是**勾选即加入**（勾上立刻进右栏、行从左栏消失），不是「勾选 + 添加所选」。
+
+### 0.83.2 改了什么
+
+- `src/PdxLauncher.Core/Configuration/PlaySetPageDisplayModes.cs`：新增 `TwoColumn = "twoColumn"`，`Normalize` 支持三值（未知值仍回 `officialLauncher`），新增 `IsTwoColumn`。
+- `src/PdxLauncher.App/Services/PlaySetPageDisplayModeCatalog.cs`：`All` 变三项，设置页下拉自动出现「双列（原版启动器式）」，无需改设置页 XAML。
+- `src/PdxLauncher.App/ViewModels/AddModRowViewModel.cs`：ctor 增加 `automationPrefix` 参数（默认 `addModCandidate`，产出与原值逐字相同），双列左栏用 `modCandidate`，两处 UI 自动化 id 不再撞车。
+- `src/PdxLauncher.App/ViewModels/ModsViewModel.cs`：
+  `Candidates` 集合 + `CandidateSearchText`；`IsTwoColumnLayout` / `ShowsPlaysetChrome`；`RebuildCandidates()` 从 `_librarySnapshot.Mods` 排除 `_allMods` 现有 ModId 生成左栏行；`ShowCandidate*` / `ShowSelected*` 六个空状态布尔；`RequestAutoSave` 门禁从 `IsOfficialLayout` 放宽到 `ShowsPlaysetChrome`（否则双列里改东西不写盘）。
+- `src/PdxLauncher.App/Views/ModsPage.xaml`：两个行模板下沉到 `Page.Resources`（`PlaysetModRowTemplate` 原样搬入、被原版列表与双列右栏共用；`PlaysetCandidateRowTemplate` 新写）；根 Grid 三行，工具条与状态栏由 `ShowsPlaysetChrome` 控制，原版主体与双列主体并列在 Row 1 各挂自己的 Visibility；双列左栏表头两行（标题+计数、整行搜索框）、右栏同构。
+- `src/PdxLauncher.App/Views/ModsPage.xaml.cs`：`ActiveModList` 按布局选 `ModList` / `ModListTwoColumn`（位次就地编辑、`ScrollIntoView` 都走它）；新增 `OnCandidateChecked`（在 `DispatcherQueue.TryEnqueue` 里 `AddMods`，避免在 CheckBox 绑定回调里清空集合）与 `OnCandidateSearchTextChanged`。
+- i18n：新增 `mods.twoColumn.{available,addToolTip,hint,noPlaySet,selectedEmpty,selectedNoMatch}`、`settings.interface.playset.twoColumn.{title,desc}`（zh-CN 与 en-US 同步，`python tools/gen-i18n.py` 重新生成，1288 键）。
+
+### 0.83.3 两处踩过的视觉坑
+
+- **CheckBox 默认样式带 120 DIP 最小宽度**：左栏候选行里勾选框一个人吃掉 120 DIP，名字被挤成省略号（截图里 39 个候选全是「Auto-Diplomacy And…」）。修法是给勾选框 `MinWidth="0" Padding="0,0,8,0"`，并把名字行从横向 `StackPanel` 换成星号列 `Grid`（横向面板按内容测量，名字过长时既不省略也不让位，会把「订阅 / 本地」徽标顶出可见区）。
+- **左栏 360 DIP 不够**：候选名普遍很长，改为 `Width="400" MinWidth="300"`（Mod 库页仍是 360）。
+
+### 0.83.4 自检与冒烟
+
+- 新增 `tests/PdxLauncher.Checks/ModsPageLayoutChecks.cs`：双列 10 个 AutomationId、原版 16 个 id 仍在、四个布局布尔绑定、两栏搜索框不得写 `Width`、行模板被两处引用 / 候选模板一处、`Click="OnCandidateChecked"` 与 `ActiveModList` 存在、`AddModsPage.xaml` 与 `addmods` 路由仍在、显示方式三值归一化。
+- `tests/PdxLauncher.Checks/InfrastructureChecks.cs` 补 `Normalize(" TWOCOLUMN ")` / `Normalize(TwoColumn)` / `IsTwoColumn` 三条断言。
+- `tests/PdxLauncher.Checks/WrapPanelChecks.cs` 的工具条首列断言改成匹配属性前缀（新增 `Visibility` 后开始标签折行，原来精确匹配 `"<Grid Grid.Row=\"0\" ColumnSpacing=\"6\">"` 会 IndexOf 返回 -1）。
+- 结果：`dotnet build PdxLauncher.sln -c Release -m:1` 0 警告 0 错误；`dotnet run --project tests/PdxLauncher.Checks -c Release` **检查类 103、0 失败**；`python tools/gen-i18n.py --check` 通过。
+- `scripts/verify-playset-twocolumn.ps1`（纯 ASCII，UIA）：设置页切「双列」→ 播放集页断言双列 id 全在、原版 id 全不在 → 截图 → 切回「原版启动器」断言原版 id 回来、双列 id 消失 → 还原用户原来的选项。连跑两轮 `FAILED=0 DONE`。
+
+### 0.83.5 注意
+
+- **UIA 脚本跑的 exe 在 `bin/x64/...`，`dotnet build <csproj>` 只更新 `bin/Release`**：忘了 `dotnet build PdxLauncher.sln` 就会拿旧 exe 跑出「双列页一片空白」，实际是旧 XAML 里没有双列分支。判断方法：`obj/x64/Release/.../Views/ModsPage.g.cs` 里 `grep IsTwoColumnLayout` 是否为 0。
+- 构建被运行中的 exe 锁断后，后续会一直报 `WMC9999 未将对象引用设置到对象的实例` + `CS2012`——那是 `obj` 写坏，`rm -rf src/PdxLauncher.App/obj` 后重编即可，**别删 `bin/x64`**（里面有 `data/`：用户设置与播放集）。
+- 以后想加第四种布局：`PlaySetPageDisplayModes` 加常量与 `Normalize` 分支、Catalog 加一项、`ModsViewModel.RefreshDisplayMode` 补通知，XAML 再并列一个 `Visibility` 分支即可；工具条与状态栏已被 `ShowsPlaysetChrome` 收口。
+
+## 0.84 2026-11-04：日志分区跟着窗口长 + 「自动换行」开关
+
+### 0.84.1 需求
+
+用户对着「性能与日志 → 日志」截图提两点：「1.日志界面不能跟随页面大小变化吗？2.添加自动换行的开关，实现日志的自动换行查看的能力」。
+所以两件事分开做：**高度要能被窗口拉**，**折行要能开关**（不折行时保留横向滚动，长行不被硬切）。
+
+### 0.84.2 根因
+
+- 日志是右栏唯一 `ScrollViewer > StackPanel` 里的一段，`TextBox` 写死 `Height="340"`：窗口变高变矮它都不动，多出来的高度全给了外层滚动条。
+- `TextWrapping="NoWrap"` 写死，没有折行路径。
+
+### 0.84.3 改了什么
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.App/Views/DiagnosticsPage.xaml` | 右栏 Grid 拆成两个互斥子元素：`ScrollViewer x:Name="diagSectionScroller"` 只装概览 / 缓存 / 网络 / 启动耗时；`Grid x:Name="secLog"`（`Auto/*` 两行）装日志头部 + `TextBox Grid.Row="1"`，去掉 `Height="340"`、加 `MinHeight="160"`，高度随窗口走 `*` 行 |
+| 同上（过滤行） | 右侧两个开关加常显标签（`TextBlock` + `OffContent="" OnContent=""`）：`tglDiagLogWrap`（自动换行）与 `tglDiagAutoRefresh`（每 5 秒自动刷新）。以前关闭态是无字开关，两个并排分不清谁是谁 |
+| `src/PdxLauncher.App/Views/DiagnosticsPage.xaml.cs` | `ShowSection` 改成 `(int Index, FrameworkElement? Element)[]` 映射：选「日志」时切 `secLog`、其余四个切 `diagSectionScroller`（`secNetwork`=3 / `secStartup`=4，不能再用数组下标） |
+| `src/PdxLauncher.App/Services/XamlTextWrapping.cs` | 新增纯函数 `static TextWrapping FromBool(bool wrap) => wrap ? TextWrapping.Wrap : TextWrapping.NoWrap`；`TextBox.TextWrapping="{x:Bind svc:XamlTextWrapping.FromBool(ViewModel.LogWrap), Mode=OneWay}"` |
+| `src/PdxLauncher.App/ViewModels/DiagnosticsViewModel.cs` | `public bool LogWrap`（默认关）：setter 发通知、写 `AppServices.Settings.DiagnosticsLogWrap` 并 `SaveSettings()`，失败只 `Logger.Warn`；构造时从设置读回 |
+| `src/PdxLauncher.Core/Configuration/AppSettings.cs` | 新增 `public bool DiagnosticsLogWrap` |
+| `tools/i18n/{zh-CN,en-US}/diagnostics.json` | 新增 `diagnostics.log.wrap`（自动换行 / Wrap lines）与 `diagnostics.log.wrapName`（日志自动换行 / Wrap log lines） |
+| `tests/PdxLauncher.Checks/DiagnosticsPageChecks.cs` | 新增断言：折行绑定字符串、日志尾部不再有 `Height="340"` 且有 `MinHeight="160"`、`secLog` 不在 `diagSectionScroller` 里、`AppSettings` 有 `DiagnosticsLogWrap`、`XamlTextWrapping` 两分支、视图模型有 `LogWrap` 且写回设置、两侧 JSON 有 `diagnostics.log.wrap`、生成表含 `DiagnosticsLogWrap`、两个开关标签常显 |
+
+### 0.84.4 不要用 SizeChanged 硬算
+
+第一种思路是监听窗口 `SizeChanged` 再把 `Height` 设成「窗口高 − 头部高」，窗口每拖动一像素就写一次布局属性。改成「日志自己在一个 `Grid` 的 `*` 行里」之后，布局系统负责这件事：不用魔法数字、不用监听、摘要卡或过滤行变高也不会错位。
+
+### 0.84.5 验证
+
+- `bash tools/build-app.sh -v q`：0 警告 0 错误；`python tools/gen-i18n.py` 生成 1290 键（含其他会话未提交的文案）。
+- 自检：`dotnet run --project tests/PdxLauncher.Checks -c Release` 跑 **103 类**；本次新增断言全过（`PlaysetChecks` 另有 1 条其他会话未完成的断言 `V3 激活播放集 mod 行数 >= 22` 失败，与本次无关；该行数下限断言已于 2026-11-04 删除，见 §0.85.5）。
+- 真机（`winapp ui` + UIA，自建实例）：`winapp ui invoke navDiagnostics` → `navDiagLog` 进日志分区；`SetWindowPos` 拉到 2300×1500 与缩到 1560×980 各截一张 —— 日志框高度跟着窗口一起伸/缩；`winapp ui invoke tglDiagLogWrap --action toggle-on` 后长路径行折行、标签「自动换行」出现。
+- 持久化：开关写进自有库 `data/pdxnext.sqlite` 的 `settings` 表（`json` 列里能看到 `"diagnosticsLogWrap": true` 与 `"lastDiagnosticsSection": 2`）。
+
+### 0.84.6 注意
+
+- **设置现在存在 sqlite，不是 `data/settings.json`**：后者只剩导入 / 自检路径在用（见 `AppSettingsStore` 顶部注释）。验证开关有没有落盘要去查 `data/pdxnext.sqlite` 的 `settings` 表。
+- 自建的实例会锁住 `bin/Release/.../PdxLauncher.App.exe`，`build-app.sh` 会以 `MSB3027` 失败：先 `Stop-Process -Id <pid>` 再构建。`build-app.sh` 只编 App 工程，**自检工程要另外 `dotnet build tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj`**，否则 `--no-build` 跑的是旧断言。
+
+## 0.85 2026-11-04：7 处搜索框全部换成 `AutoSuggestBox`（本地名字联想 + 工坊最近搜索）
+
+### 0.85.1 需求
+
+用户原话：「软件的搜索框能不能更改为AutoSuggestBox」。在方案阶段问过建议来源，用户选 **A：本地名字联想 + 工坊最近搜索**，范围是**全部 7 处**搜索框；
+硬约束是「行为语义不变」——每个框原来的提交时机（工坊＝回车 / 放大镜 / 刷新按钮，其余＝打字即过滤）与 `AutomationId` 都保留，UIA 脚本继续按 id 找得到。
+
+### 0.85.2 改了哪 7 处
+
+| 文件:行 | `AutomationId` | 建议来源 | 提交语义 |
+| --- | --- | --- | --- |
+| `src/PdxLauncher.App/Views/WorkshopPage.xaml:41` | `txtWorkshopSearch` | `AppServices.Settings.WorkshopSearchHistory`（持久化，最新在前，≤8） | 回车 / 点放大镜 / 刷新按钮才发请求 |
+| `src/PdxLauncher.App/Views/ModLibraryPage.xaml:51` | `txtModLibrarySearch` | `ModLibraryViewModel.Mods` 的 `Name` | 打字即过滤 |
+| `src/PdxLauncher.App/Views/ModsPage.xaml:397` | `txtModSearch`（原版布局工具条） | `ModsViewModel.Mods` 的 `Name` | 打字即过滤 |
+| `src/PdxLauncher.App/Views/ModsPage.xaml:496` | `txtCandidateSearch`（双列左栏候选） | `ModsViewModel.Candidates` 的 `Name` | 打字即过滤 |
+| `src/PdxLauncher.App/Views/ModsPage.xaml:611` | `txtModSearchTwoCol`（双列右栏已加入） | `ModsViewModel.Mods` 的 `Name` | 打字即过滤 |
+| `src/PdxLauncher.App/Views/AddModsPage.xaml:74` | `txtAddModsSearch` | `AddModsViewModel.Rows` 的 `Name` | 打字即过滤 |
+| `src/PdxLauncher.App/Views/ModStudioPage.xaml:47` | `modStudioSearch` | `ModStudioViewModel.Mods` 的 `Name` | 打字即过滤 |
+
+`ModStudioPage.xaml` 的 `Text` 从 `Mode=TwoWay, UpdateSourceTrigger=PropertyChanged` 改回 `Mode=OneWay`，与其余六处统一走 code-behind 写回。
+
+### 0.85.3 实现
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.App/Services/SearchSuggestions.cs`（新） | 纯逻辑：`Build(names, query, max = 8)`——空白查询返回空、名字按 `OrdinalIgnoreCase` 去重、跳过与查询完全相同的项、**前缀匹配排前、包含匹配排后**、组内保原序、截断 8 条；`Push(history, query, max = 8)`——新词置首、忽略大小写去重、去空白、截断、返回新 `List` 不改入参 |
+| `src/PdxLauncher.App/Services/SearchSuggestBox.cs`（新） | UI 粘合 `Update(AutoSuggestBox box, IEnumerable<string?>? names, query)`：算建议，**空建议显式 `IsSuggestionListOpen = false`**（否则留一个空白弹层），非空才赋 `ItemsSource` 并展开 |
+| 7 份 XAML | `TextBox` → `AutoSuggestBox` + `QueryIcon="Find"`（放大镜要显式给，默认没有）+ `QuerySubmitted`；`MinWidth` / `MaxWidth` / `Width="200"` / 对齐 / `Visibility` / 占位符 / `AutomationId` / `AutomationProperties.Name` 原样保留；工坊页删掉 `KeyDown="OnSearchKeyDown"` |
+| `WorkshopPage.xaml.cs` | 删 `using Microsoft.UI.Xaml.Input;` / `using Windows.System;` 与整个 `OnSearchKeyDown`；`OnSearchTextChanged` 只在 `args.Reason == UserInput` 时更新 `SearchText` 并给历史建议；新增 `OnSearchQuerySubmitted` → `CommitSearchWithHistoryAsync(text)`（先 `CommitSearchAsync()`，成功后 `SearchSuggestions.Push` + `AppServices.SaveSettingsDeferred()`；空白词不写历史；取消 / 异常只记日志不抛） |
+| `ModLibraryPage/AddModsPage/ModsPage/ModStudioPage.xaml.cs` | 每个框两个处理器：`OnSearchTextChanged(AutoSuggestBox, AutoSuggestBoxTextChangedEventArgs)` 先按 `ProgrammaticChange` 早退、再写回 VM、再给名字建议；`OnSearchQuerySubmitted` 把 `args.QueryText` 写回并只负责收起下拉（**不重算**，否则刚收起又被弹开） |
+| `src/PdxLauncher.Core/Configuration/AppSettings.cs` | 新增 `public List<string> WorkshopSearchHistory { get; set; } = [];`（JSON 键 `workshopSearchHistory`，旧设置文件缺这个键读到空列表） |
+| `ModLibraryPage.xaml.cs` 的 `RestoreState` | 从 `SearchBox.Text = state.SearchText` 改成 `_viewModel.SearchText = state.SearchText`——`Text` 是 OneWay 绑定，写控件会被绑定刷掉、且程序化改文本不再触发过滤 |
+
+### 0.85.4 三个坑
+
+- **程序化改文本也会触发 `TextChanged`**：双列布局的 `txtModSearchTwoCol` 与原版布局的 `txtModSearch` 共用同一个 `SearchText`，一个框写回 VM、另一个框的 `Text` 被绑定改写，就会来回弹下拉。统一守卫：`args.Reason == ProgrammaticChange` 直接 return，只有 `UserInput` 才更新建议。
+- **空建议必须显式收起**：`AutoSuggestBox` 赋空集合后弹层会留在屏幕上变成一个空框。
+- **`QuerySubmitted` 与 `SuggestionChosen` 的时机**：点建议时文本已由控件填好，`QuerySubmitted` 的 `QueryText` 总是当前文本，所以处理器里统一 trim 后再写 VM，不依赖 `ChosenSuggestion`。
+
+### 0.85.5 验证
+
+- `./build.cmd`：**0 警告 0 错误**；自检 **108 个检查类**，新增的两类全过——`SearchSuggestionsChecks`（40 条：去重 / 前缀优先 / 上限 / 空查询 / 入参不变）与 `SearchBoxChecks`（102 条：7 个框都是 `AutoSuggestBox` + `QueryIcon="Find"` + `TextChanged` + `QuerySubmitted`，10 个处理器都有 `Reason` 守卫与 `SearchSuggestBox.Update`，且不再出现 `sender is TextBox`）。
+- 唯一失败是既有的 `PlaysetChecks` 数据断言 `V3 激活播放集 mod 行数 >= 22 [7]`（本机 Victoria 3 激活播放集只有 7 行 mod；同文件 :1045-1047 的注释本来就写「真机断言只锁结构，不锁本机数据」）。**已顺手删掉这条行数下限断言**（`tests/PdxLauncher.Checks/PlaysetChecks.cs` 里改成只打印 `info V3 激活播放集 mod 行数 …`，结构由 Position 连续 / 名称非空 / Status 合法 / 至少 1 行启用 / 与 Mod 库归属行数一致来锁），复跑 `./build.cmd` → **0 警告 0 错误，108 类，失败 0**。
+- `WorkshopPageChecks` 已跟着改：工具栏断言从 `TextBox + KeyDown` 换成 `AutoSuggestBox + QueryIcon + QuerySubmitted`，并明确断言 `KeyDown=` 不再出现、code-behind 里没有 `VirtualKey.Enter`。
+
+### 0.85.6 后续
+
+- 建议目前只按「名字包含」匹配，且用页面已加载的集合（筛选后的那批）；工坊页当前没有本地数据，所以它只有最近搜索，没有联想。
+- 清除按钮（`AutoSuggestBox` 自带）只清文本、不自动重新查询，与换控件前的行为一致。
+- 待真机确认：Light / HighContrast 主题下建议弹层的配色。
+
+### 0.85.7 UIA 与弹层的观测结论（2026-11-04 真机复核）
+
+- `AutoSuggestBox` 在 UIA 树里是 **`ControlType=Group`、`ClassName=AutoSuggestBox`**，`AutomationProperties.AutomationId` 落在 Group 上；它内部是真的 `TextBox Edit`（没有 id，`Name` 等于占位符）。所以 `scripts/verify-playset-twocolumn.ps1` 这类「按 id 找元素、断言存在」的脚本不受影响；要对它输入/取值，先用 id 定位 Group，再用 `winapp ui send-keys --via send-input --target <id>` 或取内层 Edit。
+- 建议弹层是同一个 HWND 里的 XAML `Popup`：`Window "弹出窗口"` → `List "SuggestionsList"` → `ListItem`。实测几何（Mod 库页，屏幕坐标）：搜索框 `(1862,113 240x49)`、弹层 `(1862,161 240x490)`、列表 `(1862,166 239x480)` —— **与框左对齐、同宽、紧贴下沿**，没有偏移。
+- **`winapp ui screenshot`（不带 `--capture-screen`）会把主窗口和弹出窗口拼成一张带 HWND 标签的合成图**，弹层在合成图里像被挪到窗口右侧、还变窄；这是合成图的表现，不是布局 bug。要看真实位置用 `winapp ui screenshot --capture-screen --window <hwnd>` 或直接读 `ui inspect` 的 bounds。
+
+
+## 0.86 2026-11-04：双列页分隔条拖动改宽度 + 窗口变窄时左栏让位（修右栏被裁）
+
+### 0.86.1 现象
+
+用户把左栏拖到接近上限、或把窗口缩小之后，右栏被窗口右边缘切掉：只剩序号、缩略图、开关的一截，
+mod 名和行尾三个按钮完全看不见，右栏也不能滚动到这些内容。截图里窗口 1735 px（150% 缩放 ≈ 1157 DIP）、
+左栏却仍有约 927 DIP —— 左栏 + 12 DIP 分隔条已经吃掉整行宽度，右栏只剩 123 DIP。
+
+### 0.86.2 根因
+
+两处叠加，都不是「联动算错」那么简单：
+
+1. XAML 里两个列定义都写了 `MinWidth`（左 280 / 右 320）。Grid 在「可用宽度 < 各列下限之和」时会把
+   整张 Grid 撑得比父容器更宽，而不是把内容压小 —— 于是右栏被推到窗口外，被父级裁掉。
+   这一点还掩盖了钳制逻辑：即使代码算出「左栏该让到 280」，列上的 `MinWidth` 也会把宽度顶回去。
+2. `OnTwoColumnGridSizeChanged` 里读 `TwoColumnGrid.ActualWidth`：在 `SizeChanged` 回调里这个值还是**旧尺寸**，
+   于是 `Clamp(400, 旧总宽)` 得回 400，又命中「宽度没变」的早退分支，窗口缩小完全不触发让位。
+
+### 0.86.3 修法
+
+- `src/PdxLauncher.App/Services/ColumnResize.cs`：`MinimumRightWidth` 320 → **400**（一行固定占位
+  ≈ 序号 40 + 缩略图 44 + 开关与「启用」70 + 行尾三按钮 130 + 间距 ≈ 320，再给名字留 80）。
+  `Clamp` 改成「空间不足时左栏让位、绝不溢出」：`upper = min(900, available - 12 - 400)`；`upper <= 0` 时返回 0；
+  下限取 `min(280, upper)`，保证下限不会把上限顶穿。
+- `src/PdxLauncher.App/Views/ModsPage.xaml`：两个列定义删掉 `MinWidth`（左列保留 `MaxWidth="900"`），
+  只留 `Width="*"` 给它自己按剩余空间分。
+- `src/PdxLauncher.App/Views/ModsPage.xaml.cs`：把「用户意图宽度 `_preferredLeftColumnWidth`」与「当前渲染宽度」拆开；
+  `OnTwoColumnGridSizeChanged` 改用 `e.NewSize.Width`；新增 `ApplyLeftColumnWidth(available)` 统一钳制 + 写
+  `TwoColumnLeftColumn.Width`，窗口变窄只让位、不改意图宽度（窗口再拉宽会自动还原）。
+- `src/PdxLauncher.App/Controls/PdxColumnSplitter.cs`：拖动的位移语义从「相对上一次的增量」改成
+  **「相对按下点的总位移」**（新增 `DragStarted`，页面按下时记住起点宽度）。合成鼠标时曾出现
+  「指针走 96 DIP、宽度却涨了 320 DIP」的现象，逐次累加对重复 / 乱序投递的移动事件不设防，改成绝对位移后
+  同一位置重复投递不再叠加，最坏等于指针真实位移。
+
+### 0.86.4 验证
+
+- `dotnet build src/PdxLauncher.App/PdxLauncher.App.csproj -c Release -v m` → 0 警告 0 错误。
+- `dotnet run --project tests/PdxLauncher.Checks -c Release` → 检查类 108，失败 0
+  （`PlaysetChecks` 那条按本机 Victoria 3 播放集写死的 `mod 行数 >= 22` 已删，见 §0.85.5）。
+  新增 `ColumnResizeChecks` 的 `CheckYieldsWhenSpaceIsTight` / `CheckRightColumnInvariant`（右栏 ≥ min(400, 可用-12)、
+  左+12+右 ≤ 可用）与 `ModsPageLayoutChecks` 的 `CheckColumnsNotOverConstrained` / `CheckSplitterUsesEventSize`。
+- UIA 实测（`.scratch/run` 独立构建，窗口 2700 px、缩放 150%）：默认左栏 400 DIP、右栏 1686 px；
+  窗口缩到 1500 px → 左栏 324 DIP、右栏 400 DIP；缩到 1200 px → 左栏 124 DIP、右栏 400 DIP；
+  日志 `双列分栏：总宽 736，左栏让位到 324（期望 400）`、`总宽 536，左栏让位到 124（期望 400）`。右栏不再被裁。
+- 拖动本身的 1:1 手感需真机确认：我的自动化环境里 DSH 窗口始终占着前台，`SetForegroundWindow` 被系统拒绝，
+  合成的鼠标按下落不到启动器窗口（`WindowFromPoint` 指向前台窗口），所以只验证了「拖动会改写宽度、窗口缩放会让位」，
+  没能在自动化里验证「拖 100 px 宽度就涨 100 px」。
+
+### 0.86.5 注意
+
+- 分栏宽度只存在页面字段里，没写进设置，也没有新增 i18n 键（只有 `mods.twoColumn.splitterName` 的读屏名）。
+- 页面 `NavigationCacheMode="Required"`，所以同一次会话内切走再切回宽度会保留，重启回到 400 DIP。
+- 构建 `bin/x64` 时如果用户正开着启动器会锁 `PdxLauncher.Core.dll`（`MSB3026`），
+  本次改用 `-p:OutputPath=.scratch\run\` 单独产出、再把 `data/` 复制过去复现，避免影响用户数据。

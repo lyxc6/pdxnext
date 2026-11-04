@@ -60,7 +60,7 @@ internal static class AutoSortPreviewDialog
                 continue;
             }
 
-            var block = new StackPanel { Spacing = 2 };
+            var block = new StackPanel { Spacing = 4 };
             block.Children.Add(new TextBlock
             {
                 Text = row.Name + "：" + localizer.T(Keys.ModsAutoSortRowMove, row.OldIndex + 1, row.NewIndex + 1),

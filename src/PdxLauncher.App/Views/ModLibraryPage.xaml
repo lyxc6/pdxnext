@@ -35,9 +35,9 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+            <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="4">
                 <TextBlock Text="{x:Bind L.ModlibTitle, Mode=OneWay}" Style="{StaticResource TitleTextBlockStyle}" />
-                <StackPanel Orientation="Horizontal" Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="12">
                     <TextBlock Text="{x:Bind ViewModel.GameTitle, Mode=OneWay}"
                                Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -48,17 +48,19 @@
                 </StackPanel>
             </StackPanel>
 
-            <TextBox Grid.Column="1"
-                     x:Name="SearchBox"
-                     MinWidth="160"
-                     MaxWidth="320"
-                     HorizontalAlignment="Right"
-                     VerticalAlignment="Center"
-                     PlaceholderText="{x:Bind L.ModlibSearchPlaceholder, Mode=OneWay}"
-                     Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
-                     TextChanged="OnSearchTextChanged"
-                     AutomationProperties.AutomationId="txtModLibrarySearch"
-                     AutomationProperties.Name="{x:Bind L.ModlibSearchName, Mode=OneWay}" />
+            <AutoSuggestBox Grid.Column="1"
+                            x:Name="SearchBox"
+                            MinWidth="160"
+                            MaxWidth="320"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            QueryIcon="Find"
+                            PlaceholderText="{x:Bind L.ModlibSearchPlaceholder, Mode=OneWay}"
+                            Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
+                            TextChanged="OnSearchTextChanged"
+                            QuerySubmitted="OnSearchQuerySubmitted"
+                            AutomationProperties.AutomationId="txtModLibrarySearch"
+                            AutomationProperties.Name="{x:Bind L.ModlibSearchName, Mode=OneWay}" />
 
             <controls:PdxDropDown Grid.Column="2"
                                  x:Name="SortBox"
@@ -109,8 +111,8 @@
                       AutomationProperties.Name="{x:Bind L.ModlibListName, Mode=OneWay}">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="vm:ModLibraryRowViewModel">
-                        <Grid ColumnSpacing="10"
-                              Padding="4,6"
+                        <Grid ColumnSpacing="8"
+                              Padding="4,8"
                               AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
                               AutomationProperties.Name="{x:Bind Name, Mode=OneTime}"
                               AutomationProperties.HelpText="{x:Bind WarningText, Mode=OneWay}">
@@ -124,7 +126,7 @@
                             <Border Grid.Column="0"
                                     Width="{x:Bind ThumbnailSize, Mode=OneTime}"
                                     Height="{x:Bind ThumbnailSize, Mode=OneTime}"
-                                    CornerRadius="6"
+                                    CornerRadius="8"
                                     Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1">
@@ -139,7 +141,7 @@
                                 </Grid>
                             </Border>
 
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock Text="{x:Bind Name, Mode=OneTime}"
                                                Style="{StaticResource BodyStrongTextBlockStyle}"
@@ -147,7 +149,7 @@
                                     <!-- 来源徽标：本地 / 订阅。两个 Border 各自绑一种来源，靠可见性切换，
                                          比在代码里拼画刷更省事，也天然跟着主题字典走。 -->
                                     <Border VerticalAlignment="Center"
-                                            Padding="6,1"
+                                            Padding="8,4"
                                             CornerRadius="4"
                                             Background="{ThemeResource PdxOriginLocalBackgroundBrush}"
                                             Visibility="{x:Bind svc:XamlVisibility.FromBool(IsLocalOrigin), Mode=OneWay}">
@@ -156,7 +158,7 @@
                                                    Foreground="{ThemeResource PdxOriginLocalForegroundBrush}" />
                                     </Border>
                                     <Border VerticalAlignment="Center"
-                                            Padding="6,1"
+                                            Padding="8,4"
                                             CornerRadius="4"
                                             Background="{ThemeResource PdxOriginSubscribedBackgroundBrush}"
                                             Visibility="{x:Bind svc:XamlVisibility.FromBool(IsSubscribedOrigin), Mode=OneWay}">
@@ -166,9 +168,9 @@
                                     </Border>
                                 </StackPanel>
                                 <!-- 译名：原文与译文同显，译文在标题下方的描边框里（决策：不做二选一切换；不加「译文」标题）。 -->
-                                <Border Margin="0,6,0,0"
-                                        Padding="6,4"
-                                        CornerRadius="6"
+                                <Border Margin="0,8,0,0"
+                                        Padding="8,4"
+                                        CornerRadius="8"
                                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                         BorderThickness="1"
@@ -187,7 +189,7 @@
 
                             <StackPanel Grid.Column="2"
                                         Orientation="Horizontal"
-                                        Spacing="6"
+                                        Spacing="8"
                                         HorizontalAlignment="Right"
                                         VerticalAlignment="Center">
                                 <FontIcon Glyph="&#xE7BA;"
@@ -216,8 +218,8 @@
 
                                 <!-- Steam 侧真实状态：下载中 / 需要更新 / 已安装 / 本地禁用。
                                      数据来自 steam-host 子进程的一次整库查询，拿不到就整块不显示。 -->
-                                <Border Padding="6,1"
-                                        CornerRadius="3"
+                                <Border Padding="8,4"
+                                        CornerRadius="4"
                                         VerticalAlignment="Center"
                                         Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
                                         AutomationProperties.AutomationId="{x:Bind SteamStateAutomationId, Mode=OneTime}"
@@ -319,7 +321,7 @@
             <!-- 空状态：未选游戏 / 该游戏没有 mod -->
             <StackPanel HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Spacing="10"
+                        Spacing="12"
                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowEmptyState), Mode=OneWay}">
                 <TextBlock Text="{x:Bind L.ModlibNoGameHint, Mode=OneWay}"
                            HorizontalAlignment="Center"
@@ -340,8 +342,8 @@
 
         <!-- 状态栏 -->
         <Border Grid.Row="2"
-                Padding="10,6"
-                CornerRadius="6"
+                Padding="12,8"
+                CornerRadius="8"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1">

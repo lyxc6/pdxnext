@@ -39,6 +39,14 @@ public static class MemoryDiagnosticsChecks
             text.Contains("工坊条目 542 / 分页 11 / mod 缩略图 37", StringComparison.Ordinal));
         ChecksContext.Check("内存诊断：GC 次数拼法", text.Contains("GC 0/1/2=1/2/3", StringComparison.Ordinal));
         ChecksContext.Check("内存诊断：描述是单行", !text.Contains('\n'));
+        ChecksContext.Equal(
+            "内存诊断：完整描述格式逐字不变",
+            "内存：托管 42.0 MB / 工作集 267.0 MB / 私有 200.3 MB；GC 0/1/2=1/2/3；工坊条目 542 / 分页 11 / mod 缩略图 37",
+            text);
+        ChecksContext.Equal("内存诊断：峰值默认 0", 0L, snapshot.PeakWorkingSetBytes);
+        ChecksContext.Check(
+            "内存诊断：线程/句柄/运行时长默认 0",
+            snapshot.ThreadCount == 0 && snapshot.HandleCount == 0 && snapshot.Uptime == TimeSpan.Zero);
 
         var logger = new RecordingLogger();
         MemoryDiagnostics.Log(logger, "启动完成", () => (7, 3, 5));
@@ -63,6 +71,10 @@ public static class MemoryDiagnosticsChecks
             ChecksContext.Check(
                 "内存诊断：真实快照可描述",
                 MemoryDiagnostics.Describe(live).StartsWith("内存：托管 ", StringComparison.Ordinal));
+            ChecksContext.Check("内存诊断：真实峰值非负", live.PeakWorkingSetBytes > 0);
+            ChecksContext.Check("内存诊断：真实线程数非负", live.ThreadCount > 0);
+            ChecksContext.Check("内存诊断：真实句柄数非负", live.HandleCount > 0);
+            ChecksContext.Check("内存诊断：真实运行时长非负", live.Uptime > TimeSpan.Zero);
         }
         catch (Exception ex)
         {

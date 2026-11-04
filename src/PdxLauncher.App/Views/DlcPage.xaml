@@ -31,9 +31,9 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+            <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="4">
                 <TextBlock Text="DLC" Style="{StaticResource TitleTextBlockStyle}" />
-                <StackPanel Orientation="Horizontal" Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="12">
                     <TextBlock Text="{x:Bind ViewModel.GameTitle, Mode=OneWay}"
                                Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
@@ -76,7 +76,7 @@
         -->
         <Border
             Grid.Row="1"
-            Padding="12,10"
+            Padding="12,12"
             CornerRadius="8"
             Background="{ThemeResource PdxCardGlassBrush}"
             BorderBrush="{ThemeResource PdxCardStrokeBrush}"
@@ -88,7 +88,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="2">
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="4">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE8FB;"
                                   FontSize="14"
@@ -167,7 +167,7 @@
                                 Background="{ThemeResource PdxPlaceholderBackgroundBrush}"
                                 BorderBrush="{ThemeResource PdxCardStrokeBrush}"
                                 BorderThickness="1"
-                                CornerRadius="6">
+                                CornerRadius="8">
                             <Grid>
                                 <FontIcon Glyph="&#xE8B9;"
                                           FontSize="28"
@@ -240,8 +240,8 @@
 
         <!-- 状态栏 -->
         <Border Grid.Row="3"
-                Padding="10,6"
-                CornerRadius="6"
+                Padding="12,8"
+                CornerRadius="8"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1">

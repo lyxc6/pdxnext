@@ -36,6 +36,30 @@ public sealed partial class WorkshopScreenshotViewModel : LocalizedObservableObj
     /// <summary>本地图是否就绪。</summary>
     public bool HasPath => !string.IsNullOrWhiteSpace(Path);
 
+    /// <summary>
+    /// 这一张还在下载（创建即为 true，下载结束由 <see cref="MarkSettled"/> 置 false）。
+    /// <para>
+    /// 它只影响「这张图自己的叠层」，不再由页面级批次标志推断 ——
+    /// 这样后面的截图先下完时，选中却还没下完的那张会显示「正在下载这张截图…」，
+    /// 而不是一块什么都不说的黑。
+    /// </para>
+    /// </summary>
+    [ObservableProperty]
+    private bool _isPending = true;
+
+    /// <summary>这一张下载失败（异常路径置 true；有本地路径时永远为 false）。</summary>
+    [ObservableProperty]
+    private bool _isFailed;
+
+    /// <summary>大图区域显示「正在下载这张截图…」叠层。</summary>
+    public bool ShowPending => IsPending && !HasPath;
+
+    /// <summary>大图区域显示「截图下载失败」叠层。</summary>
+    public bool ShowFailed => IsFailed && !HasPath;
+
+    /// <summary>既没在下载、也没失败、又没本地图时显示中性占位图案。</summary>
+    public bool ShowPlaceholder => !HasPath && !IsPending && !IsFailed;
+
     /// <summary>是否是内联大图当前显示的那一张（缩略图条据此加描边）。</summary>
     [ObservableProperty]
     private bool _isCurrent;
@@ -63,5 +87,31 @@ public sealed partial class WorkshopScreenshotViewModel : LocalizedObservableObj
         ViewerMaxHeight = height;
     }
 
-    partial void OnPathChanged(string? value) => OnPropertyChanged(nameof(HasPath));
+    /// <summary>这一张的下载尝试结束（成功、失败或取消都算）。</summary>
+    /// <param name="failed">本次是否因异常失败；已有本地路径时按成功处理。</param>
+    public void MarkSettled(bool failed)
+    {
+        IsFailed = failed && !HasPath;
+        IsPending = false;
+    }
+
+    partial void OnPathChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasPath));
+        OnPropertyChanged(nameof(ShowPending));
+        OnPropertyChanged(nameof(ShowFailed));
+        OnPropertyChanged(nameof(ShowPlaceholder));
+    }
+
+    partial void OnIsPendingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowPending));
+        OnPropertyChanged(nameof(ShowPlaceholder));
+    }
+
+    partial void OnIsFailedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowFailed));
+        OnPropertyChanged(nameof(ShowPlaceholder));
+    }
 }

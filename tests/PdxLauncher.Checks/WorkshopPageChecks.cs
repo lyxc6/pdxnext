@@ -63,6 +63,7 @@ public static class WorkshopPageChecks
         CheckCacheKeyUsesAppliedSearch(viewModel);
         CheckFlushIsOffUiThread(viewModel);
         CheckNetworkFailureIsVisible(viewModel);
+        CheckSteamSortsIncludeRelevance(viewModel);
         CheckCodeBehindHooks(codeBehind);
 
         return ChecksContext.Failures - before;
@@ -108,7 +109,7 @@ public static class WorkshopPageChecks
             xaml.Contains("AutomationProperties.Name=\"{x:Bind L.WorkshopTitle", StringComparison.Ordinal));
     }
 
-    /// <summary>搜索框回车提交；TextChanged 只回写文本，不触发查询。</summary>
+    /// <summary>搜索框是带放大镜的 AutoSuggestBox：QuerySubmitted 才提交；TextChanged 只回写文本，不触发查询。</summary>
     private static void CheckToolbarSubmitsOnEnter(string xaml)
     {
         if (!TryGetBlock(
@@ -122,11 +123,20 @@ public static class WorkshopPageChecks
         }
 
         ChecksContext.Check(
-            "创意工坊页: 搜索框挂 KeyDown",
-            toolbar.Contains("KeyDown=\"OnSearchKeyDown\"", StringComparison.Ordinal));
+            "创意工坊页: 搜索框是 AutoSuggestBox",
+            toolbar.Contains("<AutoSuggestBox", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 搜索框带放大镜",
+            toolbar.Contains("QueryIcon=\"Find\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 提交走 QuerySubmitted",
+            toolbar.Contains("QuerySubmitted=\"OnSearchQuerySubmitted\"", StringComparison.Ordinal));
         ChecksContext.Check(
             "创意工坊页: 搜索框仍靠 TextChanged 回写文本",
             toolbar.Contains("TextChanged=\"OnSearchTextChanged\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 不再自己接 KeyDown 判回车",
+            !toolbar.Contains("KeyDown=", StringComparison.Ordinal));
     }
 
     /// <summary>顶层 Grid 四行：工具条 / 未登录提示 / 列表 / 分页状态栏。</summary>
@@ -328,19 +338,81 @@ public static class WorkshopPageChecks
         }
     }
 
+    /// <summary>
+    /// 排序下拉必须和 Steam 网页一样含「搜索相关度」（browsesort=textsearch）。
+    /// <para>
+    /// 出过的事：<c>SteamWorkshopSort.TextSearch</c> 与 <c>BuildBrowseUri</c> 一直都支持，
+    /// 但排序目录漏了这一项、<c>ResolveSteamSort</c> 也永远返回不到它，用户在界面上只看得到 5 档。
+    /// 这里把「菜单里有、能映射到 TextSearch、无关键词时给提示」钉成源码断言。
+    /// </para>
+    /// </summary>
+    private static void CheckSteamSortsIncludeRelevance(string viewModel)
+    {
+        if (TryGetBlock(
+                viewModel,
+                "private static readonly string[] SteamSortKeys",
+                "private static readonly string[] PdxSortKeys",
+                "创意工坊页: 找到 SteamSortKeys",
+                out var sortKeys))
+        {
+            var updatedAt = sortKeys.IndexOf("Keys.WorkshopSortMostUpdated", StringComparison.Ordinal);
+            var relevanceAt = sortKeys.IndexOf("Keys.WorkshopSortRelevance", StringComparison.Ordinal);
+            var subscribedAt = sortKeys.IndexOf("Keys.WorkshopSortMostSubscribed", StringComparison.Ordinal);
+
+            ChecksContext.Check(
+                "创意工坊页: 排序含「搜索相关度」",
+                relevanceAt >= 0);
+            ChecksContext.Check(
+                "创意工坊页: 「搜索相关度」排在网页同款位置",
+                updatedAt >= 0 && relevanceAt > updatedAt && subscribedAt > relevanceAt);
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "private SteamWorkshopSort ResolveSteamSort()",
+                "private bool IsRelevanceWithoutKeyword()",
+                "创意工坊页: 找到 ResolveSteamSort",
+                out var resolve))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 「搜索相关度」映射到 TextSearch",
+                resolve.Contains("SteamWorkshopSort.TextSearch", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "private async Task QuerySteamAsync(",
+                "private async Task QueryPdxAsync(",
+                "创意工坊页: 找到 QuerySteamAsync",
+                out var querySteam))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 无关键词的相关度要说明清楚",
+                querySteam.Contains("WorkshopSortRelevanceNeedsKeyword", StringComparison.Ordinal));
+        }
+    }
+
     private static void CheckCodeBehindHooks(string codeBehind)
     {
         if (TryGetBlock(
                 codeBehind,
-                "private async void OnSearchKeyDown",
+                "private async void OnSearchQuerySubmitted",
                 "private void OnSortSelectionChanged",
-                "创意工坊页: 找到 OnSearchKeyDown",
-                out var keyDown))
+                "创意工坊页: 找到 OnSearchQuerySubmitted",
+                out var querySubmitted))
         {
             ChecksContext.Check(
-                "创意工坊页: 回车才提交搜索",
-                keyDown.Contains("VirtualKey.Enter", StringComparison.Ordinal)
-                    && keyDown.Contains("CommitSearchAsync", StringComparison.Ordinal));
+                "创意工坊页: 提交才查工坊",
+                querySubmitted.Contains("CommitSearchAsync", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 提交成功记进最近搜索",
+                querySubmitted.Contains("SearchSuggestions.Push", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 最近搜索只延迟写盘一次",
+                querySubmitted.Contains("SaveSettingsDeferred", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 不再自己判回车键",
+                !querySubmitted.Contains("VirtualKey.Enter", StringComparison.Ordinal));
         }
 
         if (TryGetBlock(

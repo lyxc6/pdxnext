@@ -6,7 +6,7 @@ using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Playsets;
 
 /// <summary>
-/// 「添加模组」子页里的一行：mod 库中的一条候选 mod。
+/// 「添加模组」子页 / 播放集页左栏里的一行：mod 库中的一条候选 mod。
 /// </summary>
 /// <remarks>
 /// 行自己持有勾选状态（<see cref="IsSelected"/>），因此搜索过滤时只要复用同一批行对象，
@@ -14,18 +14,31 @@ using PdxLauncher.Core.Playsets;
 /// </remarks>
 public sealed class AddModRowViewModel : LocalizedObservableObject
 {
+    /// <summary>「添加模组」子页的候选行 Id 前缀。</summary>
+    public const string DefaultAutomationPrefix = "addModCandidate";
+
     private readonly Action<AddModRowViewModel, bool>? _onSelectionChanged;
+    private readonly string _automationPrefix;
     private bool _isSelected;
 
     /// <summary>创建一行候选 mod。</summary>
     /// <param name="entry">mod 库条目。</param>
     /// <param name="onSelectionChanged">勾选状态变化时的回调（可为 null）。</param>
-    public AddModRowViewModel(ModLibraryEntry entry, Action<AddModRowViewModel, bool>? onSelectionChanged = null)
+    /// <param name="automationPrefix">
+    /// 行与勾选框的 AutomationId 前缀。默认值等于「添加模组」子页用的 <c>addModCandidate</c>，
+    /// 播放集页左栏传 <c>modCandidate</c>，两处的 Id 不会撞车（UI 自动化脚本靠 Id 定位）。
+    /// </param>
+    public AddModRowViewModel(
+        ModLibraryEntry entry,
+        Action<AddModRowViewModel, bool>? onSelectionChanged = null,
+        string automationPrefix = DefaultAutomationPrefix)
     {
         ArgumentNullException.ThrowIfNull(entry);
+        ArgumentException.ThrowIfNullOrWhiteSpace(automationPrefix);
 
         Entry = entry;
         _onSelectionChanged = onSelectionChanged;
+        _automationPrefix = automationPrefix;
     }
 
     /// <summary>对应的 mod 库条目。</summary>
@@ -67,10 +80,10 @@ public sealed class AddModRowViewModel : LocalizedObservableObject
     public double ThumbnailSize => ModThumbnailSizes.MediumPixels;
 
     /// <summary>行本身的 AutomationId。</summary>
-    public string RowAutomationId => "addModCandidate_" + ModId.ToString("N");
+    public string RowAutomationId => _automationPrefix + "_" + ModId.ToString("N");
 
     /// <summary>勾选框的 AutomationId。</summary>
-    public string CheckAutomationId => "addModCandidateCheck_" + ModId.ToString("N");
+    public string CheckAutomationId => _automationPrefix + "Check_" + ModId.ToString("N");
 
     /// <summary>是否被勾选（要加入播放集）。</summary>
     public bool IsSelected

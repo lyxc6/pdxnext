@@ -230,4 +230,4 @@ $env:GITHUB_TOKEN = "ghp_..."
 4. 跑 `dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"`；
 5. `tools\publish-release.ps1` 上传 Setup 和 `update.json`；
 6. 用旧版本启动器做一次真实升级验证；
-7. 更新 `README.md`、`docs/HANDOFF.md` 和发布说明。
+7. 更新 `README.md`（版本徽章与截图）、`docs/DEVELOPMENT.md`、`docs/HANDOFF.md` 和发布说明。

@@ -44,6 +44,9 @@ public sealed class NavigationService
     /// <summary>设置页的导航 Tag。</summary>
     public const string SettingsTag = "settings";
 
+    /// <summary>「性能与日志」页的导航 Tag。</summary>
+    public const string DiagnosticsTag = "diagnostics";
+
     private static readonly Dictionary<string, string> TypeNames = new(StringComparer.OrdinalIgnoreCase)
     {
         [LibraryTag] = "PdxLauncher.App.Views.GameLibraryPage",
@@ -57,6 +60,7 @@ public sealed class NavigationService
         [DlcTag] = "PdxLauncher.App.Views.DlcPage",
         [AccountTag] = "PdxLauncher.App.Views.AccountPage",
         [SettingsTag] = "PdxLauncher.App.Views.SettingsPage",
+        [DiagnosticsTag] = "PdxLauncher.App.Views.DiagnosticsPage",
     };
 
     private readonly IAppLogger _logger;

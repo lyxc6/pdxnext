@@ -159,7 +159,7 @@ internal static class UpdateFlow
             Maximum = 100,
             Width = 420,
         };
-        var panel = new StackPanel { Spacing = 10, MaxWidth = 520 };
+        var panel = new StackPanel { Spacing = 12, MaxWidth = 520 };
         panel.Children.Add(status);
         panel.Children.Add(progressBar);
 

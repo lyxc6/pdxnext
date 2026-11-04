@@ -64,6 +64,7 @@ public static class SettingsChecks
             TranslateChangelogEnabled = true,
             TranslateCommentsEnabled = true,
             TranslateCacheDays = 30,
+            WorkshopSearchHistory = ["ck3", "mod"],
         };
 
         using (var store = new AppSettingsStore(fs, new SilentLogger(), path))
@@ -100,11 +101,15 @@ public static class SettingsChecks
             ChecksContext.Check("设置：翻译更新日志开关往返", loaded.TranslateChangelogEnabled);
             ChecksContext.Check("设置：翻译评论开关往返", loaded.TranslateCommentsEnabled);
             ChecksContext.Equal("设置：翻译缓存天数往返", 30, loaded.TranslateCacheDays);
+            ChecksContext.Equal("设置：工坊搜索历史条数往返", 2, loaded.WorkshopSearchHistory.Count);
+            ChecksContext.Equal("设置：工坊搜索历史顺序往返（第一条）", "ck3", loaded.WorkshopSearchHistory[0]);
+            ChecksContext.Equal("设置：工坊搜索历史顺序往返（第二条）", "mod", loaded.WorkshopSearchHistory[1]);
         }
 
         // null 字段按 WhenWritingNull 不写进文件。
         var text = fs.ReadAllText(path);
         ChecksContext.Check("设置：null 字段不落盘", !text.Contains("\"lastSettingsSection\": null", StringComparison.Ordinal), text);
+        ChecksContext.Check("设置：工坊搜索历史以 camelCase 落盘", text.Contains("\"workshopSearchHistory\"", StringComparison.Ordinal), text);
     }
 
     private static void CheckMissingFile(IFileSystem fs, string path)
@@ -119,6 +124,7 @@ public static class SettingsChecks
         ChecksContext.Equal("设置：缺文件时窗口 X 默认 -1", -1, loaded.WindowX);
         ChecksContext.Equal("设置：缺文件时窗口 Y 默认 -1", -1, loaded.WindowY);
         ChecksContext.Check("设置：缺文件时没有记住的分节", loaded.LastSettingsSection is null);
+        ChecksContext.Check("设置：缺文件时工坊搜索历史是空列表", loaded.WorkshopSearchHistory is { Count: 0 });
         ChecksContext.Check("设置：缺文件时不崩溃（默认语言）", loaded.UiLanguage is null or "zh-CN" or "en-US");
     }
 

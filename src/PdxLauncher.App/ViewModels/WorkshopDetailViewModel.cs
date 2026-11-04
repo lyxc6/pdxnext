@@ -39,6 +39,15 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     private readonly WorkshopSubscriptionReader? _steamReader;
     private readonly IAppLogger _logger;
 
+    /// <summary>
+    /// 截图下载进度：界面上的「正在下载截图…」只看它。
+    /// <para>
+    /// 不能看「整批下载任务是否结束」—— Steam 路径的 <c>Task.WhenAll</c> 里还挂着正文配图，
+    /// 那批没下完会让提示在截图全都就位之后继续转。
+    /// </para>
+    /// </summary>
+    private readonly ScreenshotLoadTracker _galleryTracker = new();
+
     /// <summary>Steam 评论翻页要用作者 SteamID（接口路径里的一部分）。</summary>
     private string? _steamCreatorId;
 
@@ -972,7 +981,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         HasError = false;
         IsLoaded = false;
         IsLoading = true;
-        IsLoadingScreenshots = false;
+        _galleryTracker.Reset();
+        NotifyGalleryActivity();
         IsLoadingComments = false;
         IsSubscriptionKnown = false;
         IsSignedIn = false;
@@ -1141,7 +1151,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
         NotifyStateChanged();
         IsLoading = false;
-        IsLoadingScreenshots = galleryUrls.Count > 0;
+        // 按「集合里实际有几种截图」计数（BuildGallery 会去重），不按抓到的 URL 条数。
+        _galleryTracker.Begin(Screenshots.Count);
+        NotifyGalleryActivity();
         NotifyStateChanged();
 
         try
@@ -1152,7 +1164,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         }
         finally
         {
-            IsLoadingScreenshots = false;
+            // 取消或异常时剩下的条目不会再结算，这里兜底收尾，避免提示卡在「下载中」。
+            _galleryTracker.FinishAll();
+            NotifyGalleryActivity();
             NotifyStateChanged();
         }
     }
@@ -1192,7 +1206,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         // 正文与元信息已经能看了，就不该再挂着「正在读取详情…」——
         // 剩下只有截图在下载，改用截图卡里的独立进度提示。
         IsLoading = false;
-        IsLoadingScreenshots = Screenshots.Count > 0;
+        _galleryTracker.Begin(Screenshots.Count);
+        NotifyGalleryActivity();
         NotifyStateChanged();
 
         try
@@ -1201,7 +1216,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         }
         finally
         {
-            IsLoadingScreenshots = false;
+            // 取消或异常时剩下的条目不会再结算，这里兜底收尾，避免提示卡在「下载中」。
+            _galleryTracker.FinishAll();
+            NotifyGalleryActivity();
             NotifyStateChanged();
         }
     }
@@ -1699,9 +1716,13 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
         await Task.WhenAll(items.Select(async shot =>
         {
-            await gate.WaitAsync(cancellationToken).ConfigureAwait(true);
+            var acquired = false;
+            var failed = false;
             try
             {
+                await gate.WaitAsync(cancellationToken).ConfigureAwait(true);
+                acquired = true;
+
                 shot.Path = await _images
                     .EnsureScreenshotAsync(row.Source, row.Id, shot.Url, cancellationToken)
                     .ConfigureAwait(true);
@@ -1718,12 +1739,24 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             }
             catch (Exception ex)
             {
-                // 单张图片失败不该让整页报错，留占位即可。
+                // 单张图片失败不该让整页报错：这一张显示「下载失败」，其余继续下。
+                failed = true;
                 _logger.Warn("创意工坊图片下载失败: " + row.Id + " #" + shot.Index + " " + ex.Message);
             }
             finally
             {
-                gate.Release();
+                if (acquired)
+                {
+                    gate.Release();
+                }
+
+                // 每张图自己结算一次：大图的「下载中」叠层与顶部批次提示都靠它推进，
+                // 不再等整批（更不等正文配图）结束。
+                shot.MarkSettled(failed);
+                if (_galleryTracker.Settle())
+                {
+                    NotifyGalleryActivity();
+                }
             }
         })).ConfigureAwait(true);
     }
@@ -1826,6 +1859,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasSteamUnavailableReason));
         OnPropertyChanged(nameof(ShowSteamSubscribeState));
     }
+
+    /// <summary>把「还有几张截图没落地」同步到批次提示；每张结算都会走一次。</summary>
+    private void NotifyGalleryActivity() => IsLoadingScreenshots = _galleryTracker.IsBusy;
 
     partial void OnCoverPathChanged(string? value) => OnPropertyChanged(nameof(HasCover));
 

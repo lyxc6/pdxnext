@@ -16,7 +16,7 @@
         页面不提供来源切换页签：来源由 WorkshopViewModel 按当前游戏判定。
         页头只有一行工具条：页面标题交给左侧导航栏，游戏名与结果数放在下方状态栏。
     -->
-    <Grid Padding="16" RowSpacing="10">
+    <Grid Padding="16" RowSpacing="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -37,17 +37,19 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!-- 搜索框只在回车（或右侧刷新按钮）时提交：打字过程中不发请求。 -->
-            <TextBox Grid.Column="0"
-                     x:Name="SearchBox"
-                     MinWidth="160"
-                     HorizontalAlignment="Stretch"
-                     PlaceholderText="{x:Bind L.WorkshopSearchPlaceholder, Mode=OneWay}"
-                     Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
-                     TextChanged="OnSearchTextChanged"
-                     KeyDown="OnSearchKeyDown"
-                     AutomationProperties.AutomationId="txtWorkshopSearch"
-                     AutomationProperties.Name="{x:Bind L.WorkshopSearchName, Mode=OneWay}" />
+            <!-- 搜索框只在回车（或放大镜/右侧刷新按钮）时提交：打字过程中不发请求。
+                 下拉里给的是最近提交过的词，选一条等于把它再提交一次，统一走 QuerySubmitted。 -->
+            <AutoSuggestBox Grid.Column="0"
+                            x:Name="SearchBox"
+                            MinWidth="160"
+                            HorizontalAlignment="Stretch"
+                            QueryIcon="Find"
+                            PlaceholderText="{x:Bind L.WorkshopSearchPlaceholder, Mode=OneWay}"
+                            Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
+                            TextChanged="OnSearchTextChanged"
+                            QuerySubmitted="OnSearchQuerySubmitted"
+                            AutomationProperties.AutomationId="txtWorkshopSearch"
+                            AutomationProperties.Name="{x:Bind L.WorkshopSearchName, Mode=OneWay}" />
 
             <controls:PdxDropDown Grid.Column="1"
                                  x:Name="SortBox"
@@ -90,12 +92,12 @@
             <Border Grid.Column="5"
                     Width="1"
                     Height="20"
-                    Margin="2,0"
+                    Margin="0"
                     VerticalAlignment="Center"
                     Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
             <Border Grid.Column="6"
-                    Padding="8,3"
+                    Padding="8,4"
                     VerticalAlignment="Center"
                     CornerRadius="4"
                     Background="{ThemeResource SubtleFillColorSecondaryBrush}"
@@ -119,8 +121,8 @@
 
         <!-- 行1：PDX 来源未登录时的提示条 -->
         <Border Grid.Row="1"
-                Padding="10,6"
-                CornerRadius="6"
+                Padding="12,8"
+                CornerRadius="8"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
@@ -164,8 +166,8 @@
                       AutomationProperties.Name="{x:Bind L.WorkshopListName, Mode=OneWay}">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="vm:WorkshopRowViewModel">
-                        <Grid ColumnSpacing="10"
-                              Padding="4,6"
+                        <Grid ColumnSpacing="8"
+                              Padding="4,8"
                               AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
                               AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
                             <Grid.ColumnDefinitions>
@@ -177,7 +179,7 @@
                             <Border Grid.Column="0"
                                     Width="{x:Bind ThumbnailSize, Mode=OneTime}"
                                     Height="{x:Bind ThumbnailSize, Mode=OneTime}"
-                                    CornerRadius="6"
+                                    CornerRadius="8"
                                     Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1">
@@ -191,14 +193,14 @@
                                 </Grid>
                             </Border>
 
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                                 <TextBlock Text="{x:Bind Name, Mode=OneTime}"
                                            Style="{StaticResource BodyStrongTextBlockStyle}"
                                            TextTrimming="CharacterEllipsis" />
                                 <!-- 译文：与原文并存，只显示译文正文（不加「译文」标题），翻译没开或失败时整块隐藏。 -->
-                                <Border Margin="0,6,0,0"
-                                        Padding="6,4"
-                                        CornerRadius="6"
+                                <Border Margin="0,8,0,0"
+                                        Padding="8,4"
+                                        CornerRadius="8"
                                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                         BorderThickness="1"
@@ -222,7 +224,7 @@
 
                             <StackPanel Grid.Column="2"
                                         Orientation="Horizontal"
-                                        Spacing="6"
+                                        Spacing="8"
                                         HorizontalAlignment="Right"
                                         VerticalAlignment="Center">
                                 <Button Width="32"
@@ -256,7 +258,7 @@
 
             <StackPanel HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Spacing="10"
+                        Spacing="12"
                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowNoGameHint), Mode=OneWay}">
                 <TextBlock Text="{x:Bind L.WorkshopNoGameHint, Mode=OneWay}"
                            Style="{StaticResource SubtitleTextBlockStyle}"
@@ -266,7 +268,7 @@
 
             <StackPanel HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Spacing="10"
+                        Spacing="12"
                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowEmptyState), Mode=OneWay}">
                 <TextBlock Text="{x:Bind L.WorkshopEmptyHint, Mode=OneWay}"
                            Style="{StaticResource SubtitleTextBlockStyle}"
@@ -309,8 +311,8 @@
             </Button>
 
             <Border Grid.Column="3"
-                    Padding="10,6"
-                    CornerRadius="6"
+                    Padding="12,8"
+                    CornerRadius="8"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                     BorderThickness="1">
@@ -324,7 +326,7 @@
                     <!-- 页头原来的「游戏名 + 结果数」搬到这里：页面标题已经在导航栏上，页内不再重复一行。 -->
                     <StackPanel Grid.Column="0"
                                 Orientation="Horizontal"
-                                Spacing="10"
+                                Spacing="12"
                                 VerticalAlignment="Center">
                         <TextBlock x:Name="txtWorkshopGame"
                                    Text="{x:Bind ViewModel.GameTitle, Mode=OneWay}"

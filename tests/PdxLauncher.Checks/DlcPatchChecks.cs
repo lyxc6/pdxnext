@@ -120,6 +120,7 @@ public static class DlcPatchChecks
 
         var applied = service.Apply(install);
         ChecksContext.Equal("打完补丁状态", GamePatchStatus.Patched, applied.Status);
+        ChecksContext.Check("本工具打的补丁 → loader 在岗", applied.IsLoaderActive);
         ChecksContext.Check("打完补丁可以移除", applied.CanRevert);
         ChecksContext.Equal("补丁文件数量", 1, applied.PatchedFiles.Count);
 
@@ -244,6 +245,7 @@ public static class DlcPatchChecks
         var service = NewService(fs, logger, Path.Combine(root, "state-foreign.json"));
         var report = service.Inspect(install);
         ChecksContext.Equal("他人补丁状态", GamePatchStatus.PatchedOther, report.Status);
+        ChecksContext.Check("他人补丁 → loader 在岗", report.IsLoaderActive);
         ChecksContext.Check("他人补丁可移除", report.CanRevert);
         ChecksContext.Check("他人补丁可重打", report.CanApply);
     }
@@ -261,6 +263,7 @@ public static class DlcPatchChecks
         var service = NewService(fs, logger, Path.Combine(root, "state-overwrote.json"));
         var report = service.Inspect(install);
         ChecksContext.Equal("被 Steam 覆盖的状态", GamePatchStatus.SteamOverwrote, report.Status);
+        ChecksContext.Check("被覆盖后当前 API 是原版 → 不算 loader 在岗", !report.IsLoaderActive);
         ChecksContext.Check("可重新打补丁", report.CanApply);
         ChecksContext.Check("可清理残留", report.CanRevert);
     }

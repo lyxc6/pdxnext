@@ -14,8 +14,11 @@ using System.Text;
 /// </summary>
 public sealed class FileLogger : Abstractions.IAppLogger, IDisposable
 {
-    private const long MaxBytes = 5L * 1024 * 1024;
-    private const int MaxArchives = 3;
+    /// <summary>单文件上限：超过后轮转。公开给「性能与日志」页面显示轮转阈值，避免两处各写一份 5 MB。</summary>
+    public const long MaxBytes = 5L * 1024 * 1024;
+
+    /// <summary>归档份数上限（<c>.1</c> ~ <c>.3</c>）。同样公开给诊断页显示。</summary>
+    public const int MaxArchives = 3;
 
     private static readonly TimeSpan FlushInterval = TimeSpan.FromSeconds(2);
     private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);

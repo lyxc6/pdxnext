@@ -42,7 +42,7 @@
                 <FontIcon Glyph="&#xE72B;" FontSize="14" />
             </Button>
 
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                 <TextBlock Text="{x:Bind ViewModel.Title, Mode=OneWay}"
                            Style="{StaticResource SubtitleTextBlockStyle}"
                            AutomationProperties.AutomationId="txtAddModsTitle"
@@ -71,16 +71,18 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <TextBox x:Name="SearchBox"
-                     MinWidth="160"
-                     MaxWidth="320"
-                     HorizontalAlignment="Left"
-                     VerticalAlignment="Center"
-                     PlaceholderText="{x:Bind ViewModel.SearchPlaceholder, Mode=OneWay}"
-                     Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
-                     TextChanged="OnSearchTextChanged"
-                     AutomationProperties.AutomationId="txtAddModsSearch"
-                     AutomationProperties.Name="{x:Bind ViewModel.SearchName, Mode=OneWay}" />
+            <AutoSuggestBox x:Name="SearchBox"
+                            MinWidth="160"
+                            MaxWidth="320"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            QueryIcon="Find"
+                            PlaceholderText="{x:Bind ViewModel.SearchPlaceholder, Mode=OneWay}"
+                            Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
+                            TextChanged="OnSearchTextChanged"
+                            QuerySubmitted="OnSearchQuerySubmitted"
+                            AutomationProperties.AutomationId="txtAddModsSearch"
+                            AutomationProperties.Name="{x:Bind ViewModel.SearchName, Mode=OneWay}" />
 
             <TextBlock Grid.Column="1"
                        VerticalAlignment="Center"
@@ -103,8 +105,8 @@
                       AutomationProperties.Name="{x:Bind ViewModel.ListName, Mode=OneWay}">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="vm:AddModRowViewModel">
-                        <Grid ColumnSpacing="10"
-                              Padding="4,6"
+                        <Grid ColumnSpacing="8"
+                              Padding="4,8"
                               AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
                               AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
                             <Grid.ColumnDefinitions>
@@ -125,7 +127,7 @@
                             <Border Grid.Column="1"
                                     Width="{x:Bind ThumbnailSize, Mode=OneTime}"
                                     Height="{x:Bind ThumbnailSize, Mode=OneTime}"
-                                    CornerRadius="6"
+                                    CornerRadius="8"
                                     Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                     BorderThickness="1">
@@ -134,14 +136,14 @@
                             </Border>
 
                             <!-- 名称 + 副标题（大小 / 注册 id） -->
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="2">
+                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="4">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock Text="{x:Bind Name, Mode=OneTime}"
                                                Style="{StaticResource BodyStrongTextBlockStyle}"
                                                TextTrimming="CharacterEllipsis" />
                                     <!-- 来源徽标：本地 / 订阅，与 Mod 库页同一套画刷。 -->
                                     <Border VerticalAlignment="Center"
-                                            Padding="6,1"
+                                            Padding="8,4"
                                             CornerRadius="4"
                                             Background="{ThemeResource PdxOriginLocalBackgroundBrush}"
                                             Visibility="{x:Bind svc:XamlVisibility.FromBool(IsLocalOrigin), Mode=OneWay}">
@@ -150,7 +152,7 @@
                                                    Foreground="{ThemeResource PdxOriginLocalForegroundBrush}" />
                                     </Border>
                                     <Border VerticalAlignment="Center"
-                                            Padding="6,1"
+                                            Padding="8,4"
                                             CornerRadius="4"
                                             Background="{ThemeResource PdxOriginSubscribedBackgroundBrush}"
                                             Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(IsLocalOrigin), Mode=OneWay}">
@@ -172,7 +174,7 @@
             <!-- 空状态：mod 库里没有可加的 mod -->
             <StackPanel VerticalAlignment="Center"
                         HorizontalAlignment="Center"
-                        Spacing="6"
+                        Spacing="8"
                         IsHitTestVisible="False"
                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowEmptyState), Mode=OneWay}">
                 <FontIcon Glyph="&#xE8B7;"
@@ -190,7 +192,7 @@
             <!-- 搜索无结果 -->
             <StackPanel VerticalAlignment="Center"
                         HorizontalAlignment="Center"
-                        Spacing="6"
+                        Spacing="8"
                         IsHitTestVisible="False"
                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowNoMatch), Mode=OneWay}">
                 <FontIcon Glyph="&#xE721;"
@@ -208,8 +210,8 @@
 
         <!-- 底栏：提示 + 已选计数 + 状态 + 按钮 -->
         <Border Grid.Row="3"
-                Padding="10,6"
-                CornerRadius="6"
+                Padding="12,8"
+                CornerRadius="8"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1">
@@ -221,7 +223,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <StackPanel Spacing="2">
+                <StackPanel Spacing="4">
                     <TextBlock Text="{x:Bind ViewModel.HintText, Mode=OneWay}"
                                Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"

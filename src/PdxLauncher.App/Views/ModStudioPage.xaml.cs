@@ -256,6 +256,48 @@ public sealed partial class ModStudioPage : Page
 
     // ------------------------------------------------------------ 顶部操作
 
+    /// <summary>
+    /// 搜索框实时过滤。x:Bind 不支持 UpdateSourceTrigger，所以 Text 只做 OneWay 绑定，
+    /// 由这里把用户输入写回 ViewModel（写回会触发 RebuildRows）。
+    /// 建议只跟"手打"走：程序化改 Text（绑定回写）也会触发 TextChanged，那时弹下拉会抢焦点。
+    /// </summary>
+    private void OnSearchTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        try
+        {
+            if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
+            {
+                return;
+            }
+
+            var text = sender.Text ?? string.Empty;
+            if (!string.Equals(text, _viewModel.SearchText, StringComparison.Ordinal))
+            {
+                _viewModel.SearchText = text;
+            }
+
+            SearchSuggestBox.Update(sender, _viewModel.Mods.Select(mod => mod.Name), text);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModStudioPage 搜索过滤失败", ex);
+        }
+    }
+
+    /// <summary>回车 / 放大镜 / 选中建议：过滤用的就是当前文本，收起下拉即可。</summary>
+    private void OnSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        try
+        {
+            _viewModel.SearchText = (args.QueryText ?? string.Empty).Trim();
+            sender.IsSuggestionListOpen = false;
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModStudioPage 搜索过滤失败", ex);
+        }
+    }
+
     private void OnCreateClick(object sender, RoutedEventArgs e)
     {
         if (!_viewModel.CanCreate)
@@ -412,6 +454,55 @@ public sealed partial class ModStudioPage : Page
         if (!ShellLauncher.TryStart("explorer.exe", "\"" + dir + "\"", "ModStudioPage"))
         {
             _viewModel.SetStatus(L.T(Keys.ModlibStatusCannotOpen, dir));
+        }
+    }
+
+    /// <summary>用 <c>steam://</c> 协议直接在本机 Steam 客户端里打开工坊条目。</summary>
+    private void OnOpenSteamClick(object sender, RoutedEventArgs e)
+    {
+        var address = SteamWorkshop.GetSteamAddress(_viewModel.SelectedRow?.WorkshopId);
+        if (address is null)
+        {
+            _viewModel.SetStatus(L.T(Keys.ModstudioOpenWorkshopUnavailable));
+            return;
+        }
+
+        if (!ShellLauncher.TryOpenSteam(address, "ModStudioPage"))
+        {
+            _viewModel.SetStatus(L.T(Keys.ModlibStatusCannotOpen, address));
+        }
+    }
+
+    /// <summary>
+    /// 「编辑描述符」：弹框改名称/版本/支持版本/标签/简介，再交给 ViewModel 写回文件。
+    /// 只写这几个字段，描述符里的其它内容由 Core 编辑器保留。
+    /// </summary>
+    private async void OnEditDescriptorClick(object sender, RoutedEventArgs e)
+    {
+        var row = _viewModel.SelectedRow;
+        if (row?.Descriptor is not { } descriptor || !_viewModel.CanEditSelectedDescriptor)
+        {
+            return;
+        }
+
+        var edit = await EditModDescriptorDialog.ShowAsync(XamlRoot, descriptor).ConfigureAwait(true);
+        if (edit is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _viewModel.SaveDescriptorAsync(edit, _lifetime.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面已关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("保存描述符失败", ex);
+            _viewModel.SetStatus(L.T(Keys.ModstudioEditFailed, ex.Message));
         }
     }
 

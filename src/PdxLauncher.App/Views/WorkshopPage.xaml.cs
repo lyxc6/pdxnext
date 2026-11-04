@@ -2,7 +2,6 @@ namespace PdxLauncher.App.Views;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 using PdxLauncher.App.Controls;
 
 using PdxLauncher.App.Localization;
@@ -10,7 +9,6 @@ using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Online;
-using Windows.System;
 
 /// <summary>
 /// 创意工坊页：按当前游戏显示 Steam 创意工坊或 Paradox Mods（二选一，没有来源切换页签）。
@@ -193,24 +191,26 @@ public sealed partial class WorkshopPage : Page
     /// <summary>
     /// 搜索框输入。x:Bind 不支持 UpdateSourceTrigger，所以 Text 只做 OneWay 绑定，
     /// 由这里把用户输入写回 ViewModel。写回只更新文本，**不发请求**：
-    /// 真正提交的是回车（<see cref="OnSearchKeyDown"/>）或刷新按钮。
+    /// 真正提交的是回车/放大镜（<see cref="OnSearchQuerySubmitted"/>）或刷新按钮。
+    /// 建议只跟"手打"走：程序化改 Text（绑定回写、恢复上次搜索）也会走 TextChanged，
+    /// 那种时候弹下拉就是和用户抢焦点。
     /// </summary>
-    private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
+    private void OnSearchTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
         try
         {
-            if (sender is not TextBox box)
+            if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
             {
                 return;
             }
 
-            var text = box.Text ?? string.Empty;
-            if (string.Equals(text, _viewModel.SearchText, StringComparison.Ordinal))
+            var text = sender.Text ?? string.Empty;
+            if (!string.Equals(text, _viewModel.SearchText, StringComparison.Ordinal))
             {
-                return;
+                _viewModel.SearchText = text;
             }
 
-            _viewModel.SearchText = text;
+            SearchSuggestBox.Update(sender, AppServices.Settings.WorkshopSearchHistory, text);
         }
         catch (Exception ex)
         {
@@ -219,18 +219,24 @@ public sealed partial class WorkshopPage : Page
     }
 
     /// <summary>
-    /// 搜索框回车：提交当前文本并重查第一页。
+    /// 提交搜索：回车、点放大镜、或从下拉里选一条最近搜索，都到这里。
     /// 打字过程中不查询 —— 每个字符都会排一次 1–3 MB 的工坊页请求，页面看起来就像卡死。
+    /// 提交成功后把关键词记进最近搜索；刷新按钮走 <see cref="OnRefreshClick"/>，不记历史。
     /// </summary>
-    private async void OnSearchKeyDown(object sender, KeyRoutedEventArgs e)
+    private async void OnSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {
-        if (e.Key != VirtualKey.Enter)
-        {
-            return;
-        }
+        var text = (args.QueryText ?? string.Empty).Trim();
+        // 选中建议时 AutoSuggestBox 会自己把该条填进框里，这里再显式写回一次：
+        // 绑定是 OneWay，不写回的话 ViewModel 可能还停在旧词上。
+        _viewModel.SearchText = text;
+        sender.IsSuggestionListOpen = false;
 
-        e.Handled = true;
+        await CommitSearchWithHistoryAsync(text).ConfigureAwait(true);
+    }
 
+    /// <summary>提交一次搜索；成功且关键词非空时记进设置的工坊最近搜索。</summary>
+    private async Task CommitSearchWithHistoryAsync(string text)
+    {
         try
         {
             await _viewModel.CommitSearchAsync().ConfigureAwait(true);
@@ -238,11 +244,21 @@ public sealed partial class WorkshopPage : Page
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
             // 页面已关闭导致的取消，忽略。
+            return;
         }
         catch (Exception ex)
         {
             AppServices.Logger.Error("WorkshopPage 搜索提交失败", ex);
+            return;
         }
+
+        if (text.Length == 0)
+        {
+            return;
+        }
+
+        AppServices.Settings.WorkshopSearchHistory = SearchSuggestions.Push(AppServices.Settings.WorkshopSearchHistory, text);
+        AppServices.SaveSettingsDeferred();
     }
 
     /// <summary>排序下拉框选择变化：写回 ViewModel 触发重查。</summary>

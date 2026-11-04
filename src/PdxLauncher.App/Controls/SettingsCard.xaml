@@ -15,7 +15,7 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel VerticalAlignment="Center" Spacing="2">
+            <StackPanel VerticalAlignment="Center" Spacing="4">
                 <TextBlock Text="{x:Bind Header, Mode=OneWay}"
                            TextWrapping="Wrap" />
                 <TextBlock Text="{x:Bind Description, Mode=OneWay}"

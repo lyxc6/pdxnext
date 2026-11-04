@@ -154,7 +154,7 @@ public static class SteamDlcListChecks
 
         // 传 null 候选（界面在列表还没建好时就是这样调的）也必须走同一个 CS2 分支，不能抛。
         var withoutCandidates = DlcOwnershipVerdict.Evaluate(GamePatchStatus.Vanilla, report, null);
-        ChecksContext.Equal("steam dlc: 没有候选列表时仍然可用", 2, withoutCandidates.SteamDlcCount);
+        ChecksContext.Equal("steam dlc: 没有候选列表时仍然可用", 2, withoutCandidates.ProbeDlcCount);
     }
 
     private static SteamOwnershipReport Report(
