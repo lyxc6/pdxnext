@@ -167,7 +167,9 @@ public sealed partial class ModLibraryPage : Page
 
         if (!string.IsNullOrEmpty(state.SearchText))
         {
-            SearchBox.Text = state.SearchText;
+            // 写 ViewModel 而不是 SearchBox.Text：Text 是 OneWay 绑定，写控件会被下次绑定刷掉，
+            // 而且程序化改 Text 不再走过滤（TextChanged 只认 UserInput）。
+            _viewModel.SearchText = state.SearchText;
         }
 
         if (!string.IsNullOrEmpty(state.SortMode))
@@ -249,23 +251,39 @@ public sealed partial class ModLibraryPage : Page
     /// <summary>
     /// 搜索框输入。x:Bind 不支持 UpdateSourceTrigger，所以 Text 只做 OneWay 绑定，
     /// 由这里把用户输入写回 ViewModel（写回会触发重新过滤）。
+    /// 建议只跟"手打"走：程序化改 Text（绑定回写、恢复上次搜索）也会走 TextChanged，
+    /// 那种时候弹下拉就是和用户抢焦点。
     /// </summary>
-    private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
+    private void OnSearchTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
         try
         {
-            if (sender is not TextBox box)
+            if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
             {
                 return;
             }
 
-            var text = box.Text ?? string.Empty;
-            if (string.Equals(text, _viewModel.SearchText, StringComparison.Ordinal))
+            var text = sender.Text ?? string.Empty;
+            if (!string.Equals(text, _viewModel.SearchText, StringComparison.Ordinal))
             {
-                return;
+                _viewModel.SearchText = text;
             }
 
-            _viewModel.SearchText = text;
+            SearchSuggestBox.Update(sender, _viewModel.Mods.Select(mod => mod.Name), text);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModLibraryPage 搜索过滤失败", ex);
+        }
+    }
+
+    /// <summary>回车 / 放大镜 / 选中建议：用当前文本过滤，并收起建议下拉。</summary>
+    private void OnSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        try
+        {
+            _viewModel.SearchText = (args.QueryText ?? string.Empty).Trim();
+            sender.IsSuggestionListOpen = false;
         }
         catch (Exception ex)
         {

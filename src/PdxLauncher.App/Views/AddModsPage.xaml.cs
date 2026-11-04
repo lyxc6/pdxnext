@@ -106,13 +106,31 @@ public sealed partial class AddModsPage : Page
         }
     }
 
-    /// <summary>搜索框实时过滤：x:Bind 没有 UpdateSourceTrigger，所以由这里写回 ViewModel。</summary>
-    private void OnSearchTextChanged(object sender, TextChangedEventArgs e)
+    /// <summary>
+    /// 搜索框实时过滤：x:Bind 没有 UpdateSourceTrigger，所以由这里写回 ViewModel。
+    /// 建议只跟"手打"走：程序化改 Text（绑定回写）也会触发 TextChanged，那时弹下拉会抢焦点。
+    /// </summary>
+    private void OnSearchTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
     {
-        if (sender is TextBox box)
+        if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
         {
-            _viewModel.SearchText = box.Text;
+            return;
         }
+
+        var text = sender.Text ?? string.Empty;
+        if (!string.Equals(text, _viewModel.SearchText, StringComparison.Ordinal))
+        {
+            _viewModel.SearchText = text;
+        }
+
+        SearchSuggestBox.Update(sender, _viewModel.Rows.Select(row => row.Name), text);
+    }
+
+    /// <summary>回车 / 放大镜 / 选中建议：过滤用的就是当前文本，收起下拉即可。</summary>
+    private void OnSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        _viewModel.SearchText = (args.QueryText ?? string.Empty).Trim();
+        sender.IsSuggestionListOpen = false;
     }
 
     /// <summary>返回播放集页（不添加任何 mod）。</summary>
