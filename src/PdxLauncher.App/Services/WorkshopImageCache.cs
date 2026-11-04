@@ -108,7 +108,9 @@ public sealed class WorkshopImageCache
         var target = _files.Combine(_info.CoverRoot, relative);
         _files.EnsureDirectory(_files.GetDirectoryName(target) ?? _info.CoverRoot);
 
-        var local = await _assets.DownloadAsync(url, target, cancellationToken).ConfigureAwait(true);
+        // 续体留在池线程：下面的 SetCover 是同步 SQLite 写，回收站扫描与缩略图
+        // 生成也都在后台。调用方（详情页）自己 await 回来，不依赖这里的上下文。
+        var local = await _assets.DownloadAsync(url, target, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(local))
         {
             return null;
@@ -174,7 +176,7 @@ public sealed class WorkshopImageCache
         _files.EnsureDirectory(directory);
         var shot = await _assets
             .DownloadAsync(url, _files.Combine(directory, stem), cancellationToken)
-            .ConfigureAwait(true);
+            .ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(shot))
         {
             _quota?.RequestSweep();

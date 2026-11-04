@@ -570,6 +570,17 @@ public sealed partial class MainWindow : Window
                     "窗口关闭",
                     () => (AppServices.WorkshopInfo.Count, AppServices.WorkshopItemPages.Count, AppServices.ModThumbnails.Cache.Count));
             }
+
+            // 看门狗汇总：这次会话里 UI 线程最长被占住多久。排查「整窗卡死」先看这一行。
+            if (AppServices.Watchdog is { } watchdog)
+            {
+                AppServices.Logger.Info(
+                    "UI 线程停顿统计：" + watchdog.Recorder.StallCount
+                    + " 次，最长 " + watchdog.Recorder.MaxStallMs + " ms");
+                watchdog.Dispose();
+                AppServices.AttachWatchdog(null);
+            }
+
             var saved = AppServices.SaveSettings();
             if (!saved.IsSuccess)
             {

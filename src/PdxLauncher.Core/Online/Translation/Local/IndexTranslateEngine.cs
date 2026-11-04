@@ -99,10 +99,16 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
                 var builder = new StringBuilder();
                 foreach (var chunk in chunks)
                 {
+                    // 一批 30 条标题、每条又要逐 token 生成，取消要能立刻生效，
+                    // 否则用户翻页后旧批次还会白占 CPU 几十秒。
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     var output = await InferAsync(BuildPrompt(chunk, target), cancellationToken)
                         .ConfigureAwait(false);
                     if (string.IsNullOrWhiteSpace(output))
                     {
+                        // 输出为空但没抛异常：状态条会显示「未知」，这里补上真正的原因。
+                        Volatile.Write(ref _lastFailure, "本地模型没有返回译文（输出为空）");
                         return null;
                     }
 
@@ -138,6 +144,8 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
         var results = new List<string?>(texts.Count);
         foreach (var text in texts)
         {
+            // 条目之间的取消点：上一页的 30 条还没翻完时用户已经翻到下一页了。
+            cancellationToken.ThrowIfCancellationRequested();
             results.Add(await TranslateAsync(text, targetLanguage, cancellationToken).ConfigureAwait(false));
         }
 
@@ -218,7 +226,9 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
 
     private async Task<string> InferAsync(string prompt, CancellationToken cancellationToken)
     {
-        var weights = GetWeights();
+        // 首次调用要把 1.3 GB 权重读进内存（LLamaWeights.LoadFromFile 是同步的）。
+        // 调用方可能是 UI 线程：绝不能让这一步跑在它上面，否则整个窗口冻结十几秒。
+        var weights = await Task.Run(GetWeights, cancellationToken).ConfigureAwait(false);
         var modelParams = new ModelParams(ModelPath)
         {
             // 与 GetWeights 保持一致：CUDA / Vulkan 已关闭，全部层留在内存里，

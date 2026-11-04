@@ -177,7 +177,14 @@ public sealed class TranslationCoordinator : IDisposable
         try
         {
             var service = CreateService(options);
-            var translated = await service.TranslateAsync(texts, options, linked.Token).ConfigureAwait(false);
+
+            // 整段翻译从线程池起步：本地 GGUF 引擎的首次权重加载（1.3 GB 同步读盘）
+            // 与推理都是同步 CPU 活，调用方（工坊列表 / Mod 库）就在 UI 线程上，
+            // 在这里 await 它会直接把整个窗口冻住几十秒。
+            var translated = await Task.Run(
+                    () => service.TranslateAsync(texts, options, linked.Token),
+                    linked.Token)
+                .ConfigureAwait(false);
 
             // 整批失败的原因留在协调器上，页面用它拼一句可读提示；
             // 成功时置空，免得旧原因一直挂着。

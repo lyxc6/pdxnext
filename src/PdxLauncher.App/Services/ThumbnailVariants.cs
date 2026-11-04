@@ -96,10 +96,25 @@ public static class ThumbnailVariants
                 }
                 catch (Exception exception)
                 {
-                    logger?.Warn("缩略图变体生成失败（" + path + "）：" + exception.Message);
+                    // 缩略图是纯优化：失败只影响列表观感，不该刷屏。
+                    // 异常消息里常带换行与 WinRT 的 HRESULT 后缀，压成一行再记。
+                    logger?.Warn(
+                        "缩略图变体生成失败（" + path + "）："
+                        + exception.GetType().Name + ": " + Flatten(exception.Message));
                 }
             },
             CancellationToken.None);
+    }
+
+    /// <summary>把异常消息里的换行/连续空白压成单个空格，日志一行读完。</summary>
+    private static string Flatten(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        return string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
     }
 
     private static async Task GenerateAsync(IFileSystem fileSystem, string path, int width, CancellationToken cancellationToken)

@@ -124,6 +124,12 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>同时下载的封面数上限。</summary>
     private const int MaxConcurrentCovers = 6;
 
+    /// <summary>标题翻译的去抖时长：翻页/换筛选很密时把几批合成一批，别反复唤醒本地模型。</summary>
+    private static readonly TimeSpan NameTranslationDebounce = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>本轮待翻译批次的去抖令牌；新批次到来时取消上一批。</summary>
+    private CancellationTokenSource? _translationDebounce;
+
     /// <summary>已经提交的搜索词：只有回车 / 刷新才更新，翻页与页缓存键都用它。</summary>
     private string _appliedSearch = string.Empty;
 
@@ -293,6 +299,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _totalCount = 0;
         _totalPages = 0;
         CancelCoverFill();
+        CancelPendingNameTranslation();
         Rows.Clear();
 
         // 不再清空整页缓存：页键里已经带了来源/游戏/筛选条件，换游戏换回来时
@@ -322,11 +329,17 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         StatusMessage = T(Keys.WorkshopStatusLoading);
         RaiseDerived();
 
+        // 阶段耗时同时进日志和看门狗面包屑：卡死时看门狗那一行会带出「最后走到哪一步」。
+        AppServices.Breadcrumb("工坊 开始加载（game=" + (game.GameId) + "）");
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+
         try
         {
             Source = await ResolveSourceAsync(cancellationToken).ConfigureAwait(true);
+            AppServices.Breadcrumb("工坊 来源=" + Source + "（" + watch.ElapsedMilliseconds + " ms）");
             RaiseDerived();
             await RunQueryAsync(resetPage: false, force: false).ConfigureAwait(true);
+            _logger.Info("创意工坊加载完成（game=" + game.GameId + "）：" + watch.ElapsedMilliseconds + " ms");
         }
         catch (OperationCanceledException)
         {
@@ -579,6 +592,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         CancelPendingQuery();
         _queryCts = CancellationTokenSource.CreateLinkedTokenSource(_pageToken);
         var version = ++_queryVersion;
+        AppServices.Breadcrumb("工坊 查询（source=" + Source + "，page=" + (_page + 1) + "）");
 
         try
         {
@@ -830,6 +844,10 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>
     /// 给一行行模型补译名（后台跑，译好一行刷一行）。
     /// <para>翻译是网络操作，不能挡着列表显示：这里只起一个后台任务，行模型自己接住结果。</para>
+    /// <para>
+    /// 250 ms 去抖：翻页、换筛选、返回缓存页都会各来一批，立即开工只会让本地模型
+    /// 反复「唤醒—推理—被取消」。等手停下来再翻，一批就够。
+    /// </para>
     /// </summary>
     /// <param name="rows">要翻译的行。</param>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
@@ -840,13 +858,64 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             return;
         }
 
-        var pending = rows.Where(static row => !string.IsNullOrWhiteSpace(row.Name)).ToList();
+        var pending = rows
+            .Where(static row => !string.IsNullOrWhiteSpace(row.Name) && string.IsNullOrEmpty(row.TranslatedName))
+            .ToList();
         if (pending.Count == 0)
         {
             return;
         }
 
-        _ = TranslateNamesAsync(pending, cancellationToken);
+        CancelPendingNameTranslation();
+
+        var debounce = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _translationDebounce = debounce;
+        _ = TranslateNamesAfterDebounceAsync(pending, debounce);
+    }
+
+    /// <summary>去抖到点后翻这一批；令牌被新批次取消时什么都不做。</summary>
+    private async Task TranslateNamesAfterDebounceAsync(
+        IReadOnlyList<WorkshopRowViewModel> rows,
+        CancellationTokenSource debounce)
+    {
+        try
+        {
+            await Task.Delay(NameTranslationDebounce, debounce.Token).ConfigureAwait(true);
+            await TranslateNamesAsync(rows, debounce.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // 被新批次取代：这一批作废。
+        }
+        finally
+        {
+            if (ReferenceEquals(_translationDebounce, debounce))
+            {
+                _translationDebounce = null;
+            }
+
+            debounce.Dispose();
+        }
+    }
+
+    /// <summary>取消还没到点/没跑完的标题翻译批次。</summary>
+    private void CancelPendingNameTranslation()
+    {
+        var previous = _translationDebounce;
+        _translationDebounce = null;
+        if (previous is null)
+        {
+            return;
+        }
+
+        try
+        {
+            previous.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 上一批刚好自己收尾释放了令牌，不用再取消。
+        }
     }
 
     /// <summary>整页标题一次性批翻（引擎内部并发），译完统一回填。</summary>
@@ -854,8 +923,10 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         IReadOnlyList<WorkshopRowViewModel> rows,
         CancellationToken cancellationToken)
     {
+        var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
+            AppServices.Breadcrumb("工坊 翻译标题 " + rows.Count + " 条");
             var names = rows.Select(static row => row.Name).ToList();
             var translated = await AppServices.Translation
                 .TranslateBatchAsync(names, cancellationToken)
@@ -876,7 +947,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
             if (!anyTranslated)
             {
-                ReportTranslationFailure();
+                ReportTranslationFailure(rows.Count, watch.ElapsedMilliseconds);
             }
         }
         catch (OperationCanceledException)
@@ -895,7 +966,9 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// 引擎连不通时原本没有任何反馈，用户会以为翻译功能压根没做。
     /// </para>
     /// </summary>
-    private void ReportTranslationFailure()
+    /// <param name="count">本批条数（写日志用）。</param>
+    /// <param name="elapsedMs">本批耗时（写日志用）。</param>
+    private void ReportTranslationFailure(int count, long elapsedMs)
     {
         var key = BuildPageKey();
         if (string.Equals(_translateFailureKey, key, StringComparison.Ordinal))
@@ -904,9 +977,12 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         }
 
         _translateFailureKey = key;
-        var reason = AppServices.Translation.LastFailure ?? T(Keys.CommonUnknown);
-        _logger.Warn("创意工坊标题全部未翻译（" + key + "）：" + reason);
-        SetStatus(T(Keys.WorkshopTranslateUnavailable, reason));
+        var failure = AppServices.Translation.LastFailure;
+        _logger.Warn(
+            "创意工坊标题全部未翻译（" + key + "）：" + (failure ?? T(Keys.CommonUnknown))
+            + "；本批 " + count + " 条 / " + elapsedMs + " ms"
+            + (failure is null ? "，引擎未给出失败原因" : string.Empty));
+        SetStatus(T(Keys.WorkshopTranslateUnavailable, failure ?? T(Keys.CommonUnknown)));
     }
 
     /// <summary>整体替换列表行；先取消上一轮封面下载，避免旧页任务继续占用带宽。</summary>
@@ -967,7 +1043,9 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             // 已经收尾，忽略。
         }
 
-        lifetime.Dispose();
+        // 这里**不** Dispose：封面任务现在跑在线程池上，池线程可能正拿着这个令牌
+        // 等信号量或注册取消回调；UI 线程此时 Dispose 会让它们抛 ObjectDisposedException。
+        // 令牌的所有权归 FillCoversAsync，它跑完自己的 finally 再释放（见 FillCoversAsync 末尾）。
     }
 
     /// <summary>封面进度变化时通知两个派生属性。</summary>
@@ -1218,8 +1296,14 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _coverDone = 0;
         IsFillingCovers = true;
         RaiseCoverProgress();
+        AppServices.Breadcrumb("工坊 补封面 " + pending.Count + " 张");
 
         var root = _info.CoverRoot;
+
+        // 整段封面流水线留在 UI 线程会形成「下载 → 回 UI → 同步写 SQLite → 每张一次」
+        // 的串行链：30 张图就是 30 次 UI 线程上的同步写盘。这里改由线程池跑，
+        // 只有行模型的 CoverPath（绑定属性）与进度计数回 UI 线程。
+        var dispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         using var gate = new SemaphoreSlim(MaxConcurrentCovers);
         try
         {
@@ -1227,34 +1311,11 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             AppServices.FileSystem.EnsureDirectory(AppServices.FileSystem.Combine(root, "steam"));
             AppServices.FileSystem.EnsureDirectory(AppServices.FileSystem.Combine(root, "pdx"));
 
-            await Task.WhenAll(pending.Select(async row =>
-            {
-                await gate.WaitAsync(token).ConfigureAwait(true);
-                try
-                {
-                    token.ThrowIfCancellationRequested();
-                    var target = AppServices.FileSystem.Combine(root, row.CoverCacheKey);
-                    var local = await _assets.DownloadAsync(row.CoverUrl!, target, token).ConfigureAwait(true);
-                    if (string.IsNullOrWhiteSpace(local))
-                    {
-                        return;
-                    }
-
-                    row.CoverPath = local;
-
-                    // 记下文件名（含来源子目录），下次这条 id 再出现直接绑本地文件。
-                    _info.SetCover(
-                        WorkshopInfoCache.Key(row.Source, row.Id),
-                        row.CoverCacheKey + Path.GetExtension(local),
-                        row.CoverUrl);
-                }
-                finally
-                {
-                    gate.Release();
-                    _coverDone++;
-                    RaiseCoverProgress();
-                }
-            })).ConfigureAwait(true);
+            await Task.WhenAll(pending.Select(row =>
+                    Task.Run(
+                        () => FillOneCoverAsync(row, gate, root, token, dispatcher, lifetime),
+                        token)))
+                .ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -1280,6 +1341,82 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             // 落盘放到线程池：封面写完再收尾，不占 UI 线程。
             _ = Task.Run(_info.Flush);
         }
+    }
+
+    /// <summary>下载并登记一张封面；在线程池上跑，只有行属性与进度回 UI 线程。</summary>
+    private async Task FillOneCoverAsync(
+        WorkshopRowViewModel row,
+        SemaphoreSlim gate,
+        string root,
+        CancellationToken token,
+        Microsoft.UI.Dispatching.DispatcherQueue? dispatcher,
+        CancellationTokenSource lifetime)
+    {
+        await gate.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            token.ThrowIfCancellationRequested();
+            var target = AppServices.FileSystem.Combine(root, row.CoverCacheKey);
+            var local = await _assets.DownloadAsync(row.CoverUrl!, target, token).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(local))
+            {
+                return;
+            }
+
+            // 记下文件名（含来源子目录），下次这条 id 再出现直接绑本地文件。
+            // 这一步是同步 SQLite 写，必须留在当前线程，别带回 UI。
+            _info.SetCover(
+                WorkshopInfoCache.Key(row.Source, row.Id),
+                row.CoverCacheKey + Path.GetExtension(local),
+                row.CoverUrl);
+
+            SetCoverPath(row, local, dispatcher);
+        }
+        finally
+        {
+            gate.Release();
+            ReportCoverDone(dispatcher, lifetime);
+        }
+    }
+
+    /// <summary>把本地封面路径写回行模型（区间在 UI 线程）。</summary>
+    private static void SetCoverPath(
+        WorkshopRowViewModel row,
+        string local,
+        Microsoft.UI.Dispatching.DispatcherQueue? dispatcher)
+    {
+        if (dispatcher is null || dispatcher.HasThreadAccess)
+        {
+            row.CoverPath = local;
+            return;
+        }
+
+        dispatcher.TryEnqueue(() => row.CoverPath = local);
+    }
+
+    /// <summary>进度 +1 并刷新文案；只改自己这一轮的计数。</summary>
+    private void ReportCoverDone(
+        Microsoft.UI.Dispatching.DispatcherQueue? dispatcher,
+        CancellationTokenSource lifetime)
+    {
+        if (dispatcher is not null && !dispatcher.HasThreadAccess)
+        {
+            if (!dispatcher.TryEnqueue(() => ReportCoverDone(null, lifetime)))
+            {
+                return;
+            }
+
+            return;
+        }
+
+        // 新一轮封面任务已经接管：这一轮的迟到计数不写，免得把新页的进度顶乱。
+        if (!ReferenceEquals(_coverLifetime, lifetime))
+        {
+            return;
+        }
+
+        _coverDone++;
+        RaiseCoverProgress();
     }
 
     /// <summary>把 Steam 列表条目并进缓存（不覆盖已抓到的封面文件名与详情）。</summary>

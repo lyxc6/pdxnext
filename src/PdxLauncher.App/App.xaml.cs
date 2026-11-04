@@ -64,6 +64,10 @@ public partial class App : Application
         _window = new MainWindow();
         MainWindowInstance = _window;
         _window.Activate();
+
+        // UI 线程看门狗：任何页面上的同步长活（大文件加载、同步 IO/解码）都会在这里留下
+        // 「停顿 N ms + 最近位置」，比窗口卡死后什么都抓不到要强。
+        AppServices.AttachWatchdog(UiThreadWatchdog.Start(AppServices.Logger, _window.DispatcherQueue));
         StartupTimeline.Mark(StartupTimeline.WindowCreated);
     }
 
