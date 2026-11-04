@@ -27,6 +27,12 @@ public static class FootprintClassifierChecks
     {
         ChecksContext.Equal("纯新增(0 覆盖) → PureAdditive", ModKind.PureAdditive, FootprintClassifier.Classify(Foot(50, 0)));
         ChecksContext.Equal("微调(1-10) → SmallTweak", ModKind.SmallTweak, FootprintClassifier.Classify(Foot(50, 5)));
+
+        // 体量门槛：2339 个文件只覆盖 2 处玩法的内容包（V3 的 Tech & Res）不是「小调整」，
+        // 它是以新增为主的内容包，层位上应排在真正的微调之前。
+        ChecksContext.Equal("微调边界(200 文件) → SmallTweak", ModKind.SmallTweak, FootprintClassifier.Classify(Foot(200, 3)));
+        ChecksContext.Equal("超过微调体量(201 文件) → PureAdditive", ModKind.PureAdditive, FootprintClassifier.Classify(Foot(201, 3)));
+        ChecksContext.Equal("大体量少覆盖(300 文件/3 处) → PureAdditive", ModKind.PureAdditive, FootprintClassifier.Classify(Foot(300, 3)));
         ChecksContext.Equal("中量(11-50) → MediumChange", ModKind.MediumChange, FootprintClassifier.Classify(Foot(200, 12)));
         ChecksContext.Equal("大量(51-200) → LargeChange", ModKind.LargeChange, FootprintClassifier.Classify(Foot(400, 51)));
         ChecksContext.Equal("超大(≥200) → Overhaul", ModKind.Overhaul, FootprintClassifier.Classify(Foot(4000, 200)));
@@ -41,6 +47,11 @@ public static class FootprintClassifierChecks
 
         var locDominantWithTweaks = new ModFootprint(Guid.NewGuid(), "A", 100, 5, 80, 0, 0, Empty(), Empty());
         ChecksContext.Equal("翻译主导且带少量改动 → 仍 Localization（层位最末）", ModKind.Localization, FootprintClassifier.Classify(locDominantWithTweaks));
+
+        // 有意语义：localization 占比 ≥80% 即按翻译包处理（排最末），不再看 gameplay 覆盖数；
+        // 翻译包必须最后加载才能套住所有玩法文本，本机 382 mod 里只有 2 个落在这条边界上。
+        var locDominantWithMedium = new ModFootprint(Guid.NewGuid(), "A", 100, 30, 80, 0, 0, Empty(), Empty());
+        ChecksContext.Equal("翻译主导且改了 30 处玩法 → 仍 Localization（有意为之）", ModKind.Localization, FootprintClassifier.Classify(locDominantWithMedium));
 
         var locBelowThreshold = new ModFootprint(Guid.NewGuid(), "A", 100, 0, 79, 0, 0, Empty(), Empty());
         ChecksContext.Equal("localization 79% 未达 80% → 不是 Localization", ModKind.PureAdditive, FootprintClassifier.Classify(locBelowThreshold));

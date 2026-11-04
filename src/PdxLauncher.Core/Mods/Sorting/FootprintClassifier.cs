@@ -4,14 +4,22 @@ namespace PdxLauncher.Core.Mods.Sorting;
 /// 从 <see cref="ModFootprint"/> 推导分层标签与排序层位。纯函数、不碰 IO。
 /// </summary>
 /// <remarks>
-/// 分层口径来自对本机 CK3 382 个订阅 mod 的实测分布（纯新增 223 / 微调 128 / 中量 17 / 大量 11 / 超大 3），
-/// 与社区惯例一致：大 mod 在上、兼容补丁与小修改在下（后加载者在同文件冲突中获胜）。
+/// 分层口径来自对本机 CK3 382 个订阅 mod 的实测分布（纯新增 177 / 微调 123 / 美化 27 / 翻译 24 /
+/// 中量 17 / 大量 7 / 超大 7），与社区惯例一致：大 mod 在上、兼容补丁与小修改在下（后加载者在同文件冲突中获胜）。
+/// 微调另加体量门槛（见 <see cref="MaxTweakFiles"/>）：收紧后约 15 个大体量内容包由微调改判纯新增。
 /// </remarks>
 public static class FootprintClassifier
 {
     /// <summary>玩法目录：其中覆盖原版文件的规模决定「改动量」分层。</summary>
     private static readonly string[] GameplayDirs =
         ["common/", "events/", "history/", "gui/", "map_data/", "data_binding/"];
+
+    /// <summary>
+    /// 微调的体量上限。CK3 微调体量 p50=26 / p90=264，200 落在 p87；
+    /// 超过它的 mod 即使只覆盖少量玩法文件（如 2339 个文件只改 2 处），
+    /// 层位上也是「以新增为主的内容包」，不该被当成小调整排到补丁之前。
+    /// </summary>
+    private const int MaxTweakFiles = 200;
 
     /// <summary>
     /// 拉丁字母的补丁/衍生名称标记：按「整词」匹配，避免 Suffix / Prefix 里的 fix 这类子串误伤。
@@ -53,7 +61,7 @@ public static class FootprintClassifier
             return ModKind.MediumChange;
         }
 
-        if (footprint.GameplayOverrides >= 1)
+        if (footprint.GameplayOverrides >= 1 && footprint.TotalFiles <= MaxTweakFiles)
         {
             return ModKind.SmallTweak;
         }

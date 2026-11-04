@@ -6,7 +6,13 @@ public enum AutoSortConflictKind
     /// <summary>两个同层位 mod 覆盖了同一个原版文件，谁赢都合理，按稳定顺序保持现状。</summary>
     VanillaOverrideSameTier,
 
-    /// <summary>两个 mod 共带同一新增文件，但没有补丁/超集/体量证据可判定基底。</summary>
+    /// <summary>
+    /// 两个 mod 共带同一新增文件，但层位不同：先后由层位决定（小改动后加载、覆盖该文件），
+    /// 不用文件体量去反向裁决。只提示，不建边。
+    /// </summary>
+    SharedAddedFileTierDecided,
+
+    /// <summary>两个同层位 mod 共带同一新增文件，也判不出基底：无顺序证据，保持现状。</summary>
     SharedAddedFileAmbiguous,
 }
 

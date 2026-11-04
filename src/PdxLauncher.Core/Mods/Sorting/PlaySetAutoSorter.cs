@@ -17,10 +17,22 @@ public enum AutoSortWarningKind
 {
     /// <summary>硬边成环，已按层位强制打破（被弹出的 mod 记录在 <see cref="AutoSortWarning.ModIds"/>）。</summary>
     DependencyCycleBroken,
+
+    /// <summary>没找到原版内容目录的文件索引：所有 mod 都只能按「纯新增」处理，层位失效。</summary>
+    VanillaIndexMissing,
+
+    /// <summary>有启用 mod 的内容文件数为 0（未安装/路径失效），它们只能落在「纯新增」。</summary>
+    EmptyFootprint,
 }
 
 /// <summary>排序警告。</summary>
-public sealed record AutoSortWarning(AutoSortWarningKind Kind, IReadOnlyList<Guid> ModIds);
+/// <param name="Kind">警告类别。</param>
+/// <param name="ModIds">相关 mod（<see cref="AutoSortWarningKind.VanillaIndexMissing"/> 为空）。</param>
+/// <param name="Edges">成环时被违背的硬边，供预览解释「哪条先于哪条被打断」。</param>
+public sealed record AutoSortWarning(
+    AutoSortWarningKind Kind,
+    IReadOnlyList<Guid> ModIds,
+    IReadOnlyList<SortEdge>? Edges = null);
 
 /// <summary>排序结果：新顺序 + 警告。</summary>
 public sealed record AutoSortResult(
@@ -61,9 +73,11 @@ public static class PlaySetAutoSorter
 
         var successors = new List<int>[items.Count];
         var indegree = new int[items.Count];
+        var edgesByAfter = new List<SortEdge>[items.Count];
         for (var i = 0; i < items.Count; i++)
         {
             successors[i] = new List<int>();
+            edgesByAfter[i] = new List<SortEdge>();
         }
 
         foreach (var edge in edges)
@@ -77,6 +91,7 @@ public static class PlaySetAutoSorter
 
             successors[before].Add(after);
             indegree[after]++;
+            edgesByAfter[after].Add(edge);
         }
 
         var queue = new PriorityQueue<int, (int Rank, int CurrentIndex)>();
@@ -91,6 +106,7 @@ public static class PlaySetAutoSorter
 
         var entries = new List<AutoSortEntry>(items.Count);
         var brokenCycle = new List<Guid>();
+        var violatedEdges = new List<SortEdge>();
         while (entries.Count < items.Count)
         {
             int node;
@@ -103,6 +119,15 @@ public static class PlaySetAutoSorter
                 // 硬边成环：按层位+当前位置强制弹出最优节点，打破环继续。
                 node = FindBestRemaining(items, ranks, emitted);
                 brokenCycle.Add(items[node].Footprint.ModId);
+
+                // 记下这一刻被违背的边（要求它在前，但它还没出序），供预览解释断环。
+                foreach (var edge in edgesByAfter[node])
+                {
+                    if (indexById.TryGetValue(edge.Before, out var beforeIndex) && !emitted[beforeIndex])
+                    {
+                        violatedEdges.Add(edge);
+                    }
+                }
             }
 
             emitted[node] = true;
@@ -131,7 +156,10 @@ public static class PlaySetAutoSorter
         }
 
         var warnings = brokenCycle.Count > 0
-            ? new List<AutoSortWarning> { new(AutoSortWarningKind.DependencyCycleBroken, brokenCycle) }
+            ? new List<AutoSortWarning>
+            {
+                new(AutoSortWarningKind.DependencyCycleBroken, brokenCycle, violatedEdges.Distinct().ToList()),
+            }
             : new List<AutoSortWarning>();
         return new AutoSortResult(entries, warnings);
     }

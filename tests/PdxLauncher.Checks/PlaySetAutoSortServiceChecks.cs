@@ -13,8 +13,9 @@ using PdxLauncher.Core.Playsets;
 
 /// <summary>
 /// 自动排序服务（PlaySetAutoSortService）的回归护栏：
-/// 覆盖预览产物（足迹/冲突/边/结果/重排行）、库声明依赖 mods_dependencies 与
-/// descriptor 依赖的边映射、缺库降级不抛、重排行保持原行内容并重编位置。
+/// 覆盖预览产物（足迹/冲突/边/结果/重排行）、库声明依赖 mods_dependencies、
+/// descriptor 依赖与 V3/EU5 <c>.metadata/metadata.json</c> 依赖的边映射、缺库降级不抛、
+/// 重排行保持原行内容并重编位置。
 /// 临时库与临时目录用例全部在系统临时目录里跑，绝不碰真机 launcher-v2.sqlite。
 /// </summary>
 public static class PlaySetAutoSortServiceChecks
@@ -27,9 +28,15 @@ public static class PlaySetAutoSortServiceChecks
         CheckTierReorder(fs);
         CheckDeclaredDependencyOverridesTier(fs);
         CheckDescriptorDependencyBySteamId(fs);
+        CheckMetadataDependencyByPdxId(fs);
+        CheckMetadataDependencyBySteamId(fs);
+        CheckUnknownMetadataDependencyIgnored(fs);
         CheckConflictGraphInPreview(fs);
         CheckMissingDatabaseDegrades(fs);
         CheckReorderedRowsPreserveContent(fs);
+        CheckDisabledModsNotScanned(fs);
+        CheckVanillaIndexMissingWarning(fs);
+        CheckEmptyFootprintWarning(fs);
         CheckInputSignatureAndStaleness();
         CheckProgressAndCancellation(fs);
 
@@ -135,6 +142,94 @@ public static class PlaySetAutoSortServiceChecks
         }
     }
 
+    /// <summary>V3 没有 descriptor.mod：依赖写在 .metadata/metadata.json 里，按元数据 id 匹配成硬边。</summary>
+    private static void CheckMetadataDependencyByPdxId(IFileSystem fs)
+    {
+        var root = NewTempRoot("metadata-id");
+        try
+        {
+            var game = NewGame(fs, root);
+            WriteVanilla(fs, game, "common/base.txt");
+
+            // 两个都是纯新增、互不共享文件：没有依赖边时顺序就是传入顺序。
+            var local = NewMod(fs, root, "m-local", "本地补丁", "common/local_a.txt");
+            var content = NewMod(fs, root, "m-content", "Tech & Res", "common/content_a.txt", "common/content_b.txt");
+            WriteMetadata(fs, local, "xukong.freight", "tech.res");
+            WriteMetadata(fs, content, "tech.res");
+
+            var preview = PlaySetAutoSortService.BuildPreview(fs, game, new[] { local, content }, new SilentLogger());
+
+            ChecksContext.Equal("metadata 依赖把被依赖方排到前面", "Tech & Res,本地补丁", Names(preview.ReorderedRows));
+            var edge = preview.Edges.FirstOrDefault(e => e.Kind == SortEdgeKind.DeclaredDependency);
+            ChecksContext.Check("metadata 依赖边存在", edge is not null, "未找到 DeclaredDependency 边");
+            if (edge is not null)
+            {
+                ChecksContext.Check(
+                    "metadata 边方向正确（被依赖方在前）",
+                    edge.Before == content.ModId && edge.After == local.ModId,
+                    "Before=" + edge.Before + " After=" + edge.After);
+                ChecksContext.Check(
+                    "metadata 边理由带依赖 id",
+                    edge.Detail is not null && edge.Detail.Contains("tech.res", StringComparison.Ordinal),
+                    edge.Detail ?? "(null)");
+            }
+        }
+        finally
+        {
+            fs.Delete(root);
+        }
+    }
+
+    /// <summary>元数据 id 常常就是 workshop id：被依赖方没有 metadata.json 时按 SteamId 也能命中。</summary>
+    private static void CheckMetadataDependencyBySteamId(IFileSystem fs)
+    {
+        var root = NewTempRoot("metadata-steam");
+        try
+        {
+            var game = NewGame(fs, root);
+            WriteVanilla(fs, game, "common/base.txt");
+
+            var local = NewMod(fs, root, "m-local", "本地扩展", "common/local_only.txt");
+            var content = NewMod(fs, root, "m-content", "无 id 内容包", "common/content_only.txt") with
+            {
+                SteamId = "3472248460",
+            };
+            WriteMetadata(fs, local, "local.pack", "3472248460");
+
+            var preview = PlaySetAutoSortService.BuildPreview(fs, game, new[] { local, content }, new SilentLogger());
+
+            ChecksContext.Equal("依赖 id 用 workshop id 也能命中", "无 id 内容包,本地扩展", Names(preview.ReorderedRows));
+        }
+        finally
+        {
+            fs.Delete(root);
+        }
+    }
+
+    /// <summary>依赖指向播放集里没有的 id：静默跳过，不建边、不改序、不抛。</summary>
+    private static void CheckUnknownMetadataDependencyIgnored(IFileSystem fs)
+    {
+        var root = NewTempRoot("metadata-missing");
+        try
+        {
+            var game = NewGame(fs, root);
+            WriteVanilla(fs, game, "common/base.txt");
+
+            var first = NewMod(fs, root, "m-first", "甲", "common/first.txt");
+            var second = NewMod(fs, root, "m-second", "乙", "common/second.txt");
+            WriteMetadata(fs, first, "local.pack", "not.installed.mod");
+
+            var preview = PlaySetAutoSortService.BuildPreview(fs, game, new[] { first, second }, new SilentLogger());
+
+            ChecksContext.Equal("未知依赖不建边", 0, preview.Edges.Count(e => e.Kind == SortEdgeKind.DeclaredDependency));
+            ChecksContext.Equal("未知依赖不改序", "甲,乙", Names(preview.ReorderedRows));
+        }
+        finally
+        {
+            fs.Delete(root);
+        }
+    }
+
     /// <summary>共享新增文件且无法判定基底时进冲突列表（SharedAddedFileAmbiguous），足迹随预览返回。</summary>
     private static void CheckConflictGraphInPreview(IFileSystem fs)
     {
@@ -223,6 +318,99 @@ public static class PlaySetAutoSortServiceChecks
             ChecksContext.Equal("ModId 集合不变",
                 string.Join(",", preview.ReorderedRows.Select(r => r.ModId).OrderBy(id => id)),
                 string.Join(",", new[] { tweak.ModId, medium.ModId }.OrderBy(id => id)));
+        }
+        finally
+        {
+            fs.Delete(root);
+        }
+    }
+
+    /// <summary>禁用行不参与扫描与重排：不产出足迹、留在原位，启用行按层位排。</summary>
+    private static void CheckDisabledModsNotScanned(IFileSystem fs)
+    {
+        var root = NewTempRoot("disabled");
+        try
+        {
+            var game = NewGame(fs, root);
+            WriteVanilla(fs, game, "common/base.txt", "common/v0.txt", "common/v1.txt", "common/v2.txt", "common/v3.txt",
+                "common/v4.txt", "common/v5.txt", "common/v6.txt", "common/v7.txt", "common/v8.txt", "common/v9.txt",
+                "common/v10.txt", "common/v11.txt");
+
+            var tweak = NewMod(fs, root, "m-tweak", "小调整", "common/base.txt");
+            // 层位更高（中量改动）但已禁用：若参与排序会跑到最前并顶掉小调整的位置。
+            var medium = NewMod(fs, root, "m-medium", "中等内容",
+                "common/v0.txt", "common/v1.txt", "common/v2.txt", "common/v3.txt", "common/v4.txt", "common/v5.txt",
+                "common/v6.txt", "common/v7.txt", "common/v8.txt", "common/v9.txt", "common/v10.txt", "common/v11.txt");
+            medium = medium with { Enabled = false, Position = 1 };
+
+            var preview = PlaySetAutoSortService.BuildPreview(fs, game, new[] { tweak, medium }, new SilentLogger());
+
+            ChecksContext.Equal("禁用行留在原位", "小调整,中等内容", Names(preview.ReorderedRows));
+            ChecksContext.Equal("位置保持连续", "0,1", string.Join(",", preview.ReorderedRows.Select(r => r.Position)));
+            ChecksContext.Equal("足迹只含启用行", 1, preview.Footprints.Count);
+            if (preview.Footprints.Count == 1)
+            {
+                ChecksContext.Check("足迹是被启用的那条", preview.Footprints[0].ModId == tweak.ModId, "足迹 ModId 不是小调整");
+            }
+
+            ChecksContext.Check("禁用行不算空足迹",
+                !preview.Result.Warnings.Any(w => w.Kind == AutoSortWarningKind.EmptyFootprint),
+                "禁用行被当成空足迹报了警");
+        }
+        finally
+        {
+            fs.Delete(root);
+        }
+    }
+
+    /// <summary>原版索引为空（内容根缺失/空目录）时给出显式警告，而不是静默把所有 mod 当纯新增。</summary>
+    private static void CheckVanillaIndexMissingWarning(IFileSystem fs)
+    {
+        var root = NewTempRoot("novanilla");
+        try
+        {
+            var game = NewGame(fs, root);
+            var first = NewMod(fs, root, "m-a", "甲", "common/base.txt");
+            var second = NewMod(fs, root, "m-b", "乙", "common/base.txt");
+
+            var preview = PlaySetAutoSortService.BuildPreview(fs, game, new[] { first, second }, new SilentLogger());
+
+            var warning = preview.Result.Warnings.FirstOrDefault(w => w.Kind == AutoSortWarningKind.VanillaIndexMissing);
+            ChecksContext.Check("原版索引缺失时有警告", warning is not null, "没有 VanillaIndexMissing 警告");
+            if (warning is not null)
+            {
+                ChecksContext.Equal("警告不绑定单个 mod", 0, warning.ModIds.Count);
+            }
+        }
+        finally
+        {
+            fs.Delete(root);
+        }
+    }
+
+    /// <summary>目录缺失/无内容的启用 mod 会退化成纯新增，预览里要显式提示空足迹。</summary>
+    private static void CheckEmptyFootprintWarning(IFileSystem fs)
+    {
+        var root = NewTempRoot("empty");
+        try
+        {
+            var game = NewGame(fs, root);
+            WriteVanilla(fs, game, "common/base.txt");
+
+            var real = NewMod(fs, root, "m-real", "真内容", "common/base.txt");
+            var empty = NewMod(fs, root, "m-empty", "空壳");
+
+            var preview = PlaySetAutoSortService.BuildPreview(fs, game, new[] { empty, real }, new SilentLogger());
+
+            var warning = preview.Result.Warnings.FirstOrDefault(w => w.Kind == AutoSortWarningKind.EmptyFootprint);
+            ChecksContext.Check("空足迹有警告", warning is not null, "没有 EmptyFootprint 警告");
+            if (warning is not null)
+            {
+                ChecksContext.Check("警告点名空壳 mod", warning.ModIds.Contains(empty.ModId), "空壳 mod 不在警告列表里");
+                ChecksContext.Check("警告不牵连正常 mod", !warning.ModIds.Contains(real.ModId), "正常 mod 被误报");
+            }
+
+            ChecksContext.Equal("空壳 mod 仍保留在行里", 2, preview.ReorderedRows.Count);
         }
         finally
         {
@@ -322,6 +510,20 @@ public static class PlaySetAutoSortServiceChecks
         {
             fs.Delete(root);
         }
+    }
+
+    /// <summary>写 V3/EU5 风格的 <c>.metadata/metadata.json</c>，只填排序需要的 id 与 dependency 关系。</summary>
+    private static void WriteMetadata(IFileSystem fs, PlaySetMod mod, string id, params string[] dependencyIds)
+    {
+        var metadataDir = Path.Combine(mod.DirPath, ".metadata");
+        fs.EnsureDirectory(metadataDir);
+        var relationships = string.Join(
+            ",",
+            dependencyIds.Select(static dependencyId =>
+                "{\"rel_type\":\"dependency\",\"id\":\"" + dependencyId + "\",\"resource_type\":\"mod\"}"));
+        fs.WriteAllTextAtomic(
+            Path.Combine(metadataDir, "metadata.json"),
+            "{\"id\":\"" + id + "\",\"relationships\":[" + relationships + "]}");
     }
 
     private static PlaySetMod Row(Guid id, string name, int position, bool enabled) => new(

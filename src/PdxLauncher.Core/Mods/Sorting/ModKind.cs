@@ -14,10 +14,13 @@ public enum ModKind
     /// <summary>中量改动：玩法覆盖 11–50。</summary>
     MediumChange,
 
-    /// <summary>微调：玩法覆盖 1–10。靠后加载，冲突时小改获胜。</summary>
+    /// <summary>微调：玩法覆盖 1–10 且总文件 ≤200。靠后加载，冲突时小改获胜。</summary>
     SmallTweak,
 
-    /// <summary>纯新增：0 处原版玩法覆盖。位置基本无关，保持相对稳定。</summary>
+    /// <summary>
+    /// 纯新增：0 处原版玩法覆盖；或体量超过微调上限、只覆盖少量玩法文件的内容包
+    /// （如 2339 个文件只改 2 处）。位置基本无关，保持相对稳定。
+    /// </summary>
     PureAdditive,
 
     /// <summary>美化：gfx 占绝对主导且不改玩法。位于内容 mod 之后。</summary>

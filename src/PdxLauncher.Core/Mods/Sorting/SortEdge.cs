@@ -8,6 +8,12 @@ public enum SortEdgeKind
 
     /// <summary>衍生补丁：补丁/翻译变体必须排在其基底 mod 之后加载。</summary>
     DerivedPatch,
+
+    /// <summary>
+    /// 同层位内的新增路径包含关系：一方的全部新增文件是另一方的子集，
+    /// 视前者为基底、后者为细化版本，基底先加载。跨层位一律不建这种边（层位裁决优先）。
+    /// </summary>
+    FootprintOverlap,
 }
 
 /// <summary>

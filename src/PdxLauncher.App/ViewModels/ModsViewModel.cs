@@ -61,9 +61,9 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
     /// <summary>
     /// 自动排序应用前的顺序快照（含位次，可直接还原），只保留在内存。
-    /// 切换或重载播放集即清空，避免把旧快照套到别的播放集上。
+    /// 切换或重载播放集即清空；列表内容在排序后有任何变化都会让签名失配，撤销随之失效。
     /// </summary>
-    private IReadOnlyList<PlaySetMod>? _autoSortUndo;
+    private AutoSortUndoSnapshot? _autoSortUndo;
 
     public ModsViewModel(
         PlaySetEditor editor,
@@ -1147,8 +1147,13 @@ public sealed class ModsViewModel : LocalizedObservableObject
             return false;
         }
 
-        _autoSortUndo = _allMods;
-        _allMods = PlaySetEditor.Renumber(preview.ReorderedRows);
+        // 快照记住「排序前的顺序」，签名记住「排序后（=当前）的列表」：
+        // 撤销时只有列表仍停在这份排序结果上才允许还原。
+        var sorted = PlaySetEditor.Renumber(preview.ReorderedRows);
+        _autoSortUndo = new AutoSortUndoSnapshot(
+            _allMods,
+            PlaySetAutoSortService.ComputeInputSignature(sorted));
+        _allMods = sorted;
         RebuildVisibleMods();
 
         var moved = preview.Result.Entries.Count(e => e.OldIndex != e.NewIndex);
@@ -1160,7 +1165,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
         return true;
     }
 
-    /// <summary>一键撤销上一次自动排序（还原应用前的顺序）；没有快照时返回 false。</summary>
+    /// <summary>一键撤销上一次自动排序（还原应用前的顺序）；没有快照或列表已变时返回 false。</summary>
     public bool UndoAutoSort()
     {
         if (_autoSortUndo is null)
@@ -1168,7 +1173,18 @@ public sealed class ModsViewModel : LocalizedObservableObject
             return false;
         }
 
-        _allMods = PlaySetEditor.Renumber(_autoSortUndo);
+        // 排序之后若增删了 mod / 改过启用态，旧顺序已经不再描述「当前这份列表的本来面目」：
+        // 强行还原会删掉新加的 mod、复活已删的 mod，并随自动保存落库。宁可作废。
+        if (!_autoSortUndo.IsValidFor(_allMods))
+        {
+            _autoSortUndo = null;
+            StatusMessage = T(Keys.ModsAutoSortUndoStale);
+            OnPropertyChanged(nameof(HasAutoSortUndo));
+            _logger.Info("自动排序（undo）：列表已在排序后发生变化，撤销快照作废");
+            return false;
+        }
+
+        _allMods = PlaySetEditor.Renumber(_autoSortUndo.Rows);
         _autoSortUndo = null;
         RebuildVisibleMods();
         StatusMessage = T(Keys.ModsStatusAutoSortUndone);

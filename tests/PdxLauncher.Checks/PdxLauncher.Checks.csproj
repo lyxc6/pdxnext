@@ -104,6 +104,12 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\AutoSortDiff.cs" Link="Linked\AutoSortDiff.cs" />
     <!--
+      撤销快照（排序前顺序 + 排序后的输入签名）。纯 record + 一次签名比对，不碰 UI，
+      随服务一起链接。判定错了不会崩，只在真机上表现为「撤销把新加的 mod 删掉、复活已删的 mod」，
+      所以由 AutoSortUndoSnapshotChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\AutoSortUndoSnapshot.cs" Link="Linked\AutoSortUndoSnapshot.cs" />
+    <!--
       图片按显示尺寸解码：目标宽度换算（纯算术）与文件头宽度解析（只碰 System.Buffers / System.IO）。
       两块都不引用 UI 类型，可以原样链接进来。它们错了不会崩，只会在真机上表现为「图糊了」
       或「内存没降下来」，编译器看不见，所以由 ImageDecodeSizeChecks 钉住口径。

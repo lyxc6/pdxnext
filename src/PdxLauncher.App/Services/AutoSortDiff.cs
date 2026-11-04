@@ -2,6 +2,7 @@ namespace PdxLauncher.App.Services;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Mods.Sorting;
@@ -16,6 +17,9 @@ public enum AutoSortDiffReasonKind
 {
     /// <summary>与另一 mod 共带文件，作为其补丁/衍生排在后面。</summary>
     DerivedPatchAfter,
+
+    /// <summary>与另一 mod 同层位且新增路径互有包含，作为被包含的一方排在后面。</summary>
+    FootprintOverlapAfter,
 
     /// <summary>声明依赖另一 mod（mods_dependencies 或 descriptor dependencies），排在其后。</summary>
     DeclaredDependencyAfter,
@@ -82,6 +86,7 @@ public sealed record AutoSortDiff(
             var kind = edge.Kind switch
             {
                 SortEdgeKind.DerivedPatch => AutoSortDiffReasonKind.DerivedPatchAfter,
+                SortEdgeKind.FootprintOverlap => AutoSortDiffReasonKind.FootprintOverlapAfter,
                 _ => AutoSortDiffReasonKind.DeclaredDependencyAfter,
             };
             nameByModId.TryGetValue(edge.Before, out var relatedName);
@@ -124,6 +129,11 @@ public sealed record AutoSortDiff(
                     : Array.Empty<AutoSortDiffReason>()));
         }
 
-        return new AutoSortDiff(rows, preview.Result.Warnings, preview.Conflicts, movedCount);
+        // 冲突按共带文件数降序：共享得越多越可能是真正的覆盖关系，先给人看。
+        var conflicts = preview.Conflicts
+            .OrderByDescending(static c => c.SharedPathCount)
+            .ToList();
+
+        return new AutoSortDiff(rows, preview.Result.Warnings, conflicts, movedCount);
     }
 }

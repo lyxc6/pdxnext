@@ -21,6 +21,8 @@ public static class AutoSortDiffChecks
         CheckRowsFollowNewOrder();
         CheckNamesComeFromModId();
         CheckReasonsMapFromEdges();
+        CheckFootprintOverlapReason();
+        CheckConflictsSortedBySharedCount();
         CheckWarningsAndConflictsPassThrough();
         CheckEmptyEntries();
 
@@ -134,6 +136,43 @@ public static class AutoSortDiffChecks
         ChecksContext.Equal("补丁行指向基础 mod 名", "基础 mod", diff.Rows[1].Reasons[0].RelatedModName);
         ChecksContext.Equal("依赖行理由类型", AutoSortDiffReasonKind.DeclaredDependencyAfter, diff.Rows[2].Reasons[0].Kind);
         ChecksContext.Equal("依赖行指向依赖方名", "基础 mod", diff.Rows[2].Reasons[0].RelatedModName);
+    }
+
+    /// <summary>足迹包含边映射为「新增文件被某 mod 包含」，不能说成「作为其补丁」。</summary>
+    private static void CheckFootprintOverlapReason()
+    {
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        var oldRows = new[] { Mod(a, "基础包", 0), Mod(b, "扩展包", 1) };
+        var entries = new[] { Entry(a, 0, 0), Entry(b, 1, 1) };
+        var edges = new[] { new SortEdge(a, b, SortEdgeKind.FootprintOverlap, "common/x.txt") };
+        var preview = Preview(edges, Array.Empty<AutoSortConflict>(), Result(entries, Array.Empty<AutoSortWarning>()));
+
+        var diff = AutoSortDiff.Build(preview, oldRows);
+
+        ChecksContext.Equal("包含边理由类型", AutoSortDiffReasonKind.FootprintOverlapAfter, diff.Rows[1].Reasons[0].Kind);
+        ChecksContext.Equal("包含边指向基底名", "基础包", diff.Rows[1].Reasons[0].RelatedModName);
+    }
+
+    /// <summary>冲突按共带文件数降序：共享得最多的先给人看。</summary>
+    private static void CheckConflictsSortedBySharedCount()
+    {
+        var a = Guid.NewGuid();
+        var b = Guid.NewGuid();
+        var c = Guid.NewGuid();
+        var oldRows = new[] { Mod(a, "甲", 0), Mod(b, "乙", 1), Mod(c, "丙", 2) };
+        var entries = new[] { Entry(a, 0, 0), Entry(b, 1, 1), Entry(c, 2, 2) };
+        var conflicts = new[]
+        {
+            new AutoSortConflict(a, b, AutoSortConflictKind.SharedAddedFileAmbiguous, 2, Array.Empty<string>()),
+            new AutoSortConflict(a, c, AutoSortConflictKind.SharedAddedFileTierDecided, 9, Array.Empty<string>()),
+        };
+        var preview = Preview(Array.Empty<SortEdge>(), conflicts, Result(entries, Array.Empty<AutoSortWarning>()));
+
+        var diff = AutoSortDiff.Build(preview, oldRows);
+
+        ChecksContext.Equal("冲突按共带数降序", 9, diff.Conflicts[0].SharedPathCount);
+        ChecksContext.Equal("次多者排第二", 2, diff.Conflicts[1].SharedPathCount);
     }
 
     /// <summary>警告与冲突原样透传，对话框只负责排版。</summary>

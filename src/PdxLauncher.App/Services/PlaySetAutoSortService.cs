@@ -57,12 +57,22 @@ public static class PlaySetAutoSortService
         var vanillaElapsed = stopwatch.ElapsedMilliseconds;
         stopwatch.Restart();
 
-        var footprints = new List<ModFootprint>(mods.Count);
-        for (var index = 0; index < mods.Count; index++)
+        // 只排启用的 mod：禁用行不参与扫描/建图，也不被移动（加载文件本来就只写启用行）。
+        var sortable = new List<PlaySetMod>(mods.Count);
+        foreach (var mod in mods)
+        {
+            if (mod.Enabled)
+            {
+                sortable.Add(mod);
+            }
+        }
+
+        var footprints = new List<ModFootprint>(sortable.Count);
+        for (var index = 0; index < sortable.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var mod = mods[index];
-            progress?.Report(new AutoSortProgress(AutoSortPhase.ScanningMods, index, mods.Count, mod.Name));
+            var mod = sortable[index];
+            progress?.Report(new AutoSortProgress(AutoSortPhase.ScanningMods, index, sortable.Count, mod.Name));
             footprints.Add(ModFootprintScanner.Scan(
                 fileSystem,
                 mod.ModId,
@@ -73,12 +83,12 @@ public static class PlaySetAutoSortService
                 cancellationToken));
         }
 
-        progress?.Report(new AutoSortProgress(AutoSortPhase.ScanningMods, mods.Count, mods.Count));
+        progress?.Report(new AutoSortProgress(AutoSortPhase.ScanningMods, sortable.Count, sortable.Count));
         var scanElapsed = stopwatch.ElapsedMilliseconds;
         stopwatch.Restart();
 
         var knownIds = new HashSet<Guid>();
-        foreach (var mod in mods)
+        foreach (var mod in sortable)
         {
             knownIds.Add(mod.ModId);
         }
@@ -92,16 +102,21 @@ public static class PlaySetAutoSortService
             }
         }
 
-        edges.AddRange(BuildDescriptorEdges(fileSystem, game, mods, logger, knownIds));
+        edges.AddRange(BuildDescriptorEdges(fileSystem, game, sortable, logger, knownIds));
 
-        progress?.Report(new AutoSortProgress(AutoSortPhase.Graph, 0, mods.Count));
+        // V3 / EU5 没有 descriptor.mod，依赖只写在 .metadata/metadata.json 里。
+        var metadataEdges = BuildMetadataDependencyEdges(fileSystem, sortable, logger, knownIds);
+        edges.AddRange(metadataEdges);
+
+        progress?.Report(new AutoSortProgress(AutoSortPhase.Graph, 0, sortable.Count));
         var graph = ConflictGraphBuilder.Build(footprints);
         edges.AddRange(graph.DerivedPatchEdges);
+        edges = DeduplicateEdges(edges);
         var graphElapsed = stopwatch.ElapsedMilliseconds;
         stopwatch.Restart();
 
-        var items = new List<AutoSortInput>(mods.Count);
-        for (var index = 0; index < mods.Count; index++)
+        var items = new List<AutoSortInput>(sortable.Count);
+        for (var index = 0; index < sortable.Count; index++)
         {
             items.Add(new AutoSortInput(footprints[index], index));
         }
@@ -109,16 +124,55 @@ public static class PlaySetAutoSortService
         var result = PlaySetAutoSorter.Sort(items, edges);
         var sortElapsed = stopwatch.ElapsedMilliseconds;
 
+        result = result with { Warnings = MergeWarnings(result.Warnings, footprints, vanillaPaths) };
+
         // 相位耗时：用来判断 O(n²) 建图是否值得优化（382 mod 实测应在百毫秒量级）。
         logger.Info(
             $"自动排序耗时：原版索引={vanillaElapsed}ms 扫描={scanElapsed}ms 建图={graphElapsed}ms " +
-            $"排序={sortElapsed}ms mod={mods.Count} 边={edges.Count} 冲突={graph.Conflicts.Count}");
+            $"排序={sortElapsed}ms mod={mods.Count} 启用={sortable.Count} 边={edges.Count} " +
+            $"元数据依赖={metadataEdges.Count} 冲突={graph.Conflicts.Count}");
 
-        var reordered = new List<PlaySetMod>(mods.Count);
+        // 回填：启用行按排序结果依次占位，禁用行保持原位不动。
+        var sequence = new List<PlaySetMod>(result.Entries.Count);
         foreach (var entry in result.Entries)
         {
-            reordered.Add(mods[entry.OldIndex]);
+            sequence.Add(sortable[entry.OldIndex]);
         }
+
+        var reordered = new List<PlaySetMod>(mods.Count);
+        var actualOfSortable = new int[sortable.Count];
+        var actualOfSlot = new int[sortable.Count];
+        var next = 0;
+        for (var index = 0; index < mods.Count; index++)
+        {
+            if (!mods[index].Enabled)
+            {
+                reordered.Add(mods[index]);
+                continue;
+            }
+
+            var slot = next++;
+            actualOfSlot[slot] = index;
+            reordered.Add(sequence[slot]);
+        }
+
+        foreach (var entry in result.Entries)
+        {
+            actualOfSortable[entry.OldIndex] = actualOfSlot[entry.NewIndex];
+        }
+
+        // 预览里的位次一律换成「播放集里的真实行号」：禁用行占着位置时，启用序号不是行号。
+        var remapped = new List<AutoSortEntry>(result.Entries.Count);
+        foreach (var entry in result.Entries)
+        {
+            remapped.Add(entry with
+            {
+                OldIndex = actualOfSortable[entry.OldIndex],
+                NewIndex = actualOfSlot[entry.NewIndex],
+            });
+        }
+
+        result = result with { Entries = remapped };
 
         return new AutoSortPreview(
             footprints,
@@ -126,6 +180,37 @@ public static class PlaySetAutoSortService
             graph.Conflicts,
             result,
             PlaySetEditor.Renumber(reordered));
+    }
+
+    /// <summary>把「原版索引缺失」「空足迹」并入排序器给出的警告。</summary>
+    private static IReadOnlyList<AutoSortWarning> MergeWarnings(
+        IReadOnlyList<AutoSortWarning> warnings,
+        IReadOnlyList<ModFootprint> footprints,
+        IReadOnlyCollection<string> vanillaPaths)
+    {
+        var merged = new List<AutoSortWarning>(warnings.Count + 2);
+        if (vanillaPaths.Count == 0)
+        {
+            merged.Add(new AutoSortWarning(AutoSortWarningKind.VanillaIndexMissing, Array.Empty<Guid>()));
+        }
+
+        merged.AddRange(warnings);
+
+        var empty = new List<Guid>();
+        foreach (var footprint in footprints)
+        {
+            if (footprint.TotalFiles == 0)
+            {
+                empty.Add(footprint.ModId);
+            }
+        }
+
+        if (empty.Count > 0)
+        {
+            merged.Add(new AutoSortWarning(AutoSortWarningKind.EmptyFootprint, empty));
+        }
+
+        return merged;
     }
 
     /// <summary>
@@ -203,6 +288,92 @@ public static class PlaySetAutoSortService
         }
 
         return edges;
+    }
+
+    /// <summary>
+    /// V3 / EU5 的 <c>.metadata/metadata.json</c> 依赖：relationships 里 <c>rel_type=dependency</c> 的 id
+    /// 指向被依赖 mod 的元数据 id（部分 mod 的元数据 id 就是 workshop id，故 SteamId 也参与匹配）。
+    /// 被依赖者必须先加载（Before=被依赖方，After=声明方）。
+    /// </summary>
+    private static IReadOnlyList<SortEdge> BuildMetadataDependencyEdges(
+        IFileSystem fileSystem,
+        IReadOnlyList<PlaySetMod> mods,
+        IAppLogger logger,
+        IReadOnlySet<Guid> knownIds)
+    {
+        var descriptors = new Dictionary<Guid, ModMetadataDescriptor>(mods.Count);
+        var byMetadataId = new Dictionary<string, PlaySetMod>(StringComparer.OrdinalIgnoreCase);
+        foreach (var mod in mods)
+        {
+            if (ModMetadataReader.TryRead(fileSystem, mod.DirPath, logger, out var descriptor))
+            {
+                descriptors[mod.ModId] = descriptor;
+                if (descriptor.Id is not null)
+                {
+                    byMetadataId.TryAdd(descriptor.Id, mod);
+                }
+            }
+
+            // 没有 metadata.json 的 mod 也可能被别的 mod 按 workshop id 依赖，SteamId 一律参与匹配。
+            if (!string.IsNullOrWhiteSpace(mod.SteamId))
+            {
+                byMetadataId.TryAdd(mod.SteamId, mod);
+            }
+        }
+
+        if (descriptors.Count == 0)
+        {
+            return Array.Empty<SortEdge>();
+        }
+
+        var edges = new List<SortEdge>();
+        foreach (var mod in mods)
+        {
+            if (!descriptors.TryGetValue(mod.ModId, out var descriptor))
+            {
+                continue;
+            }
+
+            foreach (var dependencyId in descriptor.DependencyIds)
+            {
+                if (!byMetadataId.TryGetValue(dependencyId, out var dependency) || dependency.ModId == mod.ModId)
+                {
+                    continue;
+                }
+
+                if (!knownIds.Contains(dependency.ModId))
+                {
+                    continue;
+                }
+
+                edges.Add(new SortEdge(
+                    dependency.ModId,
+                    mod.ModId,
+                    SortEdgeKind.DeclaredDependency,
+                    "metadata.json 依赖 id=" + dependencyId));
+            }
+        }
+
+        return edges;
+    }
+
+    /// <summary>
+    /// 同一对 mod 可能被游戏库、descriptor、metadata 重复声明：按 (Before, After, Kind) 去重，
+    /// 免得预览里对同一对 mod 显示两条一模一样的理由。
+    /// </summary>
+    private static List<SortEdge> DeduplicateEdges(List<SortEdge> edges)
+    {
+        var unique = new List<SortEdge>(edges.Count);
+        var seen = new HashSet<(Guid Before, Guid After, SortEdgeKind Kind)>();
+        foreach (var edge in edges)
+        {
+            if (seen.Add((edge.Before, edge.After, edge.Kind)))
+            {
+                unique.Add(edge);
+            }
+        }
+
+        return unique;
     }
 
     /// <summary>读 descriptor 原文：优先 mod 目录里的 descriptor.mod，退回 mod 目录同名 .mod（官方旧式放法）。读不到按无依赖处理。</summary>

@@ -93,13 +93,18 @@ internal static class AutoSortPreviewDialog
                 TextWrapping = TextWrapping.Wrap,
                 Foreground = CautionBrush(),
             });
-            // 目前只有 DependencyCycleBroken 一种警告（成环被断开）。
-            // 只写「有环」不写「哪几个 mod 成环」，用户没法自己去拆环，所以补上名字。
+            // 警告分三类：成环被断开、原版索引缺失（层位失效）、空足迹（没扫到内容）。
             foreach (var warning in diff.Warnings)
             {
                 panel.Children.Add(new TextBlock
                 {
-                    Text = localizer.ModsAutoSortWarningCycle,
+                    Text = warning.Kind switch
+                    {
+                        AutoSortWarningKind.VanillaIndexMissing => localizer.ModsAutoSortWarningVanillaIndex,
+                        AutoSortWarningKind.EmptyFootprint =>
+                            localizer.T(Keys.ModsAutoSortWarningEmptyFootprint, warning.ModIds.Count),
+                        _ => localizer.ModsAutoSortWarningCycle,
+                    },
                     TextWrapping = TextWrapping.Wrap,
                 });
                 if (warning.ModIds.Count > 0)
@@ -113,6 +118,23 @@ internal static class AutoSortPreviewDialog
                         TextWrapping = TextWrapping.Wrap,
                         Foreground = SecondaryTextBrush(),
                     });
+                }
+
+                // 成环时把被违背的边写出来：只报「哪几个 mod 成环」不足以让人决定拆哪条。
+                if (warning.Edges is { Count: > 0 } edges)
+                {
+                    foreach (var edge in edges)
+                    {
+                        panel.Children.Add(new TextBlock
+                        {
+                            Text = localizer.T(
+                                Keys.ModsAutoSortWarningCycleEdge,
+                                NameOf(diff, edge.Before),
+                                NameOf(diff, edge.After)),
+                            TextWrapping = TextWrapping.Wrap,
+                            Foreground = SecondaryTextBrush(),
+                        });
+                    }
                 }
             }
         }
@@ -130,9 +152,14 @@ internal static class AutoSortPreviewDialog
                 var nameB = NameOf(diff, conflict.ModIdB);
                 panel.Children.Add(new TextBlock
                 {
-                    Text = conflict.Kind == AutoSortConflictKind.SharedAddedFileAmbiguous
-                        ? localizer.T(Keys.ModsAutoSortConflictAmbiguous, nameA, nameB, conflict.SharedPathCount)
-                        : localizer.T(Keys.ModsAutoSortConflictSameTier, nameA, nameB, conflict.SharedPathCount),
+                    Text = conflict.Kind switch
+                    {
+                        AutoSortConflictKind.SharedAddedFileTierDecided =>
+                            localizer.T(Keys.ModsAutoSortConflictTierDecided, nameA, nameB, conflict.SharedPathCount),
+                        AutoSortConflictKind.SharedAddedFileAmbiguous =>
+                            localizer.T(Keys.ModsAutoSortConflictAmbiguous, nameA, nameB, conflict.SharedPathCount),
+                        _ => localizer.T(Keys.ModsAutoSortConflictSameTier, nameA, nameB, conflict.SharedPathCount),
+                    },
                     TextWrapping = TextWrapping.Wrap,
                 });
             }
@@ -178,9 +205,12 @@ internal static class AutoSortPreviewDialog
         foreach (var reason in row.Reasons)
         {
             var related = reason.RelatedModName ?? "?";
-            parts.Add(reason.Kind == AutoSortDiffReasonKind.DerivedPatchAfter
-                ? localizer.T(Keys.ModsAutoSortReasonDerivedPatch, related)
-                : localizer.T(Keys.ModsAutoSortReasonDeclaredDep, related));
+            parts.Add(reason.Kind switch
+            {
+                AutoSortDiffReasonKind.DerivedPatchAfter => localizer.T(Keys.ModsAutoSortReasonDerivedPatch, related),
+                AutoSortDiffReasonKind.FootprintOverlapAfter => localizer.T(Keys.ModsAutoSortReasonFootprintOverlap, related),
+                _ => localizer.T(Keys.ModsAutoSortReasonDeclaredDep, related),
+            });
         }
 
         return string.Join("；", parts);

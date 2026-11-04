@@ -148,6 +148,15 @@ public static class PlaySetAutoSorterChecks
 
         ChecksContext.Equal("成环仍产出完整顺序", 2, result.Entries.Count);
         ChecksContext.Check("成环输出警告", result.Warnings.Any(w => w.Kind == AutoSortWarningKind.DependencyCycleBroken));
+
+        // 只报「哪几个 mod 成环」不足以让人决定拆哪条：被违背的边要一起带出来。
+        var warning = result.Warnings.First(w => w.Kind == AutoSortWarningKind.DependencyCycleBroken);
+        var violated = warning.Edges ?? Array.Empty<SortEdge>();
+        ChecksContext.Equal("成环记录被违背的边数", 1, violated.Count);
+        ChecksContext.Equal(
+            "被违背的边是「B 应先于 A」",
+            b.Footprint.ModId + "->" + a.Footprint.ModId,
+            violated.Count == 0 ? "(无)" : violated[0].Before + "->" + violated[0].After);
     }
 
     private static void CheckEmptyInput()
