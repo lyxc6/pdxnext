@@ -35,6 +35,8 @@
   "diagnostics.log.tailEmpty": "No matching log lines.",
   "diagnostics.log.tailTitle": "Last {0} lines (newest first)",
   "diagnostics.log.title": "Log file",
+  "diagnostics.log.wrap": "Wrap lines",
+  "diagnostics.log.wrapName": "Wrap log lines",
   "diagnostics.metric.gc": "GC collections (gen 0/1/2)",
   "diagnostics.metric.gc.detail": "Fast growth means heavy allocation traffic.",
   "diagnostics.metric.managed": "Managed heap",

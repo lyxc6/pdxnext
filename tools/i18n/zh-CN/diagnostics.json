@@ -35,6 +35,8 @@
   "diagnostics.log.tailEmpty": "没有匹配的日志行。",
   "diagnostics.log.tailTitle": "最近 {0} 行（最新在上）",
   "diagnostics.log.title": "日志文件",
+  "diagnostics.log.wrap": "自动换行",
+  "diagnostics.log.wrapName": "日志自动换行",
   "diagnostics.metric.gc": "GC 回收 0/1/2 代",
   "diagnostics.metric.gc.detail": "次数涨得快说明分配压力大。",
   "diagnostics.metric.managed": "托管堆",

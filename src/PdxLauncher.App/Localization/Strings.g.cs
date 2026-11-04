@@ -113,6 +113,8 @@ public sealed partial class Localizer
         ["diagnostics.log.tailEmpty"] = "没有匹配的日志行。",
         ["diagnostics.log.tailTitle"] = "最近 {0} 行（最新在上）",
         ["diagnostics.log.title"] = "日志文件",
+        ["diagnostics.log.wrap"] = "自动换行",
+        ["diagnostics.log.wrapName"] = "日志自动换行",
         ["diagnostics.metric.gc"] = "GC 回收 0/1/2 代",
         ["diagnostics.metric.gc.detail"] = "次数涨得快说明分配压力大。",
         ["diagnostics.metric.managed"] = "托管堆",
@@ -1383,6 +1385,8 @@ public sealed partial class Localizer
         ["diagnostics.log.tailEmpty"] = "No matching log lines.",
         ["diagnostics.log.tailTitle"] = "Last {0} lines (newest first)",
         ["diagnostics.log.title"] = "Log file",
+        ["diagnostics.log.wrap"] = "Wrap lines",
+        ["diagnostics.log.wrapName"] = "Wrap log lines",
         ["diagnostics.metric.gc"] = "GC collections (gen 0/1/2)",
         ["diagnostics.metric.gc.detail"] = "Fast growth means heavy allocation traffic.",
         ["diagnostics.metric.managed"] = "Managed heap",
@@ -2653,6 +2657,8 @@ public sealed partial class Localizer
         ("diagnostics.log.tailEmpty", "DiagnosticsLogTailEmpty"),
         ("diagnostics.log.tailTitle", "DiagnosticsLogTailTitle"),
         ("diagnostics.log.title", "DiagnosticsLogTitle"),
+        ("diagnostics.log.wrap", "DiagnosticsLogWrap"),
+        ("diagnostics.log.wrapName", "DiagnosticsLogWrapName"),
         ("diagnostics.metric.gc", "DiagnosticsMetricGc"),
         ("diagnostics.metric.gc.detail", "DiagnosticsMetricGcDetail"),
         ("diagnostics.metric.managed", "DiagnosticsMetricManaged"),
@@ -3921,6 +3927,8 @@ public sealed partial class Localizer
     public string DiagnosticsLogTailEmpty => Format("diagnostics.log.tailEmpty");
     public string DiagnosticsLogTailTitle => Format("diagnostics.log.tailTitle");
     public string DiagnosticsLogTitle => Format("diagnostics.log.title");
+    public string DiagnosticsLogWrap => Format("diagnostics.log.wrap");
+    public string DiagnosticsLogWrapName => Format("diagnostics.log.wrapName");
     public string DiagnosticsMetricGc => Format("diagnostics.metric.gc");
     public string DiagnosticsMetricGcDetail => Format("diagnostics.metric.gc.detail");
     public string DiagnosticsMetricManaged => Format("diagnostics.metric.managed");
@@ -5192,6 +5200,8 @@ internal static class Keys
     public const string DiagnosticsLogTailEmpty = "diagnostics.log.tailEmpty";
     public const string DiagnosticsLogTailTitle = "diagnostics.log.tailTitle";
     public const string DiagnosticsLogTitle = "diagnostics.log.title";
+    public const string DiagnosticsLogWrap = "diagnostics.log.wrap";
+    public const string DiagnosticsLogWrapName = "diagnostics.log.wrapName";
     public const string DiagnosticsMetricGc = "diagnostics.metric.gc";
     public const string DiagnosticsMetricGcDetail = "diagnostics.metric.gc.detail";
     public const string DiagnosticsMetricManaged = "diagnostics.metric.managed";

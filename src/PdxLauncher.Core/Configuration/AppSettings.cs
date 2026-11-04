@@ -155,6 +155,12 @@ public sealed class AppSettings
     /// </summary>
     public int? LastDiagnosticsSection { get; set; }
 
+    /// <summary>
+    /// 性能与日志页的日志尾部是否自动换行。默认关（长行用横向滚动条），
+    /// 打开后长行折行显示；只影响观感，不改日志内容。
+    /// </summary>
+    public bool DiagnosticsLogWrap { get; set; }
+
     /// <summary>启动后自动检查更新（默认开）。每机器安装仍会弹 UAC 才能升级。</summary>
     public bool AutoCheckUpdates { get; set; } = true;
 

@@ -105,16 +105,24 @@ public sealed partial class DiagnosticsPage : Page
 
     private void ShowSection(int index)
     {
-        var sections = new FrameworkElement?[]
+        // 日志分区不放滚动容器：正文要跟着窗口高度伸缩，所以和滚动区互斥显示。
+        var showLog = index == LogSectionIndex;
+        secLog.Visibility = showLog ? Visibility.Visible : Visibility.Collapsed;
+        diagSectionScroller.Visibility = showLog ? Visibility.Collapsed : Visibility.Visible;
+
+        var sections = new (int Index, FrameworkElement? Element)[]
         {
-            secOverview, secCache, secLog, secNetwork, secStartup,
+            (OverviewSectionIndex, secOverview),
+            (CacheSectionIndex, secCache),
+            (NetworkSectionIndex, secNetwork),
+            (StartupSectionIndex, secStartup),
         };
 
-        for (var i = 0; i < sections.Length; i++)
+        foreach (var (sectionIndex, element) in sections)
         {
-            if (sections[i] is { } section)
+            if (element is { } section)
             {
-                section.Visibility = i == index ? Visibility.Visible : Visibility.Collapsed;
+                section.Visibility = sectionIndex == index ? Visibility.Visible : Visibility.Collapsed;
             }
         }
 

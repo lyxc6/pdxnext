@@ -29,6 +29,7 @@ public static class DiagnosticsPageChecks
         "rdoDiagLogWarn",
         "rdoDiagLogError",
         "tglDiagAutoRefresh",
+        "tglDiagLogWrap",
         "txtDiagLogTail",
         "txtDiagStatus",
     ];
@@ -102,8 +103,28 @@ public static class DiagnosticsPageChecks
             tagOrder.All(index => index >= 0) && tagOrder.SequenceEqual(tagOrder.Order()));
 
         ChecksContext.Check("日志尾部只读", xaml.Contains("IsReadOnly=\"True\"", StringComparison.Ordinal));
-        ChecksContext.Check("日志尾部不自动折行", xaml.Contains("TextWrapping=\"NoWrap\"", StringComparison.Ordinal));
-        var tailBox = SliceBetween(xaml, "x:Name=\"txtDiagLogTail\"", "/>");
+        ChecksContext.Check("日志尾部折行由开关驱动",
+            xaml.Contains("TextWrapping=\"{x:Bind svc:XamlTextWrapping.FromBool(ViewModel.LogWrap), Mode=OneWay}\"", StringComparison.Ordinal));
+        ChecksContext.Check("两个日志开关标签常显（不靠 OnContent）",
+            xaml.Contains("Text=\"{x:Bind L.DiagnosticsLogWrap, Mode=OneWay}\"", StringComparison.Ordinal) &&
+            xaml.Contains("Text=\"{x:Bind L.DiagnosticsLogAutoRefresh, Mode=OneWay}\"", StringComparison.Ordinal) &&
+            !xaml.Contains("OnContent=\"{x:Bind L.DiagnosticsLogWrap", StringComparison.Ordinal) &&
+            !xaml.Contains("OnContent=\"{x:Bind L.DiagnosticsLogAutoRefresh", StringComparison.Ordinal));
+        var filterRow = SliceBetween(xaml, "<controls:PdxWrapPanel Spacing=\"16\">", "</controls:PdxWrapPanel>");
+        ChecksContext.Check("过滤行用 PdxWrapPanel（窄窗口折行，标签不会被裁成 0 宽）",
+            filterRow.Contains("rdoDiagLogAll", StringComparison.Ordinal) &&
+            filterRow.Contains("tglDiagLogWrap", StringComparison.Ordinal) &&
+            filterRow.Contains("tglDiagAutoRefresh", StringComparison.Ordinal));
+        var tailBox = SliceBetween(xaml, "<TextBox Grid.Row=\"1\"", "/>");
+        ChecksContext.Check("日志尾部高度跟随窗口（不再写死 340）",
+            !tailBox.Contains("Height=\"340\"", StringComparison.Ordinal) &&
+            tailBox.Contains("MinHeight=\"160\"", StringComparison.Ordinal) &&
+            tailBox.Contains("Grid.Row=\"1\"", StringComparison.Ordinal));
+        ChecksContext.Check("日志分区移出滚动容器（独立 Grid）",
+            xaml.Contains("x:Name=\"diagSectionScroller\"", StringComparison.Ordinal) &&
+            Regex.IsMatch(xaml, @"<Grid x:Name=""secLog""[^>]*>\s*<Grid.RowDefinitions>", RegexOptions.Singleline) &&
+            !SliceBetween(xaml, "<ScrollViewer x:Name=\"diagSectionScroller\"", "</ScrollViewer>")
+                .Contains("x:Name=\"secLog\"", StringComparison.Ordinal));
         ChecksContext.Check("日志尾部滚动条用 ScrollViewer 附加属性",
             tailBox.Contains("ScrollViewer.HorizontalScrollBarVisibility", StringComparison.Ordinal) &&
             tailBox.Contains("ScrollViewer.VerticalScrollBarVisibility", StringComparison.Ordinal) &&
@@ -145,6 +166,18 @@ public static class DiagnosticsPageChecks
 
         ChecksContext.Check("AppSettings 记录性能页上次分节",
             settings.Contains("LastDiagnosticsSection", StringComparison.Ordinal));
+        ChecksContext.Check("AppSettings 记录日志折行开关",
+            settings.Contains("DiagnosticsLogWrap", StringComparison.Ordinal));
+
+        var wrapHelper = Read(root, Path.Combine("src", "PdxLauncher.App", "Services", "XamlTextWrapping.cs"));
+        ChecksContext.Check("换行辅助同时支持折行与不折行",
+            wrapHelper.Contains("TextWrapping.Wrap", StringComparison.Ordinal) &&
+            wrapHelper.Contains("TextWrapping.NoWrap", StringComparison.Ordinal));
+        ChecksContext.Check("视图模型暴露 LogWrap 开关",
+            viewModel.Contains("public bool LogWrap", StringComparison.Ordinal));
+        ChecksContext.Check("折行开关写回设置",
+            viewModel.Contains("DiagnosticsLogWrap = value", StringComparison.Ordinal) &&
+            viewModel.Contains("SaveSettings()", StringComparison.Ordinal));
 
         // i18n：两侧键集合由生成器保证一致，这里只确认区域文件与生成结果都到位。
         ChecksContext.Check("zh-CN 有 diagnostics 区域", zhKeys.Length > 0);
@@ -154,6 +187,10 @@ public static class DiagnosticsPageChecks
             strings.Contains("DiagnosticsPageTitle", StringComparison.Ordinal));
         ChecksContext.Check("生成表含页脚导航键",
             strings.Contains("ShellNavDiagnostics", StringComparison.Ordinal));
+        ChecksContext.Check("zh-CN 有折行开关文案", zhKeys.Contains("diagnostics.log.wrap", StringComparison.Ordinal));
+        ChecksContext.Check("en-US 有折行开关文案", enKeys.Contains("diagnostics.log.wrap", StringComparison.Ordinal));
+        ChecksContext.Check("生成表含折行开关键",
+            strings.Contains("DiagnosticsLogWrap", StringComparison.Ordinal));
 
         return ChecksContext.Failures == before ? 0 : 1;
     }

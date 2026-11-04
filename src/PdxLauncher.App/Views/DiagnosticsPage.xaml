@@ -64,7 +64,7 @@
                                    Description="{x:Bind StatsText}"
                                    AutomationProperties.AutomationId="{x:Bind AutomationId}">
                 <controls:SettingsCard.ActionContent>
-                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <StackPanel VerticalAlignment="Center" Spacing="4">
                         <TextBlock Text="{x:Bind LastRequestText}"
                                    HorizontalAlignment="Right"
                                    Style="{StaticResource CaptionTextBlockStyle}"
@@ -169,110 +169,172 @@
             </NavigationView.MenuItems>
         </NavigationView>
 
-        <ScrollViewer Grid.Row="0"
-                      Grid.Column="1"
-                      VerticalScrollBarVisibility="Visible"
-                      HorizontalScrollBarVisibility="Disabled"
-                      HorizontalScrollMode="Disabled"
-                      HorizontalContentAlignment="Stretch">
-            <!-- 右侧 14 DIP 同样是浮层滚动条通道，与设置页保持一致。 -->
-            <StackPanel Spacing="12" Margin="0,0,14,0">
+        <Grid Grid.Row="0" Grid.Column="1">
+            <!-- 概览 / 缓存 / 网络 / 启动耗时仍在滚动容器里；日志分区是独立 Grid，正文自己撑满高度。 -->
+            <ScrollViewer x:Name="diagSectionScroller"
+                          VerticalScrollBarVisibility="Visible"
+                          HorizontalScrollBarVisibility="Disabled"
+                          HorizontalScrollMode="Disabled"
+                          HorizontalContentAlignment="Stretch">
+                <!-- 右侧 16 DIP 是浮层滚动条通道，与底部状态条对齐。 -->
+                <StackPanel Spacing="12" Margin="0,0,16,0">
 
-                <!-- ============ 概览 ============ -->
-                <StackPanel x:Name="secOverview" Spacing="8">
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="{x:Bind L.DiagnosticsSectionOverview, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
-                            <TextBlock Text="{x:Bind ViewModel.LastSampleText, Mode=OneWay}"
-                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <ProgressRing Width="16" Height="16"
-                                          IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                                          Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsBusy), Mode=OneWay}" />
-                            <Button AutomationProperties.AutomationId="btnDiagRefresh"
-                                    Content="{x:Bind L.DiagnosticsOverviewRefresh, Mode=OneWay}"
-                                    Click="OnRefreshOverviewClick" />
-                        </StackPanel>
-                    </Grid>
-
-                    <TextBlock Text="{x:Bind L.DiagnosticsOverviewMetricsTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
-                    <ItemsControl ItemsSource="{x:Bind ViewModel.Metrics, Mode=OneWay}"
-                                  ItemTemplate="{StaticResource MetricRowTemplate}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Spacing="0" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-
-                    <TextBlock Text="{x:Bind L.DiagnosticsOverviewCountersTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
-                    <controls:SettingsCard Header="{x:Bind ViewModel.CacheTotalText, Mode=OneWay}"
-                                           Description="{x:Bind L.DiagnosticsCacheHint, Mode=OneWay}">
-                        <controls:SettingsCard.ActionContent>
-                            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                                <ProgressRing Width="16" Height="16"
-                                              IsActive="{x:Bind ViewModel.IsCacheBusy, Mode=OneWay}"
-                                              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsCacheBusy), Mode=OneWay}" />
-                                <Button AutomationProperties.AutomationId="btnDiagRefreshCacheOverview"
-                                        Content="{x:Bind L.SettingsCacheRefresh, Mode=OneWay}"
-                                        Click="OnRefreshCacheClick" />
+                    <!-- ============ 概览 ============ -->
+                    <StackPanel x:Name="secOverview" Spacing="8">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="{x:Bind L.DiagnosticsSectionOverview, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
+                                <TextBlock Text="{x:Bind ViewModel.LastSampleText, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
-                        </controls:SettingsCard.ActionContent>
-                    </controls:SettingsCard>
-
-                    <TextBlock Text="{x:Bind L.DiagnosticsOverviewHintsTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
-                    <ItemsControl ItemsSource="{x:Bind ViewModel.Hints, Mode=OneWay}"
-                                  ItemTemplate="{StaticResource HintRowTemplate}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Spacing="0" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-                    <TextBlock Text="{x:Bind L.DiagnosticsOverviewHintsEmpty, Mode=OneWay}"
-                               Style="{StaticResource DiagnosticsHintTextStyle}"
-                               Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(ViewModel.HasHints), Mode=OneWay}" />
-                </StackPanel>
-
-                <!-- ============ 缓存 ============ -->
-                <StackPanel x:Name="secCache" Spacing="8" Visibility="Collapsed">
-                    <TextBlock Text="{x:Bind L.DiagnosticsSectionCache, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
-                    <TextBlock Text="{x:Bind L.DiagnosticsCacheHint, Mode=OneWay}" Style="{StaticResource DiagnosticsHintTextStyle}" />
-
-                    <controls:SettingsCard Header="{x:Bind ViewModel.CacheTotalText, Mode=OneWay}">
-                        <controls:SettingsCard.ActionContent>
-                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                 <ProgressRing Width="16" Height="16"
-                                              IsActive="{x:Bind ViewModel.IsCacheBusy, Mode=OneWay}"
-                                              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsCacheBusy), Mode=OneWay}" />
-                                <Button AutomationProperties.AutomationId="btnDiagRefreshCache"
-                                        Content="{x:Bind L.SettingsCacheRefresh, Mode=OneWay}"
-                                        Click="OnRefreshCacheClick" />
-                                <Button AutomationProperties.AutomationId="btnDiagClearAllCaches"
-                                        Content="{x:Bind L.SettingsCacheClearAll, Mode=OneWay}"
-                                        Click="OnClearAllCachesClick" />
+                                              IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                                              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsBusy), Mode=OneWay}" />
+                                <Button AutomationProperties.AutomationId="btnDiagRefresh"
+                                        Content="{x:Bind L.DiagnosticsOverviewRefresh, Mode=OneWay}"
+                                        Click="OnRefreshOverviewClick" />
                             </StackPanel>
-                        </controls:SettingsCard.ActionContent>
-                    </controls:SettingsCard>
+                        </Grid>
 
-                    <ItemsControl ItemsSource="{x:Bind ViewModel.CacheRows, Mode=OneWay}"
-                                  ItemTemplate="{StaticResource CacheRowTemplate}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Spacing="0" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
+                        <TextBlock Text="{x:Bind L.DiagnosticsOverviewMetricsTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.Metrics, Mode=OneWay}"
+                                      ItemTemplate="{StaticResource MetricRowTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="0" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+
+                        <TextBlock Text="{x:Bind L.DiagnosticsOverviewCountersTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
+                        <controls:SettingsCard Header="{x:Bind ViewModel.CacheTotalText, Mode=OneWay}"
+                                               Description="{x:Bind L.DiagnosticsCacheHint, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                    <ProgressRing Width="16" Height="16"
+                                                  IsActive="{x:Bind ViewModel.IsCacheBusy, Mode=OneWay}"
+                                                  Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsCacheBusy), Mode=OneWay}" />
+                                    <Button AutomationProperties.AutomationId="btnDiagRefreshCacheOverview"
+                                            Content="{x:Bind L.SettingsCacheRefresh, Mode=OneWay}"
+                                            Click="OnRefreshCacheClick" />
+                                </StackPanel>
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <TextBlock Text="{x:Bind L.DiagnosticsOverviewHintsTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.Hints, Mode=OneWay}"
+                                      ItemTemplate="{StaticResource HintRowTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="0" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                        <TextBlock Text="{x:Bind L.DiagnosticsOverviewHintsEmpty, Mode=OneWay}"
+                                   Style="{StaticResource DiagnosticsHintTextStyle}"
+                                   Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(ViewModel.HasHints), Mode=OneWay}" />
+                    </StackPanel>
+
+                    <!-- ============ 缓存 ============ -->
+                    <StackPanel x:Name="secCache" Spacing="8" Visibility="Collapsed">
+                        <TextBlock Text="{x:Bind L.DiagnosticsSectionCache, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
+                        <TextBlock Text="{x:Bind L.DiagnosticsCacheHint, Mode=OneWay}" Style="{StaticResource DiagnosticsHintTextStyle}" />
+
+                        <controls:SettingsCard Header="{x:Bind ViewModel.CacheTotalText, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <ProgressRing Width="16" Height="16"
+                                                  IsActive="{x:Bind ViewModel.IsCacheBusy, Mode=OneWay}"
+                                                  Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsCacheBusy), Mode=OneWay}" />
+                                    <Button AutomationProperties.AutomationId="btnDiagRefreshCache"
+                                            Content="{x:Bind L.SettingsCacheRefresh, Mode=OneWay}"
+                                            Click="OnRefreshCacheClick" />
+                                    <Button AutomationProperties.AutomationId="btnDiagClearAllCaches"
+                                            Content="{x:Bind L.SettingsCacheClearAll, Mode=OneWay}"
+                                            Click="OnClearAllCachesClick" />
+                                </StackPanel>
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.CacheRows, Mode=OneWay}"
+                                      ItemTemplate="{StaticResource CacheRowTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="0" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- ============ 网络 ============ -->
+                    <StackPanel x:Name="secNetwork" Spacing="8" Visibility="Collapsed">
+                        <TextBlock Text="{x:Bind L.DiagnosticsSectionNetwork, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
+                        <TextBlock Text="{x:Bind L.DiagnosticsNetworkHint, Mode=OneWay}" Style="{StaticResource DiagnosticsHintTextStyle}" />
+
+                        <controls:SettingsCard Header="{x:Bind L.DiagnosticsNetworkProxyTitle, Mode=OneWay}"
+                                               Description="{x:Bind ViewModel.ProxyText, Mode=OneWay}" />
+                        <InfoBar Severity="Warning"
+                                 IsOpen="{x:Bind ViewModel.HasProxyWarning, Mode=OneWay}"
+                                 IsClosable="False"
+                                 Title="{x:Bind L.DiagnosticsNetworkProxyTitle, Mode=OneWay}"
+                                 Message="{x:Bind ViewModel.ProxyWarningText, Mode=OneWay}" />
+
+                        <TextBlock Text="{x:Bind L.DiagnosticsNetworkThrottleTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
+                        <TextBlock Text="{x:Bind L.DiagnosticsNetworkEmpty, Mode=OneWay}"
+                                   Style="{StaticResource DiagnosticsHintTextStyle}"
+                                   Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(ViewModel.HasNetworkRows), Mode=OneWay}" />
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.NetworkRows, Mode=OneWay}"
+                                      ItemTemplate="{StaticResource NetworkRowTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="0" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- ============ 启动耗时 ============ -->
+                    <StackPanel x:Name="secStartup" Spacing="8" Visibility="Collapsed">
+                        <TextBlock Text="{x:Bind L.DiagnosticsSectionStartup, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
+                        <TextBlock Text="{x:Bind L.DiagnosticsPageSubtitle, Mode=OneWay}" Style="{StaticResource DiagnosticsHintTextStyle}" />
+
+                        <controls:SettingsCard Header="{x:Bind ViewModel.StartupTotalText, Mode=OneWay}"
+                                               Description="{x:Bind L.DiagnosticsStartupNote, Mode=OneWay}" />
+                        <TextBlock Text="{x:Bind L.DiagnosticsStartupEmpty, Mode=OneWay}"
+                                   Style="{StaticResource DiagnosticsHintTextStyle}"
+                                   Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(ViewModel.HasStartupMarks), Mode=OneWay}" />
+
+                        <TextBlock Text="{x:Bind L.DiagnosticsStartupTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.StartupRows, Mode=OneWay}"
+                                      ItemTemplate="{StaticResource StartupRowTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Spacing="0" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </StackPanel>
                 </StackPanel>
+            </ScrollViewer>
 
-                <!-- ============ 日志 ============ -->
-                <StackPanel x:Name="secLog" Spacing="8" Visibility="Collapsed">
+            <!-- ============ 日志 ============ -->
+            <!-- 独立于滚动容器：头部随内容，正文占满剩余高度，窗口拉伸时文本框跟着变高变矮。 -->
+            <Grid x:Name="secLog"
+                  Visibility="Collapsed"
+                  Margin="0,0,16,0"
+                  RowSpacing="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Spacing="8">
                     <TextBlock Text="{x:Bind L.DiagnosticsSectionLog, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
                     <TextBlock Text="{x:Bind L.DiagnosticsLogHint, Mode=OneWay}" Style="{StaticResource DiagnosticsHintTextStyle}" />
 
@@ -298,11 +360,9 @@
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                Margin="4,0,4,0" />
 
-                    <Grid ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
+                    <!-- 过滤行整条换成 PdxWrapPanel：窄窗口下两个开关组会折到第二行，
+                         以前挤在 Grid 的 * 列里时左边那组的「自动换行」标签会被裁成 0 宽。 -->
+                    <controls:PdxWrapPanel Spacing="16">
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <TextBlock Text="{x:Bind L.DiagnosticsLogFilterTitle, Mode=OneWay}" VerticalAlignment="Center" />
                             <RadioButton AutomationProperties.AutomationId="rdoDiagLogAll"
@@ -322,87 +382,60 @@
                                          Tag="Error"
                                          Checked="OnLogFilterChecked" />
                         </StackPanel>
-                        <ToggleSwitch Grid.Column="1"
-                                      HorizontalAlignment="Right"
-                                      VerticalAlignment="Center"
-                                      MinWidth="0"
-                                      AutomationProperties.AutomationId="tglDiagAutoRefresh"
-                                      AutomationProperties.Name="{x:Bind L.DiagnosticsLogAutoRefreshName, Mode=OneWay}"
-                                      OffContent=""
-                                      OnContent="{x:Bind L.DiagnosticsLogAutoRefresh, Mode=OneWay}"
-                                      Toggled="OnAutoRefreshToggled" />
-                    </Grid>
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="20"
+                                    VerticalAlignment="Center">
+                            <!-- 开关标签常显：OffContent 留空时关闭态是无字开关，两个并排分不清谁是谁。 -->
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="8"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind L.DiagnosticsLogWrap, Mode=OneWay}"
+                                           VerticalAlignment="Center" />
+                                <ToggleSwitch MinWidth="0"
+                                              AutomationProperties.AutomationId="tglDiagLogWrap"
+                                              AutomationProperties.Name="{x:Bind L.DiagnosticsLogWrapName, Mode=OneWay}"
+                                              OffContent=""
+                                              OnContent=""
+                                              IsOn="{x:Bind ViewModel.LogWrap, Mode=TwoWay}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="8"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="{x:Bind L.DiagnosticsLogAutoRefresh, Mode=OneWay}"
+                                           VerticalAlignment="Center" />
+                                <ToggleSwitch MinWidth="0"
+                                              AutomationProperties.AutomationId="tglDiagAutoRefresh"
+                                              AutomationProperties.Name="{x:Bind L.DiagnosticsLogAutoRefreshName, Mode=OneWay}"
+                                              OffContent=""
+                                              OnContent=""
+                                              Toggled="OnAutoRefreshToggled" />
+                            </StackPanel>
+                        </StackPanel>
+                    </controls:PdxWrapPanel>
 
                     <TextBlock Text="{x:Bind ViewModel.LogTailTitleText, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
-                    <TextBox x:Name="txtDiagLogTail"
-                             AutomationProperties.AutomationId="txtDiagLogTail"
-                             Text="{x:Bind ViewModel.LogTailText, Mode=OneWay}"
-                             IsReadOnly="True"
-                             AcceptsReturn="True"
-                             TextWrapping="NoWrap"
-                             IsSpellCheckEnabled="False"
-                             FontFamily="Cascadia Mono, Consolas"
-                             Height="340"
-                             ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto"
-                             Padding="10,8" />
                 </StackPanel>
 
-                <!-- ============ 网络 ============ -->
-                <StackPanel x:Name="secNetwork" Spacing="8" Visibility="Collapsed">
-                    <TextBlock Text="{x:Bind L.DiagnosticsSectionNetwork, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
-                    <TextBlock Text="{x:Bind L.DiagnosticsNetworkHint, Mode=OneWay}" Style="{StaticResource DiagnosticsHintTextStyle}" />
-
-                    <controls:SettingsCard Header="{x:Bind L.DiagnosticsNetworkProxyTitle, Mode=OneWay}"
-                                           Description="{x:Bind ViewModel.ProxyText, Mode=OneWay}" />
-                    <InfoBar Severity="Warning"
-                             IsOpen="{x:Bind ViewModel.HasProxyWarning, Mode=OneWay}"
-                             IsClosable="False"
-                             Title="{x:Bind L.DiagnosticsNetworkProxyTitle, Mode=OneWay}"
-                             Message="{x:Bind ViewModel.ProxyWarningText, Mode=OneWay}" />
-
-                    <TextBlock Text="{x:Bind L.DiagnosticsNetworkThrottleTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
-                    <TextBlock Text="{x:Bind L.DiagnosticsNetworkEmpty, Mode=OneWay}"
-                               Style="{StaticResource DiagnosticsHintTextStyle}"
-                               Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(ViewModel.HasNetworkRows), Mode=OneWay}" />
-                    <ItemsControl ItemsSource="{x:Bind ViewModel.NetworkRows, Mode=OneWay}"
-                                  ItemTemplate="{StaticResource NetworkRowTemplate}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Spacing="0" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-                </StackPanel>
-
-                <!-- ============ 启动耗时 ============ -->
-                <StackPanel x:Name="secStartup" Spacing="8" Visibility="Collapsed">
-                    <TextBlock Text="{x:Bind L.DiagnosticsSectionStartup, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
-                    <TextBlock Text="{x:Bind L.DiagnosticsPageSubtitle, Mode=OneWay}" Style="{StaticResource DiagnosticsHintTextStyle}" />
-
-                    <controls:SettingsCard Header="{x:Bind ViewModel.StartupTotalText, Mode=OneWay}"
-                                           Description="{x:Bind L.DiagnosticsStartupNote, Mode=OneWay}" />
-                    <TextBlock Text="{x:Bind L.DiagnosticsStartupEmpty, Mode=OneWay}"
-                               Style="{StaticResource DiagnosticsHintTextStyle}"
-                               Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(ViewModel.HasStartupMarks), Mode=OneWay}" />
-
-                    <TextBlock Text="{x:Bind L.DiagnosticsStartupTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
-                    <ItemsControl ItemsSource="{x:Bind ViewModel.StartupRows, Mode=OneWay}"
-                                  ItemTemplate="{StaticResource StartupRowTemplate}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <StackPanel Spacing="0" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-                </StackPanel>
-            </StackPanel>
-        </ScrollViewer>
+                <TextBox Grid.Row="1"
+                         x:Name="txtDiagLogTail"
+                         AutomationProperties.AutomationId="txtDiagLogTail"
+                         Text="{x:Bind ViewModel.LogTailText, Mode=OneWay}"
+                         IsReadOnly="True"
+                         AcceptsReturn="True"
+                         TextWrapping="{x:Bind svc:XamlTextWrapping.FromBool(ViewModel.LogWrap), Mode=OneWay}"
+                         IsSpellCheckEnabled="False"
+                         FontFamily="Cascadia Mono, Consolas"
+                         MinHeight="160"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         Padding="12,8" />
+            </Grid>
+        </Grid>
 
         <Border Grid.Row="1"
                 Grid.ColumnSpan="2"
-                Margin="0,0,14,0"
-                Padding="16,10"
+                Margin="0,0,16,0"
+                Padding="16,12"
                 Background="{ThemeResource PdxCardBackgroundBrush}"
                 BorderBrush="{ThemeResource PdxCardStrokeBrush}"
                 BorderThickness="1"

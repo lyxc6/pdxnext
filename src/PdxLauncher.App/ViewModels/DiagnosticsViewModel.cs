@@ -35,6 +35,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
     private int _workshopEntries;
     private IReadOnlyList<StartupMark> _marks = Array.Empty<StartupMark>();
     private LogLevelFilter _logFilter = LogLevelFilter.All;
+    private bool _logWrap;
     private DateTimeOffset? _sampledAt;
     private bool _isBusy;
     private bool _isCacheBusy;
@@ -45,6 +46,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
 
     public DiagnosticsViewModel()
     {
+        _logWrap = AppServices.IsInitialized && AppServices.Settings.DiagnosticsLogWrap;
         CacheRows = new ObservableCollection<CacheRowViewModel>(CacheRowCatalog.Create());
         RebuildMetrics();
         RebuildStartup();
@@ -131,6 +133,49 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
             {
                 UpdateLogTexts();
             }
+        }
+    }
+
+    /// <summary>
+    /// 日志尾部是否自动换行。默认关（保持长行横向滚动的观感），打开后长行折行；
+    /// 只影响显示方式，不改日志内容，状态写回设置后重启保留。
+    /// </summary>
+    public bool LogWrap
+    {
+        get => _logWrap;
+        set
+        {
+            if (_logWrap == value)
+            {
+                return;
+            }
+
+            _logWrap = value;
+            OnPropertyChanged(nameof(LogWrap));
+            PersistLogWrap(value);
+        }
+    }
+
+    /// <summary>把换行开关写回设置；失败只记日志，开关仍然即时生效。</summary>
+    private static void PersistLogWrap(bool value)
+    {
+        try
+        {
+            if (!AppServices.IsInitialized)
+            {
+                return;
+            }
+
+            AppServices.Settings.DiagnosticsLogWrap = value;
+            var saved = AppServices.SaveSettings();
+            if (!saved.IsSuccess)
+            {
+                AppServices.Logger.Warn("保存日志自动换行设置失败: " + saved.ErrorMessage);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("保存日志自动换行设置失败: " + ex.Message);
         }
     }
 

@@ -63,6 +63,7 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-11-03 23:55 追加：已发布到创意工坊却仍显示「未发布」—— 根因是隐藏条目对匿名 API 回 `EResult 9`（FileNotFound，**不等于不存在**），而启动器只认「自己发起的上传」；现给宿主加 `workshop-mine` / `workshop-mine-detail` 两个动词（回调 1312/1318，走本机登录态读自己发布的条目），Mod 创建页加「绑定已有条目…」入口、发布状态改四态（未发布 / 发布未完成 / 已发布（未公开）/ 已发布）并显示 Steam 真实可见性；自检 93→94；见 §0.76。**
 **2026-11-04 13:30 追加：创意工坊「搜不出来」—— 不是搜索坏了，是连不上 Steam 而错误被当成「用户取消」吞掉；根因是本机 DNS 被污染（steamcommunity.com → 104.244.46.21）+ 直连模式不读 `http_proxy`；现把连接超时翻译成 `NetworkTimeoutException`、工坊失败码分「结构变了 / 连不上」，状态栏写明原因并提示检测到的代理，设置页加「检测到的代理 → 使用」一键切换；自检 94→95；见 §0.77。**
 **2026-11-04 15:20 追加：新增「性能与日志」页 —— 左栏底部（账号与设置之间）多一个入口，五个分区（概览 / 缓存 / 日志 / 网络 / 启动耗时）把内存与进程计数、七类缓存占用、日志尾部与轮转状态、Steam 各主机限流计数、五个启动里程碑放在一张页面里看，并按阈值自动列出「可以优化什么」；顺带把设置页的 7 行缓存定义抽成 `CacheRowCatalog` 两页共用、内存埋点与启动里程碑改成 Release 也记录；自检 96→100；见 §0.79。**
+**2026-11-04 16:45 追加：日志分区跟着窗口长 —— 以前日志框写死 `Height="340"`、又被塞在唯一的外层 `ScrollViewer` 里，窗口拉高它不变；现把右栏拆成「滚动容器（概览 / 缓存 / 网络 / 启动耗时）」与「独立 Grid（日志）」两个互斥元素，日志框落在 `*` 行随窗口伸缩（`MinHeight="160"`），过滤行右侧新增「自动换行」开关（默认关、写进设置 `DiagnosticsLogWrap`），并让两个开关的标签常显；见 §0.84。**
 **2026-11-04 14:40 追加：Mod 创建页详情那一排按钮在默认窗口宽下就被裁掉（截图里只剩半个「绑…」）—— 根因是详情右栏可用宽 ≈544 DIP 而五个按钮 ≈660 DIP，且 WinUI 3 没有 WrapPanel、水平 StackPanel 不换行、外层 ScrollViewer 横向禁滚；现新增纯算法 `WrapLayout` + 控件 `PdxWrapPanel`，详情按钮行与上传面板 BBCode 工具条都换成换行面板；自检 95→96；见 §0.78。**
 
 ## 0.79 最新一轮（2026-11-04 14:45–15:20）：新增「性能与日志」页 —— 把优化点集中到一页
@@ -6804,3 +6805,51 @@ S_STEPCHECK S_FAILCHECK S_CHECKOK S_NOEXE S_EXPECT S_STARTING S_EXE S_ALREADY S_
 - 行徽标仍是「游戏实际可用」语义（`OwnedAppIds` + 可信 DisabledDLC），本轮没有给每行加「账号真实拥有」；账号信息只在判定条出现。
 - 若以后 CreamAPI 改成按 appid 过滤，`ForeignDlcCount` 会自然归零，文案不必再改。
 - 自检类数 99（本轮新增 `CheckAccountProbe`，其余是并发会话新增的播放集相关类）。README 的计数若落后于 99，另开一轮统一。
+
+## 0.84 2026-11-04：日志分区跟着窗口长 + 「自动换行」开关
+
+### 0.84.1 需求
+
+用户对着「性能与日志 → 日志」截图提两点：「1.日志界面不能跟随页面大小变化吗？2.添加自动换行的开关，实现日志的自动换行查看的能力」。
+所以两件事分开做：**高度要能被窗口拉**，**折行要能开关**（不折行时保留横向滚动，长行不被硬切）。
+
+### 0.84.2 根因
+
+- 日志是右栏唯一 `ScrollViewer > StackPanel` 里的一段，`TextBox` 写死 `Height="340"`：窗口变高变矮它都不动，多出来的高度全给了外层滚动条。
+- `TextWrapping="NoWrap"` 写死，没有折行路径。
+
+### 0.84.3 改了什么
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.App/Views/DiagnosticsPage.xaml` | 右栏 Grid 拆成两个互斥子元素：`ScrollViewer x:Name="diagSectionScroller"` 只装概览 / 缓存 / 网络 / 启动耗时；`Grid x:Name="secLog"`（`Auto/*` 两行）装日志头部 + `TextBox Grid.Row="1"`，去掉 `Height="340"`、加 `MinHeight="160"`，高度随窗口走 `*` 行 |
+| 同上（过滤行） | 右侧两个开关加常显标签（`TextBlock` + `OffContent="" OnContent=""`）：`tglDiagLogWrap`（自动换行）与 `tglDiagAutoRefresh`（每 5 秒自动刷新）。以前关闭态是无字开关，两个并排分不清谁是谁；整行随后改成 `PdxWrapPanel Spacing="16"`（子项 =「筛选组」+「开关组」），窄窗口下开关组折到第二行（见 0.84.6） |
+| `src/PdxLauncher.App/Views/DiagnosticsPage.xaml.cs` | `ShowSection` 改成 `(int Index, FrameworkElement? Element)[]` 映射：选「日志」时切 `secLog`、其余四个切 `diagSectionScroller`（`secNetwork`=3 / `secStartup`=4，不能再用数组下标） |
+| `src/PdxLauncher.App/Services/XamlTextWrapping.cs` | 新增纯函数 `static TextWrapping FromBool(bool wrap) => wrap ? TextWrapping.Wrap : TextWrapping.NoWrap`；`TextBox.TextWrapping="{x:Bind svc:XamlTextWrapping.FromBool(ViewModel.LogWrap), Mode=OneWay}"` |
+| `src/PdxLauncher.App/ViewModels/DiagnosticsViewModel.cs` | `public bool LogWrap`（默认关）：setter 发通知、写 `AppServices.Settings.DiagnosticsLogWrap` 并 `SaveSettings()`，失败只 `Logger.Warn`；构造时从设置读回 |
+| `src/PdxLauncher.Core/Configuration/AppSettings.cs` | 新增 `public bool DiagnosticsLogWrap` |
+| `tools/i18n/{zh-CN,en-US}/diagnostics.json` | 新增 `diagnostics.log.wrap`（自动换行 / Wrap lines）与 `diagnostics.log.wrapName`（日志自动换行 / Wrap log lines） |
+| `tests/PdxLauncher.Checks/DiagnosticsPageChecks.cs` | 新增断言：折行绑定字符串、日志尾部不再有 `Height="340"` 且有 `MinHeight="160"`、`secLog` 不在 `diagSectionScroller` 里、`AppSettings` 有 `DiagnosticsLogWrap`、`XamlTextWrapping` 两分支、视图模型有 `LogWrap` 且写回设置、两侧 JSON 有 `diagnostics.log.wrap`、生成表含 `DiagnosticsLogWrap`、两个开关标签常显 |
+
+### 0.84.4 不要用 SizeChanged 硬算
+
+第一种思路是监听窗口 `SizeChanged` 再把 `Height` 设成「窗口高 − 头部高」，窗口每拖动一像素就写一次布局属性。改成「日志自己在一个 `Grid` 的 `*` 行里」之后，布局系统负责这件事：不用魔法数字、不用监听、摘要卡或过滤行变高也不会错位。
+
+### 0.84.5 验证
+
+- `bash tools/build-app.sh -v q`：0 警告 0 错误；`python tools/gen-i18n.py` 生成 1290 键（含其他会话未提交的文案）。
+- 自检：`dotnet run --project tests/PdxLauncher.Checks -c Release` 跑 **103 类**；本次新增断言全过（`PlaysetChecks` 另有 1 条其他会话未完成的断言 `V3 激活播放集 mod 行数 >= 22` 失败，与本次无关）。
+- 真机（`winapp ui` + UIA，自建实例）：`winapp ui invoke navDiagnostics` → `navDiagLog` 进日志分区；`SetWindowPos` 拉到 2300×1500 与缩到 1560×980 各截一张 —— 日志框高度跟着窗口一起伸/缩；`winapp ui invoke tglDiagLogWrap --action toggle-on` 后长路径行折行、标签「自动换行」出现。
+- 折行标签在 1200 DIP 宽下也不被裁（UIA 里 bounds 正常、`isOffscreen=false`；开关组折到了第二行），1668 DIP 宽仍是一行。
+- 持久化：开关写进自有库 `data/pdxnext.sqlite` 的 `settings` 表（`json` 列里能看到 `"diagnosticsLogWrap": true` 与 `"lastDiagnosticsSection": 2`）。
+
+### 0.84.6 窄窗口：过滤行自己折行
+
+视觉复测（1200 DIP 宽）抓到一处自己挖的坑：过滤行原本是 `Grid`（`Auto` + `*`），开关组放在 `*` 列里靠 `HorizontalAlignment="Right"`，宽度不够时右对齐组的左侧子元素会被压成 0 宽 —— UIA 里「自动换行」那枚 `TextBlock` 报 `isOffscreen=true`、bounds `0,0,0,0`，界面上就是标签凭空消失、只剩一个光秃秃的开关（宽窗口下又正常，很容易漏掉）。
+改成整行一个 `PdxWrapPanel Spacing="16"`（和播放集页工具条同一个控件），子项是「筛选组」与「开关组」两块：宽窗口一行排完，窄窗口开关组整体折到第二行，任何宽度都不会再有元素被裁。`DiagnosticsPageChecks` 补了一条断言锁住这块结构，免得以后有人把行改回 `Grid` 又踩一遍。
+
+### 0.84.7 注意
+
+- **设置现在存在 sqlite，不是 `data/settings.json`**：后者只剩导入 / 自检路径在用（见 `AppSettingsStore` 顶部注释）。验证开关有没有落盘要去查 `data/pdxnext.sqlite` 的 `settings` 表。
+- 自建的实例会锁住 `bin/Release/.../PdxLauncher.App.exe`，`build-app.sh` 会以 `MSB3027` 失败：先 `Stop-Process -Id <pid>` 再构建。`build-app.sh` 只编 App 工程，**自检工程要另外 `dotnet build tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj`**，否则 `--no-build` 跑的是旧断言。
+
