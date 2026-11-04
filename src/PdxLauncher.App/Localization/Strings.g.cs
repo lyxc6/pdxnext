@@ -520,10 +520,10 @@ public sealed partial class Localizer
         ["mods.translateUnavailable"] = "翻译没有出结果：{0}。可在「设置 → 翻译」里点「测试翻译」查看各引擎状态。",
         ["mods.twoColumn.addToolTip"] = "加入当前播放集",
         ["mods.twoColumn.available"] = "可添加的 mod",
-        ["mods.twoColumn.hint"] = "勾选左侧的 mod 即加入当前播放集；右侧开关是启用 / 禁用，行尾图标把 mod 移出。",
         ["mods.twoColumn.noPlaySet"] = "先在上方选择一个播放集，再把 mod 加进来",
         ["mods.twoColumn.selectedEmpty"] = "该播放集还没有 mod：在左侧勾选即可加入",
         ["mods.twoColumn.selectedNoMatch"] = "没有匹配的 mod，换个关键词试试",
+        ["mods.twoColumn.splitterName"] = "拖动调整左右两栏宽度",
         ["mods.warnMissingPath"] = "路径写进了加载文件，但磁盘上找不到这个目录或文件",
         ["mods.warnName"] = "这条 mod 在游戏里可能不会生效",
         ["mods.warnNoArchive"] = "这个游戏的加载文件只认压缩包路径，目录型 mod 无法表达",
@@ -1792,10 +1792,10 @@ public sealed partial class Localizer
         ["mods.translateUnavailable"] = "Translation returned nothing: {0}. Use Settings > Translation > Test translation to check engines.",
         ["mods.twoColumn.addToolTip"] = "Add to the current play set",
         ["mods.twoColumn.available"] = "Addable mods",
-        ["mods.twoColumn.hint"] = "Tick a mod on the left to add it; the switch on the right enables or disables it and the trailing icon removes it.",
         ["mods.twoColumn.noPlaySet"] = "Select a play set above before adding mods",
         ["mods.twoColumn.selectedEmpty"] = "This play set has no mods yet — tick mods on the left to add them",
         ["mods.twoColumn.selectedNoMatch"] = "No mods match that search — try another keyword",
+        ["mods.twoColumn.splitterName"] = "Drag to resize the two columns",
         ["mods.warnMissingPath"] = "The path is written to the load file, but it does not exist on disk",
         ["mods.warnName"] = "This mod may not load in game",
         ["mods.warnNoArchive"] = "This game’s load file only accepts archive paths, so folder mods cannot be listed",
@@ -3064,10 +3064,10 @@ public sealed partial class Localizer
         ("mods.translateUnavailable", "ModsTranslateUnavailable"),
         ("mods.twoColumn.addToolTip", "ModsTwoColumnAddToolTip"),
         ("mods.twoColumn.available", "ModsTwoColumnAvailable"),
-        ("mods.twoColumn.hint", "ModsTwoColumnHint"),
         ("mods.twoColumn.noPlaySet", "ModsTwoColumnNoPlaySet"),
         ("mods.twoColumn.selectedEmpty", "ModsTwoColumnSelectedEmpty"),
         ("mods.twoColumn.selectedNoMatch", "ModsTwoColumnSelectedNoMatch"),
+        ("mods.twoColumn.splitterName", "ModsTwoColumnSplitterName"),
         ("mods.warnMissingPath", "ModsWarnMissingPath"),
         ("mods.warnName", "ModsWarnName"),
         ("mods.warnNoArchive", "ModsWarnNoArchive"),
@@ -4334,10 +4334,10 @@ public sealed partial class Localizer
     public string ModsTranslateUnavailable => Format("mods.translateUnavailable");
     public string ModsTwoColumnAddToolTip => Format("mods.twoColumn.addToolTip");
     public string ModsTwoColumnAvailable => Format("mods.twoColumn.available");
-    public string ModsTwoColumnHint => Format("mods.twoColumn.hint");
     public string ModsTwoColumnNoPlaySet => Format("mods.twoColumn.noPlaySet");
     public string ModsTwoColumnSelectedEmpty => Format("mods.twoColumn.selectedEmpty");
     public string ModsTwoColumnSelectedNoMatch => Format("mods.twoColumn.selectedNoMatch");
+    public string ModsTwoColumnSplitterName => Format("mods.twoColumn.splitterName");
     public string ModsWarnMissingPath => Format("mods.warnMissingPath");
     public string ModsWarnName => Format("mods.warnName");
     public string ModsWarnNoArchive => Format("mods.warnNoArchive");
@@ -5607,10 +5607,10 @@ internal static class Keys
     public const string ModsTranslateUnavailable = "mods.translateUnavailable";
     public const string ModsTwoColumnAddToolTip = "mods.twoColumn.addToolTip";
     public const string ModsTwoColumnAvailable = "mods.twoColumn.available";
-    public const string ModsTwoColumnHint = "mods.twoColumn.hint";
     public const string ModsTwoColumnNoPlaySet = "mods.twoColumn.noPlaySet";
     public const string ModsTwoColumnSelectedEmpty = "mods.twoColumn.selectedEmpty";
     public const string ModsTwoColumnSelectedNoMatch = "mods.twoColumn.selectedNoMatch";
+    public const string ModsTwoColumnSplitterName = "mods.twoColumn.splitterName";
     public const string ModsWarnMissingPath = "mods.warnMissingPath";
     public const string ModsWarnName = "mods.warnName";
     public const string ModsWarnNoArchive = "mods.warnNoArchive";

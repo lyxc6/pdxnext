@@ -3,6 +3,7 @@ namespace PdxLauncher.App.Views;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
@@ -22,7 +23,28 @@ using Windows.System;
 /// </summary>
 public sealed partial class ModsPage : Page
 {
+    /// <summary>双列左栏的初始宽度（DIP）。XAML 里 ColumnDefinition 的 Width 初值必须与它一致。</summary>
+    private const double DefaultLeftColumnWidth = ColumnResize.DefaultWidth;
+
+    /// <summary>双列左栏的可拖范围下限；与 XAML 的 MinWidth 一致。</summary>
+    private const double MinimumLeftColumnWidth = ColumnResize.MinimumWidth;
+
+    /// <summary>双列左栏的可拖范围上限；与 XAML 的 MaxWidth 一致。</summary>
+    private const double MaximumLeftColumnWidth = ColumnResize.MaximumWidth;
+
+    /// <summary>右栏至少要留多宽（DIP）：再窄搜索框和开关就挤成一团，这个值同时决定左栏能拖多宽。</summary>
+    private const double MinimumRightColumnWidth = ColumnResize.MinimumRightWidth;
+
+    /// <summary>分隔条所在列的宽度；与 XAML 中间列的 Width 一致。</summary>
+    private const double SplitterColumnWidth = ColumnResize.SplitterWidth;
+
     private readonly ModsViewModel _viewModel;
+
+    /// <summary>
+    /// 双列左栏当前宽度（DIP）。只活在页面实例里：页面 NavigationCacheMode=Required，
+    /// 切页回来仍是用户拖过的宽度；没有写进 settings，是为了不为一个纯视觉宽度动设置 schema。
+    /// </summary>
+    private double _leftColumnWidth = DefaultLeftColumnWidth;
 
     /// <summary>页面生命周期令牌；NavigationCacheMode=Required 会在返回页面时重建。</summary>
     private CancellationTokenSource _lifetime = new();
@@ -64,6 +86,11 @@ public sealed partial class ModsPage : Page
                 AppServices.Mods,
                 AppServices.Logger),
             AppServices.Logger);
+
+        // 分隔条的事件用代码接线：PdxColumnSplitter 的 Dragged/ResetRequested 是普通事件，
+        // 不是依赖属性，XAML 编译器绑不上（也没有对应的 RoutedEvent）。
+        ColumnSplitter.Dragged += OnSplitterDragged;
+        ColumnSplitter.ResetRequested += OnSplitterReset;
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -468,8 +495,8 @@ public sealed partial class ModsPage : Page
 
     /// <summary>
     /// 双列左栏「勾选即加入」：勾上候选行就把这个 mod 追加到当前播放集末尾（走自动保存）。
-    /// 加入必须延后一帧——此刻仍在 CheckBox 的 Click 里，而 AddMods 会重建 Candidates，
-    /// 在绑定回调中途清空列表会让正在求值的这一行容器消失。
+    /// 加入延后一帧派发：此刻仍在 CheckBox 的 Click 里，而加入会把这行从 Candidates 里摘掉，
+    /// 在绑定回调中途移除「正在求值的这一行」容易让列表控件丢掉容器状态。
     /// </summary>
     private void OnCandidateChecked(object sender, RoutedEventArgs e)
     {
@@ -502,6 +529,58 @@ public sealed partial class ModsPage : Page
         {
             AppServices.Logger.Error("ModsPage 处理候选 mod 勾选失败", ex);
         }
+    }
+
+    // ------------------------------------------------------------ 双列分栏
+
+    /// <summary>
+    /// 拖动分隔条：<see cref="PdxColumnSplitter"/> 已经做了指针捕获与位移累计，
+    /// 这里拿到的 delta 就是相对上一次的 DIP 增量，直接加在左栏当前宽度上。
+    /// </summary>
+    private void OnSplitterDragged(object? sender, double delta)
+    {
+        ResizeLeftColumn(_leftColumnWidth + delta);
+    }
+
+    /// <summary>双击分隔条复位到默认宽度：拖窄之后想一次回到能看见完整名字的状态。</summary>
+    private void OnSplitterReset(object? sender, EventArgs e)
+    {
+        ResizeLeftColumn(DefaultLeftColumnWidth);
+    }
+
+    /// <summary>
+    /// 窗口尺寸变化时重新钳一次。左栏是像素宽度，窗口拉窄时右栏会先被挤掉，
+    /// 所以宽度上限要随总宽重算，不能只在拖动那一刻算。
+    /// </summary>
+    private void OnTwoColumnGridSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        ResizeLeftColumn(_leftColumnWidth);
+    }
+
+    /// <summary>
+    /// 把左栏设到指定宽度（DIP），并钳进 [280, min(900, 总宽 - 分隔条 - 右栏下限)]。
+    /// 布局还没测量（ActualWidth 为 0）时什么都不做，否则会被当成「窗口太窄」直接压到下限。
+    /// </summary>
+    private void ResizeLeftColumn(double width)
+    {
+        var available = TwoColumnGrid.ActualWidth;
+        if (available <= 0)
+        {
+            return;
+        }
+
+        var clamped = ColumnResize.Clamp(width, available);
+
+        // 值没变就别写：SizeChanged 会反复进来，每次写 Width 都白排一次版。
+        if (Math.Abs(_leftColumnWidth - clamped) < 0.5
+            && TwoColumnLeftColumn.Width.GridUnitType == GridUnitType.Pixel
+            && Math.Abs(TwoColumnLeftColumn.Width.Value - clamped) < 0.5)
+        {
+            return;
+        }
+
+        _leftColumnWidth = clamped;
+        TwoColumnLeftColumn.Width = new GridLength(clamped);
     }
 
     private void OnEnableAllClick(object sender, RoutedEventArgs e)

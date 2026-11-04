@@ -42,6 +42,7 @@
       编译器看不见，所以由 WrapPanelChecks 钉住边界口径（行内/行间间距、超宽项、NaN 与 0 宽兜底）。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\WrapLayout.cs" Link="Linked\WrapLayout.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\ColumnResize.cs" Link="Linked\ColumnResize.cs" />
     <!--
       工坊图片落地规则（封面/截图的文件名、以及「同一张图只存一份」的复用判定）同样不碰 UI 类型，
       只用 Core 的 IFileSystem / IAssetDownloader / WorkshopInfoCache，可以原样链接进来。

@@ -147,7 +147,7 @@
   "mods.toolbar.searchPlaceholder": "搜索播放集内的 mod",
   "mods.twoColumn.available": "可添加的 mod",
   "mods.twoColumn.addToolTip": "加入当前播放集",
-  "mods.twoColumn.hint": "勾选左侧的 mod 即加入当前播放集；右侧开关是启用 / 禁用，行尾图标把 mod 移出。",
+  "mods.twoColumn.splitterName": "拖动调整左右两栏宽度",
   "mods.twoColumn.noPlaySet": "先在上方选择一个播放集，再把 mod 加进来",
   "mods.twoColumn.selectedEmpty": "该播放集还没有 mod：在左侧勾选即可加入",
   "mods.twoColumn.selectedNoMatch": "没有匹配的 mod，换个关键词试试",

@@ -28,6 +28,7 @@ public static class ModsPageLayoutChecks
         "txtTwoColumnEmpty",
         "txtTwoColumnNoMatch",
         "txtTwoColumnNoPlaySet",
+        "splitTwoColumns",
     ];
 
     /// <summary>原版启动器布局的 AutomationId 一个都不能少（改造不允许动它）。</summary>
@@ -73,7 +74,10 @@ public static class ModsPageLayoutChecks
         CheckSharedRowTemplate(xaml);
         CheckCandidateIsCheckToAdd(xaml);
         CheckHeaderSearchFillsColumn(xaml);
+        CheckSplitterKept(xaml);
+        CheckHintRemoved(xaml);
         CheckCodeBehind(code);
+        CheckIncrementalUpdates(root);
         CheckLegacySubpageKept(root);
         CheckDisplayModeValue(root);
 
@@ -206,6 +210,118 @@ public static class ModsPageLayoutChecks
                 element.Contains("AutomationId=\"" + id + "\"", StringComparison.Ordinal),
                 element);
         }
+    }
+
+    /// <summary>
+    /// 分隔条：三列布局（左栏命名列 + 12 DIP 分隔条 + 右栏星号列），控件本身带自动化 id。
+    /// 分隔条被删掉或列定义退回两列时，两栏就再也调不动宽度了。
+    /// </summary>
+    private static void CheckSplitterKept(string xaml)
+    {
+        ChecksContext.Check(
+            "播放集页: 双列有命名左栏列",
+            xaml.Contains("x:Name=\"TwoColumnLeftColumn\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 双列放了分隔条控件",
+            xaml.Contains("<controls:PdxColumnSplitter", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 分隔条接线在代码后置",
+            xaml.Contains("x:Name=\"ColumnSplitter\"", StringComparison.Ordinal)
+                && xaml.Contains("AutomationId=\"splitTwoColumns\"", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 左栏底部的说明文字已按用户反馈删掉：占着顶部 400 DIP 里最宝贵的一行，
+    /// 说的还是「勾选即加入」这种一眼就能看出来的事。留着就是重复噪音。
+    /// </summary>
+    private static void CheckHintRemoved(string xaml)
+    {
+        ChecksContext.Check(
+            "播放集页: 左栏底部说明文字已移除",
+            !xaml.Contains("ModsTwoColumnHint", StringComparison.Ordinal)
+                && !xaml.Contains("mods.twoColumn.hint", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 增删 / 换位必须走增量更新：`AddMods` 与 `RemoveMod` 里再出现 `RebuildVisibleMods()` /
+    /// `RebuildCandidates()` 就会退回「清空重造两栏所有行」——缩略图重解码、滚动条跳回顶部、
+    /// 开关动画重放，用户看到的就是整页闪一下。
+    /// </summary>
+    private static void CheckIncrementalUpdates(string root)
+    {
+        var path = Path.Combine(root, "src", "PdxLauncher.App", "ViewModels", "ModsViewModel.cs");
+        if (!ChecksContext.Check("播放集页: ModsViewModel.cs 存在", File.Exists(path), path))
+        {
+            return;
+        }
+
+        var source = File.ReadAllText(path);
+        (string Signature, string Label)[] incremental =
+        [
+            ("public void AddMods(", "AddMods"),
+            ("public void RemoveMod(", "RemoveMod"),
+            ("public void MoveMod(", "MoveMod"),
+            ("public PositionEditResult TryMoveModToPosition(", "TryMoveModToPosition"),
+        ];
+
+        foreach (var (signature, label) in incremental)
+        {
+            var body = SliceMethod(source, signature);
+            ChecksContext.Check("播放集页: " + label + " 不再全量重建", body.Length > 0, signature);
+            if (body.Length == 0)
+            {
+                continue;
+            }
+
+            ChecksContext.Check(
+                "播放集页: " + label + " 不调 RebuildVisibleMods",
+                !body.Contains("RebuildVisibleMods(", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "播放集页: " + label + " 不调 RebuildCandidates",
+                !body.Contains("RebuildCandidates(", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "播放集页: " + label + " 刷新位次",
+                body.Contains("RefreshRowPositions(", StringComparison.Ordinal));
+        }
+
+        ChecksContext.Check(
+            "播放集页: 换位走 Mods.Move",
+            SliceMethod(source, "public void MoveMod(").Contains("Mods.Move(", StringComparison.Ordinal));
+    }
+
+    /// <summary>切出一个方法体（从签名后的第一个 <c>{</c> 到配对的 <c>}</c>）；找不到返回空串。</summary>
+    private static string SliceMethod(string source, string signature)
+    {
+        var start = source.IndexOf(signature, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return string.Empty;
+        }
+
+        var open = source.IndexOf('{', start);
+        if (open < 0)
+        {
+            return string.Empty;
+        }
+
+        var depth = 0;
+        for (var i = open; i < source.Length; i++)
+        {
+            if (source[i] == '{')
+            {
+                depth++;
+            }
+            else if (source[i] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    return source[open..(i + 1)];
+                }
+            }
+        }
+
+        return source[open..];
     }
 
     /// <summary>代码后置：两个新处理器在，且位次编辑 / 滚动定位跟着当前布局走。</summary>
