@@ -11,7 +11,7 @@
 ## 0. 一句话现状
 
 启动器外壳与主页已从「照官方 Paradox 启动器截图逐像素自绘」**改成 WinUI 3 标准控件 UI**（用户明确要求），
-Release **0 警告 0 错误**，自检 **108 个检查类 / 0 失败**（2026-11-04 实测；7 处搜索框已全部换成 `AutoSuggestBox`（本地名字联想 + 工坊最近搜索），见 §0.85；`PlaysetChecks` 原来按本机 Victoria 3 播放集写死的 `mod 行数 >= 22` 已改成结构断言，见 §0.85.5；
+Release **0 警告 0 错误**，自检 **111 个检查类 / 0 失败**（2026-11-05 实测；7 处搜索框已全部换成 `AutoSuggestBox`（本地名字联想 + 工坊最近搜索），见 §0.85；`PlaysetChecks` 原来按本机 Victoria 3 播放集写死的 `mod 行数 >= 22` 已改成结构断言，见 §0.85.5；
 最近一轮新增 `SearchSuggestionsChecks`、`SearchBoxChecks`、`SteamBbCodeParserChecks` 与 `ModPublishLimitsChecks`（钉住 BBCode 解析与字节上限），再往前是 `LocalizationBindingChecks` 与 `ModStudioPaneChecks`（钉住 `{0}` 裸绑与上传面板出口），再往前是 `ModPublishExtrasChecks`（含多语言语言池的 `PickUnused` / `IsDuplicate` 断言），再往前是 `WorkshopItemStateBitsChecks`、`WorkshopStateTextChecks`、`WorkshopStateCacheChecks`、`WorkshopSubscribedProtocolChecks`；此前还有 `ConfirmOverlayChecks`、`ModLibraryWarningChecks`、`PdxDatabaseChecks`、`JsonDocumentStoreChecks`、`OwnPlaysetRepositoryChecks`、`LauncherDbProjectionChecks`、`ModPathChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
 **2026-10-26 已完成：窗口置顶开关（§0.2）+ 整窗背景「方案 B」（§0.3）**——游戏主题背景图现在连标题栏条和左侧
 NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统一纱 + 卡片/列表玻璃底衬），主页那条 260 高、被裁掉一半的
@@ -72,6 +72,61 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-11-04 16:35 追加：播放集页新增第三种显示方式「双列」—— 左栏是还没加入当前播放集的 mod（勾选即加入），右栏是已加入的 mod，两栏各有搜索框；原版启动器布局与「添加模组」子页一行没动，设置页下拉切换；自检 103 类全过、`scripts/verify-playset-twocolumn.ps1` 两轮 UIA 冒烟 PASS；见 §0.83。**
 **2026-11-04 18:50 追加：双列页分隔条可以左右拖动改宽度，窗口拉窄时左栏自动让位、右栏不再被窗口边缘裁掉（修 XAML 列 MinWidth 把 Grid 撑爆 + SizeChanged 读到旧 ActualWidth 两个根因）；见 §0.86。**
 **2026-11-04 16:45 追加：日志分区跟着窗口长 —— 以前日志框写死 `Height="340"`、又被塞在唯一的外层 `ScrollViewer` 里，窗口拉高它不变；现把右栏拆成「滚动容器（概览 / 缓存 / 网络 / 启动耗时）」与「独立 Grid（日志）」两个互斥元素，日志框落在 `*` 行随窗口伸缩（`MinHeight="160"`），过滤行右侧新增「自动换行」开关（默认关、写进设置 `DiagnosticsLogWrap`），并让两个开关的标签常显；见 §0.84。**
+
+**2026-11-05 03:10 追加：安装向导不给选安装位置 —— Inno 的 `DisableDirPage` 默认 `auto`，只要卸载项里找到旧目录就把「选择目标位置」整页隐藏（只有全新机器看得到），显式改成 `no` 后目录页始终显示、升级仍预填旧目录；同时给目录页加前置校验（盘符根 / `%WINDIR%` / 用户目录根 / Program Files 根 / 每用户模式下不可写目录）、`OtherModeInstalled` 改读对方卸载项的 `Inno Setup: App Path`、新增 `InstallerScriptChecks`（111 类 0 失败）；见 §0.87。**
+
+## 0.87 最新一轮（2026-11-05 01:50–03:10）：安装向导不给选安装位置
+
+> 用户诉求原话（m00001）：「软件的安装程序不给我选择安装位置」
+
+### 0.87.1 根因：Inno 的 `DisableDirPage` 默认值是 `auto`
+
+`installer/PdxNext.iss` 从来没有写过 `DisableDirPage`，于是用了 Inno 的默认值 `auto`。官方文档
+（`topic_setup_disabledirpage.htm`）原文：*"If this is set to auto, Setup will not show the Select
+Destination Location wizard page if it finds the directory of a previous installation."* 配合脚本里
+本来就有的 `UsePreviousAppDir=yes`（从卸载项的 `Inno Setup: App Path` 取上次目录），结果就是：
+**只有全新机器能看到目录页，任何重装 / 升级都会直接跳过它装回原目录。** 用户上一轮刚装过 1.2.1，
+所以看到的是「没有选位置的页面」。
+
+### 0.87.2 改法
+
+- `DisableDirPage=no`（显式关掉隐藏规则），`UsePreviousAppDir=yes` 保留 —— 页面常显，且升级时预填旧目录。
+- 静默安装（启动器自动更新走 `/SILENT`）本来就没有页面，不受影响；`NextButtonClick` 里第一句就是
+  `if WizardSilent then Exit`，因为该事件在静默安装时同样会被调用，返回 `False` 会让 Setup 直接退出。
+- 目录页前置校验：盘符根 / 共享根、`%WINDIR%` 及其子目录、用户目录根、`%LOCALAPPDATA%` 根、
+  `%LOCALAPPDATA%\Programs` 根、Program Files 根一律拦下；每用户模式再探一次可写性（在「最近的已存在
+  父目录」写 `.pdxnext-write-test.tmp` 再删掉，不用 `ForceDirectories`，取消后不留空目录）。
+- 踩坑：`ExpandConstant('{userprofile}')` 在 Inno Setup 7 里**不是**合法常量（编译期不报错，运行到
+  `NextButtonClick` 才弹 `Runtime error (at 10:569): 内部错误: Unknown constant "userprofile"`），改成环境
+  变量形式 `{%USERPROFILE}`；同时给 `InstallerScriptChecks` 加了一条「`[Code]` 里用到的 `ExpandConstant`
+  常量必须在内置白名单内」的断言，避免同类问题再溜过去。
+- 踩坑：`tools/verify-installed-version.ps1` 一度在「确实装了」时也报 `FAIL no installed PdxNext found.`，
+  根因是脚本没有 BOM，Windows PowerShell 5.1 按 ANSI(GBK) 解码，中文注释行尾的 `。` 把后续换行吃掉、
+  把 `$uninstallKey = ...` 整行并进注释。两个脚本文件都补回 UTF-8 BOM，并在自检里钉死 BOM。
+- `OtherModeInstalled` 以前只探测两个默认路径，用户自选目录后「切模式」检测会失效、两个模式能并存；
+  现在先读**对方**卸载项里的 `Inno Setup: App Path`（每机器安装读 HKCU，每用户安装读 HKLM），读不到再退回默认路径探测。
+- `tools/verify-installed-version.ps1` 同样补上卸载项目录，自选目录的安装也能被校验到。
+- 新增 `tests/PdxLauncher.Checks/InstallerScriptChecks.cs`：把 `DisableDirPage=no`、`UsePreviousAppDir=yes`、
+  `AppId` 未改动、`[Files]` 仍排除 `data`/日志/更新缓存/`install-mode.txt`、`[CustomMessages]` 中英文成对、
+  `NextButtonClick` 里 `WizardSilent` 必须先于任何 `MsgBox`、更新器参数仍以 `/SILENT` 开头全部钉死。
+
+### 0.87.3 验证
+
+- `ISCC.exe` 直接编译 `installer/PdxNext.iss`：0 警告 0 错误。
+- 自检 `检查类: 111，失败: 0`（新增 `InstallerScriptChecks` 的 26 条断言全 ok）。
+- 数据目录不受影响：`PdxDataRoot` 先读 `install-mode.txt`，每用户 → `<安装目录>\data`，
+  每机器 → `%LOCALAPPDATA%\PdxNext-Data`，自选目录天然安全。
+- 真机向导实测（UIA 取控件坐标 + `SetWindowPos` 置顶 + `mouse_event` 真实点击，`/LANG=zhcn /CURRENTUSER /DIR=<目标>`）：
+  - 「选择目标位置」页确实出现，路径框预填 `C:\Users\<user>\AppData\Local\Programs\PdxNext` —— 原报障点已解决；
+  - 填 `C:\Windows\PdxNextProbe` → 拦下并弹「不能安装到这个位置……例如 `D:\Apps\PdxNext`」，停在目录页；
+  - 填 `C:\$Recycle.Bin\PdxNextProbe`（不在禁列里但不可写）→ 拦下并弹「当前用户没有写入该文件夹的权限……」；
+  - 填 `C:\ProgramData\PdxNextProbe` → 放行（本机 Users 对 ProgramData 根有写权限，属正常放行）；
+  - 直接填 `C:\` 时先弹的是 Inno 内建的「必须输入带驱动器盘符的完整路径」（Inno 自己的校验早于脚本事件），
+    这属于预期，因为盘符根在 Inno 那一层就被挡了。
+- 静默端到端（`/VERYSILENT /SUPPRESSMSGBOXES /CURRENTUSER /NORESTART /DIR=C:\Temp\pdxnext-install-test\e2e`）：
+  setup exit 0、`install-mode.txt: perUser`、`tools/verify-installed-version.ps1` 输出
+  `OK ...\e2e\PdxLauncher.App.exe FileVersion=1.2.1.0`、卸载 exit 0 且安装目录清空（`data` 按设计保留）。
+- 待人工做：一次真实的「启动器内自动更新」回归（`UpdateService` → `/SILENT`）。版本号按 `docs/VERSIONING.md` §4 在发布时再 bump。
 
 ## 0.81 最新一轮（2026-11-04 15:00–16:10）：工坊详情截图 —— 缩略图都出来了，上面大图还在转圈
 
