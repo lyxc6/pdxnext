@@ -26,9 +26,9 @@ public sealed partial class MainWindow : Window
     private const double DefaultWindowWidth = 1200.0;
     private const double DefaultWindowHeight = 800.0;
     /// <summary>
-    /// 最小宽度按"播放集页工具条能在一行里排完"倒推：内容区左缘约 237 DIP（导航面板 216 + 页面内边距），
-    /// 工具条最小宽度约 740 DIP（搜索框已经压到 MinWidth 96 时的实测值），加上右内边距 16 DIP 约为 993，
-    /// 取 1040 留一点余量。再窄就会出现搜索框被压扁、「添加模组」被裁掉。
+    /// 最小宽度不再由"播放集页工具条单行排完"倒推：工具条左侧按钮簇已改成 <c>PdxWrapPanel</c>，
+    /// 窗口变窄时它自己折行，搜索框固定 200 DIP、右侧「添加模组」常驻，不会再被挤没或裁掉。
+    /// 保留 1040 作为整体可用宽度的下限（列表行、其他页面的工具条在更窄时才开始显得局促）。
     /// </summary>
     private const double MinimumWindowWidth = 1040.0;
     private const double MinimumWindowHeight = 600.0;
@@ -193,6 +193,7 @@ public sealed partial class MainWindow : Window
         }
 
         _isStarted = true;
+        StartupTimeline.Mark(StartupTimeline.ShellReady);
 
         ApplyAlwaysOnTopPreference();
 
@@ -222,6 +223,8 @@ public sealed partial class MainWindow : Window
             {
                 NavigateTo(NavigationService.LibraryTag);
             }
+
+            StartupTimeline.Mark(StartupTimeline.HomeLoaded);
 
             // 自动检查更新放在首屏完成之后；fire-and-forget，绝不让网络拖慢冷启动。
             _ = UpdateFlow.CheckOnStartupAsync();
@@ -559,7 +562,7 @@ public sealed partial class MainWindow : Window
             PageStateStore.Persist();
             AppServices.FlushCaches();
             AppServices.FlushSettings();
-#if DEBUG
+            // 关窗时留一行内存快照，配合启动那行可以对比一次会话涨了多少。
             if (AppServices.IsInitialized)
             {
                 MemoryDiagnostics.Log(
@@ -567,7 +570,6 @@ public sealed partial class MainWindow : Window
                     "窗口关闭",
                     () => (AppServices.WorkshopInfo.Count, AppServices.WorkshopItemPages.Count, AppServices.ModThumbnails.Cache.Count));
             }
-#endif
             var saved = AppServices.SaveSettings();
             if (!saved.IsSuccess)
             {

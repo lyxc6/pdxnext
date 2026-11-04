@@ -37,6 +37,12 @@
     <Compile Include="..\..\src\PdxLauncher.App\Services\WorkshopText.cs" Link="Linked\WorkshopText.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\WorkshopGalleryLayout.cs" Link="Linked\WorkshopGalleryLayout.cs" />
     <!--
+      换行排版（排不下就折行）。纯算术、不碰任何 XAML 类型，所以能原样链接进来。
+      它错了不会崩，只会在真机上表现为「右边几个按钮被裁掉」或「整排挤成一行」，
+      编译器看不见，所以由 WrapPanelChecks 钉住边界口径（行内/行间间距、超宽项、NaN 与 0 宽兜底）。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\WrapLayout.cs" Link="Linked\WrapLayout.cs" />
+    <!--
       工坊图片落地规则（封面/截图的文件名、以及「同一张图只存一份」的复用判定）同样不碰 UI 类型，
       只用 Core 的 IFileSystem / IAssetDownloader / WorkshopInfoCache，可以原样链接进来。
       它决定磁盘上会不会多出同一张图的第二份，只能靠 WorkshopImageCacheChecks 钉住。
@@ -119,5 +125,27 @@
       所以描述格式（MB 一位小数、缓存计数拼法）与「Capture 永不抛」由 MemoryDiagnosticsChecks 钉住。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\MemoryDiagnostics.cs" Link="Linked\MemoryDiagnostics.cs" />
+    <!--
+      启动阶段计时：只依赖 System.Diagnostics，键名被 Program / App / MainWindow 与性能页共用。
+      错了不会崩，只会在性能页显示 0 或负的阶段差，所以幂等、单调与上限由 StartupTimelineChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\StartupTimeline.cs" Link="Linked\StartupTimeline.cs" />
+    <!--
+      日志尾部读取：只碰 System.IO / System.Text 与 Core 的 FileLogger 常量，不引用 UI 类型。
+      它决定性能页「日志」分区显示什么：截断处的半行/半个 UTF-8 字符、级别过滤丢堆栈都是真机上才看得见的错，
+      所以由 LogTailReaderChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\LogTailReader.cs" Link="Linked\LogTailReader.cs" />
+    <!--
+      优化建议规则：纯函数，阈值与 MEMORY-BASELINE 的验收目标对齐。
+      规则错了只会给出错误的「去优化什么」，编译器看不见，所以每个阈值两侧由 PerformanceHintsChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\PerformanceHints.cs" Link="Linked\PerformanceHints.cs" />
+    <!--
+      截图逐张结算计数器（顶部「正在下载截图…」的唯一数据源）。它只依赖 System.Math，
+      不碰 UI 线程之外的东西，可以原样链接进来。漏结算会让提示永远转下去，多结算会让提示提前消失，
+      两种都不崩、只在真机上表现为「一直转」或「看不见提示」，所以由 ScreenshotLoadTrackerChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\ScreenshotLoadTracker.cs" Link="Linked\ScreenshotLoadTracker.cs" />
   </ItemGroup>
 </Project>

@@ -6,10 +6,11 @@ using System.Globalization;
 using PdxLauncher.Core.Abstractions;
 
 /// <summary>
-/// Debug 构建的内存埋点：抓一份「托管 / 工作集 / 私有 + GC 次数 + 缓存条目数」快照，
-/// 拼成一行中文写进日志，供 <c>docs/MEMORY-BASELINE.md</c> 的验收对照。
+/// 内存 / 进程性能快照：抓一份「托管 / 工作集 / 私有 + GC 次数 + 缓存条目数」数据。
+/// 拼成一行中文写进启动与关窗日志，供 <c>docs/MEMORY-BASELINE.md</c> 的验收对照，
+/// 同时也是「性能与日志」页面概览卡片的数据源（Release 同样可用）。
 /// <para>
-/// 本类自身不带编译条件，由调用点用 <c>#if DEBUG</c> 控制；埋点失败只 Warn，绝不影响主流程。
+/// 本类自身不带编译条件；埋点失败只 Warn，绝不影响主流程。
 /// 这个文件会被 <c>tests/PdxLauncher.Checks</c> 原样链接，所以不得引用任何 WinUI 或 App 层类型：
 /// 缓存条目数走可选委托传入，由 App 调用点负责读 <c>AppServices</c>。
 /// </para>
@@ -28,7 +29,20 @@ public static class MemoryDiagnostics
         int Gen2,
         int WorkshopItems,
         int WorkshopPages,
-        int ModThumbnails);
+        int ModThumbnails)
+    {
+        /// <summary>进程峰值工作集；取不到时为 0。性能页用它判断内存是否曾经冲高。</summary>
+        public long PeakWorkingSetBytes { get; init; }
+
+        /// <summary>当前线程数；取不到时为 0。</summary>
+        public int ThreadCount { get; init; }
+
+        /// <summary>当前句柄数；取不到时为 0。句柄只涨不落通常意味着图标/图片句柄泄漏。</summary>
+        public int HandleCount { get; init; }
+
+        /// <summary>进程已运行时长；取不到时为 <see cref="TimeSpan.Zero"/>。</summary>
+        public TimeSpan Uptime { get; init; }
+    }
 
     /// <summary>
     /// 抓取当前进程的内存快照。进程信息取不到、计数委托抛异常时对应项退化为 0，
@@ -39,6 +53,10 @@ public static class MemoryDiagnostics
         long managedBytes = 0;
         long workingSetBytes = 0;
         long privateBytes = 0;
+        long peakWorkingSetBytes = 0;
+        int threadCount = 0;
+        int handleCount = 0;
+        var uptime = TimeSpan.Zero;
 
         try
         {
@@ -46,6 +64,10 @@ public static class MemoryDiagnostics
             using var process = Process.GetCurrentProcess();
             workingSetBytes = process.WorkingSet64;
             privateBytes = process.PrivateMemorySize64;
+            peakWorkingSetBytes = process.PeakWorkingSet64;
+            threadCount = process.Threads.Count;
+            handleCount = process.HandleCount;
+            uptime = DateTime.Now - process.StartTime;
         }
         catch (Exception)
         {
@@ -74,7 +96,13 @@ public static class MemoryDiagnostics
             GC.CollectionCount(2),
             items,
             pages,
-            thumbnails);
+            thumbnails)
+        {
+            PeakWorkingSetBytes = peakWorkingSetBytes,
+            ThreadCount = threadCount,
+            HandleCount = handleCount,
+            Uptime = uptime < TimeSpan.Zero ? TimeSpan.Zero : uptime,
+        };
     }
 
     /// <summary>把快照拼成单行中文；MB 按 1 MB = 1024² B 换算并保留一位小数（InvariantCulture）。</summary>

@@ -14,6 +14,7 @@
   "shell.crash.path": "崩溃记录已写入：{0}",
   "shell.crash.title": "启动器遇到未处理的错误",
   "shell.nav.account": "账号",
+  "shell.nav.diagnostics": "性能与日志",
   "shell.nav.home": "当前游戏",
   "shell.nav.library": "游戏库",
   "shell.nav.modLibrary": "Mod 库",

@@ -62,55 +62,129 @@ NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统�
 **2026-11-03 20:45 追加：发布链路改 GitHub Actions —— 推 `v*` tag 自动构建、自检、生成 Inno 安装器并上传 Release；新增 SemVer 版本规范 `docs/VERSIONING.md`、`CHANGELOG.md`、CI 工作流；发布仓库统一为公开的 `lyxc6/pdxnext`；见 §0.75。**
 **2026-11-03 23:55 追加：已发布到创意工坊却仍显示「未发布」—— 根因是隐藏条目对匿名 API 回 `EResult 9`（FileNotFound，**不等于不存在**），而启动器只认「自己发起的上传」；现给宿主加 `workshop-mine` / `workshop-mine-detail` 两个动词（回调 1312/1318，走本机登录态读自己发布的条目），Mod 创建页加「绑定已有条目…」入口、发布状态改四态（未发布 / 发布未完成 / 已发布（未公开）/ 已发布）并显示 Steam 真实可见性；自检 93→94；见 §0.76。**
 **2026-11-04 13:30 追加：创意工坊「搜不出来」—— 不是搜索坏了，是连不上 Steam 而错误被当成「用户取消」吞掉；根因是本机 DNS 被污染（steamcommunity.com → 104.244.46.21）+ 直连模式不读 `http_proxy`；现把连接超时翻译成 `NetworkTimeoutException`、工坊失败码分「结构变了 / 连不上」，状态栏写明原因并提示检测到的代理，设置页加「检测到的代理 → 使用」一键切换；自检 94→95；见 §0.77。**
-**2026-11-04 14:50 追加：工坊排序下拉缺「搜索相关度」—— Core 早就支持 `browsesort=textsearch`，但界面只列了 5 档、`ResolveSteamSort` 也永远返回不到 `TextSearch`；现补成 6 档（与网页同序），无关键词时回落「最热门」并在状态栏说明；自检 96→97；见 §0.79。**
+**2026-11-04 15:20 追加：新增「性能与日志」页 —— 左栏底部（账号与设置之间）多一个入口，五个分区（概览 / 缓存 / 日志 / 网络 / 启动耗时）把内存与进程计数、七类缓存占用、日志尾部与轮转状态、Steam 各主机限流计数、五个启动里程碑放在一张页面里看，并按阈值自动列出「可以优化什么」；顺带把设置页的 7 行缓存定义抽成 `CacheRowCatalog` 两页共用、内存埋点与启动里程碑改成 Release 也记录；自检 96→100；见 §0.79。**
+**2026-11-04 14:40 追加：Mod 创建页详情那一排按钮在默认窗口宽下就被裁掉（截图里只剩半个「绑…」）—— 根因是详情右栏可用宽 ≈544 DIP 而五个按钮 ≈660 DIP，且 WinUI 3 没有 WrapPanel、水平 StackPanel 不换行、外层 ScrollViewer 横向禁滚；现新增纯算法 `WrapLayout` + 控件 `PdxWrapPanel`，详情按钮行与上传面板 BBCode 工具条都换成换行面板；自检 95→96；见 §0.78。**
 
-## 0.79 最新一轮（2026-11-04 14:45–15:05）：工坊排序下拉补上「搜索相关度」
+## 0.79 最新一轮（2026-11-04 14:45–15:20）：新增「性能与日志」页 —— 把优化点集中到一页
 
-> 用户原话（m04069）：「steam搜索有个搜索相关度，怎么没有」
-> 截图对比：Steam 网页的排序菜单有 6 项 —— 最热门 / 最受好评（发布至今）/ 最近发行 / 最新更新 / **搜索相关度** / 不重复订阅者总计；本启动器的下拉只有 5 项，缺「搜索相关度」。
+> 用户诉求原话（m00001）：「能不能加一个[性能与日志]页面，给我看看有什么优化的地方」
 
-### 0.79.1 结论先说：不是服务端不支持，是界面没接上
+### 0.79.1 设计：五个只读分区 + 一组阈值规则
 
-| 层 | 状态 |
-| --- | --- |
-| `SteamWorkshopSort` 枚举 | 早就有 `TextSearch`（`src/PdxLauncher.Core/Online/SteamWorkshopModels.cs:13-32`） |
-| `SteamWorkshopClient.SortValue` | 早就映射 `TextSearch => "textsearch"`（`src/PdxLauncher.Core/Online/SteamWorkshopClient.cs:621-632`） |
-| `BuildBrowseUri` | 关键词与排序并存、`browsesort=textsearch` 原样透传；**只有**「要 textsearch 却没关键词」才回落 trend（`:76-80`） |
-| `WorkshopViewModel.SteamSortKeys` | **只有 5 项** —— 界面缺口的直接原因 |
-| `WorkshopViewModel.ResolveSteamSort()` | **只映射到 TopRated/MostRecent/MostUpdated/MostSubscribed/Trend**，永远返回不到 `TextSearch` |
+页面挂在左栏最底部（`navDiagnostics`，排在「账号」之后、「设置」之前），`Tag="diagnostics"`；
+`NavigationService` 注册 `DiagnosticsTag` → `PdxLauncher.App.Views.DiagnosticsPage`，`TagForPageType` 自动反向映射，选中态无需额外代码。
+上次停留的分区记在 `AppSettings.LastDiagnosticsSection`（`int?`，0 起 5 项，null/越界落「概览」），
+与设置页的 `LastSettingsSection` 同一套路。
 
-所以这一轮**没有改 Core**（改了只会平白增加回归面），只补了 UI 的两处映射 + 一条「没有关键词」的提示。
+| 分区 | 展示内容 | 数据来源 |
+| --- | --- | --- |
+| 概览 | 工作集 / 私有 / 托管 / 峰值（各带目标说明）、GC 0/1/2、线程 / 句柄、运行时长、工坊条目 / 分页 / mod 缩略图、缓存合计；下方是「优化建议」列表 | `MemoryDiagnostics.Capture` + `CacheRowCatalog.MeasureAsync` + `PerformanceHints.Evaluate` |
+| 缓存 | 合计 + 七行（主题 / 公告 / 缩略图 / DLC 描述 / 图片 / 工坊 / 翻译），逐行可清、可全部清除（先确认） | 与设置页「缓存」分区**同一份** `CacheRowCatalog`，不再各写一套清除 lambda |
+| 日志 | 当前文件大小 / 归档数 / 合计、最近写入时间、轮转阈值（`FileLogger.MaxBytes` / `MaxArchives`）、按「全部 / 警告 / 错误」过滤的最近 200 行、5 秒自动刷新开关、「打开日志目录」 | `LogTailReader.Measure` / `ReadTail` / `FilterNewestFirst` |
+| 网络 | 每主机一行：总请求 / 限流 / 拒发 / 冷却剩余 / 最近一次；代理模式与解析出的地址（带来源），有告警时显示 InfoBar | `AppServices.HttpThrottle.Snapshot()` + `ProxyResolver.Describe` |
+| 启动耗时 | 五个里程碑的绝对耗时与相邻差值：进程入口 / 服务装配 / 窗口激活 / 外壳就绪 / 首屏完成；下方注明「冷启动不联网」 | `StartupTimeline.Snapshot()` |
+
+「优化建议」是纯规则函数（无 UI、可单测），阈值都写成常量，命中才出现、按严重度排序：
+
+| 规则 | 阈值 | 级别 |
+| --- | --- | --- |
+| 工作集超详情预算 / 空载预算 | ≥ 550 MB → 高；≥ 250 MB → 中（内存只出一条） | 高 / 中 |
+| 有主机被限流器**拒发**过 | 拒发数 > 0（取最忙的主机） | 中 |
+| 冷启动到首屏超时 | ≥ 2500 ms | 中 |
+| 缓存合计偏大 | ≥ 500 MB | 低 |
+| 工坊缓存条目偏多 | 条目 + 分页 ≥ 2000 | 低 |
+| 日志接近轮转 | ≥ `FileLogger.MaxBytes` × 80% | 低 |
+| 历史日志已满 | 归档数 ≥ 3 | 低 |
+| 翻译模型常驻 | 翻译开 + `KeepTranslationModelLoaded` | 提示 |
 
 ### 0.79.2 改动清单
 
 | 文件 | 改动 |
 | --- | --- |
-| `src/PdxLauncher.App/ViewModels/WorkshopViewModel.cs` | `SteamSortKeys` 5→6 项，`Keys.WorkshopSortRelevance` 插在「最新更新」与「不重复订阅者总计」之间（与网页同序）；`ResolveSteamSort()` 加 `WorkshopSortRelevance => SteamWorkshopSort.TextSearch`；新增 `IsRelevanceWithoutKeyword()`；`QuerySteamAsync` 尾部状态栏三分支（空结果 / 相关度无关键词 / 正常条数） |
-| `tools/i18n/{zh-CN,en-US}/workshop.json` | 新增 `workshop.sortRelevance`、`workshop.sortRelevanceNeedsKeyword`（按键名字母序插入 `sortRating` 之后） |
-| `src/PdxLauncher.App/Localization/Strings.g.cs` | 重新生成，1161→1163 键（机器产物） |
-| `tests/PdxLauncher.Checks/WorkshopPageChecks.cs` | 新增 `CheckSteamSortsIncludeRelevance`：目录含该项且顺序正确、`ResolveSteamSort` 能映射到 `TextSearch`、`QuerySteamAsync` 带无关键词提示（3 条断言） |
-| `tests/PdxLauncher.Checks/SteamWorkshopApiChecks.cs` | `CheckBrowseUri` 补 3 条：`TextSearch` + 关键词 → 含 `browsesort=textsearch`、含 `searchtext=`、**不含** `days=` |
+| `src/PdxLauncher.App/Views/DiagnosticsPage.xaml` / `.xaml.cs` | **新增**。左 `NavigationView`（216 DIP，5 个 `NavigationViewItem`）+ 右 `ScrollViewer`，结构与设置页同构；分区切换、清缓存（`ConfirmOverlay` 先确认）、日志过滤 / 自动刷新（`DispatcherTimer` 5 s，页面卸载即停）、打开日志目录（`ShellLauncher.TryStart("explorer.exe")`）、状态条 |
+| `src/PdxLauncher.App/ViewModels/DiagnosticsViewModel.cs` | **新增**。五个分区的采样与文案拼装；`Task.Run` 采样后回 UI 线程改集合；`Relocalize` 重建全部数字与句子；不新建服务，只用 `AppServices` 静态服务 |
+| `src/PdxLauncher.App/ViewModels/DiagnosticsRows.cs` | **新增**。四个不可变行模型：指标卡、建议、限流主机、启动里程碑 |
+| `src/PdxLauncher.App/ViewModels/CacheRowCatalog.cs` | **新增**。把设置页构造里的七行缓存定义、并行测量、全部清除搬出来，设置页与性能页共用（设置页 UI 与行为不变） |
+| `src/PdxLauncher.App/Services/StartupTimeline.cs` | **新增**。静态时间线，起点取 `Process.StartTime`（失败退回 `DateTimeOffset.Now`）；`Mark` 幂等、线程安全、上限 32 条、绝不抛；五个里程碑常量 |
+| `src/PdxLauncher.App/Services/LogTailReader.cs` | **新增**。用 `FileShare.ReadWrite` 加 `FileShare.Delete` 只读尾部 128 KB / 200 行（不锁写入方）、UTF-8 残字节与半行丢弃、按 `[WARN] / [ERROR]` 整块过滤（堆栈续行跟随）、最新在上；`Measure` 统计主文件 + 归档；`FileLogger.MaxBytes` / `MaxArchives` 改为 `public const` 供页面显示阈值 |
+| `src/PdxLauncher.App/Services/PerformanceHints.cs` | **新增**。`DiagnosticHintCode` 枚举 + `PerformanceHintInput` + `Evaluate`，阈值常量集中在此 |
+| `src/PdxLauncher.App/Services/MemoryDiagnostics.cs` | `MemorySnapshot` **嵌套 record** 保持 9 个位置参数不变，另加 `init` 属性：峰值工作集 / 线程数 / 句柄数 / 运行时长；`Describe` 文案一字未改（自检逐字断言） |
+| `src/PdxLauncher.App/Services/NavigationService.cs` | `DiagnosticsTag = "diagnostics"` + `TypeNames` 映射到 `DiagnosticsPage` |
+| `src/PdxLauncher.App/MainWindow.xaml` | 页脚新增 `navDiagnostics`（`SymbolIcon Symbol="Repair"`） |
+| `src/PdxLauncher.App/Program.cs`、`App.xaml.cs`、`MainWindow.xaml.cs` | 五个启动里程碑打点；启动 / 关窗的内存快照去掉 `#if DEBUG`，Release 也留一行 |
+| `src/PdxLauncher.Core/Configuration/AppSettings.cs` | 新增 `LastDiagnosticsSection` |
+| `src/PdxLauncher.Core/Infrastructure/FileLogger.cs` | `MaxBytes` / `MaxArchives` 改 `public const`（逻辑不变） |
+| `tools/i18n/{zh-CN,en-US}/diagnostics.json`、`shell.json` | **新增** 94 个 `diagnostics.*` 键 + `shell.nav.diagnostics`；`python tools/gen-i18n.py` 重新生成（合计 1280 键） |
+| `tests/PdxLauncher.Checks/{DiagnosticsPageChecks,PerformanceHintsChecks,LogTailReaderChecks,StartupTimelineChecks}.cs` | **新增** 4 个检查类（96→100）：阈值两侧取值与排序、日志尾部的半行 / 残字节 / 写入方占用 / 归档统计、时间线幂等与上限、页面静态结构（导航注册、19 个 AutomationId、5 个分区与 Tag 顺序、只读 TextBox、XAML 无硬编码中文、三处共享埋点、设置页已改用 `CacheRowCatalog`） |
+| `tests/PdxLauncher.Checks/MemoryDiagnosticsChecks.cs` | 扩充：逐字断言 `Describe` 全文、新 `init` 属性默认 0、活体快照峰值 / 线程 / 句柄 / 运行时长非 0 |
 
-### 0.79.3 三个设计决定（都写进了注释或自检）
+**没有**新增 NuGet 依赖；页面只读本地状态与文件，不联网、不写游戏或官方启动器目录；没有清空日志的按钮（`FileLogger` 的句柄不含删除共享，清空会被写入方占用）。
 
-1. **常驻显示，不做「只有关键词才出现」**：`SortModes` 是按下标反查排序键（`ResolveSortKey` / `CurrentSortIndex`），动态增删档位会让选中项漂移，切换来源时更明显。
-2. **提交搜索时不自动切到「搜索相关度」**：用户可能就是想按「最受好评」筛关键词结果（网页也允许这两者并存）；自动切换等于替用户改筛选条件。
-3. **无关键词时按「最热门」显示并在状态栏写明**：服务端对没有 `searchtext` 的 `textsearch` 不做相关度排序（Core 已回落 trend），静默回落会让人以为排序坏了。
+### 0.79.3 验证
 
-### 0.79.4 验证
+- `bash tools/build-app.sh -v q` → **0 警告 0 错误**；`dotnet build PdxLauncher.sln -c Release -m:1`（清掉 `src/PdxLauncher.App/obj/x64` 后）→ **0 警告 0 错误**。
+- `dotnet run --project tests/PdxLauncher.Checks -c Release` → `检查类: 100，失败: 0，断言失败总数: 0`。
+- `python tools/gen-i18n.py --check` → 通过（重新生成后合计 1280 键）。
+- **未做真机 UI 截图**：本机同时有两个别的会话在跑 `PdxLauncher.App.exe`，本轮没有抢占或杀进程；页面结构与绑定的验证靠编译 + 静态检查。
 
-- `dotnet build tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj -c Release -m:1` → 0 警告 0 错误。
-- `dotnet "tests/PdxLauncher.Checks/bin/Release/net10.0/PdxLauncher.Checks.dll"` → `检查类: 96，失败: 0`。
-- 实测生成的 URL：`...&browsesort=textsearch&num_per_page=30&p=1&searchtext=morgenrote`（无 `days=`）。
-- 隔离 worktree 全量构建 + 自检 + `python tools/gen-i18n.py --check`（见提交记录）。
-- 真机：选「搜索相关度」输入关键词回车，列表与「最热门」明显不同；清空关键词后状态栏出现提示、列表回落到热门。**升级后需重启程序**（旧进程持有旧 exe）。
+### 0.79.4 坑与后续
 
-### 0.79.5 坑
+- **`MemorySnapshot` 是嵌套类型**：`MemoryDiagnostics.MemorySnapshot`，VM 里写裸 `MemorySnapshot` 会 CS0246；同时不能改它的 9 个位置参数，否则 `MemoryDiagnosticsChecks` 的命名参数构造全断——新字段一律走 `init` 属性。
+- **WinUI 3 的 `TextBox` 没有 `HorizontalScrollBarVisibility`**：要写 `ScrollViewer.HorizontalScrollBarVisibility` 附加属性（否则 WMC0011）。
+- **清掉 `obj/x64` 后 `dotnet build PdxLauncher.sln` 报 `XamlCompiler WMC9999`（参数超出范围）**：残留 `obj` 与并发实例的输出互相干扰；`rm -rf src/PdxLauncher.App/obj/x64` 后整解重建即通过（`tools/build-app.sh` 只构 App 工程，未受影响）。
+- **检查工程关 `ImplicitUsings`**：新检查文件里用到 `Path` / `Regex` 等要显式 `using System.Text.RegularExpressions;`，`IFileSystem` 要 `using PdxLauncher.Core.Abstractions;`。
+- 后续可做：真机截图核对五分区排版（尤其是 1040 DIP 最小宽下「概览」两张卡并排）、把 `DiagnosticsViewModel` 的格式化函数抽成可链接的纯静态类以便单测、在概览里补「本次会话相对启动涨了多少」。
 
-- **`SortModes` 是下标反查**：以后想加档位只加在末尾、或者同时改 `ResolveSortKey`，别在中途插队——这一轮插在倒数第二位是因为要和网页保持同序。
-- **`QuerySteamAsync` 与 `QueryPdxAsync` 有逐字相同的状态栏三元表达式**：改一处时不能用全局替换，靠上方「30 条累加后只落盘一次」注释区分。
-- **相关度排序下时间范围会自动隐藏**（`IsTimeRangeSort()` 只认 trend/toprated）；这是有意为之：Steam 只对这两种排序认 `days`。
-- 排序**没有持久化**（`PageStateSnapshot` 只存 Mod 库与 Mod 创建），所以新增档位不会让旧存档错位。
+## 0.78 最新一轮（2026-11-04 14:20–14:45）：Mod 创建页按钮行被裁掉 —— 换成「排不下就换行」
+
+> 用户诉求原话（m00971）：「把自动换行加上，现在的也太抽象了」
+> 截图（m00969）：Mod 创建页详情面板最后一行只剩四个半按钮，第五个「绑定已有条目…」被裁成「绑…」。
+
+### 0.78.1 根因：可用宽度只有 ≈544 DIP，五个按钮要 ≈660 DIP
+
+| 项 | 值 | 出处 |
+| --- | --- | --- |
+| 窗口默认宽 / 最小宽 | 1200 / **1040** DIP | `src/PdxLauncher.App/MainWindow.xaml.cs:33` `MinimumWindowWidth` |
+| 左侧导航 | 216 DIP | `src/PdxLauncher.App/MainWindow.xaml:182` `OpenPaneLength` |
+| Mod 创建页左右列 | 360（MinWidth 280）+ ColumnSpacing 12 | `src/PdxLauncher.App/Views/ModStudioPage.xaml` 主体 Grid |
+| 页面 / 卡片内边距 | 16×2 / 18×2 | 同上 |
+| **详情右栏可用宽** | 1200 宽 ≈ **544**、1040 宽 ≈ **384** | 1200−216−32−360−12−36 |
+| 五按钮自然宽（zh-CN） | ≈ **660** | 实测截图比例；en-US 更长 |
+
+也就是说**默认窗口宽下就已经放不下**，不只是窄屏。而这一行原本是
+`<StackPanel Orientation="Horizontal" Spacing="8">` —— WinUI 3 **没有** WrapPanel（`CommunityToolkit.WinUI.Controls` 也不在本项目依赖里），
+水平 StackPanel 从不换行；外层 `DetailPaneScroll` 的横向滚动默认是 Disabled，于是超出的按钮被**直接裁掉**，看起来像「按钮没了」。
+上传面板的 BBCode 工具条（11 个 `MinWidth=36` 按钮 ≈670 DIP）是同一类问题，只是窄屏时才暴露。
+
+### 0.78.2 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.App/Services/WrapLayout.cs` | **新增**。纯算术：`WrapItem(Width,Height)` / `WrapPlacement(Index,X,Y,Width,Height)` / `WrapLayoutResult(Items,Width,Height)`，`Compute(items, availableWidth, spacing)`。规则：可用宽非有限或 ≤0 → 一行；间距非有限或 <0 → 0；尺寸非有限或 ≤0 的项跳过且**不产生间距**；换行判据 `x + width > limit` 只在行内判断（行首不判，避免单项超宽死循环）；行高取本行最高项；总高 = 各行高 + 行间距。不引用任何 XAML 类型（检查工程可链接断言） |
+| `src/PdxLauncher.App/Controls/PdxWrapPanel.cs` | **新增**。`public sealed class PdxWrapPanel : Panel`，`Spacing` 依赖属性默认 **8.0**（变更回调 `InvalidateMeasure`）；`MeasureOverride` 用 `(availableWidth, ∞)` 量子元素、跳过 `Visibility.Collapsed`、委托 `WrapLayout`；`ArrangeOverride` 用 `finalSize.Width` **重算一遍**再 Arrange（首次布局时量到的宽度可能被夹过）。纯代码控件，无 XAML |
+| `src/PdxLauncher.App/Views/ModStudioPage.xaml` | 详情动作行 `StackPanel Orientation="Horizontal" Spacing="8"` → `<ctl:PdxWrapPanel Spacing="8">`（5 个按钮、AutomationId、Click 全部原样，加注释说明原因）；BBCode 工具条 → `<ctl:PdxWrapPanel Spacing="4">`。其余行（新建预览 / 上传预览的「按钮 + 省略号文本」）不动 |
+| `tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj` | 链接 `WrapLayout.cs`（App 是 WinExe + windows TFM，检查工程引用不了，只能链接源码） |
+| `tests/PdxLauncher.Checks/WrapPanelChecks.cs` | **新增**检查类（95→96）。算法：单行总量、刚好放得下 / 差 1 DIP、行高取最高、0 宽项不产生间距、原始下标保留、空列表、∞/NaN/0 宽兜底、超宽单项、非法间距；接线：详情行 5 个 `</Button>` + 5 个 AutomationId 都在同一个 `ctl:PdxWrapPanel` 内、工具条 11 个 `btnBbCode*`、面板默认间距 `8.0`、`WrapLayout` 不含 `Microsoft.UI` / `Windows.Foundation` |
+
+**没有**新增 i18n 键（只改布局），`Strings.g.cs` 未重新生成；`python tools/gen-i18n.py --check` 通过（1172 键）。
+**没有**改 `MinimumWindowWidth`、左列宽、按钮文案与顺序、其他页面的横向按钮行，也没引 NuGet 依赖。
+
+### 0.78.3 验证
+
+- `dotnet build src/PdxLauncher.App/PdxLauncher.App.csproj -c Release -v m` → **0 警告 0 错误**。
+- `dotnet run --project tests/PdxLauncher.Checks -c Release` → `检查类: 96，失败: 0，断言失败总数: 0`。
+- `python tools/gen-i18n.py --check` → exit 0。
+- 真机实测（pwsh + UIA，本机 DPI 150%，窗口尺寸按 DIP 折算）：**1200×760 DIP → 详情按钮 2 行**（3 + 2，两行 y=418 / 458，行距 40 DIP）、**1040×600 DIP（最小宽）→ 3 行**（y=437 / 477 / 517），五个按钮的 AutomationId 全部可达，不再被裁到可视区外（第三行落在详情卡片底部，滚动可见）；默认启动尺寸 1329×815 DIP → 2 行。
+- 截图证据：`.scratch/wrap-b-1200.png`（1200 DIP 两行）、`.scratch/wrap-c-1040.png`（1040 DIP 三行）；`.scratch/` 已在 `.gitignore` 第 13 行，不入库。上传面板 BBCode 工具条在 1040 DIP 下由 11×36 DIP 的按钮自然折成 2 行（同一控件、同一算法）。
+
+### 0.78.4 坑与后续
+
+- **WinUI 没有 WrapPanel**：`Microsoft.UI.Xaml.Controls` 里只有 `ItemsRepeater + UniformGridLayout`（那是等宽网格，不适合按钮条），
+  `CommunityToolkit.WinUI.Controls` 也没被引用；所以自绘 `Panel` 是唯一「不引依赖 + 不重写按钮」的路。
+- **Panel 子类在 Measure 里必须给子元素「宽度受限、高度无限」**：否则按钮会被压成多行文本或按 ∞ 宽测量。
+- **Arrange 必须用最终宽度重算**：Measure 时的可用宽可能是 ∞（父级还没定宽）或已被夹过，缓存 measure 结果会导致首帧错位。
+- 这个面板可以复用到其他横向按钮行（工坊详情、DLC 页工具条等）——本轮只动了用户截图指到的那两处。
+- **重编 x64 时踩的两个坑**：① 应用正在运行会锁住 `bin\x64\...\PdxLauncher.Core.dll`，`MSB3021/MSB3027` 反复重试失败——先 `taskkill //F //IM PdxLauncher.App.exe`（Git-Bash 里必须写双斜杠，否则 `/IM` 被当成路径）。② 手删 `obj/x64` 后增量构建会报 `WMC0601 找不到 App.xaml`，必须 `dotnet build ... -p:Platform=x64 -t:Rebuild` 走完整重建；首次重建出现的 25 条 `PRI249 Invalid qualifier: THEME-CACHE` 警告是残留 PRI 引起的瞬态，再构建一次即归零。
 
 ## 0.77 最新一轮（2026-11-04 00:00–13:30）：创意工坊搜不出来 —— 「加载失败」被当成了「用户取消」
 
@@ -6664,3 +6738,69 @@ S_STEPCHECK S_FAILCHECK S_CHECKOK S_NOEXE S_EXPECT S_STARTING S_EXE S_ALREADY S_
 - 预览是只读的 `MarkdownView`，不参与提交；提交的永远是描述框里的 BBCode 原文。
 - 上传页在这个版本**没有做「所见即所得」**，也**不做** `[table]`（Steam 描述里实测无人使用，解析器也不认，会原样保留）。
 - 自检类数 73 → 80（本轮 +2，其余是并发会话新增的播放集排序相关类）。HANDOFF 与 README 的计数要一起改。
+
+## 0.74 2026-11-04：DLC 页「490 个 DLC」的真相（loader 表 ≠ Steam 目录）+ 账号真实拥有视图
+
+用户原话（2026-11-04）：「DLC页面是真的判断出是否拥有所有dlc吗，不会只是扫描本地dlc吧」；贴出 V3 截图后追问「vic3哪来的490个dlc」。
+
+### 1. 查到的硬限制
+
+- loader 在岗时 `GetDLCCount` / `BGetDLCDataByIndex` 读的是同目录 `cream_api.ini` 的 `[dlc]` 表，**不是 Steam 目录**，而且不按当前 appid 过滤。仓库素材那份表共 490 行，是 11 款 Paradox 游戏共用模板（CS1 94 / EU4 93 / CK2 74 / HoI4 59 / Stellaris 56 / CK3 37 / CS2 29 / V3 23 / V2 11 / Imperator 9 / EU5 5）。
+- V3 真机（appid 529340）：loader 表 490、账号真实 23、本地 `game/dlc/` 17 个 `.dlc.json`。所以「490/490」既不是 V3 的 DLC 数，也不是账号拥有数。
+- 想拿「账号真实拥有」只能探原版备份 `steam_api64_o.dll`（loader 834560 B，原版 298384 B）；同一 appid 同一时刻只能有一个 `SteamAPI_Init`，两次探测必须顺序执行。
+
+### 2. 根因
+
+| # | 现象 | 根因 |
+| --- | --- | --- |
+| 1 | 判定句写「未打补丁」，详情却写「补丁：已加载」 | `DlcOwnershipVerdict.Evaluate` 只把 `GamePatchStatus.Patched` 当已打补丁，`PatchedOther`（他人/整合包装的 loader）落进 `Vanilla*`；`DlcViewModel` 的详情却把 `Patched` 和 `PatchedOther` 都当「已加载」 |
+| 2 | 「Steam 报告 490 个 DLC」 | loader 在岗时 `GetDLCCount` 来自 `cream_api.ini`，文案却统一写「Steam 报告」 |
+| 3 | 「全部拥有」名不副实 | candidates 只取磁盘上带 steam_id 的条目；磁盘没有的 DLC 永远不会判未拥有，账号真实拥有也无从体现 |
+
+### 3. 决策
+
+- `GamePatchReport.IsLoaderActive = Status is Patched or PatchedOther`（`IsPatched` 语义不动，仍是「有补丁痕迹」）。
+- `SteamOwnershipReport` 追加 `IsLoaderActive` 与 `Account`（`DlcAccountOwnership?`，第二份「账号真实拥有」报告）；loader 在岗且备份存在时顺序再探一次备份，主报告失败不影响账号结论。
+- 判定条拆两条线：主句 = 游戏实际可用（loader 表/Steam 目录），账号句 = 账号真实拥有；`Patched*` 主句不再写「Steam 报告」。
+- CS2（磁盘 DLC 数为 0）回退时优先用账号表，避免拿 490 条 loader 整表对账。
+- 缓存 key 扩为「DLL 路径 + 字节数 + appid + 补丁状态 + 备份路径 + 备份字节数」；设置页打/撤补丁成功后 `Invalidate()`。
+- 降级显式化：备份缺失 / 备份与当前文件同字节 / 备份返回同样的表 / 备份探测失败，各有错误键，不再静默当成「没拥有」。
+
+### 4. 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `src/PdxLauncher.Core/Patch/GamePatchState.cs` | `GamePatchReport` 加 `IsLoaderActive`、`BackupApiFilePath`（由 ApiDirectory/ApiFileName 推出 `_o` 备份路径） |
+| `src/PdxLauncher.Core/Patch/GamePatchService.cs` | `BackupSuffix` 改为 `public const`，供报告拼备份路径 |
+| `src/PdxLauncher.Core/Steam/SteamOwnership.cs` | 新增 `DlcAccountOwnership`；`SteamOwnershipReport` 末尾追加 `IsLoaderActive`、`Account`（可选位置参数，源码兼容）；`SteamProbeError` 加 `BackupNotOriginal` |
+| `src/PdxLauncher.Core/Steam/SteamOwnershipService.cs` | 主探测后按 `IsLoaderActive` 再探 `_o` 备份；`ProbeAccount` 处理缺备份/同字节/同表/探测失败；`ApplyTrusted` 抽出来给两份报告共用；缓存 key 扩为六段 |
+| `src/PdxLauncher.Core/Steam/DlcOwnershipVerdict.cs` | `SteamDlcCount/SteamOwnedCount` → `ProbeDlcCount/ProbeOwnedCount`；新增 `IsLoaderActive`、`AccountDlcCount/AccountOwnedCount/AccountOwnedDiskDlcCount/AccountErrorKey/ForeignDlcCount`；`PatchedOther` 也算已打补丁；空磁盘回退优先账号表 |
+| `src/PdxLauncher.App/ViewModels/DlcViewModel.cs` | headline 用 `Probe*` 并追加账号句；detail 补丁状态四态（含「其他工具/整合包」「已被 Steam 更新覆盖」）、loader 来源、外区条数、账号探测 DLL；`FillSteamRows` 在 loader 在岗时用账号表；日志分段 |
+| `src/PdxLauncher.App/ViewModels/SettingsViewModel.cs` | `ApplyPatchAsync` / `RemovePatchAsync` 写回报告后 `AppServices.DlcOwnership.Invalidate()` |
+| `tools/i18n/{zh-CN,en-US}/dlc.json` | 4 条主句改写；新增 9 键（账号句 2、错误 2、详情 5） |
+| `src/PdxLauncher.App/Localization/Strings.g.cs` | `python tools/gen-i18n.py` 重新生成（1278 键） |
+| `tests/PdxLauncher.Checks/SteamOwnershipChecks.cs` | `CheckVerdictTable` 加 `PatchedOther`/`SteamOverwrote` 用例；新增 `CheckAccountProbe`（loader 490 / 账号 23 / 磁盘 17、CS2 回退、缓存 2→4、缺备份/同字节/同表/探测失败） |
+| `tests/PdxLauncher.Checks/SteamDlcListChecks.cs` | 字段更名 |
+| `tests/PdxLauncher.Checks/DlcPatchChecks.cs` | 断言 `IsLoaderActive` 三态 |
+| `docs/DATA-FORMATS.md` | §3.1 补「loader 表 ≠ Steam 目录」「账号视图」「降级矩阵」「缓存 key」与 V3 真机数据 |
+
+### 5. 验证
+
+- `dotnet build tests/PdxLauncher.Checks/PdxLauncher.Checks.csproj -c Release -m:1 --nologo -v q`：成功，0 警告 0 错误。
+- `dotnet run --project tests/PdxLauncher.Checks -c Release --no-build`：`检查类: 99，失败: 2`，仅 `WrapPanelChecks` 失败（仓库里未提交的播放集工具条 WIP，与本改动无关）。本任务新增断言全部通过，例如：主探测 490 / 账号 23 / 外区 467、CS2 回退 23、缓存命中 2 次、`Invalidate` 后 4 次、缺备份只探 1 次。
+- `python tools/gen-i18n.py --check`：通过。
+- `dotnet build src/PdxLauncher.App/PdxLauncher.App.csproj -c Release -p:Platform=x64`：**当前工作区被无关 WIP 阻断**（`DiagnosticsRows.cs` / `DiagnosticsViewModel.cs` 找不到 `DiagnosticHintCode` / `MemorySnapshot` + WMC9999），与本改动无关；本改动涉及的 `DlcViewModel` / `SettingsViewModel` 已通过 Checks 工程对 Core 的编译链间接验证。
+
+### 6. 坑
+
+- **`gen-i18n.py` 要求占位符按 `{0}`、`{1}` 顺序出现**：en 里先写 `{1}` 再写 `{0}`（"1 of 3" 语序）会直接报错，只能改写句子。
+- **record 追加可选位置参数是源码兼容的**，但新参数必须排在最后并带默认值；`SteamOwnershipReport` 现有 3 处构造（服务 1 + 测试 2）都不用改。
+- **元组元素声明成 `IReadOnlySet<string>` 却返回 `HashSet`** 会 CS0029；`ApplyTrusted` 返回类型与解构声明要一致。
+- **`cream_api.ini` 的 490 是模板**，不是本游戏条目；Stellaris 打完补丁同样是 490/490，不要拿它当「DLC 总数」。
+- 判「备份也是 loader」不能只看字节：整包替换后备份可能被覆盖成同一份 loader；还要比对两次探测的 id 集合。
+
+### 7. 注意
+
+- 行徽标仍是「游戏实际可用」语义（`OwnedAppIds` + 可信 DisabledDLC），本轮没有给每行加「账号真实拥有」；账号信息只在判定条出现。
+- 若以后 CreamAPI 改成按 appid 过滤，`ForeignDlcCount` 会自然归零，文案不必再改。
+- 自检类数 99（本轮新增 `CheckAccountProbe`，其余是并发会话新增的播放集相关类）。README 的计数若落后于 99，另开一轮统一。

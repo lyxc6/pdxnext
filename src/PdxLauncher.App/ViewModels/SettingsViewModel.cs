@@ -17,7 +17,7 @@ using PdxLauncher.Core.Updates;
 
 /// <summary>
 /// 设置页的视图模型：界面语言、主题来源与联网检查、网络代理、界面档位、启动参数、
-/// 数据目录、五类联网缓存与危险区（dlc_signature）。
+/// 数据目录、七类联网缓存与危险区（dlc_signature）。
 /// 只读展示 + 少量可写设置，全部持久化到 AppServices.Settings 并立即 SaveSettings()。
 /// 不含任何 Microsoft.UI.Xaml 类型；ContentDialog 确认与"打开目录"等 shell 动作由页面负责。
 /// 文案统一走 <see cref="LocalizedObservableObject"/>：语言切换后基类重发属性通知，
@@ -85,88 +85,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     public SettingsViewModel()
     {
-        CacheRows = new ObservableCollection<CacheRowViewModel>
-        {
-            new(
-                CacheRowViewModel.ThemeKey,
-                Keys.SettingsCacheRowThemeTitle,
-                Keys.SettingsCacheRowThemeDesc,
-                JsonDocumentKeys.CachePrefix + "theme-assets:*",
-                () =>
-                {
-                    // 主题索引按游戏各一行，逐键删；图片仍是 theme-cache 下的素材文件。
-                    foreach (var key in AppServices.Documents.List(JsonDocumentKeys.CachePrefix + "theme-assets:"))
-                    {
-                        AppServices.Documents.Delete(key);
-                    }
-
-                    CacheStorage.Clear(AppServices.FileSystem, AppServices.ThemeCacheRoot);
-                },
-                JsonDocumentKeys.CachePrefix + "theme-assets:",
-                AppServices.ThemeCacheRoot),
-            new(
-                CacheRowViewModel.NewsKey,
-                Keys.SettingsCacheRowNewsTitle,
-                Keys.SettingsCacheRowNewsDesc,
-                JsonDocumentKeys.NewsCards,
-                AppServices.NewsFeed.ClearCache,
-                JsonDocumentKeys.NewsCards,
-                AppServices.NewsCacheRoot),
-            new(
-                CacheRowViewModel.ModThumbnailsKey,
-                Keys.SettingsCacheRowModThumbnailsTitle,
-                Keys.SettingsCacheRowModThumbnailsDesc,
-                JsonDocumentKeys.ModThumbnails,
-                () => AppServices.ModThumbnails.Cache.Clear(),
-                JsonDocumentKeys.ModThumbnails,
-                AppServices.ModThumbnailCacheRoot),
-            new(
-                CacheRowViewModel.DlcDescriptionsKey,
-                Keys.SettingsCacheRowDlcDescriptionsTitle,
-                Keys.SettingsCacheRowDlcDescriptionsDesc,
-                JsonDocumentKeys.DlcDescriptions,
-                AppServices.DlcDescriptions.ClearCache,
-                JsonDocumentKeys.DlcDescriptions,
-                null),
-            new(
-                CacheRowViewModel.ImagesKey,
-                Keys.SettingsCacheRowImagesTitle,
-                Keys.SettingsCacheRowImagesDesc,
-                AppServices.ImageArt.CacheDirectory,
-                () =>
-                {
-                    CacheStorage.Clear(AppServices.FileSystem, AppServices.ImageArt.CacheDirectory);
-                    AppServices.ImageArt.Reset();
-                }),
-            new(
-                CacheRowViewModel.WorkshopKey,
-                Keys.SettingsCacheRowWorkshopTitle,
-                Keys.SettingsCacheRowWorkshopDesc,
-                "workshop_items / workshop_pages",
-                () =>
-                {
-                    // v2 起条目与分页都在自有库真表里，清完再把封面目录一起删掉。
-                    AppServices.WorkshopInfo.Clear();
-                    AppServices.WorkshopItemPages.Clear();
-                    CacheStorage.Clear(AppServices.FileSystem, AppServices.WorkshopCacheRoot);
-                },
-                documentKey: null,
-                folderPath: AppServices.WorkshopCacheRoot,
-                measure: () =>
-                {
-                    var covers = CacheStorage.Measure(AppServices.FileSystem, AppServices.WorkshopCacheRoot);
-                    var entries = AppServices.WorkshopInfo.Count + AppServices.WorkshopItemPages.Count;
-                    return new CacheUsage(covers.Bytes, covers.Files + entries);
-                }),
-            new(
-                CacheRowViewModel.TranslationsKey,
-                Keys.SettingsCacheRowTranslationsTitle,
-                Keys.SettingsCacheRowTranslationsDesc,
-                JsonDocumentKeys.Translations,
-                () => AppServices.Translation.ClearCache(),
-                JsonDocumentKeys.Translations,
-                null),
-        };
+        CacheRows = new ObservableCollection<CacheRowViewModel>(CacheRowCatalog.Create());
     }
 
     /// <summary>
@@ -938,6 +857,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             PatchDetailText = BuildPatchDetail(report);
             RaisePatchProps();
 
+            // DLC 页拿的是 30 秒缓存；补丁文件刚变过，必须让它下一次立刻重探。
+            AppServices.DlcOwnership.Invalidate();
+
             if (report.Status == GamePatchStatus.Patched)
             {
                 SetStatus(
@@ -987,6 +909,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             PatchStatusText = T(PatchStatusKey(report.Status));
             PatchDetailText = BuildPatchDetail(report);
             RaisePatchProps();
+
+            // 移除补丁同样改变了探测对象，别让 DLC 页吃旧缓存。
+            AppServices.DlcOwnership.Invalidate();
 
             if (report.Status == GamePatchStatus.Vanilla)
             {
@@ -1308,13 +1233,13 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     // ------------------------------------------------------------ 缓存卡片
 
-    /// <summary>六类联网缓存各一行（顺序即界面顺序）。</summary>
+    /// <summary>七类联网缓存各一行（顺序即界面顺序，定义在 <see cref="CacheRowCatalog"/>）。</summary>
     public ObservableCollection<CacheRowViewModel> CacheRows { get; }
 
     /// <summary>合计占用文案（只统计字节，文件数在每行里）。</summary>
     public string CacheTotalText => T(Keys.SettingsCacheSummary, SizeFormatter.Format(_cacheTotalBytes));
 
-    /// <summary>重新统计五类缓存的占用（只看文件属性，不联网）。</summary>
+    /// <summary>重新统计七类缓存的占用（只看文件属性，不联网）。</summary>
     public async Task RefreshCacheStatsAsync(CancellationToken cancellationToken = default)
     {
         var rows = CacheRows.ToArray();
@@ -1323,24 +1248,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             return;
         }
 
-        var fileSystem = AppServices.FileSystem;
-        var usages = await Task.Run(
-            () =>
-            {
-                var result = new CacheUsage[rows.Length];
-                for (var index = 0; index < rows.Length; index++)
-                {
-                    result[index] = rows[index].MeasureOverride?.Invoke()
-                        ?? CacheStorage.Measure(
-                            fileSystem,
-                            AppServices.Documents,
-                            rows[index].DocumentKey,
-                            rows[index].FolderPath);
-                }
-
-                return result;
-            },
-            cancellationToken).ConfigureAwait(true);
+        var usages = await CacheRowCatalog.MeasureAsync(rows, cancellationToken).ConfigureAwait(true);
 
         long totalBytes = 0;
         for (var index = 0; index < rows.Length; index++)
@@ -1384,21 +1292,13 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>清除全部六类缓存。</summary>
+    /// <summary>清除全部七类缓存。</summary>
     public async Task ClearAllCachesAsync(CancellationToken cancellationToken)
     {
         var before = _cacheTotalBytes;
         try
         {
-            await Task.Run(
-                () =>
-                {
-                    foreach (var row in CacheRows.ToArray())
-                    {
-                        row.Clear();
-                    }
-                },
-                cancellationToken).ConfigureAwait(true);
+            await CacheRowCatalog.ClearAllAsync(CacheRows, cancellationToken).ConfigureAwait(true);
             await RefreshCacheStatsAsync(cancellationToken).ConfigureAwait(true);
             SetStatus(Keys.SettingsCacheStatusClearedAll, SizeFormatter.Format(before));
         }

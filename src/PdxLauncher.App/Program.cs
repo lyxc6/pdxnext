@@ -7,6 +7,7 @@ using System.Threading;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
+using PdxLauncher.App.Services;
 using PdxLauncher.Core.Steam;
 
 /// <summary>
@@ -41,6 +42,9 @@ public static class Program
     [STAThread]
     public static int Main(string[] args)
     {
+        // 性能页的启动耗时从进程入口算起；Steam 宿主子进程也走这里，但那条路径不会去看这个时间线。
+        StartupTimeline.Mark(StartupTimeline.AppStart);
+
         if (SteamHostProtocol.IsHostInvocation(args))
         {
             try

@@ -149,6 +149,12 @@ public sealed class AppSettings
     /// </summary>
     public int? LastSettingsSection { get; set; }
 
+    /// <summary>
+    /// 性能与日志页上次停留的分节（0 起，对应左栏 5 项）；null 或越界时落到概览。
+    /// 与 <see cref="LastSettingsSection"/> 分开记，两个页面互不影响。
+    /// </summary>
+    public int? LastDiagnosticsSection { get; set; }
+
     /// <summary>启动后自动检查更新（默认开）。每机器安装仍会弹 UAC 才能升级。</summary>
     public bool AutoCheckUpdates { get; set; } = true;
 

@@ -14,6 +14,7 @@
   "shell.crash.path": "Crash record written to: {0}",
   "shell.crash.title": "The launcher hit an unhandled error",
   "shell.nav.account": "Account",
+  "shell.nav.diagnostics": "Performance & Logs",
   "shell.nav.home": "Current Game",
   "shell.nav.library": "Game Library",
   "shell.nav.modLibrary": "Mod Library",

@@ -77,6 +77,100 @@ public sealed partial class Localizer
         ["common.sourceSubscribed"] = "订阅",
         ["common.unknown"] = "未知",
         ["common.yes"] = "是",
+        ["diagnostics.cache.hint"] = "缓存只影响速度，不会删游戏文件；清完首次打开相应页面会重新生成。",
+        ["diagnostics.hint.cacheLarge.detail"] = "缓存合计 {0}，超过 500 MB；缓存分区可以按行清理。",
+        ["diagnostics.hint.cacheLarge.title"] = "缓存总量偏大",
+        ["diagnostics.hint.logArchives.detail"] = "日志目录合计 {0}；旧文件只在排查问题时才有用。",
+        ["diagnostics.hint.logArchives.title"] = "已有 3 个历史日志",
+        ["diagnostics.hint.logNearRotation.detail"] = "当前日志 {0}，到 5 MB 会轮转；要留档先打开日志目录复制一份。",
+        ["diagnostics.hint.logNearRotation.title"] = "日志接近轮转阈值",
+        ["diagnostics.hint.memoryAboveDetailBudget.detail"] = "当前 {0}，超过 550 MB；先清一次大缓存，再看工坊详情是否仍偏高。",
+        ["diagnostics.hint.memoryAboveDetailBudget.title"] = "工作集超过详情页预算",
+        ["diagnostics.hint.memoryHigh.detail"] = "当前 {0}，超过 250 MB 的空闲目标；多为缩略图与图片缓存，可到缓存分区清理。",
+        ["diagnostics.hint.memoryHigh.title"] = "工作集高于空闲预算",
+        ["diagnostics.hint.startupSlow.detail"] = "这次到可交互用了 {0}；到启动耗时分区看是哪一段慢。",
+        ["diagnostics.hint.startupSlow.title"] = "冷启动超过 2.5 秒",
+        ["diagnostics.hint.throttleRejected.detail"] = "{0} 累计拒发 {1} 次；网络分区能看到冷却剩余时间。",
+        ["diagnostics.hint.throttleRejected.title"] = "有请求被限流拒发",
+        ["diagnostics.hint.translationModelResident.detail"] = "“保持模型加载”开着，模型约 1.3 GB 常驻；不常翻译可到设置页关掉。",
+        ["diagnostics.hint.translationModelResident.title"] = "翻译模型常驻内存",
+        ["diagnostics.hint.workshopCacheLarge.detail"] = "工坊条目与分页合计 {0} 条，超过 2000；不需要离线浏览时可以清掉。",
+        ["diagnostics.hint.workshopCacheLarge.title"] = "工坊缓存条目偏多",
+        ["diagnostics.log.autoRefresh"] = "每 5 秒自动刷新",
+        ["diagnostics.log.autoRefreshName"] = "自动刷新日志",
+        ["diagnostics.log.filterAll"] = "全部",
+        ["diagnostics.log.filterError"] = "仅错误",
+        ["diagnostics.log.filterTitle"] = "显示级别",
+        ["diagnostics.log.filterWarn"] = "警告及以上",
+        ["diagnostics.log.hint"] = "尾部从文件末尾读取，不会锁住写日志的进程；要看完整历史请打开目录。",
+        ["diagnostics.log.lastWrite"] = "最近写入：{0}",
+        ["diagnostics.log.lastWriteEmpty"] = "最近写入：还没有",
+        ["diagnostics.log.openFailed"] = "打开日志目录失败：{0}",
+        ["diagnostics.log.openFolder"] = "打开日志目录",
+        ["diagnostics.log.rotation"] = "单文件到 {0} 会轮转，最多保留 {1} 个历史文件",
+        ["diagnostics.log.summary"] = "当前 {0}，历史 {1} 个，合计 {2}",
+        ["diagnostics.log.summaryEmpty"] = "还没有日志文件",
+        ["diagnostics.log.tailEmpty"] = "没有匹配的日志行。",
+        ["diagnostics.log.tailTitle"] = "最近 {0} 行（最新在上）",
+        ["diagnostics.log.title"] = "日志文件",
+        ["diagnostics.metric.gc"] = "GC 回收 0/1/2 代",
+        ["diagnostics.metric.gc.detail"] = "次数涨得快说明分配压力大。",
+        ["diagnostics.metric.managed"] = "托管堆",
+        ["diagnostics.metric.managed.detail"] = "未强制完整回收，只作趋势参考。",
+        ["diagnostics.metric.peak"] = "峰值工作集",
+        ["diagnostics.metric.peak.detail"] = "本次进程启动以来的最高值。",
+        ["diagnostics.metric.private"] = "私有内存",
+        ["diagnostics.metric.private.detail"] = "进程独占的提交量，不含与他人共享的页。",
+        ["diagnostics.metric.threads"] = "线程 / 句柄",
+        ["diagnostics.metric.threads.detail"] = "句柄只增不减，常见于图片或文件没释放。",
+        ["diagnostics.metric.thumbnails"] = "Mod 缩略图",
+        ["diagnostics.metric.thumbnails.detail"] = "内存里持有的缩略图对象数。",
+        ["diagnostics.metric.uptime"] = "已运行",
+        ["diagnostics.metric.uptime.detail"] = "从进程启动到这次采样。",
+        ["diagnostics.metric.workingSet"] = "工作集",
+        ["diagnostics.metric.workingSet.detail"] = "空闲目标 250 MB；工坊详情页预算 550 MB。",
+        ["diagnostics.metric.workshop"] = "工坊条目 / 分页",
+        ["diagnostics.metric.workshop.detail"] = "常驻条目与详情分页，合计超过 2000 建议清理。",
+        ["diagnostics.network.cooldown"] = "冷却 {0}",
+        ["diagnostics.network.cooldownNone"] = "无冷却",
+        ["diagnostics.network.empty"] = "还没有联网请求：先逛一次工坊或游戏库再回来看。",
+        ["diagnostics.network.hint"] = "「拒发」是冷却期内直接放弃的请求；持续增长说明目标站点在限流，稍后再试。",
+        ["diagnostics.network.lastRequest"] = "最近请求 {0}",
+        ["diagnostics.network.lastRequestEmpty"] = "还没有请求",
+        ["diagnostics.network.proxyDirect"] = "直连（未使用代理）",
+        ["diagnostics.network.proxyTitle"] = "代理",
+        ["diagnostics.network.proxyVia"] = "{0}（来自{1}）",
+        ["diagnostics.network.proxyWarning"] = "当前代理配置有问题：{0}；实际按直连处理。",
+        ["diagnostics.network.source.environment"] = "环境变量",
+        ["diagnostics.network.source.manual"] = "手动配置",
+        ["diagnostics.network.source.system"] = "系统代理",
+        ["diagnostics.network.stats"] = "总 {0} / 限流 {1} / 拒发 {2}",
+        ["diagnostics.network.throttleTitle"] = "各站点请求与限流",
+        ["diagnostics.overview.countersTitle"] = "缓存与内容",
+        ["diagnostics.overview.hintsEmpty"] = "没有发现明显问题：内存、缓存、日志与限流都还在预算内。",
+        ["diagnostics.overview.hintsTitle"] = "优化建议",
+        ["diagnostics.overview.metricsTitle"] = "进程与内存",
+        ["diagnostics.overview.refresh"] = "重新采样",
+        ["diagnostics.overview.updated"] = "采样时间 {0}",
+        ["diagnostics.page.subtitle"] = "只读采样内存、缓存占用、日志尾部、限流与启动耗时；不联网、不写游戏目录。",
+        ["diagnostics.page.title"] = "性能与日志",
+        ["diagnostics.section.cache"] = "缓存",
+        ["diagnostics.section.log"] = "日志",
+        ["diagnostics.section.network"] = "网络",
+        ["diagnostics.section.overview"] = "概览",
+        ["diagnostics.section.startup"] = "启动耗时",
+        ["diagnostics.startup.delta"] = "距上一段 {0}",
+        ["diagnostics.startup.empty"] = "这次没有采集到启动数据（页面是在启动完成后打开的）。",
+        ["diagnostics.startup.first"] = "起点",
+        ["diagnostics.startup.mark.appStart"] = "进程启动",
+        ["diagnostics.startup.mark.homeLoaded"] = "首页加载",
+        ["diagnostics.startup.mark.servicesReady"] = "服务就绪",
+        ["diagnostics.startup.mark.shellReady"] = "壳就绪",
+        ["diagnostics.startup.mark.windowCreated"] = "窗口创建",
+        ["diagnostics.startup.note"] = "冷启动刻意不联网，这段耗时不包含首页与工坊的网络刷新。",
+        ["diagnostics.startup.title"] = "里程碑",
+        ["diagnostics.startup.total"] = "冷启动到可交互：{0}",
+        ["diagnostics.status.failed"] = "操作失败：{0}",
         ["dlc.countsText"] = "共 {0} 个 DLC，已启用 {1} 个",
         ["dlc.countsTextSteam"] = "共 {0} 个 DLC（清单来自 Steam）",
         ["dlc.descriptionName"] = "简介",
@@ -1015,6 +1109,7 @@ public sealed partial class Localizer
         ["shell.crash.path"] = "崩溃记录已写入：{0}",
         ["shell.crash.title"] = "启动器遇到未处理的错误",
         ["shell.nav.account"] = "账号",
+        ["shell.nav.diagnostics"] = "性能与日志",
         ["shell.nav.home"] = "当前游戏",
         ["shell.nav.library"] = "游戏库",
         ["shell.nav.modLibrary"] = "Mod 库",
@@ -1244,6 +1339,100 @@ public sealed partial class Localizer
         ["common.sourceSubscribed"] = "Subscribed",
         ["common.unknown"] = "Unknown",
         ["common.yes"] = "Yes",
+        ["diagnostics.cache.hint"] = "Caches only affect speed and never delete game files; they are rebuilt the next time you open the matching page.",
+        ["diagnostics.hint.cacheLarge.detail"] = "Caches total {0}, above 500 MB. Clear them row by row on the Cache tab.",
+        ["diagnostics.hint.cacheLarge.title"] = "Caches are large",
+        ["diagnostics.hint.logArchives.detail"] = "The log folder totals {0}. Old files only matter when troubleshooting.",
+        ["diagnostics.hint.logArchives.title"] = "Three archived logs exist",
+        ["diagnostics.hint.logNearRotation.detail"] = "The current log is {0}; it rotates at 5 MB. Copy it from the log folder if you need a record.",
+        ["diagnostics.hint.logNearRotation.title"] = "The log is close to rotation",
+        ["diagnostics.hint.memoryAboveDetailBudget.detail"] = "Currently {0}, above 550 MB. Clear the largest caches first, then re-check workshop detail.",
+        ["diagnostics.hint.memoryAboveDetailBudget.title"] = "Working set is above the detail-page budget",
+        ["diagnostics.hint.memoryHigh.detail"] = "Currently {0}, above the 250 MB idle target. Usually thumbnails and image caches; clear them on the Cache tab.",
+        ["diagnostics.hint.memoryHigh.title"] = "Working set is above the idle budget",
+        ["diagnostics.hint.startupSlow.detail"] = "Reached interactive in {0}. Check the Startup tab to see which stage is slow.",
+        ["diagnostics.hint.startupSlow.title"] = "Cold start is slower than 2.5 s",
+        ["diagnostics.hint.throttleRejected.detail"] = "{0} rejected {1} requests. The Network tab shows the remaining cooldown.",
+        ["diagnostics.hint.throttleRejected.title"] = "Some requests were rejected by throttling",
+        ["diagnostics.hint.translationModelResident.detail"] = "Keep model loaded is on, holding about 1.3 GB. Turn it off in Settings if you rarely translate.",
+        ["diagnostics.hint.translationModelResident.title"] = "Translation model stays resident",
+        ["diagnostics.hint.workshopCacheLarge.detail"] = "{0} workshop entries and pages, above 2000. Clear them when offline browsing is not needed.",
+        ["diagnostics.hint.workshopCacheLarge.title"] = "Workshop cache holds many entries",
+        ["diagnostics.log.autoRefresh"] = "Refresh every 5 seconds",
+        ["diagnostics.log.autoRefreshName"] = "Auto-refresh log",
+        ["diagnostics.log.filterAll"] = "All",
+        ["diagnostics.log.filterError"] = "Errors only",
+        ["diagnostics.log.filterTitle"] = "Level filter",
+        ["diagnostics.log.filterWarn"] = "Warnings and errors",
+        ["diagnostics.log.hint"] = "The tail is read from the end of the file without locking the writer. Open the folder for the full history.",
+        ["diagnostics.log.lastWrite"] = "Last write: {0}",
+        ["diagnostics.log.lastWriteEmpty"] = "Last write: none yet",
+        ["diagnostics.log.openFailed"] = "Could not open the log folder: {0}",
+        ["diagnostics.log.openFolder"] = "Open log folder",
+        ["diagnostics.log.rotation"] = "Rotates at {0}, keeping up to {1} archives",
+        ["diagnostics.log.summary"] = "Current {0}, {1} archived, {2} in total",
+        ["diagnostics.log.summaryEmpty"] = "No log file yet",
+        ["diagnostics.log.tailEmpty"] = "No matching log lines.",
+        ["diagnostics.log.tailTitle"] = "Last {0} lines (newest first)",
+        ["diagnostics.log.title"] = "Log file",
+        ["diagnostics.metric.gc"] = "GC collections (gen 0/1/2)",
+        ["diagnostics.metric.gc.detail"] = "Fast growth means heavy allocation traffic.",
+        ["diagnostics.metric.managed"] = "Managed heap",
+        ["diagnostics.metric.managed.detail"] = "Measured without a full GC; treat it as a trend.",
+        ["diagnostics.metric.peak"] = "Peak working set",
+        ["diagnostics.metric.peak.detail"] = "Highest value since this process started.",
+        ["diagnostics.metric.private"] = "Private bytes",
+        ["diagnostics.metric.private.detail"] = "Committed memory exclusive to this process; shared pages excluded.",
+        ["diagnostics.metric.threads"] = "Threads / handles",
+        ["diagnostics.metric.threads.detail"] = "Handles that only grow usually mean unreleased images or files.",
+        ["diagnostics.metric.thumbnails"] = "Mod thumbnails",
+        ["diagnostics.metric.thumbnails.detail"] = "Thumbnail objects held in memory.",
+        ["diagnostics.metric.uptime"] = "Uptime",
+        ["diagnostics.metric.uptime.detail"] = "From process start to this sample.",
+        ["diagnostics.metric.workingSet"] = "Working set",
+        ["diagnostics.metric.workingSet.detail"] = "Idle target 250 MB; workshop detail budget 550 MB.",
+        ["diagnostics.metric.workshop"] = "Workshop entries / pages",
+        ["diagnostics.metric.workshop.detail"] = "Resident entries plus detail pages; clear when the total exceeds 2000.",
+        ["diagnostics.network.cooldown"] = "Cooldown {0}",
+        ["diagnostics.network.cooldownNone"] = "No cooldown",
+        ["diagnostics.network.empty"] = "No network requests yet. Visit Workshop or the game library once, then come back.",
+        ["diagnostics.network.hint"] = "Rejected means the request was dropped during a cooldown. If that number keeps growing, the host is rate-limiting you; retry later.",
+        ["diagnostics.network.lastRequest"] = "Last request {0}",
+        ["diagnostics.network.lastRequestEmpty"] = "No requests yet",
+        ["diagnostics.network.proxyDirect"] = "Direct connection (no proxy)",
+        ["diagnostics.network.proxyTitle"] = "Proxy",
+        ["diagnostics.network.proxyVia"] = "{0} (from {1})",
+        ["diagnostics.network.proxyWarning"] = "The proxy settings have a problem: {0}. Requests currently go direct.",
+        ["diagnostics.network.source.environment"] = "environment variables",
+        ["diagnostics.network.source.manual"] = "manual settings",
+        ["diagnostics.network.source.system"] = "system proxy",
+        ["diagnostics.network.stats"] = "Total {0} / throttled {1} / rejected {2}",
+        ["diagnostics.network.throttleTitle"] = "Requests and throttling per host",
+        ["diagnostics.overview.countersTitle"] = "Cache and content",
+        ["diagnostics.overview.hintsEmpty"] = "Nothing stands out: memory, cache, logs and throttling are all within budget.",
+        ["diagnostics.overview.hintsTitle"] = "Suggested optimizations",
+        ["diagnostics.overview.metricsTitle"] = "Process and memory",
+        ["diagnostics.overview.refresh"] = "Sample again",
+        ["diagnostics.overview.updated"] = "Sampled at {0}",
+        ["diagnostics.page.subtitle"] = "Read-only samples of memory, cache usage, log tail, throttling and startup time. No network access, no writes to game folders.",
+        ["diagnostics.page.title"] = "Performance & Logs",
+        ["diagnostics.section.cache"] = "Cache",
+        ["diagnostics.section.log"] = "Logs",
+        ["diagnostics.section.network"] = "Network",
+        ["diagnostics.section.overview"] = "Overview",
+        ["diagnostics.section.startup"] = "Startup",
+        ["diagnostics.startup.delta"] = "{0} since the previous mark",
+        ["diagnostics.startup.empty"] = "No startup samples from this run (the page was opened after startup finished).",
+        ["diagnostics.startup.first"] = "start",
+        ["diagnostics.startup.mark.appStart"] = "Process start",
+        ["diagnostics.startup.mark.homeLoaded"] = "Home loaded",
+        ["diagnostics.startup.mark.servicesReady"] = "Services ready",
+        ["diagnostics.startup.mark.shellReady"] = "Shell ready",
+        ["diagnostics.startup.mark.windowCreated"] = "Window created",
+        ["diagnostics.startup.note"] = "Cold start stays offline on purpose; these timings exclude home and workshop network refreshes.",
+        ["diagnostics.startup.title"] = "Milestones",
+        ["diagnostics.startup.total"] = "Cold start to interactive: {0}",
+        ["diagnostics.status.failed"] = "Operation failed: {0}",
         ["dlc.countsText"] = "{0} DLCs in total, {1} enabled",
         ["dlc.countsTextSteam"] = "{0} DLCs (list from Steam)",
         ["dlc.descriptionName"] = "Description",
@@ -2182,6 +2371,7 @@ public sealed partial class Localizer
         ["shell.crash.path"] = "Crash record written to: {0}",
         ["shell.crash.title"] = "The launcher hit an unhandled error",
         ["shell.nav.account"] = "Account",
+        ["shell.nav.diagnostics"] = "Performance & Logs",
         ["shell.nav.home"] = "Current Game",
         ["shell.nav.library"] = "Game Library",
         ["shell.nav.modLibrary"] = "Mod Library",
@@ -2411,6 +2601,100 @@ public sealed partial class Localizer
         ("common.sourceSubscribed", "CommonSourceSubscribed"),
         ("common.unknown", "CommonUnknown"),
         ("common.yes", "CommonYes"),
+        ("diagnostics.cache.hint", "DiagnosticsCacheHint"),
+        ("diagnostics.hint.cacheLarge.detail", "DiagnosticsHintCacheLargeDetail"),
+        ("diagnostics.hint.cacheLarge.title", "DiagnosticsHintCacheLargeTitle"),
+        ("diagnostics.hint.logArchives.detail", "DiagnosticsHintLogArchivesDetail"),
+        ("diagnostics.hint.logArchives.title", "DiagnosticsHintLogArchivesTitle"),
+        ("diagnostics.hint.logNearRotation.detail", "DiagnosticsHintLogNearRotationDetail"),
+        ("diagnostics.hint.logNearRotation.title", "DiagnosticsHintLogNearRotationTitle"),
+        ("diagnostics.hint.memoryAboveDetailBudget.detail", "DiagnosticsHintMemoryAboveDetailBudgetDetail"),
+        ("diagnostics.hint.memoryAboveDetailBudget.title", "DiagnosticsHintMemoryAboveDetailBudgetTitle"),
+        ("diagnostics.hint.memoryHigh.detail", "DiagnosticsHintMemoryHighDetail"),
+        ("diagnostics.hint.memoryHigh.title", "DiagnosticsHintMemoryHighTitle"),
+        ("diagnostics.hint.startupSlow.detail", "DiagnosticsHintStartupSlowDetail"),
+        ("diagnostics.hint.startupSlow.title", "DiagnosticsHintStartupSlowTitle"),
+        ("diagnostics.hint.throttleRejected.detail", "DiagnosticsHintThrottleRejectedDetail"),
+        ("diagnostics.hint.throttleRejected.title", "DiagnosticsHintThrottleRejectedTitle"),
+        ("diagnostics.hint.translationModelResident.detail", "DiagnosticsHintTranslationModelResidentDetail"),
+        ("diagnostics.hint.translationModelResident.title", "DiagnosticsHintTranslationModelResidentTitle"),
+        ("diagnostics.hint.workshopCacheLarge.detail", "DiagnosticsHintWorkshopCacheLargeDetail"),
+        ("diagnostics.hint.workshopCacheLarge.title", "DiagnosticsHintWorkshopCacheLargeTitle"),
+        ("diagnostics.log.autoRefresh", "DiagnosticsLogAutoRefresh"),
+        ("diagnostics.log.autoRefreshName", "DiagnosticsLogAutoRefreshName"),
+        ("diagnostics.log.filterAll", "DiagnosticsLogFilterAll"),
+        ("diagnostics.log.filterError", "DiagnosticsLogFilterError"),
+        ("diagnostics.log.filterTitle", "DiagnosticsLogFilterTitle"),
+        ("diagnostics.log.filterWarn", "DiagnosticsLogFilterWarn"),
+        ("diagnostics.log.hint", "DiagnosticsLogHint"),
+        ("diagnostics.log.lastWrite", "DiagnosticsLogLastWrite"),
+        ("diagnostics.log.lastWriteEmpty", "DiagnosticsLogLastWriteEmpty"),
+        ("diagnostics.log.openFailed", "DiagnosticsLogOpenFailed"),
+        ("diagnostics.log.openFolder", "DiagnosticsLogOpenFolder"),
+        ("diagnostics.log.rotation", "DiagnosticsLogRotation"),
+        ("diagnostics.log.summary", "DiagnosticsLogSummary"),
+        ("diagnostics.log.summaryEmpty", "DiagnosticsLogSummaryEmpty"),
+        ("diagnostics.log.tailEmpty", "DiagnosticsLogTailEmpty"),
+        ("diagnostics.log.tailTitle", "DiagnosticsLogTailTitle"),
+        ("diagnostics.log.title", "DiagnosticsLogTitle"),
+        ("diagnostics.metric.gc", "DiagnosticsMetricGc"),
+        ("diagnostics.metric.gc.detail", "DiagnosticsMetricGcDetail"),
+        ("diagnostics.metric.managed", "DiagnosticsMetricManaged"),
+        ("diagnostics.metric.managed.detail", "DiagnosticsMetricManagedDetail"),
+        ("diagnostics.metric.peak", "DiagnosticsMetricPeak"),
+        ("diagnostics.metric.peak.detail", "DiagnosticsMetricPeakDetail"),
+        ("diagnostics.metric.private", "DiagnosticsMetricPrivate"),
+        ("diagnostics.metric.private.detail", "DiagnosticsMetricPrivateDetail"),
+        ("diagnostics.metric.threads", "DiagnosticsMetricThreads"),
+        ("diagnostics.metric.threads.detail", "DiagnosticsMetricThreadsDetail"),
+        ("diagnostics.metric.thumbnails", "DiagnosticsMetricThumbnails"),
+        ("diagnostics.metric.thumbnails.detail", "DiagnosticsMetricThumbnailsDetail"),
+        ("diagnostics.metric.uptime", "DiagnosticsMetricUptime"),
+        ("diagnostics.metric.uptime.detail", "DiagnosticsMetricUptimeDetail"),
+        ("diagnostics.metric.workingSet", "DiagnosticsMetricWorkingSet"),
+        ("diagnostics.metric.workingSet.detail", "DiagnosticsMetricWorkingSetDetail"),
+        ("diagnostics.metric.workshop", "DiagnosticsMetricWorkshop"),
+        ("diagnostics.metric.workshop.detail", "DiagnosticsMetricWorkshopDetail"),
+        ("diagnostics.network.cooldown", "DiagnosticsNetworkCooldown"),
+        ("diagnostics.network.cooldownNone", "DiagnosticsNetworkCooldownNone"),
+        ("diagnostics.network.empty", "DiagnosticsNetworkEmpty"),
+        ("diagnostics.network.hint", "DiagnosticsNetworkHint"),
+        ("diagnostics.network.lastRequest", "DiagnosticsNetworkLastRequest"),
+        ("diagnostics.network.lastRequestEmpty", "DiagnosticsNetworkLastRequestEmpty"),
+        ("diagnostics.network.proxyDirect", "DiagnosticsNetworkProxyDirect"),
+        ("diagnostics.network.proxyTitle", "DiagnosticsNetworkProxyTitle"),
+        ("diagnostics.network.proxyVia", "DiagnosticsNetworkProxyVia"),
+        ("diagnostics.network.proxyWarning", "DiagnosticsNetworkProxyWarning"),
+        ("diagnostics.network.source.environment", "DiagnosticsNetworkSourceEnvironment"),
+        ("diagnostics.network.source.manual", "DiagnosticsNetworkSourceManual"),
+        ("diagnostics.network.source.system", "DiagnosticsNetworkSourceSystem"),
+        ("diagnostics.network.stats", "DiagnosticsNetworkStats"),
+        ("diagnostics.network.throttleTitle", "DiagnosticsNetworkThrottleTitle"),
+        ("diagnostics.overview.countersTitle", "DiagnosticsOverviewCountersTitle"),
+        ("diagnostics.overview.hintsEmpty", "DiagnosticsOverviewHintsEmpty"),
+        ("diagnostics.overview.hintsTitle", "DiagnosticsOverviewHintsTitle"),
+        ("diagnostics.overview.metricsTitle", "DiagnosticsOverviewMetricsTitle"),
+        ("diagnostics.overview.refresh", "DiagnosticsOverviewRefresh"),
+        ("diagnostics.overview.updated", "DiagnosticsOverviewUpdated"),
+        ("diagnostics.page.subtitle", "DiagnosticsPageSubtitle"),
+        ("diagnostics.page.title", "DiagnosticsPageTitle"),
+        ("diagnostics.section.cache", "DiagnosticsSectionCache"),
+        ("diagnostics.section.log", "DiagnosticsSectionLog"),
+        ("diagnostics.section.network", "DiagnosticsSectionNetwork"),
+        ("diagnostics.section.overview", "DiagnosticsSectionOverview"),
+        ("diagnostics.section.startup", "DiagnosticsSectionStartup"),
+        ("diagnostics.startup.delta", "DiagnosticsStartupDelta"),
+        ("diagnostics.startup.empty", "DiagnosticsStartupEmpty"),
+        ("diagnostics.startup.first", "DiagnosticsStartupFirst"),
+        ("diagnostics.startup.mark.appStart", "DiagnosticsStartupMarkAppStart"),
+        ("diagnostics.startup.mark.homeLoaded", "DiagnosticsStartupMarkHomeLoaded"),
+        ("diagnostics.startup.mark.servicesReady", "DiagnosticsStartupMarkServicesReady"),
+        ("diagnostics.startup.mark.shellReady", "DiagnosticsStartupMarkShellReady"),
+        ("diagnostics.startup.mark.windowCreated", "DiagnosticsStartupMarkWindowCreated"),
+        ("diagnostics.startup.note", "DiagnosticsStartupNote"),
+        ("diagnostics.startup.title", "DiagnosticsStartupTitle"),
+        ("diagnostics.startup.total", "DiagnosticsStartupTotal"),
+        ("diagnostics.status.failed", "DiagnosticsStatusFailed"),
         ("dlc.countsText", "DlcCountsText"),
         ("dlc.countsTextSteam", "DlcCountsTextSteam"),
         ("dlc.descriptionName", "DlcDescriptionName"),
@@ -3349,6 +3633,7 @@ public sealed partial class Localizer
         ("shell.crash.path", "ShellCrashPath"),
         ("shell.crash.title", "ShellCrashTitle"),
         ("shell.nav.account", "ShellNavAccount"),
+        ("shell.nav.diagnostics", "ShellNavDiagnostics"),
         ("shell.nav.home", "ShellNavHome"),
         ("shell.nav.library", "ShellNavLibrary"),
         ("shell.nav.modLibrary", "ShellNavModLibrary"),
@@ -3576,6 +3861,100 @@ public sealed partial class Localizer
     public string CommonSourceSubscribed => Format("common.sourceSubscribed");
     public string CommonUnknown => Format("common.unknown");
     public string CommonYes => Format("common.yes");
+    public string DiagnosticsCacheHint => Format("diagnostics.cache.hint");
+    public string DiagnosticsHintCacheLargeDetail => Format("diagnostics.hint.cacheLarge.detail");
+    public string DiagnosticsHintCacheLargeTitle => Format("diagnostics.hint.cacheLarge.title");
+    public string DiagnosticsHintLogArchivesDetail => Format("diagnostics.hint.logArchives.detail");
+    public string DiagnosticsHintLogArchivesTitle => Format("diagnostics.hint.logArchives.title");
+    public string DiagnosticsHintLogNearRotationDetail => Format("diagnostics.hint.logNearRotation.detail");
+    public string DiagnosticsHintLogNearRotationTitle => Format("diagnostics.hint.logNearRotation.title");
+    public string DiagnosticsHintMemoryAboveDetailBudgetDetail => Format("diagnostics.hint.memoryAboveDetailBudget.detail");
+    public string DiagnosticsHintMemoryAboveDetailBudgetTitle => Format("diagnostics.hint.memoryAboveDetailBudget.title");
+    public string DiagnosticsHintMemoryHighDetail => Format("diagnostics.hint.memoryHigh.detail");
+    public string DiagnosticsHintMemoryHighTitle => Format("diagnostics.hint.memoryHigh.title");
+    public string DiagnosticsHintStartupSlowDetail => Format("diagnostics.hint.startupSlow.detail");
+    public string DiagnosticsHintStartupSlowTitle => Format("diagnostics.hint.startupSlow.title");
+    public string DiagnosticsHintThrottleRejectedDetail => Format("diagnostics.hint.throttleRejected.detail");
+    public string DiagnosticsHintThrottleRejectedTitle => Format("diagnostics.hint.throttleRejected.title");
+    public string DiagnosticsHintTranslationModelResidentDetail => Format("diagnostics.hint.translationModelResident.detail");
+    public string DiagnosticsHintTranslationModelResidentTitle => Format("diagnostics.hint.translationModelResident.title");
+    public string DiagnosticsHintWorkshopCacheLargeDetail => Format("diagnostics.hint.workshopCacheLarge.detail");
+    public string DiagnosticsHintWorkshopCacheLargeTitle => Format("diagnostics.hint.workshopCacheLarge.title");
+    public string DiagnosticsLogAutoRefresh => Format("diagnostics.log.autoRefresh");
+    public string DiagnosticsLogAutoRefreshName => Format("diagnostics.log.autoRefreshName");
+    public string DiagnosticsLogFilterAll => Format("diagnostics.log.filterAll");
+    public string DiagnosticsLogFilterError => Format("diagnostics.log.filterError");
+    public string DiagnosticsLogFilterTitle => Format("diagnostics.log.filterTitle");
+    public string DiagnosticsLogFilterWarn => Format("diagnostics.log.filterWarn");
+    public string DiagnosticsLogHint => Format("diagnostics.log.hint");
+    public string DiagnosticsLogLastWrite => Format("diagnostics.log.lastWrite");
+    public string DiagnosticsLogLastWriteEmpty => Format("diagnostics.log.lastWriteEmpty");
+    public string DiagnosticsLogOpenFailed => Format("diagnostics.log.openFailed");
+    public string DiagnosticsLogOpenFolder => Format("diagnostics.log.openFolder");
+    public string DiagnosticsLogRotation => Format("diagnostics.log.rotation");
+    public string DiagnosticsLogSummary => Format("diagnostics.log.summary");
+    public string DiagnosticsLogSummaryEmpty => Format("diagnostics.log.summaryEmpty");
+    public string DiagnosticsLogTailEmpty => Format("diagnostics.log.tailEmpty");
+    public string DiagnosticsLogTailTitle => Format("diagnostics.log.tailTitle");
+    public string DiagnosticsLogTitle => Format("diagnostics.log.title");
+    public string DiagnosticsMetricGc => Format("diagnostics.metric.gc");
+    public string DiagnosticsMetricGcDetail => Format("diagnostics.metric.gc.detail");
+    public string DiagnosticsMetricManaged => Format("diagnostics.metric.managed");
+    public string DiagnosticsMetricManagedDetail => Format("diagnostics.metric.managed.detail");
+    public string DiagnosticsMetricPeak => Format("diagnostics.metric.peak");
+    public string DiagnosticsMetricPeakDetail => Format("diagnostics.metric.peak.detail");
+    public string DiagnosticsMetricPrivate => Format("diagnostics.metric.private");
+    public string DiagnosticsMetricPrivateDetail => Format("diagnostics.metric.private.detail");
+    public string DiagnosticsMetricThreads => Format("diagnostics.metric.threads");
+    public string DiagnosticsMetricThreadsDetail => Format("diagnostics.metric.threads.detail");
+    public string DiagnosticsMetricThumbnails => Format("diagnostics.metric.thumbnails");
+    public string DiagnosticsMetricThumbnailsDetail => Format("diagnostics.metric.thumbnails.detail");
+    public string DiagnosticsMetricUptime => Format("diagnostics.metric.uptime");
+    public string DiagnosticsMetricUptimeDetail => Format("diagnostics.metric.uptime.detail");
+    public string DiagnosticsMetricWorkingSet => Format("diagnostics.metric.workingSet");
+    public string DiagnosticsMetricWorkingSetDetail => Format("diagnostics.metric.workingSet.detail");
+    public string DiagnosticsMetricWorkshop => Format("diagnostics.metric.workshop");
+    public string DiagnosticsMetricWorkshopDetail => Format("diagnostics.metric.workshop.detail");
+    public string DiagnosticsNetworkCooldown => Format("diagnostics.network.cooldown");
+    public string DiagnosticsNetworkCooldownNone => Format("diagnostics.network.cooldownNone");
+    public string DiagnosticsNetworkEmpty => Format("diagnostics.network.empty");
+    public string DiagnosticsNetworkHint => Format("diagnostics.network.hint");
+    public string DiagnosticsNetworkLastRequest => Format("diagnostics.network.lastRequest");
+    public string DiagnosticsNetworkLastRequestEmpty => Format("diagnostics.network.lastRequestEmpty");
+    public string DiagnosticsNetworkProxyDirect => Format("diagnostics.network.proxyDirect");
+    public string DiagnosticsNetworkProxyTitle => Format("diagnostics.network.proxyTitle");
+    public string DiagnosticsNetworkProxyVia => Format("diagnostics.network.proxyVia");
+    public string DiagnosticsNetworkProxyWarning => Format("diagnostics.network.proxyWarning");
+    public string DiagnosticsNetworkSourceEnvironment => Format("diagnostics.network.source.environment");
+    public string DiagnosticsNetworkSourceManual => Format("diagnostics.network.source.manual");
+    public string DiagnosticsNetworkSourceSystem => Format("diagnostics.network.source.system");
+    public string DiagnosticsNetworkStats => Format("diagnostics.network.stats");
+    public string DiagnosticsNetworkThrottleTitle => Format("diagnostics.network.throttleTitle");
+    public string DiagnosticsOverviewCountersTitle => Format("diagnostics.overview.countersTitle");
+    public string DiagnosticsOverviewHintsEmpty => Format("diagnostics.overview.hintsEmpty");
+    public string DiagnosticsOverviewHintsTitle => Format("diagnostics.overview.hintsTitle");
+    public string DiagnosticsOverviewMetricsTitle => Format("diagnostics.overview.metricsTitle");
+    public string DiagnosticsOverviewRefresh => Format("diagnostics.overview.refresh");
+    public string DiagnosticsOverviewUpdated => Format("diagnostics.overview.updated");
+    public string DiagnosticsPageSubtitle => Format("diagnostics.page.subtitle");
+    public string DiagnosticsPageTitle => Format("diagnostics.page.title");
+    public string DiagnosticsSectionCache => Format("diagnostics.section.cache");
+    public string DiagnosticsSectionLog => Format("diagnostics.section.log");
+    public string DiagnosticsSectionNetwork => Format("diagnostics.section.network");
+    public string DiagnosticsSectionOverview => Format("diagnostics.section.overview");
+    public string DiagnosticsSectionStartup => Format("diagnostics.section.startup");
+    public string DiagnosticsStartupDelta => Format("diagnostics.startup.delta");
+    public string DiagnosticsStartupEmpty => Format("diagnostics.startup.empty");
+    public string DiagnosticsStartupFirst => Format("diagnostics.startup.first");
+    public string DiagnosticsStartupMarkAppStart => Format("diagnostics.startup.mark.appStart");
+    public string DiagnosticsStartupMarkHomeLoaded => Format("diagnostics.startup.mark.homeLoaded");
+    public string DiagnosticsStartupMarkServicesReady => Format("diagnostics.startup.mark.servicesReady");
+    public string DiagnosticsStartupMarkShellReady => Format("diagnostics.startup.mark.shellReady");
+    public string DiagnosticsStartupMarkWindowCreated => Format("diagnostics.startup.mark.windowCreated");
+    public string DiagnosticsStartupNote => Format("diagnostics.startup.note");
+    public string DiagnosticsStartupTitle => Format("diagnostics.startup.title");
+    public string DiagnosticsStartupTotal => Format("diagnostics.startup.total");
+    public string DiagnosticsStatusFailed => Format("diagnostics.status.failed");
     public string DlcCountsText => Format("dlc.countsText");
     public string DlcCountsTextSteam => Format("dlc.countsTextSteam");
     public string DlcDescriptionName => Format("dlc.descriptionName");
@@ -4514,6 +4893,7 @@ public sealed partial class Localizer
     public string ShellCrashPath => Format("shell.crash.path");
     public string ShellCrashTitle => Format("shell.crash.title");
     public string ShellNavAccount => Format("shell.nav.account");
+    public string ShellNavDiagnostics => Format("shell.nav.diagnostics");
     public string ShellNavHome => Format("shell.nav.home");
     public string ShellNavLibrary => Format("shell.nav.library");
     public string ShellNavModLibrary => Format("shell.nav.modLibrary");
@@ -4744,6 +5124,100 @@ internal static class Keys
     public const string CommonSourceSubscribed = "common.sourceSubscribed";
     public const string CommonUnknown = "common.unknown";
     public const string CommonYes = "common.yes";
+    public const string DiagnosticsCacheHint = "diagnostics.cache.hint";
+    public const string DiagnosticsHintCacheLargeDetail = "diagnostics.hint.cacheLarge.detail";
+    public const string DiagnosticsHintCacheLargeTitle = "diagnostics.hint.cacheLarge.title";
+    public const string DiagnosticsHintLogArchivesDetail = "diagnostics.hint.logArchives.detail";
+    public const string DiagnosticsHintLogArchivesTitle = "diagnostics.hint.logArchives.title";
+    public const string DiagnosticsHintLogNearRotationDetail = "diagnostics.hint.logNearRotation.detail";
+    public const string DiagnosticsHintLogNearRotationTitle = "diagnostics.hint.logNearRotation.title";
+    public const string DiagnosticsHintMemoryAboveDetailBudgetDetail = "diagnostics.hint.memoryAboveDetailBudget.detail";
+    public const string DiagnosticsHintMemoryAboveDetailBudgetTitle = "diagnostics.hint.memoryAboveDetailBudget.title";
+    public const string DiagnosticsHintMemoryHighDetail = "diagnostics.hint.memoryHigh.detail";
+    public const string DiagnosticsHintMemoryHighTitle = "diagnostics.hint.memoryHigh.title";
+    public const string DiagnosticsHintStartupSlowDetail = "diagnostics.hint.startupSlow.detail";
+    public const string DiagnosticsHintStartupSlowTitle = "diagnostics.hint.startupSlow.title";
+    public const string DiagnosticsHintThrottleRejectedDetail = "diagnostics.hint.throttleRejected.detail";
+    public const string DiagnosticsHintThrottleRejectedTitle = "diagnostics.hint.throttleRejected.title";
+    public const string DiagnosticsHintTranslationModelResidentDetail = "diagnostics.hint.translationModelResident.detail";
+    public const string DiagnosticsHintTranslationModelResidentTitle = "diagnostics.hint.translationModelResident.title";
+    public const string DiagnosticsHintWorkshopCacheLargeDetail = "diagnostics.hint.workshopCacheLarge.detail";
+    public const string DiagnosticsHintWorkshopCacheLargeTitle = "diagnostics.hint.workshopCacheLarge.title";
+    public const string DiagnosticsLogAutoRefresh = "diagnostics.log.autoRefresh";
+    public const string DiagnosticsLogAutoRefreshName = "diagnostics.log.autoRefreshName";
+    public const string DiagnosticsLogFilterAll = "diagnostics.log.filterAll";
+    public const string DiagnosticsLogFilterError = "diagnostics.log.filterError";
+    public const string DiagnosticsLogFilterTitle = "diagnostics.log.filterTitle";
+    public const string DiagnosticsLogFilterWarn = "diagnostics.log.filterWarn";
+    public const string DiagnosticsLogHint = "diagnostics.log.hint";
+    public const string DiagnosticsLogLastWrite = "diagnostics.log.lastWrite";
+    public const string DiagnosticsLogLastWriteEmpty = "diagnostics.log.lastWriteEmpty";
+    public const string DiagnosticsLogOpenFailed = "diagnostics.log.openFailed";
+    public const string DiagnosticsLogOpenFolder = "diagnostics.log.openFolder";
+    public const string DiagnosticsLogRotation = "diagnostics.log.rotation";
+    public const string DiagnosticsLogSummary = "diagnostics.log.summary";
+    public const string DiagnosticsLogSummaryEmpty = "diagnostics.log.summaryEmpty";
+    public const string DiagnosticsLogTailEmpty = "diagnostics.log.tailEmpty";
+    public const string DiagnosticsLogTailTitle = "diagnostics.log.tailTitle";
+    public const string DiagnosticsLogTitle = "diagnostics.log.title";
+    public const string DiagnosticsMetricGc = "diagnostics.metric.gc";
+    public const string DiagnosticsMetricGcDetail = "diagnostics.metric.gc.detail";
+    public const string DiagnosticsMetricManaged = "diagnostics.metric.managed";
+    public const string DiagnosticsMetricManagedDetail = "diagnostics.metric.managed.detail";
+    public const string DiagnosticsMetricPeak = "diagnostics.metric.peak";
+    public const string DiagnosticsMetricPeakDetail = "diagnostics.metric.peak.detail";
+    public const string DiagnosticsMetricPrivate = "diagnostics.metric.private";
+    public const string DiagnosticsMetricPrivateDetail = "diagnostics.metric.private.detail";
+    public const string DiagnosticsMetricThreads = "diagnostics.metric.threads";
+    public const string DiagnosticsMetricThreadsDetail = "diagnostics.metric.threads.detail";
+    public const string DiagnosticsMetricThumbnails = "diagnostics.metric.thumbnails";
+    public const string DiagnosticsMetricThumbnailsDetail = "diagnostics.metric.thumbnails.detail";
+    public const string DiagnosticsMetricUptime = "diagnostics.metric.uptime";
+    public const string DiagnosticsMetricUptimeDetail = "diagnostics.metric.uptime.detail";
+    public const string DiagnosticsMetricWorkingSet = "diagnostics.metric.workingSet";
+    public const string DiagnosticsMetricWorkingSetDetail = "diagnostics.metric.workingSet.detail";
+    public const string DiagnosticsMetricWorkshop = "diagnostics.metric.workshop";
+    public const string DiagnosticsMetricWorkshopDetail = "diagnostics.metric.workshop.detail";
+    public const string DiagnosticsNetworkCooldown = "diagnostics.network.cooldown";
+    public const string DiagnosticsNetworkCooldownNone = "diagnostics.network.cooldownNone";
+    public const string DiagnosticsNetworkEmpty = "diagnostics.network.empty";
+    public const string DiagnosticsNetworkHint = "diagnostics.network.hint";
+    public const string DiagnosticsNetworkLastRequest = "diagnostics.network.lastRequest";
+    public const string DiagnosticsNetworkLastRequestEmpty = "diagnostics.network.lastRequestEmpty";
+    public const string DiagnosticsNetworkProxyDirect = "diagnostics.network.proxyDirect";
+    public const string DiagnosticsNetworkProxyTitle = "diagnostics.network.proxyTitle";
+    public const string DiagnosticsNetworkProxyVia = "diagnostics.network.proxyVia";
+    public const string DiagnosticsNetworkProxyWarning = "diagnostics.network.proxyWarning";
+    public const string DiagnosticsNetworkSourceEnvironment = "diagnostics.network.source.environment";
+    public const string DiagnosticsNetworkSourceManual = "diagnostics.network.source.manual";
+    public const string DiagnosticsNetworkSourceSystem = "diagnostics.network.source.system";
+    public const string DiagnosticsNetworkStats = "diagnostics.network.stats";
+    public const string DiagnosticsNetworkThrottleTitle = "diagnostics.network.throttleTitle";
+    public const string DiagnosticsOverviewCountersTitle = "diagnostics.overview.countersTitle";
+    public const string DiagnosticsOverviewHintsEmpty = "diagnostics.overview.hintsEmpty";
+    public const string DiagnosticsOverviewHintsTitle = "diagnostics.overview.hintsTitle";
+    public const string DiagnosticsOverviewMetricsTitle = "diagnostics.overview.metricsTitle";
+    public const string DiagnosticsOverviewRefresh = "diagnostics.overview.refresh";
+    public const string DiagnosticsOverviewUpdated = "diagnostics.overview.updated";
+    public const string DiagnosticsPageSubtitle = "diagnostics.page.subtitle";
+    public const string DiagnosticsPageTitle = "diagnostics.page.title";
+    public const string DiagnosticsSectionCache = "diagnostics.section.cache";
+    public const string DiagnosticsSectionLog = "diagnostics.section.log";
+    public const string DiagnosticsSectionNetwork = "diagnostics.section.network";
+    public const string DiagnosticsSectionOverview = "diagnostics.section.overview";
+    public const string DiagnosticsSectionStartup = "diagnostics.section.startup";
+    public const string DiagnosticsStartupDelta = "diagnostics.startup.delta";
+    public const string DiagnosticsStartupEmpty = "diagnostics.startup.empty";
+    public const string DiagnosticsStartupFirst = "diagnostics.startup.first";
+    public const string DiagnosticsStartupMarkAppStart = "diagnostics.startup.mark.appStart";
+    public const string DiagnosticsStartupMarkHomeLoaded = "diagnostics.startup.mark.homeLoaded";
+    public const string DiagnosticsStartupMarkServicesReady = "diagnostics.startup.mark.servicesReady";
+    public const string DiagnosticsStartupMarkShellReady = "diagnostics.startup.mark.shellReady";
+    public const string DiagnosticsStartupMarkWindowCreated = "diagnostics.startup.mark.windowCreated";
+    public const string DiagnosticsStartupNote = "diagnostics.startup.note";
+    public const string DiagnosticsStartupTitle = "diagnostics.startup.title";
+    public const string DiagnosticsStartupTotal = "diagnostics.startup.total";
+    public const string DiagnosticsStatusFailed = "diagnostics.status.failed";
     public const string DlcCountsText = "dlc.countsText";
     public const string DlcCountsTextSteam = "dlc.countsTextSteam";
     public const string DlcDescriptionName = "dlc.descriptionName";
@@ -5682,6 +6156,7 @@ internal static class Keys
     public const string ShellCrashPath = "shell.crash.path";
     public const string ShellCrashTitle = "shell.crash.title";
     public const string ShellNavAccount = "shell.nav.account";
+    public const string ShellNavDiagnostics = "shell.nav.diagnostics";
     public const string ShellNavHome = "shell.nav.home";
     public const string ShellNavLibrary = "shell.nav.library";
     public const string ShellNavModLibrary = "shell.nav.modLibrary";

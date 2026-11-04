@@ -256,6 +256,14 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
+                    AutomationProperties.AutomationId="navDiagnostics"
+                    Content="{x:Bind L.ShellNavDiagnostics, Mode=OneWay}"
+                    Tag="diagnostics">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Repair" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
                     AutomationProperties.AutomationId="navSettings"
                     Content="{x:Bind L.ShellNavSettings, Mode=OneWay}"
                     Tag="settings">

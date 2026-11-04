@@ -55,6 +55,7 @@ public partial class App : Application
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         ComposeServices();
+        StartupTimeline.Mark(StartupTimeline.ServicesReady);
 
         // 界面语言必须在任何页面 XAML 加载前生效，否则首屏会闪一下默认语言。
         Localizer.Instance.Apply(AppServices.Settings.UiLanguage);
@@ -63,6 +64,7 @@ public partial class App : Application
         _window = new MainWindow();
         MainWindowInstance = _window;
         _window.Activate();
+        StartupTimeline.Mark(StartupTimeline.WindowCreated);
     }
 
     /// <summary>手工构造服务图并交给 <see cref="AppServices"/>，不使用任何 DI 容器。</summary>
@@ -254,13 +256,11 @@ public partial class App : Application
         // 页面状态（搜索词/筛选/滚动/表单草稿）跨重启保留：先读回上次的位置，页面创建时直接用。
         PageStateStore.Attach(documents, logger);
 
-#if DEBUG
-        // 只在 Debug 构建里埋点：Release 不留这行日志，也完全不碰 Process。
+        // Release 也留一行内存快照：「性能与日志」页与基线文档都靠它判断是不是这次启动变胖了。
         MemoryDiagnostics.Log(
             logger,
             "启动完成",
             () => (AppServices.WorkshopInfo.Count, AppServices.WorkshopItemPages.Count, AppServices.ModThumbnails.Cache.Count));
-#endif
 
         // 封面目录只增不减（实测能到 200 MB+），启动时在后台按 100 MB 配额扫一轮。
         AppServices.Covers.SweepInBackground();

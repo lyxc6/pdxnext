@@ -1,8 +1,8 @@
 # 内存基线（P4：Debug 埋点 + 验收口径）
 
 本文记录 PdxNext 桌面端（WinUI 3 / Windows App SDK / .NET 10）在 `fix/memory-cpu`
-这一轮性能修复后的内存验收目标、实测方法与读数说明。埋点只在 **Debug** 构建里生效，
-Release 构建既不写这行日志，也不调用 `Process`。
+这一轮性能修复后的内存验收目标、实测方法与读数说明。启动与关窗各写一行内存快照，
+**Debug / Release 都生效**；同样的数字也可以在左栏底部的「性能与日志 → 概览」里直接看（不必翻日志）。
 
 ## 验收目标
 
@@ -18,9 +18,8 @@ Release 构建既不写这行日志，也不调用 `Process`。
 
 ## 实测方法
 
-1. 用 Debug 构建启动：`dotnet build src/PdxLauncher.App -c Debug`，运行输出的
-   `PdxLauncher.App.exe`，等主窗口出现后打开日志（设置页「打开日志」或
-   `data\logs\` 下最新的 `*.log`），找到启动行：
+1. 启动任一构建（Release 即可）并运行 `PdxLauncher.App.exe`，等主窗口出现后看
+   「性能与日志 → 日志」（或 `data\logs\` 下最新的 `*.log`），找到启动行：
 
    ```
    [启动完成] 内存：托管 … MB / 工作集 … MB / 私有 … MB；GC 0/1/2=…/…/…；工坊条目 … / 分页 … / mod 缩略图 …
