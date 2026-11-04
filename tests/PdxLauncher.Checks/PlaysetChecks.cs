@@ -1063,8 +1063,9 @@ public static class PlaysetChecks
                 "  info V3 激活播放集 mod 行数 " + mods.Count.ToString(CultureInfo.InvariantCulture)
                 + "，启用 " + enabledMods.ToString(CultureInfo.InvariantCulture)
                 + " / 未启用 " + (mods.Count - enabledMods).ToString(CultureInfo.InvariantCulture)
-                + "（官方启动器随时改写启用态，本段只锁结构与下限）");
-            ChecksContext.Check("V3 激活播放集 mod 行数 >= 22", mods.Count >= 22, mods.Count.ToString(CultureInfo.InvariantCulture));
+                + "（官方启动器随时改写启用集，行数只是本机数据，不作断言）");
+            // 行数下限也不能锁：用户在官方启动器里删 mod、换播放集，行数就变（本机 2026-11-04 只剩 7 行）。
+            // 能锁的是结构——Position 连续、名称非空、Status 合法、启用态与 Mod 库归属一致。
             // 官方启动器会把 mod 整批关掉（本机 2026-10-29 就只剩 1 行启用），「全部启用」不是不变量；
             // 能锁的是「至少还有一行启用」——全关意味着我方与官方两侧都读不到可启动内容。
             ChecksContext.Check("V3 激活播放集至少 1 行启用", enabledMods >= 1, enabledMods.ToString(CultureInfo.InvariantCulture));
