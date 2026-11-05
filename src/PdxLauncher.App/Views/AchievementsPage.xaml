@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="PdxLauncher.App.Views.AchievementsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:svc="using:PdxLauncher.App.Services"
+    xmlns:vm="using:PdxLauncher.App.ViewModels"
+    NavigationCacheMode="Disabled"
+    Background="{ThemeResource PdxPageVeilBrush}">
+
+    <!--
+        成就页：先立骨架与契约（S1），不接 Steam 原生调用、不读 appcache/stats 二进制。
+        数据源目前固定为 NullAchievementSource，页面必然显示「该游戏暂无成就数据源」。
+        数据可用时展示「已解锁 X / Y」与成就列表；不可用时用明确的空状态说明代替空白页，
+        三种原因（未接入 / 连不上 Steam / 确实没有成就）各自独立，不合并成一句「暂无数据」。
+    -->
+    <Grid Padding="24" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 页头：标题 + 当前游戏 + 解锁统计 -->
+        <Grid Grid.Row="0" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Spacing="4">
+                <TextBlock Text="{x:Bind L.AchievementsTitle, Mode=OneWay}"
+                           Style="{StaticResource TitleTextBlockStyle}" />
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <TextBlock Text="{x:Bind ViewModel.GameTitle, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{x:Bind ViewModel.CountsText, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               AutomationProperties.AutomationId="txtAchievementCounts" />
+                </StackPanel>
+            </StackPanel>
+
+            <ProgressRing Grid.Column="1"
+                          Width="20"
+                          Height="20"
+                          VerticalAlignment="Center"
+                          IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                          Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsBusy), Mode=OneWay}"
+                          AutomationProperties.AutomationId="ringAchievementsBusy"
+                          AutomationProperties.Name="{x:Bind L.CommonLoading, Mode=OneWay}" />
+        </Grid>
+
+        <!-- 空状态：必须解释原因（未接入 / 连不上 Steam / 确实没有成就 / 未选游戏） -->
+        <Border Grid.Row="1"
+                Padding="16"
+                CornerRadius="8"
+                Background="{ThemeResource PdxCardGlassBrush}"
+                BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                BorderThickness="1"
+                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowEmptyState), Mode=OneWay}"
+                AutomationProperties.AutomationId="panelAchievementsEmpty">
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <FontIcon Glyph="&#xE7C1;"
+                          FontSize="20"
+                          VerticalAlignment="Top"
+                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                          AutomationProperties.AccessibilityView="Raw" />
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{x:Bind ViewModel.EmptyStateTitle, Mode=OneWay}"
+                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                               TextWrapping="Wrap"
+                               AutomationProperties.AutomationId="txtAchievementsEmptyTitle" />
+                    <TextBlock Text="{x:Bind ViewModel.EmptyStateMessage, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               AutomationProperties.AutomationId="txtAchievementsEmptyMessage" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- 成就列表：图标（无图时占位方块）/ 名称 / 说明 / 解锁状态 / 稀有度 -->
+        <ListView Grid.Row="2"
+                  x:Name="AchievementList"
+                  ItemsSource="{x:Bind ViewModel.Achievements, Mode=OneWay}"
+                  SelectionMode="None"
+                  IsItemClickEnabled="False"
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                  ScrollViewer.HorizontalScrollMode="Disabled"
+                  AutomationProperties.AutomationId="listAchievements"
+                  AutomationProperties.Name="{x:Bind L.AchievementsListName, Mode=OneWay}">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="Margin" Value="0,0,0,4" />
+                    <Setter Property="MinHeight" Value="0" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="vm:AchievementRowViewModel">
+                    <Grid Padding="12,8" ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 图标：没有图标时用占位方块，绝不留空洞 -->
+                        <Border Grid.Column="0"
+                                Width="48"
+                                Height="48"
+                                VerticalAlignment="Center"
+                                Background="{ThemeResource PdxPlaceholderBackgroundBrush}"
+                                BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8">
+                            <Grid>
+                                <FontIcon Glyph="&#xE7C1;"
+                                          FontSize="20"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                          AutomationProperties.AccessibilityView="Raw"
+                                          Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasIcon), Mode=OneWay}" />
+                                <Image Source="{x:Bind svc:XamlImage.FromPath(IconUrl, 48), Mode=OneTime}"
+                                       Stretch="UniformToFill"
+                                       AutomationProperties.Name="{x:Bind Name, Mode=OneTime}"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(HasIcon), Mode=OneWay}" />
+                            </Grid>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                            <TextBlock Text="{x:Bind Name, Mode=OneTime}"
+                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                       TextWrapping="Wrap"
+                                       MaxLines="2"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{x:Bind DescriptionText, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       MaxLines="2"
+                                       TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2"
+                                    VerticalAlignment="Center"
+                                    HorizontalAlignment="Right"
+                                    Spacing="4">
+                            <TextBlock Text="{x:Bind StatusText, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       HorizontalAlignment="Right"
+                                       AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneTime}" />
+                            <TextBlock Text="{x:Bind RarityText, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                       HorizontalAlignment="Right"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(HasRarity), Mode=OneWay}" />
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</Page>

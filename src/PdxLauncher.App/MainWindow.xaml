@@ -237,6 +237,15 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
+                    x:Name="NavAchievements"
+                    AutomationProperties.AutomationId="navAchievements"
+                    Content="{x:Bind L.ShellNavAchievements, Mode=OneWay}"
+                    Tag="achievements">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="OutlineStar" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
                     AutomationProperties.AutomationId="navLibrary"
                     Content="{x:Bind L.ShellNavLibrary, Mode=OneWay}"
                     Tag="library">

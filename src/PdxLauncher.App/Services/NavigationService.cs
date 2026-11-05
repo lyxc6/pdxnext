@@ -38,6 +38,9 @@ public sealed class NavigationService
     /// <summary>DLC 页的导航 Tag。</summary>
     public const string DlcTag = "dlc";
 
+    /// <summary>成就页的导航 Tag。</summary>
+    public const string AchievementsTag = "achievements";
+
     /// <summary>账号页的导航 Tag。</summary>
     public const string AccountTag = "account";
 
@@ -58,6 +61,7 @@ public sealed class NavigationService
         [WorkshopDetailTag] = "PdxLauncher.App.Views.WorkshopDetailPage",
         [AddModsTag] = "PdxLauncher.App.Views.AddModsPage",
         [DlcTag] = "PdxLauncher.App.Views.DlcPage",
+        [AchievementsTag] = "PdxLauncher.App.Views.AchievementsPage",
         [AccountTag] = "PdxLauncher.App.Views.AccountPage",
         [SettingsTag] = "PdxLauncher.App.Views.SettingsPage",
         [DiagnosticsTag] = "PdxLauncher.App.Views.DiagnosticsPage",
