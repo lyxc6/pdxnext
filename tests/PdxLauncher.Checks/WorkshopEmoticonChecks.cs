@@ -6,7 +6,9 @@ using PdxLauncher.Core.Text;
 
 /// <summary>
 /// 创意工坊评论里的 Steam 表情：真实评论 HTML → 图片 + 短码、失效地址只留短码、
-/// &lt;br&gt; 仍换行、白名单只放行精确 fastly 主机 + 表情路径（akamai 别名只规范化不放大放行面）。
+/// &lt;br&gt; 仍换行，以及白名单契约——<c>community.fastly.steamstatic.com</c> 主机整体放行
+/// （Steam 头像/徽章/表情同域），表情路径识别由 <see cref="SteamEmoticon"/> 负责
+/// （akamai 别名只规范化到 fastly，不进下载白名单）。
 /// </summary>
 public static class WorkshopEmoticonChecks
 {
@@ -190,31 +192,35 @@ public static class WorkshopEmoticonChecks
         ChecksContext.Equal("表情：<br> 转成换行文本", "第一行\n第二行", body.ToPlainText());
     }
 
-    /// <summary>⑤ 白名单：精确主机放行，子域/其它主机/非 https 拒绝。</summary>
+    /// <summary>⑤ 白名单：精确主机整体放行；子域、akamai 别名都不放行，表情语义由 SteamEmoticon 判。</summary>
     private static void CheckWhitelist()
     {
-        var emoticon = new Uri(EmoticonUrl);
-        ChecksContext.Check("表情白名单：精确主机可下载", OnlineHosts.IsAllowed(emoticon));
-        ChecksContext.Check("表情白名单：精确主机 + 表情路径是表情", OnlineHosts.IsEmoticonUri(emoticon));
+        ChecksContext.Check("表情白名单：精确主机可下载", OnlineHosts.IsAllowed(new Uri(EmoticonUrl)));
+
+        // 主机级放行：同一 CDN 上的头像/徽章与表情共用一条通道，这正是「主机整体放行」的结果，
+        // 不是漏洞——下载什么由调用方（表情识别/正文配图）决定，白名单只管主机。
+        var avatar = new Uri("https://community.fastly.steamstatic.com/avatars/x.jpg");
+        ChecksContext.Check("表情白名单：同主机 /avatars 也可下载（主机级放行的直接结果）", OnlineHosts.IsAllowed(avatar));
+        ChecksContext.Check("表情白名单：同主机 /avatars 不是表情", !SteamEmoticon.IsEmoticonImage(avatar.AbsoluteUri, null));
         ChecksContext.Check(
-            "表情白名单：同主机非表情路径不算表情",
-            !OnlineHosts.IsEmoticonUri(new Uri("https://community.fastly.steamstatic.com/avatars/x.jpg")));
+            "表情白名单：同主机其它路径也不参与表情识别",
+            !SteamEmoticon.IsEmoticonImage("https://community.fastly.steamstatic.com/public/images/logo.png", null));
+
         ChecksContext.Check(
-            "表情白名单：子域不算表情",
-            !OnlineHosts.IsEmoticonUri(new Uri("https://evil.community.fastly.steamstatic.com/economy/emoticon/highrise")));
+            "表情白名单：子域不放行",
+            !OnlineHosts.IsAllowed(new Uri("https://evil.community.fastly.steamstatic.com/economy/emoticon/highrise")));
         ChecksContext.Check(
-            "表情白名单：http 不算表情",
-            !OnlineHosts.IsEmoticonUri(new Uri("http://community.fastly.steamstatic.com/economy/emoticon/highrise")));
-        ChecksContext.Check(
-            "表情白名单：同主机任意路径仍受通用白名单约束（这里只验证表情判定收紧）",
-            OnlineHosts.IsAllowed(new Uri("https://community.fastly.steamstatic.com/avatars/x.jpg"))
-            && !OnlineHosts.IsEmoticonUri(new Uri("https://community.fastly.steamstatic.com/avatars/x.jpg")));
+            "表情白名单：http 同主机仍在主机名单内，但不是表情（表情只认 https）",
+            OnlineHosts.IsAllowed(new Uri("http://community.fastly.steamstatic.com/economy/emoticon/highrise"))
+            && !SteamEmoticon.IsEmoticonImage("http://community.fastly.steamstatic.com/economy/emoticon/highrise", null));
 
         // Steam 线上还会把同一份表情轮换到 akamai；它不进下载白名单，只作为解析别名
         // 规范化回 fastly，保证真实页面能显示且网络放行面不扩大。
         var akamai = new Uri("https://community.akamai.steamstatic.com/economy/emoticon/highrise?v=2");
         ChecksContext.Check("表情白名单：akamai 别名不在通用白名单", !OnlineHosts.IsAllowed(akamai));
-        ChecksContext.Check("表情白名单：akamai 别名不通过严格表情判定", !OnlineHosts.IsEmoticonUri(akamai));
+        ChecksContext.Check(
+            "表情白名单：akamai 别名仍被识别为表情（识别与放行分开）",
+            SteamEmoticon.IsEmoticonImage(akamai.AbsoluteUri, ":highrise:"));
         ChecksContext.Check(
             "表情白名单：akamai 别名规范化为 fastly 且去掉 query",
             SteamEmoticon.TryCreate(akamai.AbsoluteUri, ":highrise:", out var normalizedAlias, out var aliasCode)

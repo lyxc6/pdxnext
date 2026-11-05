@@ -40,9 +40,10 @@ public static class OnlineHosts
     public const string SteamCommunityHost = "steamcommunity.com";
 
     /// <summary>
-    /// Steam 社区官方素材 CDN。评论表情（<c>/economy/emoticon/&lt;name&gt;</c>）在这里；
-    /// 同一主机也托管头像/徽章，所以只放行精确主机，表情路径另行由
-    /// <see cref="IsEmoticonUri"/> 限定，不做子域通配。
+    /// Steam 社区官方素材 CDN。评论表情（<c>/economy/emoticon/&lt;name&gt;</c>）在这里。
+    /// 本主机整体放行（Steam 头像/徽章/表情同域，按路径收窄会连带挡掉自检里
+    /// <c>/avatars</c> 可下载的约定）；「这段内容是不是表情」由
+    /// <see cref="SteamEmoticon"/> 负责识别，白名单不参与表情语义，也不做子域通配。
     /// </summary>
     public const string SteamCommunityAssetsHost = "community.fastly.steamstatic.com";
 
@@ -256,18 +257,6 @@ public static class OnlineHosts
 
         return trimmed;
     }
-
-    /// <summary>
-    /// 是否是 Steam 评论表情地址：https、精确主机 <see cref="SteamCommunityAssetsHost"/>、
-    /// 路径以 <c>/economy/emoticon/</c> 开头。白名单放行的是主机，这里再收紧到表情路径，
-    /// 避免把同一 CDN 上的头像/徽章也当成正文表情下载。
-    /// </summary>
-    /// <param name="uri">待判定的绝对 URI。</param>
-    public static bool IsEmoticonUri(Uri? uri) =>
-        uri is { IsAbsoluteUri: true }
-        && string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
-        && string.Equals(uri.Host, SteamCommunityAssetsHost, StringComparison.OrdinalIgnoreCase)
-        && uri.AbsolutePath.StartsWith(SteamEmoticon.PathPrefix, StringComparison.Ordinal);
 
     /// <summary>绝对 URI 是否可请求：必须是 http/https 且主机在白名单内。</summary>
     public static bool IsAllowed(Uri? uri)
