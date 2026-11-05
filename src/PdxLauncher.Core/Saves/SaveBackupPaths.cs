@@ -11,8 +11,8 @@ using System.Globalization;
 /// <para>
 /// 备份文件名规则：<c>&lt;yyyyMMdd-HHmmss&gt;__&lt;安全名&gt;.bak</c>，外加同名 <c>.bak.json</c>
 /// sidecar 与写入过程中的 <c>.tmp</c>/<c>.restore.part</c> 临时文件。安全名替换
-/// <c>&lt;&gt;:"/\|?*</c> 与控制字符为 <c>_</c>、去掉尾随点/空格、按 UTF-16 码元字节数截断到
-/// <see cref="MaxSafeNameBytes"/> 并保留扩展名；中文与 emoji 原样保留，不做转码。
+/// <c>&lt;&gt;:"/\|?*</c> 与控制字符为 <c>_</c>、去掉尾随点/空格、按 UTF-16 编码字节数（BMP 每字 2 字节、代理对 4 字节）截断到
+/// <see cref="MaxSafeNameBytes"/> 并保留扩展名（注意这不是 UTF-8 字节数）；中文与 emoji 原样保留，不做转码。
 /// </para>
 /// </summary>
 public static class SaveBackupPaths
@@ -41,10 +41,13 @@ public static class SaveBackupPaths
     /// <summary>单个游戏的备份条目数配额，默认 200。</summary>
     public const int DefaultMaxEntriesPerGame = 200;
 
-    /// <summary>备份文件名安全名部分的字节上限（按 UTF-16 码元计，BMP 字符 2 字节、代理对 4 字节）。</summary>
+    /// <summary>
+    /// 备份文件名安全名部分的长度上限，按 UTF-16 编码字节数计（<c>Encoding.Unicode.GetByteCount</c>：
+    /// BMP 字符 2 字节、代理对 4 字节），不是 UTF-8 字节数；截断时按码元边界整体取舍，绝不劈开代理对。
+    /// </summary>
     public const int MaxSafeNameBytes = 120;
 
-    /// <summary>恢复目标文件名的字节上限（比备份名宽松，但仍要满足 NTFS 255 字符限制）。</summary>
+    /// <summary>恢复目标文件名的长度上限（同 <see cref="MaxSafeNameBytes"/>，按 UTF-16 编码字节数计；比备份名宽松，但仍要满足 NTFS 255 字符限制）。</summary>
     public const int MaxRestoreNameBytes = 240;
 
     /// <summary>gameId 作为目录名时的字节上限。</summary>

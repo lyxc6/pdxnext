@@ -36,6 +36,9 @@ public static class SaveBackupChecks
             CheckRestore(fs, logger, root);
             CheckHashGuards(fs, logger, root);
             CheckDeleteBackup(fs, logger, root);
+            CheckDeleteBackupLocked(fs, logger, root);
+            CheckOrphanListing(fs, logger, root);
+            CheckMoveFailure(fs, logger, root);
             CheckDeleteSave(fs, logger, root);
             CheckQuota(fs, logger, root);
             CheckLockedFile(fs, logger, root);
@@ -654,6 +657,83 @@ public static class SaveBackupChecks
     }
 
     // ------------------------------------------------------------------
+    // 删除备份的顺序与降级条目
+    // ------------------------------------------------------------------
+
+    private static void CheckDeleteBackupLocked(IFileSystem fs, IAppLogger logger, string root)
+    {
+        Console.WriteLine("[SaveBackupChecks] 删除备份正文被占用");
+        var fixture = CreateFixture(fs, logger, root, "delbak-locked");
+        var entry = Await(fixture.Service.BackupAsync(Ck3, WriteSource(fixture, "locked-backup.ck3", [1, 3, 5, 7]), null, CancellationToken.None)).Entry;
+        ChecksContext.Check("占用删除用例备份成功", entry is not null);
+        if (entry is null)
+        {
+            return;
+        }
+
+        using (var handle = new FileStream(entry.BackupPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            var locked = Await(fixture.Service.DeleteBackupAsync(entry, CancellationToken.None));
+            ChecksContext.Equal("正文被占用时删除返回 Failed", SaveDeleteStatus.Failed, locked.Status);
+            ChecksContext.Equal("失败时 SourceStillPresent=true", true, locked.SourceStillPresent);
+            ChecksContext.Check(
+                "失败消息包含残留文件路径",
+                locked.Message.Contains(entry.BackupPath, StringComparison.Ordinal),
+                locked.Message);
+            ChecksContext.Equal("正文删不掉时 sidecar 不能被先删", true, fs.FileExists(entry.SidecarPath));
+        }
+
+        var listed = Await(fixture.Service.ListBackupsAsync(Ck3, CancellationToken.None));
+        ChecksContext.Check(
+            "删除失败后列表仍能看到该备份",
+            listed.Any(item => string.Equals(item.BackupPath, entry.BackupPath, StringComparison.Ordinal)),
+            listed.Count.ToString(CultureInfo.InvariantCulture));
+
+        var retried = Await(fixture.Service.DeleteBackupAsync(entry, CancellationToken.None));
+        ChecksContext.Equal("释放占用后删除成功", SaveDeleteStatus.Ok, retried.Status);
+        ChecksContext.Equal("释放后正文消失", false, fs.FileExists(entry.BackupPath));
+        ChecksContext.Equal("释放后 sidecar 消失", false, fs.FileExists(entry.SidecarPath));
+    }
+
+    private static void CheckOrphanListing(IFileSystem fs, IAppLogger logger, string root)
+    {
+        Console.WriteLine("[SaveBackupChecks] 缺 sidecar 的孤儿备份");
+        var fixture = CreateFixture(fs, logger, root, "orphan");
+        var payload = new byte[] { 2, 4, 6, 8 };
+        var entry = Await(fixture.Service.BackupAsync(Ck3, WriteSource(fixture, "orphan.ck3", payload), null, CancellationToken.None)).Entry;
+        ChecksContext.Check("孤儿用例备份成功", entry is not null);
+        if (entry is null)
+        {
+            return;
+        }
+
+        fs.Delete(entry.SidecarPath);
+        var listed = Await(fixture.Service.ListBackupsAsync(Ck3, CancellationToken.None));
+        var usage = Await(fixture.Service.GetUsageAsync(CancellationToken.None));
+        var orphan = listed.Count == 1 ? listed[0] : null;
+        ChecksContext.Equal("缺 sidecar 仍列出 1 条", 1, listed.Count);
+        ChecksContext.Equal("孤儿条目 sha 为空", string.Empty, orphan?.Sha256);
+        ChecksContext.Equal("孤儿条目大小取自文件本身", (long)payload.Length, orphan?.SizeBytes);
+        ChecksContext.Equal("用量条目数与列表一致", usage.EntryCount, listed.Count);
+        ChecksContext.Equal("用量字节数与列表一致", usage.TotalBytes, listed.Sum(item => item.SizeBytes));
+    }
+
+    private static void CheckMoveFailure(IFileSystem fs, IAppLogger logger, string root)
+    {
+        Console.WriteLine("[SaveBackupChecks] 备份落盘 Move 失败");
+        var fixture = CreateFixture(fs, logger, root, "movefail");
+        var failing = new FailingMoveFileSystem(fs);
+        var service = new SaveBackupService(failing, logger, fixture.DataRoot, fixture.Clock);
+        var sourcePath = WriteSource(fixture, "move-fail.ck3", [11, 12, 13, 14, 15]);
+        var result = Await(service.BackupAsync(Ck3, sourcePath, null, CancellationToken.None));
+        var gameDirectory = SaveBackupPaths.GameDirectory(fixture.DataRoot, Ck3);
+        ChecksContext.Equal("Move 抛异常时返回 Failed", SaveBackupStatus.Failed, result.Status);
+        ChecksContext.Equal("失败后没有留下 .bak", 0, CountFiles(fs, gameDirectory, "*.bak"));
+        ChecksContext.Equal("失败后没有留下 .tmp", 0, CountFiles(fs, gameDirectory, "*.tmp"));
+        ChecksContext.Equal("失败后源文件仍在", true, fs.FileExists(sourcePath));
+    }
+
+    // ------------------------------------------------------------------
     // 工具
     // ------------------------------------------------------------------
 
@@ -761,6 +841,61 @@ public static class SaveBackupChecks
         IAppLogger Logger,
         FixedClock Clock,
         SaveBackupService Service);
+
+    /// <summary>包装真实文件系统，只让「备份正文落盘」的 Move 抛 IOException，用来验证半截文件不会落地。</summary>
+    private sealed class FailingMoveFileSystem : IFileSystem
+    {
+        private readonly IFileSystem _inner;
+
+        public FailingMoveFileSystem(IFileSystem inner) => _inner = inner;
+
+        public bool FileExists(string path) => _inner.FileExists(path);
+
+        public long GetFileSize(string path) => _inner.GetFileSize(path);
+
+        public bool DirectoryExists(string path) => _inner.DirectoryExists(path);
+
+        public string ReadAllText(string path) => _inner.ReadAllText(path);
+
+        public byte[] ReadAllBytes(string path) => _inner.ReadAllBytes(path);
+
+        public Stream OpenRead(string path) => _inner.OpenRead(path);
+
+        public void WriteAllBytesAtomic(string path, ReadOnlySpan<byte> data) => _inner.WriteAllBytesAtomic(path, data);
+
+        public void WriteAllTextAtomic(string path, string text) => _inner.WriteAllTextAtomic(path, text);
+
+        public IEnumerable<string> EnumerateFiles(string directory, string searchPattern, bool recursive) =>
+            _inner.EnumerateFiles(directory, searchPattern, recursive);
+
+        public IEnumerable<string> EnumerateDirectories(string directory) => _inner.EnumerateDirectories(directory);
+
+        public string Combine(params string[] parts) => _inner.Combine(parts);
+
+        public string GetFullPath(string path) => _inner.GetFullPath(path);
+
+        public string? GetDirectoryName(string path) => _inner.GetDirectoryName(path);
+
+        public string GetFileName(string path) => _inner.GetFileName(path);
+
+        public void EnsureDirectory(string path) => _inner.EnsureDirectory(path);
+
+        public void Delete(string path) => _inner.Delete(path);
+
+        public void Copy(string source, string destination, bool overwrite) => _inner.Copy(source, destination, overwrite);
+
+        public void Move(string source, string destination, bool overwrite)
+        {
+            if (destination.EndsWith(SaveBackupPaths.BackupExtension, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new IOException("注入的 Move 失败（模拟备份正文落盘失败）");
+            }
+
+            _inner.Move(source, destination, overwrite);
+        }
+
+        public void MoveDirectory(string source, string destination) => _inner.MoveDirectory(source, destination);
+    }
 
     private sealed class FixedClock : IClock
     {

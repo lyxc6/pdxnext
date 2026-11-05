@@ -33,8 +33,6 @@ public sealed class SaveBackupService : ISaveGameBackupService
     private const string TrashLog = "存档已移入回收站";
     private const string MissingSidecarLog = "存档备份缺少 sidecar";
 
-    private static readonly UTF8Encoding Utf8WithoutBom = new(encoderShouldEmitUTF8Identifier: false);
-
     private static readonly JsonSerializerOptions SidecarWriteOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -159,7 +157,6 @@ public sealed class SaveBackupService : ISaveGameBackupService
 
         var sidecarPath = SaveBackupPaths.SidecarPath(backupPath);
         var partialPath = backupPath + SaveBackupPaths.PartialExtension;
-        var sidecarTmpPath = sidecarPath + SaveBackupPaths.PartialExtension;
 
         try
         {
@@ -178,7 +175,7 @@ public sealed class SaveBackupService : ISaveGameBackupService
                 meta?.GameDate,
                 meta?.SaveName,
                 createdUtc);
-            await WriteSidecarAsync(sidecarPath, sidecarTmpPath, sidecar, cancellationToken).ConfigureAwait(false);
+            await WriteSidecarAsync(sidecarPath, sidecar, cancellationToken).ConfigureAwait(false);
 
             var entry = new SaveBackupEntry(
                 backupPath,
@@ -196,13 +193,13 @@ public sealed class SaveBackupService : ISaveGameBackupService
         }
         catch (OperationCanceledException)
         {
-            Cleanup(partialPath, sidecarTmpPath, backupPath, sidecarPath);
+            Cleanup(partialPath, backupPath, sidecarPath);
             _logger.Warn(BackupCancelledLog + "：" + fullSourcePath);
             throw;
         }
         catch (Exception exception) when (IsIoFailure(exception))
         {
-            var remaining = Cleanup(partialPath, sidecarTmpPath, backupPath, sidecarPath);
+            var remaining = Cleanup(partialPath, backupPath, sidecarPath);
             var message = "备份失败：无法读取或写入存档（" + DescribeIoError(exception) + "）。";
             _logger.Warn(BackupFailedLog + "：" + message);
             return SaveBackupResult.Failed(message, remaining);
@@ -592,7 +589,8 @@ public sealed class SaveBackupService : ISaveGameBackupService
         }
         catch (IOException)
         {
-            // 同卷 Move 失败（典型是跨卷），走复制 → 校验 → 删源。
+            // File.Move 原生支持跨卷（内部 copy+delete），但目标被占用、只读属性、底层实现不支持
+            // 等情况仍会抛 IOException；只有这时才退回「复制 → 校验 → 删源」，并保留源文件直到校验通过。
         }
         catch (UnauthorizedAccessException exception)
         {
@@ -689,7 +687,25 @@ public sealed class SaveBackupService : ISaveGameBackupService
         }
 
         var remaining = new List<string>();
-        if (sidecarExists)
+        var backupRemoved = !backupExists;
+        if (backupExists)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                _fileSystem.Delete(entry.BackupPath);
+                backupRemoved = true;
+            }
+            catch (Exception exception) when (IsIoFailure(exception))
+            {
+                remaining.Add(entry.BackupPath);
+                _logger.Warn(BackupFailedLog + "：无法删除备份正文 " + entry.BackupPath + "（" + exception.Message + "）");
+            }
+        }
+
+        // 顺序很重要：先删正文、成功后再删 sidecar。若正文被占用删不掉而 sidecar 先消失，
+        // ListBackups 会因为缺 sidecar 漏掉这条备份，UI 里就再也看不到这个孤儿了。
+        if (backupRemoved && sidecarExists)
         {
             cancellationToken.ThrowIfCancellationRequested();
             try
@@ -703,24 +719,10 @@ public sealed class SaveBackupService : ISaveGameBackupService
             }
         }
 
-        if (backupExists)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
-            {
-                _fileSystem.Delete(entry.BackupPath);
-            }
-            catch (Exception exception) when (IsIoFailure(exception))
-            {
-                remaining.Add(entry.BackupPath);
-                _logger.Warn(BackupFailedLog + "：无法删除备份正文 " + entry.BackupPath + "（" + exception.Message + "）");
-            }
-        }
-
         var stillPresent = _fileSystem.FileExists(entry.BackupPath);
         if (remaining.Count > 0)
         {
-            var message = $"删除备份失败：仍有 {remaining.Count} 个文件残留。";
+            var message = $"删除备份失败：仍有 {remaining.Count} 个文件残留：{string.Join("、", remaining)}";
             _logger.Warn(BackupFailedLog + "：" + message);
             return SaveDeleteResult.Failed(message, stillPresent, remaining);
         }
@@ -743,7 +745,10 @@ public sealed class SaveBackupService : ISaveGameBackupService
             var sidecarPath = SaveBackupPaths.SidecarPath(backupPath);
             if (!_fileSystem.FileExists(sidecarPath))
             {
-                _logger.Warn(MissingSidecarLog + "，已跳过：" + backupPath);
+                // 缺 sidecar 的 .bak 仍然列出（降级条目，sha 为空）：否则用量统计算上了它、
+                // ListBackups 却看不到，UI 里永远删不掉这个孤儿，只能等显式 Prune。
+                _logger.Warn(MissingSidecarLog + "，按降级条目列出：" + backupPath);
+                entries.Add(CreateDegradedEntry(backupPath, sidecarPath, canonicalGameId));
                 continue;
             }
 
@@ -753,7 +758,8 @@ public sealed class SaveBackupService : ISaveGameBackupService
             }
             catch (Exception exception) when (IsSidecarFailure(exception))
             {
-                _logger.Warn(BackupFailedLog + "：sidecar 无法解析，已跳过 " + sidecarPath + "（" + exception.Message + "）");
+                _logger.Warn(BackupFailedLog + "：sidecar 无法解析，按降级条目列出 " + sidecarPath + "（" + exception.Message + "）");
+                entries.Add(CreateDegradedEntry(backupPath, sidecarPath, canonicalGameId));
             }
         }
 
@@ -839,6 +845,23 @@ public sealed class SaveBackupService : ISaveGameBackupService
             sidecar.GameDate,
             sidecar.CreatedUtc);
 
+    /// <summary>
+    /// sidecar 缺失或损坏时的降级条目：仍能列出、删除，但 sha 为空所以不能恢复。
+    /// 这样「用量统计」与「列表」的条目集合保持一致，不会出现看不见却占空间的备份。
+    /// </summary>
+    private SaveBackupEntry CreateDegradedEntry(string backupPath, string sidecarPath, string canonicalGameId) =>
+        new(
+            backupPath,
+            sidecarPath,
+            string.Empty,
+            _fileSystem.GetFileName(backupPath),
+            _fileSystem.GetFileSize(backupPath),
+            string.Empty,
+            canonicalGameId,
+            null,
+            null,
+            new DateTimeOffset(File.GetLastWriteTimeUtc(backupPath), TimeSpan.Zero));
+
     private SaveBackupSidecar ReadSidecar(string sidecarPath)
     {
         var json = _fileSystem.ReadAllText(sidecarPath);
@@ -878,16 +901,19 @@ public sealed class SaveBackupService : ISaveGameBackupService
         return sidecar;
     }
 
-    private async Task WriteSidecarAsync(
+    private Task WriteSidecarAsync(
         string sidecarPath,
-        string partialPath,
         SaveBackupSidecar sidecar,
-        CancellationToken cancellationToken)
-    {
-        var json = JsonSerializer.Serialize(sidecar, SidecarWriteOptions);
-        await File.WriteAllTextAsync(partialPath, json, Utf8WithoutBom, cancellationToken).ConfigureAwait(false);
-        _fileSystem.Move(partialPath, sidecarPath, overwrite: true);
-    }
+        CancellationToken cancellationToken) =>
+        Task.Run(
+            () =>
+            {
+                var json = JsonSerializer.Serialize(sidecar, SidecarWriteOptions);
+                // 单条 sidecar 只有几百字节，交给 IFileSystem 的原子写（内部临时文件 + Move）即可；
+                // 正文才需要流式异步复制。放在 Task.Run 里避免同步 IO 阻塞调用方线程。
+                _fileSystem.WriteAllTextAtomic(sidecarPath, json);
+            },
+            cancellationToken);
 
     private Task<BackupSnapshot> MeasureAsync(CancellationToken cancellationToken) =>
         Task.Run(() => MeasureBackups(cancellationToken), cancellationToken);
