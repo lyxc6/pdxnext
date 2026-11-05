@@ -11,6 +11,8 @@
 - `docs/AGENT-WORKFLOW.md`：1.3 起由协调者派活、实现者只改指定范围、独立验收者复核；包含派活模板、并发与 worktree 规则、固定检查三命令、验收七条与汇报格式。
 - 主页背景：Paradox 元数据没有背图的游戏（目前是 EU5）改用 Steam 官方库页大图（`library_hero`），取不到时回落到安装包内置图，设置页来源显示「Steam 官方库页」。
 - 成就页：新增侧边栏入口与页面，成就数据经 `--steam-host` 子进程从 Steam 读取（Init 仍只在子进程里做），按游戏切换；未知游戏显示「暂无成就数据源」，Steam 不可用、无成就、请求失败分开提示，切游戏时旧请求会被取消而不是显示成「Steam 不可用」。CK3 实测 198 条、EU4 373 条。
+- 存档解析：CK3 / Victoria 3 / EU5 / Stellaris / Cities: Skylines II 的存档元数据只读解析——CK3 直接读存档头部的 `meta_data`（含大 meta，上限 256 KB），V3/EU5 先嗅探 `SAV0` 再按需打开 zip 里的 `meta`（嗅探失败会回退），Stellaris 只读 zip 里的 `meta` 不碰 40 MB 的 `gamestate`，CS2 读 `.cok` 里的 JSON 元数据。整个扫描只读文件前几 KB、并行度 4，本机 76 个存档约 159 ms。V3/EU5/CS2 的时间与名字是启发式，页面上标记为实验性。
+- 存档备份：按游戏把存档备份到 `data\save-backups\<gameId>\<时间戳>__<原名>.bak`，每个备份配一份同名 `.json` 自述（原始路径、大小、SHA-256、游戏版本、游戏内日期），两者都先写临时文件再原子改名；恢复默认**不覆盖**（写成「原名 (恢复 时间).扩展名」），要覆盖时先把原档移进 `data\save-backups\trash\`；删除真实存档同样只移进 trash，不直接删；容量上限 2 GiB / 每游戏 200 份，超限只报错不自动清理，另给显式的「清理旧备份」。
 - DLC 页：Stellaris 这类在 Steam 里有 DLC 清单的游戏，现在分「已拥有（N）/ 未拥有（N）」两段列出，未拥有项只读。未拥有清单来自 Steam 的 DLC 表（`GetDLCCount` / `BGetDLCDataByIndex`）减去已拥有与磁盘上已存在的 `.dlc`；清单不可信（条目过多或大量空名）时不合成该段而是明确提示。Steam 没运行时标题改为「本地 DLC（N）」，不会再出现「已拥有（31）」但每行都写「授权未知」。
 
 ### Changed
