@@ -31,7 +31,7 @@ public sealed class LocalTranslationRuntime : IDisposable
         _logger = logger;
         Glossary = new LocalTranslationGlossary(fileSystem);
         Catalog = LocalTranslationModelCatalog.CreateDefault();
-        Store = new LocalTranslationModelStore(Catalog);
+        Store = new LocalTranslationModelStore(Catalog, rootDirectory: null, logger: logger);
         Downloader = new LocalTranslationModelDownloader(http, logger, Catalog, Store);
     }
 
