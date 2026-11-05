@@ -1087,16 +1087,36 @@ public sealed partial class Localizer
         ["settings.translate.lastFailure"] = "翻译失败：{0}",
         ["settings.translate.localModelBergamotEnZh"] = "Bergamot 英译中（约 48 MB）",
         ["settings.translate.localModelBergamotZhEn"] = "Bergamot 中译英（约 70 MB）",
+        ["settings.translate.localModelDialogRemoveContent"] = "确定要删除「{0}」的本地模型文件吗？删除后需要重新下载才能离线翻译。",
+        ["settings.translate.localModelDialogRemoveTitle"] = "删除本地模型",
         ["settings.translate.localModelDownload"] = "下载",
         ["settings.translate.localModelDownloading"] = "下载中 {0}%",
         ["settings.translate.localModelIndexTranslate"] = "Index-Translate-2B（质量最好，约 1.3 GB）",
         ["settings.translate.localModelInstalled"] = "已安装",
         ["settings.translate.localModelNotInstalled"] = "未安装",
+        ["settings.translate.localModelOpenFolder"] = "打开文件夹",
         ["settings.translate.localModelRemove"] = "删除",
+        ["settings.translate.localModelRemoveFailed"] = "删除失败：{0}",
+        ["settings.translate.localModelResidueMore"] = "…等共 {0} 项",
+        ["settings.translate.localModelStatusConfigMissing"] = "缺 config.txt，未完成配置（引擎无法加载）",
         ["settings.translate.localModelStatusDownloaded"] = "本地模型已就绪：{0}",
         ["settings.translate.localModelStatusFailed"] = "本地模型下载失败：{0}",
+        ["settings.translate.localModelStatusMissingFiles"] = "缺 {0} 个文件：{1}",
         ["settings.translate.localModelStatusRemoveFailed"] = "删除本地模型失败：{0}",
+        ["settings.translate.localModelStatusRemoveNotFound"] = "目录原本就不存在，无需删除",
         ["settings.translate.localModelStatusRemoved"] = "已删除本地模型：{0}",
+        ["settings.translate.localModelStatusRemovedVerified"] = "已删除（已复核目录不存在）",
+        ["settings.translate.localModelStatusRemovedWithResidue"] = "已删除文件，但目录仍有残留：{0}",
+        ["settings.translate.localModelStatusResidueDirectoryOnly"] = "已删除文件，但目录本身未能删除",
+        ["settings.translate.localModelStatusSizeMismatch"] = "文件不完整：{0} 个文件尺寸不符（{1} 实际 {2}，应为 {3}），建议重新下载",
+        ["settings.translate.localModelStatusVerifyConfigMissing"] = "缺 config.txt",
+        ["settings.translate.localModelStatusVerifyFailed"] = "校验未通过：{0}",
+        ["settings.translate.localModelStatusVerifyHashMismatch"] = "哈希不符：{0}（建议重新下载）",
+        ["settings.translate.localModelStatusVerifyMissing"] = "缺 {0} 个文件",
+        ["settings.translate.localModelStatusVerifyPassed"] = "校验通过：{0} 个文件 SHA-256 一致",
+        ["settings.translate.localModelStatusVerifySize"] = "{0} 个文件尺寸不符",
+        ["settings.translate.localModelStatusVerifying"] = "正在校验完整性…",
+        ["settings.translate.localModelVerify"] = "校验",
         ["settings.translate.localModels"] = "本地离线模型",
         ["settings.translate.localModelsHint"] = "模型下载到本机后完全离线翻译，不占用网络也不需要任何密钥。首次下载 Index-Translate-2B 约 1.3 GB，请确认磁盘空间充足。",
         ["settings.translate.localModelsName"] = "本地离线模型下载",
@@ -2387,16 +2407,36 @@ public sealed partial class Localizer
         ["settings.translate.lastFailure"] = "Translation failed: {0}",
         ["settings.translate.localModelBergamotEnZh"] = "Bergamot English to Chinese (about 48 MB)",
         ["settings.translate.localModelBergamotZhEn"] = "Bergamot Chinese to English (about 70 MB)",
+        ["settings.translate.localModelDialogRemoveContent"] = "Delete the local model files for '{0}'? You will need to download them again for offline translation.",
+        ["settings.translate.localModelDialogRemoveTitle"] = "Delete local model",
         ["settings.translate.localModelDownload"] = "Download",
         ["settings.translate.localModelDownloading"] = "Downloading {0}%",
         ["settings.translate.localModelIndexTranslate"] = "Index-Translate-2B (best quality, about 1.3 GB)",
         ["settings.translate.localModelInstalled"] = "Installed",
         ["settings.translate.localModelNotInstalled"] = "Not installed",
+        ["settings.translate.localModelOpenFolder"] = "Open folder",
         ["settings.translate.localModelRemove"] = "Delete",
+        ["settings.translate.localModelRemoveFailed"] = "Delete failed: {0}",
+        ["settings.translate.localModelResidueMore"] = "…and {0} more",
+        ["settings.translate.localModelStatusConfigMissing"] = "config.txt is missing — setup is incomplete and the engine cannot load this model",
         ["settings.translate.localModelStatusDownloaded"] = "Local model ready: {0}",
         ["settings.translate.localModelStatusFailed"] = "Local model download failed: {0}",
+        ["settings.translate.localModelStatusMissingFiles"] = "{0} file(s) missing: {1}",
         ["settings.translate.localModelStatusRemoveFailed"] = "Could not delete the local model: {0}",
+        ["settings.translate.localModelStatusRemoveNotFound"] = "The folder did not exist; nothing to delete",
         ["settings.translate.localModelStatusRemoved"] = "Local model deleted: {0}",
+        ["settings.translate.localModelStatusRemovedVerified"] = "Deleted (folder confirmed absent)",
+        ["settings.translate.localModelStatusRemovedWithResidue"] = "Files deleted, but residue remains in the folder: {0}",
+        ["settings.translate.localModelStatusResidueDirectoryOnly"] = "Files deleted, but the folder itself could not be removed",
+        ["settings.translate.localModelStatusSizeMismatch"] = "Incomplete: {0} file(s) have the wrong size ({1} is {2}, expected {3}) — re-download recommended",
+        ["settings.translate.localModelStatusVerifyConfigMissing"] = "config.txt is missing",
+        ["settings.translate.localModelStatusVerifyFailed"] = "Verification failed: {0}",
+        ["settings.translate.localModelStatusVerifyHashMismatch"] = "Hash mismatch: {0} — re-download recommended",
+        ["settings.translate.localModelStatusVerifyMissing"] = "{0} file(s) missing",
+        ["settings.translate.localModelStatusVerifyPassed"] = "Verification passed: SHA-256 matched for {0} file(s)",
+        ["settings.translate.localModelStatusVerifySize"] = "{0} file(s) have the wrong size",
+        ["settings.translate.localModelStatusVerifying"] = "Verifying integrity…",
+        ["settings.translate.localModelVerify"] = "Verify",
         ["settings.translate.localModels"] = "Local offline models",
         ["settings.translate.localModelsHint"] = "Once a model is downloaded the translation runs fully offline, using no network and no keys. The first Index-Translate-2B download is about 1.3 GB, so make sure there is enough free disk space.",
         ["settings.translate.localModelsName"] = "Local offline model downloads",
@@ -3687,16 +3727,36 @@ public sealed partial class Localizer
         ("settings.translate.lastFailure", "SettingsTranslateLastFailure"),
         ("settings.translate.localModelBergamotEnZh", "SettingsTranslateLocalModelBergamotEnZh"),
         ("settings.translate.localModelBergamotZhEn", "SettingsTranslateLocalModelBergamotZhEn"),
+        ("settings.translate.localModelDialogRemoveContent", "SettingsTranslateLocalModelDialogRemoveContent"),
+        ("settings.translate.localModelDialogRemoveTitle", "SettingsTranslateLocalModelDialogRemoveTitle"),
         ("settings.translate.localModelDownload", "SettingsTranslateLocalModelDownload"),
         ("settings.translate.localModelDownloading", "SettingsTranslateLocalModelDownloading"),
         ("settings.translate.localModelIndexTranslate", "SettingsTranslateLocalModelIndexTranslate"),
         ("settings.translate.localModelInstalled", "SettingsTranslateLocalModelInstalled"),
         ("settings.translate.localModelNotInstalled", "SettingsTranslateLocalModelNotInstalled"),
+        ("settings.translate.localModelOpenFolder", "SettingsTranslateLocalModelOpenFolder"),
         ("settings.translate.localModelRemove", "SettingsTranslateLocalModelRemove"),
+        ("settings.translate.localModelRemoveFailed", "SettingsTranslateLocalModelRemoveFailed"),
+        ("settings.translate.localModelResidueMore", "SettingsTranslateLocalModelResidueMore"),
+        ("settings.translate.localModelStatusConfigMissing", "SettingsTranslateLocalModelStatusConfigMissing"),
         ("settings.translate.localModelStatusDownloaded", "SettingsTranslateLocalModelStatusDownloaded"),
         ("settings.translate.localModelStatusFailed", "SettingsTranslateLocalModelStatusFailed"),
+        ("settings.translate.localModelStatusMissingFiles", "SettingsTranslateLocalModelStatusMissingFiles"),
         ("settings.translate.localModelStatusRemoveFailed", "SettingsTranslateLocalModelStatusRemoveFailed"),
+        ("settings.translate.localModelStatusRemoveNotFound", "SettingsTranslateLocalModelStatusRemoveNotFound"),
         ("settings.translate.localModelStatusRemoved", "SettingsTranslateLocalModelStatusRemoved"),
+        ("settings.translate.localModelStatusRemovedVerified", "SettingsTranslateLocalModelStatusRemovedVerified"),
+        ("settings.translate.localModelStatusRemovedWithResidue", "SettingsTranslateLocalModelStatusRemovedWithResidue"),
+        ("settings.translate.localModelStatusResidueDirectoryOnly", "SettingsTranslateLocalModelStatusResidueDirectoryOnly"),
+        ("settings.translate.localModelStatusSizeMismatch", "SettingsTranslateLocalModelStatusSizeMismatch"),
+        ("settings.translate.localModelStatusVerifyConfigMissing", "SettingsTranslateLocalModelStatusVerifyConfigMissing"),
+        ("settings.translate.localModelStatusVerifyFailed", "SettingsTranslateLocalModelStatusVerifyFailed"),
+        ("settings.translate.localModelStatusVerifyHashMismatch", "SettingsTranslateLocalModelStatusVerifyHashMismatch"),
+        ("settings.translate.localModelStatusVerifyMissing", "SettingsTranslateLocalModelStatusVerifyMissing"),
+        ("settings.translate.localModelStatusVerifyPassed", "SettingsTranslateLocalModelStatusVerifyPassed"),
+        ("settings.translate.localModelStatusVerifySize", "SettingsTranslateLocalModelStatusVerifySize"),
+        ("settings.translate.localModelStatusVerifying", "SettingsTranslateLocalModelStatusVerifying"),
+        ("settings.translate.localModelVerify", "SettingsTranslateLocalModelVerify"),
         ("settings.translate.localModels", "SettingsTranslateLocalModels"),
         ("settings.translate.localModelsHint", "SettingsTranslateLocalModelsHint"),
         ("settings.translate.localModelsName", "SettingsTranslateLocalModelsName"),
@@ -4985,16 +5045,36 @@ public sealed partial class Localizer
     public string SettingsTranslateLastFailure => Format("settings.translate.lastFailure");
     public string SettingsTranslateLocalModelBergamotEnZh => Format("settings.translate.localModelBergamotEnZh");
     public string SettingsTranslateLocalModelBergamotZhEn => Format("settings.translate.localModelBergamotZhEn");
+    public string SettingsTranslateLocalModelDialogRemoveContent => Format("settings.translate.localModelDialogRemoveContent");
+    public string SettingsTranslateLocalModelDialogRemoveTitle => Format("settings.translate.localModelDialogRemoveTitle");
     public string SettingsTranslateLocalModelDownload => Format("settings.translate.localModelDownload");
     public string SettingsTranslateLocalModelDownloading => Format("settings.translate.localModelDownloading");
     public string SettingsTranslateLocalModelIndexTranslate => Format("settings.translate.localModelIndexTranslate");
     public string SettingsTranslateLocalModelInstalled => Format("settings.translate.localModelInstalled");
     public string SettingsTranslateLocalModelNotInstalled => Format("settings.translate.localModelNotInstalled");
+    public string SettingsTranslateLocalModelOpenFolder => Format("settings.translate.localModelOpenFolder");
     public string SettingsTranslateLocalModelRemove => Format("settings.translate.localModelRemove");
+    public string SettingsTranslateLocalModelRemoveFailed => Format("settings.translate.localModelRemoveFailed");
+    public string SettingsTranslateLocalModelResidueMore => Format("settings.translate.localModelResidueMore");
+    public string SettingsTranslateLocalModelStatusConfigMissing => Format("settings.translate.localModelStatusConfigMissing");
     public string SettingsTranslateLocalModelStatusDownloaded => Format("settings.translate.localModelStatusDownloaded");
     public string SettingsTranslateLocalModelStatusFailed => Format("settings.translate.localModelStatusFailed");
+    public string SettingsTranslateLocalModelStatusMissingFiles => Format("settings.translate.localModelStatusMissingFiles");
     public string SettingsTranslateLocalModelStatusRemoveFailed => Format("settings.translate.localModelStatusRemoveFailed");
+    public string SettingsTranslateLocalModelStatusRemoveNotFound => Format("settings.translate.localModelStatusRemoveNotFound");
     public string SettingsTranslateLocalModelStatusRemoved => Format("settings.translate.localModelStatusRemoved");
+    public string SettingsTranslateLocalModelStatusRemovedVerified => Format("settings.translate.localModelStatusRemovedVerified");
+    public string SettingsTranslateLocalModelStatusRemovedWithResidue => Format("settings.translate.localModelStatusRemovedWithResidue");
+    public string SettingsTranslateLocalModelStatusResidueDirectoryOnly => Format("settings.translate.localModelStatusResidueDirectoryOnly");
+    public string SettingsTranslateLocalModelStatusSizeMismatch => Format("settings.translate.localModelStatusSizeMismatch");
+    public string SettingsTranslateLocalModelStatusVerifyConfigMissing => Format("settings.translate.localModelStatusVerifyConfigMissing");
+    public string SettingsTranslateLocalModelStatusVerifyFailed => Format("settings.translate.localModelStatusVerifyFailed");
+    public string SettingsTranslateLocalModelStatusVerifyHashMismatch => Format("settings.translate.localModelStatusVerifyHashMismatch");
+    public string SettingsTranslateLocalModelStatusVerifyMissing => Format("settings.translate.localModelStatusVerifyMissing");
+    public string SettingsTranslateLocalModelStatusVerifyPassed => Format("settings.translate.localModelStatusVerifyPassed");
+    public string SettingsTranslateLocalModelStatusVerifySize => Format("settings.translate.localModelStatusVerifySize");
+    public string SettingsTranslateLocalModelStatusVerifying => Format("settings.translate.localModelStatusVerifying");
+    public string SettingsTranslateLocalModelVerify => Format("settings.translate.localModelVerify");
     public string SettingsTranslateLocalModels => Format("settings.translate.localModels");
     public string SettingsTranslateLocalModelsHint => Format("settings.translate.localModelsHint");
     public string SettingsTranslateLocalModelsName => Format("settings.translate.localModelsName");
@@ -6286,16 +6366,36 @@ internal static class Keys
     public const string SettingsTranslateLastFailure = "settings.translate.lastFailure";
     public const string SettingsTranslateLocalModelBergamotEnZh = "settings.translate.localModelBergamotEnZh";
     public const string SettingsTranslateLocalModelBergamotZhEn = "settings.translate.localModelBergamotZhEn";
+    public const string SettingsTranslateLocalModelDialogRemoveContent = "settings.translate.localModelDialogRemoveContent";
+    public const string SettingsTranslateLocalModelDialogRemoveTitle = "settings.translate.localModelDialogRemoveTitle";
     public const string SettingsTranslateLocalModelDownload = "settings.translate.localModelDownload";
     public const string SettingsTranslateLocalModelDownloading = "settings.translate.localModelDownloading";
     public const string SettingsTranslateLocalModelIndexTranslate = "settings.translate.localModelIndexTranslate";
     public const string SettingsTranslateLocalModelInstalled = "settings.translate.localModelInstalled";
     public const string SettingsTranslateLocalModelNotInstalled = "settings.translate.localModelNotInstalled";
+    public const string SettingsTranslateLocalModelOpenFolder = "settings.translate.localModelOpenFolder";
     public const string SettingsTranslateLocalModelRemove = "settings.translate.localModelRemove";
+    public const string SettingsTranslateLocalModelRemoveFailed = "settings.translate.localModelRemoveFailed";
+    public const string SettingsTranslateLocalModelResidueMore = "settings.translate.localModelResidueMore";
+    public const string SettingsTranslateLocalModelStatusConfigMissing = "settings.translate.localModelStatusConfigMissing";
     public const string SettingsTranslateLocalModelStatusDownloaded = "settings.translate.localModelStatusDownloaded";
     public const string SettingsTranslateLocalModelStatusFailed = "settings.translate.localModelStatusFailed";
+    public const string SettingsTranslateLocalModelStatusMissingFiles = "settings.translate.localModelStatusMissingFiles";
     public const string SettingsTranslateLocalModelStatusRemoveFailed = "settings.translate.localModelStatusRemoveFailed";
+    public const string SettingsTranslateLocalModelStatusRemoveNotFound = "settings.translate.localModelStatusRemoveNotFound";
     public const string SettingsTranslateLocalModelStatusRemoved = "settings.translate.localModelStatusRemoved";
+    public const string SettingsTranslateLocalModelStatusRemovedVerified = "settings.translate.localModelStatusRemovedVerified";
+    public const string SettingsTranslateLocalModelStatusRemovedWithResidue = "settings.translate.localModelStatusRemovedWithResidue";
+    public const string SettingsTranslateLocalModelStatusResidueDirectoryOnly = "settings.translate.localModelStatusResidueDirectoryOnly";
+    public const string SettingsTranslateLocalModelStatusSizeMismatch = "settings.translate.localModelStatusSizeMismatch";
+    public const string SettingsTranslateLocalModelStatusVerifyConfigMissing = "settings.translate.localModelStatusVerifyConfigMissing";
+    public const string SettingsTranslateLocalModelStatusVerifyFailed = "settings.translate.localModelStatusVerifyFailed";
+    public const string SettingsTranslateLocalModelStatusVerifyHashMismatch = "settings.translate.localModelStatusVerifyHashMismatch";
+    public const string SettingsTranslateLocalModelStatusVerifyMissing = "settings.translate.localModelStatusVerifyMissing";
+    public const string SettingsTranslateLocalModelStatusVerifyPassed = "settings.translate.localModelStatusVerifyPassed";
+    public const string SettingsTranslateLocalModelStatusVerifySize = "settings.translate.localModelStatusVerifySize";
+    public const string SettingsTranslateLocalModelStatusVerifying = "settings.translate.localModelStatusVerifying";
+    public const string SettingsTranslateLocalModelVerify = "settings.translate.localModelVerify";
     public const string SettingsTranslateLocalModels = "settings.translate.localModels";
     public const string SettingsTranslateLocalModelsHint = "settings.translate.localModelsHint";
     public const string SettingsTranslateLocalModelsName = "settings.translate.localModelsName";
