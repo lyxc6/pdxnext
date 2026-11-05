@@ -115,7 +115,8 @@ internal static class UpdateFlow
             });
         }
 
-        if (AppServices.Updates.IsPerMachineInstall)
+        // 提示语与 LaunchInstaller 的 /ALLUSERS 判据共用同一个结论，避免「说每用户、装每机器」。
+        if (AppServices.Updates.WillUseAllUsers)
         {
             panel.Children.Add(new TextBlock
             {
