@@ -72,5 +72,12 @@
   "dlc.unownedBadge": "未拥有",
   "dlc.unknownBadge": "授权未知",
   "dlc.ownershipRowToolTip": "Steam AppID {0}",
-  "dlc.ownershipRowNoSteam": "没有 Steam AppID，无法判定授权"
+  "dlc.ownershipRowNoSteam": "没有 Steam AppID，无法判定授权",
+  "dlc.ownedSection": "已拥有（{0}）",
+  "dlc.localSection": "本地 DLC（{0}）",
+  "dlc.unownedSection": "未拥有（{0}）",
+  "dlc.unownedListName": "未拥有的 DLC",
+  "dlc.unownedNoteSteamOff": "Steam 未运行，无法列出未拥有的 DLC。",
+  "dlc.unownedNoteUnavailable": "无法列出未拥有的 DLC：{0}",
+  "dlc.unownedNoteLoader": "Steam 返回的 DLC 清单不可信（{0} 条，其中 {1} 条没有名字，像是加载器模板），已跳过未拥有列表。"
 }
