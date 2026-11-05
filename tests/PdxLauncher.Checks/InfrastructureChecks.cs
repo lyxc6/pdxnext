@@ -32,6 +32,28 @@ public static class InfrastructureChecks
                 "没有残留 .pdxnext.tmp",
                 !fs.FileExists(target + ".pdxnext.tmp"));
 
+            // --- 写失败也必须清掉临时文件：目标被同名目录占住时 Failed 且目录里不留半截 tmp
+            var blockedTarget = Path.Combine(tempRoot, "blocked-target.json");
+            Directory.CreateDirectory(blockedTarget);
+            var blockedThrew = false;
+            try
+            {
+                fs.WriteAllTextAtomic(blockedTarget, "should fail");
+            }
+            catch (IOException)
+            {
+                blockedThrew = true;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                blockedThrew = true;
+            }
+            ChecksContext.Check("写失败抛出可诊断异常（目标被目录占住）", blockedThrew);
+            ChecksContext.Check(
+                "写失败不残留 .pdxnext.tmp",
+                !fs.FileExists(blockedTarget + ".pdxnext.tmp") &&
+                Directory.GetFiles(tempRoot, "*.pdxnext.tmp").Length == 0);
+
             // --- 覆盖写不破坏旧内容语义
             fs.WriteAllTextAtomic(target, "second");
             ChecksContext.Equal("覆盖写生效", "second", fs.ReadAllText(target));
