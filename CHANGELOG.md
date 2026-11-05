@@ -14,6 +14,7 @@
 - 存档解析：CK3 / Victoria 3 / EU5 / Stellaris / Cities: Skylines II 的存档元数据只读解析——CK3 直接读存档头部的 `meta_data`（含大 meta，上限 256 KB），V3/EU5 先嗅探 `SAV0` 再按需打开 zip 里的 `meta`（嗅探失败会回退），Stellaris 只读 zip 里的 `meta` 不碰 40 MB 的 `gamestate`，CS2 读 `.cok` 里的 JSON 元数据。整个扫描只读文件前几 KB、并行度 4，本机 76 个存档约 159 ms。V3/EU5/CS2 的时间与名字是启发式，页面上标记为实验性。
 - 存档备份：按游戏把存档备份到 `data\save-backups\<gameId>\<时间戳>__<原名>.bak`，每个备份配一份同名 `.json` 自述（原始路径、大小、SHA-256、游戏版本、游戏内日期），两者都先写临时文件再原子改名；恢复默认**不覆盖**（写成「原名 (恢复 时间).扩展名」），要覆盖时先把原档移进 `data\save-backups\trash\`；删除真实存档同样只移进 trash，不直接删；容量上限 2 GiB / 每游戏 200 份，超限只报错不自动清理，另给显式的「清理旧备份」。
 - 存档页：侧边栏新增「存档」，按当前游戏列出磁盘上的存档（文件名、日期、存档名、国家、大小），CK3 / V3 / EU5 / Stellaris / CS2 都能读；读不出的档案保留粗信息并标注，切换游戏自动重扫。
+- 存档页：改成分两段加载——先只读路径、大小与文件时间出粗略列表（本机 VIC3 12 档约 4 ms、Stellaris 27 档约 8 ms），再在后台按批解析版本/存档名/国家并原地补全，不整表重建、不闪回；读屏名称随细节更新。
 - 成就中文化：成就名与描述优先读游戏自己的本地化文件（语言取游戏 `pdx_settings.txt`，读不到再退回界面语言、英文），变量别名（`$ACHIEVEMENT_x$`）会链路解析；CK3 198/198、VIC3 152/152 命中。
 - 成就页：新增全球解锁率与游戏自带图标（jpg/png；CK3 是 dds，首次访问解码成 png 缓存），并把结果写成 `data\achievement-cache\<appid>.json` 快照——进页先显示上次结果再后台刷新，冷启第一次从约 3.5 s 降到缓存命中约 0.13 s。
 - DLC 页：Victoria 3 1.15 的新 DLC 只写在 `game\dlc_metadata\00_dlc_metadata.txt`，现在会一并解析（如「State and Revolution」）；CK3 与 Stellaris 的同名目录结构不同，不会被误当成 V3 格式。
