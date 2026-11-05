@@ -223,15 +223,19 @@ public sealed class AchievementPrewarmService : IDisposable
             return;
         }
 
+        _logger.Info("开始预热成就（appid " + cacheKey + "）");
+
         var snapshot = await _source.GetAsync(game.GameId, cancellationToken).ConfigureAwait(false);
         if (cancellationToken.IsCancellationRequested)
         {
             return;
         }
 
-        if (snapshot.Availability != AchievementAvailability.Available)
+        // 空快照不能落盘：一旦把「Available + 0 条」写进缓存，页面之后就会一直复用这份空快照
+        // （缓存命中直接渲染），哪怕下一次宿主能正常返回。等下一次真正读到条目再覆盖。
+        if (snapshot.Availability != AchievementAvailability.Available || snapshot.Entries is not { Count: > 0 })
         {
-            _logger.Info("预热成就跳过（appid " + cacheKey + "）：" + snapshot.Availability);
+            _logger.Info("预热成就跳过（appid " + cacheKey + "）：" + snapshot.Availability + "，" + (snapshot.Entries?.Count ?? 0) + " 条");
             return;
         }
 
@@ -247,7 +251,7 @@ public sealed class AchievementPrewarmService : IDisposable
         {
             LastCacheKey = cacheKey;
             Interlocked.Increment(ref _prewarmCount);
-            _logger.Info("预热成就已写快照（appid " + cacheKey + "，" + snapshot.Entries.Count + " 条）");
+            _logger.Info("预热成就已写快照（appid " + cacheKey + "，" + (snapshot.Entries?.Count ?? 0) + " 条）");
         }
         else
         {

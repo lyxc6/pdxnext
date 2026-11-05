@@ -21,6 +21,7 @@ public static class AchievementPrewarmChecks
         CheckFailureOnlyLogs(fileSystem);
         CheckNonSteamGameIsSkipped(fileSystem);
         CheckUnavailableSnapshotIsNotSaved(fileSystem);
+        CheckEmptySnapshotIsNotSaved(fileSystem);
         return 0;
     }
 
@@ -145,6 +146,40 @@ public static class AchievementPrewarmChecks
 
         ChecksContext.Equal("预热：Steam 不可用不写快照", 0, service.PrewarmCount);
         ChecksContext.Check("预热：Steam 不可用不算失败", service.LastError is null);
+        Delete(root);
+    }
+
+    /// <summary>
+    /// 「Available 但 0 条」和「Steam 不可用」一样不能落盘：空快照一旦进缓存，页面之后会一直
+    /// 直接渲染这份空列表（命中即返回），再也不去问宿主，看起来就像「这款游戏没有成就」。
+    /// </summary>
+    private static void CheckEmptySnapshotIsNotSaved(IFileSystem fileSystem)
+    {
+        var root = NewDirectory();
+        var cache = NewCache(fileSystem, root);
+        var game = NewGame("ck3", 730);
+        var source = new FakeSource(_ => new AchievementSnapshot
+        {
+            Availability = AchievementAvailability.Available,
+            Entries = [],
+            FetchedAtUtc = DateTimeOffset.UtcNow,
+        });
+        using var service = new AchievementPrewarmService(
+            source,
+            cache,
+            () => game,
+            new SilentLogger(),
+            switchDebounce: TimeSpan.FromMilliseconds(20),
+            startupDelay: TimeSpan.FromMilliseconds(20));
+
+        service.Start();
+        service.WaitForIdleAsync().GetAwaiter().GetResult();
+
+        var path = cache.PathFor("730");
+        ChecksContext.Equal("预热：空快照不写快照", 0, service.PrewarmCount);
+        ChecksContext.Check("预热：空快照不留缓存文件", path is null || !File.Exists(path));
+        ChecksContext.Check("预热：空快照读不回来", cache.TryLoad("730") is null);
+        ChecksContext.Check("预热：空快照不算失败", service.LastError is null);
         Delete(root);
     }
 
