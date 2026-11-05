@@ -12,7 +12,7 @@ using PdxLauncher.Core.Games;
 /// <para>
 /// 硬约束：
 /// <list type="bullet">
-/// <item><description><c>SAV0</c> 类只读前 <see cref="MaxHeaderBytes"/> 字节，<c>gamestate</c> 永远不读；</description></item>
+/// <item><description><c>SAV0</c> 头最多读 <see cref="MaxHeaderBytes"/>；CK3 的文本 <c>meta_data</c> 按块续读，上限 <see cref="MaxTextMetaBytes"/>，<c>gamestate</c> 永远不读；</description></item>
 /// <item><description>zip 类只读 <c>meta</c>/<c>metadata</c> 条目，且条目解压后最多读 <see cref="MaxZipMetaBytes"/>；</description></item>
 /// <item><description>任何异常都在这里吞掉并降级为「文件名 + 文件时间 + ParseState=Degraded」，绝不上抛。</description></item>
 /// </list>
@@ -20,13 +20,30 @@ using PdxLauncher.Core.Games;
 /// </summary>
 public sealed class SavContainerReader
 {
-    /// <summary>SAV0 类存档读取的头部字节上限。</summary>
+    /// <summary>SAV0 头（到换行为止）的读取上限。</summary>
     public const int MaxHeaderBytes = 4096;
+
+    /// <summary>CK3 文本 <c>meta_data</c> 花括号块的最大字节数；真实档 24–32 KB，留足余量。</summary>
+    public const int MaxTextMetaBytes = 256 * 1024;
 
     /// <summary>zip 元数据条目解压后的读取上限。</summary>
     public const int MaxZipMetaBytes = 64 * 1024;
 
     private const int ZipEntryScanLimit = 512;
+
+    private const int TextMetaChunkBytes = 8 * 1024;
+
+    private enum ZipEntryReadStatus
+    {
+        Found,
+        NotFound,
+        SkippedTooLarge,
+        SkippedTooMany,
+        OpenFailed,
+        EntryReadFailed,
+    }
+
+    private readonly record struct ZipEntryReadResult(ZipEntryReadStatus Status, byte[]? Data, string? Error);
 
     private readonly IFileSystem _fileSystem;
     private readonly IAppLogger _logger;
@@ -110,38 +127,15 @@ public sealed class SavContainerReader
         long fileSize,
         DateTimeOffset lastWrite)
     {
-        var prefix = ReadPrefix(filePath);
-        if (!TryGetBodyStart(prefix, out var bodyStart, out var reason))
+        var head = ReadPrefix(filePath);
+        if (!TryGetBodyStart(head, out var bodyStart, out var reason))
         {
             return CreateFallback(gameId, filePath, fileName, stem, SaveContainer.TextMeta, fileSize, lastWrite, reason);
         }
 
-        var body = Encoding.UTF8.GetString(prefix, bodyStart, prefix.Length - bodyStart);
-        var metaIndex = body.IndexOf("meta_data", StringComparison.Ordinal);
-        if (metaIndex < 0)
+        if (!TryReadTextMetaBlock(filePath, head, bodyStart, out var block, out var blockReason))
         {
-            return CreateFallback(
-                gameId,
-                filePath,
-                fileName,
-                stem,
-                SaveContainer.TextMeta,
-                fileSize,
-                lastWrite,
-                "前 4 KB 内未找到 meta_data");
-        }
-
-        if (!TryExtractBraceBlock(body, metaIndex, out var block))
-        {
-            return CreateFallback(
-                gameId,
-                filePath,
-                fileName,
-                stem,
-                SaveContainer.TextMeta,
-                fileSize,
-                lastWrite,
-                "meta_data 花括号未在前 4 KB 内闭合");
+            return CreateFallback(gameId, filePath, fileName, stem, SaveContainer.TextMeta, fileSize, lastWrite, blockReason);
         }
 
         var values = ParseKeyValuePairs(block);
@@ -198,21 +192,34 @@ public sealed class SavContainerReader
         List<string> strings;
         if (IsZipHeader(prefix, bodyStart))
         {
-            var metaBytes = TryReadZipEntry(filePath, IsMetadataEntry, bodyStart);
-            if (metaBytes is null)
+            var zip = TryReadZipEntryDetailed(filePath, IsMetadataEntry, bodyStart);
+            switch (zip.Status)
             {
-                return CreateFallback(
-                    gameId,
-                    filePath,
-                    fileName,
-                    stem,
-                    SaveContainer.BinaryToken,
-                    fileSize,
-                    lastWrite,
-                    "SAV0 后的 zip 中没有 meta/metadata 条目");
+                case ZipEntryReadStatus.Found:
+                    strings = ReadTopLevelStrings(zip.Data!, 0);
+                    break;
+                case ZipEntryReadStatus.OpenFailed:
+                    // PK 魔数可能是误判（真档其实还是裸 token 流）：回退到原 token 路径，
+                    // 别因为一次失败的 zip 尝试丢掉本来能读到的元数据。
+                    strings = ReadTopLevelStrings(prefix, bodyStart);
+                    break;
+                case ZipEntryReadStatus.SkippedTooLarge:
+                    return CreateFallback(
+                        gameId, filePath, fileName, stem, SaveContainer.BinaryToken, fileSize, lastWrite,
+                        "zip 的 meta/metadata 条目超过 64 KB 上限，已跳过");
+                case ZipEntryReadStatus.SkippedTooMany:
+                    return CreateFallback(
+                        gameId, filePath, fileName, stem, SaveContainer.BinaryToken, fileSize, lastWrite,
+                        "zip 条目超过 512 条，未找到 meta/metadata");
+                case ZipEntryReadStatus.EntryReadFailed:
+                    return CreateFallback(
+                        gameId, filePath, fileName, stem, SaveContainer.BinaryToken, fileSize, lastWrite,
+                        "zip 的 meta/metadata 条目读取失败：" + (zip.Error ?? "未知错误"));
+                default:
+                    return CreateFallback(
+                        gameId, filePath, fileName, stem, SaveContainer.BinaryToken, fileSize, lastWrite,
+                        "SAV0 后的 zip 中没有 meta/metadata 条目");
             }
-
-            strings = ReadTopLevelStrings(metaBytes, 0);
         }
         else
         {
@@ -443,10 +450,10 @@ public sealed class SavContainerReader
         long fileSize,
         DateTimeOffset lastWrite)
     {
-        var metaBytes = TryReadZipEntry(
+        var zip = TryReadZipEntryDetailed(
             filePath,
             static entryName => string.Equals(Path.GetFileName(entryName), "meta", StringComparison.OrdinalIgnoreCase));
-        if (metaBytes is null)
+        if (zip.Status != ZipEntryReadStatus.Found)
         {
             return CreateFallback(
                 gameId,
@@ -456,10 +463,10 @@ public sealed class SavContainerReader
                 SaveContainer.ZipMeta,
                 fileSize,
                 lastWrite,
-                "zip 中没有可读的 meta 条目");
+                DescribeZipReadFailure(zip, "meta"));
         }
 
-        var values = ParseKeyValuePairs(Encoding.UTF8.GetString(metaBytes));
+        var values = ParseKeyValuePairs(Encoding.UTF8.GetString(zip.Data!));
         var version = GetFirst(values, "version");
         var gameDate = GetFirst(values, "date", "game_date");
         var metaName = GetFirst(values, "name", "save_name");
@@ -509,12 +516,12 @@ public sealed class SavContainerReader
         if (string.Equals(Path.GetExtension(filePath), ".cok", StringComparison.OrdinalIgnoreCase))
         {
             // CS2 的 SaveGameMetadata 是 JSON；只认顶层字段，绝不去 modsEnabled 里找版本。
-            var metaBytes = TryReadZipEntry(filePath, IsColossalMetadataEntry);
-            if (metaBytes is null)
+            var zip = TryReadZipEntryDetailed(filePath, IsColossalMetadataEntry);
+            if (zip.Status != ZipEntryReadStatus.Found)
             {
-                degradeReason = "zip 中没有 SaveGameMetadata 条目";
+                degradeReason = DescribeZipReadFailure(zip, "SaveGameMetadata");
             }
-            else if (TryParseColossalMetadata(metaBytes, out metaName, out gameDate, out version, out playerName, out country, out isIronman))
+            else if (TryParseColossalMetadata(zip.Data!, out metaName, out gameDate, out version, out playerName, out country, out isIronman))
             {
                 degradeReason = null;
             }
@@ -595,7 +602,7 @@ public sealed class SavContainerReader
 
             var root = document.RootElement;
             saveName = ReadJsonString(root, "cityName", "saveName", "name", "city_name", "save_name");
-            version = ReadJsonString(root, "version", "gameVersion", "game_version");
+            version = ReadJsonScalarString(root, "version", "gameVersion", "game_version");
             playerName = ReadJsonString(root, "playerName", "player_name");
             country = ReadJsonString(root, "country", "player_country") ?? saveName;
             isIronman = ReadJsonBoolean(root, "ironman");
@@ -619,6 +626,31 @@ public sealed class SavContainerReader
                 {
                     return text.Trim();
                 }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>读顶层标量：字符串或数字（CS2 的 <c>version</c> 可能是数字）。</summary>
+    private static string? ReadJsonScalarString(JsonElement element, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (!element.TryGetProperty(name, out var value))
+            {
+                continue;
+            }
+
+            var text = value.ValueKind switch
+            {
+                JsonValueKind.String => value.GetString(),
+                JsonValueKind.Number => value.GetRawText(),
+                _ => null,
+            };
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                return text.Trim();
             }
         }
 
@@ -664,32 +696,63 @@ public sealed class SavContainerReader
                property.TryGetInt32(out value);
     }
 
-    private byte[]? TryReadZipEntry(string path, Func<string, bool> predicate, long startOffset = 0)
+    private ZipEntryReadResult TryReadZipEntryDetailed(string path, Func<string, bool> predicate, long startOffset = 0)
     {
-        using var stream = _fileSystem.OpenRead(path);
-        using var archive = startOffset == 0
-            ? new ZipArchive(stream, ZipArchiveMode.Read)
-            : new ZipArchive(new SegmentStream(stream, startOffset), ZipArchiveMode.Read);
-        var inspected = 0;
-        foreach (var entry in archive.Entries)
+        var opened = false;
+        try
         {
-            inspected++;
-            if (inspected > ZipEntryScanLimit)
+            using var stream = _fileSystem.OpenRead(path);
+            using var archive = startOffset == 0
+                ? new ZipArchive(stream, ZipArchiveMode.Read)
+                : new ZipArchive(new SegmentStream(stream, startOffset), ZipArchiveMode.Read);
+            opened = true;
+            var sawTooLarge = false;
+            var inspected = 0;
+            foreach (var entry in archive.Entries)
             {
-                break;
+                inspected++;
+                if (inspected > ZipEntryScanLimit)
+                {
+                    return new ZipEntryReadResult(ZipEntryReadStatus.SkippedTooMany, null, null);
+                }
+
+                if (!predicate(entry.FullName))
+                {
+                    continue;
+                }
+
+                if (entry.Length > MaxZipMetaBytes)
+                {
+                    sawTooLarge = true;
+                    continue;
+                }
+
+                using var entryStream = entry.Open();
+                return new ZipEntryReadResult(ZipEntryReadStatus.Found, ReadBounded(entryStream, MaxZipMetaBytes), null);
             }
 
-            if (entry.Length > MaxZipMetaBytes || !predicate(entry.FullName))
-            {
-                continue;
-            }
-
-            using var entryStream = entry.Open();
-            return ReadBounded(entryStream, MaxZipMetaBytes);
+            return sawTooLarge
+                ? new ZipEntryReadResult(ZipEntryReadStatus.SkippedTooLarge, null, null)
+                : new ZipEntryReadResult(ZipEntryReadStatus.NotFound, null, null);
         }
-
-        return null;
+        catch (Exception exception) when (
+            exception is InvalidDataException or IOException or NotSupportedException or UnauthorizedAccessException or ArgumentException)
+        {
+            var error = exception.GetType().Name + "：" + exception.Message;
+            return opened
+                ? new ZipEntryReadResult(ZipEntryReadStatus.EntryReadFailed, null, error)
+                : new ZipEntryReadResult(ZipEntryReadStatus.OpenFailed, null, error);
+        }
     }
+
+    private static string DescribeZipReadFailure(ZipEntryReadResult result, string entryLabel) => result.Status switch
+    {
+        ZipEntryReadStatus.OpenFailed => "zip 打开失败：" + (result.Error ?? "未知错误"),
+        ZipEntryReadStatus.EntryReadFailed => "zip 的 " + entryLabel + " 条目读取失败：" + (result.Error ?? "未知错误"),
+        ZipEntryReadStatus.SkippedTooLarge => "zip 的 " + entryLabel + " 条目超过 64 KB 上限，已跳过",
+        ZipEntryReadStatus.SkippedTooMany => "zip 条目超过 512 条，未找到 " + entryLabel,
+        _ => "zip 中没有 " + entryLabel + " 条目",
+    };
 
     private static byte[] ReadBounded(Stream stream, int maxBytes)
     {
@@ -826,6 +889,51 @@ public sealed class SavContainerReader
 
         block = string.Empty;
         return false;
+    }
+
+    /// <summary>
+    /// 从 SAV0 头之后按块续读，直到 <c>meta_data</c> 的花括号配平；上限 <see cref="MaxTextMetaBytes"/>。
+    /// <para>真实 CK3 的 <c>meta_data</c> 可达 32 KB，超过 4 KB 的头部读取上限；这里只续读到闭合花括号，
+    /// 不会把 <c>gamestate</c> 整个读进内存。</para>
+    /// </summary>
+    private bool TryReadTextMetaBlock(string filePath, byte[] head, int bodyStart, out string block, out string reason)
+    {
+        block = string.Empty;
+        using var buffered = new MemoryStream();
+        buffered.Write(head, bodyStart, head.Length - bodyStart);
+        var total = head.Length - bodyStart;
+
+        using var stream = _fileSystem.OpenRead(filePath);
+        stream.Position = head.Length;
+        var chunk = new byte[TextMetaChunkBytes];
+        while (true)
+        {
+            var text = Encoding.UTF8.GetString(buffered.GetBuffer(), 0, (int)buffered.Length);
+            var metaIndex = text.IndexOf("meta_data", StringComparison.Ordinal);
+            if (metaIndex >= 0 && TryExtractBraceBlock(text, metaIndex, out block))
+            {
+                reason = string.Empty;
+                return true;
+            }
+
+            if (total >= MaxTextMetaBytes)
+            {
+                reason = metaIndex < 0
+                    ? "前 256 KB 内未找到 meta_data"
+                    : "meta_data 花括号未在 256 KB 内闭合";
+                return false;
+            }
+
+            var read = stream.Read(chunk, 0, chunk.Length);
+            if (read <= 0)
+            {
+                reason = metaIndex < 0 ? "文件中未找到 meta_data" : "meta_data 花括号未在文件结束前闭合";
+                return false;
+            }
+
+            buffered.Write(chunk, 0, read);
+            total += read;
+        }
     }
 
     private static Dictionary<string, string> ParseKeyValuePairs(string text)
@@ -1017,6 +1125,24 @@ public sealed class SavContainerReader
         if (dayLength is < 1 or > 2)
         {
             return false;
+        }
+
+        // EU5 会在日后再带一段小时（如 "1338.8.27.4 - 法兰西"）；只接受 0–23，日期仍截到 day。
+        if (index < value.Length && value[index] == '.')
+        {
+            var hourStart = index + 1;
+            var hourEnd = hourStart;
+            while (hourEnd < value.Length && char.IsAsciiDigit(value[hourEnd]))
+            {
+                hourEnd++;
+            }
+
+            if (hourEnd - hourStart is >= 1 and <= 2 &&
+                int.TryParse(value.AsSpan(hourStart, hourEnd - hourStart), out var hour) &&
+                hour is >= 0 and <= 23)
+            {
+                index = hourEnd;
+            }
         }
 
         while (index < value.Length && char.IsWhiteSpace(value[index]))
