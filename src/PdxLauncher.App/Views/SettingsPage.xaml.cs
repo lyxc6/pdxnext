@@ -310,7 +310,8 @@ public sealed partial class SettingsPage : Page
         var confirmed = await ConfirmAsync(
             T(Keys.SettingsTranslateLocalModelDialogRemoveTitle),
             T(Keys.SettingsTranslateLocalModelDialogRemoveContent, row.Title),
-            T(Keys.CommonDelete));
+            T(Keys.CommonDelete),
+            InitialFocus.Cancel);
         if (!confirmed)
         {
             return;
@@ -449,7 +450,8 @@ public sealed partial class SettingsPage : Page
                 if (!await ConfirmAsync(
                         T(Keys.SettingsAppDataDialogClearTitle),
                         T(Keys.SettingsAppDataDialogClearContent, legacyPath),
-                        T(Keys.CommonDelete)).ConfigureAwait(true))
+                        T(Keys.CommonDelete),
+                        InitialFocus.Cancel).ConfigureAwait(true))
                 {
                     return;
                 }
@@ -539,7 +541,8 @@ public sealed partial class SettingsPage : Page
                 if (!await ConfirmAsync(
                         T(Keys.SettingsCacheDialogClearAllTitle),
                         T(Keys.SettingsCacheDialogClearAllContent),
-                        T(Keys.CommonClear)).ConfigureAwait(true))
+                        T(Keys.CommonClear),
+                        InitialFocus.Cancel).ConfigureAwait(true))
                 {
                     return;
                 }
@@ -563,7 +566,8 @@ public sealed partial class SettingsPage : Page
                 T(Keys.SettingsPatchApplyDialogTitle),
                 T(Keys.SettingsPatchApplyDialogContent),
                 T(Keys.SettingsPatchApplyConfirm),
-                T(Keys.CommonCancel));
+                T(Keys.CommonCancel),
+                initialFocus: InitialFocus.Cancel);
             if (!confirmed)
             {
                 return;
@@ -596,7 +600,8 @@ public sealed partial class SettingsPage : Page
                 T(Keys.SettingsPatchRemoveDialogTitle),
                 T(Keys.SettingsPatchRemoveDialogContent),
                 T(Keys.SettingsPatchRemoveConfirm),
-                T(Keys.CommonCancel));
+                T(Keys.CommonCancel),
+                initialFocus: InitialFocus.Cancel);
             if (!confirmed)
             {
                 return;
@@ -648,7 +653,8 @@ public sealed partial class SettingsPage : Page
                 if (!await ConfirmAsync(
                         T(Keys.SettingsDangerDialogTitle),
                         T(Keys.SettingsDangerDialogContent),
-                        T(Keys.SettingsDangerDialogConfirm)).ConfigureAwait(true))
+                        T(Keys.SettingsDangerDialogConfirm),
+                        InitialFocus.Cancel).ConfigureAwait(true))
                 {
                     return;
                 }
@@ -659,14 +665,22 @@ public sealed partial class SettingsPage : Page
 
     // ------------------------------------------------------------ 对话框 / 护栏
 
-    /// <summary>统一的两键确认框：左边取消、右边确认，默认焦点落在确认上。</summary>
-    private async Task<bool> ConfirmAsync(string title, string content, string primaryText)
+    /// <summary>
+    /// 统一的两键确认框：左边取消、右边确认。默认焦点落在确认上；
+    /// 删除、清空等破坏性操作传 <see cref="InitialFocus.Cancel"/>。
+    /// </summary>
+    private async Task<bool> ConfirmAsync(
+        string title,
+        string content,
+        string primaryText,
+        InitialFocus initialFocus = InitialFocus.Confirm)
     {
         return await ConfirmOverlay.ConfirmAsync(
             title,
             content,
             primaryText,
-            T(Keys.CommonCancel));
+            T(Keys.CommonCancel),
+            initialFocus: initialFocus);
     }
 
     /// <summary>

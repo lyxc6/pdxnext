@@ -249,7 +249,8 @@ public sealed partial class DiagnosticsPage : Page
                 if (!await ConfirmAsync(
                         T(Keys.SettingsCacheDialogClearAllTitle),
                         T(Keys.SettingsCacheDialogClearAllContent),
-                        T(Keys.CommonClear)).ConfigureAwait(true))
+                        T(Keys.CommonClear),
+                        InitialFocus.Cancel).ConfigureAwait(true))
                 {
                     return;
                 }
@@ -369,9 +370,21 @@ public sealed partial class DiagnosticsPage : Page
 
     // ------------------------------------------------------------ 对话框 / 护栏
 
-    /// <summary>统一的两键确认框：左边取消、右边确认，默认焦点落在确认上。</summary>
-    private async Task<bool> ConfirmAsync(string title, string content, string primaryText) =>
-        await ConfirmOverlay.ConfirmAsync(title, content, primaryText, T(Keys.CommonCancel));
+    /// <summary>
+    /// 统一的两键确认框：左边取消、右边确认。默认焦点落在确认上；
+    /// 清空缓存这类破坏性操作传 <see cref="InitialFocus.Cancel"/>。
+    /// </summary>
+    private async Task<bool> ConfirmAsync(
+        string title,
+        string content,
+        string primaryText,
+        InitialFocus initialFocus = InitialFocus.Confirm) =>
+        await ConfirmOverlay.ConfirmAsync(
+            title,
+            content,
+            primaryText,
+            T(Keys.CommonCancel),
+            initialFocus: initialFocus);
 
     /// <summary>事件处理器的统一护栏：页面关闭导致的取消静默忽略，其它异常只记日志。</summary>
     private async Task RunGuardedAsync(string logMessage, Func<Task> action)
