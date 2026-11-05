@@ -32,6 +32,7 @@ public static class MarkdownInlineFlowChecks
         CheckBlockImageStaysBlock();
         CheckImagePlans();
         CheckEmoticonSize();
+        CheckMarkdownViewWiring();
 
         return ChecksContext.Failures == before ? 0 : 1;
     }
@@ -121,6 +122,55 @@ public static class MarkdownInlineFlowChecks
     private static void CheckEmoticonSize()
     {
         ChecksContext.Equal("排版：表情边长固定 20px", 20d, MarkdownInlineFlow.EmoticonSize);
+    }
+
+    /// <summary>⑧ 接线：判定在 Core，但「谁来选 RichTextBlock、表情怎么出图」在控件里，断了纯函数全绿也没用。</summary>
+    private static void CheckMarkdownViewWiring()
+    {
+        var root = FindWorkspaceRoot();
+        var path = Path.Combine(root, "src", "PdxLauncher.App", "Controls", "MarkdownView.cs");
+        if (!ChecksContext.Check("排版接线：MarkdownView.cs 存在", File.Exists(path), path))
+        {
+            return;
+        }
+
+        var source = File.ReadAllText(path);
+        ChecksContext.Check(
+            "排版接线：BuildTextBlock 用 MarkdownInlineFlow.RequiresRichText 选 RichTextBlock",
+            source.Contains("if (MarkdownInlineFlow.RequiresRichText(inlines))", StringComparison.Ordinal)
+            && source.Contains("new RichTextBlock", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "排版接线：旧的 ContainsEmoticon 已删除",
+            !source.Contains("ContainsEmoticon", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "排版接线：样式分支无条件展平（不再按子节点数判断）",
+            source.Contains("AppendInlines(target, styled.Inlines, styledWeight, styledFont);", StringComparison.Ordinal)
+            && !source.Contains("styled.Inlines.Count == 1", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "排版接线：链接分支交给 AppendLink，表情按行内表情出图",
+            source.Contains("AppendLink(target, link);", StringComparison.Ordinal)
+            && source.Contains("MarkdownImageLayout.InlineEmoticon", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "排版接线：表情尺寸取自 MarkdownInlineFlow.EmoticonSize",
+            source.Contains("Width = MarkdownInlineFlow.EmoticonSize", StringComparison.Ordinal)
+            && !source.Contains("XamlImage.FromPath(path, 20)", StringComparison.Ordinal)
+            && !source.Contains("new Grid { Height = 20,", StringComparison.Ordinal));
+    }
+
+    private static string FindWorkspaceRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, "tests", "fixtures")))
+            {
+                return dir.FullName;
+            }
+
+            dir = dir.Parent;
+        }
+
+        return Directory.GetCurrentDirectory();
     }
 
     /// <summary>取文档第一段的行内流（这些用例每段只有一段）。</summary>
