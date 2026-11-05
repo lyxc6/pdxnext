@@ -22,6 +22,7 @@ public static class GamesChecks
         var logger = new NullLogger();
 
         CheckClausewitz(fs, logger);
+        CheckClausewitzTopLevelBlocks();
         CheckValveKeyValues();
         CheckLauncherSettings(fs, logger);
         CheckSyntheticLayout(fs, logger);
@@ -79,6 +80,47 @@ public static class GamesChecks
         ChecksContext.Check("容错: tags 块不进字典", !parsed.ContainsKey("tags"));
         ChecksContext.Check("容错: 嵌套块不进字典", !parsed.ContainsKey("nested_block") && !parsed.ContainsKey("inner"));
         ChecksContext.Equal("容错: BOM/注释/CRLF 后键数量", 3, parsed.Count);
+    }
+
+    /// <summary>
+    /// <see cref="ClausewitzParser.ParseBlocks"/> 的契约：dlc_metadata 是「一条 DLC 一个顶层块」，
+    /// 块名保留原大小写，块内只取标量（键小写），嵌套块与顶层标量都不产出块。
+    /// </summary>
+    private static void CheckClausewitzTopLevelBlocks()
+    {
+        Console.WriteLine("[GamesChecks] Clausewitz 顶层块解析（dlc_metadata）");
+
+        var crlf = new string(new[] { (char)13, (char)10 });
+        var text = (char)0xFEFF
+            + "# 官方 dlc_metadata" + crlf
+            + "dlc018 = {" + crlf
+            + "\tname = \"The Great Wave\"" + crlf
+            + "\tsteam_id = \"4314650\"" + crlf
+            + "\ttags = { \"a\" \"b\" }" + crlf
+            + "}" + crlf
+            + crlf
+            + "dlc019 = { name = \"State and Revolution\" steam_id = 4314660 }" + crlf
+            + "top_level_scalar = \"ignored\"" + crlf
+            + "dlc021 = { Name = \"Upper { Brace }\" steam_id = \"88\" }" + crlf;
+
+        var blocks = ClausewitzParser.ParseBlocks(text);
+        ChecksContext.Equal("块数量（顶层标量不产出块）", 3, blocks.Count);
+        if (blocks.Count == 3)
+        {
+            ChecksContext.Equal("块名大小写原样保留", "dlc018", blocks[0].Key);
+            ChecksContext.Equal("块内 name 去引号", "The Great Wave", blocks[0].Values["name"]);
+            ChecksContext.Equal("块内 steam_id 去引号", "4314650", blocks[0].Values["steam_id"]);
+            ChecksContext.Check("块内嵌套块被忽略", !blocks[0].Values.ContainsKey("tags"));
+            ChecksContext.Equal("单行块也能解析", "State and Revolution", blocks[1].Values["name"]);
+            ChecksContext.Equal("无引号数字值", "4314660", blocks[1].Values["steam_id"]);
+            ChecksContext.Equal("块内键统一小写", "Upper { Brace }", blocks[2].Values["name"]);
+            ChecksContext.Equal("引号内的花括号不打断块结构（后续键仍可读）", "88", blocks[2].Values["steam_id"]);
+        }
+
+        var unterminated = ClausewitzParser.ParseBlocks("dlc030 = { name = \"Broken\"");
+        ChecksContext.Equal("未闭合块不抛异常且不产出", 0, unterminated.Count);
+        ChecksContext.Equal("空文本返回空列表", 0, ClausewitzParser.ParseBlocks(string.Empty).Count);
+        ChecksContext.Equal("纯标量文件没有块", 0, ClausewitzParser.ParseBlocks("name = \"x\"" + crlf).Count);
     }
 
     private static void CheckValveKeyValues()

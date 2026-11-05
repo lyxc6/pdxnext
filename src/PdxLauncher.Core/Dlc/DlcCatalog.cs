@@ -18,6 +18,8 @@ public sealed class DlcCatalog : IDlcCatalog, IScanCacheInvalidator
 {
     private const string ClausewitzPattern = "*.dlc";
     private const string JsonPattern = "*.dlc.json";
+    private const string DlcMetadataDirectoryName = "dlc_metadata";
+    private const string DlcMetadataPattern = "*.txt";
     /// <summary>
     /// 同目录缩略图的候选文件名（按优先级）。
     /// 旧游戏的 DLC 都是 <c>thumbnail.png</c>；EU5 的 DLC 只有 <c>thumbnail.dds</c>，
@@ -148,6 +150,10 @@ public sealed class DlcCatalog : IDlcCatalog, IScanCacheInvalidator
         {
             CollectClausewitz(game, dlcPath, result, cancellationToken);
         }
+
+        // VIC3 1.15 起，新 DLC 只写 game/dlc_metadata/*.txt（不再补 .dlc.json），把磁盘上没有的条目补进来。
+        // 解析失败只降级为原有的 .dlc.json/.dlc 结果，绝不影响主扫描。
+        CollectDlcMetadata(dlcPath, result, cancellationToken);
 
         result.Sort(static (left, right) => string.CompareOrdinal(left.FilePathRelativeToDlcPath, right.FilePathRelativeToDlcPath));
         _logger.Info("DLC 扫描完成：" + game.GameId + "，共 " + result.Count.ToString(CultureInfo.InvariantCulture) + " 个（目录 " + dlcPath + "）。");
@@ -339,6 +345,160 @@ public sealed class DlcCatalog : IDlcCatalog, IScanCacheInvalidator
             words.Select(static word => word.Length == 0
                 ? word
                 : char.ToUpperInvariant(word[0]) + word[1..]));
+    }
+
+    /// <summary>
+    /// VIC3 1.15 起，新 DLC 只写进 <c>&lt;DlcPath&gt;/dlc_metadata/*.txt</c>，不再补
+    /// <c>game/dlc/&lt;id&gt;/&lt;id&gt;.dlc.json</c>；同目录 <c>dlc_metadata.md</c> 的官方文档约定
+    /// 块名与 dlc 文件名一致、图标路径由块名推导：
+    /// <code>
+    /// dlc019 = { name = "State and Revolution" steam_id = "4314660" type = minor priority = 8 }
+    /// </code>
+    /// <para>
+    /// 只补磁盘上没有的条目：<c>.dlc.json</c>/<c>.dlc</c> 优先，按 steam_id 或块名去重，
+    /// 因此已有的 17 个 DLC 不会被重复列出。合成条目没有 RawBytes
+    /// （<c>DlcSignatureService</c> 只哈希非空 RawBytes，带字节会改变 dlc_signature）。
+    /// </para>
+    /// </summary>
+    private void CollectDlcMetadata(string dlcPath, List<DlcInfo> result, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var directory = FindDlcMetadataDirectory(dlcPath);
+            if (directory is null)
+            {
+                return;
+            }
+
+            // 图标按官方文档写在 <game>/gfx/interface/icons/dlc_icons 下；dlcPath 可能指向 game
+            // （VIC3 真机）也可能指向 game/dlc，两种布局都取 metadata 目录的上一级（= game 根）。
+            var gameRoot = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(directory)) ?? directory;
+
+            var seenSteamIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenPopsIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var dlc in result)
+            {
+                if (!string.IsNullOrEmpty(dlc.SteamId))
+                {
+                    seenSteamIds.Add(dlc.SteamId);
+                }
+
+                if (!string.IsNullOrEmpty(dlc.PopsId))
+                {
+                    seenPopsIds.Add(dlc.PopsId);
+                }
+            }
+
+            var added = 0;
+            foreach (var file in EnumerateTopLevelFilesSafe(directory, DlcMetadataPattern))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                string text;
+                try
+                {
+                    text = _fileSystem.ReadAllText(file);
+                }
+                catch (IOException exception)
+                {
+                    _logger.Warn("读取 DLC metadata 失败，已跳过：" + file + "：" + exception.Message);
+                    continue;
+                }
+                catch (UnauthorizedAccessException exception)
+                {
+                    _logger.Warn("读取 DLC metadata 无权限，已跳过：" + file + "：" + exception.Message);
+                    continue;
+                }
+
+                foreach (var block in ClausewitzParser.ParseBlocks(text))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var name = DlcLocalization.CleanMarkup(Read(block.Values, "name"));
+                    if (string.IsNullOrEmpty(name))
+                    {
+                        _logger.Warn("DLC metadata 缺少 name，已跳过：" + file + " -> " + block.Key);
+                        continue;
+                    }
+
+                    var steamId = Read(block.Values, "steam_id");
+                    if (string.IsNullOrEmpty(steamId))
+                    {
+                        _logger.Warn("DLC metadata 缺少 steam_id，已跳过：" + file + " -> " + block.Key);
+                        continue;
+                    }
+
+                    // 磁盘描述文件优先：steam_id 或块名（= pops_id）已经存在就跳过，避免重复列出。
+                    if (seenSteamIds.Contains(steamId) || seenPopsIds.Contains(block.Key))
+                    {
+                        continue;
+                    }
+
+                    seenSteamIds.Add(steamId);
+                    seenPopsIds.Add(block.Key);
+                    result.Add(new DlcInfo(
+                        name,
+                        block.Key,
+                        steamId,
+                        "dlc_metadata/" + block.Key,
+                        ResolveDlcMetadataIcon(gameRoot, block.Key),
+                        string.Empty,
+                        Array.Empty<byte>()));
+                    added++;
+                }
+            }
+
+            if (added > 0)
+            {
+                _logger.Info("DLC metadata 补充 " + added.ToString(CultureInfo.InvariantCulture) + " 个磁盘上没有的条目：" + directory);
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // 新数据源是增量：解析失败只降级为原有的 .dlc.json/.dlc 结果，绝不让整个扫描抛异常。
+            _logger.Warn("解析 DLC metadata 失败，已降级为磁盘描述文件结果：" + exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// 找 <c>dlc_metadata</c> 目录：VIC3 真机是 <c>&lt;DlcPath&gt;/dlc_metadata</c>（dlcPath 指向 game）；
+    /// 同时兼容 dlcPath 指向 <c>game/dlc</c> 的布局（目录在上一级）。
+    /// </summary>
+    private string? FindDlcMetadataDirectory(string dlcPath)
+    {
+        var parent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(dlcPath));
+        string?[] candidates =
+        [
+            Path.Combine(dlcPath, DlcMetadataDirectoryName),
+            string.IsNullOrEmpty(parent) ? null : Path.Combine(parent, DlcMetadataDirectoryName),
+        ];
+        foreach (var candidate in candidates)
+        {
+            if (candidate is not null && _fileSystem.DirectoryExists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 官方文档：icon 路径 = <c>&lt;game&gt;/gfx/interface/icons/dlc_icons/&lt;块名&gt;.dds</c>；
+    /// banner 只给主题选择器用，不取。文件不存在就留空（与 .dlc 缺 thumbnail 时一致）。
+    /// </summary>
+    /// <param name="gameRoot">game 根目录（metadata 目录的上一级）。</param>
+    /// <param name="id">块名，即 dlc 文件名。</param>
+    private string ResolveDlcMetadataIcon(string gameRoot, string id)
+    {
+        var candidate = Path.Combine(gameRoot, "gfx", "interface", "icons", "dlc_icons", id + ".dds");
+        return _fileSystem.FileExists(candidate) ? candidate : string.Empty;
+    }
+
+    private IEnumerable<string> EnumerateTopLevelFilesSafe(string directory, string pattern)
+    {
+        // metadata 目录只放 *.txt；不递归，避免把文档/子目录里的备份也算进来。
+        var files = _fileSystem.EnumerateFiles(directory, pattern, recursive: false).ToList();
+        files.Sort(StringComparer.OrdinalIgnoreCase);
+        return files;
     }
 
     private static string ReadStringProperty(JsonElement root, string key)
