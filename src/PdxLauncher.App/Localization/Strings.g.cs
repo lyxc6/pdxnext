@@ -1017,6 +1017,7 @@ public sealed partial class Localizer
         ["settings.theme.lastCheck"] = "上次检查时间",
         ["settings.theme.lastFailure"] = "上次失败原因",
         ["settings.theme.metadataMissing"] = "未获取到该游戏元数据（可能网络失败），暂用内置素材",
+        ["settings.theme.metadataMissingNoMetadata"] = "该游戏无官方元数据",
         ["settings.theme.neverChecked"] = "从未检查",
         ["settings.theme.nextCheck"] = "下次检查时间",
         ["settings.theme.nextOnStartup"] = "下次启动时",
@@ -1028,6 +1029,7 @@ public sealed partial class Localizer
         ["settings.theme.source.installDir"] = "安装目录",
         ["settings.theme.source.online"] = "联网缓存",
         ["settings.theme.source.steam"] = "Steam 封面",
+        ["settings.theme.source.steamHero"] = "Steam 官方库页",
         ["settings.theme.statusDone"] = "主题检查完成：来源={0}，下次检查 {1}",
         ["settings.theme.statusFailed"] = "主题检查失败：{0}",
         ["settings.theme.statusOff"] = "已关闭联网主题检查：只使用安装目录与内置占位主题",
@@ -2323,6 +2325,7 @@ public sealed partial class Localizer
         ["settings.theme.lastCheck"] = "Last checked",
         ["settings.theme.lastFailure"] = "Last failure",
         ["settings.theme.metadataMissing"] = "Couldn't fetch metadata for this game (network failure possible); using bundled art",
+        ["settings.theme.metadataMissingNoMetadata"] = "No official metadata for this game",
         ["settings.theme.neverChecked"] = "Never checked",
         ["settings.theme.nextCheck"] = "Next check",
         ["settings.theme.nextOnStartup"] = "On next launch",
@@ -2334,6 +2337,7 @@ public sealed partial class Localizer
         ["settings.theme.source.installDir"] = "Game folder",
         ["settings.theme.source.online"] = "Online cache",
         ["settings.theme.source.steam"] = "Steam cover",
+        ["settings.theme.source.steamHero"] = "Steam library art",
         ["settings.theme.statusDone"] = "Theme check finished: source={0}, next check {1}",
         ["settings.theme.statusFailed"] = "Theme check failed: {0}",
         ["settings.theme.statusOff"] = "Theme check off: only the game folder and the built-in placeholder are used",
@@ -3629,6 +3633,7 @@ public sealed partial class Localizer
         ("settings.theme.lastCheck", "SettingsThemeLastCheck"),
         ("settings.theme.lastFailure", "SettingsThemeLastFailure"),
         ("settings.theme.metadataMissing", "SettingsThemeMetadataMissing"),
+        ("settings.theme.metadataMissingNoMetadata", "SettingsThemeMetadataMissingNoMetadata"),
         ("settings.theme.neverChecked", "SettingsThemeNeverChecked"),
         ("settings.theme.nextCheck", "SettingsThemeNextCheck"),
         ("settings.theme.nextOnStartup", "SettingsThemeNextOnStartup"),
@@ -3640,6 +3645,7 @@ public sealed partial class Localizer
         ("settings.theme.source.installDir", "SettingsThemeSourceInstallDir"),
         ("settings.theme.source.online", "SettingsThemeSourceOnline"),
         ("settings.theme.source.steam", "SettingsThemeSourceSteam"),
+        ("settings.theme.source.steamHero", "SettingsThemeSourceSteamHero"),
         ("settings.theme.statusDone", "SettingsThemeStatusDone"),
         ("settings.theme.statusFailed", "SettingsThemeStatusFailed"),
         ("settings.theme.statusOff", "SettingsThemeStatusOff"),
@@ -4933,6 +4939,7 @@ public sealed partial class Localizer
     public string SettingsThemeLastCheck => Format("settings.theme.lastCheck");
     public string SettingsThemeLastFailure => Format("settings.theme.lastFailure");
     public string SettingsThemeMetadataMissing => Format("settings.theme.metadataMissing");
+    public string SettingsThemeMetadataMissingNoMetadata => Format("settings.theme.metadataMissingNoMetadata");
     public string SettingsThemeNeverChecked => Format("settings.theme.neverChecked");
     public string SettingsThemeNextCheck => Format("settings.theme.nextCheck");
     public string SettingsThemeNextOnStartup => Format("settings.theme.nextOnStartup");
@@ -4944,6 +4951,7 @@ public sealed partial class Localizer
     public string SettingsThemeSourceInstallDir => Format("settings.theme.source.installDir");
     public string SettingsThemeSourceOnline => Format("settings.theme.source.online");
     public string SettingsThemeSourceSteam => Format("settings.theme.source.steam");
+    public string SettingsThemeSourceSteamHero => Format("settings.theme.source.steamHero");
     public string SettingsThemeStatusDone => Format("settings.theme.statusDone");
     public string SettingsThemeStatusFailed => Format("settings.theme.statusFailed");
     public string SettingsThemeStatusOff => Format("settings.theme.statusOff");
@@ -6240,6 +6248,7 @@ internal static class Keys
     public const string SettingsThemeLastCheck = "settings.theme.lastCheck";
     public const string SettingsThemeLastFailure = "settings.theme.lastFailure";
     public const string SettingsThemeMetadataMissing = "settings.theme.metadataMissing";
+    public const string SettingsThemeMetadataMissingNoMetadata = "settings.theme.metadataMissingNoMetadata";
     public const string SettingsThemeNeverChecked = "settings.theme.neverChecked";
     public const string SettingsThemeNextCheck = "settings.theme.nextCheck";
     public const string SettingsThemeNextOnStartup = "settings.theme.nextOnStartup";
@@ -6251,6 +6260,7 @@ internal static class Keys
     public const string SettingsThemeSourceInstallDir = "settings.theme.source.installDir";
     public const string SettingsThemeSourceOnline = "settings.theme.source.online";
     public const string SettingsThemeSourceSteam = "settings.theme.source.steam";
+    public const string SettingsThemeSourceSteamHero = "settings.theme.source.steamHero";
     public const string SettingsThemeStatusDone = "settings.theme.statusDone";
     public const string SettingsThemeStatusFailed = "settings.theme.statusFailed";
     public const string SettingsThemeStatusOff = "settings.theme.statusOff";

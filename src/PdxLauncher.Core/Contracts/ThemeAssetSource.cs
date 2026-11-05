@@ -23,4 +23,10 @@ public enum ThemeAssetSource
     /// 层级上等价于「层 2.5」：比内置占位图优先，仍让位给安装目录素材与联网缓存。
     /// </summary>
     Bundled = 4,
+
+    /// <summary>
+    /// Steam 官方库页大图（library_hero.jpg）：metadata 没有背景记录、但有 AppId 时，
+    /// 按 AppId 从 Steam CDN 取官方库页背景，优于随包内置图。失败仍回落 <see cref="Bundled"/>。
+    /// </summary>
+    SteamHero = 5,
 }

@@ -44,6 +44,15 @@ public sealed class ThemeResolver : IThemeResolver
     /// </summary>
     public const int SteamCapsuleTimeoutMilliseconds = 12_000;
 
+    /// <summary>Steam 官方库页大图（library_hero.jpg）失败后的重试间隔：10 分钟。</summary>
+    public const long SteamHeroRetryMilliseconds = 600_000;
+
+    /// <summary>索引来源标识：metadata 下发的素材。</summary>
+    public const string MetadataSource = "metadata";
+
+    /// <summary>索引来源标识：Steam 官方库页大图。</summary>
+    public const string SteamHeroSource = "steam-hero";
+
     /// <summary>
     /// Steam 官方商店头图的旧式静态地址（460×215，无鉴权、无防盗链）。
     /// 仅作为 <see cref="ISteamCoverUrlResolver"/> 缺席或解析失败时的兜底：
@@ -113,7 +122,7 @@ public sealed class ThemeResolver : IThemeResolver
     {
         ArgumentNullException.ThrowIfNull(game);
 
-        var layer2 = ResolveLayer2(game);
+        var layer2 = ResolveInstalledLayer(game);
         var cache = ReadCache(game.GameId);
         var index = AssetIndex.Load(_indexDocument(game.GameId), _logger);
 
@@ -123,7 +132,11 @@ public sealed class ThemeResolver : IThemeResolver
             _logger.Info(
                 "主题决策: gameId=" + game.GameId + ", reason=离线, lastChecked="
                 + FormatTime(index.LastCheckedUtc));
-            return WithSteamCapsule(game, Merge(layer2, cache));
+            var offline = ApplyBundled(
+                game,
+                TagSteamHeroSource(game, Merge(layer2, cache)),
+                hasOnlineCache: cache.Count > 0);
+            return WithSteamCapsule(game, offline);
         }
 
         if (index.Assets.Count == 0)
@@ -142,7 +155,14 @@ public sealed class ThemeResolver : IThemeResolver
         if (!decision.ShouldRefresh)
         {
             LogSkip(game.GameId, index);
-            return await WithSteamCapsuleAsync(game, Merge(layer2, cache), cancellationToken)
+            var skipped = await WithSteamHeroAsync(
+                    game,
+                    TagSteamHeroSource(game, Merge(layer2, cache)),
+                    forceRefresh,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            skipped = ApplyBundled(game, skipped, hasOnlineCache: cache.Count > 0);
+            return await WithSteamCapsuleAsync(game, skipped, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -161,7 +181,15 @@ public sealed class ThemeResolver : IThemeResolver
             RecordFailure(game.GameId, "主题联网刷新异常: " + ex.Message);
         }
 
-        return await WithSteamCapsuleAsync(game, Merge(layer2, ReadCache(game.GameId)), cancellationToken)
+        var refreshedCache = ReadCache(game.GameId);
+        var resolved = await WithSteamHeroAsync(
+                game,
+                TagSteamHeroSource(game, Merge(layer2, refreshedCache)),
+                forceRefresh,
+                cancellationToken)
+            .ConfigureAwait(false);
+        resolved = ApplyBundled(game, resolved, hasOnlineCache: refreshedCache.Count > 0);
+        return await WithSteamCapsuleAsync(game, resolved, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -253,6 +281,124 @@ public sealed class ThemeResolver : IThemeResolver
     }
 
     /// <summary>
+    /// 「Steam 官方库页大图」兜底：只在 metadata / 安装目录 / 在线缓存都给不出背景、
+    /// 且该游戏有 Steam AppId 时尝试。EU5（3450310）在 metadata 里没有记录，靠这一层拿到 1920×620 官方图。
+    /// 下载成功写进同一个 theme-cache（索引来源标 steam-hero）；失败按 10 分钟退避并回落到内置图，绝不空白。
+    /// </summary>
+    private async Task<ThemeSpec> WithSteamHeroAsync(
+        GameInstallation game,
+        ThemeSpec spec,
+        bool forceRefresh,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(spec.Background))
+        {
+            return spec;
+        }
+
+        if (game.SteamAppId is not int appId || appId <= 0)
+        {
+            return spec;
+        }
+
+        if (_steamCovers is null)
+        {
+            return spec;
+        }
+
+        if (!forceRefresh && IsSteamHeroBackoff(appId))
+        {
+            _logger.Info("steam-hero 退避中，跳过: appid=" + appId + ", gameId=" + game.GameId);
+            return spec;
+        }
+
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(SteamCapsuleTimeoutMilliseconds);
+            var token = timeout.Token;
+
+            var headerUrl = await _steamCovers
+                .ResolveHeaderImageUrlAsync(appId, token)
+                .ConfigureAwait(false);
+            var heroUrl = SteamHeroUrl.ForLibraryHero(headerUrl);
+            if (heroUrl is null)
+            {
+                _logger.Warn(
+                    "steam-hero 不可用，回落内置图: appid=" + appId
+                    + ", gameId=" + game.GameId + ", 原因=头图地址缺失或无法推导");
+                MarkSteamHeroMiss(appId);
+                return spec;
+            }
+
+            var target = _fs.Combine(
+                _cacheRoot,
+                game.GameId + "-" + AssetKeys.Background + "-" + ShortHash(heroUrl));
+            var downloaded = await _assets
+                .DownloadConditionalAsync(heroUrl, target, etag: null, lastModified: null, token)
+                .ConfigureAwait(false);
+
+            if (downloaded.Status != AssetDownloadStatus.Downloaded || downloaded.LocalPath is null)
+            {
+                _logger.Warn(
+                    "steam-hero 不可用，回落内置图: appid=" + appId
+                    + ", gameId=" + game.GameId + ", 原因=下载失败(" + downloaded.Status + ")");
+                MarkSteamHeroMiss(appId);
+                return spec;
+            }
+
+            var index = AssetIndex.Load(_indexDocument(game.GameId), _logger);
+            var previousFileName = index.Find(AssetKeys.Background)?.FileName;
+            var newFileName = _fs.GetFileName(downloaded.LocalPath);
+            index.Set(
+                AssetKeys.Background,
+                heroUrl,
+                newFileName,
+                downloaded.ETag,
+                downloaded.LastModified,
+                SteamHeroSource);
+            index.Save(_indexDocument(game.GameId), _logger);
+
+            if (previousFileName is not null
+                && !string.Equals(previousFileName, newFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                TryDeleteCacheFile(_fs.Combine(_cacheRoot, previousFileName));
+            }
+
+            _logger.Info(
+                "steam-hero: appid=" + appId + " 分辨率=" + DescribeImageSize(downloaded.LocalPath)
+                + ", 字节=" + _fs.GetFileSize(downloaded.LocalPath)
+                + ", gameId=" + game.GameId + " → " + downloaded.LocalPath);
+
+            return spec with
+            {
+                Background = downloaded.LocalPath,
+                Source = ThemeAssetSource.SteamHero,
+            };
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.Warn(
+                "steam-hero 不可用，回落内置图: appid=" + appId
+                + ", gameId=" + game.GameId + ", 原因=超时(" + SteamCapsuleTimeoutMilliseconds + "ms)");
+            MarkSteamHeroMiss(appId);
+            return spec;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn(
+                "steam-hero 不可用，回落内置图: appid=" + appId
+                + ", gameId=" + game.GameId + ", 原因=" + ex.Message);
+            MarkSteamHeroMiss(appId);
+            return spec;
+        }
+    }
+
+    /// <summary>
     /// 先问商店接口要带 hash 的真实头图地址；没有解析器或解析失败时退回旧式静态地址
     /// （老游戏仍可用，新游戏会 404 → 由调用方记一次退避）。
     /// </summary>
@@ -301,9 +447,18 @@ public sealed class ThemeResolver : IThemeResolver
     private string SteamCapsuleMissPath(int appId) =>
         _fs.Combine(_cacheRoot, "steam-" + appId + ".miss");
 
-    private bool IsSteamCapsuleBackoff(int appId)
+    private string SteamHeroMissPath(int appId) =>
+        _fs.Combine(_cacheRoot, "steam-" + appId + "-hero.miss");
+
+    private bool IsSteamCapsuleBackoff(int appId) =>
+        IsBackoff(SteamCapsuleMissPath(appId), SteamCapsuleRetryMilliseconds);
+
+    private bool IsSteamHeroBackoff(int appId) =>
+        IsBackoff(SteamHeroMissPath(appId), SteamHeroRetryMilliseconds);
+
+    /// <summary>失败标记未过期即处于退避窗口，窗口内一个请求都不发。</summary>
+    private bool IsBackoff(string path, long retryMilliseconds)
     {
-        var path = SteamCapsuleMissPath(appId);
         if (!_fs.FileExists(path))
         {
             return false;
@@ -318,12 +473,82 @@ public sealed class ThemeResolver : IThemeResolver
             }
 
             var missedAt = new DateTimeOffset(ticks, TimeSpan.Zero);
-            return _clock.UtcNow - missedAt < TimeSpan.FromMilliseconds(SteamCapsuleRetryMilliseconds);
+            return _clock.UtcNow - missedAt < TimeSpan.FromMilliseconds(retryMilliseconds);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return false;
         }
+    }
+
+    private void MarkSteamHeroMiss(int appId)
+    {
+        try
+        {
+            _fs.EnsureDirectory(_cacheRoot);
+            _fs.WriteAllTextAtomic(
+                SteamHeroMissPath(appId),
+                _clock.UtcNow.UtcTicks.ToString(CultureInfo.InvariantCulture));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.Warn("Steam 库页大图退避标记写入失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 从下载到的字节里读图片像素尺寸，只用于诊断日志（读不出来就记「未知」，绝不影响解析）。
+    /// 支持 PNG（IHDR）与 JPEG（SOF 段）。
+    /// </summary>
+    private string DescribeImageSize(string path)
+    {
+        try
+        {
+            var bytes = _fs.ReadAllBytes(path);
+            if (bytes.Length >= 24
+                && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+            {
+                var width = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+                var height = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+                return width + "x" + height;
+            }
+
+            if (bytes.Length > 4 && bytes[0] == 0xFF && bytes[1] == 0xD8)
+            {
+                var i = 2;
+                while (i + 9 < bytes.Length)
+                {
+                    if (bytes[i] != 0xFF)
+                    {
+                        i++;
+                        continue;
+                    }
+
+                    var marker = bytes[i + 1];
+                    if (marker is >= 0xC0 and <= 0xCF && marker is not 0xC4 and not 0xC8 and not 0xCC)
+                    {
+                        var height = (bytes[i + 5] << 8) | bytes[i + 6];
+                        var width = (bytes[i + 7] << 8) | bytes[i + 8];
+                        return width + "x" + height;
+                    }
+
+                    if (marker is 0xD8 or 0x01 or >= 0xD0 and <= 0xD7)
+                    {
+                        i += 2;
+                        continue;
+                    }
+
+                    var length = (bytes[i + 2] << 8) | bytes[i + 3];
+                    i += length >= 2 ? length : 2;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return "未知";
+        }
+
+        return "未知";
     }
 
     private void MarkSteamCapsuleMiss(int appId)
@@ -476,28 +701,75 @@ public sealed class ThemeResolver : IThemeResolver
             index.MetadataMissing);
     }
 
-    private ThemeSpec ResolveLayer2(GameInstallation game)
+    /// <summary>
+    /// 层2：安装目录主题（只取 game.Theme 本身）。
+    /// 内置素材不再在这里补背景——它要排在 Steam 官方库页大图之后，
+    /// 由 <see cref="ApplyBundled"/> 在最末兜底，否则 EU5 这类「有内置图、无 metadata」的游戏永远轮不到官方图。
+    /// </summary>
+    private static ThemeSpec ResolveInstalledLayer(GameInstallation game)
     {
         var installed = game.Theme;
-        var bundled = _bundled?.TryResolve(game);
-
         if (installed is not null && HasAnyPath(installed))
         {
-            // 有安装目录主题、但没有背景（常见：launcher-settings.json 里只有 logo/按钮）：
-            // 只要自带美术有背景就补上，绝不把「缺背景」留给纯色底。
-            if (string.IsNullOrWhiteSpace(installed.Background) && bundled?.Background is { } background)
-            {
-                return installed with
-                {
-                    Background = background,
-                    Source = ThemeAssetSource.Bundled,
-                };
-            }
-
             return installed;
         }
 
-        return bundled ?? installed ?? DefaultThemeSpec();
+        return installed ?? DefaultThemeSpec();
+    }
+
+    /// <summary>
+    /// 内置素材兜底：只有前面所有来源都没给出背景时才补，绝不覆盖在线/官方图。
+    /// 有在线缓存时保留 Merge 推导出的来源，否则标成 Bundled。
+    /// </summary>
+    private ThemeSpec ApplyBundled(GameInstallation game, ThemeSpec spec, bool hasOnlineCache)
+    {
+        if (!string.IsNullOrWhiteSpace(spec.Background))
+        {
+            return spec;
+        }
+
+        var bundled = _bundled?.TryResolve(game);
+        if (bundled?.Background is not { } background)
+        {
+            return spec;
+        }
+
+        return spec with
+        {
+            Background = background,
+            Source = hasOnlineCache ? spec.Source : ThemeAssetSource.Bundled,
+        };
+    }
+
+    /// <summary>
+    /// 缓存里那张背景若来自 Steam 官方库页，把来源标成 <see cref="ThemeAssetSource.SteamHero"/>，
+    /// 让设置页能说清「这张图来自 Steam 官方库页」。
+    /// </summary>
+    private ThemeSpec TagSteamHeroSource(GameInstallation game, ThemeSpec spec)
+    {
+        if (string.IsNullOrWhiteSpace(spec.Background))
+        {
+            return spec;
+        }
+
+        var index = AssetIndex.Load(_indexDocument(game.GameId), _logger);
+        var entry = index.Find(AssetKeys.Background);
+        if (entry is null
+            || entry.FileName is not { } fileName
+            || !string.Equals(entry.Source, SteamHeroSource, StringComparison.OrdinalIgnoreCase))
+        {
+            return spec;
+        }
+
+        var cachedPath = _fs.Combine(_cacheRoot, fileName);
+        if (!string.Equals(spec.Background, cachedPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return spec;
+        }
+
+        return _fs.FileExists(cachedPath)
+            ? spec with { Source = ThemeAssetSource.SteamHero }
+            : spec;
     }
 
     private static ThemeSpec Merge(ThemeSpec layer2, Dictionary<string, string> cache)
@@ -738,7 +1010,7 @@ public sealed class ThemeResolver : IThemeResolver
         }
 
         var newFileName = _fs.GetFileName(result.LocalPath);
-        index.Set(key, url, newFileName, result.ETag, result.LastModified);
+        index.Set(key, url, newFileName, result.ETag, result.LastModified, MetadataSource);
         cache[key] = result.LocalPath;
 
         // 新旧文件名不同就清掉旧文件，避免缓存目录按版本堆积。

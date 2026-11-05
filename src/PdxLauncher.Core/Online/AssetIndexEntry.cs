@@ -17,4 +17,10 @@ public sealed class AssetIndexEntry
 
     /// <summary>上次 200 响应带回来的 Last-Modified，没有 ETag 时用 If-Modified-Since。</summary>
     public string? LastModified { get; set; }
+
+    /// <summary>
+    /// 素材来源标识（<c>metadata</c> / <c>steam-hero</c>）。设置页据此说清
+    /// 「这张图来自 Steam 官方库页」还是「元数据下发的素材」。
+    /// </summary>
+    public string? Source { get; set; }
 }
