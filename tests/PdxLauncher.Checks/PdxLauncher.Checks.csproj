@@ -209,5 +209,16 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\SaveScanRequestTracker.cs" Link="Linked\SaveScanRequestTracker.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\SaveRowText.cs" Link="Linked\SaveRowText.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\SaveRowAutomationWatcher.cs" Link="Linked\SaveRowAutomationWatcher.cs" />
+    <!--
+      两段式存档加载的纯 C# 部件：粗略行状态（首填后拒绝覆盖）、按批分组、行视图模型与
+      视图模型本身。它们不引用 Microsoft.UI.Xaml，可在控制台自检里原样链接：
+      第一段先铺行、第二段原位补细节、旧代次不写回，都由 ProgressiveSavesChecks 钉住。
+      SizeFormatter 是行「大小」列的格式化器，随行视图模型一起链接。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Localization\SizeFormatter.cs" Link="Linked\SizeFormatter.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveRowState.cs" Link="Linked\SaveRowState.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveGameRowViewModel.cs" Link="Linked\SaveGameRowViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SavesViewModel.cs" Link="Linked\SavesViewModel.cs" />
   </ItemGroup>
 </Project>

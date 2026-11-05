@@ -21,6 +21,7 @@
   "saves.status.failed": "Scan failed",
   "saves.status.lastScan": "Last scan: {0} · {1} saves found",
   "saves.status.noGame": "Select a game in the library first",
+  "saves.status.reading": "Reading {0} of {1}",
   "saves.status.scanning": "Scanning saves…",
   "saves.title": "Saves",
   "saves.version": "Version {0}"

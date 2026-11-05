@@ -48,4 +48,27 @@ internal static class Keys
     public const string AchievementsUnavailableNoGame = "achievements.unavailable.noGame";
     public const string AchievementsUnavailableNotSupported = "achievements.unavailable.notSupported";
     public const string AchievementsUnavailableSteamUnavailable = "achievements.unavailable.steamUnavailable";
+    public const string SavesCity = "saves.city";
+    public const string SavesCountry = "saves.country";
+    public const string SavesDateFallback = "saves.dateFallback";
+    public const string SavesEmptyEmptyMessage = "saves.empty.empty.message";
+    public const string SavesEmptyEmptyTitle = "saves.empty.empty.title";
+    public const string SavesEmptyFailedMessage = "saves.empty.failed.message";
+    public const string SavesEmptyFailedTitle = "saves.empty.failed.title";
+    public const string SavesEmptyNoDirectoryMessage = "saves.empty.noDirectory.message";
+    public const string SavesEmptyNoDirectoryTitle = "saves.empty.noDirectory.title";
+    public const string SavesEmptyNoGameMessage = "saves.empty.noGame.message";
+    public const string SavesEmptyNoGameTitle = "saves.empty.noGame.title";
+    public const string SavesExperimental = "saves.experimental";
+    public const string SavesExperimentalTooltip = "saves.experimentalTooltip";
+    public const string SavesMetadataUnreadable = "saves.metadataUnreadable";
+    public const string SavesNoGame = "saves.noGame";
+    public const string SavesRowNamePair = "saves.rowNamePair";
+    public const string SavesSaveName = "saves.saveName";
+    public const string SavesStatusFailed = "saves.status.failed";
+    public const string SavesStatusLastScan = "saves.status.lastScan";
+    public const string SavesStatusNoGame = "saves.status.noGame";
+    public const string SavesStatusReading = "saves.status.reading";
+    public const string SavesStatusScanning = "saves.status.scanning";
+    public const string SavesVersion = "saves.version";
 }

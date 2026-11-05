@@ -21,6 +21,7 @@
   "saves.status.failed": "扫描失败",
   "saves.status.lastScan": "上次扫描：{0} · 找到 {1} 个存档",
   "saves.status.noGame": "请先在游戏库中选择一款游戏",
+  "saves.status.reading": "正在读取 {0} / {1}",
   "saves.status.scanning": "正在扫描存档…",
   "saves.title": "存档",
   "saves.version": "版本 {0}"

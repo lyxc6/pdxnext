@@ -49,6 +49,12 @@ public static class AppServices
     /// </summary>
     public static ISaveGameLibrary SaveGames { get; private set; } = null!;
 
+    /// <summary>
+    /// 存档页的两段式数据源（先枚举文件、再逐条解析）；与 <see cref="SaveGames"/> 是同一个实例，
+    /// 只是暴露更窄的接口，避免页面绕过「先粗略后细节」的顺序。
+    /// </summary>
+    public static ISaveGameFileIndex SaveGameFiles { get; private set; } = null!;
+
     public static IDlcSignatureService DlcSignatures { get; private set; } = null!;
 
     /// <summary>DLC 简介（磁盘缓存 + 可选的 Steam 商店补全）。</summary>
@@ -279,7 +285,9 @@ public static class AppServices
         LoadFiles = loadFiles;
         Launcher = launcher;
         ContinueGame = continueGame;
-        SaveGames = new SaveGameScanner(fileSystem, logger);
+        var saveGames = new SaveGameScanner(fileSystem, logger);
+        SaveGames = saveGames;
+        SaveGameFiles = saveGames;
         DlcSignatures = dlcSignatures;
         DlcDescriptions = dlcDescriptions;
         NewsFeed = newsFeed;

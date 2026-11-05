@@ -770,6 +770,7 @@ public sealed partial class Localizer
         ["saves.status.failed"] = "扫描失败",
         ["saves.status.lastScan"] = "上次扫描：{0} · 找到 {1} 个存档",
         ["saves.status.noGame"] = "请先在游戏库中选择一款游戏",
+        ["saves.status.reading"] = "正在读取 {0} / {1}",
         ["saves.status.scanning"] = "正在扫描存档…",
         ["saves.title"] = "存档",
         ["saves.version"] = "版本 {0}",
@@ -2162,6 +2163,7 @@ public sealed partial class Localizer
         ["saves.status.failed"] = "Scan failed",
         ["saves.status.lastScan"] = "Last scan: {0} · {1} saves found",
         ["saves.status.noGame"] = "Select a game in the library first",
+        ["saves.status.reading"] = "Reading {0} of {1}",
         ["saves.status.scanning"] = "Scanning saves…",
         ["saves.title"] = "Saves",
         ["saves.version"] = "Version {0}",
@@ -3554,6 +3556,7 @@ public sealed partial class Localizer
         ("saves.status.failed", "SavesStatusFailed"),
         ("saves.status.lastScan", "SavesStatusLastScan"),
         ("saves.status.noGame", "SavesStatusNoGame"),
+        ("saves.status.reading", "SavesStatusReading"),
         ("saves.status.scanning", "SavesStatusScanning"),
         ("saves.title", "SavesTitle"),
         ("saves.version", "SavesVersion"),
@@ -4944,6 +4947,7 @@ public sealed partial class Localizer
     public string SavesStatusFailed => Format("saves.status.failed");
     public string SavesStatusLastScan => Format("saves.status.lastScan");
     public string SavesStatusNoGame => Format("saves.status.noGame");
+    public string SavesStatusReading => Format("saves.status.reading");
     public string SavesStatusScanning => Format("saves.status.scanning");
     public string SavesTitle => Format("saves.title");
     public string SavesVersion => Format("saves.version");
@@ -6337,6 +6341,7 @@ internal static class Keys
     public const string SavesStatusFailed = "saves.status.failed";
     public const string SavesStatusLastScan = "saves.status.lastScan";
     public const string SavesStatusNoGame = "saves.status.noGame";
+    public const string SavesStatusReading = "saves.status.reading";
     public const string SavesStatusScanning = "saves.status.scanning";
     public const string SavesTitle = "saves.title";
     public const string SavesVersion = "saves.version";

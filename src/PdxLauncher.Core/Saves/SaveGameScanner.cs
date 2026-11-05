@@ -11,7 +11,7 @@ using PdxLauncher.Core.Games;
 /// 单文件失败只降级该条结果。
 /// </para>
 /// </summary>
-public sealed class SaveGameScanner : ISaveGameLibrary
+public sealed class SaveGameScanner : ISaveGameLibrary, ISaveGameFileIndex
 {
     /// <summary>解析并行度。</summary>
     public const int MaxDegreeOfParallelism = 4;
@@ -59,20 +59,37 @@ public sealed class SaveGameScanner : ISaveGameLibrary
         IEnumerable<string> gameIds,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(gameIds);
-
-        var ids = gameIds
-            .Where(static id => !string.IsNullOrWhiteSpace(id))
-            .Select(KnownGames.CanonicalizeGameId)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
+        var ids = NormalizeGameIds(gameIds);
         if (ids.Length == 0)
         {
             return Task.FromResult<IReadOnlyList<SaveGameMeta>>([]);
         }
 
         return Task.Run(() => ScanCoreAsync(ids, cancellationToken), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<SaveFileScanResult> ScanFilesAsync(
+        IEnumerable<string> gameIds,
+        CancellationToken cancellationToken)
+    {
+        var ids = NormalizeGameIds(gameIds);
+        if (ids.Length == 0)
+        {
+            return Task.FromResult(new SaveFileScanResult([], [], false));
+        }
+
+        return Task.Run(() => ScanFilesCore(ids, cancellationToken), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public SaveGameMeta ParseFile(SaveFileEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+
+        // 复用与全量扫描完全相同的解析器；把第一段已经取到的大小/时间传进去，
+        // 避免解析阶段再对同一文件重复 stat。
+        return _reader.Parse(entry.GameId, entry.FilePath, entry.Container, entry.FileSize, entry.LastWriteUtc);
     }
 
     /// <inheritdoc />
@@ -162,6 +179,96 @@ public sealed class SaveGameScanner : ISaveGameLibrary
             .ToArray();
         _snapshot = Array.AsReadOnly(merged);
         return _snapshot;
+    }
+
+    /// <summary>
+    /// 第一段：只递归枚举候选文件并读取大小/文件时间，不解压、不打开内容。
+    /// 候选收集规则与 <see cref="ScanCoreAsync"/> 共用 <see cref="Collect"/>，深度/扩展名/上限完全一致。
+    /// </summary>
+    private SaveFileScanResult ScanFilesCore(
+        IReadOnlyList<string> gameIds,
+        CancellationToken cancellationToken)
+    {
+        var locations = new List<SaveLocationInfo>();
+        var candidates = new List<Candidate>();
+        var truncated = false;
+
+        foreach (var gameId in gameIds)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            locations.AddRange(_locations.GetLocations(gameId));
+
+            foreach (var location in _locations.Resolve(gameId))
+            {
+                Collect(location, location.Directory, 0, candidates, ref truncated, cancellationToken);
+                if (truncated)
+                {
+                    break;
+                }
+            }
+
+            if (truncated)
+            {
+                break;
+            }
+        }
+
+        if (truncated)
+        {
+            _logger.Warn($"存档枚举达到候选上限 {_maxFiles}，列表已截断。");
+        }
+
+        var files = new List<SaveFileEntry>(candidates.Count);
+        foreach (var candidate in candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var entry = SaveFileEntry.TryCreate(
+                candidate.GameId,
+                candidate.FilePath,
+                _fileSystem.GetFileSize(candidate.FilePath),
+                ReadLastWriteUtc(candidate.FilePath),
+                candidate.Container);
+            if (entry is not null)
+            {
+                files.Add(entry);
+            }
+        }
+
+        var ordered = files
+            .OrderBy(static file => file.GameId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static file => file.FileName, StringComparer.Ordinal)
+            .ThenBy(static file => file.FilePath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return new SaveFileScanResult(Array.AsReadOnly(ordered), locations, truncated);
+    }
+
+    private static string[] NormalizeGameIds(IEnumerable<string> gameIds)
+    {
+        ArgumentNullException.ThrowIfNull(gameIds);
+
+        return gameIds
+            .Where(static id => !string.IsNullOrWhiteSpace(id))
+            .Select(KnownGames.CanonicalizeGameId)
+            .Where(static id => id.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// 与 <see cref="SavContainerReader"/> 相同的时间来源（<c>File.GetLastWriteTimeUtc</c>）；
+    /// 属性读不到时退回 <see cref="DateTimeOffset.MinValue"/>，让行里显示回退日期而不是崩。
+    /// </summary>
+    private static DateTimeOffset ReadLastWriteUtc(string filePath)
+    {
+        try
+        {
+            return new DateTimeOffset(File.GetLastWriteTimeUtc(filePath));
+        }
+        catch (Exception)
+        {
+            return DateTimeOffset.MinValue;
+        }
     }
 
     private void Collect(
