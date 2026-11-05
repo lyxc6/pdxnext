@@ -18,6 +18,12 @@ public static class SteamAchievementMapping
     public const string EmptyMessageKey = "achievements.unavailable.empty";
 
     /// <summary>
+    /// 既没有本地化、也没有 Steam 显示名时的占位符。
+    /// <para>绝不能用 API 名兜底：API 名是 <c>achievement_vox_populi</c> 这种内部标识，不是给人看的。</para>
+    /// </summary>
+    public const string UnknownName = "—";
+
+    /// <summary>
     /// 宿主结果 → 快照。
     /// <para>结果码语义：<see cref="SteamAchievementCodes.NoAchievements"/> 归为
     /// <see cref="AchievementAvailability.Empty"/>，其余非成功码一律归为
@@ -25,9 +31,11 @@ public static class SteamAchievementMapping
     /// </summary>
     /// <param name="result">宿主结果；null 表示宿主输出无法解码。</param>
     /// <param name="fetchedAtUtc">取数时间；为空则用当前 UTC 时间。</param>
+    /// <param name="localization">游戏本地化字典（见 <see cref="SteamAchievementLocalization.Load"/>）；可为空。</param>
     public static AchievementSnapshot FromHostResult(
         SteamHostAchievementsResult? result,
-        DateTimeOffset? fetchedAtUtc = null)
+        DateTimeOffset? fetchedAtUtc = null,
+        IReadOnlyDictionary<string, string>? localization = null)
     {
         var fetchedAt = fetchedAtUtc ?? DateTimeOffset.UtcNow;
         if (result is null)
@@ -37,7 +45,7 @@ public static class SteamAchievementMapping
 
         if (result.Ok)
         {
-            var entries = MapEntries(result.Items);
+            var entries = MapEntries(result.Items, localization);
             if (entries.Count == 0)
             {
                 return Empty(fetchedAt);
@@ -60,7 +68,11 @@ public static class SteamAchievementMapping
     }
 
     /// <summary>把宿主条目映射成 <see cref="AchievementEntry"/>（过滤掉没有 id 的脏数据）。</summary>
-    public static IReadOnlyList<AchievementEntry> MapEntries(IReadOnlyList<SteamHostAchievementItem>? items)
+    /// <param name="items">宿主条目。</param>
+    /// <param name="localization">游戏本地化字典；有值时优先于 Steam 的英文显示名。</param>
+    public static IReadOnlyList<AchievementEntry> MapEntries(
+        IReadOnlyList<SteamHostAchievementItem>? items,
+        IReadOnlyDictionary<string, string>? localization = null)
     {
         if (items is null || items.Count == 0)
         {
@@ -75,10 +87,15 @@ public static class SteamAchievementMapping
                 continue;
             }
 
+            var localizedName = SteamAchievementLocalization.Name(localization, item.Name);
+            var localizedDescription = SteamAchievementLocalization.Description(localization, item.Name);
+
             entries.Add(new AchievementEntry(
                 Id: item.Name,
-                Name: string.IsNullOrWhiteSpace(item.DisplayName) ? item.Name : item.DisplayName,
-                Description: item.Description ?? string.Empty,
+                Name: ResolveName(item, localizedName),
+                Description: string.IsNullOrWhiteSpace(localizedDescription)
+                    ? item.Description ?? string.Empty
+                    : localizedDescription,
                 IsHidden: item.Hidden,
                 IsUnlocked: item.Achieved,
                 UnlockTimeUtc: ToUnlockTime(item.Achieved, item.UnlockTime),
@@ -87,6 +104,24 @@ public static class SteamAchievementMapping
         }
 
         return entries;
+    }
+
+    /// <summary>名字优先级：本地化 → Steam displayName → 占位符；API 名永远不露给用户。</summary>
+    private static string ResolveName(SteamHostAchievementItem item, string? localizedName)
+    {
+        if (!string.IsNullOrWhiteSpace(localizedName))
+        {
+            return localizedName;
+        }
+
+        // 宿主以前会用 API 名填 DisplayName，那种值等于内部标识，不能直接显示。
+        if (!string.IsNullOrWhiteSpace(item.DisplayName)
+            && !string.Equals(item.DisplayName, item.Name, StringComparison.Ordinal))
+        {
+            return item.DisplayName;
+        }
+
+        return UnknownName;
     }
 
     /// <summary>「这款游戏不支持 / 不是已知 Steam 游戏」。</summary>

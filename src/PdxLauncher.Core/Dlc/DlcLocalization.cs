@@ -13,7 +13,10 @@ using PdxLauncher.Core.Abstractions;
 public static partial class DlcLocalization
 {
     private const string LocalizationFolder = "localization";
-    private const string LocalizationPattern = "*_l_english.yml";
+    private const string EnglishLanguage = "english";
+
+    /// <summary>某语言的本地化文件通配符（如 <c>*_l_simp_chinese.yml</c>）；语言名由调用方归一化。</summary>
+    internal static string PatternForLanguage(string language) => "*_l_" + language + ".yml";
 
     /// <summary>读 <paramref name="dlcPath"/> 下所有英文 yml，返回 key → 去掉富文本标记的显示名。</summary>
     /// <param name="fileSystem">文件系统。</param>
@@ -38,7 +41,7 @@ public static partial class DlcLocalization
         try
         {
             files = fileSystem
-                .EnumerateFiles(dlcPath, LocalizationPattern, recursive: true)
+                .EnumerateFiles(dlcPath, PatternForLanguage(EnglishLanguage), recursive: true)
                 .Order(StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
@@ -78,7 +81,8 @@ public static partial class DlcLocalization
     }
 
     /// <summary>把一段 yml 文本里的 <c>key: "value"</c> 灌进字典（已存在的 key 保留先读到的值）。</summary>
-    private static void ParseInto(string text, Dictionary<string, string> result)
+    /// <remarks>成就本地化（<see cref="Steam.SteamAchievementLocalization"/>）复用同一套解析。</remarks>
+    internal static void ParseInto(string text, Dictionary<string, string> result)
     {
         foreach (var line in text.Split('\n'))
         {
@@ -99,12 +103,17 @@ public static partial class DlcLocalization
         }
     }
 
-    /// <summary>去掉 Clausewitz 的富文本标记（<c>#italic</c>、<c>#!</c>、<c>#bold</c> 等），压缩空白。</summary>
+    /// <summary>去掉 Clausewitz 的富文本标记（<c>#italic</c>、<c>#!</c>、<c>#bold</c>、<c>$var$</c>、<c>[link]</c>、<c>§Y</c>、<c>£icon£</c> 等），压缩空白。</summary>
     internal static string CleanMarkup(string raw)
     {
         ArgumentNullException.ThrowIfNull(raw);
 
-        var withoutMarkup = MarkupToken().Replace(raw, string.Empty).Replace("#!", string.Empty, StringComparison.Ordinal);
+        // 顺序有讲究：$var$ 里可能嵌 [..]，先把变量引用整个拿掉，避免只留半截方括号。
+        var withoutVariables = VariableRef().Replace(raw, string.Empty);
+        var withoutIcons = IconToken().Replace(withoutVariables, string.Empty);
+        var withoutLinks = ConceptLink().Replace(withoutIcons, string.Empty);
+        var withoutColors = ColorCode().Replace(withoutLinks, string.Empty);
+        var withoutMarkup = MarkupToken().Replace(withoutColors, string.Empty).Replace("#!", string.Empty, StringComparison.Ordinal);
         var unescaped = withoutMarkup.Replace("\\\"", "\"", StringComparison.Ordinal).Replace("\\n", " ", StringComparison.Ordinal);
 
         // 其它收尾标记（"#bold ...#!" 之外还有零散的 #）不是单词语义的一部分，直接去掉。
@@ -126,9 +135,21 @@ public static partial class DlcLocalization
         return builder.ToString().Trim();
     }
 
-    [GeneratedRegex("""^\s*(?<key>[A-Za-z0-9_.\-]+?):\d*\s*"(?<value>.*)"\s*$""")]
+    [GeneratedRegex("""^\s*(?<key>[A-Za-z0-9_.-]+?):\d*\s*"(?<value>(?:[^"\\]|\\.)*)"\s*(?:#.*)?$""")]
     private static partial Regex EntryLine();
 
     [GeneratedRegex("""#[A-Za-z_]\S*""")]
     private static partial Regex MarkupToken();
+
+    [GeneratedRegex("""\$[^$\r\n]*\$""")]
+    private static partial Regex VariableRef();
+
+    [GeneratedRegex("""£[^£\r\n]*£""")]
+    private static partial Regex IconToken();
+
+    [GeneratedRegex("""\[[^\]\r\n]*\]""")]
+    private static partial Regex ConceptLink();
+
+    [GeneratedRegex("""§[^\r\n]""")]
+    private static partial Regex ColorCode();
 }
