@@ -48,6 +48,14 @@ public static class OnlineHosts
     /// <summary>Steam 创意工坊网页端（列表页解析 SSR 数据）。</summary>
     public const string SteamCommunityHost = "steamcommunity.com";
 
+    /// <summary>
+    /// Steam 社区官方素材 CDN。评论表情（<c>/economy/emoticon/&lt;name&gt;</c>）在这里。
+    /// 本主机整体放行（Steam 头像/徽章/表情同域，按路径收窄会连带挡掉自检里
+    /// <c>/avatars</c> 可下载的约定）；「这段内容是不是表情」由
+    /// <see cref="SteamEmoticon"/> 负责识别，白名单不参与表情语义，也不做子域通配。
+    /// </summary>
+    public const string SteamCommunityAssetsHost = "community.fastly.steamstatic.com";
+
     /// <summary>Steam Web API（keyless 的 published file 详情接口）。</summary>
     public const string SteamApiHost = "api.steampowered.com";
 
@@ -168,6 +176,7 @@ public static class OnlineHosts
         || string.Equals(host, ModsContentHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, ModsWebHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamCommunityHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, SteamCommunityAssetsHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamApiHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, TranslationHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, GoogleTranslateWebHost, StringComparison.OrdinalIgnoreCase)

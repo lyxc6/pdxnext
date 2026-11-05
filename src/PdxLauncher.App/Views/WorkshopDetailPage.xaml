@@ -729,6 +729,8 @@
                                                 <ctl:MarkdownView Markdown="{x:Bind Body, Mode=OneWay}"
                                                                   LinkRequested="OnMarkdownLinkRequested"
                                                                   ImageRequested="OnMarkdownImageRequested"
+                                                                  Loaded="OnCommentMarkdownLoaded"
+                                                                  Unloaded="OnCommentMarkdownUnloaded"
                                                                   AutomationProperties.Name="{x:Bind BodyPlain}" />
                                                 <!-- 译文：原文与译文同显，只显示译文正文（不加「译文」标题）；评论模板按 x:DataType 绑定，L 取自 LocalizedObservableObject。 -->
                                                 <Border Margin="0,8,0,0"
@@ -741,6 +743,8 @@
                                                     <ctl:MarkdownView Markdown="{x:Bind TranslatedBody, Mode=OneWay}"
                                                                       LinkRequested="OnMarkdownLinkRequested"
                                                                       ImageRequested="OnMarkdownImageRequested"
+                                                                      Loaded="OnCommentMarkdownLoaded"
+                                                                      Unloaded="OnCommentMarkdownUnloaded"
                                                                       AutomationProperties.Name="{x:Bind TranslatedBodyPlain}" />
                                                 </Border>
                                             </StackPanel>

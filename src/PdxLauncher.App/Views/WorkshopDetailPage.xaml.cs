@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 
 using Microsoft.UI.Xaml;
@@ -26,6 +27,7 @@ public sealed partial class WorkshopDetailPage : Page
 {
     private readonly WorkshopDetailViewModel _viewModel;
     private readonly SteamWorkshopHostBackend? _steamBackend;
+    private readonly HashSet<MarkdownView> _commentMarkdownViews = [];
     private WorkshopRowViewModel? _row;
 
     /// <summary>
@@ -85,6 +87,32 @@ public sealed partial class WorkshopDetailPage : Page
     {
         DescriptionView.RefreshImages();
         ChangelogView.RefreshImages();
+
+        foreach (var view in _commentMarkdownViews)
+        {
+            view.RefreshImages();
+        }
+    }
+
+    /// <summary>评论模板里的 MarkdownView 没有在构造期接解析器，加载后再接（含表情小图）。</summary>
+    private void OnCommentMarkdownLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MarkdownView view)
+        {
+            return;
+        }
+
+        _commentMarkdownViews.Add(view);
+        view.ImageResolver = _viewModel.ResolveImagePath;
+        view.RefreshImages();
+    }
+
+    private void OnCommentMarkdownUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is MarkdownView view)
+        {
+            _commentMarkdownViews.Remove(view);
+        }
     }
 
     /// <summary>
@@ -178,6 +206,7 @@ public sealed partial class WorkshopDetailPage : Page
     {
         _viewModel.GalleryImageReady -= OnGalleryImageReady;
         _viewModel.Screenshots.CollectionChanged -= OnScreenshotsChanged;
+        _commentMarkdownViews.Clear();
         _lifetime?.Cancel();
 
         // 原生 Steamworks 会话本来就在子进程里，随进程退出自动结束；
