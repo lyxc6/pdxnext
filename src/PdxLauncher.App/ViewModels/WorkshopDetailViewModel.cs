@@ -1813,8 +1813,13 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             return;
         }
 
-        // 同一张图在正文里可能出现多次，按 URL 去重后再下。
-        var distinct = urls.Distinct(StringComparer.Ordinal).ToList();
+        // 同一张图在正文里可能出现多次，按 URL 去重后再下；表情先归一到 fastly，
+        // 否则 akamai 轮换地址既过不了下载白名单，也和界面查询用的键对不上。
+        var distinct = urls
+            .Select(SteamEmoticon.NormalizeUrl)
+            .Where(static url => url.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 
         using var gate = new SemaphoreSlim(MaxConcurrentScreenshots);
 

@@ -25,6 +25,7 @@ public static class WorkshopEmoticonChecks
         CheckInvalidSourcesFallBackToShortCode();
         CheckLineBreak();
         CheckWhitelist();
+        CheckDescriptionImageUrlsNormalized();
 
         return ChecksContext.Failures == before ? 0 : 1;
     }
@@ -227,6 +228,37 @@ public static class WorkshopEmoticonChecks
             && normalizedAlias == EmoticonUrl
             && aliasCode == ":highrise:",
             normalizedAlias + " / " + aliasCode);
+    }
+
+    /// <summary>⑥ 描述区 <c>document.ImageUrls</c>：akamai 轮换地址归一到 fastly 后再去重。</summary>
+    private static void CheckDescriptionImageUrlsNormalized()
+    {
+        const string AkamaiEmoticon = "https://community.akamai.steamstatic.com/economy/emoticon/highrise?v=2";
+        const string Screenshot = "https://images.steamusercontent.com/ugc/1/2.jpg";
+
+        ChecksContext.Equal("表情归一：akamai 换 fastly 并去 query", EmoticonUrl, SteamEmoticon.NormalizeUrl(AkamaiEmoticon));
+        ChecksContext.Equal("表情归一：fastly 原地址不变", EmoticonUrl, SteamEmoticon.NormalizeUrl(EmoticonUrl));
+        ChecksContext.Equal("表情归一：普通配图原样返回", Screenshot, SteamEmoticon.NormalizeUrl(Screenshot));
+        ChecksContext.Equal("表情归一：null 变空串", string.Empty, SteamEmoticon.NormalizeUrl(null));
+        ChecksContext.Equal(
+            "表情归一：非官方主机的表情形状地址不收",
+            "https://evil.com/economy/emoticon/highrise",
+            SteamEmoticon.NormalizeUrl("https://evil.com/economy/emoticon/highrise"));
+
+        // 描述区两张表情（akamai + fastly 指向同一张）加一张普通配图：去重后只该剩两条。
+        var body = HtmlDescriptionParser.Parse(
+            "<p><img src=\"" + AkamaiEmoticon + "\" alt=\":highrise:\" class=\"emoticon\">"
+            + " 和 <img src=\"" + EmoticonUrl + "\" alt=\":highrise:\" class=\"emoticon\">"
+            + " <img src=\"" + Screenshot + "\" alt=\"shot\"></p>");
+        ChecksContext.Equal("表情归一：描述区图片地址去重后两条", 2, body.ImageUrls.Count);
+        ChecksContext.Check(
+            "表情归一：描述区里表情是 fastly 地址",
+            body.ImageUrls.Contains(EmoticonUrl, StringComparer.Ordinal),
+            string.Join(",", body.ImageUrls));
+        ChecksContext.Check(
+            "表情归一：描述区里普通配图原样保留",
+            body.ImageUrls.Contains(Screenshot, StringComparer.Ordinal),
+            string.Join(",", body.ImageUrls));
     }
 
     private static MarkdownImageInline? AssertSingleImage(MarkdownDocument body)

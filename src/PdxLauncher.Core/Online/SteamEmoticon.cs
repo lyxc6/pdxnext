@@ -62,6 +62,18 @@ public static class SteamEmoticon
         return true;
     }
 
+    /// <summary>
+    /// 把表情地址规范成可下载的形式（fastly 主机、去掉 query/fragment）；不是表情就原样返回。
+    /// <para>
+    /// 正文配图与评论区走同一条下载/缓存通道，缓存键必须与界面查询时用的地址一致：
+    /// 物品页给的是 akamai 轮换地址，下载时若不归一，既过不了白名单、也和界面规范化后的
+    /// 地址对不上，预览里就只剩短码。
+    /// </para>
+    /// </summary>
+    /// <param name="url">图片地址；null 视为空串。</param>
+    public static string NormalizeUrl(string? url) =>
+        url is not null && TryCreate(url, alt: null, out var normalized, out _) ? normalized : url ?? string.Empty;
+
     /// <summary>alt 是否就是 Steam 的 <c>:name:</c> 短码。</summary>
     /// <param name="alt">图片 alt。</param>
     /// <param name="shortCode">去空白后的短码。</param>
