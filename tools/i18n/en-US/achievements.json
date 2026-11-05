@@ -1,0 +1,16 @@
+{
+  "achievements.counts": "Unlocked {0} / {1}",
+  "achievements.empty.title": "No achievements to show",
+  "achievements.hiddenDescription": "Unlocks to reveal the description",
+  "achievements.listName": "Achievement list",
+  "achievements.rarity": "{0}% of players unlocked",
+  "achievements.status.hidden": "Hidden achievement",
+  "achievements.status.locked": "Locked",
+  "achievements.status.unlocked": "Unlocked",
+  "achievements.status.unlockedAt": "Unlocked · {0}",
+  "achievements.title": "Achievements",
+  "achievements.unavailable.empty": "This game has no achievements",
+  "achievements.unavailable.noGame": "Select a game in the library first",
+  "achievements.unavailable.notSupported": "This game has no achievement data source yet",
+  "achievements.unavailable.steamUnavailable": "Could not connect to Steam; achievements are temporarily unavailable"
+}

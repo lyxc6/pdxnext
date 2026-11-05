@@ -1,0 +1,16 @@
+{
+  "achievements.counts": "已解锁 {0} / {1}",
+  "achievements.empty.title": "没有可显示的成就",
+  "achievements.hiddenDescription": "解锁后显示说明",
+  "achievements.listName": "成就列表",
+  "achievements.rarity": "全球解锁率 {0}%",
+  "achievements.status.hidden": "隐藏成就",
+  "achievements.status.locked": "未解锁",
+  "achievements.status.unlocked": "已解锁",
+  "achievements.status.unlockedAt": "已解锁 · {0}",
+  "achievements.title": "成就",
+  "achievements.unavailable.empty": "该游戏没有成就",
+  "achievements.unavailable.noGame": "请先在游戏库中选择一款游戏",
+  "achievements.unavailable.notSupported": "该游戏暂无成就数据源",
+  "achievements.unavailable.steamUnavailable": "未能连接 Steam，成就暂不可用"
+}

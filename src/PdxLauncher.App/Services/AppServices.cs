@@ -115,6 +115,13 @@ public static class AppServices
     /// </summary>
     public static ISteamOwnershipService DlcOwnership { get; private set; } = null!;
 
+    /// <summary>
+    /// 成就数据源。S2 接入 Steam 宿主（flat C API）前固定为空实现，
+    /// 页面拿到 <c>NotSupported</c> 并显示「该游戏暂无成就数据源」。
+    /// 接真实现时只替换这里的赋值，页面与视图模型不用改。
+    /// </summary>
+    public static IAchievementSource Achievements { get; private set; } = new NullAchievementSource();
+
     public static AppSettingsStore SettingsStore { get; private set; } = null!;
 
     /// <summary>用户设置的内存副本；改动后调用 <see cref="SaveSettings"/> 落盘。</summary>

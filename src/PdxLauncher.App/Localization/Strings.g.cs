@@ -45,6 +45,20 @@ public sealed partial class Localizer
         ["account.statusSignedOut"] = "未登录",
         ["account.statusSigningIn"] = "正在登录…",
         ["account.title"] = "Paradox 账号",
+        ["achievements.counts"] = "已解锁 {0} / {1}",
+        ["achievements.empty.title"] = "没有可显示的成就",
+        ["achievements.hiddenDescription"] = "解锁后显示说明",
+        ["achievements.listName"] = "成就列表",
+        ["achievements.rarity"] = "全球解锁率 {0}%",
+        ["achievements.status.hidden"] = "隐藏成就",
+        ["achievements.status.locked"] = "未解锁",
+        ["achievements.status.unlocked"] = "已解锁",
+        ["achievements.status.unlockedAt"] = "已解锁 · {0}",
+        ["achievements.title"] = "成就",
+        ["achievements.unavailable.empty"] = "该游戏没有成就",
+        ["achievements.unavailable.noGame"] = "请先在游戏库中选择一款游戏",
+        ["achievements.unavailable.notSupported"] = "该游戏暂无成就数据源",
+        ["achievements.unavailable.steamUnavailable"] = "未能连接 Steam，成就暂不可用",
         ["app.name"] = "PdxNext",
         ["common.apply"] = "应用",
         ["common.browse"] = "浏览…",
@@ -1151,6 +1165,7 @@ public sealed partial class Localizer
         ["shell.crash.path"] = "崩溃记录已写入：{0}",
         ["shell.crash.title"] = "启动器遇到未处理的错误",
         ["shell.nav.account"] = "账号",
+        ["shell.nav.achievements"] = "成就",
         ["shell.nav.diagnostics"] = "性能与日志",
         ["shell.nav.home"] = "当前游戏",
         ["shell.nav.library"] = "游戏库",
@@ -1351,6 +1366,20 @@ public sealed partial class Localizer
         ["account.statusSignedOut"] = "Not signed in",
         ["account.statusSigningIn"] = "Signing in…",
         ["account.title"] = "Paradox account",
+        ["achievements.counts"] = "Unlocked {0} / {1}",
+        ["achievements.empty.title"] = "No achievements to show",
+        ["achievements.hiddenDescription"] = "Unlocks to reveal the description",
+        ["achievements.listName"] = "Achievement list",
+        ["achievements.rarity"] = "{0}% of players unlocked",
+        ["achievements.status.hidden"] = "Hidden achievement",
+        ["achievements.status.locked"] = "Locked",
+        ["achievements.status.unlocked"] = "Unlocked",
+        ["achievements.status.unlockedAt"] = "Unlocked · {0}",
+        ["achievements.title"] = "Achievements",
+        ["achievements.unavailable.empty"] = "This game has no achievements",
+        ["achievements.unavailable.noGame"] = "Select a game in the library first",
+        ["achievements.unavailable.notSupported"] = "This game has no achievement data source yet",
+        ["achievements.unavailable.steamUnavailable"] = "Could not connect to Steam; achievements are temporarily unavailable",
         ["app.name"] = "PdxNext",
         ["common.apply"] = "Apply",
         ["common.browse"] = "Browse…",
@@ -2457,6 +2486,7 @@ public sealed partial class Localizer
         ["shell.crash.path"] = "Crash record written to: {0}",
         ["shell.crash.title"] = "The launcher hit an unhandled error",
         ["shell.nav.account"] = "Account",
+        ["shell.nav.achievements"] = "Achievements",
         ["shell.nav.diagnostics"] = "Performance & Logs",
         ["shell.nav.home"] = "Current Game",
         ["shell.nav.library"] = "Game Library",
@@ -2657,6 +2687,20 @@ public sealed partial class Localizer
         ("account.statusSignedOut", "AccountStatusSignedOut"),
         ("account.statusSigningIn", "AccountStatusSigningIn"),
         ("account.title", "AccountTitle"),
+        ("achievements.counts", "AchievementsCounts"),
+        ("achievements.empty.title", "AchievementsEmptyTitle"),
+        ("achievements.hiddenDescription", "AchievementsHiddenDescription"),
+        ("achievements.listName", "AchievementsListName"),
+        ("achievements.rarity", "AchievementsRarity"),
+        ("achievements.status.hidden", "AchievementsStatusHidden"),
+        ("achievements.status.locked", "AchievementsStatusLocked"),
+        ("achievements.status.unlocked", "AchievementsStatusUnlocked"),
+        ("achievements.status.unlockedAt", "AchievementsStatusUnlockedAt"),
+        ("achievements.title", "AchievementsTitle"),
+        ("achievements.unavailable.empty", "AchievementsUnavailableEmpty"),
+        ("achievements.unavailable.noGame", "AchievementsUnavailableNoGame"),
+        ("achievements.unavailable.notSupported", "AchievementsUnavailableNotSupported"),
+        ("achievements.unavailable.steamUnavailable", "AchievementsUnavailableSteamUnavailable"),
         ("app.name", "AppName"),
         ("common.apply", "CommonApply"),
         ("common.browse", "CommonBrowse"),
@@ -3763,6 +3807,7 @@ public sealed partial class Localizer
         ("shell.crash.path", "ShellCrashPath"),
         ("shell.crash.title", "ShellCrashTitle"),
         ("shell.nav.account", "ShellNavAccount"),
+        ("shell.nav.achievements", "ShellNavAchievements"),
         ("shell.nav.diagnostics", "ShellNavDiagnostics"),
         ("shell.nav.home", "ShellNavHome"),
         ("shell.nav.library", "ShellNavLibrary"),
@@ -3961,6 +4006,20 @@ public sealed partial class Localizer
     public string AccountStatusSignedOut => Format("account.statusSignedOut");
     public string AccountStatusSigningIn => Format("account.statusSigningIn");
     public string AccountTitle => Format("account.title");
+    public string AchievementsCounts => Format("achievements.counts");
+    public string AchievementsEmptyTitle => Format("achievements.empty.title");
+    public string AchievementsHiddenDescription => Format("achievements.hiddenDescription");
+    public string AchievementsListName => Format("achievements.listName");
+    public string AchievementsRarity => Format("achievements.rarity");
+    public string AchievementsStatusHidden => Format("achievements.status.hidden");
+    public string AchievementsStatusLocked => Format("achievements.status.locked");
+    public string AchievementsStatusUnlocked => Format("achievements.status.unlocked");
+    public string AchievementsStatusUnlockedAt => Format("achievements.status.unlockedAt");
+    public string AchievementsTitle => Format("achievements.title");
+    public string AchievementsUnavailableEmpty => Format("achievements.unavailable.empty");
+    public string AchievementsUnavailableNoGame => Format("achievements.unavailable.noGame");
+    public string AchievementsUnavailableNotSupported => Format("achievements.unavailable.notSupported");
+    public string AchievementsUnavailableSteamUnavailable => Format("achievements.unavailable.steamUnavailable");
     public string AppName => Format("app.name");
     public string CommonApply => Format("common.apply");
     public string CommonBrowse => Format("common.browse");
@@ -5067,6 +5126,7 @@ public sealed partial class Localizer
     public string ShellCrashPath => Format("shell.crash.path");
     public string ShellCrashTitle => Format("shell.crash.title");
     public string ShellNavAccount => Format("shell.nav.account");
+    public string ShellNavAchievements => Format("shell.nav.achievements");
     public string ShellNavDiagnostics => Format("shell.nav.diagnostics");
     public string ShellNavHome => Format("shell.nav.home");
     public string ShellNavLibrary => Format("shell.nav.library");
@@ -5268,6 +5328,20 @@ internal static class Keys
     public const string AccountStatusSignedOut = "account.statusSignedOut";
     public const string AccountStatusSigningIn = "account.statusSigningIn";
     public const string AccountTitle = "account.title";
+    public const string AchievementsCounts = "achievements.counts";
+    public const string AchievementsEmptyTitle = "achievements.empty.title";
+    public const string AchievementsHiddenDescription = "achievements.hiddenDescription";
+    public const string AchievementsListName = "achievements.listName";
+    public const string AchievementsRarity = "achievements.rarity";
+    public const string AchievementsStatusHidden = "achievements.status.hidden";
+    public const string AchievementsStatusLocked = "achievements.status.locked";
+    public const string AchievementsStatusUnlocked = "achievements.status.unlocked";
+    public const string AchievementsStatusUnlockedAt = "achievements.status.unlockedAt";
+    public const string AchievementsTitle = "achievements.title";
+    public const string AchievementsUnavailableEmpty = "achievements.unavailable.empty";
+    public const string AchievementsUnavailableNoGame = "achievements.unavailable.noGame";
+    public const string AchievementsUnavailableNotSupported = "achievements.unavailable.notSupported";
+    public const string AchievementsUnavailableSteamUnavailable = "achievements.unavailable.steamUnavailable";
     public const string AppName = "app.name";
     public const string CommonApply = "common.apply";
     public const string CommonBrowse = "common.browse";
@@ -6374,6 +6448,7 @@ internal static class Keys
     public const string ShellCrashPath = "shell.crash.path";
     public const string ShellCrashTitle = "shell.crash.title";
     public const string ShellNavAccount = "shell.nav.account";
+    public const string ShellNavAchievements = "shell.nav.achievements";
     public const string ShellNavDiagnostics = "shell.nav.diagnostics";
     public const string ShellNavHome = "shell.nav.home";
     public const string ShellNavLibrary = "shell.nav.library";
