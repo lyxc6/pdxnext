@@ -36,6 +36,8 @@ public static class LocalModelUiChecks
         "settings.translate.localModelStatusRemoveNotFound",
         "settings.translate.localModelRemoveFailed",
         "settings.translate.localModelResidueMore",
+        "settings.translate.localModelRemoveTranslationBusy",
+        "settings.translate.localModelStatusResidueReason",
     ];
 
     public static int Run(IFileSystem fs)
@@ -157,8 +159,16 @@ public static class LocalModelUiChecks
             Count(settingsViewModel, "Task.Run(") >= 2,
             "至少删除、校验各一处");
         ChecksContext.Check(
-            "本地模型: 删除调用 Remove(result, releaseEngines)",
-            settingsViewModel.Contains("runtime.Store.Remove(", StringComparison.Ordinal));
+            "本地模型: 删除调用 Remove(row.Kind, () => ReleaseEngines())",
+            settingsViewModel.Contains(
+                "runtime.Store.Remove(row.Kind, () => runtime.ReleaseEngines())",
+                StringComparison.Ordinal),
+            "只查 Store.Remove( 不够：上一轮「句柄占着整目录删不动」的回归必须让这条变红");
+        ChecksContext.Check(
+            "本地模型: 在途翻译时不删除模型",
+            settingsViewModel.Contains("AppServices.Translation.Activity.IsActive", StringComparison.Ordinal)
+            && settingsViewModel.Contains("SettingsTranslateLocalModelRemoveTranslationBusy", StringComparison.Ordinal),
+            "Core 的 Remove 契约要求调用方保证没有在途翻译，缺这条会在翻译进行中拆掉引擎");
         ChecksContext.Check(
             "本地模型: 校验做深校验",
             settingsViewModel.Contains("VerifyInstalled(row.Kind, deep: true)", StringComparison.Ordinal));
@@ -193,6 +203,14 @@ public static class LocalModelUiChecks
         ChecksContext.Check(
             "本地模型: 残留记 \".\" 时说明目录本身未删",
             settingsViewModel.Contains("Residue[0] == \".\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "本地模型: 残留会附上脱敏后的原因",
+            settingsViewModel.Contains("SettingsTranslateLocalModelStatusResidueReason", StringComparison.Ordinal),
+            "RemovedWithResidue 丢了 result.Error，用户就不知道「为什么删不掉」");
+        ChecksContext.Check(
+            "本地模型: FormatResidue 传总条数",
+            settingsViewModel.Contains("SettingsTranslateLocalModelResidueMore, residue.Count", StringComparison.Ordinal),
+            "列 6 项却写「and 7 more」自相矛盾；收尾必须是总数语义");
         ChecksContext.Check(
             "本地模型: 失败文案会去掉绝对路径",
             settingsViewModel.Contains("ToDisplayText(result.Error", StringComparison.Ordinal));
@@ -248,6 +266,19 @@ public static class LocalModelUiChecks
                     "本地模型: " + language + " 含 " + key,
                     json.Contains("\"" + key + "\"", StringComparison.Ordinal));
             }
+        }
+
+        var zhPath = Path.Combine(root, "tools", "i18n", "zh-CN", "settings.json");
+        var enPath = Path.Combine(root, "tools", "i18n", "en-US", "settings.json");
+        if (File.Exists(zhPath) && File.Exists(enPath))
+        {
+            var zh = File.ReadAllText(zhPath);
+            var en = File.ReadAllText(enPath);
+            ChecksContext.Check(
+                "本地模型: 残留收尾是中英一致的总数语义（7 项 → 等共 7 项 / 7 in total）",
+                zh.Contains("\"settings.translate.localModelResidueMore\": \"…等共 {0} 项\"", StringComparison.Ordinal)
+                && en.Contains("\"settings.translate.localModelResidueMore\": \"… ({0} in total)\"", StringComparison.Ordinal),
+                "MaxItems=6 时列 6 项，收尾若写「and 7 more」就自相矛盾；断言钉死总数语义");
         }
     }
 

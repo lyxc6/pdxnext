@@ -1837,8 +1837,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 删除某个本地模型：后台线程执行，期间该行按钮禁用；删完按 <c>Remove</c> 的结果三态
-    /// 给出可自证的文案，并重新读安装状态。
+    /// 删除某个本地模型：先确认没有在途翻译（Core 的 <c>Remove</c> 契约要求调用方保证），
+    /// 再在后台线程删除；期间该行按钮禁用，删完按 <c>Remove</c> 的结果三态给出可自证的文案，
+    /// 并重新读安装状态。
     /// </summary>
     /// <param name="row">模型行。</param>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
@@ -1847,6 +1848,18 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         var runtime = AppServices.LocalTranslation;
         if (runtime is null || row is null || row.IsBusy)
         {
+            return;
+        }
+
+        // Core 的 Remove 契约要求调用方保证此刻没有在途翻译：本地引擎可能还在翻译线程里
+        // 握着模型句柄，这时 ReleaseEngines 会拆掉正在使用的引擎。协调器的活动计数是现成的
+        // 「此刻有没有翻译在跑」，在途就不删，等这一批结束再让用户重试。
+        if (AppServices.IsInitialized && AppServices.Translation.Activity.IsActive)
+        {
+            ShowLocalModelOperation(
+                row,
+                T(Keys.SettingsTranslateLocalModelRemoveTranslationBusy),
+                cancellationToken);
             return;
         }
 
@@ -1965,9 +1978,16 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                     return T(Keys.SettingsTranslateLocalModelStatusResidueDirectoryOnly);
                 }
 
-                return T(
-                    Keys.SettingsTranslateLocalModelStatusRemovedWithResidue,
-                    FormatResidue(result.Residue));
+                // 残留清单只说明「还剩什么」，不说明「为什么删不掉」：把 Core 记下的原因
+                // 也同样脱敏后接在清单后面，用户才知道该去关哪个进程。
+                var residueText = FormatResidue(result.Residue);
+                var reason = ToDisplayText(result.Error, result.Directory);
+                return reason.Length == 0
+                    ? T(Keys.SettingsTranslateLocalModelStatusRemovedWithResidue, residueText)
+                    : T(
+                        Keys.SettingsTranslateLocalModelStatusResidueReason,
+                        residueText,
+                        reason);
 
             default:
                 return T(
@@ -2007,7 +2027,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             : string.Join("; ", parts);
     }
 
-    /// <summary>残留清单最多列 6 项，其余用条数收尾，避免一行文案横穿整页。</summary>
+    /// <summary>
+    /// 残留清单最多列 6 项，其余用「总数」收尾（不是「另有 N 项」），避免用户把 6 项当成全部。
+    /// </summary>
     private static string FormatResidue(IReadOnlyList<string> residue)
     {
         const int MaxItems = 6;
