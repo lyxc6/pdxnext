@@ -49,7 +49,10 @@ public static class Program
         {
             try
             {
-                return SteamHostRunner.Run(args, Console.Out, Console.Error);
+                // 宿主与客户端之间是「一行 JSON」的管道协议，两边都按 UTF-8 读写。
+                // 子进程的管道默认可能跟随系统代码页（GBK），中文错误串会乱码，所以先钉死编码。
+                ConfigureHostConsole();
+                return SteamHostRunner.Run(args, Console.In, Console.Out, Console.Error);
             }
             catch (Exception ex)
             {
@@ -78,5 +81,23 @@ public static class Program
         });
 
         return 0;
+    }
+
+    /// <summary>
+    /// 宿主子进程的 stdin/stdout 固定 UTF-8（无 BOM）。没控制台可写（管道异常）时保持默认，
+    /// 结果码仍然不变 —— 编码问题最多让错误文案乱码，不该让宿主直接失败。
+    /// </summary>
+    private static void ConfigureHostConsole()
+    {
+        try
+        {
+            var encoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+            Console.InputEncoding = encoding;
+            Console.OutputEncoding = encoding;
+        }
+        catch (Exception ex) when (ex is IOException or PlatformNotSupportedException or ArgumentException)
+        {
+            // 保持默认编码；调用方只看结果行的前缀与 JSON。
+        }
     }
 }

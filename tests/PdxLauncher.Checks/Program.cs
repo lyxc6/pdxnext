@@ -12,21 +12,32 @@ public static class Program
 {
     public static int Main(string[] args)
     {
-        // 自检工程同时充当「假 Steam 宿主」：成就检查类需要验证调用方取消的传播路径，
-        // 就用 --steam-host 把自己拉起来，这里挂住不返回，等父进程取消后杀掉它。
+        // 自检工程同时充当「假 Steam 宿主」：成就检查类需要验证取消传播、worker 复用、
+        // 崩溃重启与回落，就用 --steam-host 把自己拉起来，行为由 FakeSteamHost 按环境变量分派。
         if (args.Length > 0 && string.Equals(args[0], "--steam-host", StringComparison.Ordinal))
         {
-            System.Threading.Thread.Sleep(TimeSpan.FromSeconds(30));
-            return 1;
+            return FakeSteamHost.Run(args);
         }
 
         var fs = new FileSystem();
         var root = FindWorkspaceRoot();
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Console.WriteLine("workspace root: " + root);
+
+        // 排查单个检查类时用：PdxLauncher.Checks.exe --only SteamAchievementSessionChecks。
+        // 全套跑一次要十几分钟，定位挂起/慢用例时不必每次全跑。
+        var only = OptionValue(args, "--only");
+        Console.WriteLine(only is null ? "检查范围: 全部" : "检查范围: 名字包含 " + only);
         Console.WriteLine();
 
         var checks = Discover();
+        if (only is not null)
+        {
+            checks = checks
+                .Where(c => c.Type.Name.Contains(only, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
         if (checks.Count == 0)
         {
             Console.WriteLine("[checks] 没有发现任何检查类");
@@ -89,6 +100,19 @@ public static class Program
         }
 
         return found.OrderBy(x => x.Item1.Name, StringComparer.Ordinal).ToList();
+    }
+
+    private static string? OptionValue(string[] args, string name)
+    {
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+            {
+                return args[i + 1];
+            }
+        }
+
+        return null;
     }
 
     private static string FindWorkspaceRoot()

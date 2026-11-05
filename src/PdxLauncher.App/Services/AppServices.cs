@@ -2,6 +2,7 @@ namespace PdxLauncher.App.Services;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Accounts;
+using PdxLauncher.Core.Achievements;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Mods;
@@ -127,6 +128,24 @@ public static class AppServices
     /// 分别对应不同的空状态）。原生调用只在子进程里发生，主进程不碰 Steamworks。
     /// </summary>
     public static IAchievementSource Achievements { get; private set; } = new NullAchievementSource();
+
+    /// <summary>
+    /// 常驻 Steam 宿主会话。第一条成就命令拉起 worker 并付一次 <c>SteamAPI_Init</c>，
+    /// 之后整场会话复用；崩溃 / 版本不符 / 起不来时自动回落一次性宿主，页面行为不变。
+    /// 退出时由 <see cref="StartAchievementPrewarm"/> 注册的 ProcessExit 兜底 Kill。
+    /// </summary>
+    public static SteamHostSession? AchievementsSession { get; private set; }
+
+    /// <summary>
+    /// 成就预热：主窗口可见后读一次当前游戏并写快照。失败只记日志，不影响任何页面。
+    /// </summary>
+    public static AchievementPrewarmService? AchievementPrewarm { get; private set; }
+
+    /// <summary>
+    /// 由 <see cref="App"/> 在窗口 Activate 之后调用一次：开始「空闲预热当前游戏」。
+    /// 只调度，不等待，也不占 UI 线程。
+    /// </summary>
+    public static void StartAchievementPrewarm() => AchievementPrewarm?.Start();
 
     public static AppSettingsStore SettingsStore { get; private set; } = null!;
 
@@ -298,14 +317,33 @@ public static class AppServices
         LocalTranslation = localTranslation;
         GamePatch = gamePatch;
         DlcOwnership = dlcOwnership;
+        var steamHostClient = new SteamHostClient(logger);
+        var achievementsSession = new SteamHostSession(logger, steamHostClient);
+        AchievementsSession = achievementsSession;
         Achievements = new SteamAchievementSource(
-            new SteamHostClient(logger),
+            steamHostClient,
             new SteamApiLocator(fileSystem, logger),
             fileSystem,
             logger,
             () => Settings.SteamApiDllPath,
             () => CurrentGame,
-            () => PdxLauncher.App.Localization.Localizer.Instance.Language);
+            () => PdxLauncher.App.Localization.Localizer.Instance.Language,
+            achievementsSession);
+        AchievementPrewarm = new AchievementPrewarmService(
+            Achievements,
+            new AchievementSnapshotCache(
+                fileSystem,
+                Path.Combine(DataRoot, AchievementPrewarmService.CacheDirectoryName)),
+            () => CurrentGame,
+            logger);
+
+        // 进程退出兜底：把常驻宿主的 stdin 关掉（worker 读到 EOF 会自己 Shutdown 并退出），
+        // 万一卡住再 Kill 整棵进程树，避免留下孤儿 steam_api 子进程。
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            AchievementPrewarm?.Dispose();
+            AchievementsSession?.Dispose();
+        };
         SettingsStore = settingsStore;
         Database = database;
         Documents = documents;
@@ -398,6 +436,9 @@ public static class AppServices
         }
 
         CurrentGameChanged?.Invoke(null, game);
+
+        // 切游戏后预热新游戏（服务内部去抖 2 s，连续切换只预热最后停下的那款）。
+        AchievementPrewarm?.NotifyGameChanged();
     }
 
     /// <summary>立即把设置写盘；失败返回 <see cref="AppResult{T}"/>，调用方据此提示，不再静默当成功。</summary>

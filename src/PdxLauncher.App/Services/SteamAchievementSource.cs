@@ -34,15 +34,20 @@ public sealed class SteamAchievementSource : IAchievementSource
     private readonly Func<string?> _settingsApiPath;
     private readonly Func<GameInstallation?> _currentGame;
     private readonly Func<string?> _uiLanguage;
+    private readonly SteamHostSession? _session;
 
     /// <summary>构造。</summary>
-    /// <param name="client">宿主客户端。</param>
+    /// <param name="client">宿主客户端（一次性调用的兜底路径）。</param>
     /// <param name="locator"><c>steam_api64.dll</c> 定位器。</param>
     /// <param name="fileSystem">文件系统（读游戏本地化）。</param>
     /// <param name="logger">日志。</param>
     /// <param name="settingsApiPath">取「用户手填的 DLL 路径」；每次调用时现取，设置改了立即生效。</param>
     /// <param name="currentGame">取当前游戏（用于在游戏目录里找 DLL 和本地化）；每次调用时现取。</param>
     /// <param name="uiLanguage">取启动器界面语言（语言回退链的第二级）；为空时读 <see cref="CultureInfo.DefaultThreadCurrentUICulture"/>。</param>
+    /// <param name="session">
+    /// 常驻宿主会话；给了就走「worker 复用」，没给（或会话已释放）就走原来的一次性宿主。
+    /// 会话内部自己处理「起不来 / 版本不符 / 崩溃」的回落，所以这里不需要再判断。
+    /// </param>
     public SteamAchievementSource(
         SteamHostClient client,
         SteamApiLocator locator,
@@ -50,7 +55,8 @@ public sealed class SteamAchievementSource : IAchievementSource
         IAppLogger logger,
         Func<string?> settingsApiPath,
         Func<GameInstallation?> currentGame,
-        Func<string?>? uiLanguage = null)
+        Func<string?>? uiLanguage = null,
+        SteamHostSession? session = null)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _locator = locator ?? throw new ArgumentNullException(nameof(locator));
@@ -59,6 +65,7 @@ public sealed class SteamAchievementSource : IAchievementSource
         _settingsApiPath = settingsApiPath ?? throw new ArgumentNullException(nameof(settingsApiPath));
         _currentGame = currentGame ?? throw new ArgumentNullException(nameof(currentGame));
         _uiLanguage = uiLanguage ?? (() => CultureInfo.DefaultThreadCurrentUICulture?.Name);
+        _session = session;
     }
 
     /// <inheritdoc />
@@ -100,7 +107,9 @@ public sealed class SteamAchievementSource : IAchievementSource
 
         try
         {
-            var result = await _client.AchievementsAsync(apiPath!, appId, cancellationToken).ConfigureAwait(false);
+            var result = _session is { } session
+                ? await session.ReadAchievementsAsync(apiPath!, appId, cancellationToken).ConfigureAwait(false)
+                : await _client.AchievementsAsync(apiPath!, appId, cancellationToken).ConfigureAwait(false);
             if (result is { Ok: false, Error: { Length: > 0 } error })
             {
                 // 「没有成就」也会走到这里（Code == NoAchievements），它不算错误，但也值得留一条日志。
