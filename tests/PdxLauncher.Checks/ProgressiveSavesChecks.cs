@@ -2,6 +2,7 @@ namespace PdxLauncher.Checks;
 
 using System.Collections.ObjectModel;
 
+using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
@@ -42,6 +43,11 @@ public static class ProgressiveSavesChecks
             CheckSecondPhaseReusesParser(fs, catalog, documents);
             CheckViewModelProgressiveFill();
             CheckCancellation();
+            CheckAutomationWatcher();
+            CheckCancellationDuringDetails();
+            CheckConcurrencyLimit();
+            CheckOldGenerationDropped();
+            CheckProgressCountsSuccessesOnly();
         }
         finally
         {
@@ -97,6 +103,25 @@ public static class ProgressiveSavesChecks
         }
 
         ChecksContext.Check("批大小 0 抛 ArgumentOutOfRangeException", threw);
+
+        // 时间触发：小库只有 1 条时不能死等满 4 条；满一批或后台完成也应立即回填。
+        ChecksContext.Check("0 条待回填不触发", !SaveScanBatching.ShouldFlush(0, TimeSpan.FromSeconds(1), false));
+        ChecksContext.Check("满 4 条立即回填", SaveScanBatching.ShouldFlush(4, TimeSpan.Zero, false));
+        ChecksContext.Check("不足 4 条且未到 50 ms 时等待", !SaveScanBatching.ShouldFlush(3, TimeSpan.FromMilliseconds(49), false));
+        ChecksContext.Check("不足 4 条但到 50 ms 时回填", SaveScanBatching.ShouldFlush(3, TimeSpan.FromMilliseconds(50), false));
+        ChecksContext.Check("后台完成时立即回填剩余前缀", SaveScanBatching.ShouldFlush(1, TimeSpan.Zero, true));
+
+        var intervalThrew = false;
+        try
+        {
+            SaveScanBatching.ShouldFlush(1, TimeSpan.Zero, false, flushIntervalMilliseconds: -1);
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            intervalThrew = true;
+        }
+
+        ChecksContext.Check("负刷新间隔抛 ArgumentOutOfRangeException", intervalThrew);
     }
 
     private static void CheckRowState()
@@ -238,6 +263,136 @@ public static class ProgressiveSavesChecks
         ChecksContext.Check("取消后不显示忙碌态", !viewModel.IsBusy);
     }
 
+    /// <summary>读屏名监听：第二段补细节后 ListItem 必须被重写成新名字；退订后不再回调。</summary>
+    private static void CheckAutomationWatcher()
+    {
+        Console.WriteLine("[ProgressiveSavesChecks] 细节补齐后读屏名同步到列表项");
+        var file = Entry("sample0.ck3");
+        var row = new SaveGameRowViewModel(file, 0);
+        var names = new List<string>();
+        var watcher = new SaveRowAutomationWatcher();
+
+        watcher.Track(row, names.Add);
+        ChecksContext.Equal("跟踪后立即写一次读屏名", 1, names.Count);
+        ChecksContext.Check("骨架读屏名包含文件名", names[0].Contains("sample0.ck3", StringComparison.Ordinal), names[0]);
+        var skeletonName = names[0];
+
+        row.ApplyDetail(Meta(file, "Detail Realm", SaveParseState.Ok));
+        ChecksContext.Equal("细节回填触发第二次命名", 2, names.Count);
+        ChecksContext.Check("读屏名已从骨架更新为含细节", names[1] != skeletonName, names[1]);
+        ChecksContext.Check("新读屏名包含细节", row.HasDetails && names[1].Length > skeletonName.Length, names[1]);
+
+        watcher.Untrack(row);
+        ChecksContext.Equal("退订后跟踪表清空", 0, watcher.Count);
+        var nameCountAfterUntrack = names.Count;
+        row.ApplyDetail(Meta(file, "迟到的细节", SaveParseState.Degraded));
+        ChecksContext.Equal("退订后不再回调", nameCountAfterUntrack, names.Count);
+    }
+
+    /// <summary>细节阶段取消：半截骨架不能留在页面上，进度与忙碌态一起收尾。</summary>
+    private static void CheckCancellationDuringDetails()
+    {
+        Console.WriteLine("[ProgressiveSavesChecks] 细节阶段取消后清空半截行");
+        var files = Files(SampleCount);
+        var index = new GateIndex(new SaveFileScanResult(files, [Location()], false));
+        var viewModel = new SavesViewModel(index, new NullLogger());
+        using var cancellation = new CancellationTokenSource();
+
+        var load = viewModel.LoadAsync(Game("C:\\game"), cancellation.Token);
+        var appeared = SpinWait.SpinUntil(() => viewModel.Saves.Count == SampleCount, TimeSpan.FromSeconds(10));
+        ChecksContext.Check("取消前骨架已铺出", appeared, "Saves=" + viewModel.Saves.Count);
+
+        cancellation.Cancel();
+        var cancelled = false;
+        try
+        {
+            load.GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            cancelled = true;
+        }
+        finally
+        {
+            index.Release();
+        }
+
+        ChecksContext.Check("细节阶段取消抛出 OperationCanceledException", cancelled);
+        ChecksContext.Equal("取消后不残留骨架行", 0, viewModel.Saves.Count);
+        ChecksContext.Equal("取消后进度归零", 0, viewModel.ProcessedCount);
+        ChecksContext.Check("取消后不显示忙碌态", !viewModel.IsBusy);
+    }
+
+    /// <summary>第二段并发峰值不超过 4，且确实并行（至少 2 条同时解析）。</summary>
+    private static void CheckConcurrencyLimit()
+    {
+        Console.WriteLine("[ProgressiveSavesChecks] 第二段并发峰值不超过 4");
+        var files = Files(16);
+        var index = new ConcurrencyIndex(new SaveFileScanResult(files, [Location()], false));
+        var viewModel = new SavesViewModel(index, new NullLogger());
+
+        viewModel.LoadAsync(Game("C:\\game"), CancellationToken.None).GetAwaiter().GetResult();
+
+        ChecksContext.Check("并发峰值不超过上限 4", index.MaxActive <= 4, "peak=" + index.MaxActive);
+        ChecksContext.Check("确实发生了并行解析", index.MaxActive >= 2, "peak=" + index.MaxActive);
+        ChecksContext.Equal("16 条全部解析", 16, index.ParseCalls);
+        ChecksContext.Equal("16 条全部回填", 16, viewModel.ProcessedCount);
+    }
+
+    /// <summary>切游戏后旧代次的第一段结果必须整批丢弃，不能覆盖新列表。</summary>
+    private static void CheckOldGenerationDropped()
+    {
+        Console.WriteLine("[ProgressiveSavesChecks] 旧代次结果整批丢弃");
+        var index = new GenerationIndex();
+        var viewModel = new SavesViewModel(index, new NullLogger());
+
+        var first = viewModel.LoadAsync(Game("C:\\game"), CancellationToken.None);
+        var second = viewModel.LoadAsync(Game("C:\\game"), CancellationToken.None);
+        second.GetAwaiter().GetResult();
+
+        ChecksContext.Equal("第二代先完成并出 2 行", 2, viewModel.Saves.Count);
+        ChecksContext.Equal("列表属于第二代", "second0.ck3", viewModel.Saves[0].FileName);
+
+        index.ReleaseFirst();
+        first.GetAwaiter().GetResult();
+
+        ChecksContext.Equal("旧代次完成后行数不变", 2, viewModel.Saves.Count);
+        ChecksContext.Equal("旧代次没有覆盖第一行", "second0.ck3", viewModel.Saves[0].FileName);
+        ChecksContext.Equal("旧代次没有覆盖第二行", "second1.ck3", viewModel.Saves[1].FileName);
+        ChecksContext.Check("旧代次 finally 没有留下忙碌态", !viewModel.IsBusy);
+        ChecksContext.Check("状态仍是第二代的完成态", viewModel.StatusText.StartsWith("saves.status.lastScan", StringComparison.Ordinal), viewModel.StatusText);
+    }
+
+    /// <summary>解析失败的行不算进度：5 条成功时显示 5 / 6，失败行保持骨架。</summary>
+    private static void CheckProgressCountsSuccessesOnly()
+    {
+        Console.WriteLine("[ProgressiveSavesChecks] 进度只统计解析成功的行");
+        var files = Files(SampleCount);
+        var index = new FlakyIndex(new SaveFileScanResult(files, [Location()], false), "sample2.ck3");
+        var viewModel = new SavesViewModel(index, new NullLogger());
+
+        viewModel.LoadAsync(Game("C:\\game"), CancellationToken.None).GetAwaiter().GetResult();
+
+        ChecksContext.Equal("失败行仍保留骨架", SampleCount, viewModel.Saves.Count);
+        ChecksContext.Equal("进度只记 5 条成功", SampleCount - 1, viewModel.ProcessedCount);
+        ChecksContext.Equal("总数仍是 6", SampleCount, viewModel.TotalCount);
+        ChecksContext.Equal("成功行补上游戏内日期", "1066.9.15", viewModel.Saves[0].DateText);
+        ChecksContext.Check("失败行保留文件时间回退", viewModel.Saves[2].DateText != "1066.9.15", viewModel.Saves[2].DateText);
+        ChecksContext.Check("完成后仍是完成态", !viewModel.IsBusy);
+    }
+
+    private static SaveFileEntry Entry(string fileName, long size = 100) => SaveFileEntry.TryCreate(
+        "ck3",
+        "C:\\saves\\" + fileName,
+        size,
+        new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero),
+        SaveContainer.TextMeta)!;
+
+    private static SaveFileEntry[] Files(int count) =>
+        Enumerable.Range(0, count).Select(i => Entry("sample" + i + ".ck3", 100 + i)).ToArray();
+
+    private static SaveLocationInfo Location() => new("ck3", "C:\\saves", true, SaveLocationSource.Documents);
+
     private static string SampleText(string title) =>
         "SAV0\nmeta_data={\n" +
         "version=\"1.13.0\"\n" +
@@ -375,6 +530,126 @@ public static class ProgressiveSavesChecks
         public SaveGameMeta ParseFile(SaveFileEntry entry) => throw new InvalidOperationException("不应解析");
 
         public IReadOnlyList<SaveLocationInfo> GetLocations(string gameId) => [];
+    }
+
+    /// <summary>第一段立即返回，细节解析全部卡在闸门上；用于取消时验证半截行清理。</summary>
+    private sealed class GateIndex(SaveFileScanResult result) : ISaveGameFileIndex
+    {
+        private readonly ManualResetEventSlim _gate = new(false);
+
+        public Task<SaveFileScanResult> ScanFilesAsync(IEnumerable<string> gameIds, CancellationToken cancellationToken) =>
+            Task.FromResult(result);
+
+        public SaveGameMeta ParseFile(SaveFileEntry entry)
+        {
+            _gate.Wait();
+            return Meta(entry, "Detail " + entry.FileName, SaveParseState.Ok);
+        }
+
+        public IReadOnlyList<SaveLocationInfo> GetLocations(string gameId) => result.Locations;
+
+        public void Release() => _gate.Set();
+    }
+
+    /// <summary>记录并发峰值；每条 sleep 一小会儿，让并行度确实跑满。</summary>
+    private sealed class ConcurrencyIndex(SaveFileScanResult result) : ISaveGameFileIndex
+    {
+        private readonly object _sync = new();
+        private int _active;
+        private int _maxActive;
+        private int _parseCalls;
+
+        public int MaxActive
+        {
+            get
+            {
+                lock (_sync)
+                {
+                    return _maxActive;
+                }
+            }
+        }
+
+        public int ParseCalls => Volatile.Read(ref _parseCalls);
+
+        public Task<SaveFileScanResult> ScanFilesAsync(IEnumerable<string> gameIds, CancellationToken cancellationToken) =>
+            Task.FromResult(result);
+
+        public SaveGameMeta ParseFile(SaveFileEntry entry)
+        {
+            Interlocked.Increment(ref _parseCalls);
+            lock (_sync)
+            {
+                _active++;
+                _maxActive = Math.Max(_maxActive, _active);
+            }
+
+            try
+            {
+                Thread.Sleep(20);
+                return Meta(entry, "Detail " + entry.FileName, SaveParseState.Ok);
+            }
+            finally
+            {
+                lock (_sync)
+                {
+                    _active--;
+                }
+            }
+        }
+
+        public IReadOnlyList<SaveLocationInfo> GetLocations(string gameId) => result.Locations;
+    }
+
+    /// <summary>第一次扫描挂在闸门上，第二次立即返回第二组文件。</summary>
+    private sealed class GenerationIndex : ISaveGameFileIndex
+    {
+        private readonly TaskCompletionSource<SaveFileScanResult> _first =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private readonly SaveFileScanResult _second = new(
+            [Entry("second0.ck3"), Entry("second1.ck3")],
+            [Location()],
+            false);
+
+        private int _calls;
+
+        public Task<SaveFileScanResult> ScanFilesAsync(IEnumerable<string> gameIds, CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _calls) == 1)
+            {
+                return _first.Task;
+            }
+
+            return Task.FromResult(_second);
+        }
+
+        public SaveGameMeta ParseFile(SaveFileEntry entry) =>
+            Meta(entry, "Second Detail " + entry.FileName, SaveParseState.Ok);
+
+        public IReadOnlyList<SaveLocationInfo> GetLocations(string gameId) => [Location()];
+
+        public void ReleaseFirst() => _first.TrySetResult(
+            new SaveFileScanResult([Entry("first0.ck3"), Entry("first1.ck3")], [Location()], false));
+    }
+
+    /// <summary>指定文件名解析失败，其余成功。</summary>
+    private sealed class FlakyIndex(SaveFileScanResult result, string failingFileName) : ISaveGameFileIndex
+    {
+        public Task<SaveFileScanResult> ScanFilesAsync(IEnumerable<string> gameIds, CancellationToken cancellationToken) =>
+            Task.FromResult(result);
+
+        public SaveGameMeta ParseFile(SaveFileEntry entry)
+        {
+            if (string.Equals(entry.FileName, failingFileName, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("坏档");
+            }
+
+            return Meta(entry, "Detail " + entry.FileName, SaveParseState.Ok);
+        }
+
+        public IReadOnlyList<SaveLocationInfo> GetLocations(string gameId) => result.Locations;
     }
 
     private sealed class NullLogger : IAppLogger

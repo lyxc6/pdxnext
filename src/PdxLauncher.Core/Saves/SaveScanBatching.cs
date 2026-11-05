@@ -19,6 +19,45 @@ public static class SaveScanBatching
     /// <summary>默认每批条数：4 条既能摊满默认并行度，又能让首屏细节尽快出现。</summary>
     public const int DefaultBatchSize = 4;
 
+    /// <summary>距上次回填超过这个时间就先出已解析好的前缀，不再等满一批（小库/慢盘更稳）。</summary>
+    public const int DefaultFlushIntervalMilliseconds = 50;
+
+    /// <summary>
+    /// 第二段是否该把「已解析好的连续前缀」回填到界面：满一批、超过刷新间隔，
+    /// 或后台已经没有更多结果时立即回填。纯函数，便于自检钉住两个阈值的边界。
+    /// </summary>
+    /// <param name="pendingCount">已解析好、尚未回填的连续行数。</param>
+    /// <param name="elapsedSinceFlush">距上次回填的时间。</param>
+    /// <param name="noMoreWork">后台是否已没有更多解析任务。</param>
+    /// <param name="batchSize">每批条数，必须大于 0。</param>
+    /// <param name="flushIntervalMilliseconds">最长等待毫秒数，不能为负。</param>
+    public static bool ShouldFlush(
+        int pendingCount,
+        TimeSpan elapsedSinceFlush,
+        bool noMoreWork,
+        int batchSize = DefaultBatchSize,
+        int flushIntervalMilliseconds = DefaultFlushIntervalMilliseconds)
+    {
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(batchSize), batchSize, "批大小必须大于 0。");
+        }
+
+        if (flushIntervalMilliseconds < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(flushIntervalMilliseconds), flushIntervalMilliseconds, "刷新间隔不能为负。");
+        }
+
+        if (pendingCount <= 0)
+        {
+            return false;
+        }
+
+        return noMoreWork
+            || pendingCount >= batchSize
+            || elapsedSinceFlush >= TimeSpan.FromMilliseconds(flushIntervalMilliseconds);
+    }
+
     /// <summary>把完整列表按顺序切成固定大小的批次，并为每批记录起始下标。</summary>
     /// <typeparam name="T">元素类型。</typeparam>
     /// <param name="items">完整列表；null 抛 <see cref="ArgumentNullException"/>。</param>

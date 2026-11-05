@@ -209,6 +209,7 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\SaveScanRequestTracker.cs" Link="Linked\SaveScanRequestTracker.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\SaveRowText.cs" Link="Linked\SaveRowText.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\SaveRowAutomationWatcher.cs" Link="Linked\SaveRowAutomationWatcher.cs" />
     <!--
       两段式存档加载的纯 C# 部件：粗略行状态（首填后拒绝覆盖）、按批分组、行视图模型与
       视图模型本身。它们不引用 Microsoft.UI.Xaml，可在控制台自检里原样链接：

@@ -1,6 +1,7 @@
 namespace PdxLauncher.App.ViewModels;
 
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
 
 using PdxLauncher.App.Localization;
@@ -14,7 +15,7 @@ using PdxLauncher.Core.Saves;
 /// <list type="number">
 ///   <item>第一段 <see cref="ISaveGameFileIndex.ScanFilesAsync"/> 只枚举文件（路径/名字/大小/文件时间），
 ///   在后台线程完成，结果一次性铺进 <see cref="Saves"/>；</item>
-///   <item>第二段按 <see cref="SaveScanBatching.DefaultBatchSize"/> 条一批解析细节，
+///   <item>第二段最多 4 条并行解析，已解析好的连续前缀在「满一批 / 距上次回填 ≥50 ms / 后台完成」时
 ///   通过 <see cref="SaveGameRowViewModel.ApplyDetail"/> 原位回填，<b>不</b>清空/重建集合，滚动位置不丢。</item>
 /// </list>
 /// <para>
@@ -79,6 +80,12 @@ public sealed class SavesViewModel : LocalizedObservableObject
 
     public bool HasSaves => Saves.Count > 0;
 
+    /// <summary>自检用：已成功回填细节的行数（解析失败不计入）。</summary>
+    internal int ProcessedCount => _processed;
+
+    /// <summary>自检用：第一段得到的行数。</summary>
+    internal int TotalCount => _total;
+
     /// <summary>扫描/补细节期间不显示空状态，避免进度环旁边闪一下「没有存档」。</summary>
     public bool ShowEmptyState => _state is not (SavesState.Scanning or SavesState.Reading or SavesState.Ready);
 
@@ -86,7 +93,9 @@ public sealed class SavesViewModel : LocalizedObservableObject
     public string StatusText => _state switch
     {
         SavesState.Scanning => T(Keys.SavesStatusScanning),
-        SavesState.Reading => T(Keys.SavesStatusReading, _processed, _total),
+        // 0 行时没有「读取 0 / 0」这种无意义进度；第一段没铺出任何行前保持扫描文案。
+        SavesState.Reading when _total > 0 => T(Keys.SavesStatusReading, _processed, _total),
+        SavesState.Reading => T(Keys.SavesStatusScanning),
         SavesState.NoGame => T(Keys.SavesStatusNoGame),
         SavesState.Failed => T(Keys.SavesStatusFailed),
         _ => _lastScanAt is { } scannedAt
@@ -163,6 +172,19 @@ public sealed class SavesViewModel : LocalizedObservableObject
         }
         catch (OperationCanceledException)
         {
+            // 细节阶段取消：不能把半成品骨架留在页面上。清空行与进度，
+            // IsBusy 由 finally 统一关闭；页面已卸载时属于正常收尾。
+            _requests.TryCommit(
+                generation,
+                () =>
+                {
+                    Saves.Clear();
+                    _processed = 0;
+                    _total = 0;
+                    _state = SavesState.Scanning;
+                    NotifyStateChanged();
+                });
+
             throw;
         }
         catch (Exception ex)
@@ -225,45 +247,111 @@ public sealed class SavesViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 第二段：按批解析并按 <see cref="SaveFileBatch{T}.StartIndex"/> 原位回填。
-    /// 每批开始前检查取消与代次，切游戏后旧任务立即停；每批只改已有行对象的属性，
-    /// 不触发 <see cref="ObservableCollection{T}.Clear"/>，也不重新 Add 行。
+    /// 第二段：最多 4 条并行解析；已解析好的<b>连续前缀</b>在满一批、距上次回填 ≥50 ms
+    /// 或后台已完成时回填。回填只改已有行对象（<see cref="SaveGameRowViewModel.ApplyDetail"/>），
+    /// 不触发 <see cref="ObservableCollection{T}.Clear"/>，也不重新 Add 行；
+    /// 解析失败的行留在骨架态，进度只统计成功回填的行。
     /// </summary>
     private async Task LoadDetailsAsync(
         int generation,
         IReadOnlyList<SaveFileEntry> files,
         CancellationToken cancellationToken)
     {
-        foreach (var batch in SaveScanBatching.Split(files))
+        var count = files.Count;
+        var results = new SaveGameMeta?[count];
+        var finished = new bool[count];
+
+        // 每完成一条释放一次；最后再释放一次表示生产者退出。容量多加 1，避免取消时超限。
+        var signal = new SemaphoreSlim(0, count + 1);
+
+        var producer = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await Parallel.ForEachAsync(
+                        Enumerable.Range(0, count),
+                        new ParallelOptions
+                        {
+                            MaxDegreeOfParallelism = SaveGameScanner.MaxDegreeOfParallelism,
+                            CancellationToken = cancellationToken,
+                        },
+                        (index, token) =>
+                        {
+                            token.ThrowIfCancellationRequested();
+                            try
+                            {
+                                results[index] = _library.ParseFile(files[index]);
+                            }
+                            catch (OperationCanceledException)
+                            {
+                                throw;
+                            }
+                            catch (Exception ex)
+                            {
+                                // 解析器本身承诺不抛；这里兜底，避免一条坏档把整页打成失败空态。
+                                _logger.Warn("解析存档细节失败，保留粗略行：" + files[index].FilePath + "：" + ex.Message);
+                            }
+                            finally
+                            {
+                                Volatile.Write(ref finished[index], true);
+                                signal.Release();
+                            }
+
+                            return ValueTask.CompletedTask;
+                        }).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // 取消由消费者抛出 OCE 收尾；生产者不再向上抛，避免未观察异常。
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn("解析存档细节批次失败：" + ex.Message);
+                }
+                finally
+                {
+                    signal.Release();
+                }
+            },
+            CancellationToken.None);
+
+        var next = 0;
+        var sinceFlush = Stopwatch.StartNew();
+
+        while (next < count)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var metas = await Task.Run(
-                () => ParseBatch(batch.Items, cancellationToken),
-                cancellationToken).ConfigureAwait(true);
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var start = batch.StartIndex;
-            if (!_requests.TryCommit(
-                    generation,
-                    () =>
-                    {
-                        for (var i = 0; i < metas.Length; i++)
-                        {
-                            if (metas[i] is { } meta && start + i < Saves.Count)
-                            {
-                                Saves[start + i].ApplyDetail(meta);
-                            }
-                        }
-
-                        _processed += metas.Length;
-                        NotifyStateChanged();
-                    }))
+            var pending = CountFinishedPrefix(finished, next);
+            if (pending > 0
+                && SaveScanBatching.ShouldFlush(pending, sinceFlush.Elapsed, producer.IsCompleted))
             {
-                return;
+                if (!ApplyDetailPrefix(generation, results, next, pending))
+                {
+                    return;
+                }
+
+                next += pending;
+                sinceFlush.Restart();
+                continue;
             }
+
+            if (producer.IsCompleted)
+            {
+                // 生产者的每条结果都写了 finished；走到这里说明剩下的行不会再有结果。
+                await producer.ConfigureAwait(true);
+                break;
+            }
+
+            await signal
+                .WaitAsync(
+                    TimeSpan.FromMilliseconds(SaveScanBatching.DefaultFlushIntervalMilliseconds),
+                    cancellationToken)
+                .ConfigureAwait(true);
         }
+
+        await producer.ConfigureAwait(true);
 
         _requests.TryCommit(
             generation,
@@ -275,38 +363,44 @@ public sealed class SavesViewModel : LocalizedObservableObject
             });
     }
 
-    /// <summary>一批内并行解析（上限 4，与全量扫描一致），失败的单条留空等下一轮刷新。</summary>
-    private SaveGameMeta?[] ParseBatch(IReadOnlyList<SaveFileEntry> batch, CancellationToken cancellationToken)
+    /// <summary>从 <paramref name="start"/> 起有多少条连续完成的结果。</summary>
+    private static int CountFinishedPrefix(bool[] finished, int start)
     {
-        var results = new SaveGameMeta?[batch.Count];
-        var options = new ParallelOptions
+        var length = 0;
+        while (start + length < finished.Length && Volatile.Read(ref finished[start + length]))
         {
-            MaxDegreeOfParallelism = SaveGameScanner.MaxDegreeOfParallelism,
-            CancellationToken = cancellationToken,
-        };
+            length++;
+        }
 
-        Parallel.For(
-            0,
-            batch.Count,
-            options,
-            i =>
+        return length;
+    }
+
+    /// <summary>把一段连续结果回填到对应行；代次已过期时整批丢弃并返回 false。</summary>
+    private bool ApplyDetailPrefix(int generation, SaveGameMeta?[] results, int start, int count)
+    {
+        return _requests.TryCommit(
+            generation,
+            () =>
             {
-                try
+                var applied = 0;
+                for (var i = 0; i < count; i++)
                 {
-                    results[i] = _library.ParseFile(batch[i]);
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    // 解析器本身承诺不抛；这里兜底，避免一条坏档把整页打成失败空态。
-                    _logger.Warn("解析存档细节失败，保留粗略行：" + batch[i].FilePath + "：" + ex.Message);
-                }
-            });
+                    var index = start + i;
+                    if (index >= Saves.Count || results[index] is not { } meta)
+                    {
+                        continue;
+                    }
 
-        return results;
+                    if (Saves[index].ApplyDetail(meta))
+                    {
+                        applied++;
+                    }
+                }
+
+                // 只有真正解析成功并回填的行才计入进度；失败行不会让 n / N 停住。
+                _processed += applied;
+                NotifyStateChanged();
+            });
     }
 
     private void NotifyStateChanged()

@@ -23,6 +23,12 @@ public sealed partial class SavesPage : Page
     /// <summary>重载协调器：连点刷新 / 连续切游戏时取消旧扫描，只应用最新那次的结果。</summary>
     private readonly ReloadCoordinator _reload = new();
 
+    /// <summary>把第二段解析后的读屏名同步到 ListItem；容器复用/卸载时必须退订。</summary>
+    private readonly SaveRowAutomationWatcher _rowAutomation = new();
+
+    /// <summary>容器到行的映射，用于复用同一容器换行时先解除旧订阅。</summary>
+    private readonly Dictionary<ListViewItem, SaveGameRowViewModel> _automationRows = [];
+
     public SavesPage()
     {
         InitializeComponent();
@@ -68,6 +74,8 @@ public sealed partial class SavesPage : Page
     {
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
 
+        _rowAutomation.Clear();
+        _automationRows.Clear();
         _lifetime.Cancel();
     }
 
@@ -103,19 +111,38 @@ public sealed partial class SavesPage : Page
     /// 所以不能在 ItemContainerStyle 里绑；容器每次（含复用）绑定内容时在这里写。
     /// id 是 <c>save_N</c>（ASCII，不随语言变），名字是「文件名，日期，详情」——
     /// 不写的话读屏只会读到 <c>PdxLauncher.App.ViewModels.SaveGameRowViewModel</c>，整列无法区分。
+    /// 第二段补齐细节后行会发 PropertyChanged，由 <see cref="SaveRowAutomationWatcher"/> 重写名字。
     /// </summary>
     private void OnSaveContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
     {
-        if (args.InRecycleQueue || args.ItemContainer is not ListViewItem container)
+        if (args.ItemContainer is not ListViewItem container)
         {
             return;
         }
 
-        if (args.Item is SaveGameRowViewModel row)
+        if (args.InRecycleQueue)
         {
-            AutomationProperties.SetAutomationId(container, row.AutomationId);
-            AutomationProperties.SetName(container, row.AutomationName);
+            if (_automationRows.Remove(container, out var recycled))
+            {
+                _rowAutomation.Untrack(recycled);
+            }
+
+            return;
         }
+
+        if (args.Item is not SaveGameRowViewModel row)
+        {
+            return;
+        }
+
+        if (_automationRows.TryGetValue(container, out var previous) && !ReferenceEquals(previous, row))
+        {
+            _rowAutomation.Untrack(previous);
+        }
+
+        _automationRows[container] = row;
+        AutomationProperties.SetAutomationId(container, row.AutomationId);
+        _rowAutomation.Track(row, name => AutomationProperties.SetName(container, name));
     }
 
     private Task ReloadAsync() => _reload.RunAsync(

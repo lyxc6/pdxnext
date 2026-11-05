@@ -71,12 +71,13 @@ public static class SavesPageChecks
         var pagePath = Path.Combine(appRoot, "Views", "SavesPage.xaml.cs");
         var viewModelPath = Path.Combine(appRoot, "ViewModels", "SavesViewModel.cs");
         var rowViewModelPath = Path.Combine(appRoot, "ViewModels", "SaveGameRowViewModel.cs");
+        var automationWatcherPath = Path.Combine(appRoot, "Services", "SaveRowAutomationWatcher.cs");
         var navigationPath = Path.Combine(appRoot, "Services", "NavigationService.cs");
         var mainWindowPath = Path.Combine(appRoot, "MainWindow.xaml");
         var mainWindowCodePath = Path.Combine(appRoot, "MainWindow.xaml.cs");
 
         CheckPage(xamlPath);
-        CheckViewModel(viewModelPath, rowViewModelPath, pagePath);
+        CheckViewModel(viewModelPath, rowViewModelPath, pagePath, automationWatcherPath);
         CheckGenerationGuard();
         CheckRowText();
         CheckNavigation(navigationPath, mainWindowPath, mainWindowCodePath);
@@ -158,7 +159,11 @@ public static class SavesPageChecks
 
     // ------------------------------------------------------------ ViewModel
 
-    private static void CheckViewModel(string viewModelPath, string rowViewModelPath, string pagePath)
+    private static void CheckViewModel(
+        string viewModelPath,
+        string rowViewModelPath,
+        string pagePath,
+        string automationWatcherPath)
     {
         if (!ChecksContext.Check("存档页: SavesViewModel.cs 存在", File.Exists(viewModelPath), viewModelPath)
             || !ChecksContext.Check("存档页: SaveGameRowViewModel.cs 存在", File.Exists(rowViewModelPath), rowViewModelPath))
@@ -179,17 +184,23 @@ public static class SavesPageChecks
                 && !rowViewModel.Contains("Microsoft.UI.Xaml.", StringComparison.Ordinal));
 
         // 两段式：第一段只枚举（ScanFilesAsync 自己在线程池上跑，不打开文件内容）；
-        // 第二段在 Task.Run 里按批解析细节，再回到 UI 线程原位回填。
+        // 第二段最多 4 条并行解析，再按「满一批 / 50 ms / 后台完成」回填连续前缀。
         ChecksContext.Check(
             "存档页: 第一段只调用枚举 ScanFilesAsync（不读文件内容）",
             viewModel.Contains("ScanFilesAsync", StringComparison.Ordinal));
         ChecksContext.Check(
             "存档页: 第二段细节解析跑在 Task.Run 里（UI 线程零文件 IO）",
-            Regex.IsMatch(viewModel, @"Task\.Run[\s\S]{0,600}?ParseBatch", RegexOptions.CultureInvariant));
+            Regex.IsMatch(viewModel, @"Task\.Run[\s\S]{0,700}?Parallel\.ForEachAsync", RegexOptions.CultureInvariant));
         ChecksContext.Check(
-            "存档页: 第二段按批回填而不是整表重建",
-            viewModel.Contains("SaveScanBatching.Split", StringComparison.Ordinal)
+            "存档页: 第二段按时间/条数触发回填而不是整表重建",
+            viewModel.Contains("SaveScanBatching.ShouldFlush", StringComparison.Ordinal)
+                && viewModel.Contains("ApplyDetailPrefix", StringComparison.Ordinal)
                 && viewModel.Contains("ApplyDetail", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "存档页: 进度只统计成功回填的行（失败行不推进 n）",
+            Regex.IsMatch(viewModel, @"if \(Saves\[index\]\.ApplyDetail\(meta\)\)[\s\S]{0,200}?applied\+\+", RegexOptions.CultureInvariant)
+                && viewModel.Contains("_processed += applied", StringComparison.Ordinal)
+                && !viewModel.Contains("_processed += metas.Length", StringComparison.Ordinal));
 
         ChecksContext.Check(
             "存档页: 切游戏/刷新时先清空旧列表",
@@ -275,10 +286,23 @@ public static class SavesPageChecks
             page.Contains("AutomationProperties.SetAutomationId(container, row.AutomationId)", StringComparison.Ordinal));
         ChecksContext.Check(
             "存档页: 行容器写入组合后的 AutomationName",
-            page.Contains("AutomationProperties.SetName(container, row.AutomationName)", StringComparison.Ordinal));
+            page.Contains("_rowAutomation.Track", StringComparison.Ordinal));
         ChecksContext.Check(
-            "存档页: 容器复用时跳过（InRecycleQueue）",
-            page.Contains("args.InRecycleQueue", StringComparison.Ordinal));
+            "存档页: 容器复用/回收时退订读屏名变化（防泄漏）",
+            page.Contains("args.InRecycleQueue", StringComparison.Ordinal)
+                && page.Contains("_rowAutomation.Untrack", StringComparison.Ordinal));
+        if (ChecksContext.Check(
+                "存档页: 读屏名监听器存在",
+                File.Exists(automationWatcherPath),
+                automationWatcherPath))
+        {
+            var watcher = File.ReadAllText(automationWatcherPath);
+            ChecksContext.Check(
+                "存档页: 监听器订阅 PropertyChanged 并在 AutomationName 变化时重写",
+                watcher.Contains("PropertyChanged += handler", StringComparison.Ordinal)
+                    && watcher.Contains("nameof(SaveGameRowViewModel.AutomationName)", StringComparison.Ordinal)
+                    && watcher.Contains("applyName(row.AutomationName)", StringComparison.Ordinal));
+        }
     }
 
     // ------------------------------------------------------------ 代次守卫（行为级）
