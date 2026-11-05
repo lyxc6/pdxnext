@@ -135,7 +135,7 @@ isOwned = isSubscribedApp(id) || 可信DisabledDLC.contains(id) || isDLCInstalle
 - 32 位游戏的 `steam_api.dll` 在 x64 进程里会 `BadImageFormat` → 直接报「无法判定（32 位游戏不支持）」。
 - 同一个 DLL 的 Steamworks 只能有一个持有者：`SteamNativeSession` 做进程内闸门（DLC 授权探测 ↔ 创意工坊订阅）；主探测与账号探测**顺序执行**，不并发（同一 appid 两个 `SteamAPI_Init` 会互相打架）。
 - 结果缓存 30 秒（key = DLL 路径 + 字节数 + appid + 补丁状态 + 备份路径 + 备份字节数），DLC 页的「重新检测」与设置页打/撤补丁成功后会 `Invalidate()`。
-- 真机 Stellaris（appid 281990，SteamID64 76561198370719182）：打完补丁 → loader 表 490、拥有 490；用原版 `steam_api64_o.dll` → 53 个、拥有 26。V3 真机（appid 529340）：loader 表 490、账号视图 23、磁盘 17 个 `.dlc.json` → 判定「补丁已生效：游戏读到 490 个、490 个已拥有；账号真实拥有 17/23（加载器表里 467 条不属于本游戏）」。
+- 真机 Stellaris（appid 281990，SteamID64 76561198370719182）：打完补丁 → loader 表 490、拥有 490；用原版 `steam_api64_o.dll` → 53 个、拥有 26。V3 真机（appid 529340）：loader 表 490、账号视图 23、磁盘 17 个 `.dlc.json` → 判定「补丁已生效：游戏读到 490 个、490 个已拥有；账号真实拥有 17/23（加载器表里 467 条不属于本游戏）」。上面这些计数是 2026-11 的实测样本，账号增减 DLC 后会变（本机后续复测账号视图仍是 23 条，但 `BIsSubscribedApp` 返回已拥有 10 条），文档里的「拥有 x/y」不要当常量断言。
 - 失败键（UI 侧 `dlc.ownershipError*`）：`noAppId` / `noDll` / `x86` / `notWindows` / `busy` / `steamNotRunning` / `initFailed` / `native` / `backupNotOriginal`。
 
 ## 4. launcher-v2.sqlite
