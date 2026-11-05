@@ -3,6 +3,18 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)；版本号遵循
 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
+## [Unreleased]
+
+### Fixed
+
+- 安装向导不给选安装位置：Inno 的 `DisableDirPage` 默认值是 `auto`，只要在卸载项里找到旧安装目录（`UsePreviousAppDir` 命中）就把「选择目标位置」整页隐藏，所以只有全新机器能看到这一页，重装/升级永远装回原目录。现在显式 `DisableDirPage=no`，目录页始终显示，升级时仍预填上次的目录；静默安装（启动器的自动更新）不受影响，照旧无页面装回原目录。
+- 目录页加前置校验：盘符根 / 共享根、`%WINDIR%` 及其子目录、用户目录根、`%LOCALAPPDATA%` 根、Program Files 根会被拦下；每用户模式下再探测一次可写性（在最近的已存在父目录写 `.pdxnext-write-test.tmp` 后删掉，不建空目录），不可写就提示换目录或改用「为所有用户安装」。
+- 「另一种安装模式已存在」的检测只认两个默认目录，用户自选目录后切模式检测失效、两个模式可以并存：现在先读对方卸载项里的 `Inno Setup: App Path`（`OtherModeInstalled` 走 `RegQueryStringValue`），读不到再退回默认路径探测。`tools/verify-installed-version.ps1` 同样补上卸载项目录，自选目录的安装也能被校验到。
+
+### Added
+
+- 新增 `InstallerScriptChecks` 自检（检查类 111）：钉死 `DisableDirPage=no`、`UsePreviousAppDir=yes`、默认目录与权限模式、`AppId` 未改动、`[Files]` 仍排除 `data`/日志/更新缓存/`install-mode.txt`、`[CustomMessages]` 中英文成对、`NextButtonClick` 里 `WizardSilent` 必须先于任何 `MsgBox` 提前返回、更新器安装参数仍以 `/SILENT` 开头。
+
 ## [1.2.1] - 2026-11-05
 
 ### Fixed
