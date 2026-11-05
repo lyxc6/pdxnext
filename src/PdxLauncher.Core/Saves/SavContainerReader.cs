@@ -15,6 +15,8 @@ using PdxLauncher.Core.Games;
 /// <item><description><c>SAV0</c> 头最多读 <see cref="MaxHeaderBytes"/>；CK3 的文本 <c>meta_data</c> 按块续读，上限 <see cref="MaxTextMetaBytes"/>，<c>gamestate</c> 永远不读；</description></item>
 /// <item><description>zip 类只读 <c>meta</c>/<c>metadata</c> 条目，且条目解压后最多读 <see cref="MaxZipMetaBytes"/>；</description></item>
 /// <item><description>任何异常都在这里吞掉并降级为「文件名 + 文件时间 + ParseState=Degraded」，绝不上抛。</description></item>
+/// <item><description>zip 元数据只做结构校验：<see cref="ZipArchive"/> 不校验 CRC，stored meta 被静默改坏时仍可能解析出错误的版本/日期，
+/// 只有结构损坏才会落到 OpenFailed / EntryReadFailed。这里不自实现 CRC32，代价不值。</description></item>
 /// </list>
 /// </para>
 /// </summary>
@@ -260,6 +262,11 @@ public sealed class SavContainerReader
         string? playerName = null;
         foreach (var value in strings)
         {
+            if (LooksLikeGameDate(value))
+            {
+                continue;
+            }
+
             var marker = value.IndexOf(" #", StringComparison.Ordinal);
             if (marker > 0)
             {
@@ -272,7 +279,9 @@ public sealed class SavContainerReader
         string? country = null;
         foreach (var value in strings)
         {
-            if (string.Equals(value, version, StringComparison.Ordinal) ||
+            // 日期形状的串即使解析失败（如小时越界）也不是国家/玩家候选，避免原始日期串污染字段。
+            if (LooksLikeGameDate(value) ||
+                string.Equals(value, version, StringComparison.Ordinal) ||
                 string.Equals(value, dateRaw, StringComparison.Ordinal) ||
                 string.Equals(value, playerRaw, StringComparison.Ordinal))
             {
@@ -834,62 +843,6 @@ public sealed class SavContainerReader
         return true;
     }
 
-    private static bool TryExtractBraceBlock(string body, int searchStart, out string block)
-    {
-        var open = body.IndexOf('{', searchStart);
-        if (open < 0)
-        {
-            block = string.Empty;
-            return false;
-        }
-
-        var depth = 0;
-        var inQuotes = false;
-        for (var index = open; index < body.Length; index++)
-        {
-            var character = body[index];
-            if (inQuotes)
-            {
-                if (character == '\\')
-                {
-                    index++;
-                    continue;
-                }
-
-                if (character == '"')
-                {
-                    inQuotes = false;
-                }
-
-                continue;
-            }
-
-            if (character == '"')
-            {
-                inQuotes = true;
-                continue;
-            }
-
-            if (character == '{')
-            {
-                depth++;
-                continue;
-            }
-
-            if (character == '}')
-            {
-                depth--;
-                if (depth == 0)
-                {
-                    block = body[(open + 1)..index];
-                    return true;
-                }
-            }
-        }
-
-        block = string.Empty;
-        return false;
-    }
 
     /// <summary>
     /// 从 SAV0 头之后按块续读，直到 <c>meta_data</c> 的花括号配平；上限 <see cref="MaxTextMetaBytes"/>。
@@ -899,24 +852,106 @@ public sealed class SavContainerReader
     private bool TryReadTextMetaBlock(string filePath, byte[] head, int bodyStart, out string block, out string reason)
     {
         block = string.Empty;
-        using var buffered = new MemoryStream();
-        buffered.Write(head, bodyStart, head.Length - bodyStart);
-        var total = head.Length - bodyStart;
+        var initial = (int)Math.Min(MaxTextMetaBytes, (long)head.Length - bodyStart + TextMetaChunkBytes);
+        var buffer = new byte[Math.Max(initial, TextMetaChunkBytes)];
+        var length = Math.Min(head.Length - bodyStart, MaxTextMetaBytes);
+        Array.Copy(head, bodyStart, buffer, 0, length);
+
+        var metaIndex = -1;
+        var searchFrom = 0;
+        var openIndex = -1;
+        var depth = 0;
+        var inQuotes = false;
+        var scanFrom = 0;
 
         using var stream = _fileSystem.OpenRead(filePath);
         stream.Position = head.Length;
-        var chunk = new byte[TextMetaChunkBytes];
         while (true)
         {
-            var text = Encoding.UTF8.GetString(buffered.GetBuffer(), 0, (int)buffered.Length);
-            var metaIndex = text.IndexOf("meta_data", StringComparison.Ordinal);
-            if (metaIndex >= 0 && TryExtractBraceBlock(text, metaIndex, out block))
+            if (metaIndex < 0)
             {
-                reason = string.Empty;
-                return true;
+                metaIndex = IndexOfBytes(buffer, length, "meta_data"u8, searchFrom);
+                if (metaIndex < 0)
+                {
+                    searchFrom = Math.Max(0, length - 8);
+                }
+                else
+                {
+                    scanFrom = metaIndex;
+                }
             }
 
-            if (total >= MaxTextMetaBytes)
+            var index = scanFrom;
+            while (index < length)
+            {
+                var value = buffer[index];
+                if (inQuotes)
+                {
+                    if (value == (byte)'\\')
+                    {
+                        if (index + 1 >= length)
+                        {
+                            break;
+                        }
+
+                        index += 2;
+                        continue;
+                    }
+
+                    if (value == (byte)'"')
+                    {
+                        inQuotes = false;
+                    }
+
+                    index++;
+                    continue;
+                }
+
+                if (value == (byte)'"')
+                {
+                    inQuotes = true;
+                    index++;
+                    continue;
+                }
+
+                if (value == (byte)'{')
+                {
+                    depth++;
+                    if (openIndex < 0)
+                    {
+                        openIndex = index;
+                    }
+
+                    index++;
+                    continue;
+                }
+
+                if (value == (byte)'}')
+                {
+                    if (openIndex < 0)
+                    {
+                        index++;
+                        continue;
+                    }
+
+                    depth--;
+                    index++;
+                    if (depth == 0)
+                    {
+                        block = Encoding.UTF8.GetString(buffer, openIndex + 1, index - openIndex - 2);
+                        reason = string.Empty;
+                        return true;
+                    }
+
+                    continue;
+                }
+
+                index++;
+            }
+
+            scanFrom = index;
+
+            if (length >= MaxTextMetaBytes)
             {
                 reason = metaIndex < 0
                     ? "前 256 KB 内未找到 meta_data"
@@ -924,16 +959,33 @@ public sealed class SavContainerReader
                 return false;
             }
 
-            var read = stream.Read(chunk, 0, chunk.Length);
+            if (length == buffer.Length)
+            {
+                Array.Resize(ref buffer, (int)Math.Min(MaxTextMetaBytes, (long)buffer.Length * 2));
+            }
+
+            var read = stream.Read(buffer, length, buffer.Length - length);
             if (read <= 0)
             {
                 reason = metaIndex < 0 ? "文件中未找到 meta_data" : "meta_data 花括号未在文件结束前闭合";
                 return false;
             }
 
-            buffered.Write(chunk, 0, read);
-            total += read;
+            length += read;
         }
+    }
+
+    private static int IndexOfBytes(byte[] data, int length, ReadOnlySpan<byte> pattern, int start)
+    {
+        for (var index = Math.Max(0, start); index <= length - pattern.Length; index++)
+        {
+            if (data.AsSpan(index, pattern.Length).SequenceEqual(pattern))
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     private static Dictionary<string, string> ParseKeyValuePairs(string text)
@@ -1249,6 +1301,64 @@ public sealed class SavContainerReader
         {
             return DateTimeOffset.MinValue;
         }
+    }
+
+    /// <summary>
+    /// 判断一个字符串是否「长得像」游戏内日期（YYYY.M.D 开头，后面可跟小时、空白、'-' 或结束）。
+    /// <para>用于把解析失败但仍是日期形状的串排除出玩家/国家启发式，避免原始日期串污染字段。</para>
+    /// </summary>
+    private static bool LooksLikeGameDate(string value)
+    {
+        var index = 0;
+        if (!TrySkipDigits(value, ref index, 3, 4))
+        {
+            return false;
+        }
+
+        if (index >= value.Length || value[index] != '.')
+        {
+            return false;
+        }
+
+        index++;
+        if (!TrySkipDigits(value, ref index, 1, 2))
+        {
+            return false;
+        }
+
+        if (index >= value.Length || value[index] != '.')
+        {
+            return false;
+        }
+
+        index++;
+        if (!TrySkipDigits(value, ref index, 1, 2))
+        {
+            return false;
+        }
+
+        return index == value.Length ||
+               value[index] == '.' ||
+               char.IsWhiteSpace(value[index]) ||
+               value[index] == '-';
+    }
+
+    private static bool TrySkipDigits(string value, ref int index, int minimum, int maximum)
+    {
+        var start = index;
+        while (index < value.Length && char.IsAsciiDigit(value[index]))
+        {
+            index++;
+        }
+
+        var count = index - start;
+        if (count >= minimum && count <= maximum)
+        {
+            return true;
+        }
+
+        index = start;
+        return false;
     }
 
     private byte[] ReadPrefix(string path)

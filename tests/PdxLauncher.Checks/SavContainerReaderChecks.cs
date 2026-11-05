@@ -29,6 +29,8 @@ public static class SavContainerReaderChecks
         CheckVictoria3ZipEntryTooLarge(fs, reader);
         CheckVictoria3ZipTooManyEntries(fs, reader);
         CheckVictoria3PkFalsePositive(fs, reader);
+        CheckVictoria3ZipEntryReadFailure(fs, reader);
+        CheckVictoria3StoredCrcIgnored(fs, reader);
         CheckEu5(reader);
         CheckEu5HourComponent(fs, reader);
         CheckStellaris(reader);
@@ -221,6 +223,70 @@ public static class SavContainerReaderChecks
         }
     }
 
+    private static void CheckVictoria3ZipEntryReadFailure(IFileSystem fs, SavContainerReader reader)
+    {
+        Console.WriteLine("[SavContainerReaderChecks] V3 zip 的 meta 条目数据损坏");
+        var root = PlaysetChecks.CreateTempRoot(fs, "saves-v3zip-broken-entry");
+        try
+        {
+            var path = Path.Combine(root, "条目损坏_1848_03_02.v3");
+            // 内容足够大，确保 .NET 用 deflate 而不是 stored；破坏首块后读条目必抛 InvalidDataException。
+            var tokens = BuildTokenStream("1.99.0", "1848.03.02 - 合成战役", new string('x', 8000));
+            var bytes = BuildV3ZipSave("meta", tokens, compression: CompressionLevel.Optimal);
+            CorruptZipEntryData(bytes, "meta");
+            fs.WriteAllBytesAtomic(path, bytes);
+
+            var meta = reader.Parse("victoria3", path, SaveContainer.BinaryToken);
+            ChecksContext.Equal("条目读取失败时降级", SaveParseState.Degraded, meta.ParseState);
+            ChecksContext.Check(
+                "文案标识 zip 条目读取失败（不是 token 回退）",
+                meta.DegradeReason is not null &&
+                meta.DegradeReason.Contains("条目读取失败", StringComparison.Ordinal),
+                meta.DegradeReason);
+            ChecksContext.Check(
+                "文案指向 meta 条目",
+                meta.DegradeReason is not null &&
+                meta.DegradeReason.Contains("zip 的 meta", StringComparison.Ordinal),
+                meta.DegradeReason);
+            ChecksContext.Check(
+                "没有误走 token 回退文案",
+                meta.DegradeReason is null ||
+                !meta.DegradeReason.Contains("二进制 token 流", StringComparison.Ordinal),
+                meta.DegradeReason);
+        }
+        finally
+        {
+            PlaysetChecks.TryDelete(fs, root);
+        }
+    }
+
+    private static void CheckVictoria3StoredCrcIgnored(IFileSystem fs, SavContainerReader reader)
+    {
+        Console.WriteLine("[SavContainerReaderChecks] zip 不校验 CRC：stored meta 坏 1 字节仍 Ok");
+        var root = PlaysetChecks.CreateTempRoot(fs, "saves-v3zip-crc");
+        try
+        {
+            var path = Path.Combine(root, "CRC静默_1848_03_02.v3");
+            var bytes = BuildV3ZipSave("meta");
+            var versionAt = IndexOfBytes(bytes, Encoding.ASCII.GetBytes("1.99.0"));
+            ChecksContext.Check("样本里能找到版本串", versionAt >= 0, versionAt.ToString());
+            if (versionAt >= 0)
+            {
+                bytes[versionAt] = (byte)'0';
+            }
+
+            fs.WriteAllBytesAtomic(path, bytes);
+
+            var meta = reader.Parse("victoria3", path, SaveContainer.BinaryToken);
+            ChecksContext.Equal("坏 CRC 仍 Ok（ZipArchive 不校验 CRC）", SaveParseState.Ok, meta.ParseState);
+            ChecksContext.Equal("版本随坏字节变化", "0.99.0", meta.GameVersion ?? "<null>");
+        }
+        finally
+        {
+            PlaysetChecks.TryDelete(fs, root);
+        }
+    }
+
     private static void CheckEu5(SavContainerReader reader)
     {
         Console.WriteLine("[SavContainerReaderChecks] EU5 二进制 token");
@@ -249,10 +315,28 @@ public static class SavContainerReaderChecks
             ChecksContext.Equal("带小时仍解析出存档名", "瑞典", meta.SaveName ?? "<null>");
             ChecksContext.Equal("带小时的状态为 Ok", SaveParseState.Ok, meta.ParseState);
 
-            var bad = Path.Combine(root, "坏小时_1355_10_27.eu5");
-            fs.WriteAllBytesAtomic(bad, BuildTokenSave("1.0.7", "1355.10.27.99 - 坏小时"));
-            var badMeta = reader.Parse("eu5", bad, SaveContainer.BinaryToken);
-            ChecksContext.Equal("非法小时不当作存档名", "坏小时", badMeta.SaveName ?? "<null>");
+            // 文件名刻意不带日期，否则文件名回退会掩盖「小时越界被拒绝」。
+            var bad99 = Path.Combine(root, "坏小时99.eu5");
+            fs.WriteAllBytesAtomic(bad99, BuildTokenSave("1.0.7", "1355.10.27.99 - 坏小时"));
+            var bad99Meta = reader.Parse("eu5", bad99, SaveContainer.BinaryToken);
+            ChecksContext.Check("小时 99 越界：日期必须为空", bad99Meta.GameDate is null, bad99Meta.GameDate);
+            ChecksContext.Check(
+                "小时 99 越界：存档名不吞原始日期串",
+                bad99Meta.SaveName is not null &&
+                !bad99Meta.SaveName.Contains("1355.10.27.99", StringComparison.Ordinal),
+                bad99Meta.SaveName);
+            ChecksContext.Check(
+                "小时 99 越界：国家不吞原始日期串",
+                bad99Meta.PlayerCountry is null ||
+                !bad99Meta.PlayerCountry.Contains("1355.10.27.99", StringComparison.Ordinal),
+                bad99Meta.PlayerCountry);
+            ChecksContext.Check("小时 99 越界：不把日期串当国家", bad99Meta.PlayerCountry is null, bad99Meta.PlayerCountry);
+
+            var bad24 = Path.Combine(root, "坏小时24.eu5");
+            fs.WriteAllBytesAtomic(bad24, BuildTokenSave("1.0.7", "1355.10.27.24 - 坏小时二"));
+            var bad24Meta = reader.Parse("eu5", bad24, SaveContainer.BinaryToken);
+            ChecksContext.Check("小时 24 越界：日期必须为空", bad24Meta.GameDate is null, bad24Meta.GameDate);
+            ChecksContext.Check("小时 24 越界：不把日期串当国家", bad24Meta.PlayerCountry is null, bad24Meta.PlayerCountry);
         }
         finally
         {
@@ -346,7 +430,11 @@ public static class SavContainerReaderChecks
         }
     }
 
-    private static byte[] BuildV3ZipSave(string? entryName, byte[]? metaTokens = null, int fillerEntries = 0)
+    private static byte[] BuildV3ZipSave(
+        string? entryName,
+        byte[]? metaTokens = null,
+        int fillerEntries = 0,
+        CompressionLevel compression = CompressionLevel.NoCompression)
     {
         using var body = new MemoryStream();
         using (var archive = new ZipArchive(body, ZipArchiveMode.Create, leaveOpen: true))
@@ -366,7 +454,7 @@ public static class SavContainerReaderChecks
 
             if (entryName is not null)
             {
-                var meta = archive.CreateEntry(entryName, CompressionLevel.NoCompression);
+                var meta = archive.CreateEntry(entryName, compression);
                 using var metaStream = meta.Open();
                 metaStream.Write(metaTokens ?? BuildV3MetaTokenStream());
             }
@@ -434,6 +522,62 @@ public static class SavContainerReaderChecks
         return body.ToArray();
     }
 
+    private static void CorruptZipEntryData(byte[] data, string entryName)
+    {
+        for (var index = 0; index + 30 <= data.Length; index++)
+        {
+            if (data[index] != 0x50 || data[index + 1] != 0x4B ||
+                data[index + 2] != 0x03 || data[index + 3] != 0x04)
+            {
+                continue;
+            }
+
+            var nameLength = data[index + 26] | (data[index + 27] << 8);
+            var extraLength = data[index + 28] | (data[index + 29] << 8);
+            if (index + 30 + nameLength > data.Length)
+            {
+                continue;
+            }
+
+            var name = Encoding.ASCII.GetString(data, index + 30, nameLength);
+            if (!string.Equals(name, entryName, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var start = index + 30 + nameLength + extraLength;
+            for (var offset = 0; offset < 4 && start + offset < data.Length; offset++)
+            {
+                data[start + offset] = 0xFF;
+            }
+
+            return;
+        }
+    }
+
+    private static int IndexOfBytes(byte[] data, byte[] pattern)
+    {
+        for (var index = 0; index <= data.Length - pattern.Length; index++)
+        {
+            var matched = true;
+            for (var offset = 0; offset < pattern.Length; offset++)
+            {
+                if (data[index + offset] != pattern[offset])
+                {
+                    matched = false;
+                    break;
+                }
+            }
+
+            if (matched)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
     private static void CheckCorrupt(SavContainerReader reader)
     {
         Console.WriteLine("[SavContainerReaderChecks] 损坏档降级");
@@ -449,7 +593,7 @@ public static class SavContainerReaderChecks
 
     private static void CheckLargeMetaScan(IFileSystem fs, SavContainerReader reader)
     {
-        Console.WriteLine("[SavContainerReaderChecks] CK3 meta_data 扫描上限 256 KB");
+        Console.WriteLine("[SavContainerReaderChecks] CK3 meta_data 扫描上限 256 KB 与分配");
         var root = PlaysetChecks.CreateTempRoot(fs, "saves-bounded");
         try
         {
@@ -482,7 +626,7 @@ public static class SavContainerReaderChecks
             "SAV0"u8.CopyTo(farData);
             farData[4] = 10;
             var farMarker = Encoding.UTF8.GetBytes("meta_data={ version=9.9.9 meta_date=1.1.1 meta_title_name=\"越界\" }");
-            farMarker.CopyTo(farData, 300 * 1024);
+            farMarker.CopyTo(farData, 264 * 1024);
             fs.WriteAllBytesAtomic(far, farData);
 
             var farMeta = reader.Parse("ck3", far, SaveContainer.TextMeta);
@@ -492,6 +636,60 @@ public static class SavContainerReaderChecks
                 farMeta.DegradeReason is not null && farMeta.DegradeReason.Contains("256 KB", StringComparison.Ordinal),
                 farMeta.DegradeReason);
             ChecksContext.Check("超限时不编造版本", farMeta.GameVersion is null, farMeta.GameVersion);
+
+            // 边界内：meta 从 256 KB - 100 处开始，闭合仍在 256 KB 内。
+            var near = Path.Combine(root, "near.ck3");
+            var nearData = new byte[300 * 1024];
+            Array.Fill(nearData, (byte)'A');
+            "SAV0"u8.CopyTo(nearData);
+            nearData[4] = 10;
+            var nearBlock = Encoding.UTF8.GetBytes("meta_data={ version=7.7.7 }");
+            nearBlock.CopyTo(nearData, (256 * 1024) - 100);
+            fs.WriteAllBytesAtomic(near, nearData);
+
+            var nearMeta = reader.Parse("ck3", near, SaveContainer.TextMeta);
+            ChecksContext.Equal("256 KB 边界内仍可解析", SaveParseState.Ok, nearMeta.ParseState);
+            ChecksContext.Equal("256 KB 边界内版本可读", "7.7.7", nearMeta.GameVersion ?? "<null>");
+
+            // 花括号跨过 256 KB：块虽然起点在界内，闭合超出也必须降级。
+            var spill = Path.Combine(root, "spill.ck3");
+            var spillData = new byte[320 * 1024];
+            Array.Fill(spillData, (byte)'A');
+            "SAV0"u8.CopyTo(spillData);
+            spillData[4] = 10;
+            var spillBlock = Encoding.UTF8.GetBytes(
+                "meta_data={ version=8.8.8 " + new string(' ', 10_000) + "}");
+            spillBlock.CopyTo(spillData, 255 * 1024);
+            fs.WriteAllBytesAtomic(spill, spillData);
+
+            var spillMeta = reader.Parse("ck3", spill, SaveContainer.TextMeta);
+            ChecksContext.Equal("花括号跨过 256 KB 降级", SaveParseState.Degraded, spillMeta.ParseState);
+            ChecksContext.Check(
+                "跨边界文案说明未闭合",
+                spillMeta.DegradeReason is not null &&
+                spillMeta.DegradeReason.Contains("256 KB", StringComparison.Ordinal),
+                spillMeta.DegradeReason);
+
+            // 分配：meta 在 body 头部、块内含 250 KB 空白；不得重复解码整个缓冲。
+            var allocPath = Path.Combine(root, "alloc.ck3");
+            var allocBlock = Encoding.UTF8.GetBytes(
+                "meta_data={ version=6.6.6" + new string(' ', 250_000) + "}");
+            var allocData = new byte[5 + allocBlock.Length];
+            "SAV0"u8.CopyTo(allocData);
+            allocData[4] = 10;
+            allocBlock.CopyTo(allocData, 5);
+            fs.WriteAllBytesAtomic(allocPath, allocData);
+
+            var beforeAlloc = GC.GetAllocatedBytesForCurrentThread();
+            var allocMeta = reader.Parse("ck3", allocPath, SaveContainer.TextMeta);
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - beforeAlloc;
+            Console.WriteLine($"[SavContainerReaderChecks] 256 KB 附近用例分配 {allocated} 字节");
+            ChecksContext.Equal("250 KB 块仍可解析", SaveParseState.Ok, allocMeta.ParseState);
+            ChecksContext.Equal("250 KB 块版本可读", "6.6.6", allocMeta.GameVersion ?? "<null>");
+            ChecksContext.Check(
+                "256 KB 用例分配不超过 2 MB",
+                allocated < 2 * 1024 * 1024,
+                allocated.ToString());
         }
         finally
         {
