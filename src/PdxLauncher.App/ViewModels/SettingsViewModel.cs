@@ -29,7 +29,8 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// 主题缓存 TTL：24 小时。索引最后检查时间 + TTL 只用来展示「下次检查」；
     /// 真正的刷新判定在 ThemeResolver/ThemeRefreshDecision，退避与 force 都优先于 TTL。
     /// </summary>
-    public static readonly TimeSpan ThemeCacheTtl = TimeSpan.FromMilliseconds(86_400_000);
+    public static readonly TimeSpan ThemeCacheTtl =
+        TimeSpan.FromMilliseconds(ThemeRefreshDecision.DefaultTtlMilliseconds);
 
     private GameInstallation? _game;
     private ThemeSpec? _theme;

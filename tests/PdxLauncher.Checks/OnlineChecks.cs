@@ -321,6 +321,14 @@ public static class OnlineChecks
 
     private static void CheckDownloader(IFileSystem fs, string tempRoot)
     {
+        // 防止条件请求悄悄退化成普通下载：AssetDownloader 靠接口探测决定是否发
+        // If-None-Match / If-Modified-Since，HttpFetcher 一旦漏掉接口，304 分支永不执行，
+        // ETag 也永远写 null。其余自检用的是 fake IAssetDownloader，测不出这类回归。
+        ChecksContext.Check(
+            "HttpFetcher 实现 IConditionalHttpFetcher",
+            typeof(IConditionalHttpFetcher).IsAssignableFrom(typeof(HttpFetcher)),
+            "缺接口会让 AssetDownloader 静默退回普通下载，条件请求永远不发");
+
         var logger = new RecordingLogger();
         var pngBytes = BuildAsset(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, 8192);
         var fetcher = new FakeHttpFetcher(streamFactory: _ => new SyntheticStream(pngBytes));
@@ -978,6 +986,25 @@ public static class OnlineChecks
         var backoff = Run(lastChecked: now.AddDays(-5), retryAfter: now.AddMinutes(5));
         ChecksContext.Check("退避窗口内不 stale", !backoff.ShouldRefresh);
         ChecksContext.Equal("退避窗口内原因 = Backoff", ThemeRefreshReason.Backoff, backoff.Reason);
+
+        // 退避必须先于 FileMissing / IndexEmpty：否则一次失败后文件被清或索引为空时，
+        // 每次启动都会重新撞网络，退避等于失效。
+        var backoffMissing = Run(
+            lastChecked: now.AddDays(-5),
+            retryAfter: now.AddMinutes(5),
+            fileMissing: true);
+        ChecksContext.Check("退避 × 文件缺失仍不刷新", !backoffMissing.ShouldRefresh);
+        ChecksContext.Equal(
+            "退避 × 文件缺失原因 = Backoff",
+            ThemeRefreshReason.Backoff,
+            backoffMissing.Reason);
+
+        var backoffEmpty = Run(retryAfter: now.AddMinutes(5), indexEmpty: true);
+        ChecksContext.Check("退避 × 索引为空仍不刷新", !backoffEmpty.ShouldRefresh);
+        ChecksContext.Equal(
+            "退避 × 索引为空原因 = Backoff",
+            ThemeRefreshReason.Backoff,
+            backoffEmpty.Reason);
 
         var force = Run(lastChecked: now, retryAfter: now.AddMinutes(5), force: true);
         ChecksContext.Check("force 绕过 TTL 与退避", force.ShouldRefresh);

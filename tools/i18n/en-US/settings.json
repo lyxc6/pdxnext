@@ -289,7 +289,7 @@
   "settings.theme.hint": "Backgrounds and wordmarks come from the metadata service and are re-checked at most once a day (24-hour TTL); colors and fonts always come from theme-settings.json in the install folder.",
   "settings.theme.lastCheck": "Last checked",
   "settings.theme.lastFailure": "Last failure",
-  "settings.theme.metadataMissing": "No metadata for this game; using bundled art",
+  "settings.theme.metadataMissing": "Couldn't fetch metadata for this game (network failure possible); using bundled art",
   "settings.theme.neverChecked": "Never checked",
   "settings.theme.nextCheck": "Next check",
   "settings.theme.nextOnStartup": "On next launch",

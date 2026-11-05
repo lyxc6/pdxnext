@@ -413,6 +413,9 @@ public sealed class ThemeResolver : IThemeResolver
                 index.LastCheckedUtc,
                 index.RetryAfterUtc,
                 IndexEmpty: index.Assets.Count == 0,
+                // 这里恒为 false 是刻意的：缓存判定阶段还没拿到 metadata，无从比较 URL。
+                // UrlChanged 分支保留给 RefreshOneAsync 的真实比较（sameUrl 路径），
+                // 不要在决策入口把它当已判定事实。
                 UrlChanged: false,
                 FileMissing: fileMissing,
                 Force: force));

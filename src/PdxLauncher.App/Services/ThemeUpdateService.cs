@@ -275,6 +275,10 @@ internal static class ThemeUpdateService
     private static void ClearBackgroundRetry()
     {
         Interlocked.Exchange(ref _nextBackgroundAttemptTicks, 0);
+
+        // 同时清掉调度标记：否则成功后再过 10 分钟，已排队的 Task.Delay 仍会触发一次
+        // 空转刷新（decision=Fresh、无网络请求，但属于无效调度）。
+        Interlocked.Exchange(ref _retryScheduled, 0);
     }
 
     /// <summary>刷新顺序：指定的那一款 / 当前游戏优先，其余按发现顺序。</summary>

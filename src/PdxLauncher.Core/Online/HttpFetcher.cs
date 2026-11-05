@@ -14,7 +14,7 @@ using PdxLauncher.Core.Abstractions;
 /// 换对象等于把它们的引用变成指向已释放连接池的僵尸。
 /// </para>
 /// </summary>
-public sealed class HttpFetcher : IHttpFetcher, IDisposable
+public sealed class HttpFetcher : IHttpFetcher, IConditionalHttpFetcher, IDisposable
 {
     /// <summary>
     /// 连接超时 30 秒。旧值 15 秒实测会在到 metadata-assets 的 TLS 握手上大面积超时
