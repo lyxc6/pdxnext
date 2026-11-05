@@ -20,6 +20,8 @@
 - DLC 页：Victoria 3 1.15 的新 DLC 只写在 `game\dlc_metadata\00_dlc_metadata.txt`，现在会一并解析（如「State and Revolution」）；CK3 与 Stellaris 的同名目录结构不同，不会被误当成 V3 格式。
 - 工坊评论表情：评论里的 Steam 表情（`…/economy/emoticon/<名字>`）按 20 px 内联图片渲染，被粗体、斜体或链接包住时也不会整段退化成纯文字。
 - 主页按钮：没有官方美术素材的游戏（内置占位图 / 安装包内置图 / Steam 库页大图）改用 WinUI 原生按钮；EU5 补上官方金色字标（1299×497 PNG），与 Steam 官方库页大图同时生效。
+- 成就页：Steam 宿主改成常驻子进程（`--steam-host serve`，stdin/stdout 逐行 JSON，Init 只做一次、空闲 10 分钟退出），启动后后台预热当前游戏的成就并写快照；预热后首次进页约 176 ms、二次约 88 ms（冷启直进仍是约 1.2 s，其中约 0.7 s 是 Steam 初始化）。
+- 成就 DLL 定位：同一目录里的原版备份（`steam_api64_o.dll` 等）优先于 `steam_api64.dll`；打了 DLC 补丁的游戏以前会选中补丁 loader 而 `Init` 失败、成就显示 0 条，现在会依次换候选（最多 3 份）并记住崩溃/失败的 DLL。新增 `--steam-host api-check` 只检查 DLL 能不能加载与导出是否齐全，不调用 `Init`。
 - DLC 页：Stellaris 这类在 Steam 里有 DLC 清单的游戏，现在分「已拥有（N）/ 未拥有（N）」两段列出，未拥有项只读。未拥有清单来自 Steam 的 DLC 表（`GetDLCCount` / `BGetDLCDataByIndex`）减去已拥有与磁盘上已存在的 `.dlc`；清单不可信（条目过多或大量空名）时不合成该段而是明确提示。Steam 没运行时标题改为「本地 DLC（N）」，不会再出现「已拥有（31）」但每行都写「授权未知」。
 
 ### Changed
@@ -31,6 +33,7 @@
 
 ### Fixed
 
+- 成就页在打了 DLC 补丁的游戏里显示「没有可显示的成就」：一是补丁 loader 的 `Init` 必然失败且以前不会换候选，二是「可用但 0 条」的结果也会被写成缓存并被后续刷新继续沿用。现在初始化失败会换下一份 DLL，空结果不再落盘、加载到空快照时视为未命中并重新读取。
 - 背景图退避形同虚设：`IsCacheStale` 在 `now < retryAfter` 时没有提前返回，落到 5 天 TTL 判断上，失败后仍会每次解析都去撞 CDN。
 - 背景图条件请求从来没生效过：`HttpFetcher` 类声明漏了 `IConditionalHttpFetcher`，而下载器靠 `is` 探测它，结果生产永远走普通下载、`If-None-Match` 从不发送、ETag 恒为 null，304 分支是死代码（自检全绿是因为测试用了 fake 下载器）。现在接口真正实现，并加了「接口是否被实现」的自检钉住回归。
 - EU5 背景永远是安装包里 2026-10-28 那张静态图：metadata 服务端本来就没有 EU5 这条记录，以前静默跳过。现在显式记日志并明确回落到内置图；内置图查找也不再只认 eu5，任意游戏都能用 `<程序目录>\Assets\themes\<gameId>\background.jpg`。
