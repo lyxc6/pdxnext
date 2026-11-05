@@ -116,9 +116,8 @@ public static class AppServices
     public static ISteamOwnershipService DlcOwnership { get; private set; } = null!;
 
     /// <summary>
-    /// 成就数据源。S2 接入 Steam 宿主（flat C API）前固定为空实现，
-    /// 页面拿到 <c>NotSupported</c> 并显示「该游戏暂无成就数据源」。
-    /// 接真实现时只替换这里的赋值，页面与视图模型不用改。
+    /// 成就数据源：走「Steam 宿主子进程」读真实成就（appid 未知 / Steam 不可用 / 没有成就
+    /// 分别对应不同的空状态）。原生调用只在子进程里发生，主进程不碰 Steamworks。
     /// </summary>
     public static IAchievementSource Achievements { get; private set; } = new NullAchievementSource();
 
@@ -291,6 +290,12 @@ public static class AppServices
         LocalTranslation = localTranslation;
         GamePatch = gamePatch;
         DlcOwnership = dlcOwnership;
+        Achievements = new SteamAchievementSource(
+            new SteamHostClient(logger),
+            new SteamApiLocator(fileSystem, logger),
+            logger,
+            () => Settings.SteamApiDllPath,
+            () => CurrentGame);
         SettingsStore = settingsStore;
         Database = database;
         Documents = documents;

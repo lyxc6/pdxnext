@@ -36,6 +36,9 @@ public sealed class SteamHostClient
     /// <summary>列 / 读「我自己发布的条目」的超时；宿主自己最多等 30 秒，这里再留余量。</summary>
     public static readonly TimeSpan OwnItemsTimeout = TimeSpan.FromSeconds(45);
 
+    /// <summary>读成就列表的超时；宿主自己最多等 10 秒，这里再留余量。</summary>
+    public static readonly TimeSpan AchievementsTimeout = TimeSpan.FromSeconds(15);
+
     private readonly IAppLogger _logger;
     private readonly string _hostPath;
 
@@ -90,6 +93,38 @@ public sealed class SteamHostClient
         }
 
         return SteamHostProbeResult.Fail(SteamProbeError.HostFailed, Describe(run));
+    }
+
+    /// <summary>
+    /// 读一次某款游戏的成就列表（解锁状态、解锁时间、全球解锁率）。
+    /// <para>
+    /// 返回的 <see cref="SteamHostAchievementsResult"/> 用 <see cref="SteamAchievementCodes"/> 区分
+    /// 「Steam 没启动」「Init 失败」「超时」「没有成就」；解不出结果行时归为
+    /// <see cref="SteamAchievementCodes.HostFailed"/>，由上层映射成「Steam 不可用」。
+    /// </para>
+    /// </summary>
+    /// <param name="apiFilePath">要加载的 <c>steam_api64.dll</c>。</param>
+    /// <param name="appId">游戏的 Steam appid。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<SteamHostAchievementsResult> AchievementsAsync(
+        string apiFilePath,
+        int appId,
+        CancellationToken cancellationToken)
+    {
+        var run = await ExecuteAsync(
+            SteamHostProtocol.AchievementsVerb,
+            apiFilePath,
+            appId,
+            publishedFileId: null,
+            AchievementsTimeout,
+            cancellationToken).ConfigureAwait(false);
+
+        if (SteamHostProtocol.TryDecode<SteamHostAchievementsResult>(run.Stdout, out var payload) && payload is not null)
+        {
+            return payload;
+        }
+
+        return SteamHostAchievementsResult.Fail(SteamAchievementCodes.HostFailed, Describe(run));
     }
 
     /// <summary>跑一次工坊操作（读状态 / 订阅 / 取消订阅）。</summary>
