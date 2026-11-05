@@ -2,6 +2,7 @@ namespace PdxLauncher.Checks;
 
 using System.Text.RegularExpressions;
 
+using PdxLauncher.Core;
 using PdxLauncher.Core.Abstractions;
 
 /// <summary>
@@ -12,8 +13,11 @@ using PdxLauncher.Core.Abstractions;
 /// </summary>
 public static class InstallerScriptChecks
 {
-    /// <summary>安装包标识；改掉它会让新旧版本变成两个互不认识的程序（升级链断掉）。</summary>
-    private const string ExpectedAppId = "{{A2E3D5E1-5133-46BA-A846-1388A878E1A7}";
+    /// <summary>
+    /// 安装包标识；改掉它会让新旧版本变成两个互不认识的程序（升级链断掉）。
+    /// Inno 里字面量的大括号要转义成 {{，所以这里在 PdxIdentity.AppId 前补一个 {。
+    /// </summary>
+    private const string ExpectedAppId = "{" + PdxIdentity.AppId;
 
     /// <summary>升级时必须保留的运行时状态，不能被安装包覆盖。</summary>
     private static readonly string[] RequiredExcludes =
@@ -77,6 +81,10 @@ public static class InstallerScriptChecks
             text.Contains("Inno Setup: App Path", StringComparison.Ordinal)
             && text.Contains("'HKCU:'", StringComparison.Ordinal)
             && text.Contains("'HKLM:'", StringComparison.Ordinal),
+            null);
+        ChecksContext.Check(
+            "verify-installed-version.ps1 的卸载键与 PdxIdentity.UninstallKeyName 一致",
+            text.Contains(PdxIdentity.UninstallKeyName, StringComparison.Ordinal),
             null);
     }
 
@@ -180,6 +188,16 @@ public static class InstallerScriptChecks
         }
 
         var code = string.Join('\n', codeLines);
+
+        // 卸载键与程序文件名必须与运行时判定共用同一份常量，否则改 GUID/改名时两边会悄悄分家。
+        ChecksContext.Check(
+            "[Code] UninstallKey 与 PdxIdentity.UninstallKeyName 一致",
+            code.Contains(PdxIdentity.UninstallKeyName, StringComparison.Ordinal),
+            null);
+        ChecksContext.Check(
+            "[Code] 程序文件名与 PdxIdentity.AppExecutableName 一致",
+            code.Contains("AppExeName = '" + PdxIdentity.AppExecutableName + "'", StringComparison.Ordinal),
+            null);
 
         // 安装模式标记决定数据目录落在哪里（见 PdxDataRoot.IsPerMachineInstall）。
         ChecksContext.Check(
