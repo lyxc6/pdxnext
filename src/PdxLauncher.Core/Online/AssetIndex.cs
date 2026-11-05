@@ -150,7 +150,20 @@ public sealed class AssetIndex
         Set(key, url, fileName, etag: null, lastModified: null);
 
     /// <summary>记录一次成功下载，同时保存条件请求需要的 ETag / Last-Modified。</summary>
-    public void Set(string key, string url, string fileName, string? etag, string? lastModified)
+    public void Set(string key, string url, string fileName, string? etag, string? lastModified) =>
+        Set(key, url, fileName, etag, lastModified, source: null);
+
+    /// <summary>
+    /// 记录一次成功下载并标记来源（<c>metadata</c> / <c>steam-hero</c>）。
+    /// 来源进索引而不是靠「文件在不在」推断，设置页才能说清这张图是谁给的。
+    /// </summary>
+    public void Set(
+        string key,
+        string url,
+        string fileName,
+        string? etag,
+        string? lastModified,
+        string? source)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         Assets[key] = new AssetIndexEntry
@@ -159,6 +172,7 @@ public sealed class AssetIndex
             FileName = fileName,
             ETag = etag,
             LastModified = lastModified,
+            Source = source,
         };
     }
 }

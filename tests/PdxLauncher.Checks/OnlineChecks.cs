@@ -5,6 +5,7 @@ using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Themes;
 
 /// <summary>
 /// 联网层自检（不真联网）：GraphQL 解析、域名白名单、magic bytes 判型、.part 清理、
@@ -33,7 +34,9 @@ public static class OnlineChecks
             CheckThemeRefreshDecision();
             CheckThemeRefreshRetry(fs, tempRoot);
             CheckWashLayerPolicy();
+            CheckSteamHeroUrl();
             CheckSteamCoverUrlResolver();
+            CheckThemeSteamHero(fs, tempRoot);
         }
         finally
         {
@@ -877,6 +880,297 @@ public static class OnlineChecks
     }
 
     /// <summary>
+    /// 库页大图 URL 推导：只换文件名是「严格语义」，生产路径还必须去掉 hash 段
+    /// （实测同 hash 目录下的 library_hero.jpg 是 404，真正的图在 appid 上一级）。
+    /// </summary>
+    private static void CheckSteamHeroUrl()
+    {
+        const string StoreItem = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/";
+
+        ChecksContext.Equal<string?>(
+            "heroUrl: 只换文件名，保留 hash 段与查询串",
+            StoreItem + "3450310/9944/library_hero.jpg?t=1",
+            SteamHeroUrl.FromHeaderUrl(StoreItem + "3450310/9944/header.jpg?t=1"));
+
+        ChecksContext.Equal<string?>(
+            "heroUrl: 文件名大小写不敏感，输出归一成小写",
+            StoreItem + "236850/library_hero.jpg",
+            SteamHeroUrl.FromHeaderUrl(StoreItem + "236850/HEADER.JPG"));
+
+        ChecksContext.Equal<string?>(
+            "heroUrl: 非 header.jpg 返回 null（alt 变体也拒绝）",
+            null,
+            SteamHeroUrl.FromHeaderUrl(StoreItem + "3450310/9944/header_alt_assets_3.jpg"));
+
+        ChecksContext.Equal<string?>(
+            "heroUrl: 非法输入返回 null",
+            null,
+            SteamHeroUrl.FromHeaderUrl("  "));
+
+        ChecksContext.Equal<string?>(
+            "heroUrl: 非 http(s) 返回 null",
+            null,
+            SteamHeroUrl.FromHeaderUrl("C:/steam/header.jpg"));
+
+        // 生产推导：带 hash 的 alt 头图 → 去掉 hash，用 appid 上一级的 library_hero.jpg。
+        ChecksContext.Equal<string?>(
+            "heroUrl 生产: alt 头图去掉 hash 段",
+            StoreItem + "3450310/library_hero.jpg?t=1793206771",
+            SteamHeroUrl.ForLibraryHero(
+                StoreItem + "3450310/5fd80bf02f5d7ad3cb3f260708bc765ec8a11b92/header_alt_assets_3.jpg?t=1793206771"));
+
+        ChecksContext.Equal<string?>(
+            "heroUrl 生产: 无 hash 的旧式头图只换文件名",
+            "https://cdn.cloudflare.steamstatic.com/steam/apps/236850/library_hero.jpg?t=9",
+            SteamHeroUrl.ForLibraryHero(
+                "https://cdn.cloudflare.steamstatic.com/steam/apps/236850/header.jpg?t=9"));
+
+        ChecksContext.Equal<string?>(
+            "heroUrl 生产: 不带 steam/apps 的地址返回 null",
+            null,
+            SteamHeroUrl.ForLibraryHero("https://example.com/foo/header.jpg"));
+
+        // 下载闸门必须放行 Steam 图片 CDN，否则官方图会在白名单处被拦下、静默回落内置图。
+        ChecksContext.Check(
+            "白名单：shared.akamai.steamstatic.com 放行（库页大图）",
+            OnlineHosts.IsAllowedHost(OnlineHosts.SteamSharedCdnHost));
+        ChecksContext.Check(
+            "白名单：cdn.cloudflare.steamstatic.com 放行（旧式头图）",
+            OnlineHosts.IsAllowedHost(OnlineHosts.SteamCloudflareCdnHost));
+        ChecksContext.Check(
+            "白名单：未做子域通配",
+            !OnlineHosts.IsAllowedHost("evil.akamai.steamstatic.com"));
+    }
+
+    /// <summary>
+    /// Steam 官方库页大图这一层：只在 metadata / 安装目录 / 缓存都给不出背景时启用，
+    /// 成功要写同样的 theme-cache 并标来源，失败必须回落内置图且按 10 分钟退避。
+    /// </summary>
+    private static void CheckThemeSteamHero(IFileSystem fs, string tempRoot)
+    {
+        const string HeaderUrl =
+            "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3450310/5fd80bf0/header_alt_assets_3.jpg?t=1793206771";
+        const string HeroUrl =
+            "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3450310/library_hero.jpg?t=1793206771";
+
+        var logger = new RecordingLogger();
+        var clock = new MutableClock(new DateTimeOffset(2026, 11, 5, 12, 0, 0, TimeSpan.Zero));
+        var cacheRoot = Path.Combine(tempRoot, "theme-cache-hero");
+        fs.EnsureDirectory(cacheRoot);
+        var bundledPath = Path.Combine(cacheRoot, "bundled-eu5.jpg");
+        fs.WriteAllBytesAtomic(bundledPath, BuildAsset(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, 4096));
+
+        var metadata = new CountingMetadataClient { ReturnEmpty = true };
+        var downloader = new CountingAssetDownloader(fs);
+        var covers = new FixedSteamCoverResolver(3450310, HeaderUrl);
+        var resolver = new ThemeResolver(
+            fs,
+            clock,
+            logger,
+            metadata,
+            downloader,
+            cacheRoot,
+            covers,
+            new FakeBundledThemes(bundledPath));
+        var eu5 = BuildGame() with { SteamAppId = 3450310, Theme = EmptyTheme() };
+
+        // 1) metadata 无记录 + 有 appid → 下载官方库页大图，来源标 SteamHero。
+        var hero = resolver.ResolveAsync(eu5, allowOnlineRefresh: true, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Equal("steam-hero: 成功时来源 = SteamHero", ThemeAssetSource.SteamHero, hero.Source);
+        ChecksContext.Check(
+            "steam-hero: 背景是下载到的缓存文件",
+            hero.Background is not null
+            && hero.Background.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+            && fs.FileExists(hero.Background),
+            hero.Background ?? "(null)");
+        ChecksContext.Check(
+            "steam-hero: 请求的是 library_hero.jpg 而不是 header.jpg",
+            downloader.LastUrl == HeroUrl,
+            downloader.LastUrl ?? "(null)");
+        var heroIndex = AssetIndex.Load(fs, logger, resolver.IndexPath(eu5.GameId));
+        ChecksContext.Equal<string?>(
+            "steam-hero: 索引里记来源标识",
+            ThemeResolver.SteamHeroSource,
+            heroIndex.Find(AssetKeys.Background)?.Source);
+        ChecksContext.Check(
+            "steam-hero: 日志含 appid 与分辨率可 grep",
+            logger.Infos.Any(i => i.Contains("steam-hero: appid=3450310 分辨率=", StringComparison.Ordinal)),
+            string.Join(" | ", logger.Infos));
+
+        // 2) 缓存命中：不再碰 CDN（背景已存在，甚至不该进这一层）。
+        downloader.Reset();
+        var cached = resolver.ResolveAsync(eu5, allowOnlineRefresh: true, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Equal("steam-hero: 缓存命中不重复下载", 0, downloader.ConditionalCallCount);
+        ChecksContext.Equal<string?>("steam-hero: 缓存命中沿用同一文件", hero.Background, cached.Background);
+        ChecksContext.Equal("steam-hero: 缓存命中仍是 SteamHero", ThemeAssetSource.SteamHero, cached.Source);
+
+        // 3) 下载失败 → 回落内置图（绝不空白），并写 .miss 退避标记。
+        var failRoot = Path.Combine(tempRoot, "theme-cache-hero-fail");
+        fs.EnsureDirectory(failRoot);
+        var failDownloader = new CountingAssetDownloader(fs) { FailEverything = true };
+        var failCovers = new FixedSteamCoverResolver(999, HeaderUrl);
+        var failLogger = new RecordingLogger();
+        var failResolver = new ThemeResolver(
+            fs,
+            clock,
+            failLogger,
+            new CountingMetadataClient { ReturnEmpty = true },
+            failDownloader,
+            failRoot,
+            failCovers,
+            new FakeBundledThemes(bundledPath));
+        var failing = BuildGame() with { SteamAppId = 999, Theme = EmptyTheme() };
+
+        var failed = failResolver.ResolveAsync(failing, allowOnlineRefresh: true, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Equal("steam-hero 失败: 回落内置图来源", ThemeAssetSource.Bundled, failed.Source);
+        ChecksContext.Equal<string?>("steam-hero 失败: 背景非空且为内置图", bundledPath, failed.Background);
+        ChecksContext.Check(
+            "steam-hero 失败: 写 10 分钟退避标记",
+            fs.FileExists(Path.Combine(failRoot, "steam-999-hero.miss")));
+        ChecksContext.Check(
+            "steam-hero 失败: 日志说明回落原因",
+            failLogger.Warnings.Any(w => w.Contains("steam-hero 不可用，回落内置图", StringComparison.Ordinal)),
+            string.Join(" | ", failLogger.Warnings));
+
+        // 4) 退避窗口内再解析：不再撞 CDN。
+        failDownloader.Reset();
+        var backedOff = failResolver.ResolveAsync(failing, allowOnlineRefresh: true, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Equal("steam-hero 退避: 窗口内不发下载请求", 0, failDownloader.ConditionalCallCount);
+        ChecksContext.Equal("steam-hero 退避: 仍回落内置图", ThemeAssetSource.Bundled, backedOff.Source);
+
+        // 5) 10 分钟后 force「立即检查」必须能重试成功。
+        clock.Advance(TimeSpan.FromMinutes(11));
+        failDownloader.FailEverything = false;
+        var retried = failResolver
+            .ResolveAsync(failing, allowOnlineRefresh: true, CancellationToken.None, forceRefresh: true)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Equal("steam-hero 重试: force 后拿到官方图", ThemeAssetSource.SteamHero, retried.Source);
+        ChecksContext.Check(
+            "steam-hero 重试: 背景文件存在",
+            retried.Background is not null && fs.FileExists(retried.Background));
+
+        // 6) appid=0：根本不进这一层，直接用内置图。
+        var zeroRoot = Path.Combine(tempRoot, "theme-cache-hero-zero");
+        fs.EnsureDirectory(zeroRoot);
+        var zeroCovers = new FixedSteamCoverResolver(1, HeaderUrl);
+        var zeroResolver = new ThemeResolver(
+            fs,
+            clock,
+            new RecordingLogger(),
+            new CountingMetadataClient { ReturnEmpty = true },
+            new CountingAssetDownloader(fs),
+            zeroRoot,
+            zeroCovers,
+            new FakeBundledThemes(bundledPath));
+        var zero = zeroResolver
+            .ResolveAsync(
+                BuildGame() with { SteamAppId = 0, Theme = EmptyTheme() },
+                allowOnlineRefresh: true,
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Equal("steam-hero: appid=0 用内置图", ThemeAssetSource.Bundled, zero.Source);
+        ChecksContext.Equal("steam-hero: appid=0 不问商店接口", 0, zeroCovers.CallCount);
+
+        // 7) metadata 给了背景：行为完全不变（OnlineCache），不进 Steam 这一层。
+        var metaRoot = Path.Combine(tempRoot, "theme-cache-hero-meta");
+        fs.EnsureDirectory(metaRoot);
+        var metaCovers = new FixedSteamCoverResolver(3450310, HeaderUrl);
+        var metaResolver = new ThemeResolver(
+            fs,
+            clock,
+            new RecordingLogger(),
+            new CountingMetadataClient(),
+            new CountingAssetDownloader(fs),
+            metaRoot,
+            metaCovers,
+            new FakeBundledThemes(bundledPath));
+        var withMeta = metaResolver
+            .ResolveAsync(
+                BuildGame() with { SteamAppId = 3450310, Theme = EmptyTheme() },
+                allowOnlineRefresh: true,
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Equal("steam-hero: metadata 有背景时来源仍是 OnlineCache", ThemeAssetSource.OnlineCache, withMeta.Source);
+        ChecksContext.Equal("steam-hero: metadata 有背景时不问商店接口", 0, metaCovers.CallCount);
+
+        // 8) 生产链路回归（验收复现法）：离线 Resolve → ThemePatch.Apply 把内置图写回 game.Theme
+        // （来源 Bundled）→ 联网 force Resolve 必须重新判定，不能被「已有背景」13ms 短路。
+        var prodRoot = Path.Combine(tempRoot, "theme-cache-hero-prod");
+        fs.EnsureDirectory(prodRoot);
+        var prodCovers = new FixedSteamCoverResolver(3450310, HeaderUrl);
+        var prodDownloader = new CountingAssetDownloader(fs);
+        var prodResolver = new ThemeResolver(
+            fs,
+            clock,
+            new RecordingLogger(),
+            new CountingMetadataClient { ReturnEmpty = true },
+            prodDownloader,
+            prodRoot,
+            prodCovers,
+            new FakeBundledThemes(bundledPath));
+        var prodGame = BuildGame() with { SteamAppId = 3450310, Theme = EmptyTheme() };
+
+        var offlineTheme = prodResolver
+            .ResolveAsync(prodGame, allowOnlineRefresh: false, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Equal("生产链路: 离线先吃内置图", ThemeAssetSource.Bundled, offlineTheme.Source);
+        ChecksContext.Equal<string?>("生产链路: 离线背景是内置图", bundledPath, offlineTheme.Background);
+
+        var patchedGames = ThemePatch.Apply(new[] { prodGame }, prodGame.GameId, offlineTheme);
+        var patchedGame = patchedGames[0];
+        ChecksContext.Equal<ThemeAssetSource?>(
+            "生产链路: 补丁写回 game.Theme 且来源 Bundled",
+            ThemeAssetSource.Bundled,
+            patchedGame.Theme?.Source);
+
+        prodDownloader.Reset();
+        var onlineTheme = prodResolver
+            .ResolveAsync(patchedGame, allowOnlineRefresh: true, CancellationToken.None, forceRefresh: true)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Equal(
+            "生产链路: Bundled 补丁不再短路，官方图胜出",
+            ThemeAssetSource.SteamHero,
+            onlineTheme.Source);
+        ChecksContext.Check(
+            "生产链路: 确实问了 appdetails",
+            prodCovers.CallCount > 0,
+            "covers=" + prodCovers.CallCount);
+        ChecksContext.Check(
+            "生产链路: 确实下载了库页大图",
+            prodDownloader.ConditionalCallCount > 0,
+            "downloads=" + prodDownloader.ConditionalCallCount);
+    }
+
+    /// <summary>层2 全空、只有颜色的主题，用来模拟 EU5「没有安装目录素材」的现状。</summary>
+    private static ThemeSpec EmptyTheme() =>
+        new(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            ThemeResolver.ButtonTextColorFallback,
+            ThemeResolver.ButtonHoverTextColorFallback,
+            ThemeResolver.FontSizeFallback,
+            ThemeResolver.FontWeightFallback,
+            null,
+            ThemeAssetSource.BuiltInPlaceholder);
+
+    /// <summary>
     /// Steam 头图地址：静态路径已迁移成带内容 hash 的 store_item_assets，
     /// 新游戏（EU5 3450310）用老路径必 404，所以改问 appdetails 接口。
     /// </summary>
@@ -935,7 +1229,7 @@ public static class OnlineChecks
         _ = resolver.ResolveHeaderImageUrlAsync(3450310, CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Equal("解析器: 同一 AppId 只请求一次", 1, okFetcher.GetCallCount);
 
-        // 网络失败：返回 null、记 warn、不再重问。
+        // 网络失败：返回 null、记 warn；失败不缓存，下次（经调用方 10 分钟退避后）还能重试。
         var failFetcher = new FakeHttpFetcher();
         var failLogger = new RecordingLogger();
         var failing = new SteamCoverUrlResolver(failFetcher, failLogger);
@@ -943,7 +1237,7 @@ public static class OnlineChecks
         ChecksContext.Check("解析器: 请求失败返回 null 而不是抛异常", nullUrl is null);
         ChecksContext.Check("解析器: 失败记 warn", failLogger.Warnings.Count >= 1, string.Join(" | ", failLogger.Warnings));
         _ = failing.ResolveHeaderImageUrlAsync(1, CancellationToken.None).GetAwaiter().GetResult();
-        ChecksContext.Equal("解析器: 失败结果也被记住", 1, failFetcher.GetCallCount);
+        ChecksContext.Equal("解析器: 失败不缓存，允许下次重试", 2, failFetcher.GetCallCount);
 
         ChecksContext.Check(
             "解析器: 非法 AppId 直接 null",
@@ -1472,6 +1766,50 @@ public static class OnlineChecks
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
+    /// <summary>固定头图地址的解析器替身：只对指定 appId 返回，便于断言「有没有走 Steam 这一层」。</summary>
+    private sealed class FixedSteamCoverResolver : ISteamCoverUrlResolver
+    {
+        private readonly int _appId;
+        private readonly string _url;
+
+        public FixedSteamCoverResolver(int appId, string url)
+        {
+            _appId = appId;
+            _url = url;
+        }
+
+        public int CallCount { get; private set; }
+
+        public Task<string?> ResolveHeaderImageUrlAsync(int appId, CancellationToken cancellationToken)
+        {
+            CallCount++;
+            return Task.FromResult<string?>(appId == _appId ? _url : null);
+        }
+    }
+
+    /// <summary>自带美术替身：只返回一张已存在的背景图。</summary>
+    private sealed class FakeBundledThemes : IBundledThemeSource
+    {
+        private readonly string _background;
+
+        public FakeBundledThemes(string background) => _background = background;
+
+        public ThemeSpec? TryResolve(GameInstallation game) =>
+            new(
+                _background,
+                null,
+                null,
+                null,
+                null,
+                null,
+                ThemeResolver.ButtonTextColorFallback,
+                ThemeResolver.ButtonHoverTextColorFallback,
+                ThemeResolver.FontSizeFallback,
+                ThemeResolver.FontWeightFallback,
+                null,
+                ThemeAssetSource.Bundled);
+    }
+
     private sealed class CountingMetadataClient : IMetadataClient
     {
         public int CallCount { get; private set; }
@@ -1544,6 +1882,9 @@ public static class OnlineChecks
         /// <summary>成功时写出的扩展名；改成 .jpg 可模拟「magic 判型变化导致缓存文件名变化」。</summary>
         public string OutputExtension { get; set; } = ".png";
 
+        /// <summary>最后一次请求的 URL（验证取的是 library_hero 而不是 header）。</summary>
+        public string? LastUrl { get; private set; }
+
         public void Reset()
         {
             CallCount = 0;
@@ -1557,6 +1898,7 @@ public static class OnlineChecks
             string? lastModified,
             CancellationToken cancellationToken)
         {
+            LastUrl = url;
             ConditionalCallCount++;
             if (FailEverything || (FailPredicate is not null && FailPredicate(url)))
             {
@@ -1580,6 +1922,7 @@ public static class OnlineChecks
             string targetPathWithoutExtension,
             CancellationToken cancellationToken)
         {
+            LastUrl = url;
             CallCount++;
             if (FailEverything || (FailPredicate is not null && FailPredicate(url)))
             {

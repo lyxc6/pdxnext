@@ -17,7 +17,9 @@ public interface ISteamCoverUrlResolver
 /// 为什么不能拼固定路径：Steam 已把静态地址迁移成
 /// <c>store_item_assets/steam/apps/&lt;appid&gt;/&lt;内容hash&gt;/header.jpg</c>，
 /// 老式 <c>/steam/apps/&lt;appid&gt;/header.jpg</c> 对新游戏（如 EU5 3450310）直接 404。
-/// 该接口无需 API key；每进程每 AppId 只问一次（成功或失败都记住）。
+/// 该接口无需 API key；成功结果每进程每 AppId 只问一次。
+/// 失败**不记住**：否则一次断网会把该游戏锁死在「无封面」直到重启进程。
+/// 真正的防重撞由调用方的 10 分钟退避（.miss 标记）负责。
 /// </summary>
 public sealed class SteamCoverUrlResolver : ISteamCoverUrlResolver
 {
@@ -71,7 +73,11 @@ public sealed class SteamCoverUrlResolver : ISteamCoverUrlResolver
             _logger.Warn("Steam 封面地址解析失败: " + appId + "，" + ex);
         }
 
-        _memo[appId] = url;
+        if (url is not null)
+        {
+            _memo[appId] = url;
+        }
+
         return url;
     }
 

@@ -237,23 +237,33 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         get
         {
             var text = T(ThemeSourceKey);
-            return GetThemeDiagnostics().MetadataMissing
-                ? text + " · " + T(Keys.SettingsThemeMetadataMissing)
-                : text;
+            if (!GetThemeDiagnostics().MetadataMissing)
+            {
+                return text;
+            }
+
+            // 用 Steam 官方库页图时，「元数据缺失」只是补充说明，不能再说成「用内置素材」。
+            return CurrentThemeSource == ThemeAssetSource.SteamHero
+                ? text + " · " + T(Keys.SettingsThemeMetadataMissingNoMetadata)
+                : text + " · " + T(Keys.SettingsThemeMetadataMissing);
         }
     }
+
+    /// <summary>当前主题来源（展示文案与状态栏共用）。</summary>
+    private ThemeAssetSource CurrentThemeSource =>
+        _theme?.Source ?? Game?.Theme.Source ?? ThemeAssetSource.BuiltInPlaceholder;
 
     /// <summary>当前主题来源对应的本地化键（展示文案与状态栏共用，避免两处 switch 漂移）。</summary>
     private string ThemeSourceKey
     {
         get
         {
-            var source = _theme?.Source ?? Game?.Theme.Source ?? ThemeAssetSource.BuiltInPlaceholder;
-            return source switch
+            return CurrentThemeSource switch
             {
                 ThemeAssetSource.OnlineCache => Keys.SettingsThemeSourceOnline,
                 ThemeAssetSource.InstallDir => Keys.SettingsThemeSourceInstallDir,
                 ThemeAssetSource.SteamCapsule => Keys.SettingsThemeSourceSteam,
+                ThemeAssetSource.SteamHero => Keys.SettingsThemeSourceSteamHero,
                 ThemeAssetSource.Bundled => Keys.SettingsThemeSourceBundled,
                 _ => Keys.SettingsThemeSourceBuiltIn,
             };
