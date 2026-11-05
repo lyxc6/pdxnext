@@ -39,6 +39,12 @@ public sealed class SteamHostClient
     /// <summary>读成就列表的超时；宿主自己最多等 10 秒，这里再留余量。</summary>
     public static readonly TimeSpan AchievementsTimeout = TimeSpan.FromSeconds(15);
 
+    /// <summary>
+    /// 候选 DLL 导出表探测的超时。正常是几十毫秒（Load + GetExport）；
+    /// 探测进程崩掉时拿不到结果行，靠退出码判。
+    /// </summary>
+    public static readonly TimeSpan ApiCheckTimeout = TimeSpan.FromSeconds(15);
+
     private readonly IAppLogger _logger;
     private readonly string _hostPath;
 
@@ -96,17 +102,61 @@ public sealed class SteamHostClient
     }
 
     /// <summary>
-    /// 读一次某款游戏的成就列表（解锁状态、解锁时间、全球解锁率）。
+    /// 让宿主检查这份 DLL 能不能用于读成就（导出表里有没有 UserStats 那套），并带回退出码。
     /// <para>
-    /// 返回的 <see cref="SteamHostAchievementsResult"/> 用 <see cref="SteamAchievementCodes"/> 区分
-    /// 「Steam 没启动」「Init 失败」「超时」「没有成就」；解不出结果行时归为
-    /// <see cref="SteamAchievementCodes.HostFailed"/>，由上层映射成「Steam 不可用」。
+    /// 探测在子进程里做：loader 形态的 DLL 连 Load 都可能崩，主进程不能碰原生库。
+    /// 崩溃时拿不到结果行，调用方靠 <see cref="IsCrashExit"/> 判、换下一个候选。
+    /// </para>
+    /// </summary>
+    /// <param name="apiFilePath">候选 <c>steam_api64.dll</c>。</param>
+    /// <param name="appId">游戏 appid（协议要求，探测本身不用）。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<SteamApiCheckHostRun> ApiCheckRunAsync(
+        string apiFilePath,
+        int appId,
+        CancellationToken cancellationToken)
+    {
+        var run = await ExecuteAsync(
+            SteamHostProtocol.ApiCheckVerb,
+            apiFilePath,
+            appId,
+            publishedFileId: null,
+            ApiCheckTimeout,
+            cancellationToken).ConfigureAwait(false);
+
+        if (SteamHostProtocol.TryDecode<SteamHostApiCheckResult>(run.Stdout, out var payload) && payload is not null)
+        {
+            return new SteamApiCheckHostRun(payload, run.ExitCode, run.TimedOut);
+        }
+
+        return new SteamApiCheckHostRun(SteamHostApiCheckResult.Fail(Describe(run)), run.ExitCode, run.TimedOut);
+    }
+
+    /// <summary>让宿主检查候选 DLL 能不能用于读成就。</summary>
+    /// <param name="apiFilePath">候选 <c>steam_api64.dll</c>。</param>
+    /// <param name="appId">游戏 appid。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<SteamHostApiCheckResult> ApiCheckAsync(
+        string apiFilePath,
+        int appId,
+        CancellationToken cancellationToken)
+    {
+        var run = await ApiCheckRunAsync(apiFilePath, appId, cancellationToken).ConfigureAwait(false);
+        return run.Result;
+    }
+
+    /// <summary>
+    /// 读一次成就，并带回宿主进程退出码。
+    /// <para>
+    /// 退出码用来判「loader 崩了」：<c>0xC0000005</c> 这类访问违例拿不到结果行，
+    /// 只靠 <see cref="SteamHostAchievementsResult"/> 分不出「崩溃」和「DLL 不合格」，
+    /// 上层也就没法按候选列表换文件重试。
     /// </para>
     /// </summary>
     /// <param name="apiFilePath">要加载的 <c>steam_api64.dll</c>。</param>
     /// <param name="appId">游戏的 Steam appid。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    public async Task<SteamHostAchievementsResult> AchievementsAsync(
+    public async Task<SteamAchievementsHostRun> AchievementsRunAsync(
         string apiFilePath,
         int appId,
         CancellationToken cancellationToken)
@@ -121,10 +171,37 @@ public sealed class SteamHostClient
 
         if (SteamHostProtocol.TryDecode<SteamHostAchievementsResult>(run.Stdout, out var payload) && payload is not null)
         {
-            return payload;
+            return new SteamAchievementsHostRun(payload, run.ExitCode, run.TimedOut);
         }
 
-        return SteamHostAchievementsResult.Fail(SteamAchievementCodes.HostFailed, Describe(run));
+        return new SteamAchievementsHostRun(
+            SteamHostAchievementsResult.Fail(SteamAchievementCodes.HostFailed, Describe(run)),
+            run.ExitCode,
+            run.TimedOut);
+    }
+
+    /// <summary>退出码是不是「原生代码崩了」（访问违例 / 栈溢出 / 堆损坏 / fail-fast）。</summary>
+    /// <param name="exitCode">宿主进程退出码（<see cref="Process.ExitCode"/> 的有符号形式）。</param>
+    public static bool IsCrashExit(int exitCode) => unchecked((uint)exitCode) switch
+    {
+        0xC0000005 => true, // 访问违例：CK3 的 CreamAPI loader 就是这样
+        0xC0000409 => true, // stack buffer overrun / fail-fast
+        0xC0000374 => true, // 堆损坏
+        0xC00000FD => true, // 栈溢出
+        _ => false,
+    };
+
+    /// <summary>读一次成就（丢弃退出码的便捷重载）。</summary>
+    /// <param name="apiFilePath">要加载的 <c>steam_api64.dll</c>。</param>
+    /// <param name="appId">游戏的 Steam appid。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<SteamHostAchievementsResult> AchievementsAsync(
+        string apiFilePath,
+        int appId,
+        CancellationToken cancellationToken)
+    {
+        var run = await AchievementsRunAsync(apiFilePath, appId, cancellationToken).ConfigureAwait(false);
+        return run.Result;
     }
 
     /// <summary>跑一次工坊操作（读状态 / 订阅 / 取消订阅）。</summary>
@@ -659,3 +736,23 @@ public sealed class SteamHostClient
 
     private readonly record struct HostRun(int ExitCode, string Stdout, string Stderr, bool TimedOut, bool Started);
 }
+
+/// <summary>
+/// 一次候选 DLL 探测的结果 + 宿主退出状态。
+/// </summary>
+/// <param name="Result">解码后的探测结果。</param>
+/// <param name="ExitCode">宿主进程退出码。</param>
+/// <param name="TimedOut">是否超时被强杀。</param>
+public readonly record struct SteamApiCheckHostRun(SteamHostApiCheckResult Result, int ExitCode, bool TimedOut);
+
+/// <summary>
+/// 一次成就读取结果 + 宿主退出状态。
+/// <para>
+/// 单独拆出来是为了让调用方能区分「宿主崩了（<see cref="SteamHostClient.IsCrashExit"/>）」与
+/// 「宿主正常返回但这份 DLL 不合格」：前者要换候选重试并拉黑，后者只需换候选。
+/// </para>
+/// </summary>
+/// <param name="Result">解码后的成就结果。</param>
+/// <param name="ExitCode">宿主进程退出码。</param>
+/// <param name="TimedOut">是否超时被强杀。</param>
+public readonly record struct SteamAchievementsHostRun(SteamHostAchievementsResult Result, int ExitCode, bool TimedOut);

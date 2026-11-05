@@ -42,7 +42,7 @@ public static class SteamHostRunner
     {
         if (!SteamHostProtocol.TryGetVerb(args, out var verb))
         {
-            stderr.WriteLine("用法：--steam-host probe|achievements|workshop-state|workshop-subscribe|workshop-unsubscribe|workshop-publish|workshop-subscribed|workshop-batch|workshop-mine|workshop-mine-detail --api <dll> --appid <int> [--fileid <ulong>] [--request <base64 json>]");
+            stderr.WriteLine("用法：--steam-host probe|achievements|api-check|workshop-state|workshop-subscribe|workshop-unsubscribe|workshop-publish|workshop-subscribed|workshop-batch|workshop-mine|workshop-mine-detail --api <dll> --appid <int> [--fileid <ulong>] [--request <base64 json>]");
             return SteamHostProtocol.ExitFailure;
         }
 
@@ -68,6 +68,11 @@ public static class SteamHostRunner
         if (verb == SteamHostProtocol.AchievementsVerb)
         {
             return RunAchievements(apiPath!, appId, stdout);
+        }
+
+        if (verb == SteamHostProtocol.ApiCheckVerb)
+        {
+            return RunApiCheck(apiPath!, stdout);
         }
 
         if (verb == SteamHostProtocol.WorkshopPublishVerb)
@@ -156,6 +161,35 @@ public static class SteamHostRunner
             return SteamHostAchievementsResult.Fail(
                 SteamAchievementCodes.HostFailed,
                 ex.GetType().Name + "：" + ex.Message);
+        }
+    }
+
+    private static int RunApiCheck(string apiPath, TextWriter stdout)
+    {
+        WriteResult(stdout, RunApiCheckCore(apiPath));
+        return SteamHostProtocol.ExitOk;
+    }
+
+    /// <summary>
+    /// 探测这份 DLL 能不能用于读成就（只 Load + 查导出，立即 Free，不 Init）。
+    /// 探测本身可能崩（loader 的 DllMain），所以它必须跑在子进程里 —— 调用方看到退出码就知道该换候选。
+    /// </summary>
+    internal static SteamHostApiCheckResult RunApiCheckCore(string apiPath)
+    {
+        if (!File.Exists(apiPath))
+        {
+            return SteamHostApiCheckResult.Fail("找不到 steam_api64.dll：" + apiPath);
+        }
+
+        try
+        {
+            return SteamApiExportProbe.TryCheck(apiPath, out var reason)
+                ? SteamHostApiCheckResult.Success()
+                : SteamHostApiCheckResult.Fail(reason);
+        }
+        catch (Exception ex)
+        {
+            return SteamHostApiCheckResult.Fail(ex.GetType().Name + "：" + ex.Message);
         }
     }
 

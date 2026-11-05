@@ -61,6 +61,9 @@ public sealed class SteamAchievementSource : IAchievementSource
         _uiLanguage = uiLanguage ?? (() => CultureInfo.DefaultThreadCurrentUICulture?.Name);
     }
 
+    /// <summary>一次读取最多试几份 DLL（每份要多起 1-2 个宿主进程，不能无限试）。</summary>
+    private const int MaxAttempts = 3;
+
     /// <inheritdoc />
     public async Task<AchievementSnapshot> GetAsync(string gameId, CancellationToken cancellationToken)
     {
@@ -80,47 +83,179 @@ public sealed class SteamAchievementSource : IAchievementSource
         // 只取一次：定位 DLL 和读本地化必须是同一款游戏，避免 await 期间切游戏造成错配。
         var game = _currentGame();
 
-        string? apiPath;
+        IReadOnlyList<string> candidates;
         try
         {
-            apiPath = _locator.Resolve(_settingsApiPath(), AppContext.BaseDirectory, game)
-                ?? SteamClientLocator.FindSteamApiDll();
+            candidates = CollectCandidates(appId, game);
         }
         catch (Exception ex)
         {
-            _logger.Warn("读取成就失败：定位 steam_api64.dll 时出错：" + ex.Message);
+            _logger.Warn("读取成就失败：收集 steam_api64.dll 候选时出错：" + ex.Message);
             return SteamAchievementMapping.SteamUnavailable(fetchedAt);
         }
 
-        if (string.IsNullOrWhiteSpace(apiPath))
+        if (candidates.Count == 0)
         {
             _logger.Warn("读取成就失败：找不到可用的 steam_api64.dll（appid " + appId + "）");
             return SteamAchievementMapping.SteamUnavailable(fetchedAt);
         }
 
-        try
+        string? crashed = null;
+        var attempts = 0;
+        foreach (var candidate in candidates)
         {
-            var result = await _client.AchievementsAsync(apiPath!, appId, cancellationToken).ConfigureAwait(false);
-            if (result is { Ok: false, Error: { Length: > 0 } error })
+            if (attempts >= MaxAttempts)
             {
-                // 「没有成就」也会走到这里（Code == NoAchievements），它不算错误，但也值得留一条日志。
-                _logger.Info("Steam 成就未返回（" + result.Code + "）：" + error);
+                break;
             }
 
-            var localization = result is { Ok: true } ? LoadLocalization(game, result, appId) : null;
-            return SteamAchievementMapping.FromHostResult(result, fetchedAt, localization);
+            if (SteamApiCrashBlacklist.IsCrashed(candidate))
+            {
+                _logger.Info("跳过本次运行已崩溃过的候选：" + candidate);
+                continue;
+            }
+
+            attempts++;
+
+            if (crashed is not null)
+            {
+                // 上一个是崩的，日志里把「从谁换到谁」写清楚，玩家报问题时能直接看出走了哪个文件。
+                _logger.Warn("候选 " + crashed + " 崩溃，改用 " + candidate);
+                crashed = null;
+            }
+
+            try
+            {
+                var check = await _client.ApiCheckRunAsync(candidate, appId, cancellationToken).ConfigureAwait(false);
+                if (SteamHostClient.IsCrashExit(check.ExitCode))
+                {
+                    // 探测阶段就崩（loader 的 DllMain 里常有的访问违例）：同样拉黑、换下一个。
+                    SteamApiCrashBlacklist.MarkCrashed(candidate);
+                    _logger.Warn(
+                        "候选 " + candidate + " 在导出探测时崩溃（退出码 0x" +
+                        unchecked((uint)check.ExitCode).ToString("X8", CultureInfo.InvariantCulture) +
+                        "），本次运行不再使用");
+                    crashed = candidate;
+                    continue;
+                }
+
+                if (!check.Result.Ok)
+                {
+                    _logger.Info("跳过不适合作成就的 steam_api64.dll：" + candidate + "（" + (check.Result.Error ?? "未知原因") + "）");
+                    continue;
+                }
+
+                var run = await _client.AchievementsRunAsync(candidate, appId, cancellationToken).ConfigureAwait(false);
+                if (SteamHostClient.IsCrashExit(run.ExitCode))
+                {
+                    // loader 形态的 DLL 会在 DllMain / 初始化里直接崩掉子进程（0xC0000005），
+                    // 这次运行别再拿它试：换下一个候选，并把路径记进进程内黑名单。
+                    SteamApiCrashBlacklist.MarkCrashed(candidate);
+                    _logger.Warn(
+                        "候选 " + candidate + " 崩溃（退出码 0x" +
+                        unchecked((uint)run.ExitCode).ToString("X8", CultureInfo.InvariantCulture) +
+                        "），本次运行不再使用");
+                    crashed = candidate;
+                    continue;
+                }
+
+                var result = run.Result;
+                if (!result.Ok && !run.TimedOut && run.ExitCode != 0)
+                {
+                    // 崩溃之外的「非 0 退出」（加载依赖缺失、Init 里异常退出等）同样说明这份 DLL 不适合；
+                    // 换下一个候选，并记进本次运行的黑名单，避免每次刷新都再撞一遍。
+                    SteamApiCrashBlacklist.MarkCrashed(candidate);
+                    _logger.Warn(
+                        "候选 " + candidate + " 的宿主异常退出（退出码 0x" +
+                        unchecked((uint)run.ExitCode).ToString("X8", CultureInfo.InvariantCulture) +
+                        "），本次运行不再使用");
+                    crashed = candidate;
+                    continue;
+                }
+
+                if (result is { Ok: false, Error: { Length: > 0 } error })
+                {
+                    // 「没有成就」也会走到这里（Code == NoAchievements），它不算错误，但也值得留一条日志。
+                    _logger.Info("Steam 成就未返回（" + result.Code + "）：" + error);
+                }
+
+                _logger.Info("成就读取使用 steam_api64.dll：" + candidate + "（appid " + appId + "）");
+
+                var localization = result is { Ok: true } ? LoadLocalization(game, result, appId) : null;
+                return SteamAchievementMapping.FromHostResult(result, fetchedAt, localization);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // 切游戏 / 离开页面导致的取消由协调器吞掉，这里必须原样抛出，
+                // 否则旧请求会被当成「Steam 不可用」写进新一轮的界面状态。
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn("候选 " + candidate + " 读取成就失败：" + ex.GetType().Name + "：" + ex.Message);
+            }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+
+        _logger.Warn("读取成就失败：没有可用的 steam_api64.dll 候选（appid " + appId + "）");
+        return SteamAchievementMapping.SteamUnavailable(fetchedAt);
+    }
+
+    /// <summary>
+    /// 收集本次读取的候选 DLL：定位器给的有序候选 + Steam 客户端自带的那份，
+    /// 过滤掉不存在 / 体积异常 / 本次运行已经崩过的；最多留 <see cref="MaxAttempts"/> 份备用。
+    /// </summary>
+    private List<string> CollectCandidates(int appId, GameInstallation? game)
+    {
+        var results = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Add(string? path)
         {
-            // 切游戏 / 离开页面导致的取消由协调器吞掉，这里必须原样抛出，
-            // 否则旧请求会被当成「Steam 不可用」写进新一轮的界面状态。
-            throw;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            string full;
+            try
+            {
+                full = _fileSystem.GetFullPath(path!);
+            }
+            catch (Exception)
+            {
+                return;
+            }
+
+            if (!seen.Add(full))
+            {
+                return;
+            }
+
+            if (!_locator.LooksUsable(full, out var reason))
+            {
+                _logger.Info("跳过不可用的 steam_api64.dll 候选：" + full + "（" + (reason ?? "未知原因") + "）");
+                return;
+            }
+
+            results.Add(full);
+        }
+
+        foreach (var candidate in _locator.Candidates(_settingsApiPath(), AppContext.BaseDirectory, game))
+        {
+            Add(candidate);
+        }
+
+        // 游戏目录里一份都找不到时，退回 Steam 客户端自带的 dll（注册表里那边通常有）。
+        try
+        {
+            Add(SteamClientLocator.FindSteamApiDll());
         }
         catch (Exception ex)
         {
-            _logger.Warn("读取成就失败（appid " + appId + "）：" + ex.GetType().Name + "：" + ex.Message);
-            return SteamAchievementMapping.SteamUnavailable(fetchedAt);
+            _logger.Warn("查找 Steam 客户端自带的 steam_api64.dll 失败（appid " + appId + "）：" + ex.Message);
         }
+
+        return results;
     }
 
     /// <summary>读游戏本地化；任何异常都只记日志并返回 null，绝不影响成就本身是否可用。</summary>

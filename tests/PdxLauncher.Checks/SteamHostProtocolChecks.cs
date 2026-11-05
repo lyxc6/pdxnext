@@ -53,31 +53,36 @@ public static class SteamHostProtocolChecks
 
         // 动词表后来又多了三组：workshop-subscribed（整库订阅列表）+ workshop-batch（批量下载/本地禁用），
         // 以及 workshop-mine / workshop-mine-detail（读「我自己发布的条目」）；
-        // 成就读取（achievements）排在 probe 之后，是第一个「只读且要等回调」的动词。
-        AssertEqual(10, SteamHostProtocol.Verbs.Count, "动词表恰好十个（probe + 成就 + 四工坊操作 + 订阅列表 + 批量 + 我的条目两个）");
+        // 成就读取（achievements）排在 probe 之后，是第一个「只读且要等回调」的动词；
+        // 导出探测（api-check）紧跟 achievements，供成就数据源在启动宿主前筛掉会崩的 DLL。
+        AssertEqual(11, SteamHostProtocol.Verbs.Count, "动词表恰好十一个（probe + 成就 + 导出探测 + 四工坊操作 + 订阅列表 + 批量 + 我的条目两个）");
         AssertEqual(
             SteamHostProtocol.AchievementsVerb,
             SteamHostProtocol.Verbs[1],
             "动词表第二位是 achievements");
         AssertEqual(
+            SteamHostProtocol.ApiCheckVerb,
+            SteamHostProtocol.Verbs[2],
+            "动词表第三位是 api-check");
+        AssertEqual(
             SteamHostProtocol.WorkshopPublishVerb,
-            SteamHostProtocol.Verbs[5],
-            "动词表第六位是 workshop-publish");
+            SteamHostProtocol.Verbs[6],
+            "动词表第七位是 workshop-publish");
         AssertEqual(
             SteamHostProtocol.WorkshopSubscribedVerb,
-            SteamHostProtocol.Verbs[6],
-            "动词表第七位是 workshop-subscribed");
+            SteamHostProtocol.Verbs[7],
+            "动词表第八位是 workshop-subscribed");
         AssertEqual(
             SteamHostProtocol.WorkshopBatchVerb,
-            SteamHostProtocol.Verbs[7],
-            "动词表第八位是 workshop-batch");
+            SteamHostProtocol.Verbs[8],
+            "动词表第九位是 workshop-batch");
         AssertEqual(
             SteamHostProtocol.WorkshopMineVerb,
-            SteamHostProtocol.Verbs[8],
-            "动词表第九位是 workshop-mine");
+            SteamHostProtocol.Verbs[9],
+            "动词表第十位是 workshop-mine");
         AssertEqual(
             SteamHostProtocol.WorkshopMineDetailVerb,
-            SteamHostProtocol.Verbs[9],
+            SteamHostProtocol.Verbs[10],
             "动词表末位是 workshop-mine-detail");
     }
 
