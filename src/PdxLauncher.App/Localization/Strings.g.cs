@@ -748,6 +748,31 @@ public sealed partial class Localizer
         ["modstudio.visibilityPublic"] = "公开",
         ["modstudio.visibilityUnknown"] = "未核实",
         ["modstudio.visibilityUnlisted"] = "非公开",
+        ["saves.city"] = "城市：{0}",
+        ["saves.country"] = "国家：{0}",
+        ["saves.dateFallback"] = "文件修改时间",
+        ["saves.empty.empty.message"] = "已找到该游戏的存档目录，但里面还没有存档文件。",
+        ["saves.empty.empty.title"] = "存档目录是空的",
+        ["saves.empty.failed.message"] = "扫描存档目录时出错，可稍后重试；详细信息已写入日志。",
+        ["saves.empty.failed.title"] = "读取存档失败",
+        ["saves.empty.noDirectory.message"] = "该游戏还没有创建存档目录；在游戏里保存一次后再回来刷新。",
+        ["saves.empty.noDirectory.title"] = "没有找到存档目录",
+        ["saves.empty.noGame.message"] = "请先在游戏库中选择一款游戏，再查看它的存档。",
+        ["saves.empty.noGame.title"] = "未选择游戏",
+        ["saves.experimental"] = "实验性",
+        ["saves.experimentalTooltip"] = "该游戏的存档格式没有公开规范，日期与名称来自启发式解析，可能不准确。",
+        ["saves.listName"] = "存档列表",
+        ["saves.metadataUnreadable"] = "元数据不可读",
+        ["saves.noGame"] = "未选择游戏",
+        ["saves.refresh"] = "刷新",
+        ["saves.rowNamePair"] = "{0}，{1}",
+        ["saves.saveName"] = "存档名：{0}",
+        ["saves.status.failed"] = "扫描失败",
+        ["saves.status.lastScan"] = "上次扫描：{0} · 找到 {1} 个存档",
+        ["saves.status.noGame"] = "请先在游戏库中选择一款游戏",
+        ["saves.status.scanning"] = "正在扫描存档…",
+        ["saves.title"] = "存档",
+        ["saves.version"] = "版本 {0}",
         ["settings.about.autoCheck"] = "自动检查更新",
         ["settings.about.autoCheckName"] = "启动时自动检查更新",
         ["settings.about.checkFailed"] = "检查失败：{0}",
@@ -1217,6 +1242,7 @@ public sealed partial class Localizer
         ["shell.nav.modLibrary"] = "Mod 库",
         ["shell.nav.modStudio"] = "Mod 创建",
         ["shell.nav.playSets"] = "播放集",
+        ["shell.nav.saves"] = "存档",
         ["shell.nav.settings"] = "设置",
         ["shell.nav.workshop"] = "创意工坊",
         ["shell.playSet.countDiff"] = "{0} 数量 {1} != {2}",
@@ -2114,6 +2140,31 @@ public sealed partial class Localizer
         ["modstudio.visibilityPublic"] = "Public",
         ["modstudio.visibilityUnknown"] = "Not verified",
         ["modstudio.visibilityUnlisted"] = "Unlisted",
+        ["saves.city"] = "City: {0}",
+        ["saves.country"] = "Country: {0}",
+        ["saves.dateFallback"] = "File modified time",
+        ["saves.empty.empty.message"] = "The save folder exists, but it does not contain any save files yet.",
+        ["saves.empty.empty.title"] = "The save folder is empty",
+        ["saves.empty.failed.message"] = "Something went wrong while scanning the save folder. Try again later; details were written to the log.",
+        ["saves.empty.failed.title"] = "Could not read saves",
+        ["saves.empty.noDirectory.message"] = "This game has not created a save folder yet. Save once in the game, then come back and refresh.",
+        ["saves.empty.noDirectory.title"] = "No save folder found",
+        ["saves.empty.noGame.message"] = "Select a game in the library first, then view its saves.",
+        ["saves.empty.noGame.title"] = "No game selected",
+        ["saves.experimental"] = "Experimental",
+        ["saves.experimentalTooltip"] = "This game's save format has no public specification. Dates and names come from heuristic parsing and may be inaccurate.",
+        ["saves.listName"] = "Save games",
+        ["saves.metadataUnreadable"] = "Metadata unreadable",
+        ["saves.noGame"] = "No game selected",
+        ["saves.refresh"] = "Refresh",
+        ["saves.rowNamePair"] = "{0}, {1}",
+        ["saves.saveName"] = "Save name: {0}",
+        ["saves.status.failed"] = "Scan failed",
+        ["saves.status.lastScan"] = "Last scan: {0} · {1} saves found",
+        ["saves.status.noGame"] = "Select a game in the library first",
+        ["saves.status.scanning"] = "Scanning saves…",
+        ["saves.title"] = "Saves",
+        ["saves.version"] = "Version {0}",
         ["settings.about.autoCheck"] = "Check for updates automatically",
         ["settings.about.autoCheckName"] = "Check for updates when the launcher starts",
         ["settings.about.checkFailed"] = "Check failed: {0}",
@@ -2583,6 +2634,7 @@ public sealed partial class Localizer
         ["shell.nav.modLibrary"] = "Mod Library",
         ["shell.nav.modStudio"] = "Mod Studio",
         ["shell.nav.playSets"] = "Playsets",
+        ["shell.nav.saves"] = "Saves",
         ["shell.nav.settings"] = "Settings",
         ["shell.nav.workshop"] = "Workshop",
         ["shell.playSet.countDiff"] = "{0} count {1} != {2}",
@@ -3480,6 +3532,31 @@ public sealed partial class Localizer
         ("modstudio.visibilityPublic", "ModstudioVisibilityPublic"),
         ("modstudio.visibilityUnknown", "ModstudioVisibilityUnknown"),
         ("modstudio.visibilityUnlisted", "ModstudioVisibilityUnlisted"),
+        ("saves.city", "SavesCity"),
+        ("saves.country", "SavesCountry"),
+        ("saves.dateFallback", "SavesDateFallback"),
+        ("saves.empty.empty.message", "SavesEmptyEmptyMessage"),
+        ("saves.empty.empty.title", "SavesEmptyEmptyTitle"),
+        ("saves.empty.failed.message", "SavesEmptyFailedMessage"),
+        ("saves.empty.failed.title", "SavesEmptyFailedTitle"),
+        ("saves.empty.noDirectory.message", "SavesEmptyNoDirectoryMessage"),
+        ("saves.empty.noDirectory.title", "SavesEmptyNoDirectoryTitle"),
+        ("saves.empty.noGame.message", "SavesEmptyNoGameMessage"),
+        ("saves.empty.noGame.title", "SavesEmptyNoGameTitle"),
+        ("saves.experimental", "SavesExperimental"),
+        ("saves.experimentalTooltip", "SavesExperimentalTooltip"),
+        ("saves.listName", "SavesListName"),
+        ("saves.metadataUnreadable", "SavesMetadataUnreadable"),
+        ("saves.noGame", "SavesNoGame"),
+        ("saves.refresh", "SavesRefresh"),
+        ("saves.rowNamePair", "SavesRowNamePair"),
+        ("saves.saveName", "SavesSaveName"),
+        ("saves.status.failed", "SavesStatusFailed"),
+        ("saves.status.lastScan", "SavesStatusLastScan"),
+        ("saves.status.noGame", "SavesStatusNoGame"),
+        ("saves.status.scanning", "SavesStatusScanning"),
+        ("saves.title", "SavesTitle"),
+        ("saves.version", "SavesVersion"),
         ("settings.about.autoCheck", "SettingsAboutAutoCheck"),
         ("settings.about.autoCheckName", "SettingsAboutAutoCheckName"),
         ("settings.about.checkFailed", "SettingsAboutCheckFailed"),
@@ -3949,6 +4026,7 @@ public sealed partial class Localizer
         ("shell.nav.modLibrary", "ShellNavModLibrary"),
         ("shell.nav.modStudio", "ShellNavModStudio"),
         ("shell.nav.playSets", "ShellNavPlaySets"),
+        ("shell.nav.saves", "ShellNavSaves"),
         ("shell.nav.settings", "ShellNavSettings"),
         ("shell.nav.workshop", "ShellNavWorkshop"),
         ("shell.playSet.countDiff", "ShellPlaySetCountDiff"),
@@ -4844,6 +4922,31 @@ public sealed partial class Localizer
     public string ModstudioVisibilityPublic => Format("modstudio.visibilityPublic");
     public string ModstudioVisibilityUnknown => Format("modstudio.visibilityUnknown");
     public string ModstudioVisibilityUnlisted => Format("modstudio.visibilityUnlisted");
+    public string SavesCity => Format("saves.city");
+    public string SavesCountry => Format("saves.country");
+    public string SavesDateFallback => Format("saves.dateFallback");
+    public string SavesEmptyEmptyMessage => Format("saves.empty.empty.message");
+    public string SavesEmptyEmptyTitle => Format("saves.empty.empty.title");
+    public string SavesEmptyFailedMessage => Format("saves.empty.failed.message");
+    public string SavesEmptyFailedTitle => Format("saves.empty.failed.title");
+    public string SavesEmptyNoDirectoryMessage => Format("saves.empty.noDirectory.message");
+    public string SavesEmptyNoDirectoryTitle => Format("saves.empty.noDirectory.title");
+    public string SavesEmptyNoGameMessage => Format("saves.empty.noGame.message");
+    public string SavesEmptyNoGameTitle => Format("saves.empty.noGame.title");
+    public string SavesExperimental => Format("saves.experimental");
+    public string SavesExperimentalTooltip => Format("saves.experimentalTooltip");
+    public string SavesListName => Format("saves.listName");
+    public string SavesMetadataUnreadable => Format("saves.metadataUnreadable");
+    public string SavesNoGame => Format("saves.noGame");
+    public string SavesRefresh => Format("saves.refresh");
+    public string SavesRowNamePair => Format("saves.rowNamePair");
+    public string SavesSaveName => Format("saves.saveName");
+    public string SavesStatusFailed => Format("saves.status.failed");
+    public string SavesStatusLastScan => Format("saves.status.lastScan");
+    public string SavesStatusNoGame => Format("saves.status.noGame");
+    public string SavesStatusScanning => Format("saves.status.scanning");
+    public string SavesTitle => Format("saves.title");
+    public string SavesVersion => Format("saves.version");
     public string SettingsAboutAutoCheck => Format("settings.about.autoCheck");
     public string SettingsAboutAutoCheckName => Format("settings.about.autoCheckName");
     public string SettingsAboutCheckFailed => Format("settings.about.checkFailed");
@@ -5313,6 +5416,7 @@ public sealed partial class Localizer
     public string ShellNavModLibrary => Format("shell.nav.modLibrary");
     public string ShellNavModStudio => Format("shell.nav.modStudio");
     public string ShellNavPlaySets => Format("shell.nav.playSets");
+    public string ShellNavSaves => Format("shell.nav.saves");
     public string ShellNavSettings => Format("shell.nav.settings");
     public string ShellNavWorkshop => Format("shell.nav.workshop");
     public string ShellPlaySetCountDiff => Format("shell.playSet.countDiff");
@@ -6211,6 +6315,31 @@ internal static class Keys
     public const string ModstudioVisibilityPublic = "modstudio.visibilityPublic";
     public const string ModstudioVisibilityUnknown = "modstudio.visibilityUnknown";
     public const string ModstudioVisibilityUnlisted = "modstudio.visibilityUnlisted";
+    public const string SavesCity = "saves.city";
+    public const string SavesCountry = "saves.country";
+    public const string SavesDateFallback = "saves.dateFallback";
+    public const string SavesEmptyEmptyMessage = "saves.empty.empty.message";
+    public const string SavesEmptyEmptyTitle = "saves.empty.empty.title";
+    public const string SavesEmptyFailedMessage = "saves.empty.failed.message";
+    public const string SavesEmptyFailedTitle = "saves.empty.failed.title";
+    public const string SavesEmptyNoDirectoryMessage = "saves.empty.noDirectory.message";
+    public const string SavesEmptyNoDirectoryTitle = "saves.empty.noDirectory.title";
+    public const string SavesEmptyNoGameMessage = "saves.empty.noGame.message";
+    public const string SavesEmptyNoGameTitle = "saves.empty.noGame.title";
+    public const string SavesExperimental = "saves.experimental";
+    public const string SavesExperimentalTooltip = "saves.experimentalTooltip";
+    public const string SavesListName = "saves.listName";
+    public const string SavesMetadataUnreadable = "saves.metadataUnreadable";
+    public const string SavesNoGame = "saves.noGame";
+    public const string SavesRefresh = "saves.refresh";
+    public const string SavesRowNamePair = "saves.rowNamePair";
+    public const string SavesSaveName = "saves.saveName";
+    public const string SavesStatusFailed = "saves.status.failed";
+    public const string SavesStatusLastScan = "saves.status.lastScan";
+    public const string SavesStatusNoGame = "saves.status.noGame";
+    public const string SavesStatusScanning = "saves.status.scanning";
+    public const string SavesTitle = "saves.title";
+    public const string SavesVersion = "saves.version";
     public const string SettingsAboutAutoCheck = "settings.about.autoCheck";
     public const string SettingsAboutAutoCheckName = "settings.about.autoCheckName";
     public const string SettingsAboutCheckFailed = "settings.about.checkFailed";
@@ -6680,6 +6809,7 @@ internal static class Keys
     public const string ShellNavModLibrary = "shell.nav.modLibrary";
     public const string ShellNavModStudio = "shell.nav.modStudio";
     public const string ShellNavPlaySets = "shell.nav.playSets";
+    public const string ShellNavSaves = "shell.nav.saves";
     public const string ShellNavSettings = "shell.nav.settings";
     public const string ShellNavWorkshop = "shell.nav.workshop";
     public const string ShellPlaySetCountDiff = "shell.playSet.countDiff";

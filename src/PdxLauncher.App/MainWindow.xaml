@@ -237,6 +237,15 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
+                    x:Name="NavSaves"
+                    AutomationProperties.AutomationId="navSaves"
+                    Content="{x:Bind L.ShellNavSaves, Mode=OneWay}"
+                    Tag="saves">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Save" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
                     x:Name="NavAchievements"
                     AutomationProperties.AutomationId="navAchievements"
                     Content="{x:Bind L.ShellNavAchievements, Mode=OneWay}"

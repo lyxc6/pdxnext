@@ -202,5 +202,12 @@
       它错了的表现是「EU5 主页没有字标」或「其它游戏误吃了 EU5 的图」，由 HomeButtonStyleChecks 用临时目录钉住。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\BundledThemes.cs" Link="Linked\BundledThemes.cs" />
+    <!--
+      存档页的两个纯逻辑部件：代次判定（旧扫描的结果必须整批丢弃）与行文案规则
+      （城市 / 国家该不该显示）。两者都不碰 UI 类型，可以原样链接；代次判定的极性
+      翻转会让「旧请求写回新列表」，由 SavesPageChecks 的行为级用例钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\SaveScanRequestTracker.cs" Link="Linked\SaveScanRequestTracker.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\SaveRowText.cs" Link="Linked\SaveRowText.cs" />
   </ItemGroup>
 </Project>

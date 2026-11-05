@@ -21,6 +21,7 @@
   "shell.nav.modLibrary": "Mod Library",
   "shell.nav.modStudio": "Mod Studio",
   "shell.nav.playSets": "Playsets",
+  "shell.nav.saves": "Saves",
   "shell.nav.settings": "Settings",
   "shell.nav.workshop": "Workshop",
   "shell.playSet.countDiff": "{0} count {1} != {2}",
