@@ -5,11 +5,12 @@ using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
 
 /// <summary>
-/// 主页「继续 / 开始游戏」按钮的样式口径：没有官方按钮美术的来源（内置占位、随包自带素材）
-/// 用 WinUI 原生按钮，有美术的来源（安装目录、在线缓存、Steam 胶囊）保留自定义皮肤。
+/// 主页「继续 / 开始游戏」按钮的样式口径：没有官方按钮美术的来源（内置占位、随包自带素材、
+/// Steam 库页背景）用 WinUI 原生按钮，有美术的来源（安装目录、在线缓存、Steam 胶囊）保留自定义皮肤。
 /// <para>
-/// 判据本身是纯函数，这里对五个 <see cref="ThemeAssetSource"/> 逐一断言；另加一条源码扫描，
-/// 确认页面真的调用了这个判据——否则「判据对了但页面没用」编译器看不见。
+/// 判据本身是纯函数 <see cref="HomeButtonStylePolicy.ResolveStyle"/>，这里对全部六个
+/// <see cref="ThemeAssetSource"/> 逐一断言（含 EU5 联网后必现的 SteamHero）；另加一条最小源码断言，
+/// 确认页面真的调用了这个函数——否则「判据对了但页面没用」编译器看不见。
 /// 随包素材的解析用临时目录钉住：EU5 有 logo.png 时要有字标，没有时必须回落到 null。
 /// </para>
 /// </summary>
@@ -29,27 +30,68 @@ public static class HomeButtonStyleChecks
         return ChecksContext.Failures - before;
     }
 
-    /// <summary>判据只认「没有按钮美术」的两种来源，其余三种必须保留皮肤。</summary>
+    /// <summary>
+    /// 来源 → 外观的完整决策表。EU5 在线（SteamHero）、离线有 hero 缓存（SteamHero）、
+    /// 清缓存首次（Bundled）都必须走原生；CS2 走安装目录（InstallDir）必须保留皮肤。
+    /// 判据取反或漏掉任一来源，这里都会逐行红。
+    /// </summary>
     private static void CheckPolicyBySource()
     {
-        ChecksContext.Check(
-            "内置占位走原生样式",
-            HomeButtonStylePolicy.UsesNativeStyle(ThemeAssetSource.BuiltInPlaceholder));
-        ChecksContext.Check(
-            "随包自带素材（EU5）走原生样式",
-            HomeButtonStylePolicy.UsesNativeStyle(ThemeAssetSource.Bundled));
-        ChecksContext.Check(
-            "安装目录主题保留皮肤",
-            !HomeButtonStylePolicy.UsesNativeStyle(ThemeAssetSource.InstallDir));
-        ChecksContext.Check(
-            "在线缓存主题保留皮肤",
-            !HomeButtonStylePolicy.UsesNativeStyle(ThemeAssetSource.OnlineCache));
-        ChecksContext.Check(
-            "Steam 胶囊主题保留皮肤",
-            !HomeButtonStylePolicy.UsesNativeStyle(ThemeAssetSource.SteamCapsule));
+        CheckStyle(
+            "内置占位",
+            ThemeAssetSource.BuiltInPlaceholder,
+            HomeButtonStyleKind.NativeDefault,
+            HomeButtonStyleKind.NativeAccent);
+        CheckStyle(
+            "随包自带素材（EU5 清缓存首次）",
+            ThemeAssetSource.Bundled,
+            HomeButtonStyleKind.NativeDefault,
+            HomeButtonStyleKind.NativeAccent);
+        CheckStyle(
+            "Steam 库页背景（EU5 在线 / 离线有 hero 缓存）",
+            ThemeAssetSource.SteamHero,
+            HomeButtonStyleKind.NativeDefault,
+            HomeButtonStyleKind.NativeAccent);
+        CheckStyle(
+            "安装目录主题（CS2）",
+            ThemeAssetSource.InstallDir,
+            HomeButtonStyleKind.Themed,
+            HomeButtonStyleKind.Themed);
+        CheckStyle(
+            "在线缓存主题",
+            ThemeAssetSource.OnlineCache,
+            HomeButtonStyleKind.Themed,
+            HomeButtonStyleKind.Themed);
+        CheckStyle(
+            "Steam 胶囊兜底",
+            ThemeAssetSource.SteamCapsule,
+            HomeButtonStyleKind.Themed,
+            HomeButtonStyleKind.Themed);
+
+        ChecksContext.Equal(
+            "Default 外观对应 DefaultButtonStyle",
+            "DefaultButtonStyle",
+            HomeButtonStylePolicy.StyleKey(HomeButtonStyleKind.NativeDefault));
+        ChecksContext.Equal(
+            "Accent 外观对应 AccentButtonStyle",
+            "AccentButtonStyle",
+            HomeButtonStylePolicy.StyleKey(HomeButtonStyleKind.NativeAccent));
     }
 
-    /// <summary>页面必须按 spec.Source 走判据，并且真的两枚按钮都调到原生分支。</summary>
+    private static void CheckStyle(
+        string name,
+        ThemeAssetSource source,
+        HomeButtonStyleKind secondary,
+        HomeButtonStyleKind primary)
+    {
+        ChecksContext.Equal(name + "：继续（次要）外观", secondary, HomeButtonStylePolicy.ResolveStyle(source, isPrimary: false));
+        ChecksContext.Equal(name + "：开始（主要）外观", primary, HomeButtonStylePolicy.ResolveStyle(source, isPrimary: true));
+    }
+
+    /// <summary>
+    /// 只钉一条接线事实：页面真的用 <c>spec.Source</c> 调了决策函数。
+    /// 判据本身由上面的决策表覆盖，不再用源码字符串扫描去重复判据的逻辑。
+    /// </summary>
     private static void CheckHomePageUsesPolicy()
     {
         var path = FindRepoFile(Path.Combine("src", "PdxLauncher.App", "Views", "HomePage.xaml.cs"));
@@ -59,12 +101,9 @@ public static class HomeButtonStyleChecks
         }
 
         var text = File.ReadAllText(path!);
-        var guard = text.IndexOf("HomeButtonStylePolicy.UsesNativeStyle(spec.Source)", StringComparison.Ordinal);
-        ChecksContext.Check("HomePage 用 spec.Source 调判据", guard >= 0, "index " + guard);
-        ChecksContext.Check("原生分支给「继续」用 DefaultButtonStyle", text.Contains("\"DefaultButtonStyle\"", StringComparison.Ordinal));
-        ChecksContext.Check("原生分支给「开始」用 AccentButtonStyle", text.Contains("\"AccentButtonStyle\"", StringComparison.Ordinal));
-        ChecksContext.Equal("ApplyNativeButton 出现次数（声明 + 两次调用）", 3, CountOf(text, "ApplyNativeButton("));
-        ChecksContext.Check("判据在原生分支之前生效", guard >= 0 && guard < text.IndexOf("ApplyNativeButton(", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "HomePage 用 spec.Source 调 HomeButtonStylePolicy.ResolveStyle",
+            text.Contains("HomeButtonStylePolicy.ResolveStyle(spec.Source", StringComparison.Ordinal));
     }
 
     /// <summary>同目录有 logo.png 才给字标；背景缺失时整个主题不成立。</summary>
@@ -180,19 +219,6 @@ public static class HomeButtonStyleChecks
         BrowserModUrl: null,
         SteamAppId: null,
         Support: GameSupport.LaunchOnly);
-
-    private static int CountOf(string text, string needle)
-    {
-        var count = 0;
-        var index = 0;
-        while ((index = text.IndexOf(needle, index, StringComparison.Ordinal)) >= 0)
-        {
-            count++;
-            index += needle.Length;
-        }
-
-        return count;
-    }
 
     /// <summary>
     /// 从检查程序目录逐级上溯找仓库文件（与 ChecksContext.FixturePath 同一套做法）。

@@ -510,6 +510,23 @@
                 Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
                 TextWrapping="Wrap"
                 Visibility="{x:Bind svc:XamlVisibility.FromString(ViewModel.StatusMessage), Mode=OneWay}" />
+
+            <!--
+                原生按钮禁用态的取色探针。两个按钮的内容是 Grid + TextBlock，文字带本地前景，
+                不会跟随模板里 ContentPresenter 的 Disabled 状态；代码又查不到 ThemeDictionaries
+                里的 ThemeResource（TryGetValue 不走主题字典），所以让 XAML 解析一次，
+                禁用时由代码读取探针的画刷。Collapsed 不影响布局，主题切换时 ThemeResource 会自动重取。
+                Default 用 ButtonForegroundDisabled，Accent 用 TextOnAccentFillColorDisabledBrush
+                （前者是 TextFillColorDisabledBrush 的别名，后者是 Accent 禁用态的白字）。
+            -->
+            <Border
+                x:Name="DefaultButtonDisabledForegroundProbe"
+                BorderBrush="{ThemeResource ButtonForegroundDisabled}"
+                Visibility="Collapsed" />
+            <Border
+                x:Name="AccentButtonDisabledForegroundProbe"
+                BorderBrush="{ThemeResource TextOnAccentFillColorDisabledBrush}"
+                Visibility="Collapsed" />
         </StackPanel>
     </ScrollViewer>
 </Page>
