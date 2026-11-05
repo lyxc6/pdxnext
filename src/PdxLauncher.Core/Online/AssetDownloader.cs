@@ -1,5 +1,6 @@
 namespace PdxLauncher.Core.Online;
 
+using System.Net;
 using System.Net.Http;
 using PdxLauncher.Core.Abstractions;
 
@@ -55,15 +56,8 @@ public sealed class AssetDownloader : IAssetDownloader, IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(url);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetPathWithoutExtension);
 
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        if (!TryResolveAllowedUri(url, out var uri))
         {
-            _logger.Warn("素材 URL 非法，拒绝下载: " + url);
-            return null;
-        }
-
-        if (!OnlineHosts.IsAllowed(uri))
-        {
-            _logger.Warn("素材域名不在白名单内，拒绝下载: " + uri.Host + " (" + url + ")");
             return null;
         }
 
@@ -110,7 +104,144 @@ public sealed class AssetDownloader : IAssetDownloader, IDisposable
     private TimeSpan RetryDelay(int attempt) =>
         attempt <= 1 ? RetryBaseDelay : TimeSpan.FromMilliseconds(RetryBaseDelay.TotalMilliseconds * 3);
 
+    /// <summary>
+    /// 条件下载：URL 未变时用索引里的 ETag / Last-Modified 做校验。
+    /// 304 → 不创建、不覆盖任何文件，只把新的校验头回给调用方；
+    /// 200 → 照旧写 .part 再原子改名。真实 HTTP 出口不支持条件请求时退回普通下载。
+    /// </summary>
+    public async Task<AssetDownloadResult> DownloadConditionalAsync(
+        string url,
+        string targetPathWithoutExtension,
+        string? etag,
+        string? lastModified,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(url);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetPathWithoutExtension);
+
+        if (!TryResolveAllowedUri(url, out var uri))
+        {
+            return AssetDownloadResult.Failed;
+        }
+
+        if (_http is not IConditionalHttpFetcher conditional)
+        {
+            var fallback = await DownloadAsync(url, targetPathWithoutExtension, cancellationToken)
+                .ConfigureAwait(false);
+            return fallback is null
+                ? AssetDownloadResult.Failed
+                : AssetDownloadResult.Downloaded(fallback, etag: null, lastModified: null);
+        }
+
+        var partPath = targetPathWithoutExtension + PartSuffix;
+        await _slots.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    await using var response = await conditional
+                        .GetConditionalAsync(uri, etag, lastModified, cancellationToken)
+                        .ConfigureAwait(false);
+
+                    if (response.StatusCode == HttpStatusCode.NotModified)
+                    {
+                        _logger.Info(
+                            "素材请求: 状态=304, ETag=" + (response.ETag ?? "(无)") + ", url=" + uri);
+                        return AssetDownloadResult.NotModified(response.ETag, response.LastModified);
+                    }
+
+                    if ((int)response.StatusCode is < 200 or >= 300 || response.Content is null)
+                    {
+                        _logger.Warn("素材请求返回非成功状态: " + (int)response.StatusCode + " " + uri);
+                        return AssetDownloadResult.Failed;
+                    }
+
+                    var saved = await SaveStreamAsync(
+                            response.Content,
+                            uri,
+                            targetPathWithoutExtension,
+                            partPath,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (saved is null)
+                    {
+                        return AssetDownloadResult.Failed;
+                    }
+
+                    _logger.Info(
+                        "素材请求: 状态=200, ETag=" + (response.ETag ?? "(无)") + ", url=" + uri);
+                    return AssetDownloadResult.Downloaded(saved, response.ETag, response.LastModified);
+                }
+                catch (SteamThrottleException ex)
+                {
+                    _logger.Warn("素材下载被限流，不再重试: " + ex.Message + " (" + uri + ")");
+                    TryDeletePart(partPath);
+                    return AssetDownloadResult.Failed;
+                }
+                catch (TransientDownloadException ex)
+                {
+                    if (attempt >= MaxAttempts)
+                    {
+                        _logger.Warn(
+                            ex.Message + "（已重试 " + (MaxAttempts - 1) + " 次）(" + uri + ")");
+                        return AssetDownloadResult.Failed;
+                    }
+
+                    _logger.Warn(
+                        "素材下载重试 " + attempt + "/" + (MaxAttempts - 1) + ": " + ex.Message
+                        + " (" + uri + ")");
+                    await Task.Delay(RetryDelay(attempt), cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+        finally
+        {
+            _slots.Release();
+        }
+    }
+
     private async Task<string?> DownloadCoreAsync(
+        Uri uri,
+        string targetPathWithoutExtension,
+        string partPath,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var source = await _http.GetAsync(uri, cancellationToken).ConfigureAwait(false);
+            return await SaveStreamAsync(
+                    source,
+                    uri,
+                    targetPathWithoutExtension,
+                    partPath,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            TryDeletePart(partPath);
+            throw;
+        }
+        catch (OperationCanceledException ex)
+        {
+            TryDeletePart(partPath);
+            throw new TransientDownloadException("素材下载超时: " + ex.Message, ex);
+        }
+        catch (HttpRequestException ex)
+        {
+            TryDeletePart(partPath);
+            throw new TransientDownloadException("素材下载失败: " + ex.Message, ex);
+        }
+    }
+
+    /// <summary>
+    /// 把响应流落成最终文件：大小/上限/magic bytes 校验后写 &lt;target&gt;.part，
+    /// 最后 File.Move 原子替换。失败返回 null 并保留旧图。
+    /// </summary>
+    private async Task<string?> SaveStreamAsync(
+        Stream source,
         Uri uri,
         string targetPathWithoutExtension,
         string partPath,
@@ -132,7 +263,6 @@ public sealed class AssetDownloader : IAssetDownloader, IDisposable
             var headLength = 0;
             var oversize = false;
 
-            await using (var source = await _http.GetAsync(uri, cancellationToken).ConfigureAwait(false))
             await using (var destination = new FileStream(
                              partPath,
                              FileMode.Create,
@@ -243,6 +373,24 @@ public sealed class AssetDownloader : IAssetDownloader, IDisposable
             TryDeletePart(partPath);
             return null;
         }
+    }
+
+    /// <summary>URL 合法且域名在白名单内才允许发请求；拒绝时记日志并返回 false。</summary>
+    private bool TryResolveAllowedUri(string url, out Uri uri)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out uri!))
+        {
+            _logger.Warn("素材 URL 非法，拒绝下载: " + url);
+            return false;
+        }
+
+        if (!OnlineHosts.IsAllowed(uri))
+        {
+            _logger.Warn("素材域名不在白名单内，拒绝下载: " + uri.Host + " (" + url + ")");
+            return false;
+        }
+
+        return true;
     }
 
     private void TryDeletePart(string partPath)

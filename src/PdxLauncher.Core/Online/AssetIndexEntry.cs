@@ -8,4 +8,13 @@ public sealed class AssetIndexEntry
 
     /// <summary>缓存目录下的文件名（含推断扩展名，如 ck3-background.png）。</summary>
     public string? FileName { get; set; }
+
+    /// <summary>
+    /// 上次 200 响应带回来的 ETag。URL 不变时用它发 If-None-Match：
+    /// 304 只更新检查时间、绝不重写文件；服务端原地换图会变成 200。
+    /// </summary>
+    public string? ETag { get; set; }
+
+    /// <summary>上次 200 响应带回来的 Last-Modified，没有 ETag 时用 If-Modified-Since。</summary>
+    public string? LastModified { get; set; }
 }

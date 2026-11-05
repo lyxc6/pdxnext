@@ -8,7 +8,8 @@ using PdxLauncher.Core.Online;
 
 /// <summary>
 /// 联网层自检（不真联网）：GraphQL 解析、域名白名单、magic bytes 判型、.part 清理、
-/// 代理优先级、主题三层合并与 5 天 TTL。所有 HTTP 均通过 fake IHttpFetcher 注入。
+/// 代理优先级、主题三层合并、24 小时 TTL、条件请求（304 不重写）与退避判定。
+/// 所有 HTTP 均通过 fake IHttpFetcher / IAssetDownloader 注入。
 /// </summary>
 public static class OnlineChecks
 {
@@ -29,6 +30,7 @@ public static class OnlineChecks
             CheckDownloader(fs, tempRoot);
             CheckProxyResolver();
             CheckThemeResolver(fs, tempRoot);
+            CheckThemeRefreshDecision();
             CheckThemeRefreshRetry(fs, tempRoot);
             CheckWashLayerPolicy();
             CheckSteamCoverUrlResolver();
@@ -232,7 +234,11 @@ public static class OnlineChecks
 
         ChecksContext.Equal("256 B 阈值", 256, AssetFileTypeDetector.MinimumFileBytes);
         ChecksContext.Equal("40 MB 阈值", 40 * 1024 * 1024, AssetFileTypeDetector.MaximumFileBytes);
-        ChecksContext.Equal("TTL 5 天毫秒数", 432_000_000L, ThemeResolver.CacheTtlMilliseconds);
+        ChecksContext.Equal("TTL 24 小时毫秒数", 86_400_000L, ThemeResolver.CacheTtlMilliseconds);
+        ChecksContext.Equal(
+            "TTL 与判定器默认值一致",
+            ThemeRefreshDecision.DefaultTtlMilliseconds,
+            ThemeResolver.CacheTtlMilliseconds);
         ChecksContext.Equal("失败短重试 10 分钟毫秒数", 600_000L, ThemeResolver.RefreshRetryDelayMilliseconds);
         ChecksContext.Equal("连接超时 30 秒", TimeSpan.FromSeconds(30), HttpFetcher.ConnectTimeout);
         ChecksContext.Equal("单体素材最多尝试 3 次", 3, AssetDownloader.MaxAttempts);
@@ -315,6 +321,14 @@ public static class OnlineChecks
 
     private static void CheckDownloader(IFileSystem fs, string tempRoot)
     {
+        // 防止条件请求悄悄退化成普通下载：AssetDownloader 靠接口探测决定是否发
+        // If-None-Match / If-Modified-Since，HttpFetcher 一旦漏掉接口，304 分支永不执行，
+        // ETag 也永远写 null。其余自检用的是 fake IAssetDownloader，测不出这类回归。
+        ChecksContext.Check(
+            "HttpFetcher 实现 IConditionalHttpFetcher",
+            typeof(IConditionalHttpFetcher).IsAssignableFrom(typeof(HttpFetcher)),
+            "缺接口会让 AssetDownloader 静默退回普通下载，条件请求永远不发");
+
         var logger = new RecordingLogger();
         var pngBytes = BuildAsset(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, 8192);
         var fetcher = new FakeHttpFetcher(streamFactory: _ => new SyntheticStream(pngBytes));
@@ -486,7 +500,7 @@ public static class OnlineChecks
         ChecksContext.Check("并发上限为 2", AssetDownloader.MaxConcurrentDownloads == 2);
 
         // 连接抖动重试：前两次抛 HttpRequestException，第三次成功。
-        // 真实事故：到 metadata-assets 的 TLS 握手一次性超时，6 项素材全灭且被 5 天 TTL 锁住。
+        // 真实事故：到 metadata-assets 的 TLS 握手一次性超时，6 项素材全灭且被当时的 5 天 TTL 锁住。
         var flakyFetcher = new FlakyHttpFetcher(pngBytes, failures: 2);
         using (var flakyDownloader = new AssetDownloader(flakyFetcher, logger, fs)
                {
@@ -651,7 +665,12 @@ public static class OnlineChecks
         var cachedPng = Path.Combine(cacheRoot, "ck3-background.png");
         fs.WriteAllBytesAtomic(cachedPng, BuildAsset(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, 8192));
         var index = new AssetIndex { LastCheckedUtc = clock.UtcNow };
-        index.Set(AssetKeys.Background, AssetPrefix + "ck3/launcher-background-image-abc", "ck3-background.png");
+        index.Set(
+            AssetKeys.Background,
+            AssetPrefix + "ck3/launcher-background-image-abc",
+            "ck3-background.png",
+            "seed-etag",
+            "Wed, 21 Oct 2015 07:28:00 GMT");
         index.Save(fs, logger, resolver.IndexPath("ck3"));
 
         var online = resolver.ResolveAsync(game, allowOnlineRefresh: false, CancellationToken.None)
@@ -666,33 +685,35 @@ public static class OnlineChecks
         ChecksContext.Equal("字重永远取层2（不联网）", game.Theme.FontWeight, online.FontWeight);
         ChecksContext.Equal<string?>("字体路径取层2（缓存未覆盖）", game.Theme.ButtonFont, online.ButtonFont);
 
-        // TTL 4 天：仍然新鲜 → 即使 allowOnlineRefresh=true 也不刷新。
-        SetLastChecked(fs, logger, resolver, "ck3", clock.UtcNow.AddDays(-4));
+        // TTL 23 小时：仍然新鲜 → 即使 allowOnlineRefresh=true 也不刷新。
+        SetLastChecked(fs, logger, resolver, "ck3", clock.UtcNow.AddHours(-23));
         metadata.Reset();
         downloader.Reset();
         var fresh = resolver.ResolveAsync(game, allowOnlineRefresh: true, CancellationToken.None)
             .GetAwaiter()
             .GetResult();
-        ChecksContext.Equal("TTL 4 天 → 不刷新（元数据调用 0）", 0, metadata.CallCount);
-        ChecksContext.Equal("TTL 4 天 → 不刷新（下载调用 0）", 0, downloader.CallCount);
-        ChecksContext.Equal("TTL 4 天仍为 OnlineCache", ThemeAssetSource.OnlineCache, fresh.Source);
+        ChecksContext.Equal("TTL 23 小时 → 不刷新（元数据调用 0）", 0, metadata.CallCount);
+        ChecksContext.Equal("TTL 23 小时 → 不刷新（下载调用 0）", 0, downloader.CallCount);
+        ChecksContext.Equal("TTL 23 小时仍为 OnlineCache", ThemeAssetSource.OnlineCache, fresh.Source);
 
-        // TTL 6 天 + URL 未变：必须刷新元数据但跳过下载，并把 lastCheckedUtc 推到当前时间。
-        SetLastChecked(fs, logger, resolver, "ck3", clock.UtcNow.AddDays(-6));
+        // TTL 25 小时 + URL 未变：必须发一次条件请求（If-None-Match），
+        // 服务端 304 时只推进 lastCheckedUtc，绝不重写文件。
+        SetLastChecked(fs, logger, resolver, "ck3", clock.UtcNow.AddHours(-25));
         metadata.Reset();
         downloader.Reset();
         var refreshed = resolver.ResolveAsync(game, allowOnlineRefresh: true, CancellationToken.None)
             .GetAwaiter()
             .GetResult();
-        ChecksContext.Equal("TTL 6 天 → 触发元数据请求", 1, metadata.CallCount);
-        ChecksContext.Equal("TTL 6 天 + URL 未变 → 不重复下载", 0, downloader.CallCount);
-        ChecksContext.Equal("TTL 6 天刷新后仍为 OnlineCache", ThemeAssetSource.OnlineCache, refreshed.Source);
-        ChecksContext.Equal<string?>("TTL 6 天刷新后背景仍是缓存文件", cachedPng, refreshed.Background);
+        ChecksContext.Equal("TTL 25 小时 → 触发元数据请求", 1, metadata.CallCount);
+        ChecksContext.Equal("TTL 25 小时 + URL 未变 → 发一次条件请求", 1, downloader.ConditionalCallCount);
+        ChecksContext.Equal("TTL 25 小时 + 304 → 不重写文件", 0, downloader.CallCount);
+        ChecksContext.Equal("TTL 25 小时刷新后仍为 OnlineCache", ThemeAssetSource.OnlineCache, refreshed.Source);
+        ChecksContext.Equal<string?>("TTL 25 小时刷新后背景仍是缓存文件", cachedPng, refreshed.Background);
         ChecksContext.Check(
             "刷新后索引记录了 lastCheckedUtc",
             AssetIndex.Load(fs, logger, resolver.IndexPath("ck3")).LastCheckedUtc == clock.UtcNow);
 
-        // 关键回归：刷新成功后 5 天内必须零网络请求。
+        // 关键回归：刷新成功后 24 小时内必须零网络请求。
         // 旧实现用缓存文件 mtime 判 TTL，而「URL 未变跳过下载」永不更新 mtime，
         // 导致每次启动都判定过期 → 每次启动多一次 GraphQL 请求。这两条断言锁死该 bug。
         metadata.Reset();
@@ -700,12 +721,12 @@ public static class OnlineChecks
         var afterRefresh = resolver.ResolveAsync(game, allowOnlineRefresh: true, CancellationToken.None)
             .GetAwaiter()
             .GetResult();
-        ChecksContext.Equal("刷新后 5 天内再 Resolve 零元数据请求", 0, metadata.CallCount);
-        ChecksContext.Equal("刷新后 5 天内再 Resolve 零下载请求", 0, downloader.CallCount);
+        ChecksContext.Equal("刷新后 24 小时内再 Resolve 零元数据请求", 0, metadata.CallCount);
+        ChecksContext.Equal("刷新后 24 小时内再 Resolve 零下载请求", 0, downloader.CallCount);
         ChecksContext.Equal<string?>("刷新后仍用缓存背景", cachedPng, afterRefresh.Background);
 
         // 刷新失败（下载返回 null）必须静默保留旧图，不抛异常。
-        SetLastChecked(fs, logger, resolver, "ck3", clock.UtcNow.AddDays(-6));
+        SetLastChecked(fs, logger, resolver, "ck3", clock.UtcNow.AddHours(-25));
         metadata.Reset();
         metadata.BackgroundUrl = AssetPrefix + "ck3/launcher-background-image-fail";
         downloader.Reset();
@@ -718,7 +739,7 @@ public static class OnlineChecks
         downloader.FailEverything = false;
 
         // TTL 过期且 URL 变了：必须下载新文件，并清理扩展名变化的旧文件名。
-        SetLastChecked(fs, logger, resolver, "ck3", clock.UtcNow.AddDays(-6));
+        SetLastChecked(fs, logger, resolver, "ck3", clock.UtcNow.AddHours(-25));
         metadata.Reset();
         metadata.BackgroundUrl = AssetPrefix + "ck3/launcher-background-image-def";
         downloader.Reset();
@@ -756,14 +777,15 @@ public static class OnlineChecks
             changedIndex.Find(AssetKeys.Background)?.FileName);
         downloader.OutputExtension = ".png";
 
-        // 同一 URL 再刷新一次：文件名必须保持不变（否则每次启动都会重下）。
-        SetLastChecked(fs, logger, resolver, "ck3", clock.UtcNow.AddDays(-6));
+        // 同一 URL 再刷新一次：条件请求 304，文件名与文件内容都必须保持不变。
+        SetLastChecked(fs, logger, resolver, "ck3", clock.UtcNow.AddHours(-25));
         metadata.Reset();
         downloader.Reset();
         var again = resolver.ResolveAsync(game, allowOnlineRefresh: true, CancellationToken.None)
             .GetAwaiter()
             .GetResult();
-        ChecksContext.Equal("同一 URL 再刷新不重复下载", 0, downloader.CallCount);
+        ChecksContext.Equal("同一 URL 再刷新只发条件请求", 1, downloader.ConditionalCallCount);
+        ChecksContext.Equal("同一 URL 再刷新不重写文件", 0, downloader.CallCount);
         ChecksContext.Equal<string?>("同一 URL 再刷新沿用同一缓存文件", changedPath, again.Background);
 
         // 损坏的索引必须容错：视为无缓存，退回层 2。
@@ -944,7 +966,77 @@ public static class OnlineChecks
     }
 
     /// <summary>
-    /// 刷新失败不得推进 5 天 TTL。真实事故：到 metadata-assets 的 TLS 握手一次性超时，
+    /// 纯判定器：顺序就是行为契约。重点钉住「退避窗口内必须判为不刷新」这条回归。
+    /// </summary>
+    private static void CheckThemeRefreshDecision()
+    {
+        var now = new DateTimeOffset(2026, 11, 5, 12, 0, 0, TimeSpan.Zero);
+
+        ThemeRefreshResult Run(
+            DateTimeOffset? lastChecked = null,
+            DateTimeOffset? retryAfter = null,
+            bool indexEmpty = false,
+            bool urlChanged = false,
+            bool fileMissing = false,
+            bool force = false) =>
+            ThemeRefreshDecision.Evaluate(
+                new ThemeRefreshInput(now, lastChecked, retryAfter, indexEmpty, urlChanged, fileMissing, force));
+
+        // 回归：几天前的检查时间早已过 TTL，但仍在 10 分钟退避窗口内 → 不许刷新。
+        var backoff = Run(lastChecked: now.AddDays(-5), retryAfter: now.AddMinutes(5));
+        ChecksContext.Check("退避窗口内不 stale", !backoff.ShouldRefresh);
+        ChecksContext.Equal("退避窗口内原因 = Backoff", ThemeRefreshReason.Backoff, backoff.Reason);
+
+        // 退避必须先于 FileMissing / IndexEmpty：否则一次失败后文件被清或索引为空时，
+        // 每次启动都会重新撞网络，退避等于失效。
+        var backoffMissing = Run(
+            lastChecked: now.AddDays(-5),
+            retryAfter: now.AddMinutes(5),
+            fileMissing: true);
+        ChecksContext.Check("退避 × 文件缺失仍不刷新", !backoffMissing.ShouldRefresh);
+        ChecksContext.Equal(
+            "退避 × 文件缺失原因 = Backoff",
+            ThemeRefreshReason.Backoff,
+            backoffMissing.Reason);
+
+        var backoffEmpty = Run(retryAfter: now.AddMinutes(5), indexEmpty: true);
+        ChecksContext.Check("退避 × 索引为空仍不刷新", !backoffEmpty.ShouldRefresh);
+        ChecksContext.Equal(
+            "退避 × 索引为空原因 = Backoff",
+            ThemeRefreshReason.Backoff,
+            backoffEmpty.Reason);
+
+        var force = Run(lastChecked: now, retryAfter: now.AddMinutes(5), force: true);
+        ChecksContext.Check("force 绕过 TTL 与退避", force.ShouldRefresh);
+        ChecksContext.Equal("force 原因 = Force", ThemeRefreshReason.Force, force.Reason);
+
+        ChecksContext.Check("索引空必须刷新", Run(indexEmpty: true).ShouldRefresh);
+        ChecksContext.Equal("索引空原因", ThemeRefreshReason.IndexEmpty, Run(indexEmpty: true).Reason);
+        ChecksContext.Equal("URL 变原因", ThemeRefreshReason.UrlChanged, Run(urlChanged: true, lastChecked: now).Reason);
+        ChecksContext.Equal("文件缺失原因", ThemeRefreshReason.FileMissing, Run(fileMissing: true, lastChecked: now).Reason);
+        ChecksContext.Equal("退避到点原因", ThemeRefreshReason.RetryDue, Run(lastChecked: now, retryAfter: now.AddMinutes(-1)).Reason);
+        ChecksContext.Equal("从未检查原因", ThemeRefreshReason.NeverChecked, Run().Reason);
+
+        var exactlyTtl = Run(lastChecked: now.AddHours(-24));
+        ChecksContext.Check("满 24 小时即过期", exactlyTtl.ShouldRefresh);
+        ChecksContext.Equal("TTL 过期原因", ThemeRefreshReason.TtlExpired, exactlyTtl.Reason);
+
+        var fresh = Run(lastChecked: now.AddHours(-23));
+        ChecksContext.Check("23 小时内保持新鲜", !fresh.ShouldRefresh);
+        ChecksContext.Equal("新鲜原因", ThemeRefreshReason.Fresh, fresh.Reason);
+
+        // Steam 兜底只看背景：有 logo、缺背景仍然是空白页。
+        var logoOnly = new ThemeSpec(
+            null, "logo.png", null, null, null, null, "#000", "#111", 20d, 300, null,
+            ThemeAssetSource.InstallDir);
+        ChecksContext.Check("NeedsSteamCapsule：有 logo 缺背景仍需要", ThemeResolver.NeedsSteamCapsule(logoOnly));
+        ChecksContext.Check(
+            "NeedsSteamCapsule：有背景就不需要",
+            !ThemeResolver.NeedsSteamCapsule(logoOnly with { Background = "bg.png" }));
+    }
+
+    /// <summary>
+    /// 刷新失败不得推进 24 小时 TTL。真实事故：到 metadata-assets 的 TLS 握手一次性超时，
     /// 6 项素材全灭后仍写了 lastCheckedUtc，导致 eu4/ck3/hoi4/stellaris 的主题
     /// 被锁在「安装目录那张 20% 不透明底图」上整整 5 天（用户看到的就是发灰的卡片）。
     /// </summary>
@@ -989,6 +1081,11 @@ public static class OnlineChecks
         var gated = AssetIndex.Load(fs, logger, resolver.IndexPath("ck3"));
         gated.LastCheckedUtc = clock.UtcNow.AddDays(-1);
         gated.RetryAfterUtc = clock.UtcNow.AddMinutes(5);
+        if (gated.Find(AssetKeys.Background) is { } gatedBackground)
+        {
+            gatedBackground.ETag = "etag-gated";
+        }
+
         gated.Save(fs, logger, resolver.IndexPath("ck3"));
 
         metadata.Reset();
@@ -1003,7 +1100,8 @@ public static class OnlineChecks
             .GetAwaiter()
             .GetResult();
         ChecksContext.Equal("重试时间已到 → 发一次元数据请求", 1, metadata.CallCount);
-        ChecksContext.Equal("重试时间已到 → URL 未变不重复下载", 0, downloader.CallCount);
+        ChecksContext.Equal("重试时间已到 → URL 未变走条件请求", 1, downloader.ConditionalCallCount);
+        ChecksContext.Equal("重试时间已到 → 304 不重写文件", 0, downloader.CallCount);
         ChecksContext.Equal("重试成功后仍是 OnlineCache", ThemeAssetSource.OnlineCache, afterRetry.Source);
 
         var afterRetryIndex = AssetIndex.Load(fs, logger, resolver.IndexPath("ck3"));
@@ -1046,6 +1144,60 @@ public static class OnlineChecks
         ChecksContext.Check("全失败不推进 lastCheckedUtc", afterAllFailed.LastCheckedUtc is null);
         ChecksContext.Equal<DateTimeOffset?>("全失败同样记下重试时间", retryAtNow, afterAllFailed.RetryAfterUtc);
         ChecksContext.Equal("全失败不写入任何素材条目", 0, afterAllFailed.Assets.Count);
+
+        // 5) force 必须绕过 24h TTL 与退避；普通 Resolve 在退避窗口内一个请求都不发。
+        var forcePng = Path.Combine(cacheRoot, "ck3-background.png");
+        fs.WriteAllBytesAtomic(forcePng, BuildAsset(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, 8192));
+        var forceIndex = new AssetIndex
+        {
+            LastCheckedUtc = clock.UtcNow,
+            RetryAfterUtc = clock.UtcNow.AddMinutes(10),
+        };
+        forceIndex.Set(AssetKeys.Background, metadata.BackgroundUrl, "ck3-background.png", "etag-force", null);
+        forceIndex.Save(fs, logger, resolver.IndexPath("ck3"));
+
+        metadata.Reset();
+        downloader.Reset();
+        resolver.ResolveAsync(game, allowOnlineRefresh: true, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("退避窗口内普通 Resolve 不发元数据请求", 0, metadata.CallCount);
+        ChecksContext.Equal("退避窗口内普通 Resolve 不发素材请求", 0, downloader.ConditionalCallCount);
+        ChecksContext.Check(
+            "退避窗口内普通 Resolve 不改 lastCheckedUtc",
+            AssetIndex.Load(fs, logger, resolver.IndexPath("ck3")).LastCheckedUtc == clock.UtcNow);
+
+        metadata.Reset();
+        downloader.Reset();
+        var forced = resolver
+            .ResolveAsync(game, allowOnlineRefresh: true, CancellationToken.None, forceRefresh: true)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Equal("force 绕过 TTL/退避 → 发元数据请求", 1, metadata.CallCount);
+        ChecksContext.Equal("force 仍走条件请求", 1, downloader.ConditionalCallCount);
+        ChecksContext.Equal("force 命中 304 不重写文件", 0, downloader.CallCount);
+        ChecksContext.Equal<string?>("force 后背景仍是原缓存文件", forcePng, forced.Background);
+        var forcedIndex = AssetIndex.Load(fs, logger, resolver.IndexPath("ck3"));
+        ChecksContext.Check("force 成功后推进 lastCheckedUtc", forcedIndex.LastCheckedUtc == clock.UtcNow);
+        ChecksContext.Check("force 成功后清掉退避", forcedIndex.RetryAfterUtc is null);
+
+        // 6) metadata 没有该游戏：不能静默，必须记录可展示的原因并使用内置/安装目录素材。
+        metadata.ReturnEmpty = true;
+        metadata.Reset();
+        downloader.Reset();
+        resolver
+            .ResolveAsync(game, allowOnlineRefresh: true, CancellationToken.None, forceRefresh: true)
+            .GetAwaiter()
+            .GetResult();
+        var missing = resolver.GetDiagnostics("ck3");
+        ChecksContext.Check("元数据无记录 → 标记 MetadataMissing", missing.MetadataMissing);
+        ChecksContext.Check(
+            "元数据无记录 → 记录可展示原因",
+            missing.LastError?.Contains("元数据无该游戏", StringComparison.Ordinal) == true,
+            missing.LastError ?? "(null)");
+        ChecksContext.Check(
+            "元数据无记录 → 记 warn 说明使用内置素材",
+            logger.Warnings.Any(w => w.Contains("使用内置素材", StringComparison.Ordinal)),
+            string.Join(" | ", logger.Warnings));
+        metadata.ReturnEmpty = false;
     }
 
     /// <summary>把索引里的 lastCheckedUtc 改成指定时间，用来模拟「上次联网检查」的年龄。</summary>
@@ -1330,6 +1482,9 @@ public static class OnlineChecks
         /// <summary>fake 元数据里的 logo URL；非空时远端素材变成 2 项，用于验证「部分失败」。</summary>
         public string? LogoUrl { get; set; }
 
+        /// <summary>模拟「远端 metadata 完全没有该游戏」（EU5 现状）。</summary>
+        public bool ReturnEmpty { get; set; }
+
         public void Reset() => CallCount = 0;
 
         public Task<IReadOnlyList<GameMetadataDto>> GetMetadataAsync(
@@ -1337,6 +1492,11 @@ public static class OnlineChecks
             CancellationToken cancellationToken)
         {
             CallCount++;
+            if (ReturnEmpty)
+            {
+                return Task.FromResult<IReadOnlyList<GameMetadataDto>>(Array.Empty<GameMetadataDto>());
+            }
+
             IReadOnlyList<GameMetadataDto> result = new[]
             {
                 new GameMetadataDto(
@@ -1373,6 +1533,9 @@ public static class OnlineChecks
 
         public int CallCount { get; private set; }
 
+        /// <summary>带校验头的条件请求次数；304 不应增加 CallCount（不写文件）。</summary>
+        public int ConditionalCallCount { get; private set; }
+
         public bool FailEverything { get; set; }
 
         /// <summary>只让匹配的 URL 失败，用来模拟「部分素材下不下来」。</summary>
@@ -1381,7 +1544,36 @@ public static class OnlineChecks
         /// <summary>成功时写出的扩展名；改成 .jpg 可模拟「magic 判型变化导致缓存文件名变化」。</summary>
         public string OutputExtension { get; set; } = ".png";
 
-        public void Reset() => CallCount = 0;
+        public void Reset()
+        {
+            CallCount = 0;
+            ConditionalCallCount = 0;
+        }
+
+        public Task<AssetDownloadResult> DownloadConditionalAsync(
+            string url,
+            string targetPathWithoutExtension,
+            string? etag,
+            string? lastModified,
+            CancellationToken cancellationToken)
+        {
+            ConditionalCallCount++;
+            if (FailEverything || (FailPredicate is not null && FailPredicate(url)))
+            {
+                return Task.FromResult(AssetDownloadResult.Failed);
+            }
+
+            // 有校验头即模拟服务端 304：不写文件，只回 ETag。
+            if (!string.IsNullOrEmpty(etag))
+            {
+                return Task.FromResult(AssetDownloadResult.NotModified(etag, lastModified));
+            }
+
+            CallCount++;
+            var path = targetPathWithoutExtension + OutputExtension;
+            _fs.WriteAllBytesAtomic(path, BuildAsset(new byte[] { 0x89, 0x50, 0x4E, 0x47 }, 8192));
+            return Task.FromResult(AssetDownloadResult.Downloaded(path, "etag-" + url.GetHashCode(), null));
+        }
 
         public Task<string?> DownloadAsync(
             string url,

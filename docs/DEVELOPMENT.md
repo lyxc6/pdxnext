@@ -382,7 +382,7 @@ Cities: Skylines 则是**本体根本不读任何加载文件**——它的 mod 
 
 **背景图是按版本走的，不是安装目录里那张**。和官方 Paradox Launcher v2 一样，主题素材由 Paradox 元数据服务
 按 `gameId` 下发一组 URL（路径末尾带内容 hash），下载到
-`data\theme-cache\<gameId>-<assetKey>-<urlHash8>.<ext>`（程序目录下），TTL 5 天、过期先返回旧图再后台刷新；
+`data\theme-cache\<gameId>-<assetKey>-<urlHash8>.<ext>`（程序目录下），TTL 24 小时、过期先返回旧图再后台刷新；
 游戏发新版本 ⇒ 服务端换图 ⇒ URL 变 ⇒ 本地文件名跟着变（顺带让 WinUI 的图片缓存自动失效）。
 实测 CK3 拿到的背景图与官方启动器 `cache\ck3-background` **sha256 完全一致**，
 而它与安装目录 `launcher\assets\app-background.png` 是两张完全不同的图。
@@ -660,7 +660,7 @@ csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cm
 | 自有数据库 | `data\pdxnext.sqlite`（播放集 / mod / settings / session / 六份缓存索引） | 同上 |
 | 启动器设置 | 库内 `settings` 键（原 `data\settings.json`，已入库） | 同上 |
 | DLC 简介缓存 | 库内 `cache:dlc-descriptions` 键 | 同上（TTL 7 天） |
-| 主题素材缓存 | 库内 `cache:theme-assets:<gameId>` + 图片 `data\theme-cache\` | 同上（TTL 5 天） |
+| 主题素材缓存 | 库内 `cache:theme-assets:<gameId>` + 图片 `data\theme-cache\` | 同上（TTL 24 小时） |
 | 官方公告缓存 | 库内 `cache:news-cards` + 图片 `data\news-cache\` | 同上（TTL 6 小时） |
 | Mod 缩略图缓存 | 库内 `cache:mod-thumbnails` + 图片 `data\mod-cache\` | 同上（保留天数可配，默认 30 天） |
 | 译文缓存 | 库内 `cache:translations` 键 | 同上（保留天数可配，默认 30 天） |

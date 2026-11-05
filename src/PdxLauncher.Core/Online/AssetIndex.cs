@@ -25,18 +25,27 @@ public sealed class AssetIndex
     public Dictionary<string, AssetIndexEntry> Assets { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// 上次成功联网检查该游戏主题的时间（UTC）。ThemeResolver 用它判 TTL（5 天），
-    /// 不用缓存文件 mtime —— 因为「URL 未变就跳过下载」会让 mtime 永远不更新。
+    /// 上次成功联网检查该游戏主题的时间（UTC）。ThemeResolver 用它判 TTL（24 小时），
+    /// 不用缓存文件 mtime —— 因为「URL 未变就只做条件请求」会让 mtime 在 304 时永远不更新。
     /// </summary>
     public DateTimeOffset? LastCheckedUtc { get; set; }
 
     /// <summary>
     /// 上次刷新有素材没下下来时记录的「最早可重试时间」（UTC）。
     /// 与 LastCheckedUtc 的区别：LastCheckedUtc 只代表**全部素材都就绪**的那次检查；
-    /// 有失败时它不前移，改由本字段安排 10 分钟后的短重试，避免一次网络抖动把该游戏主题锁死 5 天。
+    /// 有失败时它不前移，改由本字段安排 10 分钟后的短重试，避免一次网络抖动把该游戏主题锁死一整天。
     /// 为 null 表示没有待重试的失败。
     /// </summary>
     public DateTimeOffset? RetryAfterUtc { get; set; }
+
+    /// <summary>上次刷新失败的中文原因（元数据无该游戏、素材下载失败等）；成功后清空。</summary>
+    public string? LastError { get; set; }
+
+    /// <summary>上次失败发生的时间（UTC），设置页展示「上次失败原因」用。</summary>
+    public DateTimeOffset? LastErrorUtc { get; set; }
+
+    /// <summary>上次检查时 metadata 里根本没有该游戏（例如 EU5）：不是网络故障，别静默。</summary>
+    public bool MetadataMissing { get; set; }
 
     /// <summary>读取索引；文件缺失、JSON 损坏或 IO 失败时返回空索引并记 warn，绝不抛。</summary>
     public static AssetIndex Load(IFileSystem fs, IAppLogger logger, string path)
@@ -136,10 +145,20 @@ public sealed class AssetIndex
     public AssetIndexEntry? Find(string key) =>
         Assets.TryGetValue(key, out var entry) ? entry : null;
 
-    /// <summary>记录一次成功下载。</summary>
-    public void Set(string key, string url, string fileName)
+    /// <summary>记录一次成功下载（没有响应校验头时使用）。</summary>
+    public void Set(string key, string url, string fileName) =>
+        Set(key, url, fileName, etag: null, lastModified: null);
+
+    /// <summary>记录一次成功下载，同时保存条件请求需要的 ETag / Last-Modified。</summary>
+    public void Set(string key, string url, string fileName, string? etag, string? lastModified)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
-        Assets[key] = new AssetIndexEntry { Url = url, FileName = fileName };
+        Assets[key] = new AssetIndexEntry
+        {
+            Url = url,
+            FileName = fileName,
+            ETag = etag,
+            LastModified = lastModified,
+        };
     }
 }
