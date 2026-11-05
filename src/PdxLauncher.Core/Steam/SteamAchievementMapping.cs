@@ -56,15 +56,16 @@ public static class SteamAchievementMapping
                 Availability = AchievementAvailability.Available,
                 Entries = entries,
                 FetchedAtUtc = fetchedAt,
+                Code = SteamAchievementCodes.Ok,
             };
         }
 
         if (result.Code == SteamAchievementCodes.NoAchievements)
         {
-            return Empty(fetchedAt);
+            return Empty(fetchedAt) with { Code = result.Code };
         }
 
-        return SteamUnavailable(fetchedAt);
+        return SteamUnavailable(fetchedAt) with { Code = result.Code };
     }
 
     /// <summary>把宿主条目映射成 <see cref="AchievementEntry"/>（过滤掉没有 id 的脏数据）。</summary>

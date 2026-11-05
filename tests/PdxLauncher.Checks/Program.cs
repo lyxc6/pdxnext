@@ -107,7 +107,9 @@ public static class Program
             }
         }
 
-        var crash = api.Contains("crash", StringComparison.OrdinalIgnoreCase);
+        // 只认自检临时目录的固定前缀（pdxnext-*），不要匹配任意路径：
+        // 仓库本身就可能位于 ...\steamapi-initfail\ 之类的目录，宽匹配会把正常用例误判成失败。
+        var crash = api.Contains("pdxnext-crash", StringComparison.OrdinalIgnoreCase);
 
         if (string.Equals(verb, SteamHostProtocol.ApiCheckVerb, StringComparison.Ordinal))
         {
@@ -128,7 +130,25 @@ public static class Program
                 return CrashExitCode();
             }
 
-            if (api.Contains("good", StringComparison.OrdinalIgnoreCase))
+            // 模拟 DLC 解锁 loader：Init 阶段失败，但进程正常退出、有结果行。
+            if (api.Contains("pdxnext-initfail", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine(SteamHostProtocol.Encode(
+                    SteamHostAchievementsResult.Fail(SteamAchievementCodes.InitFailed, "SteamAPI_Init 失败（假宿主）")));
+                Console.Out.Flush();
+                return 0;
+            }
+
+            // 模拟环境问题：Steam 没启动。换哪份 DLL 都应直接放弃，而不是继续试。
+            if (api.Contains("pdxnext-norun", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine(SteamHostProtocol.Encode(
+                    SteamHostAchievementsResult.Fail(SteamAchievementCodes.SteamNotRunning, "Steam 客户端没有运行（假宿主）")));
+                Console.Out.Flush();
+                return 0;
+            }
+
+            if (api.Contains("pdxnext-good", StringComparison.OrdinalIgnoreCase))
             {
                 var items = new[]
                 {

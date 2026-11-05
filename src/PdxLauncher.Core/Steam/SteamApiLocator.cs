@@ -129,6 +129,9 @@ public sealed class SteamApiLocator
         return results;
 
         // 同一个目录里，原版备份排在标准名之前：loader 顶替标准名时，成就只有备份能跑。
+        // 实测 CK3：game\binaries\steam_api64.dll 是 834,560 B 的 DLC 解锁 loader，宿主动词
+        // 返回 initFailed、0 条成就；同目录/根目录的 298,384 B 原版 steam_api64.dll 能正常返回 198 条。
+        // 所以成就用途必须先试 _o/orig/original 备份，再试标准名；loader 只适合启动游戏。
         void AddDirectory(string dir)
         {
             foreach (var backup in OriginalBackupFileNames)

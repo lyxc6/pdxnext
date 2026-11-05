@@ -33,6 +33,9 @@ public static class SteamAchievementsChecks
         CheckApiCheckVerb();
         CheckExportProbe();
         CheckCrashFallback(fs);
+        CheckInitFailedSwitchesCandidate(fs);
+        CheckEnvironmentFaultStopsCandidateLoop(fs);
+        CheckAllCandidatesInitFailed(fs);
         CheckNativeLayout();
 
         return ChecksContext.Failures - before;
@@ -413,7 +416,7 @@ public static class SteamAchievementsChecks
         var crashApi = fs.Combine(crashDir, SteamApiLocator.FileName);
         var goodApi = fs.Combine(fs.Combine(gameRoot, "binaries"), SteamApiLocator.FileName);
 
-        SteamApiCrashBlacklist.Clear();
+        SteamApiCandidateBlacklist.Clear();
         try
         {
             fs.EnsureDirectory(crashDir);
@@ -438,8 +441,8 @@ public static class SteamAchievementsChecks
                 "回退: 条目名来自第二候选",
                 "ACH_FAKE",
                 snapshot.Entries.Count > 0 ? snapshot.Entries[0].Id : "null");
-            ChecksContext.Check("回退: 崩溃候选被拉黑", SteamApiCrashBlacklist.IsCrashed(crashApi), crashApi);
-            ChecksContext.Check("回退: 正常候选没被拉黑", !SteamApiCrashBlacklist.IsCrashed(goodApi), goodApi);
+            ChecksContext.Check("回退: 崩溃候选被拉黑", SteamApiCandidateBlacklist.IsBlocked(crashApi), crashApi);
+            ChecksContext.Check("回退: 正常候选没被拉黑", !SteamApiCandidateBlacklist.IsBlocked(goodApi), goodApi);
             ChecksContext.Check(
                 "回退: 日志写清「谁崩了、换成谁」",
                 logger.Messages.Any(line => line.Contains(crashApi, StringComparison.OrdinalIgnoreCase) && line.Contains("崩溃", StringComparison.Ordinal))
@@ -448,8 +451,196 @@ public static class SteamAchievementsChecks
         }
         finally
         {
-            SteamApiCrashBlacklist.Clear();
+            SteamApiCandidateBlacklist.Clear();
             TryDelete(fs, crashDir);
+            TryDelete(fs, gameRoot);
+        }
+    }
+
+    private static void CheckInitFailedSwitchesCandidate(IFileSystem fs)
+    {
+        var hostPath = FindFakeHostPath();
+        ChecksContext.Check("Init 失败回退: 找到假宿主可执行文件", hostPath is not null, "构建输出里应有 PdxLauncher.Checks.exe");
+        if (hostPath is null)
+        {
+            return;
+        }
+
+        // 第一候选的名字带 initfail：假宿主在 achievements 里返回 initFailed（进程正常退出、有结果行），
+        // 第二候选带 good：假宿主返回 1 条 ACH_FAKE。最像真机上的「loader 先、原版后」布局。
+        var badDir = fs.Combine(Path.GetTempPath(), "pdxnext-initfail-" + Guid.NewGuid().ToString("N"));
+        var gameRoot = fs.Combine(Path.GetTempPath(), "pdxnext-good-" + Guid.NewGuid().ToString("N"));
+        var badApi = fs.Combine(badDir, SteamApiLocator.FileName);
+        var goodApi = fs.Combine(fs.Combine(gameRoot, "binaries"), SteamApiLocator.FileName);
+
+        SteamApiCandidateBlacklist.Clear();
+        try
+        {
+            fs.EnsureDirectory(badDir);
+            fs.EnsureDirectory(fs.Combine(gameRoot, "binaries"));
+            fs.WriteAllBytesAtomic(badApi, new byte[128 * 1024]);
+            fs.WriteAllBytesAtomic(goodApi, new byte[128 * 1024]);
+
+            var logger = new RecordingLogger();
+            var source = new SteamAchievementSource(
+                new SteamHostClient(logger, hostPath),
+                new SteamApiLocator(fs, logger),
+                fs,
+                logger,
+                () => badApi,
+                () => SteamApiLocatorChecks.MakeGame(fs, gameRoot));
+
+            var snapshot = source.GetAsync("ck3", CancellationToken.None).GetAwaiter().GetResult();
+
+            ChecksContext.Equal("Init 失败回退: 最终拿到成就", AchievementAvailability.Available, snapshot.Availability);
+            ChecksContext.Equal("Init 失败回退: 结果码是 ok", SteamAchievementCodes.Ok, snapshot.Code ?? "null");
+            ChecksContext.Equal("Init 失败回退: 回传的是第二候选的条目", 1, snapshot.Entries.Count);
+            ChecksContext.Check("Init 失败回退: 失败候选被拉黑", SteamApiCandidateBlacklist.IsBlocked(badApi), badApi);
+            ChecksContext.Check("Init 失败回退: 正常候选没被拉黑", !SteamApiCandidateBlacklist.IsBlocked(goodApi), goodApi);
+            ChecksContext.Check(
+                "Init 失败回退: 日志按 (路径, 码) 记了每次尝试",
+                logger.Messages.Any(line =>
+                    line.Contains("候选尝试", StringComparison.Ordinal)
+                    && line.Contains(badApi, StringComparison.OrdinalIgnoreCase)
+                    && line.Contains(SteamAchievementCodes.InitFailed, StringComparison.Ordinal))
+                && logger.Messages.Any(line =>
+                    line.Contains("成就读取使用", StringComparison.Ordinal)
+                    && line.Contains(goodApi, StringComparison.OrdinalIgnoreCase)),
+                string.Join(" | ", logger.Messages));
+            ChecksContext.Check(
+                "Init 失败回退: 拉黑原因带 initFailed",
+                SteamApiCandidateBlacklist.TryGetReason(badApi, out var reason)
+                && reason is { Length: > 0 }
+                && reason.Contains(SteamAchievementCodes.InitFailed, StringComparison.Ordinal),
+                reason ?? "null");
+        }
+        finally
+        {
+            SteamApiCandidateBlacklist.Clear();
+            TryDelete(fs, badDir);
+            TryDelete(fs, gameRoot);
+        }
+    }
+
+    private static void CheckEnvironmentFaultStopsCandidateLoop(IFileSystem fs)
+    {
+        var hostPath = FindFakeHostPath();
+        ChecksContext.Check("环境失败不换候选: 找到假宿主可执行文件", hostPath is not null, "构建输出里应有 PdxLauncher.Checks.exe");
+        if (hostPath is null)
+        {
+            return;
+        }
+
+        // 第一候选返回 steamNotRunning（环境问题），第二候选是好的：必须立刻停，不能去试第二份。
+        var noRunDir = fs.Combine(Path.GetTempPath(), "pdxnext-norun-" + Guid.NewGuid().ToString("N"));
+        var gameRoot = fs.Combine(Path.GetTempPath(), "pdxnext-good-" + Guid.NewGuid().ToString("N"));
+        var noRunApi = fs.Combine(noRunDir, SteamApiLocator.FileName);
+        var goodApi = fs.Combine(fs.Combine(gameRoot, "binaries"), SteamApiLocator.FileName);
+
+        SteamApiCandidateBlacklist.Clear();
+        try
+        {
+            fs.EnsureDirectory(noRunDir);
+            fs.EnsureDirectory(fs.Combine(gameRoot, "binaries"));
+            fs.WriteAllBytesAtomic(noRunApi, new byte[128 * 1024]);
+            fs.WriteAllBytesAtomic(goodApi, new byte[128 * 1024]);
+
+            var logger = new RecordingLogger();
+            var source = new SteamAchievementSource(
+                new SteamHostClient(logger, hostPath),
+                new SteamApiLocator(fs, logger),
+                fs,
+                logger,
+                () => noRunApi,
+                () => SteamApiLocatorChecks.MakeGame(fs, gameRoot));
+
+            var snapshot = source.GetAsync("ck3", CancellationToken.None).GetAwaiter().GetResult();
+
+            ChecksContext.Equal("环境失败不换候选: 结果是 SteamUnavailable", AchievementAvailability.SteamUnavailable, snapshot.Availability);
+            ChecksContext.Equal(
+                "环境失败不换候选: 结果码仍是 steamNotRunning（不降级）",
+                SteamAchievementCodes.SteamNotRunning,
+                snapshot.Code ?? "null");
+            ChecksContext.Equal("环境失败不换候选: 只尝试了第一份", 1, logger.Messages.Count(line => line.Contains("候选尝试", StringComparison.Ordinal)));
+            ChecksContext.Check(
+                "环境失败不换候选: 没有去试正常候选",
+                !logger.Messages.Any(line => line.Contains("成就读取使用", StringComparison.Ordinal))
+                && !SteamApiCandidateBlacklist.IsBlocked(goodApi),
+                string.Join(" | ", logger.Messages));
+            ChecksContext.Check(
+                "环境失败不换候选: 环境问题不进黑名单",
+                !SteamApiCandidateBlacklist.IsBlocked(noRunApi));
+        }
+        finally
+        {
+            SteamApiCandidateBlacklist.Clear();
+            TryDelete(fs, noRunDir);
+            TryDelete(fs, gameRoot);
+        }
+    }
+
+    private static void CheckAllCandidatesInitFailed(IFileSystem fs)
+    {
+        var hostPath = FindFakeHostPath();
+        ChecksContext.Check("全部 Init 失败: 找到假宿主可执行文件", hostPath is not null, "构建输出里应有 PdxLauncher.Checks.exe");
+        if (hostPath is null)
+        {
+            return;
+        }
+
+        // 三份候选依次是：手填路径、游戏根、binaries；假宿主对三份都返回 initFailed。
+        // 必须恰好尝试 3 次（MaxAttempts），全部拉黑，并给出带「最后一次失败码 + 尝试数」的日志。
+        var firstDir = fs.Combine(Path.GetTempPath(), "pdxnext-initfail-a-" + Guid.NewGuid().ToString("N"));
+        var gameRoot = fs.Combine(Path.GetTempPath(), "pdxnext-initfail-game-" + Guid.NewGuid().ToString("N"));
+        var firstApi = fs.Combine(firstDir, SteamApiLocator.FileName);
+        var rootApi = fs.Combine(gameRoot, SteamApiLocator.FileName);
+        var binApi = fs.Combine(fs.Combine(gameRoot, "binaries"), SteamApiLocator.FileName);
+
+        SteamApiCandidateBlacklist.Clear();
+        try
+        {
+            fs.EnsureDirectory(firstDir);
+            fs.EnsureDirectory(fs.Combine(gameRoot, "binaries"));
+            fs.WriteAllBytesAtomic(firstApi, new byte[128 * 1024]);
+            fs.WriteAllBytesAtomic(rootApi, new byte[128 * 1024]);
+            fs.WriteAllBytesAtomic(binApi, new byte[128 * 1024]);
+
+            var logger = new RecordingLogger();
+            var source = new SteamAchievementSource(
+                new SteamHostClient(logger, hostPath),
+                new SteamApiLocator(fs, logger),
+                fs,
+                logger,
+                () => firstApi,
+                () => SteamApiLocatorChecks.MakeGame(fs, gameRoot));
+
+            var snapshot = source.GetAsync("ck3", CancellationToken.None).GetAwaiter().GetResult();
+
+            ChecksContext.Equal("全部 Init 失败: 结果是 SteamUnavailable", AchievementAvailability.SteamUnavailable, snapshot.Availability);
+            ChecksContext.Equal(
+                "全部 Init 失败: 结果码仍是 initFailed（不降级成 steamUnavailable）",
+                SteamAchievementCodes.InitFailed,
+                snapshot.Code ?? "null");
+            ChecksContext.Equal("全部 Init 失败: 恰好尝试 3 份", 3, logger.Messages.Count(line => line.Contains("候选尝试", StringComparison.Ordinal)));
+            ChecksContext.Check(
+                "全部 Init 失败: 三份都被拉黑",
+                SteamApiCandidateBlacklist.IsBlocked(firstApi)
+                && SteamApiCandidateBlacklist.IsBlocked(rootApi)
+                && SteamApiCandidateBlacklist.IsBlocked(binApi),
+                string.Join(" | ", logger.Messages));
+            ChecksContext.Check(
+                "全部 Init 失败: 最终日志带尝试数与最后失败码",
+                logger.Messages.Any(line =>
+                    line.Contains("已尝试 3 份", StringComparison.Ordinal)
+                    && line.Contains(SteamAchievementCodes.InitFailed, StringComparison.Ordinal)
+                    && line.Contains(firstApi, StringComparison.OrdinalIgnoreCase)
+                    && line.Contains(binApi, StringComparison.OrdinalIgnoreCase)),
+                string.Join(" | ", logger.Messages));
+        }
+        finally
+        {
+            SteamApiCandidateBlacklist.Clear();
+            TryDelete(fs, firstDir);
             TryDelete(fs, gameRoot);
         }
     }
@@ -547,7 +738,7 @@ public static class SteamAchievementsChecks
             return;
         }
 
-        var logger = new SilentLogger();
+        var logger = new RecordingLogger();
 
         // 宿主客户端层：调用方取消必须抛 OperationCanceledException，不能变成一个「失败结果」。
         var client = new SteamHostClient(logger, hostPath);

@@ -100,8 +100,10 @@ public sealed class SteamAchievementSource : IAchievementSource
             return SteamAchievementMapping.SteamUnavailable(fetchedAt);
         }
 
-        string? crashed = null;
+        string? replaced = null;
+        string? lastCode = null;
         var attempts = 0;
+        var attemptedPaths = new List<string>();
         foreach (var candidate in candidates)
         {
             if (attempts >= MaxAttempts)
@@ -109,19 +111,20 @@ public sealed class SteamAchievementSource : IAchievementSource
                 break;
             }
 
-            if (SteamApiCrashBlacklist.IsCrashed(candidate))
+            if (SteamApiCandidateBlacklist.TryGetReason(candidate, out var blockedReason))
             {
-                _logger.Info("跳过本次运行已崩溃过的候选：" + candidate);
+                _logger.Info("跳过本次运行已标记不可用的候选：" + candidate + "（" + (blockedReason ?? "未知原因") + "）");
                 continue;
             }
 
             attempts++;
+            attemptedPaths.Add(candidate);
 
-            if (crashed is not null)
+            if (replaced is not null)
             {
-                // 上一个是崩的，日志里把「从谁换到谁」写清楚，玩家报问题时能直接看出走了哪个文件。
-                _logger.Warn("候选 " + crashed + " 崩溃，改用 " + candidate);
-                crashed = null;
+                // 上一份不行（崩溃 / Init 失败），日志里把「从谁换到谁」写清楚，玩家报问题时能直接看出走了哪个文件。
+                _logger.Warn("候选 " + replaced + " 不可用，改用 " + candidate);
+                replaced = null;
             }
 
             try
@@ -130,12 +133,14 @@ public sealed class SteamAchievementSource : IAchievementSource
                 if (SteamHostClient.IsCrashExit(check.ExitCode))
                 {
                     // 探测阶段就崩（loader 的 DllMain 里常有的访问违例）：同样拉黑、换下一个。
-                    SteamApiCrashBlacklist.MarkCrashed(candidate);
+                    SteamApiCandidateBlacklist.MarkBlocked(
+                        candidate,
+                        "导出探测崩溃（0x" + unchecked((uint)check.ExitCode).ToString("X8", CultureInfo.InvariantCulture) + "）");
                     _logger.Warn(
                         "候选 " + candidate + " 在导出探测时崩溃（退出码 0x" +
                         unchecked((uint)check.ExitCode).ToString("X8", CultureInfo.InvariantCulture) +
                         "），本次运行不再使用");
-                    crashed = candidate;
+                    replaced = candidate;
                     continue;
                 }
 
@@ -150,26 +155,56 @@ public sealed class SteamAchievementSource : IAchievementSource
                 {
                     // loader 形态的 DLL 会在 DllMain / 初始化里直接崩掉子进程（0xC0000005），
                     // 这次运行别再拿它试：换下一个候选，并把路径记进进程内黑名单。
-                    SteamApiCrashBlacklist.MarkCrashed(candidate);
+                    SteamApiCandidateBlacklist.MarkBlocked(
+                        candidate,
+                        "宿主崩溃（0x" + unchecked((uint)run.ExitCode).ToString("X8", CultureInfo.InvariantCulture) + "）");
                     _logger.Warn(
                         "候选 " + candidate + " 崩溃（退出码 0x" +
                         unchecked((uint)run.ExitCode).ToString("X8", CultureInfo.InvariantCulture) +
                         "），本次运行不再使用");
-                    crashed = candidate;
+                    replaced = candidate;
                     continue;
                 }
 
                 var result = run.Result;
+                lastCode = result.Code;
+                _logger.Info("候选尝试：" + candidate + " → " + result.Code + "（appid " + appId + "）");
                 if (!result.Ok && !run.TimedOut && run.ExitCode != 0)
                 {
                     // 崩溃之外的「非 0 退出」（加载依赖缺失、Init 里异常退出等）同样说明这份 DLL 不适合；
                     // 换下一个候选，并记进本次运行的黑名单，避免每次刷新都再撞一遍。
-                    SteamApiCrashBlacklist.MarkCrashed(candidate);
+                    SteamApiCandidateBlacklist.MarkBlocked(
+                        candidate,
+                        "宿主异常退出（0x" + unchecked((uint)run.ExitCode).ToString("X8", CultureInfo.InvariantCulture) + "）");
                     _logger.Warn(
                         "候选 " + candidate + " 的宿主异常退出（退出码 0x" +
                         unchecked((uint)run.ExitCode).ToString("X8", CultureInfo.InvariantCulture) +
                         "），本次运行不再使用");
-                    crashed = candidate;
+                    replaced = candidate;
+                    continue;
+                }
+
+                if (SteamAchievementCodes.IsEnvironmentFault(result.Code))
+                {
+                    // Steam 没启动 / 没登录 / 等回调超时：换哪份 DLL 都一样，继续试只会再多等几轮 Init。
+                    if (result is { Error: { Length: > 0 } environmentError })
+                    {
+                        _logger.Info("Steam 成就未返回（" + result.Code + "）：" + environmentError);
+                    }
+
+                    _logger.Info("候选 " + candidate + " 返回 " + result.Code + "：环境问题，换 DLL 无意义，停止尝试");
+                    return SteamAchievementMapping.FromHostResult(result, fetchedAt);
+                }
+
+                if (SteamAchievementCodes.IsCandidateFault(result.Code))
+                {
+                    // loader 形态的 DLL 常在 Init 里失败（initFailed），或者根本加载不起来（native）：
+                    // 这份文件就是不行，记进本次运行的黑名单再换下一份，最多 MaxAttempts 份。
+                    SteamApiCandidateBlacklist.MarkBlocked(candidate, "宿主返回 " + result.Code);
+                    _logger.Warn(
+                        "候选 " + candidate + " 返回 " + result.Code + "，换下一份候选" +
+                        (result.Error is { Length: > 0 } faultError ? "（" + faultError + "）" : string.Empty));
+                    replaced = candidate;
                     continue;
                 }
 
@@ -196,8 +231,15 @@ public sealed class SteamAchievementSource : IAchievementSource
             }
         }
 
-        _logger.Warn("读取成就失败：没有可用的 steam_api64.dll 候选（appid " + appId + "）");
-        return SteamAchievementMapping.SteamUnavailable(fetchedAt);
+        _logger.Warn(
+            "读取成就失败：已尝试 " + attemptedPaths.Count + " 份 steam_api64.dll（appid " + appId +
+            "），最后一次失败码 " + (lastCode ?? "无") +
+            (attemptedPaths.Count > 0 ? "，最后路径 " + attemptedPaths[^1] : string.Empty) +
+            "；已尝试路径：" + string.Join("；", attemptedPaths));
+
+        // 保留宿主给的具体码（例如全部候选都 initFailed 时仍是 initFailed），
+        // 不要退化成含糊的 steamUnavailable：玩家需要区分「Steam 没开」和「DLL 不对」。
+        return SteamAchievementMapping.SteamUnavailable(fetchedAt) with { Code = lastCode };
     }
 
     /// <summary>

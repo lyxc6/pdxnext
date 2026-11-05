@@ -20,6 +20,16 @@ public sealed record AchievementSnapshot
     public DateTimeOffset FetchedAtUtc { get; init; }
 
     /// <summary>
+    /// 数据源返回的原始结果码（<c>ok</c> / <c>initFailed</c> / <c>steamNotRunning</c> …），
+    /// 用于诊断与自检；界面文案仍按 <see cref="Availability"/> 选，不要直接展示这个字段。
+    /// <para>
+    /// 之所以单独留一列而不是塞进 <see cref="Message"/>：<c>initFailed</c>（DLL 不对）与
+    /// <c>steamNotRunning</c>（Steam 没开）对用户是两件事，不能都降级成含糊的 <c>steamUnavailable</c>。
+    /// </para>
+    /// </summary>
+    public string? Code { get; init; }
+
+    /// <summary>
     /// 给界面用的原因说明<b>键</b>（如 <c>achievements.unavailable.steamUnavailable</c>），
     /// 不是中文文案；null 表示没有额外说明。展示层优先按 <see cref="Availability"/> 选文案，
     /// 这里只用于数据源想补充更具体的原因。
