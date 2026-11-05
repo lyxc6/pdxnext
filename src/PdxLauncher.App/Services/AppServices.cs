@@ -8,6 +8,7 @@ using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Online.Translation.Local;
 using PdxLauncher.Core.Patch;
+using PdxLauncher.Core.Saves;
 using PdxLauncher.Core.Storage;
 using PdxLauncher.Core.Steam;
 using PdxLauncher.Core.Updates;
@@ -41,6 +42,12 @@ public static class AppServices
     public static IGameLauncher Launcher { get; private set; } = null!;
 
     public static IContinueGameReader ContinueGame { get; private set; } = null!;
+
+    /// <summary>
+    /// 存档库：只读磁盘，按需扫描。启动路径<b>不</b>调用它——存档页打开或点刷新时才扫描，
+    /// 避免把「用户 Documents 下有多少文件」变成冷启动耗时。
+    /// </summary>
+    public static ISaveGameLibrary SaveGames { get; private set; } = null!;
 
     public static IDlcSignatureService DlcSignatures { get; private set; } = null!;
 
@@ -272,6 +279,7 @@ public static class AppServices
         LoadFiles = loadFiles;
         Launcher = launcher;
         ContinueGame = continueGame;
+        SaveGames = new SaveGameScanner(fileSystem, logger);
         DlcSignatures = dlcSignatures;
         DlcDescriptions = dlcDescriptions;
         NewsFeed = newsFeed;
