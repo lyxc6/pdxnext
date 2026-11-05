@@ -1,10 +1,13 @@
 namespace PdxLauncher.App.ViewModels;
 
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Globalization;
 
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Achievements;
 using PdxLauncher.Core.Contracts;
 
 /// <summary>
@@ -23,15 +26,30 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
 {
     private readonly IAchievementSource _source;
     private readonly AchievementRequestTracker _requests = new();
+    private readonly AchievementSnapshotCache? _cache;
 
     private GameInstallation? _game;
     private AchievementAvailability _availability = AchievementAvailability.NotSupported;
     private bool _isBusy;
+    private DateTimeOffset? _lastUpdatedUtc;
+    private string? _renderedGameKey;
+    private bool _hasRenderedSnapshot;
 
+    /// <summary>构造（不带磁盘缓存，数据源直读；自检与降级路径用）。</summary>
     public AchievementsViewModel(IAchievementSource source)
+        : this(source, cache: null)
+    {
+    }
+
+    /// <summary>
+    /// 构造。<paramref name="cache"/> 非空时进页面先渲染上次快照，再后台刷新；
+    /// 刷新失败保留缓存，<see cref="LastUpdatedText"/> 因此显示的是「上次成功更新」的时间。
+    /// </summary>
+    public AchievementsViewModel(IAchievementSource source, AchievementSnapshotCache? cache)
     {
         ArgumentNullException.ThrowIfNull(source);
         _source = source;
+        _cache = cache;
     }
 
     /// <summary>当前展示的成就行；切游戏 / 重新取数时整体清空重建。</summary>
@@ -55,6 +73,17 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
     }
 
     public string GameTitle => Game?.DisplayName ?? T(Keys.AchievementsUnavailableNoGame);
+
+    /// <summary>列表里是否已有可渲染的快照（来自缓存或上一次成功刷新）。</summary>
+    public bool HasSnapshot => _hasRenderedSnapshot;
+
+    /// <summary>「上次更新」文案；没有成功取过数时为空，界面隐藏该行。</summary>
+    public string LastUpdatedText => _lastUpdatedUtc is { } updatedUtc
+        ? T(Keys.AchievementsLastUpdated, updatedUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture))
+        : string.Empty;
+
+    /// <summary>是否显示「上次更新」；从没成功取过数时不显示，避免出现一个空时间。</summary>
+    public bool HasLastUpdated => _lastUpdatedUtc.HasValue;
 
     public AchievementAvailability Availability
     {
@@ -133,30 +162,60 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 取当前游戏的成就。切游戏时旧列表立即清空，并先把可用性置为 <see cref="AchievementAvailability.Loading"/>，
-    /// 避免异步取数期间页面继续显示上一款游戏的原因文案。
+    /// 取当前游戏的成就。切游戏时旧列表立即清空；同一款游戏重新进页面时先用磁盘缓存渲染，
+    /// 再后台刷新，刷新期间绝不清空列表。
     /// <para>
     /// 只有最新一代请求可以落地：旧请求被取消后仍会执行 <c>finally</c>，
     /// 由 <see cref="AchievementRequestTracker"/> 判断代次，旧请求不会关掉新请求的 <see cref="IsBusy"/>。
+    /// </para>
+    /// <para>
+    /// 刷新失败（Steam 不可用 / 数据源未接入）且已有缓存时保留缓存与「上次更新」时间：
+    /// 用户看到的是「上次成功的成就」，而不是一屏错误或空列表。
     /// </para>
     /// </summary>
     public async Task LoadAsync(GameInstallation? game, CancellationToken cancellationToken)
     {
         var generation = _requests.Begin();
 
+        var gameKey = CacheKey(game);
+        var gameChanged = !string.Equals(_renderedGameKey, gameKey, StringComparison.Ordinal);
         Game = game;
-
-        Achievements.Clear();
-        NotifyCountsChanged();
 
         if (game is null)
         {
+            _renderedGameKey = null;
+            _hasRenderedSnapshot = false;
+            Achievements.Clear();
+            SetLastUpdated(null);
+            NotifyCountsChanged();
             IsBusy = false;
             Availability = AchievementAvailability.NotSupported;
             return;
         }
 
-        Availability = AchievementAvailability.Loading;
+        if (gameChanged)
+        {
+            // 切游戏：上一款的成就一条都不能留在屏幕上。
+            Achievements.Clear();
+            NotifyCountsChanged();
+            _hasRenderedSnapshot = false;
+            SetLastUpdated(null);
+
+            var cached = TryLoadCache(game);
+            if (cached is not null)
+            {
+                Apply(game, cached);
+                _hasRenderedSnapshot = true;
+                _renderedGameKey = gameKey;
+                SetLastUpdated(cached.FetchedAtUtc);
+            }
+        }
+
+        // 有缓存就先显示缓存（统计、列表都在），刷新期间只转圈；没有缓存才回到中性「—」态。
+        if (!_hasRenderedSnapshot)
+        {
+            Availability = AchievementAvailability.Loading;
+        }
         IsBusy = true;
         try
         {
@@ -168,7 +227,22 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            Apply(snapshot);
+
+            if (ShouldKeepCached(snapshot))
+            {
+                // 刷新失败：保留缓存列表与上次更新时间，IsBusy 在 finally 关掉。
+                return;
+            }
+
+            Apply(game, snapshot);
+            _hasRenderedSnapshot = true;
+            _renderedGameKey = gameKey;
+            SetLastUpdated(snapshot.FetchedAtUtc);
+
+            if (snapshot.Availability is AchievementAvailability.Available or AchievementAvailability.Empty)
+            {
+                TrySaveCache(game, snapshot);
+            }
         }
         finally
         {
@@ -179,14 +253,15 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
         }
     }
 
-    private void Apply(AchievementSnapshot snapshot)
+    private void Apply(GameInstallation game, AchievementSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
         var entries = snapshot.Entries ?? [];
+        Achievements.Clear();
         foreach (var entry in entries)
         {
-            Achievements.Add(new AchievementRowViewModel(entry));
+            Achievements.Add(new AchievementRowViewModel(entry, ResolveIcon(game, entry)));
         }
 
         // 数据源说「可用」但一条都没有：按 Empty 解释，页面才有话说，而不是留一块空白。
@@ -195,6 +270,69 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
             : snapshot.Availability;
 
         NotifyCountsChanged();
+    }
+
+    /// <summary>失败且已有可显示快照时保留缓存；没有缓存则照常把失败原因写进空状态。</summary>
+    private bool ShouldKeepCached(AchievementSnapshot snapshot) =>
+        _hasRenderedSnapshot
+        && snapshot.Availability is AchievementAvailability.NotSupported or AchievementAvailability.SteamUnavailable;
+
+    private static string? ResolveIcon(GameInstallation game, AchievementEntry entry)
+    {
+        try
+        {
+            return AchievementIconResolver.Resolve(game.InstallRoot, entry.Id, entry.IsUnlocked);
+        }
+        catch
+        {
+            // 图标只是装饰：解析失败就回占位方块，绝不能阻断成就列表。
+            return null;
+        }
+    }
+
+    private AchievementSnapshot? TryLoadCache(GameInstallation game)
+    {
+        if (_cache is null || CacheKey(game) is not { } key)
+        {
+            return null;
+        }
+
+        return _cache.TryLoad(key);
+    }
+
+    private void TrySaveCache(GameInstallation game, AchievementSnapshot snapshot)
+    {
+        if (_cache is null || CacheKey(game) is not { } key)
+        {
+            return;
+        }
+
+        _cache.TrySave(key, snapshot);
+    }
+
+    /// <summary>缓存键：Steam 游戏用 appid（与磁盘文件名一一对应），其余退回 gameId。</summary>
+    private static string? CacheKey(GameInstallation? game)
+    {
+        if (game is null)
+        {
+            return null;
+        }
+
+        return game.SteamAppId is > 0
+            ? game.SteamAppId.Value.ToString(CultureInfo.InvariantCulture)
+            : game.GameId;
+    }
+
+    private void SetLastUpdated(DateTimeOffset? value)
+    {
+        if (_lastUpdatedUtc == value)
+        {
+            return;
+        }
+
+        _lastUpdatedUtc = value;
+        OnPropertyChanged(nameof(LastUpdatedText));
+        OnPropertyChanged(nameof(HasLastUpdated));
     }
 
     private void NotifyCountsChanged()

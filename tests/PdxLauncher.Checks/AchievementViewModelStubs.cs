@@ -1,0 +1,51 @@
+// 仅供 PdxLauncher.Checks 链接 App/ViewModels/AchievementsViewModel.cs 使用的最小本地化替身。
+// 真实实现依赖 WinUI 工程的 Localizer/Strings.g.cs；自检只关心状态机与文案键，不需要真译文。
+namespace PdxLauncher.App.Localization;
+
+using System.Collections.Generic;
+using System.Linq;
+
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+
+/// <summary>与 App 同名的 ViewModel 基类替身：提供 OnPropertyChanged / SetProperty / T。</summary>
+public abstract class LocalizedObservableObject : INotifyPropertyChanged
+{
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    protected static string T(string key, params object?[] args) =>
+        args.Length == 0 ? key : key + ":" + string.Join("|", args.Select(static arg => arg?.ToString()));
+
+    protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? name = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value))
+        {
+            return false;
+        }
+
+        field = value;
+        OnPropertyChanged(name);
+        return true;
+    }
+}
+
+/// <summary>成就相关文案键；取值与 Strings.g.cs 一致，避免自检与真实键名漂移。</summary>
+internal static class Keys
+{
+    public const string AchievementsCounts = "achievements.counts";
+    public const string AchievementsEmptyTitle = "achievements.empty.title";
+    public const string AchievementsHiddenDescription = "achievements.hiddenDescription";
+    public const string AchievementsLastUpdated = "achievements.lastUpdated";
+    public const string AchievementsRarity = "achievements.rarity";
+    public const string AchievementsStatusHidden = "achievements.statusHidden";
+    public const string AchievementsStatusLocked = "achievements.statusLocked";
+    public const string AchievementsStatusUnlocked = "achievements.statusUnlocked";
+    public const string AchievementsStatusUnlockedAt = "achievements.statusUnlockedAt";
+    public const string AchievementsUnavailableEmpty = "achievements.unavailable.empty";
+    public const string AchievementsUnavailableNoGame = "achievements.unavailable.noGame";
+    public const string AchievementsUnavailableNotSupported = "achievements.unavailable.notSupported";
+    public const string AchievementsUnavailableSteamUnavailable = "achievements.unavailable.steamUnavailable";
+}

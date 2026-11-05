@@ -48,6 +48,7 @@ public sealed partial class Localizer
         ["achievements.counts"] = "已解锁 {0} / {1}",
         ["achievements.empty.title"] = "没有可显示的成就",
         ["achievements.hiddenDescription"] = "解锁后显示说明",
+        ["achievements.lastUpdated"] = "上次更新：{0}",
         ["achievements.listName"] = "成就列表",
         ["achievements.rarity"] = "全球解锁率 {0}%",
         ["achievements.status.hidden"] = "隐藏成就",
@@ -1439,6 +1440,7 @@ public sealed partial class Localizer
         ["achievements.counts"] = "Unlocked {0} / {1}",
         ["achievements.empty.title"] = "No achievements to show",
         ["achievements.hiddenDescription"] = "Unlocks to reveal the description",
+        ["achievements.lastUpdated"] = "Last updated: {0}",
         ["achievements.listName"] = "Achievement list",
         ["achievements.rarity"] = "{0}% of players unlocked",
         ["achievements.status.hidden"] = "Hidden achievement",
@@ -2830,6 +2832,7 @@ public sealed partial class Localizer
         ("achievements.counts", "AchievementsCounts"),
         ("achievements.empty.title", "AchievementsEmptyTitle"),
         ("achievements.hiddenDescription", "AchievementsHiddenDescription"),
+        ("achievements.lastUpdated", "AchievementsLastUpdated"),
         ("achievements.listName", "AchievementsListName"),
         ("achievements.rarity", "AchievementsRarity"),
         ("achievements.status.hidden", "AchievementsStatusHidden"),
@@ -4219,6 +4222,7 @@ public sealed partial class Localizer
     public string AchievementsCounts => Format("achievements.counts");
     public string AchievementsEmptyTitle => Format("achievements.empty.title");
     public string AchievementsHiddenDescription => Format("achievements.hiddenDescription");
+    public string AchievementsLastUpdated => Format("achievements.lastUpdated");
     public string AchievementsListName => Format("achievements.listName");
     public string AchievementsRarity => Format("achievements.rarity");
     public string AchievementsStatusHidden => Format("achievements.status.hidden");
@@ -5611,6 +5615,7 @@ internal static class Keys
     public const string AchievementsCounts = "achievements.counts";
     public const string AchievementsEmptyTitle = "achievements.empty.title";
     public const string AchievementsHiddenDescription = "achievements.hiddenDescription";
+    public const string AchievementsLastUpdated = "achievements.lastUpdated";
     public const string AchievementsListName = "achievements.listName";
     public const string AchievementsRarity = "achievements.rarity";
     public const string AchievementsStatusHidden = "achievements.status.hidden";
