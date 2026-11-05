@@ -171,5 +171,10 @@
       「前缀匹配排到后面」或「工坊历史记住了一个空词」，所以由 SearchSuggestionsChecks 钉住。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\SearchSuggestions.cs" Link="Linked\SearchSuggestions.cs" />
+    <!--
+      成就取数的请求代次（纯 Interlocked 计数）。只依赖 System.Threading，可以原样链接；
+      口径错了表现为「连点切游戏后新请求的进度环被旧请求提前关掉」，由 SteamAchievementsChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\AchievementRequestTracker.cs" Link="Linked\AchievementRequestTracker.cs" />
   </ItemGroup>
 </Project>

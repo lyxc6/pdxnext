@@ -17,4 +17,13 @@ public enum AchievementAvailability
 
     /// <summary>数据源可用且连接正常，但这款游戏没有成就（或当前账号没有任何成就定义）。</summary>
     Empty,
+
+    /// <summary>
+    /// 正在取数（只用于界面过渡，数据源本身不会返回这个值）。
+    /// <para>
+    /// 放在末尾是为了不改变已有成员的值：契约里 <see cref="AchievementSnapshot"/> 的默认可用性
+    /// 是 <see cref="NotSupported"/>，序列化 / 比较都依赖现有数值稳定。
+    /// </para>
+    /// </summary>
+    Loading,
 }
