@@ -52,14 +52,18 @@ public sealed class BergamotTranslationEngine : ITranslationEngine, IDisposable
     public bool IsConfigured => HasModel(LocalTranslationModelKind.BergamotEnZh)
         || HasModel(LocalTranslationModelKind.BergamotZhEn);
 
-    /// <summary>某个方向的模型是否已经装好（文件齐全且大小对得上）。</summary>
+    /// <summary>
+    /// 某个方向的模型是否真的能加载：用 Core 的 <c>IsRunnable</c>（文件齐、尺寸对、
+    /// <c>config.txt</c> 也在），而不是只看文件在不在——缺配置时浏览器插件根本起不来。
+    /// </summary>
     private bool HasModel(LocalTranslationModelKind kind)
     {
         if (_store is not null)
         {
-            return _store.IsInstalled(kind);
+            return _store.GetInstallState(kind).IsRunnable;
         }
 
+        // 没有仓库实例时无法逐文件核对，只能保守看配置文件。
         var config = Path.Combine(
             LocalTranslationModelStore.GetModelDirectory(kind),
             LocalTranslationModelConfigWriter.ConfigFileName);

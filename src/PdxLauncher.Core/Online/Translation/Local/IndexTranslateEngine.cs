@@ -65,9 +65,12 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
     /// <inheritdoc />
     public string? LastFailure => Volatile.Read(ref _lastFailure);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// 引擎是否真的可跑：用 Core 的 <c>IsRunnable</c>，与设置页展示的五态口径一致；
+    /// 只看 <c>IsInstalled</c> 会把「缺 config.txt」误报成可用。
+    /// </summary>
     public bool IsConfigured => _store is not null
-        ? _store.IsInstalled(LocalTranslationModelKind.IndexTranslate)
+        ? _store.GetInstallState(LocalTranslationModelKind.IndexTranslate).IsRunnable
         : File.Exists(ModelPath);
 
     private static string ModelPath =>

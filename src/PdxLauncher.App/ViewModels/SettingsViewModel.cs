@@ -3,6 +3,7 @@ namespace PdxLauncher.App.ViewModels;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
@@ -1841,46 +1842,75 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 下载某个本地模型；下载中该行会显示进度。
+    /// 操作结果文案在行内停留的时长；到点自动清空。
+    /// <para>
+    /// 用户停在这一页不动时，旧的「已删除」/「校验通过」不该一直挂着——
+    /// 它只说明刚才那一下发生了什么，不代表当前状态。
+    /// </para>
+    /// </summary>
+    private static readonly TimeSpan LocalModelOperationLifetime = TimeSpan.FromSeconds(8);
+
+    /// <summary>从 Core 的错误文本里挑出绝对路径，上屏前换成相对路径或文件名。</summary>
+    private static readonly Regex AbsolutePathPattern = new(
+        @"(?:[A-Za-z]:\\|\\\\)[^\s""'“”\r\n；;，,]*",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// 下载某个本地模型；下载中该行显示进度，完成后重新读 Core 的安装状态。
     /// </summary>
     /// <param name="row">模型行。</param>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
     public async Task DownloadLocalModelAsync(LocalModelRowViewModel row, CancellationToken cancellationToken)
     {
         var runtime = AppServices.LocalTranslation;
-        if (runtime is null || row is null)
+        if (runtime is null || row is null || row.IsBusy)
         {
             return;
         }
 
         row.IsBusy = true;
-        row.StatusText = T(Keys.SettingsTranslateLocalModelDownloading, 0);
+        row.SetOperation(T(Keys.SettingsTranslateLocalModelDownloading, 0));
         try
         {
-            var progress = new Progress<double>(value =>
-                row.StatusText = T(Keys.SettingsTranslateLocalModelDownloading, (int)Math.Round(value * 100)));
+            var progress = new Progress<double>(value => row.SetOperation(
+                T(Keys.SettingsTranslateLocalModelDownloading, (int)Math.Round(value * 100))));
             var result = await runtime.DownloadAsync(row.Kind, progress, cancellationToken).ConfigureAwait(true);
+
+            // 不再手写本行的安装布尔：以 Core 的重新探测为准，
+            // 这样「下完了但 config.txt 没写成」也会如实显示为 ConfigMissing。
+            ApplyLocalModelState(row, runtime);
             if (result.Success)
             {
-                row.IsInstalled = true;
-                row.StatusText = T(Keys.SettingsTranslateLocalModelStatusDownloaded, row.Title);
-                SetStatus(Keys.SettingsTranslateLocalModelStatusDownloaded, row.Title);
+                ShowLocalModelOperation(
+                    row,
+                    T(Keys.SettingsTranslateLocalModelStatusDownloaded, row.Title),
+                    cancellationToken);
             }
             else
             {
-                row.StatusText = T(Keys.SettingsTranslateLocalModelStatusFailed, result.Message);
-                SetStatus(Keys.SettingsTranslateLocalModelStatusFailed, result.Message);
+                ShowLocalModelOperation(
+                    row,
+                    T(
+                        Keys.SettingsTranslateLocalModelStatusFailed,
+                        ToDisplayText(result.Message, row.Directory)),
+                    cancellationToken);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            row.StatusText = T(Keys.SettingsTranslateLocalModelNotInstalled);
+            row.ClearOperation();
+            ApplyLocalModelState(row, runtime);
         }
         catch (Exception ex)
         {
             AppServices.Logger.Error("下载本地翻译模型失败", ex);
-            row.StatusText = T(Keys.SettingsTranslateLocalModelStatusFailed, ex.Message);
-            SetStatus(Keys.SettingsTranslateLocalModelStatusFailed, ex.Message);
+            ApplyLocalModelState(row, runtime);
+            ShowLocalModelOperation(
+                row,
+                T(
+                    Keys.SettingsTranslateLocalModelStatusFailed,
+                    ToDisplayText(ex.Message, row.Directory)),
+                cancellationToken);
         }
         finally
         {
@@ -1889,36 +1919,278 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>删除某个已安装的本地模型。</summary>
+    /// <summary>
+    /// 删除某个本地模型：先确认没有在途翻译（Core 的 <c>Remove</c> 契约要求调用方保证），
+    /// 再在后台线程删除；期间该行按钮禁用，删完按 <c>Remove</c> 的结果三态给出可自证的文案，
+    /// 并重新读安装状态。
+    /// </summary>
     /// <param name="row">模型行。</param>
-    public void RemoveLocalModel(LocalModelRowViewModel row)
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public async Task RemoveLocalModelAsync(LocalModelRowViewModel row, CancellationToken cancellationToken)
     {
         var runtime = AppServices.LocalTranslation;
-        if (runtime is null || row is null)
+        if (runtime is null || row is null || row.IsBusy)
         {
             return;
         }
 
+        // Core 的 Remove 契约要求调用方保证此刻没有在途翻译：本地引擎可能还在翻译线程里
+        // 握着模型句柄，这时 ReleaseEngines 会拆掉正在使用的引擎。协调器的活动计数是现成的
+        // 「此刻有没有翻译在跑」，在途就不删，等这一批结束再让用户重试。
+        if (AppServices.IsInitialized && AppServices.Translation.Activity.IsActive)
+        {
+            ShowLocalModelOperation(
+                row,
+                T(Keys.SettingsTranslateLocalModelRemoveTranslationBusy),
+                cancellationToken);
+            return;
+        }
+
+        row.IsBusy = true;
+        row.ClearOperation();
         try
         {
-            runtime.Store.Remove(row.Kind);
-            row.IsInstalled = runtime.Store.IsInstalled(row.Kind);
-            row.StatusText = T(
-                row.IsInstalled ? Keys.SettingsTranslateLocalModelStatusRemoveFailed : Keys.SettingsTranslateLocalModelStatusRemoved,
-                row.Title);
-            SetStatus(
-                row.IsInstalled ? Keys.SettingsTranslateLocalModelStatusRemoveFailed : Keys.SettingsTranslateLocalModelStatusRemoved,
-                row.Title);
+            // 删除会逐个删文件并复核目录；1.3 GB 的模型不该卡在 UI 线程上。
+            // ReleaseEngines 放在后台线程里调，删除前先释放模型文件句柄。
+            var result = await Task.Run(
+                    () => runtime.Store.Remove(row.Kind, () => runtime.ReleaseEngines()),
+                    cancellationToken)
+                .ConfigureAwait(true);
+
+            ApplyLocalModelState(row, runtime);
+            ShowLocalModelOperation(row, DescribeRemoveResult(result), cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            ApplyLocalModelState(row, runtime);
         }
         catch (Exception ex)
         {
             AppServices.Logger.Error("删除本地翻译模型失败", ex);
-            SetStatus(Keys.SettingsTranslateLocalModelStatusRemoveFailed, ex.Message);
+            ApplyLocalModelState(row, runtime);
+            ShowLocalModelOperation(
+                row,
+                T(Keys.SettingsTranslateLocalModelRemoveFailed, ToDisplayText(ex.Message, row.Directory)),
+                cancellationToken);
         }
         finally
         {
+            row.IsBusy = false;
             OnPropertyChanged(nameof(LocalModelSizeText));
         }
+    }
+
+    /// <summary>
+    /// 深度校验某个本地模型（SHA-256），后台执行；结果说明通过或哪些文件不符。
+    /// </summary>
+    /// <param name="row">模型行。</param>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public async Task VerifyLocalModelAsync(LocalModelRowViewModel row, CancellationToken cancellationToken)
+    {
+        var runtime = AppServices.LocalTranslation;
+        if (runtime is null || row is null || row.IsBusy || !row.CanVerify)
+        {
+            return;
+        }
+
+        row.IsBusy = true;
+        row.SetOperation(T(Keys.SettingsTranslateLocalModelStatusVerifying));
+        try
+        {
+            // Index-Translate 的 gguf 有 1.3 GB，哈希必须离开 UI 线程慢慢算。
+            var result = await Task.Run(
+                    () => runtime.Store.VerifyInstalled(row.Kind, deep: true),
+                    cancellationToken)
+                .ConfigureAwait(true);
+
+            ApplyLocalModelState(row, runtime);
+            if (result.IsValid)
+            {
+                var hashedFiles = runtime.Catalog.Get(row.Kind)?.Files
+                    .Count(file => !string.IsNullOrEmpty(file.Sha256)) ?? 0;
+                ShowLocalModelOperation(
+                    row,
+                    T(Keys.SettingsTranslateLocalModelStatusVerifyPassed, hashedFiles),
+                    cancellationToken);
+            }
+            else
+            {
+                ShowLocalModelOperation(
+                    row,
+                    T(
+                        Keys.SettingsTranslateLocalModelStatusVerifyFailed,
+                        DescribeVerifyFailure(result)),
+                    cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            row.ClearOperation();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("校验本地翻译模型失败", ex);
+            ShowLocalModelOperation(
+                row,
+                T(
+                    Keys.SettingsTranslateLocalModelStatusVerifyFailed,
+                    ToDisplayText(ex.Message, row.Directory)),
+                cancellationToken);
+        }
+        finally
+        {
+            row.IsBusy = false;
+        }
+    }
+
+    /// <summary>把 Core 的删除结果翻译成能自证的行内文案。</summary>
+    private static string DescribeRemoveResult(LocalTranslationModelRemoveResult result)
+    {
+        switch (result.Status)
+        {
+            case LocalTranslationModelRemoveStatus.Removed:
+                // 只有 Core 复核过「目录确实不存在」才会报 Removed，文案要把这一点说出来。
+                return T(Keys.SettingsTranslateLocalModelStatusRemovedVerified);
+
+            case LocalTranslationModelRemoveStatus.NotFound:
+                return T(Keys.SettingsTranslateLocalModelStatusRemoveNotFound);
+
+            case LocalTranslationModelRemoveStatus.RemovedWithResidue:
+                if (result.Residue.Count == 1 && result.Residue[0] == ".")
+                {
+                    return T(Keys.SettingsTranslateLocalModelStatusResidueDirectoryOnly);
+                }
+
+                // 残留清单只说明「还剩什么」，不说明「为什么删不掉」：把 Core 记下的原因
+                // 也同样脱敏后接在清单后面，用户才知道该去关哪个进程。
+                var residueText = FormatResidue(result.Residue);
+                var reason = ToDisplayText(result.Error, result.Directory);
+                return reason.Length == 0
+                    ? T(Keys.SettingsTranslateLocalModelStatusRemovedWithResidue, residueText)
+                    : T(
+                        Keys.SettingsTranslateLocalModelStatusResidueReason,
+                        residueText,
+                        reason);
+
+            default:
+                return T(
+                    Keys.SettingsTranslateLocalModelRemoveFailed,
+                    ToDisplayText(result.Error, result.Directory));
+        }
+    }
+
+    private static string DescribeVerifyFailure(LocalTranslationModelVerifyResult result)
+    {
+        var parts = new List<string>(4);
+        var state = result.State;
+        if (state.MissingFiles.Count > 0)
+        {
+            parts.Add(T(Keys.SettingsTranslateLocalModelStatusVerifyMissing, state.MissingFiles.Count));
+        }
+
+        if (state.SizeMismatches.Count > 0)
+        {
+            parts.Add(T(Keys.SettingsTranslateLocalModelStatusVerifySize, state.SizeMismatches.Count));
+        }
+
+        if (state.Status == LocalTranslationModelInstallStatus.ConfigMissing)
+        {
+            parts.Add(T(Keys.SettingsTranslateLocalModelStatusVerifyConfigMissing));
+        }
+
+        if (result.HashMismatches.Count > 0)
+        {
+            parts.Add(T(
+                Keys.SettingsTranslateLocalModelStatusVerifyHashMismatch,
+                string.Join(", ", result.HashMismatches.Select(mismatch => mismatch.FileName))));
+        }
+
+        return parts.Count == 0
+            ? T(Keys.SettingsTranslateLocalModelNotInstalled)
+            : string.Join("; ", parts);
+    }
+
+    /// <summary>
+    /// 残留清单最多列 6 项，其余用「总数」收尾（不是「另有 N 项」），避免用户把 6 项当成全部。
+    /// </summary>
+    private static string FormatResidue(IReadOnlyList<string> residue)
+    {
+        const int MaxItems = 6;
+        var shown = string.Join(", ", residue.Take(MaxItems));
+        return residue.Count > MaxItems
+            ? shown + T(Keys.SettingsTranslateLocalModelResidueMore, residue.Count)
+            : shown;
+    }
+
+    /// <summary>把 Core 的安装状态应用到行上（状态、目录是否存在、按钮可用性）。</summary>
+    private static void ApplyLocalModelState(LocalModelRowViewModel row, LocalTranslationRuntime runtime)
+    {
+        var state = runtime.Store.GetInstallState(row.Kind);
+        var directoryExists = AppServices.IsInitialized
+            && AppServices.FileSystem.DirectoryExists(state.Directory);
+        row.ApplyState(state, directoryExists);
+    }
+
+    /// <summary>写一条会过期的操作文案，并安排到点清除。</summary>
+    private void ShowLocalModelOperation(
+        LocalModelRowViewModel row,
+        string text,
+        CancellationToken cancellationToken)
+    {
+        var expiresAt = DateTimeOffset.Now + LocalModelOperationLifetime;
+        row.SetOperation(text, expiresAt);
+        _ = ClearLocalModelOperationLaterAsync(row, expiresAt, cancellationToken);
+    }
+
+    private static async Task ClearLocalModelOperationLaterAsync(
+        LocalModelRowViewModel row,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken)
+    {
+        var delay = expiresAt - DateTimeOffset.Now;
+        try
+        {
+            if (delay > TimeSpan.Zero)
+            {
+                // 页面关闭时令牌取消，不留下后台任务。
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        row.ExpireOperation(DateTimeOffset.Now);
+    }
+
+    /// <summary>
+    /// 把 Core 错误文本里的绝对路径换成相对路径或文件名；日志里仍保留完整原文。
+    /// </summary>
+    private static string ToDisplayText(string? text, string? directory)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        var value = text;
+        if (!string.IsNullOrEmpty(directory))
+        {
+            // 先替换已知的模型目录，保留其下的相对层级（如 index\model.bin）。
+            var replacement = Path.GetFileName(directory.TrimEnd('\\', '/'));
+            value = value.Replace(
+                directory,
+                string.IsNullOrEmpty(replacement) ? "." : replacement,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        return AbsolutePathPattern.Replace(value, match =>
+        {
+            var raw = match.Value.TrimEnd('.', '。', ' ', ':', '：', '\\', '/', '"', '\'');
+            var name = Path.GetFileName(raw);
+            return string.IsNullOrWhiteSpace(name) ? "." : name;
+        });
     }
 
     /// <summary>把新增词条追加到列表（不写盘，等用户点「保存词典」）。</summary>
@@ -2026,14 +2298,11 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 _ => Keys.SettingsTranslateLocalModelIndexTranslate,
             };
 
-            var installed = runtime.Store.IsInstalled(model.Kind);
-            _localModelRows.Add(new LocalModelRowViewModel(model.Kind, titleKey, model.DisplayName)
-            {
-                IsInstalled = installed,
-                StatusText = T(installed
-                    ? Keys.SettingsTranslateLocalModelInstalled
-                    : Keys.SettingsTranslateLocalModelNotInstalled),
-            });
+            // 状态全部来自 Core 的 GetInstallState：Installed / ConfigMissing / 缺文件 /
+            // 尺寸不符 / 未安装五态各有各的文案，不再用单个 IsInstalled 布尔糊过去。
+            var row = new LocalModelRowViewModel(model.Kind, titleKey, model.DisplayName);
+            ApplyLocalModelState(row, runtime);
+            _localModelRows.Add(row);
         }
 
         OnPropertyChanged(nameof(LocalModelRows));
@@ -2143,8 +2412,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         RefreshPatchState();
         RaiseTranslationProps();
 
-        // 本地模型行的文案要按新语言重建；术语词典是用户数据，不动它。
-        RefreshLocalModelRows();
+        // 本地模型行自己会在语言切换时重发文案（基类按弱登记逐个通知），
+        // 这里不再重建行——重建会把在途的下载/校验状态和刚弹的操作结果一起丢掉。
+        // 术语词典是用户数据，同样不动。
 
         // 探测结果是拼好的句子，语言切换后要按新语言重建。
         if (_translateTestResults is { Count: > 0 })

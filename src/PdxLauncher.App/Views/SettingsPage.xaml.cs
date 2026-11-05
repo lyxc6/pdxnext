@@ -282,13 +282,43 @@ public sealed partial class SettingsPage : Page
                 ? _viewModel.DownloadLocalModelAsync(row, _lifetime.Token)
                 : Task.CompletedTask);
 
-    /// <summary>删除某个已安装的本地离线模型。</summary>
-    private void OnRemoveLocalModelClick(object sender, RoutedEventArgs e)
+    /// <summary>深度校验某个本地模型的完整性（后台算 SHA-256）。</summary>
+    private async void OnVerifyLocalModelClick(object sender, RoutedEventArgs e) =>
+        await RunGuardedAsync(
+            "SettingsPage 校验本地模型失败",
+            () => sender is FrameworkElement { DataContext: LocalModelRowViewModel row }
+                ? _viewModel.VerifyLocalModelAsync(row, _lifetime.Token)
+                : Task.CompletedTask);
+
+    /// <summary>用资源管理器打开模型所在目录，让用户自己确认文件在不在。</summary>
+    private void OnOpenLocalModelFolderClick(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: LocalModelRowViewModel row })
         {
-            _viewModel.RemoveLocalModel(row);
+            OpenPath(row.Directory, row.Title);
         }
+    }
+
+    /// <summary>确认后删除某个本地离线模型（删除在后台线程执行）。</summary>
+    private async void OnRemoveLocalModelClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: LocalModelRowViewModel row })
+        {
+            return;
+        }
+
+        var confirmed = await ConfirmAsync(
+            T(Keys.SettingsTranslateLocalModelDialogRemoveTitle),
+            T(Keys.SettingsTranslateLocalModelDialogRemoveContent, row.Title),
+            T(Keys.CommonDelete));
+        if (!confirmed)
+        {
+            return;
+        }
+
+        await RunGuardedAsync(
+            "SettingsPage 删除本地模型失败",
+            () => _viewModel.RemoveLocalModelAsync(row, _lifetime.Token));
     }
 
     /// <summary>把输入框里的词条追加到词典列表（写盘由「保存词典」负责）。</summary>

@@ -836,16 +836,32 @@
                                                 <ProgressRing Width="16" Height="16"
                                                               IsActive="{x:Bind IsBusy, Mode=OneWay}"
                                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(IsBusy), Mode=OneWay}" />
-                                                <TextBlock Text="{x:Bind StatusText, Mode=OneWay}"
-                                                           MinWidth="120" TextAlignment="Right" VerticalAlignment="Center" />
-                                                <Button Content="{x:Bind L.SettingsTranslateLocalModelDownload, Mode=OneWay}"
-                                                        IsEnabled="{x:Bind CanDownload, Mode=OneWay}"
-                                                        Click="OnDownloadLocalModelClick"
-                                                        AutomationProperties.AutomationId="btnDownloadLocalModel" />
-                                                <Button Content="{x:Bind L.SettingsTranslateLocalModelRemove, Mode=OneWay}"
-                                                        IsEnabled="{x:Bind CanRemove, Mode=OneWay}"
-                                                        Click="OnRemoveLocalModelClick"
-                                                        AutomationProperties.AutomationId="btnRemoveLocalModel" />
+                                                <StackPanel Spacing="4" MaxWidth="240" VerticalAlignment="Center">
+                                                    <TextBlock Text="{x:Bind StatusText, Mode=OneWay}"
+                                                               TextWrapping="Wrap" />
+                                                    <TextBlock Text="{x:Bind OperationText, Mode=OneWay}"
+                                                               Visibility="{x:Bind svc:XamlVisibility.FromString(OperationText), Mode=OneWay}"
+                                                               Style="{StaticResource SettingsHintTextStyle}"
+                                                               TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                    <Button Content="{x:Bind L.SettingsTranslateLocalModelDownload, Mode=OneWay}"
+                                                            IsEnabled="{x:Bind CanDownload, Mode=OneWay}"
+                                                            Click="OnDownloadLocalModelClick"
+                                                            AutomationProperties.AutomationId="btnDownloadLocalModel" />
+                                                    <Button Content="{x:Bind L.SettingsTranslateLocalModelVerify, Mode=OneWay}"
+                                                            IsEnabled="{x:Bind CanVerify, Mode=OneWay}"
+                                                            Click="OnVerifyLocalModelClick"
+                                                            AutomationProperties.AutomationId="btnVerifyLocalModel" />
+                                                    <Button Content="{x:Bind L.SettingsTranslateLocalModelOpenFolder, Mode=OneWay}"
+                                                            IsEnabled="{x:Bind CanOpenFolder, Mode=OneWay}"
+                                                            Click="OnOpenLocalModelFolderClick"
+                                                            AutomationProperties.AutomationId="btnOpenLocalModelFolder" />
+                                                    <Button Content="{x:Bind L.SettingsTranslateLocalModelRemove, Mode=OneWay}"
+                                                            IsEnabled="{x:Bind CanRemove, Mode=OneWay}"
+                                                            Click="OnRemoveLocalModelClick"
+                                                            AutomationProperties.AutomationId="btnRemoveLocalModel" />
+                                                </StackPanel>
                                             </StackPanel>
                                         </controls:SettingsCard.ActionContent>
                                     </controls:SettingsCard>
