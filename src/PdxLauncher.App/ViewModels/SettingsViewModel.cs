@@ -1243,7 +1243,8 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// </summary>
     public async Task LoadAsync(GameInstallation? game, CancellationToken cancellationToken)
     {
-        // 安装形态与游戏无关，每次进页面读一次；注册表读取在线程池上，不压 UI 线程。
+        // 安装形态与游戏无关，每进程读一次（首次成功后 RefreshInstallModeAsync 直接复用判定结果）；
+        // 注册表读取在线程池上，不压 UI 线程。
         await RefreshInstallModeAsync(cancellationToken).ConfigureAwait(true);
 
         var sameGame = IsSameGame(_game, game);
