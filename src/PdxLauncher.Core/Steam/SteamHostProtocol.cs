@@ -38,6 +38,15 @@ public static class SteamHostProtocol
     /// </summary>
     public const string AchievementsVerb = "achievements";
 
+    /// <summary>
+    /// 探测某个 <c>steam_api64.dll</c> 能不能用于读成就（导出表里有没有 UserStats 那套）。
+    /// <para>
+    /// 单独做成动词的原因：Load 会执行 DllMain，loader 形态的 DLL 甚至可能直接崩，
+    /// 所以探测必须发生在这个子进程里；主进程只拿结论，不碰原生库。
+    /// </para>
+    /// </summary>
+    public const string ApiCheckVerb = "api-check";
+
     /// <summary>读某个工坊条目的订阅状态。</summary>
     public const string WorkshopStateVerb = "workshop-state";
 
@@ -87,6 +96,7 @@ public static class SteamHostProtocol
     {
         ProbeVerb,
         AchievementsVerb,
+        ApiCheckVerb,
         WorkshopStateVerb,
         WorkshopSubscribeVerb,
         WorkshopUnsubscribeVerb,
@@ -616,4 +626,26 @@ public sealed record SteamHostAchievementsResult
     /// <summary>失败结果。</summary>
     public static SteamHostAchievementsResult Fail(string code, string? error = null, string? detail = null, bool initialized = false) =>
         new() { Ok = false, Code = code, Initialized = initialized, Error = error, Detail = detail };
+}
+
+/// <summary>
+/// 宿主对一份 <c>steam_api64.dll</c> 做导出表探测的结果。
+/// <para>
+/// 只有 <see cref="Ok"/> 为 true 的候选才有资格去跑 <see cref="SteamHostProtocol.AchievementsVerb"/>；
+/// 不合格的典型是只挂 DLC 解锁的 loader（缺 <c>SteamAPI_ISteamUserStats_GetNumAchievements</c>）。
+/// </para>
+/// </summary>
+public sealed record SteamHostApiCheckResult
+{
+    /// <summary>是否具备读成就所需的导出。</summary>
+    public bool Ok { get; init; }
+
+    /// <summary>不合格原因（中文，直接进日志）。</summary>
+    public string? Error { get; init; }
+
+    /// <summary>合格。</summary>
+    public static SteamHostApiCheckResult Success() => new() { Ok = true };
+
+    /// <summary>不合格。</summary>
+    public static SteamHostApiCheckResult Fail(string? error) => new() { Ok = false, Error = error };
 }

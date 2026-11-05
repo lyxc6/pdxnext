@@ -29,6 +29,10 @@ public static class SteamAchievementsChecks
         CheckRequestTracker();
         CheckInitFailureCode();
         CheckCancellation(fs);
+        CheckCrashExitCodes();
+        CheckApiCheckVerb();
+        CheckExportProbe();
+        CheckCrashFallback(fs);
         CheckNativeLayout();
 
         return ChecksContext.Failures - before;
@@ -291,6 +295,180 @@ public static class SteamAchievementsChecks
         ChecksContext.Check("宿主动词: 未知动词在 stderr 说明原因", !string.IsNullOrWhiteSpace(unknownErr.ToString()));
     }
 
+    // ------------------------------------------------------------ 崩溃分类 / 候选回退
+
+    private static void CheckCrashExitCodes()
+    {
+        // 只认 NTSTATUS 里「原生代码死掉」的那几个；-1 是超时哨兵、1 是普通失败，
+        // 把这两个当崩溃会让上层对一份好 DLL 反复换候选。
+        ChecksContext.Check("崩溃分类: 0xC0000005（访问违例）算崩溃", SteamHostClient.IsCrashExit(unchecked((int)0xC0000005)));
+        ChecksContext.Check("崩溃分类: 0xC0000409（fail-fast）算崩溃", SteamHostClient.IsCrashExit(unchecked((int)0xC0000409)));
+        ChecksContext.Check("崩溃分类: 0xC0000374（堆损坏）算崩溃", SteamHostClient.IsCrashExit(unchecked((int)0xC0000374)));
+        ChecksContext.Check("崩溃分类: 0xC00000FD（栈溢出）算崩溃", SteamHostClient.IsCrashExit(unchecked((int)0xC00000FD)));
+        ChecksContext.Check("崩溃分类: 正常退出 0 不算崩溃", !SteamHostClient.IsCrashExit(0));
+        ChecksContext.Check("崩溃分类: 普通失败 1 不算崩溃", !SteamHostClient.IsCrashExit(1));
+        ChecksContext.Check("崩溃分类: 超时哨兵 -1 不算崩溃", !SteamHostClient.IsCrashExit(-1));
+        ChecksContext.Check(
+            "崩溃分类: .NET 未处理异常 0xE0434352 不算原生崩溃（留给 hostFailed 文案）",
+            !SteamHostClient.IsCrashExit(unchecked((int)0xE0434352)));
+    }
+
+    private static void CheckApiCheckVerb()
+    {
+        ChecksContext.Equal("探测: 动词名", "api-check", SteamHostProtocol.ApiCheckVerb);
+        ChecksContext.Check("探测: 动词在白名单里", SteamHostProtocol.Verbs.Contains(SteamHostProtocol.ApiCheckVerb));
+        ChecksContext.Check(
+            "探测: TryGetVerb 命中",
+            SteamHostProtocol.TryGetVerb(["--steam-host", "api-check", "--api", "x.dll", "--appid", "1"], out var verb)
+            && verb == SteamHostProtocol.ApiCheckVerb);
+
+        var okJson = SteamHostProtocol.Encode(SteamHostApiCheckResult.Success());
+        ChecksContext.Check(
+            "探测: 合格结果编码后 Ok=true 且无错误",
+            SteamHostProtocol.TryDecode<SteamHostApiCheckResult>(okJson, out var ok) && ok is { Ok: true, Error: null },
+            okJson);
+
+        var badJson = SteamHostProtocol.Encode(SteamHostApiCheckResult.Fail("缺少 UserStats 导出"));
+        ChecksContext.Check(
+            "探测: 不合格结果带原因",
+            SteamHostProtocol.TryDecode<SteamHostApiCheckResult>(badJson, out var bad)
+            && bad is { Ok: false, Error: "缺少 UserStats 导出" },
+            badJson);
+
+        // 宿主动词层：缺文件也要以 0 退出，把「不合格」写进 JSON（与 achievements 的 noDll 同口径）。
+        var missing = Path.Combine(Path.GetTempPath(), "pdxnext-no-such-api-" + Guid.NewGuid().ToString("N") + ".dll");
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var exit = SteamHostRunner.Run(
+            ["--steam-host", "api-check", "--api", missing, "--appid", "1158310"],
+            stdout,
+            stderr);
+
+        ChecksContext.Equal("探测: 缺文件仍以 0 退出（结果码在 JSON 里）", 0, exit);
+        ChecksContext.Check(
+            "探测: 缺文件返回 Ok=false 且说明路径",
+            SteamHostProtocol.TryDecode<SteamHostApiCheckResult>(stdout.ToString(), out var payload)
+            && payload is { Ok: false, Error: { Length: > 0 } error }
+            && error.Contains(missing, StringComparison.Ordinal),
+            stdout.ToString().Trim());
+        ChecksContext.Check("探测: 缺文件不写 stderr", string.IsNullOrWhiteSpace(stderr.ToString()));
+    }
+
+    private static void CheckExportProbe()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), "pdxnext-no-such-probe-" + Guid.NewGuid().ToString("N") + ".dll");
+        ChecksContext.Check(
+            "导出探测: 不存在的文件不合格且给出原因",
+            !SteamApiExportProbe.TryCheck(missing, out var missingReason) && !string.IsNullOrWhiteSpace(missingReason),
+            missingReason ?? "null");
+
+        // 128 KB 不是合法 PE：Load 会抛 BadImageFormatException，探针必须转成 false 而不是把异常漏出去。
+        var text = Path.Combine(Path.GetTempPath(), "pdxnext-not-a-pe-" + Guid.NewGuid().ToString("N") + ".dll");
+        try
+        {
+            File.WriteAllBytes(text, Enumerable.Repeat((byte)0x4D, 128 * 1024).ToArray());
+            ChecksContext.Check(
+                "导出探测: 非 PE 文件不合格且给出原因",
+                !SteamApiExportProbe.TryCheck(text, out var badReason) && !string.IsNullOrWhiteSpace(badReason),
+                badReason ?? "null");
+        }
+        finally
+        {
+            File.Delete(text);
+        }
+
+        // 真实 PE、但没有 Steamworks 导出：必须因为「缺 SteamAPI_Init」被拒，
+        // 而不是因为加载失败——这条把「加载成功但导出不全」的路径与「文件坏了」区分开。
+        var systemDll = Path.Combine(Environment.SystemDirectory, "kernel32.dll");
+        ChecksContext.Check("导出探测: 系统 DLL 存在（前提）", File.Exists(systemDll), systemDll);
+        if (File.Exists(systemDll))
+        {
+            ChecksContext.Check(
+                "导出探测: 没有 SteamAPI 导出的真 PE 被拒",
+                !SteamApiExportProbe.TryCheck(systemDll, out var reason)
+                && reason is { Length: > 0 }
+                && reason.Contains("SteamAPI_Init", StringComparison.Ordinal),
+                reason ?? "null");
+
+            // 连续两次都要能返回：探针在 finally 里 Free，句柄不应累积。
+            ChecksContext.Check(
+                "导出探测: 连续两次探测同一文件都正常返回（Load 后已 Free）",
+                !SteamApiExportProbe.TryCheck(systemDll, out _) && !SteamApiExportProbe.TryCheck(systemDll, out _));
+        }
+    }
+
+    private static void CheckCrashFallback(IFileSystem fs)
+    {
+        var hostPath = FindFakeHostPath();
+        ChecksContext.Check("回退: 找到假宿主可执行文件", hostPath is not null, "构建输出里应有 PdxLauncher.Checks.exe");
+        if (hostPath is null)
+        {
+            return;
+        }
+
+        // 第一候选放在手填路径里，目录名带 crash：假宿主看到 api 路径含 crash 就返回 0xC0000005；
+        // 第二候选放在游戏 binaries 里，路径不含 crash，假宿主返回 1 条 ACH_FAKE。
+        var crashDir = fs.Combine(Path.GetTempPath(), "pdxnext-crash-" + Guid.NewGuid().ToString("N"));
+        var gameRoot = fs.Combine(Path.GetTempPath(), "pdxnext-good-" + Guid.NewGuid().ToString("N"));
+        var crashApi = fs.Combine(crashDir, SteamApiLocator.FileName);
+        var goodApi = fs.Combine(fs.Combine(gameRoot, "binaries"), SteamApiLocator.FileName);
+
+        SteamApiCrashBlacklist.Clear();
+        try
+        {
+            fs.EnsureDirectory(crashDir);
+            fs.EnsureDirectory(fs.Combine(gameRoot, "binaries"));
+            fs.WriteAllBytesAtomic(crashApi, new byte[128 * 1024]);
+            fs.WriteAllBytesAtomic(goodApi, new byte[128 * 1024]);
+
+            var logger = new RecordingLogger();
+            var source = new SteamAchievementSource(
+                new SteamHostClient(logger, hostPath),
+                new SteamApiLocator(fs, logger),
+                fs,
+                logger,
+                () => crashApi,
+                () => SteamApiLocatorChecks.MakeGame(fs, gameRoot));
+
+            var snapshot = source.GetAsync("ck3", CancellationToken.None).GetAwaiter().GetResult();
+
+            ChecksContext.Equal("回退: 崩溃候选之后仍拿到成就", AchievementAvailability.Available, snapshot.Availability);
+            ChecksContext.Equal("回退: 回传的是第二个候选的条目", 1, snapshot.Entries.Count);
+            ChecksContext.Equal(
+                "回退: 条目名来自第二候选",
+                "ACH_FAKE",
+                snapshot.Entries.Count > 0 ? snapshot.Entries[0].Id : "null");
+            ChecksContext.Check("回退: 崩溃候选被拉黑", SteamApiCrashBlacklist.IsCrashed(crashApi), crashApi);
+            ChecksContext.Check("回退: 正常候选没被拉黑", !SteamApiCrashBlacklist.IsCrashed(goodApi), goodApi);
+            ChecksContext.Check(
+                "回退: 日志写清「谁崩了、换成谁」",
+                logger.Messages.Any(line => line.Contains(crashApi, StringComparison.OrdinalIgnoreCase) && line.Contains("崩溃", StringComparison.Ordinal))
+                && logger.Messages.Any(line => line.Contains("成就读取使用", StringComparison.Ordinal) && line.Contains(goodApi, StringComparison.OrdinalIgnoreCase)),
+                string.Join(" | ", logger.Messages));
+        }
+        finally
+        {
+            SteamApiCrashBlacklist.Clear();
+            TryDelete(fs, crashDir);
+            TryDelete(fs, gameRoot);
+        }
+    }
+
+    private static void TryDelete(IFileSystem fs, string directory)
+    {
+        try
+        {
+            if (fs.DirectoryExists(directory))
+            {
+                fs.Delete(directory);
+            }
+        }
+        catch (Exception)
+        {
+            // 清理失败不影响断言。
+        }
+    }
+
     // ------------------------------------------------------------ 请求代次
 
     private static void CheckRequestTracker()
@@ -448,6 +626,17 @@ public static class SteamAchievementsChecks
             "原生: 成就上限定为 4096（防止脏 count 撑爆内存）",
             4096,
             SteamAchievementsHostOperation.MaxAchievements);
+    }
+
+    private sealed class RecordingLogger : IAppLogger
+    {
+        public List<string> Messages { get; } = new();
+
+        public void Info(string message) => Messages.Add(message);
+
+        public void Warn(string message) => Messages.Add(message);
+
+        public void Error(string message, Exception? exception = null) => Messages.Add(message);
     }
 
     private sealed class SilentLogger : IAppLogger

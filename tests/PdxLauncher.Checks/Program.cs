@@ -3,6 +3,7 @@ namespace PdxLauncher.Checks;
 using System.Reflection;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Infrastructure;
+using PdxLauncher.Core.Steam;
 
 /// <summary>
 /// 自检入口。用反射发现所有 <c>public static int Run(IFileSystem)</c> 的检查类，
@@ -12,12 +13,13 @@ public static class Program
 {
     public static int Main(string[] args)
     {
-        // 自检工程同时充当「假 Steam 宿主」：成就检查类需要验证调用方取消的传播路径，
-        // 就用 --steam-host 把自己拉起来，这里挂住不返回，等父进程取消后杀掉它。
+        // 自检工程同时充当「假 Steam 宿主」：成就检查类需要验证
+        // ① 调用方取消的传播路径；② loader 崩掉后换候选。这里按 verb 与 --api 路径分支。
+        //   api-check   → 路径含 crash 就模拟 0xC0000005，否则输出 ok
+        //   achievements→ 路径含 crash 就模拟 0xC0000005，含 good 就输出 1 条成就，其余挂住等取消
         if (args.Length > 0 && string.Equals(args[0], "--steam-host", StringComparison.Ordinal))
         {
-            System.Threading.Thread.Sleep(TimeSpan.FromSeconds(30));
-            return 1;
+            return RunFakeHost(args);
         }
 
         // 成就图标性能取样：用真实 CK3 安装目录测「首次全部生成 / 二次全命中」，
@@ -92,6 +94,70 @@ public static class Program
 
         return failed.Count == 0 ? 0 : 1;
     }
+
+    private static int RunFakeHost(string[] args)
+    {
+        var verb = args.Length > 1 ? args[1] : string.Empty;
+        var api = string.Empty;
+        for (var i = 0; i + 1 < args.Length; i++)
+        {
+            if (string.Equals(args[i], "--api", StringComparison.Ordinal))
+            {
+                api = args[i + 1];
+            }
+        }
+
+        var crash = api.Contains("crash", StringComparison.OrdinalIgnoreCase);
+
+        if (string.Equals(verb, SteamHostProtocol.ApiCheckVerb, StringComparison.Ordinal))
+        {
+            if (crash)
+            {
+                return CrashExitCode();
+            }
+
+            Console.WriteLine(SteamHostProtocol.Encode(SteamHostApiCheckResult.Success()));
+            Console.Out.Flush();
+            return 0;
+        }
+
+        if (string.Equals(verb, SteamHostProtocol.AchievementsVerb, StringComparison.Ordinal))
+        {
+            if (crash)
+            {
+                return CrashExitCode();
+            }
+
+            if (api.Contains("good", StringComparison.OrdinalIgnoreCase))
+            {
+                var items = new[]
+                {
+                    new SteamHostAchievementItem
+                    {
+                        Name = "ACH_FAKE",
+                        DisplayName = "假成就",
+                        Description = "自检用",
+                        Hidden = false,
+                        Achieved = true,
+                        UnlockTime = 0,
+                    },
+                };
+                Console.WriteLine(SteamHostProtocol.Encode(SteamHostAchievementsResult.Success(items)));
+                Console.Out.Flush();
+                return 0;
+            }
+
+            // 其余情况挂住不返回，供父进程验证「调用方取消」。
+            System.Threading.Thread.Sleep(TimeSpan.FromSeconds(30));
+            return 1;
+        }
+
+        System.Threading.Thread.Sleep(TimeSpan.FromSeconds(30));
+        return 1;
+    }
+
+    /// <summary>模拟原生访问违例（0xC0000005 的 int 形式），让父进程看到崩溃退出码。</summary>
+    private static int CrashExitCode() => unchecked((int)0xC0000005);
 
     private static List<(Type Type, MethodInfo Method)> Discover()
     {
