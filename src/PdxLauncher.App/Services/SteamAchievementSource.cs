@@ -137,7 +137,12 @@ public sealed class SteamAchievementSource : IAchievementSource
         try
         {
             var language = SteamAchievementLocalization.ResolveLanguage(_fileSystem, game.GameDataDir, _uiLanguage());
-            var localization = SteamAchievementLocalization.Load(_fileSystem, game.InstallRoot, language, _logger);
+            var localization = SteamAchievementLocalization.Load(
+                _fileSystem,
+                game.InstallRoot,
+                language,
+                _logger,
+                result.Items.Count);
             if (localization.Count > 0)
             {
                 var total = result.Items.Count;

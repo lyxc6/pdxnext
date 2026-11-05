@@ -84,6 +84,42 @@ public static partial class DlcLocalization
     /// <remarks>成就本地化（<see cref="Steam.SteamAchievementLocalization"/>）复用同一套解析。</remarks>
     internal static void ParseInto(string text, Dictionary<string, string> result)
     {
+        foreach (var (key, raw) in EnumerateEntries(text))
+        {
+            var value = CleanMarkup(raw);
+            if (value.Length == 0)
+            {
+                continue;
+            }
+
+            result.TryAdd(key, value);
+        }
+    }
+
+    /// <summary>
+    /// 只解析出 <c>key → 原始值</c>，不剥标记。
+    /// <para>
+    /// 给「先还原引用、再剥标记」的调用方用：CK3 的
+    /// <c>ACHIEVEMENT_ep1_01_achievement: "$ACHIEVEMENT_patronage_achievement$"</c>
+    /// 是别名，先剥标记就什么都不剩了。去重规则与 <see cref="ParseInto"/> 一致（先读到的赢）。
+    /// </para>
+    /// </summary>
+    internal static void ParseRawInto(string text, Dictionary<string, string> result)
+    {
+        foreach (var (key, raw) in EnumerateEntries(text))
+        {
+            if (raw.Length == 0)
+            {
+                continue;
+            }
+
+            result.TryAdd(key, raw);
+        }
+    }
+
+    /// <summary>按行吐出 <c>(key, 原始值)</c>；key 或值为空的跳过。</summary>
+    private static IEnumerable<(string Key, string Raw)> EnumerateEntries(string text)
+    {
         foreach (var line in text.Split('\n'))
         {
             var match = EntryLine().Match(line);
@@ -93,13 +129,10 @@ public static partial class DlcLocalization
             }
 
             var key = match.Groups["key"].Value;
-            var value = CleanMarkup(match.Groups["value"].Value);
-            if (key.Length == 0 || value.Length == 0)
+            if (key.Length > 0)
             {
-                continue;
+                yield return (key, match.Groups["value"].Value);
             }
-
-            result.TryAdd(key, value);
         }
     }
 
