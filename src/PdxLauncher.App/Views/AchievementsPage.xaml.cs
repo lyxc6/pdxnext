@@ -72,6 +72,14 @@ public sealed partial class AchievementsPage : Page
 
     private void OnCurrentGameChanged(object? sender, GameInstallation? game)
     {
+        // 用户切游戏时事件就在 UI 线程上：直接开始取数，少一帧上一款游戏的残留。
+        // 后台刷新（主题重建 GameInstallation）仍走派发，避免跨线程碰 ViewModel。
+        if (DispatcherQueue.HasThreadAccess)
+        {
+            _ = ReloadAsync();
+            return;
+        }
+
         if (!DispatcherQueue.TryEnqueue(() => _ = ReloadAsync()))
         {
             AppServices.Logger.Warn("AchievementsPage 无法派发游戏切换事件");
