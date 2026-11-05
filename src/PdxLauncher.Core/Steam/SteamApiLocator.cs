@@ -93,10 +93,19 @@ public sealed class SteamApiLocator
         }
 
         // ① 用户手填：既可能是 dll 本身，也可能是它所在的目录。
+        // 目录要按「备份 → 标准名 → 变体」整目录展开：手填 binaries/ 的玩家多半也打了补丁，
+        // 只把 <dir>\steam_api64.dll 放进候选会让 loader 排在原版备份前面，宿主直接 initFailed。
         if (!string.IsNullOrWhiteSpace(settingsPath))
         {
             var configured = settingsPath!.Trim();
-            Add(_fileSystem.DirectoryExists(configured) ? _fileSystem.Combine(configured, FileName) : configured);
+            if (_fileSystem.DirectoryExists(configured))
+            {
+                AddDirectory(configured);
+            }
+            else
+            {
+                Add(configured);
+            }
         }
 
         // ② 启动器自身目录。

@@ -26,6 +26,7 @@ public static class SteamApiLocatorChecks
 
         var before = ChecksContext.Failures;
         CheckBackupWinsOverLoader(fs);
+        CheckConfiguredDirectoryYieldsBackups(fs);
         CheckExactNameWinsWithoutBackup(fs);
         CheckVariantsAreOrderedByDistance(fs);
         CheckOnlyLoaderStillResolves(fs);
@@ -68,6 +69,45 @@ public static class SteamApiLocatorChecks
                 "定位: 原版备份排在 loader 之前",
                 originalIndex >= 0 && loaderIndex >= 0 && originalIndex < loaderIndex,
                 "原版序号 " + originalIndex + "，loader 序号 " + loaderIndex);
+        }
+        finally
+        {
+            SafeDelete(fs, root);
+        }
+    }
+
+    /// <summary>
+    /// 设置里手填的是目录（不是 dll）：目录里的原版备份也要进候选，且排在 loader 之前。
+    /// 旧实现只把 <c>&lt;dir&gt;\steam_api64.dll</c> 放进去，于是 loader 排第一，打补丁的游戏一直 initFailed。
+    /// </summary>
+    private static void CheckConfiguredDirectoryYieldsBackups(IFileSystem fs)
+    {
+        var root = NewTempRoot(fs, "configured-directory");
+        try
+        {
+            var configured = fs.Combine(root, "binaries");
+            fs.EnsureDirectory(configured);
+
+            var loader = fs.Combine(configured, "steam_api64.dll");
+            var original = fs.Combine(configured, "steam_api64_o.dll");
+            fs.WriteAllBytesAtomic(loader, new byte[834560]);
+            fs.WriteAllBytesAtomic(original, new byte[298384]);
+
+            var locator = new SteamApiLocator(fs, new SilentLogger());
+
+            var candidates = locator.Candidates(configured, null, null).ToList();
+            var originalIndex = IndexOf(candidates, original);
+            var loaderIndex = IndexOf(candidates, loader);
+            ChecksContext.Check(
+                "定位: 手填目录时原版备份进候选",
+                originalIndex >= 0,
+                "未进候选：" + string.Join("；", candidates));
+            ChecksContext.Check("定位: 手填目录时 loader 也在候选里", loaderIndex >= 0, "未进候选");
+            ChecksContext.Check(
+                "定位: 手填目录时原版备份排在 loader 之前",
+                originalIndex >= 0 && loaderIndex >= 0 && originalIndex < loaderIndex,
+                "备份序号 " + originalIndex + "，loader 序号 " + loaderIndex);
+            ChecksContext.Equal("定位: 手填目录优先选中原版备份", original, locator.Resolve(configured, null, null));
         }
         finally
         {

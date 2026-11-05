@@ -214,7 +214,11 @@ public sealed class SteamAchievementSource : IAchievementSource
                     _logger.Info("Steam 成就未返回（" + result.Code + "）：" + error);
                 }
 
-                _logger.Info("成就读取使用 steam_api64.dll：" + candidate + "（appid " + appId + "）");
+                if (result.Ok)
+                {
+                    // 只有真读到成就才说「用的是哪份 DLL」；失败时这句会误导排查（看起来像读取成功）。
+                    _logger.Info("成就读取使用 steam_api64.dll：" + candidate + "（appid " + appId + "）");
+                }
 
                 var localization = result is { Ok: true } ? LoadLocalization(game, result, appId) : null;
                 return SteamAchievementMapping.FromHostResult(result, fetchedAt, localization);
