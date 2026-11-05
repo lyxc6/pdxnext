@@ -12,6 +12,14 @@ public static class Program
 {
     public static int Main(string[] args)
     {
+        // 自检工程同时充当「假 Steam 宿主」：成就检查类需要验证调用方取消的传播路径，
+        // 就用 --steam-host 把自己拉起来，这里挂住不返回，等父进程取消后杀掉它。
+        if (args.Length > 0 && string.Equals(args[0], "--steam-host", StringComparison.Ordinal))
+        {
+            System.Threading.Thread.Sleep(TimeSpan.FromSeconds(30));
+            return 1;
+        }
+
         var fs = new FileSystem();
         var root = FindWorkspaceRoot();
         Console.OutputEncoding = System.Text.Encoding.UTF8;

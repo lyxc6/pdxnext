@@ -9,10 +9,10 @@
     Background="{ThemeResource PdxPageVeilBrush}">
 
     <!--
-        成就页：先立骨架与契约（S1），不接 Steam 原生调用、不读 appcache/stats 二进制。
-        数据源目前固定为 NullAchievementSource，页面必然显示「该游戏暂无成就数据源」。
+        成就页：数据来自 Steam 宿主子进程（SteamAchievementSource），页面不碰原生 API。
         数据可用时展示「已解锁 X / Y」与成就列表；不可用时用明确的空状态说明代替空白页，
         三种原因（未接入 / 连不上 Steam / 确实没有成就）各自独立，不合并成一句「暂无数据」。
+        取数期间显示进度环并把统计置为「—」，不沿用上一款游戏的结论。
     -->
     <Grid Padding="24" RowSpacing="16">
         <Grid.RowDefinitions>

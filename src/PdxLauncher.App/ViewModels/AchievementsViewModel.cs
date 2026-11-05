@@ -3,6 +3,7 @@ namespace PdxLauncher.App.ViewModels;
 using System.Collections.ObjectModel;
 
 using PdxLauncher.App.Localization;
+using PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
 
@@ -21,6 +22,7 @@ using PdxLauncher.Core.Contracts;
 public sealed class AchievementsViewModel : LocalizedObservableObject
 {
     private readonly IAchievementSource _source;
+    private readonly AchievementRequestTracker _requests = new();
 
     private GameInstallation? _game;
     private AchievementAvailability _availability = AchievementAvailability.NotSupported;
@@ -62,6 +64,7 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
             if (SetProperty(ref _availability, value))
             {
                 OnPropertyChanged(nameof(IsAvailable));
+                OnPropertyChanged(nameof(IsLoading));
                 OnPropertyChanged(nameof(ShowEmptyState));
                 OnPropertyChanged(nameof(EmptyStateTitle));
                 OnPropertyChanged(nameof(EmptyStateMessage));
@@ -75,19 +78,30 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
         private set => SetProperty(ref _isBusy, value);
     }
 
+    /// <summary>是否正在取数：为 true 时页面只显示进度环，不显示空状态说明。</summary>
+    public bool IsLoading => Availability == AchievementAvailability.Loading;
+
     public int TotalCount => Achievements.Count;
 
     public int UnlockedCount => Achievements.Count(static row => row.IsUnlocked);
 
-    /// <summary>顶部统计文案：「已解锁 X / Y」。</summary>
-    public string CountsText => T(Keys.AchievementsCounts, UnlockedCount, TotalCount);
+    /// <summary>
+    /// 顶部统计文案：「已解锁 X / Y」。
+    /// <para>
+    /// 不可用 / 取数中时显示破折号：显示「已解锁 0 / 0」会把「连不上 Steam」说成「一个都没解锁」。
+    /// </para>
+    /// </summary>
+    public string CountsText => IsAvailable
+        ? T(Keys.AchievementsCounts, UnlockedCount, TotalCount)
+        : "—";
 
     /// <summary>数据源可用且列表非空；为 false 时页面显示空状态说明而不是空白列表。</summary>
     public bool IsAvailable => Availability == AchievementAvailability.Available;
 
-    public bool ShowEmptyState => !IsAvailable;
+    /// <summary>只有在「确定没数据且不忙」时才显示空状态，避免取数期间闪一下空白提示。</summary>
+    public bool ShowEmptyState => !IsAvailable && !IsLoading;
 
-    public string EmptyStateTitle => IsAvailable ? string.Empty : T(Keys.AchievementsEmptyTitle);
+    public string EmptyStateTitle => ShowEmptyState ? T(Keys.AchievementsEmptyTitle) : string.Empty;
 
     /// <summary>
     /// 空状态原因：没有当前游戏时先提示选游戏，其余按可用性给出对应文案。
@@ -102,6 +116,12 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
                 return T(Keys.AchievementsUnavailableNoGame);
             }
 
+            if (IsLoading)
+            {
+                // 取数中不展示任何「不可用」结论；页面此刻显示的是进度环。
+                return string.Empty;
+            }
+
             return Availability switch
             {
                 AchievementAvailability.NotSupported => T(Keys.AchievementsUnavailableNotSupported),
@@ -113,10 +133,17 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 取当前游戏的成就。切游戏时旧列表立即清空，避免新游戏页面上残留上一款的成就。
+    /// 取当前游戏的成就。切游戏时旧列表立即清空，并先把可用性置为 <see cref="AchievementAvailability.Loading"/>，
+    /// 避免异步取数期间页面继续显示上一款游戏的原因文案。
+    /// <para>
+    /// 只有最新一代请求可以落地：旧请求被取消后仍会执行 <c>finally</c>，
+    /// 由 <see cref="AchievementRequestTracker"/> 判断代次，旧请求不会关掉新请求的 <see cref="IsBusy"/>。
+    /// </para>
     /// </summary>
     public async Task LoadAsync(GameInstallation? game, CancellationToken cancellationToken)
     {
+        var generation = _requests.Begin();
+
         Game = game;
 
         Achievements.Clear();
@@ -124,20 +151,31 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
 
         if (game is null)
         {
+            IsBusy = false;
             Availability = AchievementAvailability.NotSupported;
             return;
         }
 
+        Availability = AchievementAvailability.Loading;
         IsBusy = true;
         try
         {
             var snapshot = await _source.GetAsync(game.GameId, cancellationToken);
+            if (!_requests.IsCurrent(generation))
+            {
+                // 旧请求：结果属于上一款游戏，既不能写列表，也不能改 IsBusy。
+                return;
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
             Apply(snapshot);
         }
         finally
         {
-            IsBusy = false;
+            if (_requests.IsCurrent(generation))
+            {
+                IsBusy = false;
+            }
         }
     }
 

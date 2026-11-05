@@ -8,9 +8,9 @@ using PdxLauncher.App.ViewModels;
 using PdxLauncher.Core.Contracts;
 
 /// <summary>
-/// 成就页：骨架 + 契约。当前数据源固定为 <c>NullAchievementSource</c>，
-/// 所以页面必然显示「该游戏暂无成就数据源」；S2 接入 Steam 宿主后由真实现替换，页面不用改。
-/// 切游戏时重新取数并清空旧列表（与 <see cref="DlcPage"/> 同一套生命周期写法）。
+/// 成就页：数据源是 <see cref="SteamAchievementSource"/>，真实成就通过 Steam 宿主子进程读取
+/// （主进程不碰 Steam 原生 API），页面本身只消费 <see cref="AchievementSnapshot"/>。
+/// 切游戏时先切到「加载中」中性态、清空旧列表，再重新取数（与 <see cref="DlcPage"/> 同一套生命周期写法）。
 /// </summary>
 public sealed partial class AchievementsPage : Page
 {
@@ -72,6 +72,14 @@ public sealed partial class AchievementsPage : Page
 
     private void OnCurrentGameChanged(object? sender, GameInstallation? game)
     {
+        // 用户切游戏时事件就在 UI 线程上：直接开始取数，少一帧上一款游戏的残留。
+        // 后台刷新（主题重建 GameInstallation）仍走派发，避免跨线程碰 ViewModel。
+        if (DispatcherQueue.HasThreadAccess)
+        {
+            _ = ReloadAsync();
+            return;
+        }
+
         if (!DispatcherQueue.TryEnqueue(() => _ = ReloadAsync()))
         {
             AppServices.Logger.Warn("AchievementsPage 无法派发游戏切换事件");

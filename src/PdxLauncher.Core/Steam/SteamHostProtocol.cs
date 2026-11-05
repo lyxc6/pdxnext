@@ -28,6 +28,16 @@ public static class SteamHostProtocol
     /// <summary>只读 DLC 授权探测。</summary>
     public const string ProbeVerb = "probe";
 
+    /// <summary>
+    /// 读取当前账号在某款游戏下的成就列表（含解锁状态、解锁时间、全球解锁率）。
+    /// <para>
+    /// 成就元数据与解锁状态都来自 <c>ISteamUserStats</c>：必须先 <c>RequestUserStats</c>，
+    /// 再等 <c>UserStatsReceived_t</c>（callback id 1101）才拿得到当前账号的数据，
+    /// 所以这个动词比探测要慢，但通常也在几百毫秒内。
+    /// </para>
+    /// </summary>
+    public const string AchievementsVerb = "achievements";
+
     /// <summary>读某个工坊条目的订阅状态。</summary>
     public const string WorkshopStateVerb = "workshop-state";
 
@@ -76,6 +86,7 @@ public static class SteamHostProtocol
     public static IReadOnlyList<string> Verbs { get; } = new[]
     {
         ProbeVerb,
+        AchievementsVerb,
         WorkshopStateVerb,
         WorkshopSubscribeVerb,
         WorkshopUnsubscribeVerb,
@@ -534,4 +545,75 @@ public sealed record WorkshopBatchResult(
     /// <summary>失败结果。</summary>
     public static WorkshopBatchResult Fail(string op, string error) =>
         new(false, op, Array.Empty<WorkshopBatchItem>(), error, false);
+}
+
+/// <summary>成就列表里的一条（宿主 → App 的 JSON 载荷）。</summary>
+/// <remarks>
+/// 用 init 属性而不是位置构造参数：<c>System.Text.Json</c> 对缺失字段会保留默认值，
+/// 这样「老宿主少给一个字段」不会让反序列化整体失败。字符串一律给空串默认值，
+/// 避免调用方到处判 null。
+/// </remarks>
+public sealed record SteamHostAchievementItem
+{
+    /// <summary>成就的 API 名（<c>GetAchievementName</c> 的返回值，也是页面上行的稳定 id）。</summary>
+    public string Name { get; init; } = string.Empty;
+
+    /// <summary>显示名（<c>GetAchievementDisplayAttribute(name, "name")</c>）；宿主读不到时为空，由 App 退回 API 名。</summary>
+    public string DisplayName { get; init; } = string.Empty;
+
+    /// <summary>说明文字（<c>GetAchievementDisplayAttribute(name, "desc")</c>）。</summary>
+    public string Description { get; init; } = string.Empty;
+
+    /// <summary>是否隐藏成就（未解锁时 Steam 也不给看说明）。</summary>
+    public bool Hidden { get; init; }
+
+    /// <summary>当前账号是否已解锁。</summary>
+    public bool Achieved { get; init; }
+
+    /// <summary>解锁时间（Unix 秒）；0 表示未解锁或该成就没有时间戳。</summary>
+    public uint UnlockTime { get; init; }
+
+    /// <summary>全球解锁率（0-100）；读不到时为 null。</summary>
+    public double? GlobalPercent { get; init; }
+}
+
+/// <summary>
+/// 宿主执行一次成就读取后回报的结果。
+/// <para>
+/// <see cref="Code"/> 是**稳定结果码**（见 <see cref="SteamAchievementCodes"/>）：
+/// 「Steam 没启动」「Init 失败」「等回调超时」「这款游戏一个成就都没有」必须能分开判读，
+/// 否则页面只能把「Steam 没运行」显示成「没有成就」。
+/// </para>
+/// </summary>
+public sealed record SteamHostAchievementsResult
+{
+    /// <summary>是否读到了成就列表（<see cref="Code"/> 为 <see cref="SteamAchievementCodes.Ok"/>）。</summary>
+    public bool Ok { get; init; }
+
+    /// <summary>结果码，见 <see cref="SteamAchievementCodes"/>。</summary>
+    public string Code { get; init; } = SteamAchievementCodes.Ok;
+
+    /// <summary><c>SteamAPI_Init</c> 是否成功（= 本进程被 Steam 登记过）。</summary>
+    public bool Initialized { get; init; }
+
+    /// <summary>成就列表；成功但为 0 条时是空数组，配合 <see cref="SteamAchievementCodes.NoAchievements"/> 才有意义。</summary>
+    public IReadOnlyList<SteamHostAchievementItem> Items { get; init; } = Array.Empty<SteamHostAchievementItem>();
+
+    /// <summary>失败原因（中文，直接进日志）。</summary>
+    public string? Error { get; init; }
+
+    /// <summary>原生错误文本（Init 的 message buffer 等）。</summary>
+    public string? Detail { get; init; }
+
+    /// <summary>成功结果。</summary>
+    public static SteamHostAchievementsResult Success(IReadOnlyList<SteamHostAchievementItem> items) =>
+        new() { Ok = true, Code = SteamAchievementCodes.Ok, Initialized = true, Items = items };
+
+    /// <summary>明确「这款游戏没有成就」的结果（不是失败，但也不是可用数据）。</summary>
+    public static SteamHostAchievementsResult None(bool initialized) =>
+        new() { Ok = false, Code = SteamAchievementCodes.NoAchievements, Initialized = initialized };
+
+    /// <summary>失败结果。</summary>
+    public static SteamHostAchievementsResult Fail(string code, string? error = null, string? detail = null, bool initialized = false) =>
+        new() { Ok = false, Code = code, Initialized = initialized, Error = error, Detail = detail };
 }

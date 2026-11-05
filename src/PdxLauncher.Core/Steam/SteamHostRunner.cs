@@ -25,6 +25,15 @@ public static class SteamHostRunner
     /// <summary>列出 / 读取自己发布的条目最多等多久（每页 50 条，纯内存往返，用不了这么久）。</summary>
     public static readonly TimeSpan OwnItemsTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// 读成就列表时等 <c>UserStatsReceived_t</c> 最多多久。
+    /// <para>
+    /// 正常情况几十毫秒就回来；10 秒是为了兜住「Steam 客户端半死」这种状态 ——
+    /// 再久也没有意义，按超时码返回让页面显示「Steam 暂时不可用」，而不是让子进程挂着。
+    /// </para>
+    /// </summary>
+    public static readonly TimeSpan AchievementsTimeout = TimeSpan.FromSeconds(10);
+
     /// <summary>运行一次宿主操作，返回进程退出码。</summary>
     /// <param name="args">完整命令行参数（含 <c>--steam-host</c>）。</param>
     /// <param name="stdout">结果输出（真实调用传 <see cref="Console.Out"/>）。</param>
@@ -33,7 +42,7 @@ public static class SteamHostRunner
     {
         if (!SteamHostProtocol.TryGetVerb(args, out var verb))
         {
-            stderr.WriteLine("用法：--steam-host probe|workshop-state|workshop-subscribe|workshop-unsubscribe|workshop-publish|workshop-subscribed|workshop-batch|workshop-mine|workshop-mine-detail --api <dll> --appid <int> [--fileid <ulong>] [--request <base64 json>]");
+            stderr.WriteLine("用法：--steam-host probe|achievements|workshop-state|workshop-subscribe|workshop-unsubscribe|workshop-publish|workshop-subscribed|workshop-batch|workshop-mine|workshop-mine-detail --api <dll> --appid <int> [--fileid <ulong>] [--request <base64 json>]");
             return SteamHostProtocol.ExitFailure;
         }
 
@@ -54,6 +63,11 @@ public static class SteamHostRunner
         if (verb == SteamHostProtocol.ProbeVerb)
         {
             return RunProbe(apiPath!, appId, stdout);
+        }
+
+        if (verb == SteamHostProtocol.AchievementsVerb)
+        {
+            return RunAchievements(apiPath!, appId, stdout);
         }
 
         if (verb == SteamHostProtocol.WorkshopPublishVerb)
@@ -113,6 +127,35 @@ public static class SteamHostRunner
         catch (Exception ex)
         {
             return SteamHostProbeResult.Fail(SteamProbeError.HostFailed, ex.GetType().Name + "：" + ex.Message);
+        }
+    }
+
+    private static int RunAchievements(string apiPath, int appId, TextWriter stdout)
+    {
+        WriteResult(stdout, RunAchievementsCore(apiPath, appId, AchievementsTimeout));
+        return SteamHostProtocol.ExitOk;
+    }
+
+    /// <summary>真正读一次成就；单独抽出来便于自检直接调用（不经过子进程）。</summary>
+    internal static SteamHostAchievementsResult RunAchievementsCore(string apiPath, int appId, TimeSpan timeout)
+    {
+        if (!File.Exists(apiPath))
+        {
+            return SteamHostAchievementsResult.Fail(
+                SteamAchievementCodes.NoDll,
+                "找不到 steam_api64.dll：" + apiPath);
+        }
+
+        try
+        {
+            using var operation = new SteamAchievementsHostOperation(apiPath, appId);
+            return operation.ReadAchievements(timeout);
+        }
+        catch (Exception ex)
+        {
+            return SteamHostAchievementsResult.Fail(
+                SteamAchievementCodes.HostFailed,
+                ex.GetType().Name + "：" + ex.Message);
         }
     }
 
