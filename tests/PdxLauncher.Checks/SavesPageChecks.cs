@@ -45,6 +45,7 @@ public static class SavesPageChecks
         "saves.listName",
         "saves.noGame",
         "saves.status.scanning",
+        "saves.status.reading",
         "saves.status.lastScan",
         "saves.status.failed",
         "saves.status.noGame",
@@ -177,14 +178,18 @@ public static class SavesPageChecks
             !rowViewModel.Contains("using Microsoft.UI.Xaml", StringComparison.Ordinal)
                 && !rowViewModel.Contains("Microsoft.UI.Xaml.", StringComparison.Ordinal));
 
-        // 目录探测（GetLocations 内部有 DirectoryExists）与扫描必须一起待在线程池上。
-        // 把 GetLocations 挪出 Task.Run 会让页面在 UI 线程上碰磁盘，这条断言随即变红。
+        // 两段式：第一段只枚举（ScanFilesAsync 自己在线程池上跑，不打开文件内容）；
+        // 第二段在 Task.Run 里按批解析细节，再回到 UI 线程原位回填。
         ChecksContext.Check(
-            "存档页: 目录探测跑在 Task.Run 里（UI 线程零文件 IO）",
-            Regex.IsMatch(viewModel, @"Task\.Run[\s\S]{0,600}?GetLocations", RegexOptions.CultureInvariant));
+            "存档页: 第一段只调用枚举 ScanFilesAsync（不读文件内容）",
+            viewModel.Contains("ScanFilesAsync", StringComparison.Ordinal));
         ChecksContext.Check(
-            "存档页: 扫描调用位于 Task.Run 内",
-            Regex.IsMatch(viewModel, @"Task\.Run[\s\S]{0,600}?ScanAsync", RegexOptions.CultureInvariant));
+            "存档页: 第二段细节解析跑在 Task.Run 里（UI 线程零文件 IO）",
+            Regex.IsMatch(viewModel, @"Task\.Run[\s\S]{0,600}?ParseBatch", RegexOptions.CultureInvariant));
+        ChecksContext.Check(
+            "存档页: 第二段按批回填而不是整表重建",
+            viewModel.Contains("SaveScanBatching.Split", StringComparison.Ordinal)
+                && viewModel.Contains("ApplyDetail", StringComparison.Ordinal));
 
         ChecksContext.Check(
             "存档页: 切游戏/刷新时先清空旧列表",
@@ -213,7 +218,7 @@ public static class SavesPageChecks
         ChecksContext.Check(
             "存档页: 有游戏内日期时优先用它",
             rowViewModel.Contains("HasGameDate", StringComparison.Ordinal)
-                && rowViewModel.Contains("_meta.GameDate", StringComparison.Ordinal));
+                && rowViewModel.Contains("Meta!.GameDate", StringComparison.Ordinal));
 
         // 删掉日期回退逻辑（不显示文件修改时间）这条会变红。
         ChecksContext.Check(

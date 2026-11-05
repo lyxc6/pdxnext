@@ -27,7 +27,7 @@ public sealed partial class SavesPage : Page
     {
         InitializeComponent();
 
-        _viewModel = new SavesViewModel(AppServices.SaveGames, AppServices.Logger);
+        _viewModel = new SavesViewModel(AppServices.SaveGameFiles, AppServices.Logger);
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
