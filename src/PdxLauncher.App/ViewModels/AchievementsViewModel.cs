@@ -142,8 +142,14 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
     /// <summary>数据源可用且列表非空；为 false 时页面显示空状态说明而不是空白列表。</summary>
     public bool IsAvailable => Availability == AchievementAvailability.Available;
 
-    /// <summary>只有在「确定没数据且不忙」时才显示空状态，避免取数期间闪一下空白提示。</summary>
-    public bool ShowEmptyState => !IsAvailable && !IsLoading;
+    /// <summary>
+    /// 只有在「确定没数据且不忙」时才显示空状态横条。
+    /// <para>
+    /// 列表里已有行（例如刷新失败但缓存还在）时不显示：横条会和成就列表同时出现，
+    /// 把「上次成功的数据」说成「一条都没有」。此时列表本身就是答案，顶部统计显示「—」表示不可用。
+    /// </para>
+    /// </summary>
+    public bool ShowEmptyState => !IsAvailable && !IsLoading && Achievements.Count == 0;
 
     public string EmptyStateTitle => ShowEmptyState ? T(Keys.AchievementsEmptyTitle) : string.Empty;
 
@@ -408,5 +414,10 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(TotalCount));
         OnPropertyChanged(nameof(UnlockedCount));
         OnPropertyChanged(nameof(CountsText));
+
+        // 行的增减直接决定空状态横条是否该出现：有行就不许再显示「没有可显示的成就」。
+        OnPropertyChanged(nameof(ShowEmptyState));
+        OnPropertyChanged(nameof(EmptyStateTitle));
+        OnPropertyChanged(nameof(EmptyStateMessage));
     }
 }

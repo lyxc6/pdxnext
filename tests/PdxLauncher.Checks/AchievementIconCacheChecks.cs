@@ -165,6 +165,119 @@ public static class AchievementIconCacheChecks
         ChecksContext.Check(
             "DDS 缓存: 拒绝非 png 目标",
             cache.Ensure(source, Path.Combine("1158310", "evil.jpg")) is null);
+
+        CheckPngSelfHealing(icons, root);
+        CheckConcurrentGeneration(icons, root);
+    }
+
+    // ------------------------------------------------------------ PNG 缓存自愈
+
+    private static void CheckPngSelfHealing(string icons, string root)
+    {
+        var source = Path.Combine(icons, "ACH_HEAL.dds");
+        File.WriteAllBytes(source, Bc1Dds(4, 4));
+        var cache = new DdsPngCache(Path.Combine(root, "cache-heal"), maxDimension: 96);
+        const string Relative = "1158310\\ACH_HEAL.png";
+        var target = Path.Combine(cache.DirectoryPath, Relative);
+
+        var seeded = cache.Ensure(source, Relative);
+        ChecksContext.Check("DDS 缓存自愈: 预生成成功", seeded is not null && File.Exists(target), seeded ?? "null");
+        var goodBytes = File.Exists(target) ? File.ReadAllBytes(target) : [];
+        ChecksContext.Check(
+            "DDS 缓存自愈: 预生成是完整 PNG",
+            IsPng(goodBytes) && goodBytes.Length >= 64,
+            goodBytes.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        // 半截 PNG 用「删掉 IEND」构造：签名、IHDR、宽高全都合法，只有 IEND 校验能发现它。
+        byte[][] corrupt =
+        [
+            [],
+            "not-a-png"u8.ToArray(),
+            goodBytes.Length > 12 ? goodBytes[..^12] : [],
+        ];
+        string[] labels = ["0 字节", "9 字节垃圾", "半截 PNG（缺 IEND）"];
+
+        var before = cache.DecodeCount;
+        for (int i = 0; i < corrupt.Length; i++)
+        {
+            File.WriteAllBytes(target, corrupt[i]);
+            var healed = cache.Ensure(source, Relative);
+            var bytes = healed is not null && File.Exists(healed) ? File.ReadAllBytes(healed) : [];
+            var (width, height) = bytes.Length >= 24 ? ReadPngSize(bytes) : (0, 0);
+            ChecksContext.Check(
+                "DDS 缓存自愈: " + labels[i] + " 被重建为有效 PNG",
+                healed is not null && IsPng(bytes) && bytes.Length >= 64 && width > 0 && height > 0,
+                healed ?? "null");
+        }
+
+        ChecksContext.Equal("DDS 缓存自愈: 三次坏缓存各重建一次", 3, cache.DecodeCount - before);
+
+        var hit = cache.Ensure(source, Relative);
+        ChecksContext.Check("DDS 缓存自愈: 重建后再命中不再解码", hit is not null && cache.DecodeCount - before == 3, "decodes=" + (cache.DecodeCount - before));
+    }
+
+    // ------------------------------------------------------------ 并发同 key
+
+    private static void CheckConcurrentGeneration(string icons, string root)
+    {
+        var source = Path.Combine(icons, "ACH_CONC.dds");
+        File.WriteAllBytes(source, Bc1Dds(8, 8));
+        var cache = new DdsPngCache(Path.Combine(root, "cache-conc"), maxDimension: 96);
+
+        const int Threads = 6;
+        const int Rounds = 3;
+        for (int round = 0; round < Rounds; round++)
+        {
+            // 每轮都从「没有缓存」开始，才会真的发生 6 线程抢同一次生成。
+            string relative = Path.Combine("1158310", "ACH_CONC_" + round.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".png");
+            string target = Path.Combine(cache.DirectoryPath, relative);
+            if (File.Exists(target))
+            {
+                File.Delete(target);
+            }
+
+            var results = new string?[Threads];
+            var errors = new Exception?[Threads];
+            using (var barrier = new Barrier(Threads))
+            {
+                var threads = new Thread[Threads];
+                for (int i = 0; i < threads.Length; i++)
+                {
+                    int index = i;
+                    threads[i] = new Thread(() =>
+                    {
+                        try
+                        {
+                            barrier.SignalAndWait();
+                            results[index] = cache.Ensure(source, relative);
+                        }
+                        catch (Exception ex)
+                        {
+                            errors[index] = ex;
+                        }
+                    });
+                    threads[i].Start();
+                }
+
+                foreach (var thread in threads)
+                {
+                    thread.Join();
+                }
+            }
+
+            ChecksContext.Check(
+                "DDS 缓存并发: 第 " + (round + 1) + " 轮 6 线程都拿到同一个有效路径",
+                errors.All(static e => e is null)
+                    && results.All(r => r is not null && string.Equals(r, results[0], StringComparison.OrdinalIgnoreCase))
+                    && File.Exists(target)
+                    && IsPng(File.ReadAllBytes(target)),
+                string.Join(",", results.Select(static r => r ?? "null")));
+        }
+
+        ChecksContext.Equal("DDS 缓存并发: 三轮各只解码一次", Rounds, cache.DecodeCount);
+        ChecksContext.Check(
+            "DDS 缓存并发: 不残留 .tmp 临时文件",
+            Directory.GetFiles(cache.DirectoryPath, "*.tmp", SearchOption.AllDirectories).Length == 0);
     }
 
     // ------------------------------------------------------------ ViewModel：惰性 + 空快照
@@ -240,6 +353,31 @@ public static class AchievementIconCacheChecks
             "空快照防御: 刷新失败仍保留非空缓存",
             goodVm.Achievements.Count == 1 && goodVm.Availability == AchievementAvailability.Available,
             "rows=" + goodVm.Achievements.Count + " " + goodVm.Availability);
+
+        // 4) 空状态遮挡：不可用与行同时存在时，只留列表，不许再叠一条「没有可显示的成就」。
+        var staleVm = new AchievementsViewModel(
+            new CompletedSource(new AchievementSnapshot
+            {
+                Availability = AchievementAvailability.SteamUnavailable,
+                FetchedAtUtc = DateTimeOffset.UtcNow,
+                Entries = [Entry("ACH_STALE", unlocked: true)],
+            }),
+            null,
+            new DdsPngCache(Path.Combine(root, "icons-stale")));
+        staleVm.LoadAsync(Game(Path.Combine(root, "game-stale")), CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check(
+            "空状态遮挡: 有行 + SteamUnavailable 不显示空状态横条",
+            staleVm.Achievements.Count == 1 && !staleVm.IsAvailable && !staleVm.ShowEmptyState,
+            "rows=" + staleVm.Achievements.Count + " " + staleVm.Availability + " show=" + staleVm.ShowEmptyState);
+        ChecksContext.Check(
+            "空状态遮挡: 有行时不生成空状态标题",
+            staleVm.EmptyStateTitle.Length == 0);
+        ChecksContext.Check(
+            "空状态遮挡: 无行 + SteamUnavailable 仍显示空状态横条",
+            poisonVm.Achievements.Count == 0
+                && poisonVm.Availability == AchievementAvailability.SteamUnavailable
+                && poisonVm.ShowEmptyState,
+            "rows=" + poisonVm.Achievements.Count + " " + poisonVm.Availability + " show=" + poisonVm.ShowEmptyState);
 
         // 4) 惰性 + DDS：加载后 0 次解码；读到某行才解码；二次进页面全命中。
         var lazyRoot = Path.Combine(root, "lazy-game");
