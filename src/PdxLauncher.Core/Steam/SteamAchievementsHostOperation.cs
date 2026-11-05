@@ -29,6 +29,12 @@ internal sealed class SteamAchievementsHostOperation : IDisposable
     /// <summary><c>GlobalAchievementPercentagesReady_t::k_iCallback</c>（isteamuserstats.h:444）。</summary>
     private const int GlobalPercentagesReadyId = 1110;
 
+    /// <summary><c>SteamAPICallCompleted_t::k_iCallback</c>（isteamgamecoordinator/isteamutils.h）；CallResult 统一从 703 取。</summary>
+    private const int SteamApiCallCompletedId = 703;
+
+    /// <summary>x64 下 <c>GlobalAchievementPercentagesReady_t</c> 的托管尺寸（uint64 + EResult + 对齐）。</summary>
+    private const int GlobalPercentagesReadyBufferSize = 16;
+
     /// <summary>拿到 UserStats 后给 callback 1110 的收尾时间；不改变「拿不到就不显示」的语义。</summary>
     private static readonly TimeSpan GlobalPercentagesGrace = TimeSpan.FromSeconds(2);
 
@@ -51,6 +57,7 @@ internal sealed class SteamAchievementsHostOperation : IDisposable
     private UserStatsReceived? _statsReceived;
     private bool _percentagesReady;
     private bool _percentagesRequested;
+    private ulong _globalPercentagesCall;
 
     private ShutdownFn? _shutdown;
     private RunCallbacksFn? _runCallbacks;
@@ -70,6 +77,7 @@ internal sealed class SteamAchievementsHostOperation : IDisposable
     private ManualDispatchRunFrameFn? _manualDispatchRunFrame;
     private ManualDispatchGetNextCallbackFn? _manualDispatchGetNextCallback;
     private ManualDispatchFreeLastCallbackFn? _manualDispatchFreeLastCallback;
+    private ManualDispatchGetApiCallResultFn? _manualDispatchGetApiCallResult;
 
     /// <summary>构造。</summary>
     /// <param name="apiFilePath">本进程要加载的 <c>steam_api64.dll</c> 绝对路径。</param>
@@ -82,6 +90,18 @@ internal sealed class SteamAchievementsHostOperation : IDisposable
 
     /// <summary>自检用：<c>UserStatsReceived_t</c> 的托管尺寸（x64 期望 24）。</summary>
     internal static int UserStatsReceivedSize => Marshal.SizeOf<UserStatsReceived>();
+
+    /// <summary>自检用：<c>GlobalAchievementPercentagesReady_t</c> 的托管尺寸（x64 期望 16）。</summary>
+    internal static int GlobalPercentagesReadySize => Marshal.SizeOf<GlobalAchievementPercentagesReady>();
+
+    /// <summary>自检用：<c>SteamAPICallCompleted_t</c> 的托管尺寸（x64 期望 16）。</summary>
+    internal static int SteamApiCallCompletedSize => Marshal.SizeOf<SteamApiCallCompleted>();
+
+    /// <summary>自检用：CallResult 统一到达的回调 id（期望 703）。</summary>
+    internal static int SteamApiCallCompletedCallbackId => SteamApiCallCompletedId;
+
+    /// <summary>自检用：全球解锁率结果自身的回调 id（期望 1110）。</summary>
+    internal static int GlobalPercentagesReadyCallbackId => GlobalPercentagesReadyId;
 
     /// <inheritdoc />
     public void Dispose()
@@ -373,7 +393,8 @@ internal sealed class SteamAchievementsHostOperation : IDisposable
     }
 
     /// <summary>
-    /// 全球解锁率要先 <c>RequestGlobalAchievementPercentages</c>，结果走 callback 1110。
+    /// 全球解锁率先 <c>RequestGlobalAchievementPercentages</c>，返回的 <c>SteamAPICall_t</c>
+    /// 之后会以 <c>SteamAPICallCompleted_t</c>（703）到达，再按 1110 取结果。
     /// 这里只发请求不等：让它和 <c>RequestUserStats</c> 并行，省掉一次串行等待。
     /// </summary>
     private void RequestGlobalPercentages()
@@ -386,11 +407,12 @@ internal sealed class SteamAchievementsHostOperation : IDisposable
         _percentagesRequested = true;
         try
         {
-            _requestGlobalPercentages(_userStats);
+            _globalPercentagesCall = _requestGlobalPercentages(_userStats);
         }
         catch
         {
             // 请求失败就当拿不到百分比，条目里留 null。
+            _globalPercentagesCall = 0;
         }
     }
 
@@ -448,6 +470,7 @@ internal sealed class SteamAchievementsHostOperation : IDisposable
         _manualDispatchRunFrame = Bind<ManualDispatchRunFrameFn>("SteamAPI_ManualDispatch_RunFrame");
         _manualDispatchGetNextCallback = Bind<ManualDispatchGetNextCallbackFn>("SteamAPI_ManualDispatch_GetNextCallback");
         _manualDispatchFreeLastCallback = Bind<ManualDispatchFreeLastCallbackFn>("SteamAPI_ManualDispatch_FreeLastCallback");
+        _manualDispatchGetApiCallResult = Bind<ManualDispatchGetApiCallResultFn>("SteamAPI_ManualDispatch_GetAPICallResult");
 
         if (_shutdown is null)
         {
@@ -648,9 +671,11 @@ internal sealed class SteamAchievementsHostOperation : IDisposable
                     {
                         _statsReceived = Marshal.PtrToStructure<UserStatsReceived>(header.Param);
                     }
-                    else if (header.CallbackId == GlobalPercentagesReadyId)
+                    else if (header.CallbackId == SteamApiCallCompletedId)
                     {
-                        _percentagesReady = true;
+                        // GlobalAchievementPercentagesReady_t 是 CallResult，永远不会以 1110 直接出现，
+                        // 只能从 703 里拿 AsyncCall 再调 GetAPICallResult。
+                        TryReadGlobalPercentagesResult(header.Param);
                     }
                 }
                 finally
@@ -662,6 +687,61 @@ internal sealed class SteamAchievementsHostOperation : IDisposable
         finally
         {
             Marshal.FreeHGlobal(message);
+        }
+    }
+
+    /// <summary>
+    /// 从 <c>SteamAPICallCompleted_t</c>（703）里取 1110 的结果。
+    /// 取不到、IO 错误或 <c>EResult</c> 非 OK 时保持 <see cref="_percentagesReady"/> 为 false，
+    /// 条目里 <c>globalPercent</c> 留 null —— 不写 0 冒充真实数据。
+    /// </summary>
+    private void TryReadGlobalPercentagesResult(IntPtr param)
+    {
+        if (_manualDispatchGetApiCallResult is null || param == IntPtr.Zero)
+        {
+            return;
+        }
+
+        try
+        {
+            var completed = Marshal.PtrToStructure<SteamApiCallCompleted>(param);
+            if (completed.Callback != GlobalPercentagesReadyId)
+            {
+                return;
+            }
+
+            // 只认自己发出去的那次请求，别的 CallResult 不掺和。
+            if (_globalPercentagesCall != 0 && completed.AsyncCall != _globalPercentagesCall)
+            {
+                return;
+            }
+
+            var buffer = Marshal.AllocHGlobal(GlobalPercentagesReadyBufferSize);
+            try
+            {
+                if (!_manualDispatchGetApiCallResult(
+                        _pipe,
+                        completed.AsyncCall,
+                        buffer,
+                        GlobalPercentagesReadyBufferSize,
+                        GlobalPercentagesReadyId,
+                        out var ioFailure)
+                    || ioFailure)
+                {
+                    return;
+                }
+
+                var ready = Marshal.PtrToStructure<GlobalAchievementPercentagesReady>(buffer);
+                _percentagesReady = ready.Result == ResultOk;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+        catch
+        {
+            // 全球解锁率是锦上添花，任何异常都只保持 null。
         }
     }
 
@@ -777,6 +857,16 @@ internal sealed class SteamAchievementsHostOperation : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate void ManualDispatchFreeLastCallbackFn(int pipe);
 
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private delegate bool ManualDispatchGetApiCallResultFn(
+        int pipe,
+        ulong apiCall,
+        IntPtr callback,
+        int callbackSize,
+        int expectedCallback,
+        [MarshalAs(UnmanagedType.I1)] out bool ioFailure);
+
     /// <summary><c>CCallbackMsg</c> 头（HSteamUser int、回调 id int、参数指针、参数长度）。</summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct SteamCallbackMsg
@@ -798,5 +888,28 @@ internal sealed class SteamAchievementsHostOperation : IDisposable
         public ulong GameId;
         public int Result;
         public ulong SteamIdUser;
+    }
+
+    /// <summary>
+    /// <c>SteamAPICallCompleted_t</c>（callback 703）：<c>SteamAPICall_t m_hAsyncCall</c>、
+    /// <c>int m_iCallback</c>、<c>uint32 m_cubParam</c>。x64 下 16 字节。
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SteamApiCallCompleted
+    {
+        public ulong AsyncCall;
+        public int Callback;
+        public uint ParamSize;
+    }
+
+    /// <summary>
+    /// <c>GlobalAchievementPercentagesReady_t</c>（callback 1110）：<c>uint64 m_nGameID</c>、
+    /// <c>EResult m_eResult</c>。x64 下 <c>Marshal.SizeOf</c> = 16（8 + 4 + 4 对齐）。
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GlobalAchievementPercentagesReady
+    {
+        public ulong GameId;
+        public int Result;
     }
 }

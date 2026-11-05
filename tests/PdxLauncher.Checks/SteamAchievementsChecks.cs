@@ -216,7 +216,10 @@ public static class SteamAchievementsChecks
 
         ChecksContext.Equal("映射: 有数据 → Available", AchievementAvailability.Available, available.Availability);
         ChecksContext.Equal("映射: 条目数", 2, available.Entries.Count);
-        ChecksContext.Equal("映射: 显示名回退用 API 名", "ACH_SECRET", available.Entries[1].Name);
+        ChecksContext.Equal(
+            "映射: 缺显示名时用占位符，绝不把 API 名当名字",
+            SteamAchievementMapping.UnknownName,
+            available.Entries[1].Name);
         ChecksContext.Equal("映射: 已解锁", true, available.Entries[0].IsUnlocked);
         ChecksContext.Equal(
             "映射: 解锁时间转 UTC",
@@ -393,6 +396,7 @@ public static class SteamAchievementsChecks
         var source = new SteamAchievementSource(
             new SteamHostClient(logger, hostPath),
             new SteamApiLocator(fs, logger),
+            fs,
             logger,
             () => Path.Combine(AppContext.BaseDirectory, "PdxLauncher.Checks.dll"),
             () => null);

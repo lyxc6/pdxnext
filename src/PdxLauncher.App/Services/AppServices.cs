@@ -301,9 +301,11 @@ public static class AppServices
         Achievements = new SteamAchievementSource(
             new SteamHostClient(logger),
             new SteamApiLocator(fileSystem, logger),
+            fileSystem,
             logger,
             () => Settings.SteamApiDllPath,
-            () => CurrentGame);
+            () => CurrentGame,
+            () => PdxLauncher.App.Localization.Localizer.Instance.Language);
         SettingsStore = settingsStore;
         Database = database;
         Documents = documents;
