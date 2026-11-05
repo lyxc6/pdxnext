@@ -223,7 +223,8 @@ public sealed partial class MarkdownView : ContentControl
     {
         // 表情要作为 20×20 的 UI 元素嵌在文字流里，而 TextBlock 不能承载
         // InlineUIContainer（WinUI 只支持 RichTextBlock + Paragraph）。
-        if (ContainsEmoticon(inlines))
+        // 判定必须与 AppendInlines 一致：样式/链接会被无条件展平，所以嵌套多深都算。
+        if (MarkdownInlineFlow.RequiresRichText(inlines))
         {
             var rich = new RichTextBlock
             {
@@ -253,29 +254,6 @@ public sealed partial class MarkdownView : ContentControl
         return text;
     }
 
-    /// <summary>这段行内流里是否至少有一个可渲染的官方表情。</summary>
-    private static bool ContainsEmoticon(IReadOnlyList<MarkdownInline> inlines)
-    {
-        foreach (var inline in inlines)
-        {
-            switch (inline)
-            {
-                case MarkdownImageInline image when SteamEmoticon.IsEmoticonImage(image.Url, image.Alt):
-                    return true;
-
-                case MarkdownLinkInline link when link.Inlines.Count == 1
-                    && ContainsEmoticon(link.Inlines):
-                    return true;
-
-                case MarkdownStyledInline styled when styled.Inlines.Count == 1
-                    && ContainsEmoticon(styled.Inlines):
-                    return true;
-            }
-        }
-
-        return false;
-    }
-
     /// <summary>
     /// 渲染一段行内流：没有图片时就是一段 TextBlock；有图片时按「文字段 / 图片块」分段，
     /// 图片单独成块，避免被排版挤成一条线。
@@ -286,7 +264,7 @@ public sealed partial class MarkdownView : ContentControl
         FontWeight weight,
         Thickness margin)
     {
-        if (!HasImage(inlines))
+        if (!MarkdownInlineFlow.HasBlockImage(inlines))
         {
             return BuildTextBlock(inlines, size, weight, margin);
         }
@@ -308,7 +286,7 @@ public sealed partial class MarkdownView : ContentControl
 
         foreach (var inline in inlines)
         {
-            if (TryGetImage(inline, out var image) && image is not null && !IsInlineImage(image))
+            if (MarkdownInlineFlow.TryGetBlockImage(inline, out var image) && image is not null)
             {
                 FlushText();
                 panel.Children.Add(BuildImage(image.Url));
@@ -326,51 +304,6 @@ public sealed partial class MarkdownView : ContentControl
 
         FlushText();
         return panel;
-    }
-
-    /// <summary>
-    /// 是否还有「需要单独成块」的图片。官方表情走行内小图，不参与分块；
-    /// alt 是 <c>:name:</c> 的非表情图也按短码行内文本处理，不再占 240×160 的灰块。
-    /// </summary>
-    private static bool HasImage(IReadOnlyList<MarkdownInline> inlines)
-    {
-        foreach (var inline in inlines)
-        {
-            if (TryGetImage(inline, out var image) && image is not null && !IsInlineImage(image))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>图片是否只该以行内形式出现（官方表情，或 alt 本身就是短码的失效表情）。</summary>
-    private static bool IsInlineImage(MarkdownImageInline image) =>
-        SteamEmoticon.IsEmoticonImage(image.Url, image.Alt)
-        || SteamEmoticon.TryGetShortCode(image.Alt, out _);
-
-    /// <summary>
-    /// 取出一段行内里「唯一」的图片：直接是图片、或者整段被包在链接/样式里（Steam 有 <c>&lt;a&gt;&lt;img&gt;&lt;/a&gt;</c>）。
-    /// </summary>
-    private static bool TryGetImage(MarkdownInline inline, out MarkdownImageInline? image)
-    {
-        switch (inline)
-        {
-            case MarkdownImageInline direct when !string.IsNullOrWhiteSpace(direct.Url):
-                image = direct;
-                return true;
-
-            case MarkdownLinkInline link when link.Inlines.Count == 1:
-                return TryGetImage(link.Inlines[0], out image);
-
-            case MarkdownStyledInline styled when styled.Inlines.Count == 1:
-                return TryGetImage(styled.Inlines[0], out image);
-
-            default:
-                image = null;
-                return false;
-        }
     }
 
     /// <summary>单张正文配图：圆角容器 + 占位图标 + 实际图片，点击进全屏查看器。</summary>
@@ -465,7 +398,7 @@ public sealed partial class MarkdownView : ContentControl
         /// <summary>切到本地文件显示；失败则继续显示短码。</summary>
         public void Show(string path)
         {
-            var source = XamlImage.FromPath(path, 20);
+            var source = XamlImage.FromPath(path, (int)MarkdownInlineFlow.EmoticonSize);
             if (source is null)
             {
                 return;
@@ -495,15 +428,15 @@ public sealed partial class MarkdownView : ContentControl
 
         var picture = new Image
         {
-            Width = 20,
-            Height = 20,
+            Width = MarkdownInlineFlow.EmoticonSize,
+            Height = MarkdownInlineFlow.EmoticonSize,
             Stretch = Stretch.Uniform,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             Visibility = Visibility.Collapsed,
         };
 
-        var host = new Grid { Height = 20, VerticalAlignment = VerticalAlignment.Center };
+        var host = new Grid { Height = MarkdownInlineFlow.EmoticonSize, VerticalAlignment = VerticalAlignment.Center };
         host.Children.Add(picture);
         host.Children.Add(fallback);
 
@@ -554,57 +487,104 @@ public sealed partial class MarkdownView : ContentControl
                 }
 
                 case MarkdownLinkInline link:
-                {
-                    var hyperlink = new Hyperlink();
-                    foreach (var child in link.Inlines)
-                    {
-                        switch (child)
-                        {
-                            case MarkdownTextInline text:
-                                hyperlink.Inlines.Add(new Run { Text = text.Text });
-                                break;
-                            case MarkdownCodeInline code:
-                                hyperlink.Inlines.Add(new Run
-                                {
-                                    Text = code.Text,
-                                    FontFamily = new FontFamily("Consolas"),
-                                });
-                                break;
-                            case MarkdownBreakInline:
-                                hyperlink.Inlines.Add(new LineBreak());
-                                break;
-                        }
-                    }
-
-                    if (hyperlink.Inlines.Count == 0)
-                    {
-                        hyperlink.Inlines.Add(new Run { Text = link.Url });
-                    }
-
-                    var url = link.Url;
-                    hyperlink.Click += (_, _) => LinkRequested?.Invoke(this, url);
-                    target.Add(hyperlink);
-                    break;
-                }
-
-                case MarkdownImageInline image
-                    when SteamEmoticon.TryCreate(image.Url, image.Alt, out var emoticonUrl, out var shortCode):
-                    AddEmoticon(target, emoticonUrl, shortCode);
-                    break;
-
-                case MarkdownImageInline image when SteamEmoticon.TryGetShortCode(image.Alt, out var fallbackCode):
-                    target.Add(new Run { Text = fallbackCode });
+                    AppendLink(target, link);
                     break;
 
                 case MarkdownImageInline image:
-                {
-                    var hyperlink = new Hyperlink();
-                    hyperlink.Inlines.Add(new Run { Text = "［图片］" });
-                    var url = image.Url;
-                    hyperlink.Click += (_, _) => ImageRequested?.Invoke(this, url);
-                    target.Add(hyperlink);
+                    AppendImage(target, MarkdownInlineFlow.PlanImage(image.Url, image.Alt));
                     break;
-                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 链接：文字仍是可点击的 Hyperlink；链接里裹着官方表情时，表情提到链接外单独成行内元素
+    /// ——<c>Hyperlink</c> 只承载纯文本，塞不进 <c>InlineUIContainer</c>。
+    /// </summary>
+    private void AppendLink(InlineCollection target, MarkdownLinkInline link)
+    {
+        var pending = new Hyperlink();
+        var emitted = false;
+
+        void Flush()
+        {
+            if (pending.Inlines.Count == 0)
+            {
+                return;
+            }
+
+            var url = link.Url;
+            pending.Click += (_, _) => LinkRequested?.Invoke(this, url);
+            target.Add(pending);
+            pending = new Hyperlink();
+            emitted = true;
+        }
+
+        foreach (var child in link.Inlines)
+        {
+            if (child is MarkdownImageInline image
+                && MarkdownInlineFlow.PlanImage(image.Url, image.Alt) is { Layout: MarkdownImageLayout.InlineEmoticon } plan)
+            {
+                Flush();
+                AddEmoticon(target, plan.Url, plan.ShortCode);
+                emitted = true;
+                continue;
+            }
+
+            switch (child)
+            {
+                case MarkdownTextInline text:
+                    pending.Inlines.Add(new Run { Text = text.Text });
+                    break;
+
+                case MarkdownCodeInline code:
+                    pending.Inlines.Add(new Run
+                    {
+                        Text = code.Text,
+                        FontFamily = new FontFamily("Consolas"),
+                    });
+                    break;
+
+                case MarkdownBreakInline:
+                    pending.Inlines.Add(new LineBreak());
+                    break;
+            }
+        }
+
+        Flush();
+
+        if (!emitted)
+        {
+            // 链接里全是取不出来的东西（无从命中的图片），至少把地址给出来。
+            var fallback = new Hyperlink();
+            fallback.Inlines.Add(new Run { Text = link.Url });
+            var url = link.Url;
+            fallback.Click += (_, _) => LinkRequested?.Invoke(this, url);
+            target.Add(fallback);
+        }
+    }
+
+    /// <summary>按方案落一张行内图片：官方表情出小图，失效表情退短码，其它给「［图片］」链接。</summary>
+    private void AppendImage(InlineCollection target, MarkdownImagePlan plan)
+    {
+        switch (plan.Layout)
+        {
+            case MarkdownImageLayout.InlineEmoticon:
+                AddEmoticon(target, plan.Url, plan.ShortCode);
+                break;
+
+            case MarkdownImageLayout.ShortCode:
+                target.Add(new Run { Text = plan.ShortCode });
+                break;
+
+            default:
+            {
+                var hyperlink = new Hyperlink();
+                hyperlink.Inlines.Add(new Run { Text = "［图片］" });
+                var url = plan.Url;
+                hyperlink.Click += (_, _) => ImageRequested?.Invoke(this, url);
+                target.Add(hyperlink);
+                break;
             }
         }
     }
