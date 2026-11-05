@@ -21,6 +21,7 @@
   "shell.nav.modLibrary": "Mod 库",
   "shell.nav.modStudio": "Mod 创建",
   "shell.nav.playSets": "播放集",
+  "shell.nav.saves": "存档",
   "shell.nav.settings": "设置",
   "shell.nav.workshop": "创意工坊",
   "shell.playSet.countDiff": "{0} 数量 {1} != {2}",
