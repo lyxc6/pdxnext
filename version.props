@@ -4,8 +4,8 @@
     改版本时只改这一处；tools/build-installer.py 会用正则读取本文件。
   -->
   <PropertyGroup>
-    <Version>1.2.1</Version>
-    <FileVersion>1.2.1.0</FileVersion>
-    <AssemblyVersion>1.2.1.0</AssemblyVersion>
+    <Version>1.2.2</Version>
+    <FileVersion>1.2.2.0</FileVersion>
+    <AssemblyVersion>1.2.2.0</AssemblyVersion>
   </PropertyGroup>
 </Project>
