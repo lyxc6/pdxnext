@@ -183,5 +183,17 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\SteamHostClient.cs" Link="Linked\SteamHostClient.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\SteamAchievementSource.cs" Link="Linked\SteamAchievementSource.cs" />
+    <!--
+      主页「继续 / 开始游戏」按钮的样式判据。它只认 ThemeAssetSource，不碰 UI 类型，
+      所以能原样链接进来。判据错了不会崩，只在真机上表现为「有官方美术的游戏被剥掉了皮肤」
+      或「没美术的游戏还画着幽灵按钮」，编译器看不见，因此必须由 HomeButtonStyleChecks 直接测。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\HomeButtonStylePolicy.cs" Link="Linked\HomeButtonStylePolicy.cs" />
+    <!--
+      随包自带素材的解析（Assets/themes/<gameId>/background.jpg + logo.png）。
+      只依赖 Core 的 IBundledThemeSource / GameInstallation / ThemeSpec，可以原样链接进来；
+      它错了的表现是「EU5 主页没有字标」或「其它游戏误吃了 EU5 的图」，由 HomeButtonStyleChecks 用临时目录钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\BundledThemes.cs" Link="Linked\BundledThemes.cs" />
   </ItemGroup>
 </Project>

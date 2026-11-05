@@ -242,8 +242,34 @@ public sealed partial class HomePage : Page
 
             // 「继续」「开始」两个按钮按官方语义渲染：button.backgroundImage 当底图、
             // button.color 当文字色（悬停取 buttonHover.color），不是「拿 color 当底色」。
-            ApplyThemedButton(ContinueButton, ContinueSurface, ContinueGlow, ContinueLabel, visuals);
-            ApplyThemedButton(StartButton, StartSurface, StartGlow, StartLabel, visuals);
+            // 只有真正带主题美术的来源才保留这套皮肤；内置占位与随包自带素材（EU5）没有官方
+            // 按钮素材，继续画幽灵皮肤反而与系统其它按钮不是一套，改用 WinUI 原生样式。
+            if (HomeButtonStylePolicy.UsesNativeStyle(spec.Source))
+            {
+                ApplyNativeButton(
+                    ContinueButton,
+                    ContinueSurface,
+                    ContinueGlow,
+                    ContinueInnerRing,
+                    ContinueBottomLine,
+                    ContinueLabel,
+                    "DefaultButtonStyle");
+                ApplyNativeButton(
+                    StartButton,
+                    StartSurface,
+                    StartGlow,
+                    StartInnerRing,
+                    StartBottomLine,
+                    StartLabel,
+                    "AccentButtonStyle");
+            }
+            else
+            {
+                ShowThemedLayers(ContinueSurface, ContinueGlow, ContinueInnerRing, ContinueBottomLine);
+                ShowThemedLayers(StartSurface, StartGlow, StartInnerRing, StartBottomLine);
+                ApplyThemedButton(ContinueButton, ContinueSurface, ContinueGlow, ContinueLabel, visuals);
+                ApplyThemedButton(StartButton, StartSurface, StartGlow, StartLabel, visuals);
+            }
 
             var loader = _bitmapLoader;
             if (loader is null)
@@ -387,6 +413,77 @@ public sealed partial class HomePage : Page
         var skin = new ThemedButtonSkin(button, surface, glow, label, visuals);
         _themedSkins[button] = skin;
         skin.SetEnabled(button.IsEnabled);
+    }
+
+    /// <summary>
+    /// 没有主题按钮美术时把按钮还原成 WinUI 原生样式：拆掉幽灵皮肤与资源覆盖、清掉主题写进去的
+    /// 本地属性、挂回 Accent/Default 样式，并折叠三层自绘内容（高光 / 内描边 / 底线）。
+    /// <para>
+    /// 同一页面切换游戏时会在「原生 ↔ 主题皮肤」之间来回切，所以这里必须幂等：
+    /// 先摘皮肤，再清本地值——本地值优先级高于 Style，不清掉会盖住原生背景 / 前景。
+    /// </para>
+    /// </summary>
+    private void ApplyNativeButton(
+        Button button,
+        Grid surface,
+        Border glow,
+        Border innerRing,
+        Border bottomLine,
+        TextBlock label,
+        string styleKey)
+    {
+        _themedSkins.Remove(button);
+
+        foreach (var (keys, _) in ThemedBrushBindings)
+        {
+            foreach (var key in keys)
+            {
+                button.Resources.Remove(key);
+            }
+        }
+
+        button.Style = Application.Current.Resources.TryGetValue(styleKey, out var style)
+            ? style as Style
+            : null;
+
+        button.ClearValue(Control.BackgroundProperty);
+        button.ClearValue(Control.BorderBrushProperty);
+        button.ClearValue(Control.BorderThicknessProperty);
+        button.ClearValue(Control.ForegroundProperty);
+        button.ClearValue(Control.FontFamilyProperty);
+        button.ClearValue(Control.FontSizeProperty);
+        button.ClearValue(Control.FontWeightProperty);
+        button.ClearValue(Control.PaddingProperty);
+        button.ClearValue(Control.CornerRadiusProperty);
+
+        glow.Visibility = Visibility.Collapsed;
+        innerRing.Visibility = Visibility.Collapsed;
+        bottomLine.Visibility = Visibility.Collapsed;
+        surface.Opacity = 1.0;
+
+        label.ClearValue(TextBlock.FontFamilyProperty);
+        label.ClearValue(TextBlock.FontSizeProperty);
+        label.ClearValue(TextBlock.FontWeightProperty);
+
+        // 内容是 Grid + TextBlock，不经过 ContentPresenter 的文本着色：原生按钮的前景色
+        // （Accent 白字 / Default 随主题）要手动接到文字上，否则 ClearValue 会退回主题默认字色，
+        // 浅色主题下落在 Accent 蓝底上不可读。
+        label.Foreground = button.Foreground;
+
+        if (button.RenderTransform is CompositeTransform transform)
+        {
+            transform.ScaleX = 1.0;
+            transform.ScaleY = 1.0;
+        }
+    }
+
+    /// <summary>切回主题皮肤时恢复三层自绘内容（原生分支里被折叠掉了）。</summary>
+    private static void ShowThemedLayers(Grid surface, Border glow, Border innerRing, Border bottomLine)
+    {
+        surface.Opacity = 1.0;
+        glow.Visibility = Visibility.Visible;
+        innerRing.Visibility = Visibility.Visible;
+        bottomLine.Visibility = Visibility.Visible;
     }
 
     private void OnNewsMainClick(object sender, RoutedEventArgs e) =>

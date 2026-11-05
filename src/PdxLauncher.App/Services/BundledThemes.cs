@@ -13,7 +13,8 @@ using PdxLauncher.Core.Online;
 /// </para>
 /// <para>
 /// 文件位置：<c>&lt;程序目录&gt;\Assets\themes\&lt;gameId&gt;\background.jpg</c>；
-/// 缺失或 gameId 非法时返回 null（调用方回落到内置占位图），绝不抛异常。
+/// 同目录的 <c>logo.png</c> 存在时作为字标（EU5 官方徽标），不存在则 Logo 保持 null。
+/// 背景缺失或 gameId 非法时返回 null（调用方回落到内置占位图），绝不抛异常。
 /// </para>
 /// </summary>
 internal sealed class BundledThemes : IBundledThemeSource
@@ -21,6 +22,14 @@ internal sealed class BundledThemes : IBundledThemeSource
     private const string AssetsFolderName = "Assets";
     private const string ThemeFolderName = "themes";
     private const string BackgroundFileName = "background.jpg";
+    private const string LogoFileName = "logo.png";
+
+    /// <summary>素材根目录（自检可传临时目录；生产走程序目录）。</summary>
+    private readonly string _baseDirectory;
+
+    /// <summary>默认从程序目录读；传入目录只给自检用。</summary>
+    public BundledThemes(string? baseDirectory = null) =>
+        _baseDirectory = baseDirectory ?? AppContext.BaseDirectory;
 
     /// <inheritdoc />
     public ThemeSpec? TryResolve(GameInstallation game)
@@ -32,21 +41,23 @@ internal sealed class BundledThemes : IBundledThemeSource
             return null;
         }
 
-        var background = Path.Combine(
-            AppContext.BaseDirectory,
+        var themeDirectory = Path.Combine(
+            _baseDirectory,
             AssetsFolderName,
             ThemeFolderName,
-            game.GameId,
-            BackgroundFileName);
+            game.GameId);
+        var background = Path.Combine(themeDirectory, BackgroundFileName);
 
         if (!File.Exists(background))
         {
             return null;
         }
 
+        var logo = Path.Combine(themeDirectory, LogoFileName);
+
         return new ThemeSpec(
             background,
-            Logo: null,
+            Logo: File.Exists(logo) ? logo : null,
             AppIcon: null,
             AppTaskbarIcon: null,
             ButtonBackground: null,
