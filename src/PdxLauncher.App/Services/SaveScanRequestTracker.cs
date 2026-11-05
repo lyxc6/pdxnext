@@ -16,6 +16,9 @@ public sealed class SaveScanRequestTracker
     /// <summary>开始一次新请求，返回它的代次。</summary>
     public int Begin() => Interlocked.Increment(ref _generation);
 
+    /// <summary>当前代次；写操作可用它判断自己开始时的那一代是否仍然有效。</summary>
+    public int Current => Volatile.Read(ref _generation);
+
     /// <summary>该代次是否仍是最新一次请求。</summary>
     public bool IsCurrent(int generation) => Volatile.Read(ref _generation) == generation;
 

@@ -748,7 +748,23 @@ public sealed partial class Localizer
         ["modstudio.visibilityPublic"] = "公开",
         ["modstudio.visibilityUnknown"] = "未核实",
         ["modstudio.visibilityUnlisted"] = "非公开",
+        ["saves.action.backup"] = "备份",
+        ["saves.action.delete"] = "删除",
+        ["saves.action.deleteBackup"] = "删除备份",
+        ["saves.action.restore"] = "恢复",
+        ["saves.backup.created"] = "备份于 {0}",
+        ["saves.backup.empty"] = "还没有备份",
+        ["saves.backup.quotaFull"] = "备份空间已满（可删除旧备份）",
+        ["saves.backup.rowName"] = "{0}，{1}",
+        ["saves.backup.title"] = "备份",
+        ["saves.backup.usage"] = "已用 {0} · {1} 个备份",
         ["saves.city"] = "城市：{0}",
+        ["saves.confirm.deleteBackup.content"] = "将删除备份「{0}」及其说明文件，无法撤销。",
+        ["saves.confirm.deleteBackup.title"] = "删除备份",
+        ["saves.confirm.deleteSave.content"] = "将把「{0}」移入回收站（trash 目录），不会永久删除文件。",
+        ["saves.confirm.deleteSave.title"] = "删除存档",
+        ["saves.confirm.restore.content"] = "将把备份恢复到存档目录，并新建一个带「(恢复 日期-时间)」后缀的副本，不会覆盖现有存档。",
+        ["saves.confirm.restore.title"] = "恢复备份",
         ["saves.country"] = "国家：{0}",
         ["saves.dateFallback"] = "文件修改时间",
         ["saves.empty.empty.message"] = "已找到该游戏的存档目录，但里面还没有存档文件。",
@@ -764,6 +780,11 @@ public sealed partial class Localizer
         ["saves.listName"] = "存档列表",
         ["saves.metadataUnreadable"] = "元数据不可读",
         ["saves.noGame"] = "未选择游戏",
+        ["saves.notice.backedUp"] = "已备份：{0}",
+        ["saves.notice.deletedBackup"] = "已删除备份：{0}",
+        ["saves.notice.deletedSave"] = "已移入回收站：{0}",
+        ["saves.notice.restored"] = "已恢复副本：{0}",
+        ["saves.notice.sourceMissing"] = "存档已不存在，已刷新列表。",
         ["saves.refresh"] = "刷新",
         ["saves.rowNamePair"] = "{0}，{1}",
         ["saves.saveName"] = "存档名：{0}",
@@ -2141,7 +2162,23 @@ public sealed partial class Localizer
         ["modstudio.visibilityPublic"] = "Public",
         ["modstudio.visibilityUnknown"] = "Not verified",
         ["modstudio.visibilityUnlisted"] = "Unlisted",
+        ["saves.action.backup"] = "Back up",
+        ["saves.action.delete"] = "Delete",
+        ["saves.action.deleteBackup"] = "Delete backup",
+        ["saves.action.restore"] = "Restore",
+        ["saves.backup.created"] = "Backed up {0}",
+        ["saves.backup.empty"] = "No backups yet",
+        ["saves.backup.quotaFull"] = "Backup space is full — delete old backups",
+        ["saves.backup.rowName"] = "{0}, {1}",
+        ["saves.backup.title"] = "Backups",
+        ["saves.backup.usage"] = "{0} used · {1} backups",
         ["saves.city"] = "City: {0}",
+        ["saves.confirm.deleteBackup.content"] = "The backup “{0}” and its sidecar file will be deleted. This cannot be undone.",
+        ["saves.confirm.deleteBackup.title"] = "Delete backup",
+        ["saves.confirm.deleteSave.content"] = "“{0}” will be moved into the trash folder. The file is not permanently deleted.",
+        ["saves.confirm.deleteSave.title"] = "Delete save",
+        ["saves.confirm.restore.content"] = "The backup will be restored into the save folder as a new copy with a “(restored date-time)” suffix. Existing saves are not overwritten.",
+        ["saves.confirm.restore.title"] = "Restore backup",
         ["saves.country"] = "Country: {0}",
         ["saves.dateFallback"] = "File modified time",
         ["saves.empty.empty.message"] = "The save folder exists, but it does not contain any save files yet.",
@@ -2157,6 +2194,11 @@ public sealed partial class Localizer
         ["saves.listName"] = "Save games",
         ["saves.metadataUnreadable"] = "Metadata unreadable",
         ["saves.noGame"] = "No game selected",
+        ["saves.notice.backedUp"] = "Backed up: {0}",
+        ["saves.notice.deletedBackup"] = "Backup deleted: {0}",
+        ["saves.notice.deletedSave"] = "Moved to trash: {0}",
+        ["saves.notice.restored"] = "Restored copy: {0}",
+        ["saves.notice.sourceMissing"] = "The save no longer exists; the list was refreshed.",
         ["saves.refresh"] = "Refresh",
         ["saves.rowNamePair"] = "{0}, {1}",
         ["saves.saveName"] = "Save name: {0}",
@@ -3534,7 +3576,23 @@ public sealed partial class Localizer
         ("modstudio.visibilityPublic", "ModstudioVisibilityPublic"),
         ("modstudio.visibilityUnknown", "ModstudioVisibilityUnknown"),
         ("modstudio.visibilityUnlisted", "ModstudioVisibilityUnlisted"),
+        ("saves.action.backup", "SavesActionBackup"),
+        ("saves.action.delete", "SavesActionDelete"),
+        ("saves.action.deleteBackup", "SavesActionDeleteBackup"),
+        ("saves.action.restore", "SavesActionRestore"),
+        ("saves.backup.created", "SavesBackupCreated"),
+        ("saves.backup.empty", "SavesBackupEmpty"),
+        ("saves.backup.quotaFull", "SavesBackupQuotaFull"),
+        ("saves.backup.rowName", "SavesBackupRowName"),
+        ("saves.backup.title", "SavesBackupTitle"),
+        ("saves.backup.usage", "SavesBackupUsage"),
         ("saves.city", "SavesCity"),
+        ("saves.confirm.deleteBackup.content", "SavesConfirmDeleteBackupContent"),
+        ("saves.confirm.deleteBackup.title", "SavesConfirmDeleteBackupTitle"),
+        ("saves.confirm.deleteSave.content", "SavesConfirmDeleteSaveContent"),
+        ("saves.confirm.deleteSave.title", "SavesConfirmDeleteSaveTitle"),
+        ("saves.confirm.restore.content", "SavesConfirmRestoreContent"),
+        ("saves.confirm.restore.title", "SavesConfirmRestoreTitle"),
         ("saves.country", "SavesCountry"),
         ("saves.dateFallback", "SavesDateFallback"),
         ("saves.empty.empty.message", "SavesEmptyEmptyMessage"),
@@ -3550,6 +3608,11 @@ public sealed partial class Localizer
         ("saves.listName", "SavesListName"),
         ("saves.metadataUnreadable", "SavesMetadataUnreadable"),
         ("saves.noGame", "SavesNoGame"),
+        ("saves.notice.backedUp", "SavesNoticeBackedUp"),
+        ("saves.notice.deletedBackup", "SavesNoticeDeletedBackup"),
+        ("saves.notice.deletedSave", "SavesNoticeDeletedSave"),
+        ("saves.notice.restored", "SavesNoticeRestored"),
+        ("saves.notice.sourceMissing", "SavesNoticeSourceMissing"),
         ("saves.refresh", "SavesRefresh"),
         ("saves.rowNamePair", "SavesRowNamePair"),
         ("saves.saveName", "SavesSaveName"),
@@ -4925,7 +4988,23 @@ public sealed partial class Localizer
     public string ModstudioVisibilityPublic => Format("modstudio.visibilityPublic");
     public string ModstudioVisibilityUnknown => Format("modstudio.visibilityUnknown");
     public string ModstudioVisibilityUnlisted => Format("modstudio.visibilityUnlisted");
+    public string SavesActionBackup => Format("saves.action.backup");
+    public string SavesActionDelete => Format("saves.action.delete");
+    public string SavesActionDeleteBackup => Format("saves.action.deleteBackup");
+    public string SavesActionRestore => Format("saves.action.restore");
+    public string SavesBackupCreated => Format("saves.backup.created");
+    public string SavesBackupEmpty => Format("saves.backup.empty");
+    public string SavesBackupQuotaFull => Format("saves.backup.quotaFull");
+    public string SavesBackupRowName => Format("saves.backup.rowName");
+    public string SavesBackupTitle => Format("saves.backup.title");
+    public string SavesBackupUsage => Format("saves.backup.usage");
     public string SavesCity => Format("saves.city");
+    public string SavesConfirmDeleteBackupContent => Format("saves.confirm.deleteBackup.content");
+    public string SavesConfirmDeleteBackupTitle => Format("saves.confirm.deleteBackup.title");
+    public string SavesConfirmDeleteSaveContent => Format("saves.confirm.deleteSave.content");
+    public string SavesConfirmDeleteSaveTitle => Format("saves.confirm.deleteSave.title");
+    public string SavesConfirmRestoreContent => Format("saves.confirm.restore.content");
+    public string SavesConfirmRestoreTitle => Format("saves.confirm.restore.title");
     public string SavesCountry => Format("saves.country");
     public string SavesDateFallback => Format("saves.dateFallback");
     public string SavesEmptyEmptyMessage => Format("saves.empty.empty.message");
@@ -4941,6 +5020,11 @@ public sealed partial class Localizer
     public string SavesListName => Format("saves.listName");
     public string SavesMetadataUnreadable => Format("saves.metadataUnreadable");
     public string SavesNoGame => Format("saves.noGame");
+    public string SavesNoticeBackedUp => Format("saves.notice.backedUp");
+    public string SavesNoticeDeletedBackup => Format("saves.notice.deletedBackup");
+    public string SavesNoticeDeletedSave => Format("saves.notice.deletedSave");
+    public string SavesNoticeRestored => Format("saves.notice.restored");
+    public string SavesNoticeSourceMissing => Format("saves.notice.sourceMissing");
     public string SavesRefresh => Format("saves.refresh");
     public string SavesRowNamePair => Format("saves.rowNamePair");
     public string SavesSaveName => Format("saves.saveName");
@@ -6319,7 +6403,23 @@ internal static class Keys
     public const string ModstudioVisibilityPublic = "modstudio.visibilityPublic";
     public const string ModstudioVisibilityUnknown = "modstudio.visibilityUnknown";
     public const string ModstudioVisibilityUnlisted = "modstudio.visibilityUnlisted";
+    public const string SavesActionBackup = "saves.action.backup";
+    public const string SavesActionDelete = "saves.action.delete";
+    public const string SavesActionDeleteBackup = "saves.action.deleteBackup";
+    public const string SavesActionRestore = "saves.action.restore";
+    public const string SavesBackupCreated = "saves.backup.created";
+    public const string SavesBackupEmpty = "saves.backup.empty";
+    public const string SavesBackupQuotaFull = "saves.backup.quotaFull";
+    public const string SavesBackupRowName = "saves.backup.rowName";
+    public const string SavesBackupTitle = "saves.backup.title";
+    public const string SavesBackupUsage = "saves.backup.usage";
     public const string SavesCity = "saves.city";
+    public const string SavesConfirmDeleteBackupContent = "saves.confirm.deleteBackup.content";
+    public const string SavesConfirmDeleteBackupTitle = "saves.confirm.deleteBackup.title";
+    public const string SavesConfirmDeleteSaveContent = "saves.confirm.deleteSave.content";
+    public const string SavesConfirmDeleteSaveTitle = "saves.confirm.deleteSave.title";
+    public const string SavesConfirmRestoreContent = "saves.confirm.restore.content";
+    public const string SavesConfirmRestoreTitle = "saves.confirm.restore.title";
     public const string SavesCountry = "saves.country";
     public const string SavesDateFallback = "saves.dateFallback";
     public const string SavesEmptyEmptyMessage = "saves.empty.empty.message";
@@ -6335,6 +6435,11 @@ internal static class Keys
     public const string SavesListName = "saves.listName";
     public const string SavesMetadataUnreadable = "saves.metadataUnreadable";
     public const string SavesNoGame = "saves.noGame";
+    public const string SavesNoticeBackedUp = "saves.notice.backedUp";
+    public const string SavesNoticeDeletedBackup = "saves.notice.deletedBackup";
+    public const string SavesNoticeDeletedSave = "saves.notice.deletedSave";
+    public const string SavesNoticeRestored = "saves.notice.restored";
+    public const string SavesNoticeSourceMissing = "saves.notice.sourceMissing";
     public const string SavesRefresh = "saves.refresh";
     public const string SavesRowNamePair = "saves.rowNamePair";
     public const string SavesSaveName = "saves.saveName";

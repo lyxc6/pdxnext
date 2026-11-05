@@ -56,6 +56,12 @@ public static class AppServices
     /// </summary>
     public static ISaveGameFileIndex SaveGameFiles { get; private set; } = null!;
 
+    /// <summary>
+    /// 存档备份：备份 / 恢复 / 删除（含真实存档移入回收站）。写文件全部在这层完成，
+    /// 页面只负责确认与刷新；配额由服务判定（2 GiB / 每款游戏 200 条），服务不会自动清理。
+    /// </summary>
+    public static ISaveGameBackupService SaveBackups { get; private set; } = null!;
+
     public static IDlcSignatureService DlcSignatures { get; private set; } = null!;
 
     /// <summary>DLC 简介（磁盘缓存 + 可选的 Steam 商店补全）。</summary>
@@ -307,6 +313,7 @@ public static class AppServices
         var saveGames = new SaveGameScanner(fileSystem, logger);
         SaveGames = saveGames;
         SaveGameFiles = saveGames;
+        SaveBackups = new SaveBackupService(fileSystem, logger);
         DlcSignatures = dlcSignatures;
         DlcDescriptions = dlcDescriptions;
         NewsFeed = newsFeed;

@@ -30,6 +30,9 @@ public sealed class SaveGameRowViewModel : LocalizedObservableObject
 
     private readonly int _index;
     private SaveRowState _state;
+    private bool _isBusy;
+    private bool _backupAllowed = true;
+    private bool _actionAllowed = true;
 
     public SaveGameRowViewModel(SaveFileEntry file, int index)
     {
@@ -43,6 +46,9 @@ public sealed class SaveGameRowViewModel : LocalizedObservableObject
 
     /// <summary>解析后的细节；第二段补到之前为 null。</summary>
     private SaveGameMeta? Meta => _state.Detail;
+
+    /// <summary>交给备份服务的元数据快照（只读）；细节未到时为 null，备份仍可进行。</summary>
+    public SaveGameMeta? Detail => _state.Detail;
 
     public string FileName => _state.File.FileName;
 
@@ -129,6 +135,61 @@ public sealed class SaveGameRowViewModel : LocalizedObservableObject
             return string.Join(" · ", parts);
         }
     }
+
+    /// <summary>
+    /// 本行是否正在执行备份/删除。为 true 时行内两个按钮都禁用，避免同一份档案上
+    /// 备份与删除并发（服务端没有行级锁，但并发写同一个 .bak/存档目录会互相踩）。
+    /// </summary>
+    public bool IsBusy
+    {
+        get => _isBusy;
+        private set
+        {
+            if (SetProperty(ref _isBusy, value))
+            {
+                OnPropertyChanged(nameof(CanBackup));
+                OnPropertyChanged(nameof(CanDelete));
+            }
+        }
+    }
+
+    /// <summary>备份按钮可用：不在本行操作中，且配额还有余量（配额满时由页面提示「可删除旧备份」）。</summary>
+    public bool CanBackup => !IsBusy && _backupAllowed;
+
+    /// <summary>删除按钮可用：不在本行操作中、页面不忙，且没有被配额/扫描的全局禁用。</summary>
+    public bool CanDelete => !IsBusy && _actionAllowed;
+
+    /// <summary>行内按钮文案：DataTemplate 里只能绑行 VM，绑不到页面上的 <c>L</c>。</summary>
+    public string BackupText => T(Keys.SavesActionBackup);
+
+    public string DeleteText => T(Keys.SavesActionDelete);
+
+    /// <summary>配额变化时由视图模型统一下发；不改变行自身的忙碌态。</summary>
+    public void SetBackupAllowed(bool allowed)
+    {
+        if (_backupAllowed == allowed)
+        {
+            return;
+        }
+
+        _backupAllowed = allowed;
+        OnPropertyChanged(nameof(CanBackup));
+    }
+
+    /// <summary>页面整体忙碌（扫描或任一写操作）时由视图模型统一下发，避免后台竞态下仍可点删除。</summary>
+    public void SetActionAllowed(bool allowed)
+    {
+        if (_actionAllowed == allowed)
+        {
+            return;
+        }
+
+        _actionAllowed = allowed;
+        OnPropertyChanged(nameof(CanDelete));
+    }
+
+    /// <summary>由视图模型在操作开始时置位；操作结束（含失败/取消）必须在 finally 里复位。</summary>
+    internal void SetBusy(bool busy) => IsBusy = busy;
 
     /// <summary>
     /// 第二段回填细节。内部经 <see cref="SaveRowState.WithDetail"/> 做「只填一次」保护：
