@@ -145,9 +145,30 @@ public static class DdsImage
             }
 
             byte[] png = EncodePng(decoded.Pixels);
-            string temp = targetPath + ".tmp";
-            File.WriteAllBytes(temp, png);
-            File.Move(temp, targetPath, overwrite: true);
+
+            // 临时名必须唯一：固定 targetPath + ".tmp" 会让并发同 key 的两次生成互相覆盖，
+            // 也可能把上一次崩溃残留的半个文件当成自己的中间产物。
+            string temp = targetPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                File.WriteAllBytes(temp, png);
+                File.Move(temp, targetPath, overwrite: true);
+            }
+            finally
+            {
+                try
+                {
+                    if (File.Exists(temp))
+                    {
+                        File.Delete(temp);
+                    }
+                }
+                catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+                {
+                    // 清理失败不能把已经成功的替换判成失败；残留的 .tmp 由下一次生成自愈。
+                }
+            }
+
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
