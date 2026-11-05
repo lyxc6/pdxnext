@@ -7,6 +7,7 @@ using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
 using PdxLauncher.Core.Achievements;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Imaging;
 
 /// <summary>
 /// 成就页：数据源是 <see cref="SteamAchievementSource"/>，真实成就通过 Steam 宿主子进程读取
@@ -19,6 +20,12 @@ public sealed partial class AchievementsPage : Page
 {
     /// <summary>同一款游戏在这个窗口内重进页面时直接复用已有列表，不再起子进程。</summary>
     private static readonly TimeSpan ReloadFreshWindow = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// 成就图标的解码尺寸：行模板显示 48 DIP，按 2 倍缩放取 96 像素；
+    /// <see cref="DdsPngCache"/> 只缩不放，64×64 的 CK3 原图因此保持原样，不会被放大糊掉。
+    /// </summary>
+    private const int IconPngMaxDimension = 96;
 
     private readonly AchievementsViewModel _viewModel;
     private readonly AchievementSnapshotCache _snapshotCache;
@@ -40,7 +47,10 @@ public sealed partial class AchievementsPage : Page
         _snapshotCache = new AchievementSnapshotCache(
             AppServices.FileSystem,
             Path.Combine(AppServices.DataRoot, "achievement-cache"));
-        _viewModel = new AchievementsViewModel(AppServices.Achievements, _snapshotCache);
+        var iconPngCache = new DdsPngCache(
+            Path.Combine(AppServices.DataRoot, "achievement-icons"),
+            IconPngMaxDimension);
+        _viewModel = new AchievementsViewModel(AppServices.Achievements, _snapshotCache, iconPngCache);
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;

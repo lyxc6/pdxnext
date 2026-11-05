@@ -195,6 +195,7 @@ public static class AchievementIconResolverChecks
         var appRoot = Path.Combine(root, "src", "PdxLauncher.App");
         var xamlPath = Path.Combine(appRoot, "Views", "AchievementsPage.xaml");
         var viewModelPath = Path.Combine(appRoot, "ViewModels", "AchievementsViewModel.cs");
+        var pageCodePath = Path.Combine(appRoot, "Views", "AchievementsPage.xaml.cs");
 
         if (!ChecksContext.Check("成就图标: AchievementsPage.xaml 存在", File.Exists(xamlPath), xamlPath))
         {
@@ -219,8 +220,21 @@ public static class AchievementIconResolverChecks
         {
             var viewModel = File.ReadAllText(viewModelPath);
             ChecksContext.Check(
-                "成就图标: ViewModel 走 AchievementIconResolver.Resolve",
-                viewModel.Contains("AchievementIconResolver.Resolve(", StringComparison.Ordinal));
+                "成就图标: ViewModel 走 AchievementIconResolver.ResolveSource",
+                viewModel.Contains("AchievementIconResolver.ResolveSource(", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "成就图标: ViewModel 对 DDS 走 DdsPngCache 解码",
+                viewModel.Contains("DdsPngCache", StringComparison.Ordinal)
+                    && viewModel.Contains("EndsWith(\".dds\"", StringComparison.Ordinal));
+        }
+
+        if (ChecksContext.Check("成就图标: AchievementsPage.xaml.cs 存在", File.Exists(pageCodePath), pageCodePath))
+        {
+            var pageCode = File.ReadAllText(pageCodePath);
+            ChecksContext.Check(
+                "成就图标: 页面把 DdsPngCache 指向 data\\achievement-icons",
+                pageCode.Contains("\"achievement-icons\"", StringComparison.Ordinal)
+                    && pageCode.Contains("DdsPngCache", StringComparison.Ordinal));
         }
     }
 

@@ -9,6 +9,7 @@ using PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Achievements;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Imaging;
 
 /// <summary>
 /// 成就页的视图模型：向 <see cref="IAchievementSource"/> 取当前游戏的成就快照，
@@ -27,6 +28,7 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
     private readonly IAchievementSource _source;
     private readonly AchievementRequestTracker _requests = new();
     private readonly AchievementSnapshotCache? _cache;
+    private readonly DdsPngCache? _iconPngCache;
 
     private GameInstallation? _game;
     private AchievementAvailability _availability = AchievementAvailability.NotSupported;
@@ -37,7 +39,7 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
 
     /// <summary>构造（不带磁盘缓存，数据源直读；自检与降级路径用）。</summary>
     public AchievementsViewModel(IAchievementSource source)
-        : this(source, cache: null)
+        : this(source, cache: null, iconPngCache: null)
     {
     }
 
@@ -46,10 +48,23 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
     /// 刷新失败保留缓存，<see cref="LastUpdatedText"/> 因此显示的是「上次成功更新」的时间。
     /// </summary>
     public AchievementsViewModel(IAchievementSource source, AchievementSnapshotCache? cache)
+        : this(source, cache, iconPngCache: null)
+    {
+    }
+
+    /// <summary>
+    /// 构造。<paramref name="iconPngCache"/> 非空时把 CK3 的 DDS 图标惰性解码成 PNG 并缓存；
+    /// 为空时 DDS 图标直接当作没有图标（界面显示占位方块），绝不把 DDS 路径交给 BitmapImage。
+    /// </summary>
+    public AchievementsViewModel(
+        IAchievementSource source,
+        AchievementSnapshotCache? cache,
+        DdsPngCache? iconPngCache)
     {
         ArgumentNullException.ThrowIfNull(source);
         _source = source;
         _cache = cache;
+        _iconPngCache = iconPngCache;
     }
 
     /// <summary>当前展示的成就行；切游戏 / 重新取数时整体清空重建。</summary>
@@ -235,11 +250,13 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
             }
 
             Apply(game, snapshot);
-            _hasRenderedSnapshot = true;
+            _hasRenderedSnapshot = Achievements.Count > 0;
             _renderedGameKey = gameKey;
             SetLastUpdated(snapshot.FetchedAtUtc);
 
-            if (snapshot.Availability is AchievementAvailability.Available or AchievementAvailability.Empty)
+            // 只缓存「真的取到了成就」的快照：数据源说 Available 但返回空数组，
+            // 在旧机器上就是「一条成就都没有」的假象，一旦写盘会被下一次启动原样复现。
+            if (snapshot.Availability == AchievementAvailability.Available && snapshot.Entries is { Count: > 0 })
             {
                 TrySaveCache(game, snapshot);
             }
@@ -261,7 +278,8 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
         Achievements.Clear();
         foreach (var entry in entries)
         {
-            Achievements.Add(new AchievementRowViewModel(entry, ResolveIcon(game, entry)));
+            // 惰性：行容器实化并读取 IconUrl 时才解析 / 解码，198 个 DDS 不会在进页面时同步解开。
+            Achievements.Add(new AchievementRowViewModel(entry, () => ResolveIcon(game, entry)));
         }
 
         // 数据源说「可用」但一条都没有：按 Empty 解释，页面才有话说，而不是留一块空白。
@@ -272,22 +290,58 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
         NotifyCountsChanged();
     }
 
-    /// <summary>失败且已有可显示快照时保留缓存；没有缓存则照常把失败原因写进空状态。</summary>
+    /// <summary>
+    /// 失败且已有可显示的非空快照时保留缓存；没有缓存（或缓存是空列表）则照常把失败原因写进空状态。
+    /// </summary>
     private bool ShouldKeepCached(AchievementSnapshot snapshot) =>
         _hasRenderedSnapshot
+        && Achievements.Count > 0
         && snapshot.Availability is AchievementAvailability.NotSupported or AchievementAvailability.SteamUnavailable;
 
-    private static string? ResolveIcon(GameInstallation game, AchievementEntry entry)
+    /// <summary>
+    /// 解析一行的图标：位图直接用；DDS 先解码落 PNG 再返回 PNG 路径。
+    /// 任何一步失败都返回 <see langword="null"/>（界面显示占位方块），且绝不返回 DDS 路径。
+    /// </summary>
+    private string? ResolveIcon(GameInstallation game, AchievementEntry entry)
     {
         try
         {
-            return AchievementIconResolver.Resolve(game.InstallRoot, entry.Id, entry.IsUnlocked);
+            var source = AchievementIconResolver.ResolveSource(game.InstallRoot, entry.Id, entry.IsUnlocked);
+            if (source is null)
+            {
+                return null;
+            }
+
+            if (!source.EndsWith(".dds", StringComparison.OrdinalIgnoreCase))
+            {
+                return source;
+            }
+
+            if (_iconPngCache is null)
+            {
+                return null;
+            }
+
+            var relative = IconCacheRelativePath(game, entry);
+            return relative is null ? null : _iconPngCache.Ensure(source, relative);
         }
         catch
         {
             // 图标只是装饰：解析失败就回占位方块，绝不能阻断成就列表。
             return null;
         }
+    }
+
+    /// <summary>成就图标的 PNG 缓存相对路径：<c>&lt;appid&gt;\&lt;apiName&gt;[_locked].png</c>。</summary>
+    private static string? IconCacheRelativePath(GameInstallation game, AchievementEntry entry)
+    {
+        if (CacheKey(game) is not { } key)
+        {
+            return null;
+        }
+
+        var stem = entry.IsUnlocked ? entry.Id : entry.Id + "_locked";
+        return Path.Combine(key, stem + ".png");
     }
 
     private AchievementSnapshot? TryLoadCache(GameInstallation game)
@@ -297,7 +351,21 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
             return null;
         }
 
-        return _cache.TryLoad(key);
+        var cached = _cache.TryLoad(key);
+        if (cached is null)
+        {
+            return null;
+        }
+
+        // 旧版本把「Availability=Available 但 Entries=[]」当成功写进了缓存。
+        // 这种毒快照会让老机器每次启动都直接显示「没有成就」，必须当作未命中并清掉。
+        if (cached.Availability == AchievementAvailability.Available && (cached.Entries?.Count ?? 0) == 0)
+        {
+            _cache.TryDelete(key);
+            return null;
+        }
+
+        return cached;
     }
 
     private void TrySaveCache(GameInstallation game, AchievementSnapshot snapshot)

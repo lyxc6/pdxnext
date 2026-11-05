@@ -20,13 +20,35 @@ public static class Program
             return 1;
         }
 
+        // 成就图标性能取样：用真实 CK3 安装目录测「首次全部生成 / 二次全命中」，
+        // 与常规自检分开，避免每次 runs 都扫几百个 DDS。
+        if (args.Length >= 3 && string.Equals(args[0], "--bench-achievement-icons", StringComparison.Ordinal))
+        {
+            return AchievementIconBench.Run(args[1], args[2]);
+        }
+
         var fs = new FileSystem();
         var root = FindWorkspaceRoot();
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Console.WriteLine("workspace root: " + root);
         Console.WriteLine();
 
+        // 开发/变异验证时只跑一类检查：--only <类型名子串>，避免每次全量跑几分钟。
+        string? only = null;
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (string.Equals(args[i], "--only", StringComparison.Ordinal))
+            {
+                only = args[i + 1];
+                break;
+            }
+        }
+
         var checks = Discover();
+        if (only is not null)
+        {
+            checks = checks.Where(x => x.Type.Name.Contains(only, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
         if (checks.Count == 0)
         {
             Console.WriteLine("[checks] 没有发现任何检查类");
@@ -49,6 +71,7 @@ public static class Program
             catch (TargetInvocationException ex)
             {
                 Console.WriteLine("  !! 抛出异常: " + ex.InnerException?.GetType().Name + ": " + ex.InnerException?.Message);
+                Console.WriteLine(ex.InnerException?.StackTrace);
                 failed.Add(type.Name + " (异常)");
             }
 
