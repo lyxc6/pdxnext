@@ -5,6 +5,7 @@ using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Themes;
 
 /// <summary>
 /// 联网层自检（不真联网）：GraphQL 解析、域名白名单、magic bytes 判型、.part 清理、
@@ -928,6 +929,17 @@ public static class OnlineChecks
             "heroUrl 生产: 不带 steam/apps 的地址返回 null",
             null,
             SteamHeroUrl.ForLibraryHero("https://example.com/foo/header.jpg"));
+
+        // 下载闸门必须放行 Steam 图片 CDN，否则官方图会在白名单处被拦下、静默回落内置图。
+        ChecksContext.Check(
+            "白名单：shared.akamai.steamstatic.com 放行（库页大图）",
+            OnlineHosts.IsAllowedHost(OnlineHosts.SteamSharedCdnHost));
+        ChecksContext.Check(
+            "白名单：cdn.cloudflare.steamstatic.com 放行（旧式头图）",
+            OnlineHosts.IsAllowedHost(OnlineHosts.SteamCloudflareCdnHost));
+        ChecksContext.Check(
+            "白名单：未做子域通配",
+            !OnlineHosts.IsAllowedHost("evil.akamai.steamstatic.com"));
     }
 
     /// <summary>
@@ -1091,6 +1103,55 @@ public static class OnlineChecks
             .GetResult();
         ChecksContext.Equal("steam-hero: metadata 有背景时来源仍是 OnlineCache", ThemeAssetSource.OnlineCache, withMeta.Source);
         ChecksContext.Equal("steam-hero: metadata 有背景时不问商店接口", 0, metaCovers.CallCount);
+
+        // 8) 生产链路回归（验收复现法）：离线 Resolve → ThemePatch.Apply 把内置图写回 game.Theme
+        // （来源 Bundled）→ 联网 force Resolve 必须重新判定，不能被「已有背景」13ms 短路。
+        var prodRoot = Path.Combine(tempRoot, "theme-cache-hero-prod");
+        fs.EnsureDirectory(prodRoot);
+        var prodCovers = new FixedSteamCoverResolver(3450310, HeaderUrl);
+        var prodDownloader = new CountingAssetDownloader(fs);
+        var prodResolver = new ThemeResolver(
+            fs,
+            clock,
+            new RecordingLogger(),
+            new CountingMetadataClient { ReturnEmpty = true },
+            prodDownloader,
+            prodRoot,
+            prodCovers,
+            new FakeBundledThemes(bundledPath));
+        var prodGame = BuildGame() with { SteamAppId = 3450310, Theme = EmptyTheme() };
+
+        var offlineTheme = prodResolver
+            .ResolveAsync(prodGame, allowOnlineRefresh: false, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Equal("生产链路: 离线先吃内置图", ThemeAssetSource.Bundled, offlineTheme.Source);
+        ChecksContext.Equal<string?>("生产链路: 离线背景是内置图", bundledPath, offlineTheme.Background);
+
+        var patchedGames = ThemePatch.Apply(new[] { prodGame }, prodGame.GameId, offlineTheme);
+        var patchedGame = patchedGames[0];
+        ChecksContext.Equal<ThemeAssetSource?>(
+            "生产链路: 补丁写回 game.Theme 且来源 Bundled",
+            ThemeAssetSource.Bundled,
+            patchedGame.Theme?.Source);
+
+        prodDownloader.Reset();
+        var onlineTheme = prodResolver
+            .ResolveAsync(patchedGame, allowOnlineRefresh: true, CancellationToken.None, forceRefresh: true)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Equal(
+            "生产链路: Bundled 补丁不再短路，官方图胜出",
+            ThemeAssetSource.SteamHero,
+            onlineTheme.Source);
+        ChecksContext.Check(
+            "生产链路: 确实问了 appdetails",
+            prodCovers.CallCount > 0,
+            "covers=" + prodCovers.CallCount);
+        ChecksContext.Check(
+            "生产链路: 确实下载了库页大图",
+            prodDownloader.ConditionalCallCount > 0,
+            "downloads=" + prodDownloader.ConditionalCallCount);
     }
 
     /// <summary>层2 全空、只有颜色的主题，用来模拟 EU5「没有安装目录素材」的现状。</summary>

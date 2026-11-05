@@ -705,16 +705,25 @@ public sealed class ThemeResolver : IThemeResolver
     /// 层2：安装目录主题（只取 game.Theme 本身）。
     /// 内置素材不再在这里补背景——它要排在 Steam 官方库页大图之后，
     /// 由 <see cref="ApplyBundled"/> 在最末兜底，否则 EU5 这类「有内置图、无 metadata」的游戏永远轮不到官方图。
+    /// 另外，离线阶段 <c>ThemeUpdateService</c> 会把内置图经 <see cref="Themes.ThemePatch.Apply"/>
+    /// 打进 <c>game.Theme</c>（来源 Bundled）。那不是真实安装层：若把它当背景返回，
+    /// 联网解析会误判「已有背景」而永久跳过官方图，所以这里剥掉它的背景，交给联网层重新判定；
+    /// 真失败时 <see cref="ApplyBundled"/> 会用同一张内置图补回来，离线显示不受影响。
     /// </summary>
     private static ThemeSpec ResolveInstalledLayer(GameInstallation game)
     {
         var installed = game.Theme;
-        if (installed is not null && HasAnyPath(installed))
+        if (installed is null)
         {
-            return installed;
+            return DefaultThemeSpec();
         }
 
-        return installed ?? DefaultThemeSpec();
+        if (installed.Source == ThemeAssetSource.Bundled)
+        {
+            return installed with { Background = string.Empty };
+        }
+
+        return installed;
     }
 
     /// <summary>

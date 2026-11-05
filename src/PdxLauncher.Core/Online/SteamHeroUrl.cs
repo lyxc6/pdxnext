@@ -25,6 +25,8 @@ public static class SteamHeroUrl
     /// 严格推导：只把结尾的 <c>header.jpg</c> 换成 <c>library_hero.jpg</c>，
     /// 保留 scheme/host/全部路径段与查询串；不是 <c>header.jpg</c> 就返回 null。
     /// 大小写不敏感，输出文件名统一小写。
+    /// <para>仅作契约/测试用：生产路径必须走 <see cref="ForLibraryHero"/>（要丢 hash 段），
+    /// 不要把它接回 <c>ThemeResolver</c>，否则 EU5 这类新布局会 404。</para>
     /// </summary>
     public static string? FromHeaderUrl(string? headerUrl)
     {
@@ -64,6 +66,7 @@ public static class SteamHeroUrl
         }
 
         // 从右往左找 .../steam/apps/<appid>；前缀原样保留，避免把 host/布局写死。
+        // 循环上界是 Length-2，保证 appsIndex+1 永远落在最后一段上（文件名），无需再判越界。
         var appsIndex = -1;
         for (var i = segments.Length - 2; i >= 1; i--)
         {
@@ -75,7 +78,7 @@ public static class SteamHeroUrl
             }
         }
 
-        if (appsIndex < 0 || appsIndex + 1 >= segments.Length || !IsAppId(segments[appsIndex + 1]))
+        if (appsIndex < 0 || !IsAppId(segments[appsIndex + 1]))
         {
             return null;
         }
