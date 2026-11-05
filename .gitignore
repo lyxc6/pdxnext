@@ -15,6 +15,7 @@ publish/
 .backup/
 backup*/
 ui-test-artifacts/
+artifacts/
 
 # 运行时数据（默认在 exe 目录下的 data/，通常已被 bin/ 覆盖，这里再兜底）
 data/

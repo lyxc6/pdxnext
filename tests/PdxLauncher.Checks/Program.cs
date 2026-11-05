@@ -13,13 +13,14 @@ public static class Program
 {
     public static int Main(string[] args)
     {
-        // 自检工程同时充当「假 Steam 宿主」：成就检查类需要验证
-        // ① 调用方取消的传播路径；② loader 崩掉后换候选。这里按 verb 与 --api 路径分支。
-        //   api-check   → 路径含 crash 就模拟 0xC0000005，否则输出 ok
-        //   achievements→ 路径含 crash 就模拟 0xC0000005，含 good 就输出 1 条成就，其余挂住等取消
+        // 自检工程同时充当「假 Steam 宿主」，两条路径按参数分派：
+        //   ① 一次性动词 + --api 路径带 pdxnext-crash / good / initfail / norun 标记 → RunFakeHost：
+        //      用来验证「loader 崩掉后换候选」「环境问题不再换候选」等换候选用例；
+        //   ② 常驻 serve 以及其余不认识的路径 → FakeSteamHost：行为由 PDXNEXT_FAKE_MODE 决定
+        //      （sleep 保持旧用例，ok / ok-delay / crash-first / bad-payload / bad-version / slow-worker）。
         if (args.Length > 0 && string.Equals(args[0], "--steam-host", StringComparison.Ordinal))
         {
-            return RunFakeHost(args);
+            return HasCandidateMarker(args) ? RunFakeHost(args) : FakeSteamHost.Run(args);
         }
 
         // 成就图标性能取样：用真实 CK3 安装目录测「首次全部生成 / 二次全命中」，
@@ -33,18 +34,12 @@ public static class Program
         var root = FindWorkspaceRoot();
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Console.WriteLine("workspace root: " + root);
-        Console.WriteLine();
 
-        // 开发/变异验证时只跑一类检查：--only <类型名子串>，避免每次全量跑几分钟。
-        string? only = null;
-        for (var i = 0; i < args.Length - 1; i++)
-        {
-            if (string.Equals(args[i], "--only", StringComparison.Ordinal))
-            {
-                only = args[i + 1];
-                break;
-            }
-        }
+        // 排查单个检查类时用：PdxLauncher.Checks.exe --only SteamAchievementSessionChecks。
+        // 全套跑一次要十几分钟，定位挂起/慢用例时不必每次全跑。
+        var only = OptionValue(args, "--only");
+        Console.WriteLine(only is null ? "检查范围: 全部" : "检查范围: 名字包含 " + only);
+        Console.WriteLine();
 
         var checks = Discover();
         if (only is not null)
@@ -93,6 +88,32 @@ public static class Program
         }
 
         return failed.Count == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// <c>--api</c> 指向自检临时目录的候选标记（pdxnext-crash / good / initfail / norun）时走
+    /// <see cref="RunFakeHost"/>，其余（尤其是 <c>serve</c>）走按环境变量分派的 <see cref="FakeSteamHost"/>。
+    /// <para>
+    /// 只认 <c>pdxnext-</c> 前缀：仓库目录本身可能叫 <c>steamapi-initfail</c>，宽匹配会把正常用例误判。
+    /// </para>
+    /// </summary>
+    private static bool HasCandidateMarker(string[] args)
+    {
+        for (var i = 0; i + 1 < args.Length; i++)
+        {
+            if (!string.Equals(args[i], "--api", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var api = args[i + 1];
+            return api.Contains("pdxnext-crash", StringComparison.OrdinalIgnoreCase)
+                || api.Contains("pdxnext-good", StringComparison.OrdinalIgnoreCase)
+                || api.Contains("pdxnext-initfail", StringComparison.OrdinalIgnoreCase)
+                || api.Contains("pdxnext-norun", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
     }
 
     private static int RunFakeHost(string[] args)
@@ -198,6 +219,19 @@ public static class Program
         }
 
         return found.OrderBy(x => x.Item1.Name, StringComparer.Ordinal).ToList();
+    }
+
+    private static string? OptionValue(string[] args, string name)
+    {
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (string.Equals(args[i], name, StringComparison.OrdinalIgnoreCase))
+            {
+                return args[i + 1];
+            }
+        }
+
+        return null;
     }
 
     private static string FindWorkspaceRoot()

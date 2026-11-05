@@ -191,6 +191,13 @@
     <Compile Include="..\..\src\PdxLauncher.App\Services\SteamHostClient.cs" Link="Linked\SteamHostClient.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\SteamAchievementSource.cs" Link="Linked\SteamAchievementSource.cs" />
     <!--
+      常驻宿主会话与启动预热。两者都只依赖 Core + System.*，可以原样链接；
+      复用 / 崩溃重启一次 / 回落一次性 / 切游戏去抖全靠 SteamAchievementSessionChecks
+      与 AchievementPrewarmChecks 用「自检 exe 充当假宿主」钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\SteamHostSession.cs" Link="Linked\SteamHostSession.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\AchievementPrewarmService.cs" Link="Linked\AchievementPrewarmService.cs" />
+    <!--
       主页「继续 / 开始游戏」按钮的样式判据。它只认 ThemeAssetSource，不碰 UI 类型，
       所以能原样链接进来。判据错了不会崩，只在真机上表现为「有官方美术的游戏被剥掉了皮肤」
       或「没美术的游戏还画着幽灵按钮」，编译器看不见，因此必须由 HomeButtonStyleChecks 直接测。

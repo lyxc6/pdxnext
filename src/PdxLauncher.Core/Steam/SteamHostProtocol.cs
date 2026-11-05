@@ -79,6 +79,15 @@ public static class SteamHostProtocol
     /// <summary>按 id 读**自己**某个工坊条目的详情（含真实可见性）；配合 <c>--fileid</c> 使用。</summary>
     public const string WorkshopMineDetailVerb = "workshop-mine-detail";
 
+    /// <summary>
+    /// 常驻宿主：进程起一次、<c>SteamAPI_Init</c> 只做一次，之后从 stdin 逐行收命令、往 stdout 逐行回结果。
+    /// <para>
+    /// 与一次性动词共用 <c>--steam-host</c> 入口和 <c>--api</c>/<c>--appid</c> 参数，但生命期由 App 侧
+    /// 的会话对象管理（启动、复用、崩溃重启一次、退出 Kill）。行格式见 <see cref="SteamHostWorkerProtocol"/>。
+    /// </para>
+    /// </summary>
+    public const string ServeVerb = "serve";
+
     /// <summary>结果行的前缀；宿主只往 stdout 写这一行 + 换行。</summary>
     public const string ResultPrefix = "PDXNEXT-STEAM-HOST ";
 
@@ -105,6 +114,7 @@ public static class SteamHostProtocol
         WorkshopBatchVerb,
         WorkshopMineVerb,
         WorkshopMineDetailVerb,
+        ServeVerb,
     };
 
     /// <summary>共享的 JSON 设置：camelCase、忽略 null、不回填只有 getter 的派生属性。</summary>
