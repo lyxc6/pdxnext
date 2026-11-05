@@ -20,7 +20,7 @@ public static class Program
         //      （sleep 保持旧用例，ok / ok-delay / crash-first / bad-payload / bad-version / slow-worker）。
         if (args.Length > 0 && string.Equals(args[0], "--steam-host", StringComparison.Ordinal))
         {
-            return HasCandidateMarker(args) ? RunFakeHost(args) : FakeSteamHost.Run(args);
+            return UseMarkerFakeHost(args) ? RunFakeHost(args) : FakeSteamHost.Run(args);
         }
 
         // 成就图标性能取样：用真实 CK3 安装目录测「首次全部生成 / 二次全命中」，
@@ -96,7 +96,23 @@ public static class Program
     /// <para>
     /// 只认 <c>pdxnext-</c> 前缀：仓库目录本身可能叫 <c>steamapi-initfail</c>，宽匹配会把正常用例误判。
     /// </para>
+    /// <para>
+    /// <c>api-check</c> 一律走 <see cref="RunFakeHost"/>：它只回答「这份 DLL 能不能读成就」，
+    /// 现有用例用路径标记模拟「探测崩溃」；没标记就当合格，让后面的 achievements 真的被调用
+    /// （取消传播的用例就是靠它挂住不返回）。
+    /// </para>
     /// </summary>
+    private static bool UseMarkerFakeHost(string[] args)
+    {
+        if (args.Length > 1
+            && string.Equals(args[1], SteamHostProtocol.ApiCheckVerb, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return HasCandidateMarker(args);
+    }
+
     private static bool HasCandidateMarker(string[] args)
     {
         for (var i = 0; i + 1 < args.Length; i++)
