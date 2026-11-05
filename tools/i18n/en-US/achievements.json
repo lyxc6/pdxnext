@@ -2,6 +2,7 @@
   "achievements.counts": "Unlocked {0} / {1}",
   "achievements.empty.title": "No achievements to show",
   "achievements.hiddenDescription": "Unlocks to reveal the description",
+  "achievements.lastUpdated": "Last updated: {0}",
   "achievements.listName": "Achievement list",
   "achievements.rarity": "{0}% of players unlocked",
   "achievements.status.hidden": "Hidden achievement",

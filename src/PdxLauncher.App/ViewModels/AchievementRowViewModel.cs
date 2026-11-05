@@ -15,11 +15,20 @@ using PdxLauncher.Core.Contracts;
 public sealed class AchievementRowViewModel : LocalizedObservableObject
 {
     private readonly AchievementEntry _entry;
+    private readonly string _iconPath;
 
-    public AchievementRowViewModel(AchievementEntry entry)
+    /// <summary>
+    /// 构造。<paramref name="iconPath"/> 是游戏自带图标的本地路径（见
+    /// <c>AchievementIconResolver</c>）；为空时退回 <see cref="AchievementEntry.IconUrl"/>，
+    /// 再没有就显示占位方块。
+    /// </summary>
+    public AchievementRowViewModel(AchievementEntry entry, string? iconPath = null)
     {
         ArgumentNullException.ThrowIfNull(entry);
         _entry = entry;
+        _iconPath = string.IsNullOrWhiteSpace(iconPath)
+            ? entry.IconUrl ?? string.Empty
+            : iconPath;
     }
 
     public string Id => _entry.Id;
@@ -30,10 +39,10 @@ public sealed class AchievementRowViewModel : LocalizedObservableObject
 
     public bool IsHidden => _entry.IsHidden;
 
-    public string IconUrl => _entry.IconUrl ?? string.Empty;
+    public string IconUrl => _iconPath;
 
     /// <summary>有图标地址时为 true；否则界面显示占位方块。</summary>
-    public bool HasIcon => !string.IsNullOrWhiteSpace(_entry.IconUrl);
+    public bool HasIcon => !string.IsNullOrWhiteSpace(_iconPath);
 
     /// <summary>平台给了稀有度才显示百分比；没有数据时整行隐藏，不显示 0%。</summary>
     public bool HasRarity => _entry.GlobalPercent.HasValue;

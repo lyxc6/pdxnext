@@ -177,6 +177,13 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\AchievementRequestTracker.cs" Link="Linked\AchievementRequestTracker.cs" />
     <!--
+      成就页 ViewModel 只依赖 Core 契约、IconResolver、Cache 与一个「本地化」基类。
+      这里链接真实 VM，并用同名 stub 提供 LocalizedObservableObject/Keys（不引用 WinUI），
+      这样「缓存先渲染 + 后台失败不回滚」可以用 fake IAchievementSource 直接断言。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementsViewModel.cs" Link="Linked\AchievementsViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementRowViewModel.cs" Link="Linked\AchievementRowViewModel.cs" />
+    <!--
       拉起 Steam 宿主子进程的客户端与成就数据源。两者都只依赖 Core + System.*，
       可以原样链接；取消传播口径错了会把「切游戏」写成「Steam 不可用」，由
       SteamAchievementsChecks 用「自检 exe 充当假宿主」的取消用例钉住。

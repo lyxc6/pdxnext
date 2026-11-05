@@ -5,14 +5,15 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:svc="using:PdxLauncher.App.Services"
     xmlns:vm="using:PdxLauncher.App.ViewModels"
-    NavigationCacheMode="Disabled"
+    NavigationCacheMode="Required"
     Background="{ThemeResource PdxPageVeilBrush}">
 
     <!--
         成就页：数据来自 Steam 宿主子进程（SteamAchievementSource），页面不碰原生 API。
         数据可用时展示「已解锁 X / Y」与成就列表；不可用时用明确的空状态说明代替空白页，
         三种原因（未接入 / 连不上 Steam / 确实没有成就）各自独立，不合并成一句「暂无数据」。
-        取数期间显示进度环并把统计置为「—」，不沿用上一款游戏的结论。
+        取数期间显示进度环并把统计置为「—」，不沿用上一款游戏的结论；
+        有磁盘缓存时先把缓存渲染出来，再后台刷新（见 AchievementsViewModel）。
     -->
     <Grid Padding="24" RowSpacing="16">
         <Grid.RowDefinitions>
@@ -40,6 +41,11 @@
                                Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                AutomationProperties.AutomationId="txtAchievementCounts" />
+                    <TextBlock Text="{x:Bind ViewModel.LastUpdatedText, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasLastUpdated), Mode=OneWay}"
+                               AutomationProperties.AutomationId="txtAchievementsUpdated" />
                 </StackPanel>
             </StackPanel>
 
@@ -82,14 +88,20 @@
             </StackPanel>
         </Border>
 
-        <!-- 成就列表：图标（无图时占位方块）/ 名称 / 说明 / 解锁状态 / 稀有度 -->
+        <!--
+            成就列表：图标（无图时占位方块）/ 名称 / 说明 / 解锁状态 / 稀有度。
+            右侧必须给 WinUI 的悬浮滚动条留出固定空白：ListView.Padding 16 + 行内 Padding 16，
+            文字右缘到可视区右缘恒为 32px，滚动条出现/消失都不会压住状态文字，也不会让行内容左右跳动。
+        -->
         <ListView Grid.Row="2"
                   x:Name="AchievementList"
                   ItemsSource="{x:Bind ViewModel.Achievements, Mode=OneWay}"
                   SelectionMode="None"
                   IsItemClickEnabled="False"
+                  Padding="0,0,16,0"
                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                   ScrollViewer.HorizontalScrollMode="Disabled"
+                  ScrollViewer.VerticalScrollBarVisibility="Auto"
                   AutomationProperties.AutomationId="listAchievements"
                   AutomationProperties.Name="{x:Bind L.AchievementsListName, Mode=OneWay}">
             <ListView.ItemContainerStyle>
@@ -102,7 +114,7 @@
             </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="vm:AchievementRowViewModel">
-                    <Grid Padding="12,8" ColumnSpacing="16">
+                    <Grid Padding="0,8,16,8" ColumnSpacing="16">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />

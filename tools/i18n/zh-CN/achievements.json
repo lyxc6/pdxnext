@@ -2,6 +2,7 @@
   "achievements.counts": "已解锁 {0} / {1}",
   "achievements.empty.title": "没有可显示的成就",
   "achievements.hiddenDescription": "解锁后显示说明",
+  "achievements.lastUpdated": "上次更新：{0}",
   "achievements.listName": "成就列表",
   "achievements.rarity": "全球解锁率 {0}%",
   "achievements.status.hidden": "隐藏成就",
