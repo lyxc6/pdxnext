@@ -92,6 +92,9 @@ public sealed class SaveGameScanner : ISaveGameLibrary
             .ToArray();
     }
 
+    /// <inheritdoc />
+    public IReadOnlyList<SaveLocationInfo> GetLocations(string gameId) => _locations.GetLocations(gameId);
+
     private async Task<IReadOnlyList<SaveGameMeta>> ScanCoreAsync(
         IReadOnlyList<string> gameIds,
         CancellationToken cancellationToken)
@@ -146,7 +149,18 @@ public sealed class SaveGameScanner : ISaveGameLibrary
             .ThenBy(static meta => meta.FileName, StringComparer.Ordinal)
             .ThenBy(static meta => meta.FilePath, StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        _snapshot = Array.AsReadOnly(ordered);
+
+        // 按 gameId 合并：本次扫描到的游戏整体替换（扫描为空也要清掉旧结果），
+        // 未参与本次扫描的游戏继续保留上一次结果。
+        var scanned = new HashSet<string>(gameIds, StringComparer.OrdinalIgnoreCase);
+        var merged = _snapshot
+            .Where(meta => !scanned.Contains(meta.GameId))
+            .Concat(ordered)
+            .OrderBy(static meta => meta.GameId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static meta => meta.FileName, StringComparer.Ordinal)
+            .ThenBy(static meta => meta.FilePath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        _snapshot = Array.AsReadOnly(merged);
         return _snapshot;
     }
 
@@ -172,6 +186,7 @@ public sealed class SaveGameScanner : ISaveGameLibrary
 
         foreach (var file in _fileSystem.EnumerateFiles(directory, "*", false))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (candidates.Count >= _maxFiles)
             {
                 truncated = true;

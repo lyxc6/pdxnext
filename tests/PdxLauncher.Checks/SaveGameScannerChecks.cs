@@ -30,10 +30,12 @@ public static class SaveGameScannerChecks
             CheckMissingDirectory(fs, scanner, catalog, documents);
             CheckVictoria3Scan(fs, logger, catalog, reader, documents);
             CheckStellarisDepth(fs, reader, catalog, documents);
+            CheckSnapshotMerge(fs, logger, catalog, reader);
             CheckCs2Scan(fs, reader, catalog, localAppDataLow);
             CheckCs1Scan(fs, reader, catalog, localAppData);
             CheckCap(fs, logger, catalog, reader, documents);
             CheckCancellation(fs, logger, catalog, reader);
+            CheckCancellationDuringScan(fs, logger, catalog, reader, documents);
         }
         finally
         {
@@ -58,6 +60,14 @@ public static class SaveGameScannerChecks
     {
         Console.WriteLine("[SaveGameScannerChecks] 目录不存在返回空集合");
         ChecksContext.Equal("未建目录时 Resolve 为空", 0, catalog.Resolve("ck3").Count);
+        var missing = catalog.GetLocations("ck3");
+        ChecksContext.Equal("未建目录时 GetLocations 仍登记一条", 1, missing.Count);
+        ChecksContext.Check("未建目录时 Exists=false", missing.Count == 1 && !missing[0].Exists);
+        ChecksContext.Equal(
+            "CK3 落点来源为 Documents",
+            SaveLocationSource.Documents,
+            missing.Count > 0 ? missing[0].Source : SaveLocationSource.LocalAppData);
+        ChecksContext.Equal("未登记的游戏 GetLocations 为空", 0, catalog.GetLocations("no_such_game").Count);
         var metas = Await(scanner.ScanAsync(["ck3"], CancellationToken.None));
         ChecksContext.Equal("未建目录时扫描为空", 0, metas.Count);
         ChecksContext.Equal("未扫描的游戏按游戏取为空", 0, scanner.GetByGame("ck3").Count);
@@ -129,6 +139,24 @@ public static class SaveGameScannerChecks
         ChecksContext.Equal("Stellaris 落点深度为 2", 2, catalog.Resolve("stellaris")[0].MaxDepth);
     }
 
+    private static void CheckSnapshotMerge(
+        IFileSystem fs,
+        NullLogger logger,
+        SaveLocationCatalog catalog,
+        SavContainerReader reader)
+    {
+        Console.WriteLine("[SaveGameScannerChecks] 分次扫描按 gameId 合并快照");
+        var scanner = new SaveGameScanner(fs, logger, catalog, reader);
+        var v3 = Await(scanner.ScanAsync(["victoria3"], CancellationToken.None));
+        ChecksContext.Equal("先扫 Victoria 3", 3, v3.Count);
+
+        var merged = Await(scanner.ScanAsync(["stellaris"], CancellationToken.None));
+        ChecksContext.Equal("合并快照保留未参与本次扫描的游戏", 5, merged.Count);
+        ChecksContext.Equal("合并后 Victoria 3 仍在", 3, scanner.GetByGame("victoria3").Count);
+        ChecksContext.Equal("合并后 Stellaris 为 2", 2, scanner.GetByGame("stellaris").Count);
+        ChecksContext.Equal("GetAll 与合并结果一致", merged.Count, scanner.GetAll().Count);
+    }
+
     private static void CheckCs2Scan(
         IFileSystem fs,
         SavContainerReader reader,
@@ -172,7 +200,8 @@ public static class SaveGameScannerChecks
         ChecksContext.Equal("CS1 .crp 按文件名收录", 1, metas.Count);
         var first = metas.Count > 0 ? metas[0] : null;
         ChecksContext.Equal("CS1 中文存档名", "我的城市", first?.SaveName ?? "<none>");
-        ChecksContext.Equal("CS1 按文件名解析仍为 Ok", SaveParseState.Ok, first?.ParseState ?? SaveParseState.Degraded);
+        ChecksContext.Equal("CS1 没有元数据时为 Degraded", SaveParseState.Degraded, first?.ParseState ?? SaveParseState.Ok);
+        ChecksContext.Check("CS1 降级原因非空", !string.IsNullOrWhiteSpace(first?.DegradeReason), first?.DegradeReason);
         ChecksContext.Equal("CS1 落点深度为 0", 0, catalog.Resolve("cities_skylines")[0].MaxDepth);
     }
 
@@ -202,6 +231,41 @@ public static class SaveGameScannerChecks
         ChecksContext.Check("预取消的 token 让扫描任务直接 Canceled", canceled.IsCanceled);
     }
 
+    private static void CheckCancellationDuringScan(
+        IFileSystem fs,
+        NullLogger logger,
+        SaveLocationCatalog catalog,
+        SavContainerReader reader,
+        string documents)
+    {
+        Console.WriteLine("[SaveGameScannerChecks] 扫描途中取消");
+        var directory = Path.Combine(documents, "Paradox Interactive", "Europa Universalis V", "save games");
+        fs.EnsureDirectory(directory);
+        for (var index = 0; index < 60; index++)
+        {
+            WriteText(fs, Path.Combine(directory, "bulk_" + index.ToString("00", System.Globalization.CultureInfo.InvariantCulture) + ".eu5"), "SAV0\n");
+        }
+
+        using var cancellation = new CancellationTokenSource();
+        var cancelingFileSystem = new CancelAfterFileSystem(fs, cancellation, cancelAfter: 5);
+        var scanner = new SaveGameScanner(cancelingFileSystem, logger, catalog, reader);
+        var task = scanner.ScanAsync(["eu5"], cancellation.Token);
+
+        var canceled = false;
+        try
+        {
+            task.GetAwaiter().GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            canceled = true;
+        }
+
+        ChecksContext.Check("扫描途中取消按契约抛 OperationCanceledException", canceled);
+        ChecksContext.Check("扫描途中取消后任务为 Canceled", task.IsCanceled);
+        ChecksContext.Equal("取消的扫描不发布半成品快照", 0, scanner.GetAll().Count);
+    }
+
     private static IReadOnlyList<SaveGameMeta> Await(Task<IReadOnlyList<SaveGameMeta>> task)
     {
         // 自检入口是同步签名（Program.cs 只认 static int Run(IFileSystem)），
@@ -210,6 +274,72 @@ public static class SaveGameScannerChecks
     }
 
     private static void WriteText(IFileSystem fs, string path, string text) => fs.WriteAllTextAtomic(path, text);
+
+    /// <summary>枚举到第 N 个文件时触发取消，用来模拟「扫描途中取消」。</summary>
+    private sealed class CancelAfterFileSystem : IFileSystem
+    {
+        private readonly IFileSystem _inner;
+        private readonly CancellationTokenSource _cancellation;
+        private readonly int _cancelAfter;
+
+        public CancelAfterFileSystem(IFileSystem inner, CancellationTokenSource cancellation, int cancelAfter)
+        {
+            _inner = inner;
+            _cancellation = cancellation;
+            _cancelAfter = cancelAfter;
+        }
+
+        public IEnumerable<string> EnumerateFiles(string directory, string searchPattern, bool recursive)
+        {
+            var count = 0;
+            foreach (var file in _inner.EnumerateFiles(directory, searchPattern, recursive))
+            {
+                count++;
+                if (count >= _cancelAfter && !_cancellation.IsCancellationRequested)
+                {
+                    _cancellation.Cancel();
+                }
+
+                yield return file;
+            }
+        }
+
+        public bool FileExists(string path) => _inner.FileExists(path);
+
+        public long GetFileSize(string path) => _inner.GetFileSize(path);
+
+        public bool DirectoryExists(string path) => _inner.DirectoryExists(path);
+
+        public string ReadAllText(string path) => _inner.ReadAllText(path);
+
+        public byte[] ReadAllBytes(string path) => _inner.ReadAllBytes(path);
+
+        public Stream OpenRead(string path) => _inner.OpenRead(path);
+
+        public void WriteAllBytesAtomic(string path, ReadOnlySpan<byte> data) => _inner.WriteAllBytesAtomic(path, data);
+
+        public void WriteAllTextAtomic(string path, string text) => _inner.WriteAllTextAtomic(path, text);
+
+        public IEnumerable<string> EnumerateDirectories(string directory) => _inner.EnumerateDirectories(directory);
+
+        public string Combine(params string[] parts) => _inner.Combine(parts);
+
+        public string GetFullPath(string path) => _inner.GetFullPath(path);
+
+        public string? GetDirectoryName(string path) => _inner.GetDirectoryName(path);
+
+        public string GetFileName(string path) => _inner.GetFileName(path);
+
+        public void EnsureDirectory(string path) => _inner.EnsureDirectory(path);
+
+        public void Delete(string path) => _inner.Delete(path);
+
+        public void Copy(string source, string destination, bool overwrite) => _inner.Copy(source, destination, overwrite);
+
+        public void Move(string source, string destination, bool overwrite) => _inner.Move(source, destination, overwrite);
+
+        public void MoveDirectory(string source, string destination) => _inner.MoveDirectory(source, destination);
+    }
 
     private sealed class NullLogger : IAppLogger
     {

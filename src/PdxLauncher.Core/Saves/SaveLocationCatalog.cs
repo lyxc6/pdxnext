@@ -83,6 +83,30 @@ public sealed class SaveLocationCatalog
         ];
     }
 
+    /// <summary>
+    /// 返回某个游戏登记过的存档落点及其是否存在；未登记时返回空集合。
+    /// <para>与 <see cref="Resolve"/> 的区别：目录不存在时仍返回一条 <c>Exists=false</c> 的记录，
+    /// 供备份层区分「该游戏没有存档目录」与「目录还没出现」。</para>
+    /// </summary>
+    /// <param name="gameId">游戏 id（大小写不敏感，别名会归一）。</param>
+    public IReadOnlyList<SaveLocationInfo> GetLocations(string gameId)
+    {
+        var canonical = KnownGames.CanonicalizeGameId(gameId);
+        if (canonical.Length == 0 || !_definitions.TryGetValue(canonical, out var definition))
+        {
+            return [];
+        }
+
+        return
+        [
+            new SaveLocationInfo(
+                definition.GameId,
+                definition.Directory,
+                _fileSystem.DirectoryExists(definition.Directory),
+                definition.Source),
+        ];
+    }
+
     private Dictionary<string, SaveLocationDefinition> BuildDefinitions()
     {
         var definitions = new Dictionary<string, SaveLocationDefinition>(StringComparer.OrdinalIgnoreCase);
@@ -94,6 +118,7 @@ public sealed class SaveLocationCatalog
             _fileSystem.Combine(paradox, "Crusader Kings III", SaveGamesFolder),
             0,
             SaveContainer.TextMeta,
+            SaveLocationSource.Documents,
             [".ck3"]);
         Add(
             definitions,
@@ -101,6 +126,7 @@ public sealed class SaveLocationCatalog
             _fileSystem.Combine(paradox, "Victoria 3", SaveGamesFolder),
             0,
             SaveContainer.BinaryToken,
+            SaveLocationSource.Documents,
             [".v3"]);
         Add(
             definitions,
@@ -108,6 +134,7 @@ public sealed class SaveLocationCatalog
             _fileSystem.Combine(paradox, "Europa Universalis V", SaveGamesFolder),
             0,
             SaveContainer.BinaryToken,
+            SaveLocationSource.Documents,
             [".eu5"]);
         Add(
             definitions,
@@ -115,6 +142,7 @@ public sealed class SaveLocationCatalog
             _fileSystem.Combine(paradox, "Stellaris", SaveGamesFolder),
             2,
             SaveContainer.ZipMeta,
+            SaveLocationSource.Documents,
             [".sav"]);
         Add(
             definitions,
@@ -126,6 +154,7 @@ public sealed class SaveLocationCatalog
                 "Saves"),
             1,
             SaveContainer.Colossal,
+            SaveLocationSource.LocalAppDataLow,
             [".cok"]);
         Add(
             definitions,
@@ -137,6 +166,7 @@ public sealed class SaveLocationCatalog
                 "Saves"),
             0,
             SaveContainer.Colossal,
+            SaveLocationSource.LocalAppData,
             [".crp"]);
 
         return definitions;
@@ -148,9 +178,10 @@ public sealed class SaveLocationCatalog
         string directory,
         int maxDepth,
         SaveContainer container,
+        SaveLocationSource source,
         string[] extensions)
     {
-        definitions[gameId] = new SaveLocationDefinition(gameId, directory, maxDepth, extensions, container);
+        definitions[gameId] = new SaveLocationDefinition(gameId, directory, maxDepth, extensions, container, source);
     }
 
     private static string ResolveLocalAppDataLow(string localAppDataDirectory)
@@ -172,5 +203,6 @@ public sealed class SaveLocationCatalog
         string Directory,
         int MaxDepth,
         IReadOnlyList<string> Extensions,
-        SaveContainer Container);
+        SaveContainer Container,
+        SaveLocationSource Source);
 }

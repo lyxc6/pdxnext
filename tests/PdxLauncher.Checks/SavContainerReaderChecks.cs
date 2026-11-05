@@ -2,6 +2,7 @@ namespace PdxLauncher.Checks;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Saves;
+using System.IO.Compression;
 
 /// <summary>
 /// 自检：存档容器头解析。用 <c>tests/fixtures/saves</c> 里自造的小样本钉住
@@ -21,9 +22,12 @@ public static class SavContainerReaderChecks
 
         CheckCk3(fs, reader);
         CheckVictoria3(reader);
+        CheckVictoria3ZipNamedSave(fs, reader);
+        CheckVictoria3ZipWithoutMeta(fs, reader);
         CheckEu5(reader);
         CheckStellaris(reader);
         CheckCs2(reader);
+        CheckCs2TopLevelVersionWins(fs, reader);
         CheckCorrupt(reader);
         CheckBoundedRead(fs, reader);
         CheckMissingFile(fs, reader);
@@ -63,6 +67,103 @@ public static class SavContainerReaderChecks
         ChecksContext.Equal("V3 文件名中文原样保留", "大不列颠_1850_06_18.v3", meta.FileName);
     }
 
+    private static void CheckVictoria3ZipNamedSave(IFileSystem fs, SavContainerReader reader)
+    {
+        Console.WriteLine("[SavContainerReaderChecks] Victoria 3 命名档 = SAV0 + zip(meta=token)");
+
+        // 合成样本：SAV0 + id + \n + zip；meta 里是 Jomini token 流。绝不使用玩家真实存档。
+        var root = PlaysetChecks.CreateTempRoot(fs, "saves-v3zip");
+        try
+        {
+            var path = Path.Combine(root, "合成战役_1848_03_02.v3");
+            fs.WriteAllBytesAtomic(path, BuildV3ZipSave("meta"));
+
+            var meta = reader.Parse("victoria3", path, SaveContainer.BinaryToken);
+            ChecksContext.Equal("V3 zip 容器", SaveContainer.BinaryToken, meta.Container);
+            ChecksContext.Equal("V3 zip 解析状态", SaveParseState.Ok, meta.ParseState);
+            ChecksContext.Equal("V3 zip 版本来自 meta token", "1.99.0", meta.GameVersion ?? "<null>");
+            ChecksContext.Equal("V3 zip 存档名来自 meta token", "合成战役", meta.SaveName ?? "<null>");
+            ChecksContext.Equal("V3 zip 游戏内日期来自 meta token", "1848.03.02", meta.GameDate ?? "<null>");
+        }
+        finally
+        {
+            PlaysetChecks.TryDelete(fs, root);
+        }
+    }
+
+    private static void CheckVictoria3ZipWithoutMeta(IFileSystem fs, SavContainerReader reader)
+    {
+        Console.WriteLine("[SavContainerReaderChecks] Victoria 3 zip 缺少 meta 时降级");
+        var root = PlaysetChecks.CreateTempRoot(fs, "saves-v3zip-empty");
+        try
+        {
+            var path = Path.Combine(root, "无元数据_1848_03_02.v3");
+            fs.WriteAllBytesAtomic(path, BuildV3ZipSave(entryName: null));
+
+            var meta = reader.Parse("victoria3", path, SaveContainer.BinaryToken);
+            ChecksContext.Equal("缺少 meta 的样本档降级", SaveParseState.Degraded, meta.ParseState);
+            ChecksContext.Check("缺少 meta 时记录原因", !string.IsNullOrWhiteSpace(meta.DegradeReason), meta.DegradeReason);
+            ChecksContext.Equal("降级仍用文件名日期", "1848.03.02", meta.GameDate ?? "<null>");
+        }
+        finally
+        {
+            PlaysetChecks.TryDelete(fs, root);
+        }
+    }
+
+    private static byte[] BuildV3ZipSave(string? entryName)
+    {
+        using var body = new MemoryStream();
+        using (var archive = new ZipArchive(body, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var gamestate = archive.CreateEntry("gamestate", CompressionLevel.NoCompression);
+            using (var gamestateStream = gamestate.Open())
+            {
+                gamestateStream.Write([0x00, 0x01, 0x02, 0x03]);
+            }
+
+            if (entryName is not null)
+            {
+                var meta = archive.CreateEntry(entryName, CompressionLevel.NoCompression);
+                using var metaStream = meta.Open();
+                metaStream.Write(BuildV3MetaTokenStream());
+            }
+        }
+
+        var header = System.Text.Encoding.ASCII.GetBytes("SAV0synthetic-save-id\n");
+        var zip = body.ToArray();
+        var result = new byte[header.Length + zip.Length];
+        header.CopyTo(result, 0);
+        zip.CopyTo(result, header.Length);
+        return result;
+    }
+
+    private static byte[] BuildV3MetaTokenStream()
+    {
+        using var stream = new MemoryStream();
+        WriteUInt16(stream, 0x0003); // OPEN（深度 1，只有这一层的字符串会被采集）
+        WriteUInt16(stream, 0x1234); // 普通键
+        WriteTokenString(stream, "1.99.0");
+        WriteUInt16(stream, 0x1235);
+        WriteTokenString(stream, "1848.03.02 - 合成战役");
+        WriteUInt16(stream, 0x0004); // CLOSE
+        return stream.ToArray();
+    }
+
+    private static void WriteTokenString(Stream stream, string value)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(value);
+        WriteUInt16(stream, 0x000f);
+        WriteUInt16(stream, (ushort)bytes.Length);
+        stream.Write(bytes);
+    }
+
+    private static void WriteUInt16(Stream stream, ushort value)
+    {
+        stream.WriteByte((byte)(value & 0xFF));
+        stream.WriteByte((byte)(value >> 8));
+    }
+
     private static void CheckEu5(SavContainerReader reader)
     {
         Console.WriteLine("[SavContainerReaderChecks] EU5 二进制 token");
@@ -95,15 +196,62 @@ public static class SavContainerReaderChecks
 
     private static void CheckCs2(SavContainerReader reader)
     {
-        Console.WriteLine("[SavContainerReaderChecks] CS2 .cok zip");
+        Console.WriteLine("[SavContainerReaderChecks] CS2 .cok zip（JSON 顶层元数据）");
         var path = FixturePath("cs2/阿伦德尔 2.cok");
         var meta = reader.Parse("cities_skylines_2", path, SaveContainer.Colossal);
 
         ChecksContext.Equal("CS2 容器", SaveContainer.Colossal, meta.Container);
         ChecksContext.Equal("CS2 解析状态", SaveParseState.Ok, meta.ParseState);
         ChecksContext.Equal("CS2 存档名含中文与空格", "阿伦德尔 2", meta.SaveName ?? "<null>");
-        ChecksContext.Equal("CS2 日期", "2024.10.01", meta.GameDate ?? "<null>");
-        ChecksContext.Equal("CS2 版本", "1.1.2f1", meta.GameVersion ?? "<null>");
+        ChecksContext.Equal("CS2 日期来自 simulationDate", "2024.10.01", meta.GameDate ?? "<null>");
+        ChecksContext.Check("CS2 不从 modsEnabled 取版本", meta.GameVersion is null, meta.GameVersion);
+    }
+
+    private static void CheckCs2TopLevelVersionWins(IFileSystem fs, SavContainerReader reader)
+    {
+        Console.WriteLine("[SavContainerReaderChecks] CS2 顶层版本优先于 modsEnabled 干扰项");
+        var root = PlaysetChecks.CreateTempRoot(fs, "saves-cs2-json");
+        try
+        {
+            var path = Path.Combine(root, "顶层版本.cok");
+            const string json = """
+                {
+                  "cityName": "顶层版本",
+                  "version": "9.9.9f1",
+                  "simulationDate": { "year": 2030, "month": 1, "day": 2 },
+                  "modsEnabled": [
+                    "Decoy, Version=0.8.3.0, Culture=neutral, PublicKeyToken=null"
+                  ]
+                }
+                """;
+            fs.WriteAllBytesAtomic(path, BuildCokZip("顶层版本.SaveGameMetadata", json));
+
+            var meta = reader.Parse("cities_skylines_2", path, SaveContainer.Colossal);
+            ChecksContext.Equal("CS2 顶层版本优先", "9.9.9f1", meta.GameVersion ?? "<null>");
+            ChecksContext.Equal("CS2 顶层日期", "2030.01.02", meta.GameDate ?? "<null>");
+            ChecksContext.Check(
+                "CS2 版本不带 mods 的逗号尾巴",
+                meta.GameVersion is not null && !meta.GameVersion.Contains(','),
+                meta.GameVersion);
+        }
+        finally
+        {
+            PlaysetChecks.TryDelete(fs, root);
+        }
+    }
+
+    private static byte[] BuildCokZip(string entryName, string json)
+    {
+        using var body = new MemoryStream();
+        using (var archive = new ZipArchive(body, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entry = archive.CreateEntry(entryName, CompressionLevel.NoCompression);
+            using var stream = entry.Open();
+            stream.Write([0xEF, 0xBB, 0xBF]);
+            stream.Write(System.Text.Encoding.UTF8.GetBytes(json));
+        }
+
+        return body.ToArray();
     }
 
     private static void CheckCorrupt(SavContainerReader reader)

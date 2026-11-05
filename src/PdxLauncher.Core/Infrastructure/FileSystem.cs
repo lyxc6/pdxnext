@@ -37,6 +37,14 @@ public sealed class FileSystem : Abstractions.IFileSystem
 
     public byte[] ReadAllBytes(string path) => File.ReadAllBytes(path);
 
+    public Stream OpenRead(string path) => new FileStream(
+        path,
+        FileMode.Open,
+        FileAccess.Read,
+        FileShare.ReadWrite | FileShare.Delete,
+        bufferSize: 4096,
+        FileOptions.None);
+
     public void WriteAllBytesAtomic(string path, ReadOnlySpan<byte> data)
     {
         ArgumentNullException.ThrowIfNull(path);

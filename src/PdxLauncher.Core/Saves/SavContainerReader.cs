@@ -3,6 +3,7 @@ namespace PdxLauncher.Core.Saves;
 using System.Globalization;
 using System.IO.Compression;
 using System.Text;
+using System.Text.Json;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Games;
 
@@ -147,12 +148,15 @@ public sealed class SavContainerReader
         var version = GetFirst(values, "version");
         var gameDate = GetFirst(values, "meta_date", "date");
         var playerName = GetFirst(values, "meta_player_name", "player_name");
-        var saveName = GetFirst(values, "meta_title_name", "meta_save_name", "name", "title") ?? stem;
+        var metaName = GetFirst(values, "meta_title_name", "meta_save_name", "name", "title");
+        var saveName = metaName ?? stem;
         var country = GetFirst(values, "meta_country", "meta_player_country", "country");
         var isIronman = IsTruthy(GetFirst(values, "ironman"));
 
-        var state = version is not null || gameDate is not null ? SaveParseState.Ok : SaveParseState.Degraded;
-        var degradeReason = state == SaveParseState.Ok ? null : "meta_data 中没有 version/meta_date";
+        var hasMetadata = version is not null || gameDate is not null || metaName is not null ||
+                          playerName is not null || country is not null || isIronman;
+        var state = hasMetadata ? SaveParseState.Ok : SaveParseState.Degraded;
+        var degradeReason = state == SaveParseState.Ok ? null : "meta_data 中没有可展示字段";
 
         return new SaveGameMeta(
             filePath,
@@ -189,7 +193,32 @@ public sealed class SavContainerReader
             return CreateFallback(gameId, filePath, fileName, stem, SaveContainer.BinaryToken, fileSize, lastWrite, reason);
         }
 
-        var strings = ReadTopLevelStrings(prefix, bodyStart);
+        // Victoria 3 的「命名存档」在 SAV0 头之后是 zip（SAV0 + id + \n + PK\x03\x04），
+        // 元数据在 meta 条目里仍是 Jomini token 流；autosave 才是裸 token 流。
+        List<string> strings;
+        if (IsZipHeader(prefix, bodyStart))
+        {
+            var metaBytes = TryReadZipEntry(filePath, IsMetadataEntry, bodyStart);
+            if (metaBytes is null)
+            {
+                return CreateFallback(
+                    gameId,
+                    filePath,
+                    fileName,
+                    stem,
+                    SaveContainer.BinaryToken,
+                    fileSize,
+                    lastWrite,
+                    "SAV0 后的 zip 中没有 meta/metadata 条目");
+            }
+
+            strings = ReadTopLevelStrings(metaBytes, 0);
+        }
+        else
+        {
+            strings = ReadTopLevelStrings(prefix, bodyStart);
+        }
+
         if (strings.Count == 0)
         {
             return CreateFallback(
@@ -252,6 +281,9 @@ public sealed class SavContainerReader
             }
         }
 
+        var hasMetadata = version is not null || name is not null || date is not null ||
+                          playerName is not null || country is not null;
+
         var saveName = name ?? playerName ?? stem;
         if (date is null && TrySplitFileDate(stem, out var fileBaseName, out var fileDate))
         {
@@ -262,8 +294,8 @@ public sealed class SavContainerReader
             }
         }
 
-        var state = version is not null || name is not null ? SaveParseState.Ok : SaveParseState.Degraded;
-        var degradeReason = state == SaveParseState.Ok ? null : "二进制元数据中没有可识别的版本/日期";
+        var state = hasMetadata ? SaveParseState.Ok : SaveParseState.Degraded;
+        var degradeReason = state == SaveParseState.Ok ? null : "二进制元数据中没有可展示字段";
 
         return new SaveGameMeta(
             filePath,
@@ -430,15 +462,16 @@ public sealed class SavContainerReader
         var values = ParseKeyValuePairs(Encoding.UTF8.GetString(metaBytes));
         var version = GetFirst(values, "version");
         var gameDate = GetFirst(values, "date", "game_date");
-        var saveName = GetFirst(values, "name", "save_name") ?? stem;
+        var metaName = GetFirst(values, "name", "save_name");
+        var saveName = metaName ?? stem;
         var playerName = GetFirst(values, "player_name", "player");
         var country = GetFirst(values, "country", "player_country");
         var isIronman = IsTruthy(GetFirst(values, "ironman"));
 
-        var state = version is not null || gameDate is not null || !string.Equals(saveName, stem, StringComparison.Ordinal)
-            ? SaveParseState.Ok
-            : SaveParseState.Degraded;
-        var degradeReason = state == SaveParseState.Ok ? null : "meta 条目里没有 name/date/version";
+        var hasMetadata = version is not null || gameDate is not null || metaName is not null ||
+                          playerName is not null || country is not null || isIronman;
+        var state = hasMetadata ? SaveParseState.Ok : SaveParseState.Degraded;
+        var degradeReason = state == SaveParseState.Ok ? null : "meta 条目里没有可展示字段";
 
         return new SaveGameMeta(
             filePath,
@@ -465,44 +498,178 @@ public sealed class SavContainerReader
         long fileSize,
         DateTimeOffset lastWrite)
     {
-        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string? metaName = null;
+        string? gameDate = null;
+        string? version = null;
+        string? playerName = null;
+        string? country = null;
+        var isIronman = false;
+        string? degradeReason;
+
         if (string.Equals(Path.GetExtension(filePath), ".cok", StringComparison.OrdinalIgnoreCase))
         {
-            var metaBytes = TryReadZipEntry(
-                filePath,
-                static entryName => Path.GetFileName(entryName).Contains("meta", StringComparison.OrdinalIgnoreCase));
-            if (metaBytes is not null)
+            // CS2 的 SaveGameMetadata 是 JSON；只认顶层字段，绝不去 modsEnabled 里找版本。
+            var metaBytes = TryReadZipEntry(filePath, IsColossalMetadataEntry);
+            if (metaBytes is null)
             {
-                values = ParseKeyValuePairs(Encoding.UTF8.GetString(metaBytes));
+                degradeReason = "zip 中没有 SaveGameMetadata 条目";
+            }
+            else if (TryParseColossalMetadata(metaBytes, out metaName, out gameDate, out version, out playerName, out country, out isIronman))
+            {
+                degradeReason = null;
+            }
+            else
+            {
+                degradeReason = "SaveGameMetadata 不是可解析的 JSON";
             }
         }
+        else
+        {
+            degradeReason = "CS1 .crp 容器不含可读元数据";
+        }
 
-        var saveName = GetFirst(values, "name", "saveName", "cityName", "city_name") ?? stem;
-        var gameDate = GetFirst(values, "date", "gameDate", "game_date");
-        var version = GetFirst(values, "version");
-        var playerName = GetFirst(values, "playerName", "player_name");
-        var country = GetFirst(values, "cityName", "city_name");
+        var hasMetadata = metaName is not null || gameDate is not null || version is not null ||
+                          playerName is not null || country is not null || isIronman;
+        var state = hasMetadata ? SaveParseState.Ok : SaveParseState.Degraded;
+        if (state == SaveParseState.Degraded && degradeReason is null)
+        {
+            degradeReason = "元数据中没有可展示字段";
+        }
 
         return new SaveGameMeta(
             filePath,
             fileName,
             gameId,
             SaveContainer.Colossal,
-            saveName,
+            metaName ?? stem,
             gameDate,
             version,
             playerName,
-            IsTruthy(GetFirst(values, "ironman")),
+            isIronman,
             country,
             fileSize,
             lastWrite,
-            SaveParseState.Ok,
-            null);
+            state,
+            state == SaveParseState.Ok ? null : degradeReason);
     }
 
-    private static byte[]? TryReadZipEntry(string path, Func<string, bool> predicate)
+    private static bool IsMetadataEntry(string entryName)
     {
-        using var archive = ZipFile.OpenRead(path);
+        var name = Path.GetFileName(entryName);
+        return string.Equals(name, "meta", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(name, "metadata", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsColossalMetadataEntry(string entryName)
+    {
+        var name = Path.GetFileName(entryName);
+        return name.EndsWith(".SaveGameMetadata", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(name, "metadata", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(name, "meta", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryParseColossalMetadata(
+        byte[] data,
+        out string? saveName,
+        out string? gameDate,
+        out string? version,
+        out string? playerName,
+        out string? country,
+        out bool isIronman)
+    {
+        saveName = null;
+        gameDate = null;
+        version = null;
+        playerName = null;
+        country = null;
+        isIronman = false;
+
+        var offset = data.Length >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF ? 3 : 0;
+        try
+        {
+            using var document = JsonDocument.Parse(data.AsMemory(offset));
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            var root = document.RootElement;
+            saveName = ReadJsonString(root, "cityName", "saveName", "name", "city_name", "save_name");
+            version = ReadJsonString(root, "version", "gameVersion", "game_version");
+            playerName = ReadJsonString(root, "playerName", "player_name");
+            country = ReadJsonString(root, "country", "player_country") ?? saveName;
+            isIronman = ReadJsonBoolean(root, "ironman");
+            gameDate = ReadJsonString(root, "date", "gameDate", "game_date") ?? ReadSimulationDate(root);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string? ReadJsonString(JsonElement element, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String)
+            {
+                var text = value.GetString();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    return text.Trim();
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static bool ReadJsonBoolean(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var value))
+        {
+            return false;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.String => IsTruthy(value.GetString()),
+            JsonValueKind.Number => value.TryGetInt32(out var number) && number != 0,
+            _ => false,
+        };
+    }
+
+    private static string? ReadSimulationDate(JsonElement root)
+    {
+        if (!root.TryGetProperty("simulationDate", out var date) || date.ValueKind != JsonValueKind.Object ||
+            !TryGetJsonInt(date, "year", out var year) || !TryGetJsonInt(date, "month", out var month))
+        {
+            return null;
+        }
+
+        var yearText = year.ToString(CultureInfo.InvariantCulture);
+        var monthText = month.ToString("00", CultureInfo.InvariantCulture);
+        return TryGetJsonInt(date, "day", out var day)
+            ? yearText + "." + monthText + "." + day.ToString("00", CultureInfo.InvariantCulture)
+            : yearText + "." + monthText;
+    }
+
+    private static bool TryGetJsonInt(JsonElement element, string name, out int value)
+    {
+        value = 0;
+        return element.TryGetProperty(name, out var property) &&
+               property.ValueKind == JsonValueKind.Number &&
+               property.TryGetInt32(out value);
+    }
+
+    private byte[]? TryReadZipEntry(string path, Func<string, bool> predicate, long startOffset = 0)
+    {
+        using var stream = _fileSystem.OpenRead(path);
+        using var archive = startOffset == 0
+            ? new ZipArchive(stream, ZipArchiveMode.Read)
+            : new ZipArchive(new SegmentStream(stream, startOffset), ZipArchiveMode.Read);
         var inspected = 0;
         foreach (var entry in archive.Entries)
         {
@@ -517,8 +684,8 @@ public sealed class SavContainerReader
                 continue;
             }
 
-            using var stream = entry.Open();
-            return ReadBounded(stream, MaxZipMetaBytes);
+            using var entryStream = entry.Open();
+            return ReadBounded(entryStream, MaxZipMetaBytes);
         }
 
         return null;
@@ -958,15 +1125,9 @@ public sealed class SavContainerReader
         }
     }
 
-    private static byte[] ReadPrefix(string path)
+    private byte[] ReadPrefix(string path)
     {
-        using var stream = new FileStream(
-            path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite | FileShare.Delete,
-            bufferSize: 4096,
-            FileOptions.SequentialScan);
+        using var stream = _fileSystem.OpenRead(path);
         var available = (int)Math.Min(MaxHeaderBytes, stream.Length);
         var buffer = new byte[available];
         var read = 0;
@@ -982,6 +1143,80 @@ public sealed class SavContainerReader
         }
 
         return read == available ? buffer : buffer[..read];
+    }
+
+    private static bool IsZipHeader(byte[] data, int offset) =>
+        offset >= 0 && offset + 4 <= data.Length &&
+        data[offset] == (byte)'P' && data[offset + 1] == (byte)'K' &&
+        data[offset + 2] == 0x03 && data[offset + 3] == 0x04;
+
+    /// <summary>
+    /// 把「从 offset 到文件尾」的一段包装成从 0 开始的流。
+    /// <para>zip 的内嵌偏移会破坏 <see cref="ZipArchive"/> 对中央目录的定位，
+    /// 必须先把 SAV0 头切掉再交给它；不能整段复制，<c>gamestate</c> 可能有数百 MB。</para>
+    /// </summary>
+    private sealed class SegmentStream : Stream
+    {
+        private readonly Stream _inner;
+        private readonly long _offset;
+        private readonly long _length;
+
+        public SegmentStream(Stream inner, long offset)
+        {
+            _inner = inner;
+            _offset = offset;
+            _length = inner.Length - offset;
+            _inner.Position = offset;
+        }
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => true;
+
+        public override bool CanWrite => false;
+
+        public override long Length => _length;
+
+        public override long Position
+        {
+            get => _inner.Position - _offset;
+            set => _inner.Position = _offset + value;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+
+        public override int Read(Span<byte> buffer) => _inner.Read(buffer);
+
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            var target = origin switch
+            {
+                SeekOrigin.Begin => offset,
+                SeekOrigin.Current => Position + offset,
+                SeekOrigin.End => _length + offset,
+                _ => throw new ArgumentOutOfRangeException(nameof(origin)),
+            };
+            Position = target;
+            return target;
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
     }
 
     private static ushort ReadUInt16(byte[] data, int offset) =>
