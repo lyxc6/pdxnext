@@ -575,6 +575,7 @@ tests/
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
+  AGENT-WORKFLOW.md            :: 1.3 起的分工约定：派活模板 / 并发隔离 / 验收清单 / 文档归属
   DATA-FORMATS.md              :: 所有数据格式的真机实测记录（含自有库表字典，见第 20 节）
   INSTALLER.md                 :: 安装包、双安装模式、自动更新与发版流程
   app-icon.png                 :: 应用图标接触表（深/浅底，16→256，由生成器写出）
