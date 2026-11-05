@@ -747,6 +747,7 @@ public sealed partial class Localizer
         ["modstudio.visibilityPublic"] = "公开",
         ["modstudio.visibilityUnknown"] = "未核实",
         ["modstudio.visibilityUnlisted"] = "非公开",
+        ["saves.city"] = "城市：{0}",
         ["saves.country"] = "国家：{0}",
         ["saves.dateFallback"] = "文件修改时间",
         ["saves.empty.empty.message"] = "已找到该游戏的存档目录，但里面还没有存档文件。",
@@ -763,6 +764,7 @@ public sealed partial class Localizer
         ["saves.metadataUnreadable"] = "元数据不可读",
         ["saves.noGame"] = "未选择游戏",
         ["saves.refresh"] = "刷新",
+        ["saves.rowNamePair"] = "{0}，{1}",
         ["saves.saveName"] = "存档名：{0}",
         ["saves.status.failed"] = "扫描失败",
         ["saves.status.lastScan"] = "上次扫描：{0} · 找到 {1} 个存档",
@@ -2136,6 +2138,7 @@ public sealed partial class Localizer
         ["modstudio.visibilityPublic"] = "Public",
         ["modstudio.visibilityUnknown"] = "Not verified",
         ["modstudio.visibilityUnlisted"] = "Unlisted",
+        ["saves.city"] = "City: {0}",
         ["saves.country"] = "Country: {0}",
         ["saves.dateFallback"] = "File modified time",
         ["saves.empty.empty.message"] = "The save folder exists, but it does not contain any save files yet.",
@@ -2152,6 +2155,7 @@ public sealed partial class Localizer
         ["saves.metadataUnreadable"] = "Metadata unreadable",
         ["saves.noGame"] = "No game selected",
         ["saves.refresh"] = "Refresh",
+        ["saves.rowNamePair"] = "{0}, {1}",
         ["saves.saveName"] = "Save name: {0}",
         ["saves.status.failed"] = "Scan failed",
         ["saves.status.lastScan"] = "Last scan: {0} · {1} saves found",
@@ -3525,6 +3529,7 @@ public sealed partial class Localizer
         ("modstudio.visibilityPublic", "ModstudioVisibilityPublic"),
         ("modstudio.visibilityUnknown", "ModstudioVisibilityUnknown"),
         ("modstudio.visibilityUnlisted", "ModstudioVisibilityUnlisted"),
+        ("saves.city", "SavesCity"),
         ("saves.country", "SavesCountry"),
         ("saves.dateFallback", "SavesDateFallback"),
         ("saves.empty.empty.message", "SavesEmptyEmptyMessage"),
@@ -3541,6 +3546,7 @@ public sealed partial class Localizer
         ("saves.metadataUnreadable", "SavesMetadataUnreadable"),
         ("saves.noGame", "SavesNoGame"),
         ("saves.refresh", "SavesRefresh"),
+        ("saves.rowNamePair", "SavesRowNamePair"),
         ("saves.saveName", "SavesSaveName"),
         ("saves.status.failed", "SavesStatusFailed"),
         ("saves.status.lastScan", "SavesStatusLastScan"),
@@ -4912,6 +4918,7 @@ public sealed partial class Localizer
     public string ModstudioVisibilityPublic => Format("modstudio.visibilityPublic");
     public string ModstudioVisibilityUnknown => Format("modstudio.visibilityUnknown");
     public string ModstudioVisibilityUnlisted => Format("modstudio.visibilityUnlisted");
+    public string SavesCity => Format("saves.city");
     public string SavesCountry => Format("saves.country");
     public string SavesDateFallback => Format("saves.dateFallback");
     public string SavesEmptyEmptyMessage => Format("saves.empty.empty.message");
@@ -4928,6 +4935,7 @@ public sealed partial class Localizer
     public string SavesMetadataUnreadable => Format("saves.metadataUnreadable");
     public string SavesNoGame => Format("saves.noGame");
     public string SavesRefresh => Format("saves.refresh");
+    public string SavesRowNamePair => Format("saves.rowNamePair");
     public string SavesSaveName => Format("saves.saveName");
     public string SavesStatusFailed => Format("saves.status.failed");
     public string SavesStatusLastScan => Format("saves.status.lastScan");
@@ -6302,6 +6310,7 @@ internal static class Keys
     public const string ModstudioVisibilityPublic = "modstudio.visibilityPublic";
     public const string ModstudioVisibilityUnknown = "modstudio.visibilityUnknown";
     public const string ModstudioVisibilityUnlisted = "modstudio.visibilityUnlisted";
+    public const string SavesCity = "saves.city";
     public const string SavesCountry = "saves.country";
     public const string SavesDateFallback = "saves.dateFallback";
     public const string SavesEmptyEmptyMessage = "saves.empty.empty.message";
@@ -6318,6 +6327,7 @@ internal static class Keys
     public const string SavesMetadataUnreadable = "saves.metadataUnreadable";
     public const string SavesNoGame = "saves.noGame";
     public const string SavesRefresh = "saves.refresh";
+    public const string SavesRowNamePair = "saves.rowNamePair";
     public const string SavesSaveName = "saves.saveName";
     public const string SavesStatusFailed = "saves.status.failed";
     public const string SavesStatusLastScan = "saves.status.lastScan";

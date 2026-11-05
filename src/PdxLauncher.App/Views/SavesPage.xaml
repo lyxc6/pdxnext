@@ -105,18 +105,29 @@
                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                   ScrollViewer.HorizontalScrollMode="Disabled"
                   AutomationProperties.AutomationId="listSaves"
-                  AutomationProperties.Name="{x:Bind L.SavesListName, Mode=OneWay}">
+                  AutomationProperties.Name="{x:Bind L.SavesListName, Mode=OneWay}"
+                  ContainerContentChanging="OnSaveContainerContentChanging">
             <ListView.ItemContainerStyle>
                 <Style TargetType="ListViewItem">
                     <Setter Property="Padding" Value="0" />
                     <Setter Property="Margin" Value="0,0,0,4" />
                     <Setter Property="MinHeight" Value="0" />
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <!--
+                        行容器（ListViewItem）就是 UIA 树里的 ListItem。列表项的 Content 是视图模型对象，
+                        不设 Name 时读屏会把整列都读成 PdxLauncher.App.ViewModels.SaveGameRowViewModel。
+                        这里不写 Setter AutomationProperties.*：WinUI 的 Style Setter.Value 不支持 {Binding}，
+                        实测 UIA 里 ListItem.AutomationId 仍为空；改由 code-behind 的
+                        ContainerContentChanging 在容器复用后写 id/name（见 SavesPage.xaml.cs）。
+                        模板根 Grid 另带 {x:Bind AutomationName} 作为兜底。
+                    -->
                 </Style>
             </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="vm:SaveGameRowViewModel">
-                    <Grid Padding="12,8" ColumnSpacing="16">
+                    <Grid Padding="12,8"
+                          ColumnSpacing="16"
+                          AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
@@ -127,8 +138,7 @@
                                        Style="{StaticResource BodyStrongTextBlockStyle}"
                                        TextWrapping="NoWrap"
                                        TextTrimming="CharacterEllipsis"
-                                       ToolTipService.ToolTip="{x:Bind FilePath, Mode=OneTime}"
-                                       AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneTime}" />
+                                       ToolTipService.ToolTip="{x:Bind FilePath, Mode=OneTime}" />
 
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <TextBlock Text="{x:Bind DateText, Mode=OneWay}"

@@ -1,4 +1,5 @@
 {
+  "saves.city": "City: {0}",
   "saves.country": "Country: {0}",
   "saves.dateFallback": "File modified time",
   "saves.empty.empty.message": "The save folder exists, but it does not contain any save files yet.",
@@ -15,6 +16,7 @@
   "saves.metadataUnreadable": "Metadata unreadable",
   "saves.noGame": "No game selected",
   "saves.refresh": "Refresh",
+  "saves.rowNamePair": "{0}, {1}",
   "saves.saveName": "Save name: {0}",
   "saves.status.failed": "Scan failed",
   "saves.status.lastScan": "Last scan: {0} · {1} saves found",

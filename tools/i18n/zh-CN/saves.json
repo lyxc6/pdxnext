@@ -1,4 +1,5 @@
 {
+  "saves.city": "城市：{0}",
   "saves.country": "国家：{0}",
   "saves.dateFallback": "文件修改时间",
   "saves.empty.empty.message": "已找到该游戏的存档目录，但里面还没有存档文件。",
@@ -15,6 +16,7 @@
   "saves.metadataUnreadable": "元数据不可读",
   "saves.noGame": "未选择游戏",
   "saves.refresh": "刷新",
+  "saves.rowNamePair": "{0}，{1}",
   "saves.saveName": "存档名：{0}",
   "saves.status.failed": "扫描失败",
   "saves.status.lastScan": "上次扫描：{0} · 找到 {1} 个存档",

@@ -148,13 +148,13 @@ public sealed class SavesViewModel : LocalizedObservableObject
                 },
                 cancellationToken).ConfigureAwait(true);
 
-            if (!_requests.IsCurrent(generation))
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!_requests.TryCommit(generation, () => Apply(gameId, locations)))
             {
+                // 旧代次（已切游戏 / 又点了一次刷新）：结果整批丢弃，绝不写进列表。
                 return;
             }
-
-            cancellationToken.ThrowIfCancellationRequested();
-            Apply(gameId, locations);
         }
         catch (OperationCanceledException)
         {
@@ -162,25 +162,27 @@ public sealed class SavesViewModel : LocalizedObservableObject
         }
         catch (Exception ex)
         {
-            if (!_requests.IsCurrent(generation))
-            {
-                return;
-            }
-
-            // 扫描失败按空状态处理：不弹框、不崩页面，原因写日志。
-            _logger.Warn("扫描存档失败 (" + gameId + "): " + ex.Message);
-            Saves.Clear();
-            _lastScanAt = DateTimeOffset.Now;
-            _state = SavesState.Failed;
-            NotifyStateChanged();
+            _requests.TryCommit(
+                generation,
+                () =>
+                {
+                    // 扫描失败按空状态处理：不弹框、不崩页面，原因写日志。
+                    _logger.Warn("扫描存档失败 (" + gameId + "): " + ex.Message);
+                    Saves.Clear();
+                    _lastScanAt = DateTimeOffset.Now;
+                    _state = SavesState.Failed;
+                    NotifyStateChanged();
+                });
         }
         finally
         {
-            if (_requests.IsCurrent(generation))
-            {
-                IsBusy = false;
-                NotifyStateChanged();
-            }
+            _requests.TryCommit(
+                generation,
+                () =>
+                {
+                    IsBusy = false;
+                    NotifyStateChanged();
+                });
         }
     }
 

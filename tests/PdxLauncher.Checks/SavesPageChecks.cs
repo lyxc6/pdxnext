@@ -3,7 +3,9 @@ namespace PdxLauncher.Checks;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
+using PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Saves;
 
 /// <summary>
 /// 存档页（T3a，只读浏览）自检。这一片最容易悄悄退化的地方：
@@ -53,6 +55,8 @@ public static class SavesPageChecks
         "saves.version",
         "saves.saveName",
         "saves.country",
+        "saves.city",
+        "saves.rowNamePair",
     ];
 
     public static int Run(IFileSystem fs)
@@ -72,6 +76,8 @@ public static class SavesPageChecks
 
         CheckPage(xamlPath);
         CheckViewModel(viewModelPath, rowViewModelPath, pagePath);
+        CheckGenerationGuard();
+        CheckRowText();
         CheckNavigation(navigationPath, mainWindowPath, mainWindowCodePath);
         CheckI18n(root);
 
@@ -129,6 +135,21 @@ public static class SavesPageChecks
             xaml.Contains("IsExperimental", StringComparison.Ordinal)
                 && xaml.Contains("ExperimentalText", StringComparison.Ordinal)
                 && xaml.Contains("ExperimentalTooltip", StringComparison.Ordinal));
+
+        // UIA 无障碍名：ListView 的 Content 是视图模型对象，名字与自动 id 必须挂在行容器上，
+        // 否则读屏把整列都读成类型全名。WinUI 的 Style Setter.Value 不支持 {Binding}（实测
+        // ListItem.AutomationId 仍为空），所以改由 ContainerContentChanging 写；这里断言入口没丢。
+        ChecksContext.Check(
+            "存档页: 列表用 ContainerContentChanging 写行容器的名字与 id",
+            xaml.Contains("ContainerContentChanging=\"OnSaveContainerContentChanging\"", StringComparison.Ordinal)
+                && !xaml.Contains("Value=\"{Binding AutomationName}\"", StringComparison.Ordinal)
+                && !xaml.Contains("Value=\"{Binding AutomationId}\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "存档页: 模板根元素也带自动化名字（{x:Bind AutomationName}）",
+            Regex.IsMatch(
+                xaml,
+                @"<DataTemplate[\s\S]{0,400}?AutomationProperties\.Name=""\{x:Bind AutomationName",
+                RegexOptions.CultureInvariant));
         ChecksContext.Check(
             "存档页: 页面没有硬编码中文「实验性」（必须走 i18n 键）",
             !xaml.Contains("实验性", StringComparison.Ordinal));
@@ -170,10 +191,13 @@ public static class SavesPageChecks
             viewModel.Contains("Saves.Clear()", StringComparison.Ordinal));
 
         // 代次守卫：旧扫描的 finally 不能关掉新扫描的忙碌态，旧结果也不能写进列表。
+        // 这里只钉「调用点交还给 tracker」；判定极性本身由 CheckGenerationGuard 的行为用例钉住，
+        // 因为纯文本断言挡不住 `if (!IsCurrent(...))` 被改成 `if (IsCurrent(...))`。
         ChecksContext.Check(
-            "存档页: 用代次守卫判断结果是否仍然有效",
+            "存档页: 结果提交统一走 tracker 的代次判定",
             viewModel.Contains("SaveScanRequestTracker", StringComparison.Ordinal)
-                && viewModel.Contains("IsCurrent(generation)", StringComparison.Ordinal));
+                && viewModel.Contains("TryCommit(generation", StringComparison.Ordinal)
+                && !viewModel.Contains("IsCurrent(generation)", StringComparison.Ordinal));
 
         ChecksContext.Check(
             "存档页: 扫描异常记 Warn 并落到失败空状态",
@@ -210,6 +234,15 @@ public static class SavesPageChecks
             "存档页: 降级文案走 i18n 键",
             rowViewModel.Contains("Keys.SavesMetadataUnreadable", StringComparison.Ordinal));
 
+        // 读屏读的是列表项的 Content（视图模型对象）：没有这个组合名，整列都是类型全名。
+        ChecksContext.Check(
+            "存档页: 行自动化名字由文件名 + 日期 + 详情拼成",
+            Regex.IsMatch(
+                rowViewModel,
+                @"AutomationName[\s\S]{0,800}?Keys\.SavesRowNamePair[\s\S]{0,400}?HasDetails",
+                RegexOptions.CultureInvariant)
+                && !rowViewModel.Contains("实验性", StringComparison.Ordinal));
+
         if (!ChecksContext.Check("存档页: SavesPage.xaml.cs 存在", File.Exists(pagePath), pagePath))
         {
             return;
@@ -230,6 +263,73 @@ public static class SavesPageChecks
             "存档页: 后台线程的游戏切换事件派发回 UI 线程",
             page.Contains("DispatcherQueue.HasThreadAccess", StringComparison.Ordinal)
                 && page.Contains("DispatcherQueue.TryEnqueue", StringComparison.Ordinal));
+
+        // 行容器的 UIA 名字/id：只能写在这里（Style Setter 的 {Binding} 在 WinUI 里不生效）。
+        ChecksContext.Check(
+            "存档页: 行容器写入 save_N 的 AutomationId",
+            page.Contains("AutomationProperties.SetAutomationId(container, row.AutomationId)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "存档页: 行容器写入组合后的 AutomationName",
+            page.Contains("AutomationProperties.SetName(container, row.AutomationName)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "存档页: 容器复用时跳过（InRecycleQueue）",
+            page.Contains("args.InRecycleQueue", StringComparison.Ordinal));
+    }
+
+    // ------------------------------------------------------------ 代次守卫（行为级）
+
+    /// <summary>
+    /// 直接跑 <see cref="SaveScanRequestTracker"/>：旧代次提交必须被丢弃且<b>不执行</b>提交动作，
+    /// 新代次必须真正落盘。文本断言只认字符串，把判定极性翻转（<c>if (!IsCurrent(...))</c> 去掉 <c>!</c>）
+    /// 仍然全绿；这条用真实调用把两种方向都钉住。
+    /// </summary>
+    private static void CheckGenerationGuard()
+    {
+        var tracker = new SaveScanRequestTracker();
+        var first = tracker.Begin();
+        var second = tracker.Begin();
+
+        var oldApplied = 0;
+        var oldCommitted = tracker.TryCommit(first, () => oldApplied++);
+        var newApplied = 0;
+        var newCommitted = tracker.TryCommit(second, () => newApplied++);
+        // 迟到的旧代次（旧扫描在 await 点之后才走到提交）同样不能写回列表。
+        var lateCommitted = tracker.TryCommit(first, () => oldApplied++);
+
+        ChecksContext.Check(
+            "存档页: 旧代次的结果被整批丢弃（提交动作不执行）",
+            !oldCommitted && oldApplied == 0 && !lateCommitted,
+            "oldCommitted=" + oldCommitted + ", lateCommitted=" + lateCommitted + ", oldApplied=" + oldApplied);
+        ChecksContext.Check(
+            "存档页: 新代次的结果被应用（提交动作只执行一次）",
+            newCommitted && newApplied == 1,
+            "newCommitted=" + newCommitted + ", newApplied=" + newApplied);
+    }
+
+    /// <summary>
+    /// 详情段的取字段规则：CS2 把 <c>cityName</c> 同时写进存档名与国家，两段同字就是重复；
+    /// 而 CK3/Stellaris 的国家是独立信息，必须保留。改错只有肉眼能看出，所以直接断言纯函数。
+    /// </summary>
+    private static void CheckRowText()
+    {
+        ChecksContext.Check(
+            "存档页: 国家/城市与存档名相同或为空时不重复显示",
+            !SaveRowText.ShouldShowPlace("阿伦德尔", "阿伦德尔")
+                && !SaveRowText.ShouldShowPlace("阿伦德尔", " 阿伦德尔 ")
+                && !SaveRowText.ShouldShowPlace(null, "七丘城")
+                && !SaveRowText.ShouldShowPlace("   ", "七丘城"));
+        ChecksContext.Check(
+            "存档页: 国家与存档名不同的独立信息仍然显示",
+            SaveRowText.ShouldShowPlace("普鲁士", "七丘城"));
+        ChecksContext.Check(
+            "存档页: 只有 Colossal 容器的 country 字段按城市名显示",
+            SaveRowText.IsCityPlace(SaveContainer.Colossal)
+                && !SaveRowText.IsCityPlace(SaveContainer.TextMeta)
+                && !SaveRowText.IsCityPlace(SaveContainer.Unknown));
+        ChecksContext.Check(
+            "存档页: 行详情用 i18n 的「城市」片段而不是「国家」",
+            File.ReadAllText(Path.Combine(FindWorkspaceRoot(), "src", "PdxLauncher.App", "ViewModels", "SaveGameRowViewModel.cs"))
+                .Contains("Keys.SavesCity", StringComparison.Ordinal));
     }
 
     // ------------------------------------------------------------ 导航四处

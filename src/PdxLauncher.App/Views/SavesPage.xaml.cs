@@ -1,6 +1,7 @@
 namespace PdxLauncher.App.Views;
 
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
@@ -95,6 +96,26 @@ public sealed partial class SavesPage : Page
 
         // 扫描由协调器取消上一次；错误在 onError 里记日志，不弹框。
         _ = ReloadAsync();
+    }
+
+    /// <summary>
+    /// 行容器（UIA 里的 ListItem）的自动化 id 与名字。WinUI 的 Style Setter.Value 不支持 {Binding}，
+    /// 所以不能在 ItemContainerStyle 里绑；容器每次（含复用）绑定内容时在这里写。
+    /// id 是 <c>save_N</c>（ASCII，不随语言变），名字是「文件名，日期，详情」——
+    /// 不写的话读屏只会读到 <c>PdxLauncher.App.ViewModels.SaveGameRowViewModel</c>，整列无法区分。
+    /// </summary>
+    private void OnSaveContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+    {
+        if (args.InRecycleQueue || args.ItemContainer is not ListViewItem container)
+        {
+            return;
+        }
+
+        if (args.Item is SaveGameRowViewModel row)
+        {
+            AutomationProperties.SetAutomationId(container, row.AutomationId);
+            AutomationProperties.SetName(container, row.AutomationName);
+        }
     }
 
     private Task ReloadAsync() => _reload.RunAsync(

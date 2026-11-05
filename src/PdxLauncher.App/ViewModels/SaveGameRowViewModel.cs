@@ -3,6 +3,7 @@ namespace PdxLauncher.App.ViewModels;
 using System.Globalization;
 
 using PdxLauncher.App.Localization;
+using PdxLauncher.App.Services;
 using PdxLauncher.Core.Saves;
 
 /// <summary>
@@ -41,8 +42,22 @@ public sealed class SaveGameRowViewModel : LocalizedObservableObject
     /// <summary>完整路径只作为悬停提示，不占列表宽度。</summary>
     public string FilePath => _meta.FilePath;
 
-    /// <summary>UI 自动化 id；保持 ASCII，不随语言变化。</summary>
+    /// <summary>UI 自动化 id；保持 ASCII，不随语言变化。挂在行容器（ListViewItem）上。</summary>
     public string AutomationId => "save_" + _index.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// 读屏用的整行名字：文件名 + 日期 + 详情。列表项的 Content 是视图模型对象，
+    /// 不设这个属性时 UIA 会把整列每一行都读成类型全名（<c>PdxLauncher.App.ViewModels.SaveGameRowViewModel</c>）。
+    /// 用 i18n 的成对连接片段拼，中文用「，」、英文用「, 」，不写死任何一侧的标点。
+    /// </summary>
+    public string AutomationName
+    {
+        get
+        {
+            var name = T(Keys.SavesRowNamePair, FileName, DateText);
+            return HasDetails ? T(Keys.SavesRowNamePair, name, DetailsText) : name;
+        }
+    }
 
     public bool IsExperimental => ExperimentalGameIds.Contains(_meta.GameId);
 
@@ -75,22 +90,27 @@ public sealed class SaveGameRowViewModel : LocalizedObservableObject
     public string VersionText => HasVersion ? T(Keys.SavesVersion, _meta.GameVersion!) : string.Empty;
 
     public bool HasDetails =>
-        !string.IsNullOrWhiteSpace(_meta.SaveName) || !string.IsNullOrWhiteSpace(_meta.PlayerCountry);
+        SaveRowText.HasSaveName(_meta.SaveName) || SaveRowText.ShouldShowPlace(_meta.PlayerCountry, _meta.SaveName);
 
-    /// <summary>存档名 / 玩家国家；有哪个显示哪个，都没有时行内不留空标签。</summary>
+    /// <summary>
+    /// 存档名 / 国家（CS2 是城市）；有哪个显示哪个，都没有时行内不留空标签。
+    /// 国家段与存档名相同时不重复显示。
+    /// </summary>
     public string DetailsText
     {
         get
         {
             var parts = new List<string>(2);
-            if (!string.IsNullOrWhiteSpace(_meta.SaveName))
+            if (SaveRowText.HasSaveName(_meta.SaveName))
             {
                 parts.Add(T(Keys.SavesSaveName, _meta.SaveName!));
             }
 
-            if (!string.IsNullOrWhiteSpace(_meta.PlayerCountry))
+            if (SaveRowText.ShouldShowPlace(_meta.PlayerCountry, _meta.SaveName))
             {
-                parts.Add(T(Keys.SavesCountry, _meta.PlayerCountry!));
+                parts.Add(SaveRowText.IsCityPlace(_meta.Container)
+                    ? T(Keys.SavesCity, _meta.PlayerCountry!)
+                    : T(Keys.SavesCountry, _meta.PlayerCountry!));
             }
 
             return string.Join(" · ", parts);
