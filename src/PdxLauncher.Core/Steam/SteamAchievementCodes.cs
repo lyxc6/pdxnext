@@ -44,6 +44,21 @@ public static class SteamAchievementCodes
     public const string HostFailed = "hostFailed";
 
     /// <summary>
+    /// 这个失败码是否说明「这份 DLL 不行」：典型的是 DLC 解锁 loader 在 <c>SteamAPI_Init</c> 里失败
+    /// （<see cref="InitFailed"/>），或者根本加载不起来（<see cref="Native"/>）。
+    /// 这种时候换下一份候选是有意义的；但只换 DLL，别再等更多轮 Init。
+    /// </summary>
+    /// <param name="code">宿主返回的结果码。</param>
+    public static bool IsCandidateFault(string? code) => code is InitFailed or Native;
+
+    /// <summary>
+    /// 这个失败码是否属于环境问题（Steam 没启动、没登录、等回调超时）。
+    /// 换哪份 <c>steam_api64.dll</c> 结果都一样，调用方应当直接停下，而不是把候选全试一遍。
+    /// </summary>
+    /// <param name="code">宿主返回的结果码。</param>
+    public static bool IsEnvironmentFault(string? code) => code is SteamNotRunning or NoSteamUser or Timeout;
+
+    /// <summary>
     /// 这个码是否意味着「Steam 侧确实不可用」（而不是「没有成就」或成功）。
     /// </summary>
     public static bool IsUnavailable(string? code) =>
