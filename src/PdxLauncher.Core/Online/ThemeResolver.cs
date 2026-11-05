@@ -727,26 +727,46 @@ public sealed class ThemeResolver : IThemeResolver
     }
 
     /// <summary>
-    /// 内置素材兜底：只有前面所有来源都没给出背景时才补，绝不覆盖在线/官方图。
-    /// 有在线缓存时保留 Merge 推导出的来源，否则标成 Bundled。
+    /// 内置素材兜底：背景与字标分别补齐，互不牵连。
+    /// <para>
+    /// 背景只在前面所有来源都没给出时才补，绝不覆盖在线/官方图；
+    /// 字标只在 <see cref="ThemeSpec.Logo"/> 缺失时才补。EU5 联网拿到 Steam 库页大图后
+    /// 背景不再为空，但字标仍然必须来自内置素材，否则主页会退回纯文字标题
+    /// （旧实现「背景非空就提前返回」正是漏在这里）。
+    /// </para>
+    /// <para>
+    /// 来源语义：只有背景确实来自本次内置兜底时才按 <paramref name="hasOnlineCache"/> 决定——
+    /// 有在线缓存就保留 Merge 推导出的来源，否则标成 Bundled；背景来自其它层时原样保留
+    /// （hero 命中必须还是 <see cref="ThemeAssetSource.SteamHero"/>，设置页文案依赖它）。
+    /// 背景与字标都没变化时返回原实例，避免上层误判「主题变了」。
+    /// </para>
     /// </summary>
     private ThemeSpec ApplyBundled(GameInstallation game, ThemeSpec spec, bool hasOnlineCache)
     {
-        if (!string.IsNullOrWhiteSpace(spec.Background))
+        var bundled = _bundled?.TryResolve(game);
+        var bundledBackground = bundled?.Background;
+        var background = string.IsNullOrWhiteSpace(spec.Background)
+            && !string.IsNullOrWhiteSpace(bundledBackground)
+                ? bundledBackground
+                : spec.Background;
+        var logo = spec.Logo ?? bundled?.Logo;
+
+        var backgroundChanged = !string.Equals(background, spec.Background, StringComparison.Ordinal);
+        var logoChanged = !string.Equals(logo, spec.Logo, StringComparison.Ordinal);
+        if (!backgroundChanged && !logoChanged)
         {
             return spec;
         }
 
-        var bundled = _bundled?.TryResolve(game);
-        if (bundled?.Background is not { } background)
-        {
-            return spec;
-        }
+        var source = backgroundChanged && !hasOnlineCache
+            ? ThemeAssetSource.Bundled
+            : spec.Source;
 
         return spec with
         {
             Background = background,
-            Source = hasOnlineCache ? spec.Source : ThemeAssetSource.Bundled,
+            Logo = logo,
+            Source = source,
         };
     }
 
