@@ -57,6 +57,12 @@ public sealed class DlcViewModel : LocalizedObservableObject
 
     public ObservableCollection<DlcRowViewModel> Dlcs { get; } = new();
 
+    /// <summary>「未拥有」段的行：磁盘上没有、Steam 清单里有、账号也没授权的 DLC（只读，无开关）。</summary>
+    public ObservableCollection<DlcRowViewModel> UnownedDlcs { get; } = new();
+
+    /// <summary>最近一次规划结果（段标题计数、未拥有段状态都从这里取）。</summary>
+    private DlcListPlan? _plan;
+
     public GameInstallation? Game
     {
         get => _game;
@@ -112,6 +118,46 @@ public sealed class DlcViewModel : LocalizedObservableObject
     /// <summary>能否对当前游戏做授权探测（只有会写播放集的游戏才有 DLC 目录与 appid）。</summary>
     public bool CanRecheckOwnership => Game is { SupportsContentManagement: true };
 
+    /// <summary>
+    /// 是否按「已拥有 / 未拥有」两段展示。只有磁盘清单模式的游戏才分段：
+    /// CS2 的列表本身就是 Steam 给的（全部已拥有），再分一段「未拥有」没有意义。
+    /// </summary>
+    public bool CanListUnowned => !_isSteamDlcList && Game is { SupportsContentManagement: true };
+
+    /// <summary>「已拥有」段标题（带行数）；CS2 与无游戏时不显示。</summary>
+    public string OwnedSectionTitle => T(Keys.DlcOwnedSection, Dlcs.Count);
+
+    /// <summary>「已拥有」段标题是否可见（列表为空时整段不显示）。</summary>
+    public bool HasOwnedSection => CanListUnowned && Dlcs.Count > 0;
+
+    /// <summary>「未拥有」段标题（带行数）。</summary>
+    public string UnownedSectionTitle => T(Keys.DlcUnownedSection, UnownedDlcs.Count);
+
+    /// <summary>「未拥有」段是否可见（没有未拥有条目时整段不显示）。</summary>
+    public bool HasUnownedSection => CanListUnowned && UnownedDlcs.Count > 0;
+
+    /// <summary>「未拥有」列表的自动化名称。</summary>
+    public string UnownedListName => T(Keys.DlcUnownedListName);
+
+    /// <summary>
+    /// 「未拥有」段不可用时的说明：Steam 没跑 / 报告不可用 / 报告像 loader 模板，各给一句人话，
+    /// 而不是留一片空白让用户以为 DLC 都拥有了。
+    /// </summary>
+    public string UnownedNote => _plan?.UnownedState switch
+    {
+        DlcUnownedListState.UntrustedCatalog => T(
+            Keys.DlcUnownedNoteLoader,
+            _plan.CatalogCount,
+            _plan.EmptyNameCount),
+        DlcUnownedListState.SteamUnavailable => _ownership is null
+            ? T(Keys.DlcUnownedNoteSteamOff)
+            : T(Keys.DlcUnownedNoteUnavailable, DescribeOwnershipError(_ownership)),
+        _ => string.Empty,
+    };
+
+    /// <summary>说明文案是否可见。</summary>
+    public bool HasUnownedNote => CanListUnowned && UnownedNote.Length > 0;
+
     /// <summary>判定条标题的自动化名称。</summary>
     public string OwnershipName => T(Keys.DlcOwnershipName);
 
@@ -155,6 +201,10 @@ public sealed class DlcViewModel : LocalizedObservableObject
     {
         Game = game;
         SetSteamDlcList(false);
+
+        // 切游戏时先清掉上一份「未拥有」段，避免旧条目闪在新列表旁边。
+        UnownedDlcs.Clear();
+        _plan = null;
         if (game is null)
         {
             Dlcs.Clear();
@@ -217,9 +267,25 @@ public sealed class DlcViewModel : LocalizedObservableObject
             // V1/V1_1 的 disabledDLC 只能写 pops_id，pops_id 为空的 DLC 无法表达 ⇒ 开关置灰。
             var contentLoadFormat = game.Format is LoadFileFormat.ContentLoadV1 or LoadFileFormat.ContentLoadV1_1;
 
-            Dlcs.Clear();
-            foreach (var info in catalog.OrderBy(static d => d.DisplayName, StringComparer.CurrentCultureIgnoreCase))
+            // 行的顺序与拥有态都由 Core 的规划器算（纯函数，Checks 覆盖）；这里只做「条目 → 行」的映射。
+            var catalogByPath = new Dictionary<string, DlcInfo>(StringComparer.OrdinalIgnoreCase);
+            foreach (var info in catalog)
             {
+                catalogByPath.TryAdd(info.FilePathRelativeToDlcPath, info);
+            }
+
+            var entries = DlcListPlanner
+                .Create(catalog.Select(static d => new DlcListDiskRow(d.SteamId, d.DisplayName, d.FilePathRelativeToDlcPath)), report: null)
+                .Entries;
+
+            Dlcs.Clear();
+            foreach (var entry in entries)
+            {
+                if (!catalogByPath.TryGetValue(entry.FilePath, out var info))
+                {
+                    continue;
+                }
+
                 var enabled = !stateById.TryGetValue(DlcCatalog.GetEffectiveDlcId(info), out var saved) || saved;
                 var canBeDisabled = !contentLoadFormat || DlcCatalog.CanBeDisabledInContentLoad(info);
                 Dlcs.Add(new DlcRowViewModel(info, enabled, canBeDisabled, OnRowEnabledChanged));
@@ -284,15 +350,14 @@ public sealed class DlcViewModel : LocalizedObservableObject
         var report = await ProbeOwnershipAsync(force, cancellationToken).ConfigureAwait(true);
         if (report is null)
         {
-            _ownership = null;
-            _ownershipVerdict = null;
-            SetOwnershipOnRows(null);
             if (IsSteamDlcList)
             {
                 // 重探失败时不能把旧清单留在屏幕上假装还有效：清空并给出失败原因。
                 FillSteamRows(null);
                 SetSteamStatus(null);
             }
+
+            ResetOwnership();
         }
         else
         {
@@ -442,6 +507,7 @@ public sealed class DlcViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(IsSteamDlcList));
         OnPropertyChanged(nameof(CanEditDlcToggles));
         OnPropertyChanged(nameof(CountsText));
+        RaiseSections();
     }
 
     private void ApplyOwnership(SteamOwnershipReport report)
@@ -454,18 +520,10 @@ public sealed class DlcViewModel : LocalizedObservableObject
             .ToList();
         _ownershipVerdict = DlcOwnershipVerdict.Evaluate(report.PatchStatus, report, candidates);
 
-        foreach (var row in Dlcs)
-        {
-            bool? owned = null;
-            if (report.HasOwnership && !string.IsNullOrWhiteSpace(row.SteamId))
-            {
-                // DisabledDLC 里的条目 Steam 会说"未订阅"，但游戏确实读得到授权，官方也把它们算作已拥有。
-                owned = report.OwnedAppIds.Contains(row.SteamId)
-                    || report.TrustedDisabledDlc.Contains(row.SteamId);
-            }
-
-            row.SetOwnership(owned);
-        }
+        // 拥有态、未拥有清单与排序都由 Core 的规划器算（Checks 覆盖），这里只做映射。
+        var plan = DlcListPlanner.Create(Dlcs.Select(ToDiskRow), report);
+        _plan = plan;
+        ApplyPlan(plan);
 
         var accountText = report.Account is { } account
             ? "，账号视图 state=" + account.State + "、" + account.Dlcs.Count + " 个 DLC、" + account.OwnedAppIds.Count + " 个已拥有"
@@ -474,6 +532,7 @@ public sealed class DlcViewModel : LocalizedObservableObject
             "DLC 授权探测（gameId=" + (Game?.GameId ?? "<null>") + "）：state=" + report.State
             + "，loader 在岗=" + report.IsLoaderActive
             + "，主探测 " + report.Dlcs.Count + " 个 DLC、" + report.OwnedAppIds.Count + " 个已拥有"
+            + "，未拥有 " + plan.UnownedCount + " 个（" + plan.UnownedState + "）"
             + accountText
             + "，结论=" + (_ownershipVerdict?.Kind.ToString() ?? "<null>"));
     }
@@ -482,17 +541,65 @@ public sealed class DlcViewModel : LocalizedObservableObject
     {
         _ownership = null;
         _ownershipVerdict = null;
-        SetOwnershipOnRows(null);
+
+        // 报告没了也要把磁盘行的拥有态退回「未知」，并清掉上一份未拥有段。
+        var plan = DlcListPlanner.Create(Dlcs.Select(ToDiskRow), report: null);
+        _plan = plan;
+        ApplyPlan(plan);
+
         RaiseOwnership();
     }
 
-    private void SetOwnershipOnRows(bool? isOwned)
+    /// <summary>把规划结果映射成界面：磁盘行按路径回填拥有态，未拥有段按条目重建。</summary>
+    private void ApplyPlan(DlcListPlan plan)
     {
+        var ownedByPath = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in plan.Entries)
+        {
+            ownedByPath.TryAdd(entry.FilePath, entry.Owned);
+        }
+
         foreach (var row in Dlcs)
         {
-            row.SetOwnership(isOwned);
+            row.SetOwnership(ownedByPath.TryGetValue(row.FilePathRelativeToDlcPath, out var owned) ? owned : null);
         }
+
+        UnownedDlcs.Clear();
+        if (_isSteamDlcList)
+        {
+            // CS2 的清单本身就是 Steam 给的，全部是「已拥有」，不再分段。
+            RaiseSections();
+            return;
+        }
+
+        foreach (var entry in plan.Unowned)
+        {
+            var info = new DlcInfo(
+                DisplayName: entry.DisplayName,
+                PopsId: string.Empty,
+                SteamId: entry.SteamId,
+                FilePathRelativeToDlcPath: entry.FilePath,
+                ThumbnailPath: string.Empty,
+                Description: string.Empty,
+                RawBytes: Array.Empty<byte>());
+
+            // 未拥有行只读：没有开关（没有 pops_id、也写不进播放集），缩略图留空显示占位图。
+            var row = new DlcRowViewModel(
+                info,
+                isEnabled: true,
+                canBeDisabled: false,
+                onEnabledChanged: null,
+                showsToggle: false);
+            row.SetOwnership(entry.Owned);
+            UnownedDlcs.Add(row);
+        }
+
+        RaiseSections();
     }
+
+    /// <summary>磁盘行 → 规划器输入（只传规划要用的三个字段）。</summary>
+    private static DlcListDiskRow ToDiskRow(DlcRowViewModel row) =>
+        new(row.SteamId, row.DisplayName, row.FilePathRelativeToDlcPath);
 
     private void RaiseOwnership()
     {
@@ -854,6 +961,20 @@ public sealed class DlcViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(EnabledCount));
         OnPropertyChanged(nameof(CountsText));
         OnPropertyChanged(nameof(HasOwnershipStrip));
+        RaiseSections();
+    }
+
+    /// <summary>通知「已拥有 / 未拥有」分段相关的计算属性（计数变了、报告换了都要重发）。</summary>
+    private void RaiseSections()
+    {
+        OnPropertyChanged(nameof(CanListUnowned));
+        OnPropertyChanged(nameof(OwnedSectionTitle));
+        OnPropertyChanged(nameof(HasOwnedSection));
+        OnPropertyChanged(nameof(UnownedSectionTitle));
+        OnPropertyChanged(nameof(HasUnownedSection));
+        OnPropertyChanged(nameof(UnownedListName));
+        OnPropertyChanged(nameof(UnownedNote));
+        OnPropertyChanged(nameof(HasUnownedNote));
     }
 
     /// <summary>设置状态栏主句：同时记住键与参数，切语言时按新语言重算。</summary>

@@ -201,6 +201,7 @@ public sealed partial class Localizer
         ["dlc.noGameHint"] = "请先在游戏库里选择一款游戏",
         ["dlc.noGameTitle"] = "（未选择游戏）",
         ["dlc.ownedBadge"] = "已拥有",
+        ["dlc.ownedSection"] = "已拥有（{0}）",
         ["dlc.ownershipAccountOwned"] = "账号真实拥有 {0}/{1}",
         ["dlc.ownershipAccountUnknown"] = "账号真实拥有无法判定（{0}）",
         ["dlc.ownershipChecking"] = "正在查询 Steam 授权…",
@@ -261,6 +262,11 @@ public sealed partial class Localizer
         ["dlc.toggleToolTipLocked"] = "该 DLC 无法通过 content_load.json 禁用（pops_id 为空，官方启动器同样会丢弃它）",
         ["dlc.unknownBadge"] = "授权未知",
         ["dlc.unownedBadge"] = "未拥有",
+        ["dlc.unownedListName"] = "未拥有的 DLC",
+        ["dlc.unownedNoteLoader"] = "Steam 返回的 DLC 清单不可信（{0} 条，其中 {1} 条没有名字，像是加载器模板），已跳过未拥有列表。",
+        ["dlc.unownedNoteSteamOff"] = "Steam 未运行，无法列出未拥有的 DLC。",
+        ["dlc.unownedNoteUnavailable"] = "无法列出未拥有的 DLC：{0}",
+        ["dlc.unownedSection"] = "未拥有（{0}）",
         ["home.continue"] = "继续",
         ["home.continueName"] = "继续游戏（读取最近存档）",
         ["home.continueToolTip"] = "继续：{0}（{1}）",
@@ -1544,6 +1550,7 @@ public sealed partial class Localizer
         ["dlc.noGameHint"] = "Select a game in your library first",
         ["dlc.noGameTitle"] = "(No game selected)",
         ["dlc.ownedBadge"] = "Owned",
+        ["dlc.ownedSection"] = "Owned ({0})",
         ["dlc.ownershipAccountOwned"] = "the account truly owns {0}/{1}",
         ["dlc.ownershipAccountUnknown"] = "account ownership cannot be determined ({0})",
         ["dlc.ownershipChecking"] = "Querying Steam ownership…",
@@ -1604,6 +1611,11 @@ public sealed partial class Localizer
         ["dlc.toggleToolTipLocked"] = "This DLC cannot be disabled through content_load.json (empty pops_id; the official launcher drops it too)",
         ["dlc.unknownBadge"] = "Ownership unknown",
         ["dlc.unownedBadge"] = "Not owned",
+        ["dlc.unownedListName"] = "DLC you do not own",
+        ["dlc.unownedNoteLoader"] = "The DLC list from Steam is not trustworthy ({0} entries, {1} of them unnamed; it looks like a loader template), so the list of DLC you do not own was skipped.",
+        ["dlc.unownedNoteSteamOff"] = "Steam is not running, so the DLC you do not own cannot be listed.",
+        ["dlc.unownedNoteUnavailable"] = "Cannot list the DLC you do not own: {0}",
+        ["dlc.unownedSection"] = "Not owned ({0})",
         ["home.continue"] = "Continue",
         ["home.continueName"] = "Continue game (loads the latest save)",
         ["home.continueToolTip"] = "Continue: {0} ({1})",
@@ -2887,6 +2899,7 @@ public sealed partial class Localizer
         ("dlc.noGameHint", "DlcNoGameHint"),
         ("dlc.noGameTitle", "DlcNoGameTitle"),
         ("dlc.ownedBadge", "DlcOwnedBadge"),
+        ("dlc.ownedSection", "DlcOwnedSection"),
         ("dlc.ownershipAccountOwned", "DlcOwnershipAccountOwned"),
         ("dlc.ownershipAccountUnknown", "DlcOwnershipAccountUnknown"),
         ("dlc.ownershipChecking", "DlcOwnershipChecking"),
@@ -2947,6 +2960,11 @@ public sealed partial class Localizer
         ("dlc.toggleToolTipLocked", "DlcToggleToolTipLocked"),
         ("dlc.unknownBadge", "DlcUnknownBadge"),
         ("dlc.unownedBadge", "DlcUnownedBadge"),
+        ("dlc.unownedListName", "DlcUnownedListName"),
+        ("dlc.unownedNoteLoader", "DlcUnownedNoteLoader"),
+        ("dlc.unownedNoteSteamOff", "DlcUnownedNoteSteamOff"),
+        ("dlc.unownedNoteUnavailable", "DlcUnownedNoteUnavailable"),
+        ("dlc.unownedSection", "DlcUnownedSection"),
         ("home.continue", "HomeContinue"),
         ("home.continueName", "HomeContinueName"),
         ("home.continueToolTip", "HomeContinueToolTip"),
@@ -4228,6 +4246,7 @@ public sealed partial class Localizer
     public string DlcNoGameHint => Format("dlc.noGameHint");
     public string DlcNoGameTitle => Format("dlc.noGameTitle");
     public string DlcOwnedBadge => Format("dlc.ownedBadge");
+    public string DlcOwnedSection => Format("dlc.ownedSection");
     public string DlcOwnershipAccountOwned => Format("dlc.ownershipAccountOwned");
     public string DlcOwnershipAccountUnknown => Format("dlc.ownershipAccountUnknown");
     public string DlcOwnershipChecking => Format("dlc.ownershipChecking");
@@ -4288,6 +4307,11 @@ public sealed partial class Localizer
     public string DlcToggleToolTipLocked => Format("dlc.toggleToolTipLocked");
     public string DlcUnknownBadge => Format("dlc.unknownBadge");
     public string DlcUnownedBadge => Format("dlc.unownedBadge");
+    public string DlcUnownedListName => Format("dlc.unownedListName");
+    public string DlcUnownedNoteLoader => Format("dlc.unownedNoteLoader");
+    public string DlcUnownedNoteSteamOff => Format("dlc.unownedNoteSteamOff");
+    public string DlcUnownedNoteUnavailable => Format("dlc.unownedNoteUnavailable");
+    public string DlcUnownedSection => Format("dlc.unownedSection");
     public string HomeContinue => Format("home.continue");
     public string HomeContinueName => Format("home.continueName");
     public string HomeContinueToolTip => Format("home.continueToolTip");
@@ -5572,6 +5596,7 @@ internal static class Keys
     public const string DlcNoGameHint = "dlc.noGameHint";
     public const string DlcNoGameTitle = "dlc.noGameTitle";
     public const string DlcOwnedBadge = "dlc.ownedBadge";
+    public const string DlcOwnedSection = "dlc.ownedSection";
     public const string DlcOwnershipAccountOwned = "dlc.ownershipAccountOwned";
     public const string DlcOwnershipAccountUnknown = "dlc.ownershipAccountUnknown";
     public const string DlcOwnershipChecking = "dlc.ownershipChecking";
@@ -5632,6 +5657,11 @@ internal static class Keys
     public const string DlcToggleToolTipLocked = "dlc.toggleToolTipLocked";
     public const string DlcUnknownBadge = "dlc.unknownBadge";
     public const string DlcUnownedBadge = "dlc.unownedBadge";
+    public const string DlcUnownedListName = "dlc.unownedListName";
+    public const string DlcUnownedNoteLoader = "dlc.unownedNoteLoader";
+    public const string DlcUnownedNoteSteamOff = "dlc.unownedNoteSteamOff";
+    public const string DlcUnownedNoteUnavailable = "dlc.unownedNoteUnavailable";
+    public const string DlcUnownedSection = "dlc.unownedSection";
     public const string HomeContinue = "home.continue";
     public const string HomeContinueName = "home.continueName";
     public const string HomeContinueToolTip = "home.continueToolTip";
