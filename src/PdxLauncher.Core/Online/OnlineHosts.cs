@@ -39,6 +39,13 @@ public static class OnlineHosts
     /// <summary>Steam 创意工坊网页端（列表页解析 SSR 数据）。</summary>
     public const string SteamCommunityHost = "steamcommunity.com";
 
+    /// <summary>
+    /// Steam 社区官方素材 CDN。评论表情（<c>/economy/emoticon/&lt;name&gt;</c>）在这里；
+    /// 同一主机也托管头像/徽章，所以只放行精确主机，表情路径另行由
+    /// <see cref="IsEmoticonUri"/> 限定，不做子域通配。
+    /// </summary>
+    public const string SteamCommunityAssetsHost = "community.fastly.steamstatic.com";
+
     /// <summary>Steam Web API（keyless 的 published file 详情接口）。</summary>
     public const string SteamApiHost = "api.steampowered.com";
 
@@ -157,6 +164,7 @@ public static class OnlineHosts
         || string.Equals(host, ModsContentHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, ModsWebHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamCommunityHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, SteamCommunityAssetsHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamApiHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, TranslationHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, GoogleTranslateWebHost, StringComparison.OrdinalIgnoreCase)
@@ -248,6 +256,18 @@ public static class OnlineHosts
 
         return trimmed;
     }
+
+    /// <summary>
+    /// 是否是 Steam 评论表情地址：https、精确主机 <see cref="SteamCommunityAssetsHost"/>、
+    /// 路径以 <c>/economy/emoticon/</c> 开头。白名单放行的是主机，这里再收紧到表情路径，
+    /// 避免把同一 CDN 上的头像/徽章也当成正文表情下载。
+    /// </summary>
+    /// <param name="uri">待判定的绝对 URI。</param>
+    public static bool IsEmoticonUri(Uri? uri) =>
+        uri is { IsAbsoluteUri: true }
+        && string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(uri.Host, SteamCommunityAssetsHost, StringComparison.OrdinalIgnoreCase)
+        && uri.AbsolutePath.StartsWith(SteamEmoticon.PathPrefix, StringComparison.Ordinal);
 
     /// <summary>绝对 URI 是否可请求：必须是 http/https 且主机在白名单内。</summary>
     public static bool IsAllowed(Uri? uri)

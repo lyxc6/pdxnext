@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
+using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Text;
 
 /// <summary>
@@ -28,6 +29,9 @@ public sealed partial class MarkdownView : ContentControl
 {
     /// <summary>已渲染的图片元素，key 是图片 URL（用于下载完成后原地刷新）。</summary>
     private readonly Dictionary<string, ImageSlot> _imageSlots = new(StringComparer.Ordinal);
+
+    /// <summary>已渲染的评论表情（无扩展名的小图，下载完成后原地换成图片）。</summary>
+    private readonly List<EmoticonSlot> _emoticonSlots = [];
 
     /// <summary>链接被点击（参数是 URL）。</summary>
     public event EventHandler<string>? LinkRequested;
@@ -54,6 +58,15 @@ public sealed partial class MarkdownView : ContentControl
 
             pair.Value.Show(path);
         }
+
+        foreach (var slot in _emoticonSlots)
+        {
+            var path = ImageResolver?.Invoke(slot.Url);
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                slot.Show(path);
+            }
+        }
     }
 
     /// <summary>正文文档。</summary>
@@ -78,6 +91,7 @@ public sealed partial class MarkdownView : ContentControl
     private void Rebuild()
     {
         _imageSlots.Clear();
+        _emoticonSlots.Clear();
 
         var host = new StackPanel { Spacing = 4 };
         var document = Markdown;
@@ -201,12 +215,31 @@ public sealed partial class MarkdownView : ContentControl
         _ => 14,
     };
 
-    private TextBlock BuildTextBlock(
+    private FrameworkElement BuildTextBlock(
         IReadOnlyList<MarkdownInline> inlines,
         double size,
         FontWeight weight,
         Thickness margin)
     {
+        // 表情要作为 20×20 的 UI 元素嵌在文字流里，而 TextBlock 不能承载
+        // InlineUIContainer（WinUI 只支持 RichTextBlock + Paragraph）。
+        if (ContainsEmoticon(inlines))
+        {
+            var rich = new RichTextBlock
+            {
+                FontSize = size,
+                FontWeight = weight,
+                TextWrapping = TextWrapping.Wrap,
+                IsTextSelectionEnabled = true,
+                Margin = margin,
+            };
+
+            var paragraph = new Paragraph();
+            AppendInlines(paragraph.Inlines, inlines, weight, FontStyle.Normal);
+            rich.Blocks.Add(paragraph);
+            return rich;
+        }
+
         var text = new TextBlock
         {
             FontSize = size,
@@ -218,6 +251,29 @@ public sealed partial class MarkdownView : ContentControl
 
         AppendInlines(text.Inlines, inlines, weight, FontStyle.Normal);
         return text;
+    }
+
+    /// <summary>这段行内流里是否至少有一个可渲染的官方表情。</summary>
+    private static bool ContainsEmoticon(IReadOnlyList<MarkdownInline> inlines)
+    {
+        foreach (var inline in inlines)
+        {
+            switch (inline)
+            {
+                case MarkdownImageInline image when SteamEmoticon.IsEmoticonImage(image.Url, image.Alt):
+                    return true;
+
+                case MarkdownLinkInline link when link.Inlines.Count == 1
+                    && ContainsEmoticon(link.Inlines):
+                    return true;
+
+                case MarkdownStyledInline styled when styled.Inlines.Count == 1
+                    && ContainsEmoticon(styled.Inlines):
+                    return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -252,10 +308,10 @@ public sealed partial class MarkdownView : ContentControl
 
         foreach (var inline in inlines)
         {
-            if (TryGetImageUrl(inline, out var url))
+            if (TryGetImage(inline, out var image) && image is not null && !IsInlineImage(image))
             {
                 FlushText();
-                panel.Children.Add(BuildImage(url));
+                panel.Children.Add(BuildImage(image.Url));
                 continue;
             }
 
@@ -272,11 +328,15 @@ public sealed partial class MarkdownView : ContentControl
         return panel;
     }
 
+    /// <summary>
+    /// 是否还有「需要单独成块」的图片。官方表情走行内小图，不参与分块；
+    /// alt 是 <c>:name:</c> 的非表情图也按短码行内文本处理，不再占 240×160 的灰块。
+    /// </summary>
     private static bool HasImage(IReadOnlyList<MarkdownInline> inlines)
     {
         foreach (var inline in inlines)
         {
-            if (TryGetImageUrl(inline, out _))
+            if (TryGetImage(inline, out var image) && image is not null && !IsInlineImage(image))
             {
                 return true;
             }
@@ -285,25 +345,30 @@ public sealed partial class MarkdownView : ContentControl
         return false;
     }
 
+    /// <summary>图片是否只该以行内形式出现（官方表情，或 alt 本身就是短码的失效表情）。</summary>
+    private static bool IsInlineImage(MarkdownImageInline image) =>
+        SteamEmoticon.IsEmoticonImage(image.Url, image.Alt)
+        || SteamEmoticon.TryGetShortCode(image.Alt, out _);
+
     /// <summary>
-    /// 取出一段行内里「唯一」的图片地址：直接是图片、或者整段被包在链接/样式里（Steam 有 <c>&lt;a&gt;&lt;img&gt;&lt;/a&gt;</c>）。
+    /// 取出一段行内里「唯一」的图片：直接是图片、或者整段被包在链接/样式里（Steam 有 <c>&lt;a&gt;&lt;img&gt;&lt;/a&gt;</c>）。
     /// </summary>
-    private static bool TryGetImageUrl(MarkdownInline inline, out string url)
+    private static bool TryGetImage(MarkdownInline inline, out MarkdownImageInline? image)
     {
         switch (inline)
         {
-            case MarkdownImageInline image:
-                url = image.Url;
-                return !string.IsNullOrWhiteSpace(url);
+            case MarkdownImageInline direct when !string.IsNullOrWhiteSpace(direct.Url):
+                image = direct;
+                return true;
 
             case MarkdownLinkInline link when link.Inlines.Count == 1:
-                return TryGetImageUrl(link.Inlines[0], out url);
+                return TryGetImage(link.Inlines[0], out image);
 
             case MarkdownStyledInline styled when styled.Inlines.Count == 1:
-                return TryGetImageUrl(styled.Inlines[0], out url);
+                return TryGetImage(styled.Inlines[0], out image);
 
             default:
-                url = string.Empty;
+                image = null;
                 return false;
         }
     }
@@ -391,6 +456,67 @@ public sealed partial class MarkdownView : ContentControl
         }
     }
 
+    /// <summary>行内表情：小图 + 短码兜底，URL 用于刷新时重新解析本地路径。</summary>
+    private sealed class EmoticonSlot(Image picture, TextBlock fallback, string url)
+    {
+        /// <summary>表情 URL（已规范化，无 query/fragment）。</summary>
+        public string Url { get; } = url;
+
+        /// <summary>切到本地文件显示；失败则继续显示短码。</summary>
+        public void Show(string path)
+        {
+            var source = XamlImage.FromPath(path, 20);
+            if (source is null)
+            {
+                return;
+            }
+
+            if (ReferenceEquals(picture.Source, source))
+            {
+                return;
+            }
+
+            picture.Source = source;
+            picture.Visibility = Visibility.Visible;
+            fallback.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    /// <summary>把一个官方表情作为 20×20 行内元素塞进文字流；本地图未就绪时显示短码。</summary>
+    private void AddEmoticon(InlineCollection target, string url, string shortCode)
+    {
+        var fallback = new TextBlock
+        {
+            Text = shortCode,
+            FontSize = 14,
+            TextWrapping = TextWrapping.NoWrap,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+
+        var picture = new Image
+        {
+            Width = 20,
+            Height = 20,
+            Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Visibility = Visibility.Collapsed,
+        };
+
+        var host = new Grid { Height = 20, VerticalAlignment = VerticalAlignment.Center };
+        host.Children.Add(picture);
+        host.Children.Add(fallback);
+
+        target.Add(new InlineUIContainer { Child = host });
+
+        var slot = new EmoticonSlot(picture, fallback, url);
+        _emoticonSlots.Add(slot);
+        if (ImageResolver?.Invoke(url) is { Length: > 0 } path)
+        {
+            slot.Show(path);
+        }
+    }
+
     private void AppendInlines(
         InlineCollection target,
         IReadOnlyList<MarkdownInline> inlines,
@@ -460,6 +586,15 @@ public sealed partial class MarkdownView : ContentControl
                     target.Add(hyperlink);
                     break;
                 }
+
+                case MarkdownImageInline image
+                    when SteamEmoticon.TryCreate(image.Url, image.Alt, out var emoticonUrl, out var shortCode):
+                    AddEmoticon(target, emoticonUrl, shortCode);
+                    break;
+
+                case MarkdownImageInline image when SteamEmoticon.TryGetShortCode(image.Alt, out var fallbackCode):
+                    target.Add(new Run { Text = fallbackCode });
+                    break;
 
                 case MarkdownImageInline image:
                 {

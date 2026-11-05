@@ -332,6 +332,13 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             return null;
         }
 
+        // 评论表情地址会被 MarkdownView 规范化为「无 query/fragment」的版本；
+        // 这里再归一一次，避免同一张表情因为参数写法不同查不到缓存。
+        if (SteamEmoticon.TryCreate(url, alt: null, out var emoticonUrl, out _))
+        {
+            url = emoticonUrl;
+        }
+
         if (_inlineImages.TryGetValue(url, out var inlinePath) && !string.IsNullOrWhiteSpace(inlinePath))
         {
             return inlinePath;
@@ -653,6 +660,11 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             {
                 ApplyCommentPage(pageData, target, start, cancellationToken);
                 CommentsStatusText = string.Empty;
+
+                // 翻页换了一整批评论，首屏那次收集的 inlineUrls 已经不适用；
+                // 这里重新收当前评论里的官方表情，复用正文配图的下载/缓存管线。
+                await DownloadInlineImagesAsync(row, CollectCommentEmoticonUrls(), cancellationToken)
+                    .ConfigureAwait(true);
             }
             else
             {
@@ -1147,7 +1159,13 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         // Steam 工坊订阅状态：后端可用读实时状态，否则读 acf（都读不到就保持未知）。
         await RefreshSteamSubscriptionAsync(row, cancellationToken).ConfigureAwait(true);
 
-        var inlineUrls = imageUrls.Count > 0 ? imageUrls : document.ImageUrls.ToList();
+        var inlineUrls = new List<string>();
+        inlineUrls.AddRange(imageUrls.Count > 0 ? imageUrls : document.ImageUrls);
+
+        // 评论表情（community.fastly.steamstatic.com/economy/emoticon/<name>）与正文配图
+        // 共用同一份缓存，但评论正文是另外解析的，不会出现在 document.ImageUrls 里。
+        // 只收官方表情路径，头像/徽章等同一 CDN 的其它图片不下载。
+        inlineUrls.AddRange(CollectCommentEmoticonUrls());
 
         NotifyStateChanged();
         IsLoading = false;
@@ -1544,13 +1562,18 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             ? HtmlDescriptionParser.Parse(comment.TextHtml)
             : MarkdownParser.Parse(comment.TextPlain);
 
+        // AST 的纯文本会把表情图片还原成 alt 短码（:highrise:）；评论的 TextPlain
+        // 来自裸扫标签的 ToPlainText，拿不到 alt。这里优先用 AST 的文本，
+        // 让无障碍名称/复制/翻译比对都还能看到短码；TextPlain 仍原样保留作兜底。
+        var bodyPlain = body.IsEmpty ? comment.TextPlain : body.ToPlainText();
+
         return new WorkshopCommentViewModel(
             index,
             comment.AuthorName,
             comment.AuthorProfileUrl,
             comment.PostedUtc,
             body,
-            comment.TextPlain);
+            bodyPlain);
     }
 
     /// <summary>详情取不到时退回缓存正文，至少还能看上次抓到的东西。</summary>
@@ -1759,6 +1782,24 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                 }
             }
         })).ConfigureAwait(true);
+    }
+
+    /// <summary>当前评论列表里的官方表情（规范化 URL，去重前的原始顺序）。</summary>
+    private List<string> CollectCommentEmoticonUrls()
+    {
+        var urls = new List<string>();
+        foreach (var comment in Comments)
+        {
+            foreach (var url in comment.Body.ImageUrls)
+            {
+                if (SteamEmoticon.TryCreate(url, alt: null, out var emoticonUrl, out _))
+                {
+                    urls.Add(emoticonUrl);
+                }
+            }
+        }
+
+        return urls;
     }
 
     /// <summary>正文配图逐张下载（最多 2 张并发），每张完成即通知页面原地换图。</summary>
