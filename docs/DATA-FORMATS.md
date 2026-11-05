@@ -241,7 +241,7 @@ headers：Content-Type: application/json、User-Agent: ParadoxLauncher/<ver>、x
 缓存：<程序目录>\data\theme-cache\<gameId>-<assetKey>-<urlHash8>.<ext>（**绝不写 P社的 cache 目录**）。
 `<urlHash8>` = 素材 URL 的 SHA-256 前 4 字节小写十六进制（8 个字符）。文件名带 URL hash 是有意为之：新版本换了图 → URL 变 → 文件名变 → BitmapLoader / WinUI / FontLoader 里以路径为键的图片与字体缓存自动失效，不需要额外的失效通知。
 索引：同目录 `<gameId>.assets.json`，记录每个键的 url / fileName 与 `lastCheckedUtc`（**主题的「上次检查时间」只写这里，不写 settings.json**）。
-TTL **5 天**（432,000,000 ms，与官方 `pve=1e3*60*60*24*5` 一致）；URL 未变且文件存在则跳过下载。扩展名/文件名变化时删除同一键的旧文件。
+TTL **24 小时**（86,400,000 ms）；URL 未变且文件存在时发 `If-None-Match` / `If-Modified-Since` 条件请求，304 只推进检查时间、不重写文件。扩展名/文件名变化时删除同一键的旧文件。
 下载：流式写 <target>.part → 原子改名；失败/取消删 .part 并保留旧图；并发 2；可取消。
 白名单域名：metadata-assets.paradox-interactive.com、store.steampowered.com、api.paradox-interactive.com、braze-images.com（官方公告图，见 7.3；**只放行主域，子域一律拒绝**）。
 magic：PNG 89 50 4E 47、JPEG FF D8 FF、GIF "GIF8"、SVG 含 "<svg"、字体 00 01 00 00 / "OTTO"（CFF OpenType）/ "true"、WOFF wOFF、WOFF2 wOF2。拒绝 <256 B 或 >40 MB（阈值一路下调：4 KB → 1 KB → 256 B。官方 cache 实测 ck3-buttonBackgroundImage 3,818 B、stellaris 4,495 B、**cities_skylines-buttonBackgroundImage 仅 361 B**（IHDR 8×50 + 单个 IDAT + IEND，结构完整），都是合法 PNG；阈值必须低于 361 B，否则 CS1 的主题刷新永远停在「部分失败」并每 10 分钟重试）。

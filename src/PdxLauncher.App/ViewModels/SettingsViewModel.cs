@@ -25,8 +25,11 @@ using PdxLauncher.Core.Updates;
 /// </summary>
 public sealed class SettingsViewModel : LocalizedObservableObject
 {
-    /// <summary>主题缓存 TTL：5 天 = 432,000,000 ms（docs/DATA-FORMATS.md 冻结值）。</summary>
-    public static readonly TimeSpan ThemeCacheTtl = TimeSpan.FromMilliseconds(432_000_000);
+    /// <summary>
+    /// 主题缓存 TTL：24 小时。索引最后检查时间 + TTL 只用来展示「下次检查」；
+    /// 真正的刷新判定在 ThemeResolver/ThemeRefreshDecision，退避与 force 都优先于 TTL。
+    /// </summary>
+    public static readonly TimeSpan ThemeCacheTtl = TimeSpan.FromMilliseconds(86_400_000);
 
     private GameInstallation? _game;
     private ThemeSpec? _theme;
@@ -226,8 +229,17 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     // ------------------------------------------------------------ 主题区
 
-    /// <summary>当前主题来源：联网缓存 / 安装目录 / 内置占位。</summary>
-    public string ThemeSourceText => T(ThemeSourceKey);
+    /// <summary>当前主题来源：联网缓存 / 安装目录 / 内置素材 / Steam 封面 / 内置占位。</summary>
+    public string ThemeSourceText
+    {
+        get
+        {
+            var text = T(ThemeSourceKey);
+            return GetThemeDiagnostics().MetadataMissing
+                ? text + " · " + T(Keys.SettingsThemeMetadataMissing)
+                : text;
+        }
+    }
 
     /// <summary>当前主题来源对应的本地化键（展示文案与状态栏共用，避免两处 switch 漂移）。</summary>
     private string ThemeSourceKey
@@ -240,6 +252,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 ThemeAssetSource.OnlineCache => Keys.SettingsThemeSourceOnline,
                 ThemeAssetSource.InstallDir => Keys.SettingsThemeSourceInstallDir,
                 ThemeAssetSource.SteamCapsule => Keys.SettingsThemeSourceSteam,
+                ThemeAssetSource.Bundled => Keys.SettingsThemeSourceBundled,
                 _ => Keys.SettingsThemeSourceBuiltIn,
             };
         }
@@ -255,15 +268,66 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>下次检查时间 = 上次检查 + 5 天；从未检查时显示"下次启动时"。</summary>
+    /// <summary>
+    /// 下次检查时间：有失败退避时优先显示退避到点时间，否则 = 上次检查 + 24 小时；
+    /// 从未检查时显示「下次启动时」。
+    /// </summary>
     public string NextCheckText
     {
         get
         {
-            var last = GetLastCheckUtc();
+            var diagnostics = GetThemeDiagnostics();
+            if (diagnostics.RetryAfterUtc is { } retryAfter)
+            {
+                return FormatLocal(retryAfter);
+            }
+
+            var last = diagnostics.LastCheckedUtc;
             return last is null
                 ? T(Keys.SettingsThemeNextOnStartup)
                 : FormatLocal(last.Value + ThemeCacheTtl);
+        }
+    }
+
+    /// <summary>当前背景文件路径 + 本地修改时间；没有背景时显示「无」。</summary>
+    public string BackgroundFileText
+    {
+        get
+        {
+            var path = _theme?.Background ?? Game?.Theme.Background;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return T(Keys.SettingsThemeFileNone);
+            }
+
+            try
+            {
+                var modified = File.GetLastWriteTimeUtc(path)
+                    .ToLocalTime()
+                    .ToString("g", CultureInfo.CurrentCulture);
+                return path + " · " + modified;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return path;
+            }
+        }
+    }
+
+    /// <summary>上次失败原因 + 时间；没有失败时显示「无」。</summary>
+    public string LastFailureText
+    {
+        get
+        {
+            var diagnostics = GetThemeDiagnostics();
+            if (string.IsNullOrWhiteSpace(diagnostics.LastError))
+            {
+                return T(Keys.SettingsThemeFailureNone);
+            }
+
+            return diagnostics.LastErrorUtc is { } at
+                ? diagnostics.LastError + " · " + FormatLocal(at)
+                : diagnostics.LastError;
         }
     }
 
@@ -1147,12 +1211,14 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
 
         IsBusy = true;
+        var startedAt = DateTimeOffset.UtcNow;
         try
         {
-            // 走同一条刷新管线：下载完成后由 ThemeUpdateService 回写 AppServices.Games 并广播，
+            // 真正的 force：绕过 24 小时 TTL 与 10 分钟退避，仍拿同一把 Gate。
+            // 下载完成后由 ThemeUpdateService 回写 AppServices.Games 并广播，
             // 主窗口背景随之更新；这里只负责把结果反映到设置页文案。
             await ThemeUpdateService
-                .RefreshAsync(Game, cancellationToken)
+                .RefreshAsync(Game, forceRefresh: true, cancellationToken)
                 .ConfigureAwait(true);
 
             _theme = AppServices.Games
@@ -1162,8 +1228,24 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             RaiseThemeProps();
 
             var sourceKey = ThemeSourceKey;
-            SetStatus(Keys.SettingsThemeStatusDone, T(sourceKey), NextCheckText);
-            AppServices.Logger.Info("主题检查完成（gameId=" + Game.GameId + "，source=" + T(sourceKey) + "）");
+            var diagnostics = GetThemeDiagnostics();
+            if (!diagnostics.MetadataMissing
+                && diagnostics.LastErrorUtc is { } failedAt
+                && failedAt >= startedAt
+                && !string.IsNullOrWhiteSpace(diagnostics.LastError))
+            {
+                // ResolveAsync 会吞掉刷新异常并写入索引：这里必须把本轮失败如实反馈，
+                // 不能让用户看到「检查完成」却还是旧图。
+                SetStatus(Keys.SettingsThemeStatusFailed, diagnostics.LastError);
+                AppServices.Logger.Warn(
+                    "主题检查失败（gameId=" + Game.GameId + "）: " + diagnostics.LastError);
+            }
+            else
+            {
+                SetStatus(Keys.SettingsThemeStatusDone, T(sourceKey), NextCheckText);
+                AppServices.Logger.Info(
+                    "主题检查完成（gameId=" + Game.GameId + "，source=" + T(sourceKey) + "）");
+            }
         }
         catch (OperationCanceledException)
         {
@@ -2075,8 +2157,12 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
-    private DateTimeOffset? GetLastCheckUtc() =>
-        Game is null ? null : AppServices.ThemeResolver.GetLastCheckedUtc(Game.GameId);
+    private DateTimeOffset? GetLastCheckUtc() => GetThemeDiagnostics().LastCheckedUtc;
+
+    private ThemeCacheDiagnostics GetThemeDiagnostics() =>
+        Game is null
+            ? new ThemeCacheDiagnostics(null, null, null, null, MetadataMissing: false)
+            : AppServices.ThemeResolver.GetDiagnostics(Game.GameId);
 
     private static string FormatLocal(DateTimeOffset utc) =>
         utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
@@ -2307,6 +2393,8 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(ThemeSourceText));
         OnPropertyChanged(nameof(LastCheckText));
         OnPropertyChanged(nameof(NextCheckText));
+        OnPropertyChanged(nameof(BackgroundFileText));
+        OnPropertyChanged(nameof(LastFailureText));
         OnPropertyChanged(nameof(OnlineRefreshEnabled));
         OnPropertyChanged(nameof(DlcDescriptionOnlineEnabled));
         OnPropertyChanged(nameof(NewsFeedOnlineEnabled));

@@ -1,5 +1,6 @@
 namespace PdxLauncher.Core.Online;
 
+using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using PdxLauncher.Core.Abstractions;
@@ -152,6 +153,92 @@ public sealed class HttpFetcher : IHttpFetcher, IDisposable
         {
             // 返回内容流即可：流的释放会把连接归还连接池。
             return await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            response.Dispose();
+            throw;
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<ConditionalHttpResult> GetConditionalAsync(
+        Uri uri,
+        string? etag,
+        string? lastModified,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
+        EnsureAllowed(uri);
+
+        var slot = await AcquireSlotAsync(uri, cancellationToken).ConfigureAwait(false);
+        HttpResponseMessage response;
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+            if (!string.IsNullOrWhiteSpace(etag))
+            {
+                request.Headers.TryAddWithoutValidation("If-None-Match", etag);
+            }
+
+            if (!string.IsNullOrWhiteSpace(lastModified))
+            {
+                request.Headers.TryAddWithoutValidation("If-Modified-Since", lastModified);
+            }
+
+            response = await Volatile.Read(ref _client)
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            slot?.Dispose();
+            throw new NetworkTimeoutException(
+                uri.Host,
+                "连接超时（" + (int)ConnectTimeout.TotalSeconds + " 秒）：" + uri.Host,
+                ex);
+        }
+        catch
+        {
+            slot?.Dispose();
+            throw;
+        }
+
+        var responseEtag = response.Headers.ETag?.ToString();
+        var responseLastModified = response.Content.Headers.LastModified
+            ?.ToString("R", CultureInfo.InvariantCulture);
+
+        if (response.StatusCode == HttpStatusCode.NotModified)
+        {
+            _throttle?.ReportSuccess(uri.Host);
+            response.Dispose();
+            slot?.Dispose();
+            return new ConditionalHttpResult(
+                HttpStatusCode.NotModified,
+                content: null,
+                responseEtag,
+                responseLastModified);
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var failure = ClassifyFailure(uri, response);
+            response.Dispose();
+            slot?.Dispose();
+            throw failure;
+        }
+
+        _throttle?.ReportSuccess(uri.Host);
+        slot?.Dispose();
+
+        try
+        {
+            var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            return new ConditionalHttpResult(
+                response.StatusCode,
+                stream,
+                responseEtag,
+                responseLastModified);
         }
         catch (Exception)
         {

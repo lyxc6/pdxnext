@@ -776,7 +776,7 @@ public sealed partial class Localizer
         ["settings.cache.row.modThumbnails.title"] = "Mod 缩略图",
         ["settings.cache.row.news.desc"] = "公告卡与配图，6 小时过期",
         ["settings.cache.row.news.title"] = "官方公告",
-        ["settings.cache.row.theme.desc"] = "联网下发的背景与字标，5 天过期；清除后下次检查时重新下载",
+        ["settings.cache.row.theme.desc"] = "联网下发的背景与字标，24 小时过期；清除后下次检查时重新下载",
         ["settings.cache.row.theme.title"] = "主题素材",
         ["settings.cache.row.translations.desc"] = "已翻译的标题、简介与评论；清除后下次显示时会重新向翻译服务请求",
         ["settings.cache.row.translations.title"] = "译文缓存",
@@ -1007,11 +1007,16 @@ public sealed partial class Localizer
         ["settings.steamSubscribeOn"] = "Steam 工坊直连订阅（实验）",
         ["settings.steamSubscribeStatusOff"] = "已关闭 Steam 工坊直连订阅",
         ["settings.steamSubscribeStatusOn"] = "已开启 Steam 工坊直连订阅",
+        ["settings.theme.backgroundFile"] = "当前背景文件",
         ["settings.theme.busy"] = "处理中",
         ["settings.theme.checkNow"] = "立即检查",
         ["settings.theme.dialogFailedTitle"] = "检查主题失败",
-        ["settings.theme.hint"] = "背景 / 字标素材由元数据服务按版本下发并缓存 5 天；颜色 / 字体始终取安装目录的 theme-settings.json。",
+        ["settings.theme.failureNone"] = "无",
+        ["settings.theme.fileNone"] = "无",
+        ["settings.theme.hint"] = "背景 / 字标素材由元数据服务按版本下发，每天最多检查一次（24 小时 TTL）；颜色 / 字体始终取安装目录的 theme-settings.json。",
         ["settings.theme.lastCheck"] = "上次检查时间",
+        ["settings.theme.lastFailure"] = "上次失败原因",
+        ["settings.theme.metadataMissing"] = "元数据无该游戏，使用内置素材",
         ["settings.theme.neverChecked"] = "从未检查",
         ["settings.theme.nextCheck"] = "下次检查时间",
         ["settings.theme.nextOnStartup"] = "下次启动时",
@@ -1019,13 +1024,14 @@ public sealed partial class Localizer
         ["settings.theme.onlineOn"] = "联网检查主题",
         ["settings.theme.source"] = "当前主题来源",
         ["settings.theme.source.builtIn"] = "内置占位",
+        ["settings.theme.source.bundled"] = "内置素材",
         ["settings.theme.source.installDir"] = "安装目录",
         ["settings.theme.source.online"] = "联网缓存",
         ["settings.theme.source.steam"] = "Steam 封面",
         ["settings.theme.statusDone"] = "主题检查完成：来源={0}，下次检查 {1}",
         ["settings.theme.statusFailed"] = "主题检查失败：{0}",
         ["settings.theme.statusOff"] = "已关闭联网主题检查：只使用安装目录与内置占位主题",
-        ["settings.theme.statusOn"] = "已开启联网主题检查（TTL 5 天）",
+        ["settings.theme.statusOn"] = "已开启联网主题检查（TTL 24 小时）",
         ["settings.title"] = "设置",
         ["settings.translate.apiKey"] = "接口密钥",
         ["settings.translate.apiKeyName"] = "OpenAI 兼容接口密钥",
@@ -2076,7 +2082,7 @@ public sealed partial class Localizer
         ["settings.cache.row.modThumbnails.title"] = "Mod thumbnails",
         ["settings.cache.row.news.desc"] = "News cards and images; expire after 6 hours",
         ["settings.cache.row.news.title"] = "Official news",
-        ["settings.cache.row.theme.desc"] = "Backgrounds and wordmarks downloaded online; expire after 5 days and are fetched again on the next check",
+        ["settings.cache.row.theme.desc"] = "Online background and wordmark art; expires after 24 hours and is re-downloaded on the next check after clearing.",
         ["settings.cache.row.theme.title"] = "Theme assets",
         ["settings.cache.row.translations.desc"] = "Translated titles, descriptions and comments; cleared entries are requested from the translation service again the next time they are shown",
         ["settings.cache.row.translations.title"] = "Translations",
@@ -2307,11 +2313,16 @@ public sealed partial class Localizer
         ["settings.steamSubscribeOn"] = "Direct Steam Workshop subscription (experimental)",
         ["settings.steamSubscribeStatusOff"] = "Direct Steam Workshop subscription disabled",
         ["settings.steamSubscribeStatusOn"] = "Direct Steam Workshop subscription enabled",
+        ["settings.theme.backgroundFile"] = "Current background file",
         ["settings.theme.busy"] = "Working",
         ["settings.theme.checkNow"] = "Check now",
         ["settings.theme.dialogFailedTitle"] = "Theme check failed",
-        ["settings.theme.hint"] = "Backgrounds and wordmarks come from the metadata service and are cached for 5 days; colors and fonts always come from theme-settings.json in the install folder.",
+        ["settings.theme.failureNone"] = "None",
+        ["settings.theme.fileNone"] = "None",
+        ["settings.theme.hint"] = "Backgrounds and wordmarks come from the metadata service and are re-checked at most once a day (24-hour TTL); colors and fonts always come from theme-settings.json in the install folder.",
         ["settings.theme.lastCheck"] = "Last checked",
+        ["settings.theme.lastFailure"] = "Last failure",
+        ["settings.theme.metadataMissing"] = "No metadata for this game; using bundled art",
         ["settings.theme.neverChecked"] = "Never checked",
         ["settings.theme.nextCheck"] = "Next check",
         ["settings.theme.nextOnStartup"] = "On next launch",
@@ -2319,13 +2330,14 @@ public sealed partial class Localizer
         ["settings.theme.onlineOn"] = "Check theme online",
         ["settings.theme.source"] = "Theme source",
         ["settings.theme.source.builtIn"] = "Built-in placeholder",
+        ["settings.theme.source.bundled"] = "Bundled art",
         ["settings.theme.source.installDir"] = "Game folder",
         ["settings.theme.source.online"] = "Online cache",
         ["settings.theme.source.steam"] = "Steam cover",
         ["settings.theme.statusDone"] = "Theme check finished: source={0}, next check {1}",
         ["settings.theme.statusFailed"] = "Theme check failed: {0}",
         ["settings.theme.statusOff"] = "Theme check off: only the game folder and the built-in placeholder are used",
-        ["settings.theme.statusOn"] = "Theme check online (5-day cache)",
+        ["settings.theme.statusOn"] = "Theme check online (24-hour cache)",
         ["settings.title"] = "Settings",
         ["settings.translate.apiKey"] = "API key",
         ["settings.translate.apiKeyName"] = "OpenAI-compatible API key",
@@ -3607,11 +3619,16 @@ public sealed partial class Localizer
         ("settings.steamSubscribeOn", "SettingsSteamSubscribeOn"),
         ("settings.steamSubscribeStatusOff", "SettingsSteamSubscribeStatusOff"),
         ("settings.steamSubscribeStatusOn", "SettingsSteamSubscribeStatusOn"),
+        ("settings.theme.backgroundFile", "SettingsThemeBackgroundFile"),
         ("settings.theme.busy", "SettingsThemeBusy"),
         ("settings.theme.checkNow", "SettingsThemeCheckNow"),
         ("settings.theme.dialogFailedTitle", "SettingsThemeDialogFailedTitle"),
+        ("settings.theme.failureNone", "SettingsThemeFailureNone"),
+        ("settings.theme.fileNone", "SettingsThemeFileNone"),
         ("settings.theme.hint", "SettingsThemeHint"),
         ("settings.theme.lastCheck", "SettingsThemeLastCheck"),
+        ("settings.theme.lastFailure", "SettingsThemeLastFailure"),
+        ("settings.theme.metadataMissing", "SettingsThemeMetadataMissing"),
         ("settings.theme.neverChecked", "SettingsThemeNeverChecked"),
         ("settings.theme.nextCheck", "SettingsThemeNextCheck"),
         ("settings.theme.nextOnStartup", "SettingsThemeNextOnStartup"),
@@ -3619,6 +3636,7 @@ public sealed partial class Localizer
         ("settings.theme.onlineOn", "SettingsThemeOnlineOn"),
         ("settings.theme.source", "SettingsThemeSource"),
         ("settings.theme.source.builtIn", "SettingsThemeSourceBuiltIn"),
+        ("settings.theme.source.bundled", "SettingsThemeSourceBundled"),
         ("settings.theme.source.installDir", "SettingsThemeSourceInstallDir"),
         ("settings.theme.source.online", "SettingsThemeSourceOnline"),
         ("settings.theme.source.steam", "SettingsThemeSourceSteam"),
@@ -4905,11 +4923,16 @@ public sealed partial class Localizer
     public string SettingsSteamSubscribeOn => Format("settings.steamSubscribeOn");
     public string SettingsSteamSubscribeStatusOff => Format("settings.steamSubscribeStatusOff");
     public string SettingsSteamSubscribeStatusOn => Format("settings.steamSubscribeStatusOn");
+    public string SettingsThemeBackgroundFile => Format("settings.theme.backgroundFile");
     public string SettingsThemeBusy => Format("settings.theme.busy");
     public string SettingsThemeCheckNow => Format("settings.theme.checkNow");
     public string SettingsThemeDialogFailedTitle => Format("settings.theme.dialogFailedTitle");
+    public string SettingsThemeFailureNone => Format("settings.theme.failureNone");
+    public string SettingsThemeFileNone => Format("settings.theme.fileNone");
     public string SettingsThemeHint => Format("settings.theme.hint");
     public string SettingsThemeLastCheck => Format("settings.theme.lastCheck");
+    public string SettingsThemeLastFailure => Format("settings.theme.lastFailure");
+    public string SettingsThemeMetadataMissing => Format("settings.theme.metadataMissing");
     public string SettingsThemeNeverChecked => Format("settings.theme.neverChecked");
     public string SettingsThemeNextCheck => Format("settings.theme.nextCheck");
     public string SettingsThemeNextOnStartup => Format("settings.theme.nextOnStartup");
@@ -4917,6 +4940,7 @@ public sealed partial class Localizer
     public string SettingsThemeOnlineOn => Format("settings.theme.onlineOn");
     public string SettingsThemeSource => Format("settings.theme.source");
     public string SettingsThemeSourceBuiltIn => Format("settings.theme.source.builtIn");
+    public string SettingsThemeSourceBundled => Format("settings.theme.source.bundled");
     public string SettingsThemeSourceInstallDir => Format("settings.theme.source.installDir");
     public string SettingsThemeSourceOnline => Format("settings.theme.source.online");
     public string SettingsThemeSourceSteam => Format("settings.theme.source.steam");
@@ -6206,11 +6230,16 @@ internal static class Keys
     public const string SettingsSteamSubscribeOn = "settings.steamSubscribeOn";
     public const string SettingsSteamSubscribeStatusOff = "settings.steamSubscribeStatusOff";
     public const string SettingsSteamSubscribeStatusOn = "settings.steamSubscribeStatusOn";
+    public const string SettingsThemeBackgroundFile = "settings.theme.backgroundFile";
     public const string SettingsThemeBusy = "settings.theme.busy";
     public const string SettingsThemeCheckNow = "settings.theme.checkNow";
     public const string SettingsThemeDialogFailedTitle = "settings.theme.dialogFailedTitle";
+    public const string SettingsThemeFailureNone = "settings.theme.failureNone";
+    public const string SettingsThemeFileNone = "settings.theme.fileNone";
     public const string SettingsThemeHint = "settings.theme.hint";
     public const string SettingsThemeLastCheck = "settings.theme.lastCheck";
+    public const string SettingsThemeLastFailure = "settings.theme.lastFailure";
+    public const string SettingsThemeMetadataMissing = "settings.theme.metadataMissing";
     public const string SettingsThemeNeverChecked = "settings.theme.neverChecked";
     public const string SettingsThemeNextCheck = "settings.theme.nextCheck";
     public const string SettingsThemeNextOnStartup = "settings.theme.nextOnStartup";
@@ -6218,6 +6247,7 @@ internal static class Keys
     public const string SettingsThemeOnlineOn = "settings.theme.onlineOn";
     public const string SettingsThemeSource = "settings.theme.source";
     public const string SettingsThemeSourceBuiltIn = "settings.theme.source.builtIn";
+    public const string SettingsThemeSourceBundled = "settings.theme.source.bundled";
     public const string SettingsThemeSourceInstallDir = "settings.theme.source.installDir";
     public const string SettingsThemeSourceOnline = "settings.theme.source.online";
     public const string SettingsThemeSourceSteam = "settings.theme.source.steam";

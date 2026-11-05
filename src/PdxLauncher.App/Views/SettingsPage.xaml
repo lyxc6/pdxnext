@@ -155,6 +155,18 @@
                                                     ValueAutomationName="{x:Bind L.SettingsThemeNextCheck, Mode=OneWay}"
                                                     ShowToolTip="False" />
 
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsThemeBackgroundFile, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.BackgroundFileText, Mode=OneWay}"
+                                                    ValueAutomationId="txtThemeBackgroundFile"
+                                                    ValueAutomationName="{x:Bind L.SettingsThemeBackgroundFile, Mode=OneWay}"
+                                                    ShowToolTip="False" />
+
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsThemeLastFailure, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.LastFailureText, Mode=OneWay}"
+                                                    ValueAutomationId="txtThemeLastFailure"
+                                                    ValueAutomationName="{x:Bind L.SettingsThemeLastFailure, Mode=OneWay}"
+                                                    ShowToolTip="False" />
+
                         <controls:SettingsCard Header="{x:Bind L.SettingsThemeOnlineOn, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
                                 <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
