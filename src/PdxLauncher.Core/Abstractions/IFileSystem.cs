@@ -14,6 +14,12 @@ public interface IFileSystem
 
     byte[] ReadAllBytes(string path);
 
+    /// <summary>
+    /// 以只读方式打开文件流，供需要随机访问的容器解析（zip）和有限头读取使用。
+    /// <para>调用方负责释放返回的流；实现应允许其它进程共享读写。</para>
+    /// </summary>
+    Stream OpenRead(string path);
+
     void WriteAllBytesAtomic(string path, ReadOnlySpan<byte> data);
 
     void WriteAllTextAtomic(string path, string text);
