@@ -133,6 +133,36 @@ public sealed class AchievementSnapshotCache
         }
     }
 
+    /// <summary>
+    /// 删除某个游戏的缓存文件（用于清掉旧版本写入的「可用但空数组」毒快照）。
+    /// 文件本就不存在、key 非法或删除失败都只返回 false，不抛异常。
+    /// </summary>
+    /// <param name="cacheKey">缓存键（appid 或 gameId）。</param>
+    public bool TryDelete(string cacheKey)
+    {
+        var path = PathFor(cacheKey);
+        if (path is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            if (!_fileSystem.FileExists(path))
+            {
+                return false;
+            }
+
+            _fileSystem.Delete(path);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException
+            or NotSupportedException or ArgumentException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>缓存键就是 appid（或 gameId），只允许单段文件名，避免 <c>..</c> 跑出缓存目录。</summary>
     private static bool IsSafeKey(string key)
     {
