@@ -1,8 +1,11 @@
 namespace PdxLauncher.Checks;
 
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 
+using PdxLauncher.App.Localization;
+using PdxLauncher.App.ViewModels;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Saves;
 
@@ -57,6 +60,7 @@ public static class SavesActionsChecks
         try
         {
             CheckServiceBehaviour(fs, logger, root);
+            CheckQuotaAndGlobalBusy(fs, logger, root);
 
             var workspace = FindWorkspaceRoot();
             var page = ReadRequired(
@@ -198,6 +202,71 @@ public static class SavesActionsChecks
     // 页面 / 视图模型源码断言
     // ------------------------------------------------------------------
 
+    /// <summary>
+    /// 配额满原因必须真的出现在可见文案里；全局忙碌时必须把删除/恢复也禁用，
+    /// 不能只在 handler 里 return（用户点了确认后静默 no-op）。
+    /// </summary>
+    private static void CheckQuotaAndGlobalBusy(IFileSystem fs, IAppLogger logger, string root)
+    {
+        Console.WriteLine("[SavesActionsChecks] 配额满提示与全局忙碌禁用");
+
+        var scanner = new SaveGameScanner(
+            fs,
+            logger,
+            new SaveLocationCatalog(
+                fs,
+                Path.Combine(root, "vm-docs"),
+                Path.Combine(root, "vm-local"),
+                Path.Combine(root, "vm-low")));
+        var backups = new SaveBackupService(fs, logger, Path.Combine(root, "vm-data"));
+        var viewModel = new SavesViewModel(scanner, backups, logger);
+
+        var usageField = typeof(SavesViewModel).GetField(
+            "_usage",
+            BindingFlags.Instance | BindingFlags.NonPublic);
+        ChecksContext.Check("视图模型: 可注入备份用量做配额自检", usageField is not null, "缺少 _usage 字段");
+        if (usageField is not null)
+        {
+            usageField.SetValue(
+                viewModel,
+                new SaveBackupUsage(SaveBackupPaths.DefaultMaxTotalBytes, 0));
+            ChecksContext.Check("视图模型: 配额满判断", viewModel.IsQuotaFull);
+            ChecksContext.Check(
+                "视图模型: 配额满时用量行包含配额提示键",
+                viewModel.BackupUsageText.Contains(Keys.SavesBackupQuotaFull, StringComparison.Ordinal),
+                viewModel.BackupUsageText);
+        }
+
+        var file = new SaveFileEntry(
+            GameId,
+            Path.Combine(root, "a.ck3"),
+            "a.ck3",
+            1,
+            DateTimeOffset.UtcNow,
+            SaveContainer.TextMeta);
+        var gameRow = new SaveGameRowViewModel(file, 0);
+        ChecksContext.Check("行按钮: 全局空闲时允许删除", gameRow.CanDelete);
+        gameRow.SetActionAllowed(false);
+        ChecksContext.Check("行按钮: 全局忙碌时删除禁用", !gameRow.CanDelete);
+
+        var backupEntry = new SaveBackupEntry(
+            Path.Combine(root, "a.ck3.bak"),
+            Path.Combine(root, "a.ck3.bak.json"),
+            file.FilePath,
+            "a.ck3",
+            1,
+            "sha256",
+            GameId,
+            null,
+            null,
+            DateTimeOffset.UtcNow);
+        var backupRow = new SaveBackupRowViewModel(backupEntry, 0);
+        ChecksContext.Check("备份行: 全局空闲时允许恢复", backupRow.CanRestore);
+        backupRow.SetActionAllowed(false);
+        ChecksContext.Check("备份行: 全局忙碌时恢复禁用", !backupRow.CanRestore);
+        ChecksContext.Check("备份行: 全局忙碌时删除备份禁用", !backupRow.CanDelete);
+    }
+
     private static void CheckDestructiveFocus(string page)
     {
         Console.WriteLine("[SavesActionsChecks] 破坏性确认框的初始焦点");
@@ -264,6 +333,10 @@ public static class SavesActionsChecks
         ChecksContext.Check(
             "视图模型: 配额满提示「可删除旧备份」",
             backup.Contains("Keys.SavesBackupQuotaFull", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "视图模型: 全局忙碌时统一下发 SetActionAllowed",
+            viewModel.Contains("row.SetActionAllowed(actionAllowed)", StringComparison.Ordinal)
+                && viewModel.Contains("var actionAllowed = !IsBusy;", StringComparison.Ordinal));
     }
 
     private static void CheckFailureMessages(string viewModel)
@@ -338,9 +411,9 @@ public static class SavesActionsChecks
             "备份行: 读屏名包含创建时间",
             backupRow.Contains("T(Keys.SavesBackupRowName, FileName, CreatedText)", StringComparison.Ordinal));
         ChecksContext.Check(
-            "备份行: 恢复/删除按钮受 IsBusy 控制",
-            backupRow.Contains("CanRestore => !IsBusy", StringComparison.Ordinal)
-                && backupRow.Contains("CanDelete => !IsBusy", StringComparison.Ordinal));
+            "备份行: 恢复/删除按钮受行忙碌与全局忙碌控制",
+            backupRow.Contains("CanRestore => !IsBusy && _actionAllowed", StringComparison.Ordinal)
+                && backupRow.Contains("CanDelete => !IsBusy && _actionAllowed", StringComparison.Ordinal));
     }
 
     private static void CheckXamlWiring(string xaml)
@@ -383,6 +456,15 @@ public static class SavesActionsChecks
         ChecksContext.Check(
             "XAML: 备份用量显示在标题旁",
             xaml.Contains("ViewModel.BackupUsageText", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "XAML: 配额满原因有独立可见文案",
+            xaml.Contains("txtBackupQuotaFull", StringComparison.Ordinal)
+                && xaml.Contains("L.SavesBackupQuotaFull", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "XAML: 配额满原因按 IsQuotaFull 显示",
+            xaml.Contains(
+                "XamlVisibility.FromBool(ViewModel.IsQuotaFull)",
+                StringComparison.Ordinal));
         ChecksContext.Check(
             "XAML: 点击处理齐全",
             xaml.Contains(@"Click=""OnBackupSaveClick""", StringComparison.Ordinal)

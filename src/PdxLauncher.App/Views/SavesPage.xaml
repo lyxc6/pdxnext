@@ -264,6 +264,13 @@
                                AutomationProperties.AutomationId="txtBackupUsage" />
                 </Grid>
 
+                <TextBlock Text="{x:Bind L.SavesBackupQuotaFull, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                           Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsQuotaFull), Mode=OneWay}"
+                           AutomationProperties.AutomationId="txtBackupQuotaFull"
+                           TextWrapping="Wrap" />
+
                 <TextBlock Text="{x:Bind L.SavesBackupEmpty, Mode=OneWay}"
                            Style="{StaticResource CaptionTextBlockStyle}"
                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"

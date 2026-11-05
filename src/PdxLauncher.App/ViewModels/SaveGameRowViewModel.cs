@@ -32,6 +32,7 @@ public sealed class SaveGameRowViewModel : LocalizedObservableObject
     private SaveRowState _state;
     private bool _isBusy;
     private bool _backupAllowed = true;
+    private bool _actionAllowed = true;
 
     public SaveGameRowViewModel(SaveFileEntry file, int index)
     {
@@ -155,8 +156,8 @@ public sealed class SaveGameRowViewModel : LocalizedObservableObject
     /// <summary>备份按钮可用：不在本行操作中，且配额还有余量（配额满时由页面提示「可删除旧备份」）。</summary>
     public bool CanBackup => !IsBusy && _backupAllowed;
 
-    /// <summary>删除按钮可用：只受本行操作影响；配额满不影响删除。</summary>
-    public bool CanDelete => !IsBusy;
+    /// <summary>删除按钮可用：不在本行操作中、页面不忙，且没有被配额/扫描的全局禁用。</summary>
+    public bool CanDelete => !IsBusy && _actionAllowed;
 
     /// <summary>行内按钮文案：DataTemplate 里只能绑行 VM，绑不到页面上的 <c>L</c>。</summary>
     public string BackupText => T(Keys.SavesActionBackup);
@@ -173,6 +174,18 @@ public sealed class SaveGameRowViewModel : LocalizedObservableObject
 
         _backupAllowed = allowed;
         OnPropertyChanged(nameof(CanBackup));
+    }
+
+    /// <summary>页面整体忙碌（扫描或任一写操作）时由视图模型统一下发，避免后台竞态下仍可点删除。</summary>
+    public void SetActionAllowed(bool allowed)
+    {
+        if (_actionAllowed == allowed)
+        {
+            return;
+        }
+
+        _actionAllowed = allowed;
+        OnPropertyChanged(nameof(CanDelete));
     }
 
     /// <summary>由视图模型在操作开始时置位；操作结束（含失败/取消）必须在 finally 里复位。</summary>

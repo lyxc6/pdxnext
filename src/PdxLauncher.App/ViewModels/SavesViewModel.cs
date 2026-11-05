@@ -95,9 +95,15 @@ public sealed class SavesViewModel : LocalizedObservableObject
     /// <summary>有游戏但还没有任何备份时显示「还没有备份」；扫描期间不闪。</summary>
     public bool ShowBackupEmptyState => HasGame && !HasBackups;
 
-    /// <summary>备份用量：总量（跨游戏）与当前游戏的条目数。</summary>
-    public string BackupUsageText =>
-        T(Keys.SavesBackupUsage, SizeFormatter.Format(_usage.TotalBytes), Backups.Count);
+    /// <summary>备份用量：总量（跨游戏）与当前游戏的条目数；配额满时同一行直接补原因。</summary>
+    public string BackupUsageText
+    {
+        get
+        {
+            var usage = T(Keys.SavesBackupUsage, SizeFormatter.Format(_usage.TotalBytes), Backups.Count);
+            return IsQuotaFull ? usage + " · " + T(Keys.SavesBackupQuotaFull) : usage;
+        }
+    }
 
     /// <summary>
     /// 配额是否已满：总量达到 2 GiB 或当前游戏条目达到 200 条。服务端还会按「将要写入的大小」
@@ -744,11 +750,24 @@ public sealed class SavesViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(BackupUsageText));
         OnPropertyChanged(nameof(IsQuotaFull));
 
-        // 配额状态变化直接决定每一行「备份」按钮是否可用。
-        var allowed = !IsBusy && !IsQuotaFull;
+        // 配额状态变化决定「备份」按钮；页面忙碌状态同时决定删除/恢复按钮。
+        ApplyRowAvailability();
+    }
+
+    /// <summary>把全局忙碌态与配额状态下发给所有行；行自身的 IsBusy 仍由各自操作维护。</summary>
+    private void ApplyRowAvailability()
+    {
+        var actionAllowed = !IsBusy;
+        var backupAllowed = actionAllowed && !IsQuotaFull;
         foreach (var row in Saves)
         {
-            row.SetBackupAllowed(allowed);
+            row.SetBackupAllowed(backupAllowed);
+            row.SetActionAllowed(actionAllowed);
+        }
+
+        foreach (var row in Backups)
+        {
+            row.SetActionAllowed(actionAllowed);
         }
     }
 
@@ -956,12 +975,8 @@ public sealed class SavesViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(BackupUsageText));
         OnPropertyChanged(nameof(IsQuotaFull));
 
-        // 扫描/写操作期间整页忙碌，行的「备份」按钮随之禁用；配额满同样禁用（删除/恢复不受影响）。
-        var allowed = !IsBusy && !IsQuotaFull;
-        foreach (var row in Saves)
-        {
-            row.SetBackupAllowed(allowed);
-        }
+        // 扫描/写操作期间整页忙碌：备份、删除、恢复按钮都随之下发禁用。
+        ApplyRowAvailability();
     }
 
     private enum SavesState

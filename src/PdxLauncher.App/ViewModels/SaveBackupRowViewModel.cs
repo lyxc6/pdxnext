@@ -15,6 +15,7 @@ public sealed class SaveBackupRowViewModel : LocalizedObservableObject
     private readonly int _index;
 
     private bool _isBusy;
+    private bool _actionAllowed = true;
 
     public SaveBackupRowViewModel(SaveBackupEntry entry, int index)
     {
@@ -59,14 +60,29 @@ public sealed class SaveBackupRowViewModel : LocalizedObservableObject
         }
     }
 
-    public bool CanRestore => !IsBusy;
+    /// <summary>页面整体忙碌（扫描或任一写操作）期间禁用，防止确认后静默 no-op。</summary>
+    public bool CanRestore => !IsBusy && _actionAllowed;
 
-    public bool CanDelete => !IsBusy;
+    /// <summary>页面整体忙碌期间禁用，防止确认后静默 no-op。</summary>
+    public bool CanDelete => !IsBusy && _actionAllowed;
 
     /// <summary>行内按钮文案：DataTemplate 里只能绑行 VM，绑不到页面上的 <c>L</c>。</summary>
     public string RestoreText => T(Keys.SavesActionRestore);
 
     public string DeleteText => T(Keys.SavesActionDeleteBackup);
+
+    /// <summary>页面忙碌态变化时由视图模型统一下发；不改变行自身的忙碌态。</summary>
+    public void SetActionAllowed(bool allowed)
+    {
+        if (_actionAllowed == allowed)
+        {
+            return;
+        }
+
+        _actionAllowed = allowed;
+        OnPropertyChanged(nameof(CanRestore));
+        OnPropertyChanged(nameof(CanDelete));
+    }
 
     /// <summary>由视图模型在操作开始时置位；结束时必须在 finally 里复位。</summary>
     internal void SetBusy(bool busy) => IsBusy = busy;
