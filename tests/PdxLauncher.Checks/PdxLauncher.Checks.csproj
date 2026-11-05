@@ -220,5 +220,6 @@
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveRowState.cs" Link="Linked\SaveRowState.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveGameRowViewModel.cs" Link="Linked\SaveGameRowViewModel.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SavesViewModel.cs" Link="Linked\SavesViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveBackupRowViewModel.cs" Link="Linked\SaveBackupRowViewModel.cs" />
   </ItemGroup>
 </Project>

@@ -27,26 +27,37 @@ using PdxLauncher.Core.Saves;
 public sealed class SavesViewModel : LocalizedObservableObject
 {
     private readonly ISaveGameFileIndex _library;
+    private readonly ISaveGameBackupService _backups;
     private readonly IAppLogger _logger;
     private readonly SaveScanRequestTracker _requests = new();
 
     private GameInstallation? _game;
-    private bool _isBusy;
+    private bool _scanBusy;
+    private int _actionCount;
+    private int _backupLoadVersion;
     private SavesState _state = SavesState.NoGame;
     private DateTimeOffset? _lastScanAt;
     private int _processed;
     private int _total;
+    private SaveBackupUsage _usage = SaveBackupUsage.Empty;
+    private string _noticeText = string.Empty;
+    private bool _noticeIsError;
 
-    public SavesViewModel(ISaveGameFileIndex library, IAppLogger logger)
+    public SavesViewModel(ISaveGameFileIndex library, ISaveGameBackupService backups, IAppLogger logger)
     {
         ArgumentNullException.ThrowIfNull(library);
+        ArgumentNullException.ThrowIfNull(backups);
         ArgumentNullException.ThrowIfNull(logger);
         _library = library;
+        _backups = backups;
         _logger = logger;
     }
 
     /// <summary>当前游戏的存档行；切游戏或重新扫描时整体清空，第二段只原位补细节。</summary>
     public ObservableCollection<SaveGameRowViewModel> Saves { get; } = new();
+
+    /// <summary>当前游戏的备份条目（按服务返回的时间降序）；切游戏/刷新时整体重建。</summary>
+    public ObservableCollection<SaveBackupRowViewModel> Backups { get; } = new();
 
     public GameInstallation? Game
     {
@@ -57,28 +68,53 @@ public sealed class SavesViewModel : LocalizedObservableObject
             {
                 OnPropertyChanged(nameof(GameTitle));
                 OnPropertyChanged(nameof(CanRefresh));
+                OnPropertyChanged(nameof(HasGame));
+                OnPropertyChanged(nameof(ShowBackupEmptyState));
             }
         }
     }
 
     public string GameTitle => Game?.DisplayName ?? T(Keys.SavesNoGame);
 
-    public bool IsBusy
-    {
-        get => _isBusy;
-        private set
-        {
-            if (SetProperty(ref _isBusy, value))
-            {
-                OnPropertyChanged(nameof(CanRefresh));
-            }
-        }
-    }
+    /// <summary>
+    /// 扫描或写操作（备份/恢复/删除）期间为 true。写操作也计入忙碌态，
+    /// 以免用户在文件操作尚未落地时刷新页面或切换游戏，导致旧结果覆盖新页面。
+    /// </summary>
+    public bool IsBusy => _scanBusy || Volatile.Read(ref _actionCount) > 0;
 
-    /// <summary>没有当前游戏或正在扫描时不能刷新（避免重复排队）。</summary>
+    /// <summary>没有当前游戏、正在扫描或正在写文件时不能刷新（避免重复排队/跨代次覆盖）。</summary>
     public bool CanRefresh => !IsBusy && Game is not null;
 
+    /// <summary>未选游戏时整块备份段都隐藏（包括空状态与用量）。</summary>
+    public bool HasGame => Game is not null;
+
     public bool HasSaves => Saves.Count > 0;
+
+    public bool HasBackups => Backups.Count > 0;
+
+    /// <summary>有游戏但还没有任何备份时显示「还没有备份」；扫描期间不闪。</summary>
+    public bool ShowBackupEmptyState => HasGame && !HasBackups;
+
+    /// <summary>备份用量：总量（跨游戏）与当前游戏的条目数。</summary>
+    public string BackupUsageText =>
+        T(Keys.SavesBackupUsage, SizeFormatter.Format(_usage.TotalBytes), Backups.Count);
+
+    /// <summary>
+    /// 配额是否已满：总量达到 2 GiB 或当前游戏条目达到 200 条。服务端还会按「将要写入的大小」
+    /// 再判一次（可能提前返回 <see cref="SaveBackupStatus.QuotaExceeded"/>），这里只负责把按钮关掉并提示。
+    /// </summary>
+    public bool IsQuotaFull =>
+        _usage.TotalBytes >= SaveBackupPaths.DefaultMaxTotalBytes
+        || Backups.Count >= SaveBackupPaths.DefaultMaxEntriesPerGame;
+
+    /// <summary>页内提示（成功还是失败由 <see cref="ShowErrorNotice"/> 决定）；InfoBar 关闭时清空。</summary>
+    public string NoticeText => _noticeText;
+
+    public bool HasNotice => _noticeText.Length > 0;
+
+    public bool ShowSuccessNotice => HasNotice && !_noticeIsError;
+
+    public bool ShowErrorNotice => HasNotice && _noticeIsError;
 
     /// <summary>自检用：已成功回填细节的行数（解析失败不计入）。</summary>
     internal int ProcessedCount => _processed;
@@ -134,25 +170,31 @@ public sealed class SavesViewModel : LocalizedObservableObject
 
         Game = game;
         Saves.Clear();
+        Backups.Clear();
+        _usage = SaveBackupUsage.Empty;
         _lastScanAt = null;
         _processed = 0;
         _total = 0;
 
         if (game is null)
         {
-            IsBusy = false;
+            SetScanBusy(false);
             _state = SavesState.NoGame;
             NotifyStateChanged();
             return;
         }
 
         var gameId = game.GameId;
-        IsBusy = true;
+        SetScanBusy(true);
         _state = SavesState.Scanning;
         NotifyStateChanged();
 
         try
         {
+            // 备份段与存档扫描互不依赖：先读 sidecar（只枚举几十个小文件），失败只记日志，
+            // 不能让「备份目录不可读」把整页打成失败空态。
+            await LoadBackupsAsync(game, cancellationToken).ConfigureAwait(true);
+
             // 第一段：枚举文件（内部 Task.Run，UI 线程零 IO）。不解析任何内容。
             var index = await _library.ScanFilesAsync([gameId], cancellationToken).ConfigureAwait(true);
             cancellationToken.ThrowIfCancellationRequested();
@@ -207,9 +249,506 @@ public sealed class SavesViewModel : LocalizedObservableObject
                 generation,
                 () =>
                 {
-                    IsBusy = false;
+                    SetScanBusy(false);
                     NotifyStateChanged();
                 });
+        }
+    }
+
+    // ------------------------------------------------------------ 写操作（备份 / 恢复 / 删除）
+
+    /// <summary>
+    /// 备份一条存档。文件复制与哈希都在服务端线程池上完成；本方法只负责忙碌态、提示与刷新备份段。
+    /// 配额已满时不发起调用，直接提示「可删除旧备份」——服务不会自动清理。
+    /// </summary>
+    public async Task BackupAsync(SaveGameRowViewModel row, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        if (Game is not { } game || IsBusy || row.IsBusy)
+        {
+            return;
+        }
+
+        if (IsQuotaFull)
+        {
+            SetNotice(T(Keys.SavesBackupQuotaFull), isError: true);
+            return;
+        }
+
+        var generation = _requests.Current;
+        BeginAction();
+        row.SetBusy(true);
+        try
+        {
+            var result = await _backups
+                .BackupAsync(game.GameId, row.FilePath, row.Detail, cancellationToken)
+                .ConfigureAwait(true);
+
+            if (result.IsSuccess)
+            {
+                if (!TryCommitAction(
+                        generation,
+                        game,
+                        () => SetNotice(
+                            T(Keys.SavesNoticeBackedUp, result.Entry?.OriginalFileName ?? row.FileName),
+                            isError: false)))
+                {
+                    return;
+                }
+
+                await LoadBackupsAsync(game, cancellationToken).ConfigureAwait(true);
+                return;
+            }
+
+            if (!TryCommitAction(
+                    generation,
+                    game,
+                    () => SetNotice(MapBackupFailure(result), isError: true)))
+            {
+                return;
+            }
+
+            if (result.Status == SaveBackupStatus.SourceMissing)
+            {
+                await LoadAsync(game, cancellationToken).ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            TryCommitAction(
+                generation,
+                game,
+                () =>
+                {
+                    _logger.Warn("备份存档失败：" + row.FilePath + "：" + ex.Message);
+                    SetNotice(ex.Message, isError: true);
+                });
+        }
+        finally
+        {
+            row.SetBusy(false);
+            EndAction();
+        }
+    }
+
+    /// <summary>
+    /// 删除真实存档：服务只把它移入 <c>trash\&lt;game&gt;</c>，绝不直接删文件。
+    /// 成功后行立即消失并重扫（磁盘仍为真源）；已被外部删除时提示并刷新，不抛出。
+    /// </summary>
+    public async Task DeleteSaveAsync(SaveGameRowViewModel row, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        if (Game is not { } game || IsBusy || row.IsBusy)
+        {
+            return;
+        }
+
+        var generation = _requests.Current;
+        BeginAction();
+        row.SetBusy(true);
+        try
+        {
+            var result = await _backups
+                .DeleteSaveAsync(game.GameId, row.FilePath, cancellationToken)
+                .ConfigureAwait(true);
+
+            if (result.IsSuccess)
+            {
+                if (!TryCommitAction(
+                        generation,
+                        game,
+                        () =>
+                        {
+                            Saves.Remove(row);
+                            NotifyStateChanged();
+                            SetNotice(
+                                T(Keys.SavesNoticeDeletedSave, result.TrashedPath ?? row.FilePath),
+                                isError: false);
+                        }))
+                {
+                    return;
+                }
+
+                await LoadAsync(game, cancellationToken).ConfigureAwait(true);
+                return;
+            }
+
+            if (!TryCommitAction(
+                    generation,
+                    game,
+                    () => SetNotice(MapDeleteFailure(result), isError: true)))
+            {
+                return;
+            }
+
+            if (result.Status == SaveDeleteStatus.NotFound)
+            {
+                await LoadAsync(game, cancellationToken).ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            TryCommitAction(
+                generation,
+                game,
+                () =>
+                {
+                    _logger.Warn("删除存档失败：" + row.FilePath + "：" + ex.Message);
+                    SetNotice(ex.Message, isError: true);
+                });
+        }
+        finally
+        {
+            row.SetBusy(false);
+            EndAction();
+        }
+    }
+
+    /// <summary>
+    /// 恢复备份。默认 <c>overwrite: false</c>：服务在存档目录里新建带「(恢复 日期-时间)」后缀的副本，
+    /// 现有存档不被覆盖；这条语义由页面文案明确告知用户。
+    /// </summary>
+    public async Task RestoreAsync(SaveBackupRowViewModel row, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        if (Game is not { } game || IsBusy || row.IsBusy)
+        {
+            return;
+        }
+
+        var generation = _requests.Current;
+        BeginAction();
+        row.SetBusy(true);
+        try
+        {
+            var result = await _backups
+                .RestoreAsync(row.Entry, overwrite: false, cancellationToken)
+                .ConfigureAwait(true);
+
+            if (result.IsSuccess)
+            {
+                var restoredName = result.RestoredPath is { } restoredPath
+                    ? Path.GetFileName(restoredPath)
+                    : row.FileName;
+                if (!TryCommitAction(
+                        generation,
+                        game,
+                        () => SetNotice(T(Keys.SavesNoticeRestored, restoredName), isError: false)))
+                {
+                    return;
+                }
+
+                await LoadAsync(game, cancellationToken).ConfigureAwait(true);
+                return;
+            }
+
+            if (!TryCommitAction(
+                    generation,
+                    game,
+                    () => SetNotice(result.Message, isError: true)))
+            {
+                return;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            TryCommitAction(
+                generation,
+                game,
+                () =>
+                {
+                    _logger.Warn("恢复备份失败：" + row.FilePath + "：" + ex.Message);
+                    SetNotice(ex.Message, isError: true);
+                });
+        }
+        finally
+        {
+            row.SetBusy(false);
+            EndAction();
+        }
+    }
+
+    /// <summary>删除备份（<c>.bak</c> + sidecar）；失败直接显示服务返回的 Message。</summary>
+    public async Task DeleteBackupAsync(SaveBackupRowViewModel row, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        if (Game is not { } game || IsBusy || row.IsBusy)
+        {
+            return;
+        }
+
+        var generation = _requests.Current;
+        BeginAction();
+        row.SetBusy(true);
+        try
+        {
+            var result = await _backups
+                .DeleteBackupAsync(row.Entry, cancellationToken)
+                .ConfigureAwait(true);
+
+            if (result.IsSuccess)
+            {
+                if (!TryCommitAction(
+                        generation,
+                        game,
+                        () =>
+                        {
+                            Backups.Remove(row);
+                            NotifyBackupStateChanged();
+                            SetNotice(T(Keys.SavesNoticeDeletedBackup, row.FileName), isError: false);
+                        }))
+                {
+                    return;
+                }
+
+                await LoadBackupsAsync(game, cancellationToken).ConfigureAwait(true);
+                return;
+            }
+
+            if (!TryCommitAction(
+                    generation,
+                    game,
+                    () => SetNotice(MapDeleteFailure(result), isError: true)))
+            {
+                return;
+            }
+
+            if (result.Status == SaveDeleteStatus.NotFound)
+            {
+                await LoadBackupsAsync(game, cancellationToken).ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            TryCommitAction(
+                generation,
+                game,
+                () =>
+                {
+                    _logger.Warn("删除备份失败：" + row.FilePath + "：" + ex.Message);
+                    SetNotice(ex.Message, isError: true);
+                });
+        }
+        finally
+        {
+            row.SetBusy(false);
+            EndAction();
+        }
+    }
+
+    /// <summary>InfoBar 关闭时清空页内提示。</summary>
+    public void DismissNotice()
+    {
+        if (_noticeText.Length == 0)
+        {
+            return;
+        }
+
+        _noticeText = string.Empty;
+        _noticeIsError = false;
+        NotifyNoticeChanged();
+    }
+
+    /// <summary>
+    /// 失败文案映射：配额与「目标已不存在」这两类有稳定的用户可执行动作，用本地化键；
+    /// 其余（IO、校验失败等）直接显示服务返回的 Message，避免把具体原因吞成一句「失败」。
+    /// </summary>
+    private static string MapBackupFailure(SaveBackupResult result) => result.Status switch
+    {
+        SaveBackupStatus.QuotaExceeded => T(Keys.SavesBackupQuotaFull),
+        SaveBackupStatus.SourceMissing => T(Keys.SavesNoticeSourceMissing),
+        _ => result.Message,
+    };
+
+    private static string MapDeleteFailure(SaveDeleteResult result) => result.Status switch
+    {
+        SaveDeleteStatus.NotFound => T(Keys.SavesNoticeSourceMissing),
+        _ => result.Message,
+    };
+
+    /// <summary>
+    /// 重新读取当前游戏的备份列表与用量；失败只记日志，不动存档列表。
+    /// 读盘期间可能已经切游戏或又发起了一次刷新，因此写回前必须同时校验游戏身份、
+    /// 扫描代次和本次备份读取序号，旧结果一律丢弃，不能覆盖新游戏的备份段。
+    /// </summary>
+    private async Task LoadBackupsAsync(GameInstallation game, CancellationToken cancellationToken)
+    {
+        var gameId = game.GameId;
+        var generation = _requests.Current;
+        var version = ++_backupLoadVersion;
+
+        try
+        {
+            var entries = await _backups.ListBackupsAsync(gameId, cancellationToken).ConfigureAwait(true);
+            var usage = await _backups.GetUsageAsync(cancellationToken).ConfigureAwait(true);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (!TryCommitBackup(
+                    generation,
+                    game,
+                    version,
+                    () =>
+                    {
+                        Backups.Clear();
+                        for (var i = 0; i < entries.Count; i++)
+                        {
+                            Backups.Add(new SaveBackupRowViewModel(entries[i], i));
+                        }
+
+                        _usage = usage;
+                    }))
+            {
+                return;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            if (!TryCommitBackup(
+                    generation,
+                    game,
+                    version,
+                    () =>
+                    {
+                        // 备份目录不可读不应把整页打成失败：清空备份段并保留日志。
+                        _logger.Warn("读取存档备份失败 (" + gameId + ")：" + ex.Message);
+                        Backups.Clear();
+                        _usage = SaveBackupUsage.Empty;
+                    }))
+            {
+                return;
+            }
+        }
+        finally
+        {
+            TryCommitBackup(generation, game, version, NotifyBackupStateChanged);
+        }
+    }
+
+    /// <summary>
+    /// 写操作的提交口：代次仍是当前、且页面仍停在同一款游戏时才执行 UI 写入。
+    /// 操作期间用户切游戏/刷新后，完成回调不能把旧游戏的行、备份或提示写进新页面。
+    /// </summary>
+    private bool TryCommitAction(int generation, GameInstallation game, Action commit)
+    {
+        var applied = false;
+        _requests.TryCommit(
+            generation,
+            () =>
+            {
+                if (ReferenceEquals(Game, game))
+                {
+                    commit();
+                    applied = true;
+                }
+            });
+        return applied;
+    }
+
+    private bool TryCommitBackup(
+        int generation,
+        GameInstallation game,
+        int version,
+        Action commit)
+    {
+        var applied = false;
+        _requests.TryCommit(
+            generation,
+            () =>
+            {
+                if (version == _backupLoadVersion && ReferenceEquals(Game, game))
+                {
+                    commit();
+                    applied = true;
+                }
+            });
+        return applied;
+    }
+
+    private void SetNotice(string text, bool isError)
+    {
+        _noticeText = text ?? string.Empty;
+        _noticeIsError = isError && _noticeText.Length > 0;
+        NotifyNoticeChanged();
+    }
+
+    private void NotifyNoticeChanged()
+    {
+        OnPropertyChanged(nameof(NoticeText));
+        OnPropertyChanged(nameof(HasNotice));
+        OnPropertyChanged(nameof(ShowSuccessNotice));
+        OnPropertyChanged(nameof(ShowErrorNotice));
+    }
+
+    private void SetScanBusy(bool value)
+    {
+        if (_scanBusy == value)
+        {
+            return;
+        }
+
+        _scanBusy = value;
+        NotifyBusyChanged();
+    }
+
+    private void BeginAction()
+    {
+        _actionCount++;
+        NotifyBusyChanged();
+    }
+
+    private void EndAction()
+    {
+        if (_actionCount > 0)
+        {
+            _actionCount--;
+        }
+
+        NotifyBusyChanged();
+    }
+
+    private void NotifyBusyChanged()
+    {
+        OnPropertyChanged(nameof(IsBusy));
+        OnPropertyChanged(nameof(CanRefresh));
+        NotifyBackupStateChanged();
+    }
+
+    private void NotifyBackupStateChanged()
+    {
+        OnPropertyChanged(nameof(HasBackups));
+        OnPropertyChanged(nameof(ShowBackupEmptyState));
+        OnPropertyChanged(nameof(BackupUsageText));
+        OnPropertyChanged(nameof(IsQuotaFull));
+
+        // 配额状态变化直接决定每一行「备份」按钮是否可用。
+        var allowed = !IsBusy && !IsQuotaFull;
+        foreach (var row in Saves)
+        {
+            row.SetBackupAllowed(allowed);
         }
     }
 
@@ -411,6 +950,18 @@ public sealed class SavesViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(EmptyStateTitle));
         OnPropertyChanged(nameof(EmptyStateMessage));
         OnPropertyChanged(nameof(CanRefresh));
+        OnPropertyChanged(nameof(HasGame));
+        OnPropertyChanged(nameof(HasBackups));
+        OnPropertyChanged(nameof(ShowBackupEmptyState));
+        OnPropertyChanged(nameof(BackupUsageText));
+        OnPropertyChanged(nameof(IsQuotaFull));
+
+        // 扫描/写操作期间整页忙碌，行的「备份」按钮随之禁用；配额满同样禁用（删除/恢复不受影响）。
+        var allowed = !IsBusy && !IsQuotaFull;
+        foreach (var row in Saves)
+        {
+            row.SetBackupAllowed(allowed);
+        }
     }
 
     private enum SavesState

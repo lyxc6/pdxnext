@@ -208,7 +208,7 @@ public static class ProgressiveSavesChecks
                 SaveContainer.TextMeta)!)
             .ToArray();
         var index = new BlockingIndex(new SaveFileScanResult(files, [new SaveLocationInfo("ck3", "C:\\saves", true, SaveLocationSource.Documents)], false));
-        var viewModel = new SavesViewModel(index, new NullLogger());
+        var viewModel = new SavesViewModel(index, NoBackupService.Instance, new NullLogger());
 
         var load = viewModel.LoadAsync(Game("C:\\game"), CancellationToken.None);
         var appeared = SpinWait.SpinUntil(
@@ -244,7 +244,7 @@ public static class ProgressiveSavesChecks
     {
         Console.WriteLine("[ProgressiveSavesChecks] 切游戏/取消时旧任务不写回");
         using var cancellation = new CancellationTokenSource();
-        var viewModel = new SavesViewModel(new HangingIndex(), new NullLogger());
+        var viewModel = new SavesViewModel(new HangingIndex(), NoBackupService.Instance, new NullLogger());
         var load = viewModel.LoadAsync(Game("C:\\game"), cancellation.Token);
         cancellation.Cancel();
 
@@ -295,7 +295,7 @@ public static class ProgressiveSavesChecks
         Console.WriteLine("[ProgressiveSavesChecks] 细节阶段取消后清空半截行");
         var files = Files(SampleCount);
         var index = new GateIndex(new SaveFileScanResult(files, [Location()], false));
-        var viewModel = new SavesViewModel(index, new NullLogger());
+        var viewModel = new SavesViewModel(index, NoBackupService.Instance, new NullLogger());
         using var cancellation = new CancellationTokenSource();
 
         var load = viewModel.LoadAsync(Game("C:\\game"), cancellation.Token);
@@ -329,7 +329,7 @@ public static class ProgressiveSavesChecks
         Console.WriteLine("[ProgressiveSavesChecks] 第二段并发峰值不超过 4");
         var files = Files(16);
         var index = new ConcurrencyIndex(new SaveFileScanResult(files, [Location()], false));
-        var viewModel = new SavesViewModel(index, new NullLogger());
+        var viewModel = new SavesViewModel(index, NoBackupService.Instance, new NullLogger());
 
         viewModel.LoadAsync(Game("C:\\game"), CancellationToken.None).GetAwaiter().GetResult();
 
@@ -344,7 +344,7 @@ public static class ProgressiveSavesChecks
     {
         Console.WriteLine("[ProgressiveSavesChecks] 旧代次结果整批丢弃");
         var index = new GenerationIndex();
-        var viewModel = new SavesViewModel(index, new NullLogger());
+        var viewModel = new SavesViewModel(index, NoBackupService.Instance, new NullLogger());
 
         var first = viewModel.LoadAsync(Game("C:\\game"), CancellationToken.None);
         var second = viewModel.LoadAsync(Game("C:\\game"), CancellationToken.None);
@@ -369,7 +369,7 @@ public static class ProgressiveSavesChecks
         Console.WriteLine("[ProgressiveSavesChecks] 进度只统计解析成功的行");
         var files = Files(SampleCount);
         var index = new FlakyIndex(new SaveFileScanResult(files, [Location()], false), "sample2.ck3");
-        var viewModel = new SavesViewModel(index, new NullLogger());
+        var viewModel = new SavesViewModel(index, NoBackupService.Instance, new NullLogger());
 
         viewModel.LoadAsync(Game("C:\\game"), CancellationToken.None).GetAwaiter().GetResult();
 
@@ -650,6 +650,57 @@ public static class ProgressiveSavesChecks
         }
 
         public IReadOnlyList<SaveLocationInfo> GetLocations(string gameId) => result.Locations;
+    }
+
+    /// <summary>两段式加载的自检只走「读」路径，备份段留空；写操作由 SavesActionsChecks 覆盖。</summary>
+    private sealed class NoBackupService : ISaveGameBackupService
+    {
+        public static readonly NoBackupService Instance = new();
+
+        public string BackupRootDirectory => Path.Combine(Path.GetTempPath(), "pdx-checks-saves-backups");
+
+        public Task<SaveBackupResult> BackupAsync(
+            string gameId,
+            string sourcePath,
+            SaveGameMeta? meta,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new SaveBackupResult(SaveBackupStatus.Failed, "自检未使用", null, null));
+
+        public Task<SaveRestoreResult> RestoreAsync(
+            SaveBackupEntry entry,
+            bool overwrite,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new SaveRestoreResult(SaveRestoreStatus.Failed, "自检未使用", null, null));
+
+        public Task<SaveDeleteResult> DeleteBackupAsync(
+            SaveBackupEntry entry,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new SaveDeleteResult(SaveDeleteStatus.Failed, "自检未使用", false, null));
+
+        public Task<SaveDeleteResult> DeleteSaveAsync(
+            string gameId,
+            string savePath,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new SaveDeleteResult(SaveDeleteStatus.Failed, "自检未使用", false, null));
+
+        public Task<SaveBackupUsage> GetUsageAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(SaveBackupUsage.Empty);
+
+        public Task<IReadOnlyList<SaveBackupEntry>> ListBackupsAsync(
+            string gameId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<SaveBackupEntry>>([]);
+
+        public Task<SaveBackupPruneResult> PruneAsync(
+            string gameId,
+            int keepNewest,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new SaveBackupPruneResult(
+                SaveBackupStatus.Failed,
+                "自检未使用",
+                0,
+                0,
+                SaveBackupUsage.Empty));
     }
 
     private sealed class NullLogger : IAppLogger
