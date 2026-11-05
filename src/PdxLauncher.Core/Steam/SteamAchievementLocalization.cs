@@ -380,13 +380,21 @@ public static partial class SteamAchievementLocalization
         return Clean(raw);
     }
 
-    /// <summary>把原始值里的别名还原掉，再统一剥标记；剥成空串的条目丢弃。</summary>
+    /// <summary>
+    /// 把原始值里的别名还原掉，再统一剥标记；剥成空串的条目丢弃。
+    /// <para>
+    /// 混在句子里的 <c>$var$</c>（整值别名已在上一步还原）在这里剥掉：
+    /// 它只在成就文本里是占位符，DLC 名里的 <c>$PRICE$</c> 则要保留，所以不能放进共享的
+    /// <see cref="DlcLocalization.CleanMarkup"/>。
+    /// </para>
+    /// </summary>
     private static IReadOnlyDictionary<string, string> Clean(Dictionary<string, string> raw)
     {
         var result = new Dictionary<string, string>(raw.Count, StringComparer.OrdinalIgnoreCase);
         foreach (var (key, value) in raw)
         {
-            var cleaned = DlcLocalization.CleanMarkup(value);
+            var withoutVariables = VariableRef().Replace(value, string.Empty);
+            var cleaned = DlcLocalization.CleanMarkup(withoutVariables);
             if (cleaned.Length > 0)
             {
                 result[key] = cleaned;
@@ -614,7 +622,11 @@ public static partial class SteamAchievementLocalization
     [GeneratedRegex("^[a-z0-9_]+$")]
     private static partial Regex LanguageToken();
 
-    /// <summary>整值别名：<c>$ACHIEVEMENT_foo$</c>。混在句子里的 <c>$var$</c> 不算，那由 <c>CleanMarkup</c> 负责剥。</summary>
+    /// <summary>整值别名：<c>$ACHIEVEMENT_foo$</c>。混在句子里的 <c>$var$</c> 不算，那由 <see cref="Clean"/> 在还原之后剥。</summary>
     [GeneratedRegex("""^\$(?<key>[A-Za-z0-9_.-]+)\$$""")]
     private static partial Regex AliasValue();
+
+    /// <summary>句子里残留的变量引用（<c>$COUNTRY$</c> 之类），在成就文本里当占位符剥掉。</summary>
+    [GeneratedRegex("""\$[^$\r\n]*\$""")]
+    private static partial Regex VariableRef();
 }

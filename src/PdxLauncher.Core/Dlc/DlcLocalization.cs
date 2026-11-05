@@ -136,14 +136,18 @@ public static partial class DlcLocalization
         }
     }
 
-    /// <summary>去掉 Clausewitz 的富文本标记（<c>#italic</c>、<c>#!</c>、<c>#bold</c>、<c>$var$</c>、<c>[link]</c>、<c>§Y</c>、<c>£icon£</c> 等），压缩空白。</summary>
+    /// <summary>
+    /// 去掉 Clausewitz 的富文本标记（<c>#italic</c>、<c>#!</c>、<c>#bold</c>、<c>[link]</c>、<c>§Y</c>、<c>£icon£</c> 等），压缩空白。
+    /// <para>
+    /// <c>$var$</c> 故意保留：DLC 名里的 <c>$PRICE$</c> 是原文的一部分，剥不剥由调用方决定
+    /// （成就名在 <c>SteamAchievementLocalization</c> 里单独剥，避免误伤 DLC 名）。
+    /// </para>
+    /// </summary>
     internal static string CleanMarkup(string raw)
     {
         ArgumentNullException.ThrowIfNull(raw);
 
-        // 顺序有讲究：$var$ 里可能嵌 [..]，先把变量引用整个拿掉，避免只留半截方括号。
-        var withoutVariables = VariableRef().Replace(raw, string.Empty);
-        var withoutIcons = IconToken().Replace(withoutVariables, string.Empty);
+        var withoutIcons = IconToken().Replace(raw, string.Empty);
         var withoutLinks = ConceptLink().Replace(withoutIcons, string.Empty);
         var withoutColors = ColorCode().Replace(withoutLinks, string.Empty);
         var withoutMarkup = MarkupToken().Replace(withoutColors, string.Empty).Replace("#!", string.Empty, StringComparison.Ordinal);
@@ -173,9 +177,6 @@ public static partial class DlcLocalization
 
     [GeneratedRegex("""#[A-Za-z_]\S*""")]
     private static partial Regex MarkupToken();
-
-    [GeneratedRegex("""\$[^$\r\n]*\$""")]
-    private static partial Regex VariableRef();
 
     [GeneratedRegex("""£[^£\r\n]*£""")]
     private static partial Regex IconToken();
