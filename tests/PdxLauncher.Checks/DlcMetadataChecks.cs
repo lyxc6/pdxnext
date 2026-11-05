@@ -9,7 +9,9 @@ using PdxLauncher.Core.Dlc;
 /// T2 自检：<see cref="DlcCatalog"/> 对 <c>game/dlc_metadata/*.txt</c>（Victoria 3 1.15 起的新数据源）的增量解析。
 /// <para>
 /// 覆盖：只有 metadata 时能出条目、与 <c>.dlc.json</c> 按 steam_id / 块名去重、坏文件与缺键跳过且不抛、
-/// 名字清理（中文 + <c>#</c> 标记 + <c>$</c>）、没有 metadata 目录时条数不变、VIC3 17+1=18 形态。
+/// 名字清理（中文 + <c>#</c> 标记 + <c>$</c>）、没有 metadata 目录时条数不变、VIC3 17+1=18 形态，
+/// 以及 CK3（<c>key = "显示名"</c>、无 <c>name</c>）与 Stellaris（顶层 <c>dlcs = { … }</c> 嵌套）的
+/// 真机同名文件形状 —— 两者都不合成条目、不刷 Warn。
 /// </para>
 /// <para>全部用一次性临时目录自造 fixture，不碰真机安装目录。</para>
 /// </summary>
@@ -31,6 +33,8 @@ public static class DlcMetadataChecks
         CheckNameCleanup(fs);
         CheckNoMetadataDirectory(fs);
         CheckSiblingLayout(fs);
+        CheckCk3Shape(fs);
+        CheckStellarisShape(fs);
         CheckVictoria3Shape(fs);
         return ChecksContext.Failures - before;
     }
@@ -336,6 +340,84 @@ public static class DlcMetadataChecks
             {
                 ChecksContext.Equal("上一级 metadata 名字", "Sibling Layout", items[0].DisplayName);
             }
+        }
+        finally
+        {
+            PlaysetChecks.TryDelete(fs, root);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // CK3 真机同名文件：schema 是 key = "显示名"、没有 name —— 整文件跳过，0 条 Warn
+    // 真机样本：game/dlc_metadata/00_dlc_metadata.txt（30 块，key/steam_id/msgr_id/type/priority）
+    // ------------------------------------------------------------------
+
+    private static void CheckCk3Shape(IFileSystem fs)
+    {
+        Console.WriteLine("[DlcMetadataChecks] CK3 形状（key 作显示名、无 name）不合成、不刷 Warn");
+
+        var root = PlaysetChecks.CreateTempRoot(fs, "dlcmeta-ck3");
+        try
+        {
+            var gameRoot = Path.Combine(root, "game");
+            var metadata = new System.Text.StringBuilder();
+            for (var i = 1; i <= 30; i++)
+            {
+                metadata.Append("dlc_").Append(i.ToString("D3", CultureInfo.InvariantCulture)).Append(" = {\n")
+                    .Append("\tkey = \"Fixture CK3 DLC ").Append(i.ToString(CultureInfo.InvariantCulture)).Append("\"\n")
+                    .Append("\tsteam_id = \"").Append((1296729 + i).ToString(CultureInfo.InvariantCulture)).Append("\"\n")
+                    .Append("\tmsgr_id = \"9NSL78KTTM4X\"\n\ttype = minor\n\tpriority = ")
+                    .Append((1000 + i).ToString(CultureInfo.InvariantCulture)).Append("\n}\n\n");
+            }
+
+            WriteMetadata(fs, Path.Combine(gameRoot, "dlc_metadata"), "00_dlc_metadata.txt", metadata.ToString());
+            // 真机同目录还有 _dlc_metadata.info：不是 *.txt，不应被当成数据源读进来。
+            fs.WriteAllTextAtomic(Path.Combine(gameRoot, "dlc_metadata", "_dlc_metadata.info"), "ignored");
+
+            var game = CreateGame(Ck3GameId, root, gameRoot, LoadFileFormat.DlcLoadV0);
+            var logger = new RecordingLogger();
+            var items = Discover(fs, game, logger);
+
+            ChecksContext.Equal("CK3 形状不合成条目", 0, items.Count);
+            ChecksContext.Equal("CK3 形状 0 条 Warn（不逐块刷日志）", 0, logger.Warnings.Count);
+            ChecksContext.Equal("CK3 形状不出现「缺少 name」日志", 0, logger.CountOf("缺少 name"));
+        }
+        finally
+        {
+            PlaysetChecks.TryDelete(fs, root);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Stellaris 真机同名文件：顶层 dlcs = { … } 嵌套 —— 同样整文件跳过，0 条 Warn
+    // 真机样本：dlc_metadata/dlc_info.txt（dlcs = { dlc001 = { name/steam_id/… } }）
+    // ------------------------------------------------------------------
+
+    private static void CheckStellarisShape(IFileSystem fs)
+    {
+        Console.WriteLine("[DlcMetadataChecks] Stellaris 形状（顶层 dlcs 嵌套）不合成、不刷 Warn");
+
+        var root = PlaysetChecks.CreateTempRoot(fs, "dlcmeta-stellaris");
+        try
+        {
+            var gameRoot = Path.Combine(root, "game");
+            var text = new System.Text.StringBuilder();
+            text.Append("# Meta-information about all available DLCs.\n\n")
+                .Append("dlcs = {\n")
+                .Append("\tdlc001 = {\n\t\tname = \"Symbols of Domination\"\n\t\tsteam_id = \"447680\"\n")
+                .Append("\t\tgui = \"symbols_of_domination\"\n\t\tshow = no\n\t}\n")
+                .Append("\tdlc002 = {\n\t\tname = \"Arachnoid Portrait Pack\"\n\t\tsteam_id = \"447683\"\n")
+                .Append("\t\trecommendations = {}\n\t}\n")
+                .Append("}\n");
+
+            WriteMetadata(fs, Path.Combine(gameRoot, "dlc_metadata"), "dlc_info.txt", text.ToString());
+
+            var game = CreateGame("stellaris", root, gameRoot, LoadFileFormat.DlcLoadV0);
+            var logger = new RecordingLogger();
+            var items = Discover(fs, game, logger);
+
+            ChecksContext.Equal("Stellaris 形状不合成条目", 0, items.Count);
+            ChecksContext.Equal("Stellaris 形状 0 条 Warn（不逐块刷日志）", 0, logger.Warnings.Count);
         }
         finally
         {

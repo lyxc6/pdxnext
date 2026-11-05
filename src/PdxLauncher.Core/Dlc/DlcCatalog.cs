@@ -359,6 +359,17 @@ public sealed class DlcCatalog : IDlcCatalog, IScanCacheInvalidator
     /// 因此已有的 17 个 DLC 不会被重复列出。合成条目没有 RawBytes
     /// （<c>DlcSignatureService</c> 只哈希非空 RawBytes，带字节会改变 dlc_signature）。
     /// </para>
+    /// <para>
+    /// 数据源只认 VIC3 1.15 的 <c>name</c>/<c>steam_id</c> schema：CK3 真机也有
+    /// <c>game/dlc_metadata/00_dlc_metadata.txt</c>（30 块，用 <c>key = "显示名"</c>，没有 <c>name</c>），
+    /// Stellaris 有 <c>dlc_metadata/dlc_info.txt</c>（顶层 <c>dlcs = { … }</c> 嵌套）。这两种不是这批数据，
+    /// 整文件跳过且只记一条 Info，不逐块 Warn —— 否则每次切换游戏都会刷几十条日志。
+    /// </para>
+    /// <para>
+    /// <see cref="DlcInfo.PopsId"/> 取块名（<c>dlc019</c>）是<b>推断</b>：官方 dlc_metadata 文档与磁盘都没有
+    /// pops_id/paradoxAppId 对照，未与官方 launcher 验证过；合成路径 <c>dlc_metadata/&lt;块名&gt;</c> 按序数排序
+    /// 排在所有 <c>dlc/…</c> 之后（<c>'/'</c> 0x2F &lt; <c>'_'</c> 0x5F），即新增 DLC 出现在列表末尾。
+    /// </para>
     /// </summary>
     private void CollectDlcMetadata(string dlcPath, List<DlcInfo> result, CancellationToken cancellationToken)
     {
@@ -390,6 +401,8 @@ public sealed class DlcCatalog : IDlcCatalog, IScanCacheInvalidator
             }
 
             var added = 0;
+            var unsupportedFiles = 0;
+            var missingName = 0;
             foreach (var file in EnumerateTopLevelFilesSafe(directory, DlcMetadataPattern))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -409,13 +422,24 @@ public sealed class DlcCatalog : IDlcCatalog, IScanCacheInvalidator
                     continue;
                 }
 
-                foreach (var block in ClausewitzParser.ParseBlocks(text))
+                var blocks = ClausewitzParser.ParseBlocks(text);
+
+                // 只认 VIC3 1.15 的 name/steam_id schema。CK3 真机的同名文件用 key 作显示名（无 name），
+                // Stellaris 的 dlc_info.txt 是顶层 dlcs = { … } 嵌套；两者都不是这批数据，整文件跳过。
+                if (blocks.Count > 0 && !blocks.Any(static block => block.Values.ContainsKey("name")))
+                {
+                    unsupportedFiles++;
+                    continue;
+                }
+
+                foreach (var block in blocks)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var name = DlcLocalization.CleanMarkup(Read(block.Values, "name"));
                     if (string.IsNullOrEmpty(name))
                     {
-                        _logger.Warn("DLC metadata 缺少 name，已跳过：" + file + " -> " + block.Key);
+                        // 同一份文件里个别块缺 name：只计数，最后汇总一条 Info，不逐块刷 Warn。
+                        missingName++;
                         continue;
                     }
 
@@ -449,6 +473,17 @@ public sealed class DlcCatalog : IDlcCatalog, IScanCacheInvalidator
             if (added > 0)
             {
                 _logger.Info("DLC metadata 补充 " + added.ToString(CultureInfo.InvariantCulture) + " 个磁盘上没有的条目：" + directory);
+            }
+
+            if (missingName > 0)
+            {
+                _logger.Info("DLC metadata 有 " + missingName.ToString(CultureInfo.InvariantCulture) + " 个块缺少 name，已跳过：" + directory);
+            }
+
+            if (unsupportedFiles > 0)
+            {
+                _logger.Info("DLC metadata 不是 VIC3 1.15 的 name/steam_id 结构，已整文件跳过 "
+                    + unsupportedFiles.ToString(CultureInfo.InvariantCulture) + " 个：" + directory);
             }
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
