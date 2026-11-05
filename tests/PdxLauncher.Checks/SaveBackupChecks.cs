@@ -10,7 +10,8 @@ using PdxLauncher.Core.Saves;
 /// <summary>
 /// 自检：存档备份/恢复/安全删除服务。全部在系统临时目录里造数据，绝不读取或写入真机存档。
 /// <para>覆盖命名规则（CJK/emoji/非法字符/120 字节截断/冲突后缀/保留名）、sidecar 字段、
-/// 备份与恢复、overwrite 回收站、哈希/大小守卫、删除备份与真实存档、配额、占用、取消、清理与隔离。</para>
+/// sidecar 原子写（成功计数 + 半截失败清理）、备份与恢复、overwrite 回收站、哈希/大小守卫、
+/// 删除备份与真实存档、配额、占用、取消、清理与隔离。</para>
 /// </summary>
 public static class SaveBackupChecks
 {
@@ -39,6 +40,8 @@ public static class SaveBackupChecks
             CheckDeleteBackupLocked(fs, logger, root);
             CheckOrphanListing(fs, logger, root);
             CheckMoveFailure(fs, logger, root);
+            CheckSidecarAtomicWrite(fs, logger, root);
+            CheckSidecarWriteFailure(fs, logger, root);
             CheckDeleteSave(fs, logger, root);
             CheckQuota(fs, logger, root);
             CheckLockedFile(fs, logger, root);
@@ -733,6 +736,47 @@ public static class SaveBackupChecks
         ChecksContext.Equal("失败后源文件仍在", true, fs.FileExists(sourcePath));
     }
 
+    private static void CheckSidecarAtomicWrite(IFileSystem fs, IAppLogger logger, string root)
+    {
+        Console.WriteLine("[SaveBackupChecks] sidecar 走原子写");
+        var fixture = CreateFixture(fs, logger, root, "sidecar-atomic");
+        var counting = new CountingFileSystem(fs);
+        var service = new SaveBackupService(counting, logger, fixture.DataRoot, fixture.Clock);
+        var sourcePath = WriteSource(fixture, "atomic.ck3", [21, 22, 23]);
+        var result = Await(service.BackupAsync(Ck3, sourcePath, null, CancellationToken.None));
+        var gameDirectory = SaveBackupPaths.GameDirectory(fixture.DataRoot, Ck3);
+        ChecksContext.Equal("原子写用例备份成功", SaveBackupStatus.Ok, result.Status);
+        ChecksContext.Equal("sidecar 只调用一次 WriteAllTextAtomic", 1, counting.WriteAllTextAtomicCalls);
+        var writtenPath = counting.WriteAllTextAtomicPaths.Count == 1
+            ? counting.WriteAllTextAtomicPaths[0]
+            : "(未写入)";
+        ChecksContext.Equal("原子写目标就是该备份的 sidecar", result.Entry?.SidecarPath, writtenPath);
+        ChecksContext.Check(
+            "原子写目标以 .bak.json 结尾",
+            writtenPath.EndsWith(SaveBackupPaths.BackupExtension + SaveBackupPaths.SidecarExtension, StringComparison.Ordinal),
+            writtenPath);
+        ChecksContext.Equal("原子写成功不留 .pdxnext.tmp", 0, CountFiles(fs, gameDirectory, "*.pdxnext.tmp"));
+        ChecksContext.Equal("原子写成功目录里只有正文与 sidecar", 2, CountFiles(fs, gameDirectory, "*"));
+    }
+
+    private static void CheckSidecarWriteFailure(IFileSystem fs, IAppLogger logger, string root)
+    {
+        Console.WriteLine("[SaveBackupChecks] sidecar 原子写半截后抛 IOException");
+        var fixture = CreateFixture(fs, logger, root, "sidecar-halfwrite");
+        var failing = new HalfWrittenSidecarFileSystem(fs);
+        var service = new SaveBackupService(failing, logger, fixture.DataRoot, fixture.Clock);
+        var sourcePath = WriteSource(fixture, "half.ck3", [31, 32, 33, 34]);
+        var result = Await(service.BackupAsync(Ck3, sourcePath, null, CancellationToken.None));
+        var gameDirectory = SaveBackupPaths.GameDirectory(fixture.DataRoot, Ck3);
+        ChecksContext.Equal("sidecar 写失败返回 Failed", SaveBackupStatus.Failed, result.Status);
+        ChecksContext.Equal("失败后没有 *.json", 0, CountFiles(fs, gameDirectory, "*.json"));
+        ChecksContext.Equal("失败后没有 *.bak", 0, CountFiles(fs, gameDirectory, "*.bak"));
+        ChecksContext.Equal("失败后没有 *.tmp", 0, CountFiles(fs, gameDirectory, "*.tmp"));
+        ChecksContext.Equal("失败后没有 *.pdxnext.tmp", 0, CountFiles(fs, gameDirectory, "*.pdxnext.tmp"));
+        ChecksContext.Equal("失败后源存档仍在", true, fs.FileExists(sourcePath));
+        ChecksContext.Equal("失败后 RemainingPaths 为空", 0, result.RemainingPaths.Count);
+    }
+
     // ------------------------------------------------------------------
     // 工具
     // ------------------------------------------------------------------
@@ -842,59 +886,119 @@ public static class SaveBackupChecks
         FixedClock Clock,
         SaveBackupService Service);
 
-    /// <summary>包装真实文件系统，只让「备份正文落盘」的 Move 抛 IOException，用来验证半截文件不会落地。</summary>
-    private sealed class FailingMoveFileSystem : IFileSystem
+    /// <summary>把 <see cref="IFileSystem"/> 全部成员转给内层实现；子类只覆盖需要注入故障/计数的成员。</summary>
+    private abstract class FileSystemWrapper : IFileSystem
     {
-        private readonly IFileSystem _inner;
+        protected FileSystemWrapper(IFileSystem inner) => Inner = inner;
 
-        public FailingMoveFileSystem(IFileSystem inner) => _inner = inner;
+        protected IFileSystem Inner { get; }
 
-        public bool FileExists(string path) => _inner.FileExists(path);
+        public virtual bool FileExists(string path) => Inner.FileExists(path);
 
-        public long GetFileSize(string path) => _inner.GetFileSize(path);
+        public virtual long GetFileSize(string path) => Inner.GetFileSize(path);
 
-        public bool DirectoryExists(string path) => _inner.DirectoryExists(path);
+        public virtual bool DirectoryExists(string path) => Inner.DirectoryExists(path);
 
-        public string ReadAllText(string path) => _inner.ReadAllText(path);
+        public virtual string ReadAllText(string path) => Inner.ReadAllText(path);
 
-        public byte[] ReadAllBytes(string path) => _inner.ReadAllBytes(path);
+        public virtual byte[] ReadAllBytes(string path) => Inner.ReadAllBytes(path);
 
-        public Stream OpenRead(string path) => _inner.OpenRead(path);
+        public virtual Stream OpenRead(string path) => Inner.OpenRead(path);
 
-        public void WriteAllBytesAtomic(string path, ReadOnlySpan<byte> data) => _inner.WriteAllBytesAtomic(path, data);
+        public virtual void WriteAllBytesAtomic(string path, ReadOnlySpan<byte> data) =>
+            Inner.WriteAllBytesAtomic(path, data);
 
-        public void WriteAllTextAtomic(string path, string text) => _inner.WriteAllTextAtomic(path, text);
+        public virtual void WriteAllTextAtomic(string path, string text) => Inner.WriteAllTextAtomic(path, text);
 
-        public IEnumerable<string> EnumerateFiles(string directory, string searchPattern, bool recursive) =>
-            _inner.EnumerateFiles(directory, searchPattern, recursive);
+        public virtual IEnumerable<string> EnumerateFiles(string directory, string searchPattern, bool recursive) =>
+            Inner.EnumerateFiles(directory, searchPattern, recursive);
 
-        public IEnumerable<string> EnumerateDirectories(string directory) => _inner.EnumerateDirectories(directory);
+        public virtual IEnumerable<string> EnumerateDirectories(string directory) => Inner.EnumerateDirectories(directory);
 
-        public string Combine(params string[] parts) => _inner.Combine(parts);
+        public virtual string Combine(params string[] parts) => Inner.Combine(parts);
 
-        public string GetFullPath(string path) => _inner.GetFullPath(path);
+        public virtual string GetFullPath(string path) => Inner.GetFullPath(path);
 
-        public string? GetDirectoryName(string path) => _inner.GetDirectoryName(path);
+        public virtual string? GetDirectoryName(string path) => Inner.GetDirectoryName(path);
 
-        public string GetFileName(string path) => _inner.GetFileName(path);
+        public virtual string GetFileName(string path) => Inner.GetFileName(path);
 
-        public void EnsureDirectory(string path) => _inner.EnsureDirectory(path);
+        public virtual void EnsureDirectory(string path) => Inner.EnsureDirectory(path);
 
-        public void Delete(string path) => _inner.Delete(path);
+        public virtual void Delete(string path) => Inner.Delete(path);
 
-        public void Copy(string source, string destination, bool overwrite) => _inner.Copy(source, destination, overwrite);
+        public virtual void Copy(string source, string destination, bool overwrite) =>
+            Inner.Copy(source, destination, overwrite);
 
-        public void Move(string source, string destination, bool overwrite)
+        public virtual void Move(string source, string destination, bool overwrite) =>
+            Inner.Move(source, destination, overwrite);
+
+        public virtual void MoveDirectory(string source, string destination) =>
+            Inner.MoveDirectory(source, destination);
+    }
+
+    /// <summary>包装真实文件系统，只让「备份正文落盘」的 Move 抛 IOException，用来验证半截文件不会落地。</summary>
+    private sealed class FailingMoveFileSystem : FileSystemWrapper
+    {
+        public FailingMoveFileSystem(IFileSystem inner)
+            : base(inner)
+        {
+        }
+
+        public override void Move(string source, string destination, bool overwrite)
         {
             if (destination.EndsWith(SaveBackupPaths.BackupExtension, StringComparison.OrdinalIgnoreCase))
             {
                 throw new IOException("注入的 Move 失败（模拟备份正文落盘失败）");
             }
 
-            _inner.Move(source, destination, overwrite);
+            Inner.Move(source, destination, overwrite);
+        }
+    }
+
+    /// <summary>包装真实文件系统，记录 <see cref="WriteAllTextAtomic"/> 的调用次数与目标路径。</summary>
+    private sealed class CountingFileSystem : FileSystemWrapper
+    {
+        public CountingFileSystem(IFileSystem inner)
+            : base(inner)
+        {
         }
 
-        public void MoveDirectory(string source, string destination) => _inner.MoveDirectory(source, destination);
+        public int WriteAllTextAtomicCalls { get; private set; }
+
+        public List<string> WriteAllTextAtomicPaths { get; } = [];
+
+        public override void WriteAllTextAtomic(string path, string text)
+        {
+            WriteAllTextAtomicCalls++;
+            WriteAllTextAtomicPaths.Add(path);
+            Inner.WriteAllTextAtomic(path, text);
+        }
+    }
+
+    /// <summary>
+    /// 包装真实文件系统：sidecar 的原子写先落半截（半个 JSON）再抛 IOException，
+    /// 模拟「原子写内部写完一半就失败」，用来验证服务会清掉这半截 sidecar。
+    /// </summary>
+    private sealed class HalfWrittenSidecarFileSystem : FileSystemWrapper
+    {
+        public HalfWrittenSidecarFileSystem(IFileSystem inner)
+            : base(inner)
+        {
+        }
+
+        public override void WriteAllTextAtomic(string path, string text)
+        {
+            if (!path.EndsWith(SaveBackupPaths.SidecarExtension, StringComparison.OrdinalIgnoreCase))
+            {
+                Inner.WriteAllTextAtomic(path, text);
+                return;
+            }
+
+            var half = text.Length > 2 ? text[..(text.Length / 2)] : text;
+            Inner.WriteAllTextAtomic(path, half);
+            throw new IOException("注入的 sidecar 原子写失败（模拟写到一半）");
+        }
     }
 
     private sealed class FixedClock : IClock

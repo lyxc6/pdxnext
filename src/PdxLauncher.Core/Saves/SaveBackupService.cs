@@ -249,9 +249,10 @@ public sealed class SaveBackupService : ISaveGameBackupService
         }
         catch (Exception exception) when (IsSidecarFailure(exception))
         {
-            var message = "恢复失败：sidecar 无法解析（" + exception.Message + "）。";
-            _logger.Warn(BackupFailedLog + "：" + message);
-            return SaveRestoreResult.Failed(message);
+            // JSON 解析器原文（如 "'t' is an invalid start of a property name..."）只进日志；
+            // 面向用户只说文件坏了，别把解析器内部细节糊到 UI 上。
+            _logger.Warn(BackupFailedLog + "：sidecar 无法解析 " + sidecarPath + "（" + exception.Message + "）");
+            return SaveRestoreResult.Failed("恢复失败：备份信息文件已损坏，无法读取。");
         }
 
         if (sidecar.SizeBytes != _fileSystem.GetFileSize(backupPath))
