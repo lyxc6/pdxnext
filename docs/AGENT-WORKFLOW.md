@@ -52,6 +52,21 @@
   `PdxLauncher.Core.dll`。
 - 一波最多 2 个写任务 + 1 个只读核对；写范围有重叠就判为拆分错误，改依赖串行。
 
+### 4.1 用户机器的只读边界（2026-11-05 事故后新增，硬规则）
+
+- **禁止**向任何用户已安装的目录写入、覆盖或删除文件，包括 `D:\app\PdxNext`、
+  `%LOCALAPPDATA%\Programs\PdxNext`、`Program Files` 下的 PdxNext，以及它们的 `data\`。
+  安装/升级/卸载只允许由协调者在明确发版流程里执行。
+- UI 验收需要「像已安装一样」时，只允许：把发布目录复制到 `%TEMP%\pdxnext-uitest-*`，
+  或 `subst` 一个盘符指向临时目录，在副本上启动；绝不能把 dev build 铺到真实安装目录上去
+  图「注册表里 App Path 对得上」。
+- 验收者必须区分「代码对」和「环境对」：如果一条结论依赖真实安装态，而环境被改动过，
+  必须写「环境不干净，待发版安装后复验」，不许当作已通过。
+- 事故记录：`feat/install-mode-ui` 为验证「已安装」文案，把 build 输出覆盖进
+  `D:\app\PdxNext` 并启动，污染了用户 1.2.2 安装与 `data\pdxnext.sqlite`；
+  已用 `PdxNext-Setup-1.2.2.exe /VERYSILENT /DIR=D:\app\PdxNext` 恢复并用
+  `tools\verify-installed-version.ps1` 校验通过。
+
 ## 5. 每个任务的固定检查
 
 ```bat
