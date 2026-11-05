@@ -9,7 +9,6 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
-using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Text;
 
 /// <summary>
