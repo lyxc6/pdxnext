@@ -38,6 +38,10 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     private bool _isBusy;
     private bool _isLoaded;
     private bool _isRelocalizing;
+    /// <summary>安装形态判定结果；null 表示注册表还没读完（界面显示「正在检查」）。</summary>
+    private InstallMode? _installMode;
+    /// <summary>卸载记录里的目录；PathMismatch 时展示，便于用户判断是不是装了两份。</summary>
+    private string? _recordedInstallDirectory;
     private string _statusMessage = string.Empty;
     private string? _statusKey;
     private object?[] _statusArgs = Array.Empty<object?>();
@@ -517,24 +521,172 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     public string LauncherVersionText => AppServices.Updates?.CurrentVersion ?? "1.0.0";
 
-    /// <summary>安装模式：每机器 / 每用户 / 便携。每机器由 marker 或 Program Files 路径判定。</summary>
+    /// <summary>
+    /// 安装形态文案。判定只认 Core 的 <see cref="InstallModeResolver"/>：已安装时按 Scope 区分
+    /// 当前用户 / 所有用户；便携运行时按 <see cref="InstallModeReason"/> 说明差在哪条证据。
+    /// 旧实现只比较 <c>%LOCALAPPDATA%\Programs</c> 前缀，装在 D 盘就必然显示「便携」。
+    /// </summary>
     public string InstallModeText
     {
         get
         {
-            if (AppServices.Updates?.IsPerMachineInstall == true)
+            var mode = _installMode;
+            if (mode is null)
             {
-                return T(Keys.SettingsAboutInstallModePerMachine);
+                return T(Keys.SettingsAboutInstallModeChecking);
             }
 
-            var localPrograms = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Programs");
-            var baseDirectory = AppContext.BaseDirectory;
-            return baseDirectory.StartsWith(localPrograms + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                ? T(Keys.SettingsAboutInstallModePerUser)
-                : T(Keys.SettingsAboutInstallModePortable);
+            if (mode.IsInstalled)
+            {
+                return mode.Scope == InstallScope.PerMachine
+                    ? T(Keys.SettingsAboutInstallModeInstalledPerMachine)
+                    : T(Keys.SettingsAboutInstallModeInstalledPerUser);
+            }
+
+            return mode.Reason switch
+            {
+                InstallModeReason.PathMismatch => T(Keys.SettingsAboutInstallModePathMismatch),
+                InstallModeReason.ExeMissing => T(Keys.SettingsAboutInstallModeExeMissing),
+                InstallModeReason.MarkerOnly => T(Keys.SettingsAboutInstallModeMarkerOnly),
+                _ => T(Keys.SettingsAboutInstallModeNoEntry),
+            };
         }
+    }
+
+    /// <summary>卸载项里的 DisplayVersion；没有就整行不显示。</summary>
+    public string InstallModeVersionText =>
+        string.IsNullOrWhiteSpace(_installMode?.DisplayVersion)
+            ? string.Empty
+            : T(Keys.SettingsAboutInstallModeVersion, _installMode!.DisplayVersion);
+
+    public bool HasInstallModeVersion => !string.IsNullOrEmpty(InstallModeVersionText);
+
+    /// <summary>
+    /// 要展示的目录：已安装 / 主程序缺失时是本程序目录；目录不一致时是卸载记录里的目录，
+    /// 让用户能自己判断是不是装了两份。
+    /// </summary>
+    public string InstallModeDirectory
+    {
+        get
+        {
+            var mode = _installMode;
+            if (mode is null)
+            {
+                return string.Empty;
+            }
+
+            return mode.Reason == InstallModeReason.PathMismatch
+                ? _recordedInstallDirectory ?? string.Empty
+                : mode.InstallDirectory ?? string.Empty;
+        }
+    }
+
+    public bool HasInstallModeDirectory => InstallModeDirectory.Length > 0;
+
+    /// <summary>「打开安装目录」按钮：目录不存在或为空时禁用。</summary>
+    public bool CanOpenInstallModeDirectory =>
+        HasInstallModeDirectory && AppServices.FileSystem.DirectoryExists(InstallModeDirectory);
+
+    /// <summary>目录一行的标题：路径不一致时写「记录中的目录」，避免误导成当前程序目录。</summary>
+    public string InstallModeDirectoryLabel => _installMode?.Reason == InstallModeReason.PathMismatch
+        ? T(Keys.SettingsAboutInstallModeRecordedDirectory)
+        : T(Keys.SettingsAboutInstallModeDirectory);
+
+    /// <summary>主程序缺失 / 只有 marker 时补一句解释，其余情况不占位。</summary>
+    public bool HasInstallModeHint =>
+        _installMode?.Reason is InstallModeReason.ExeMissing or InstallModeReason.MarkerOnly;
+
+    public string InstallModeHintText => _installMode?.Reason switch
+    {
+        InstallModeReason.ExeMissing => T(Keys.SettingsAboutInstallModeExeMissingHint),
+        InstallModeReason.MarkerOnly => T(Keys.SettingsAboutInstallModeMarkerOnlyHint),
+        _ => string.Empty,
+    };
+
+    /// <summary>当前数据目录（与「程序数据目录」区同一来源，只读展示）。</summary>
+    public string InstallModeDataDirectory => AppServices.DataRoot;
+
+    /// <summary>
+    /// Program Files 里的绿色拷贝会出现「设置页说便携、数据却落在每机器安装的位置」。
+    /// 这时把数据目录也摆出来并解释一句，别让两处说法打架。
+    /// </summary>
+    public bool ShowInstallModeDataNote
+    {
+        get
+        {
+            var mode = _installMode;
+            if (mode is null || mode.IsInstalled)
+            {
+                return false;
+            }
+
+            var perMachineDataRoot = Path.Combine(
+                PdxDataRoot.LocalAppDataDirectory,
+                PdxDataRoot.PerMachineDataFolderName);
+            return string.Equals(
+                Path.TrimEndingDirectorySeparator(AppServices.DataRoot),
+                Path.TrimEndingDirectorySeparator(perMachineDataRoot),
+                StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    public string InstallModeDataNoteText =>
+        T(Keys.SettingsAboutInstallModeDataNote, AppServices.DataRoot);
+
+    /// <summary>
+    /// 后台读注册表并判定安装形态。注册表可能读得慢，判定整体放在线程池上；
+    /// 任何失败都退化成「便携运行（未找到安装记录）」，绝不把异常抛给页面。
+    /// </summary>
+    public async Task RefreshInstallModeAsync(CancellationToken cancellationToken)
+    {
+        if (_installMode is not null)
+        {
+            return;
+        }
+
+        var baseDirectory = AppContext.BaseDirectory;
+        InstallMode mode;
+        string? recordedDirectory;
+        try
+        {
+            var result = await Task.Run(
+                () =>
+                {
+                    var marker = PdxDataRoot.ReadInstallMode(baseDirectory);
+                    var source = new RegistryUninstallEntrySource(
+                        AppServices.IsInitialized ? AppServices.Logger : null);
+                    var entries = source.ReadEntries();
+                    return (Mode: InstallModeResolver.Resolve(baseDirectory, marker, entries), Entries: entries);
+                },
+                cancellationToken).ConfigureAwait(true);
+
+            mode = result.Mode;
+            recordedDirectory = result.Entries
+                .Select(entry => entry.AppPath)
+                .FirstOrDefault(path => !string.IsNullOrWhiteSpace(path));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            (AppServices.IsInitialized ? AppServices.Logger : null)?.Warn(
+                "读取安装记录失败，安装模式按便携处理: " + ex.Message);
+            mode = InstallMode.PortableRun(InstallModeReason.NoEntry);
+            recordedDirectory = null;
+        }
+
+        _installMode = mode;
+        _recordedInstallDirectory = recordedDirectory;
+        OnPropertyChanged(nameof(InstallModeText));
+        OnPropertyChanged(nameof(InstallModeVersionText));
+        OnPropertyChanged(nameof(HasInstallModeVersion));
+        OnPropertyChanged(nameof(InstallModeDirectory));
+        OnPropertyChanged(nameof(HasInstallModeDirectory));
+        OnPropertyChanged(nameof(CanOpenInstallModeDirectory));
+        OnPropertyChanged(nameof(InstallModeDirectoryLabel));
+        OnPropertyChanged(nameof(HasInstallModeHint));
+        OnPropertyChanged(nameof(InstallModeHintText));
+        OnPropertyChanged(nameof(InstallModeDataDirectory));
+        OnPropertyChanged(nameof(ShowInstallModeDataNote));
+        OnPropertyChanged(nameof(InstallModeDataNoteText));
     }
 
     public string LastUpdateCheckText
@@ -1099,8 +1251,12 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// 这时只重读展示值，不重置 dlc_signature、不覆盖用户选的「其它可执行文件」，
     /// 也不把正在输入的代理地址回滚成 settings.json 里的旧值。
     /// </summary>
-    public Task LoadAsync(GameInstallation? game, CancellationToken cancellationToken)
+    public async Task LoadAsync(GameInstallation? game, CancellationToken cancellationToken)
     {
+        // 安装形态与游戏无关，每进程读一次（首次成功后 RefreshInstallModeAsync 直接复用判定结果）；
+        // 注册表读取在线程池上，不压 UI 线程。
+        await RefreshInstallModeAsync(cancellationToken).ConfigureAwait(true);
+
         var sameGame = IsSameGame(_game, game);
 
         RefreshOptionSelections();
@@ -1119,7 +1275,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             SetStatus(Keys.SettingsStatusSelectGameFirst);
             RaiseThemeProps();
             RefreshPatchState();
-            return Task.CompletedTask;
+            return;
         }
 
         _isRelocalizing = true;
@@ -1156,7 +1312,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         _theme = game.Theme;
         RaiseThemeProps();
         RefreshPatchState();
-        return Task.CompletedTask;
+        return;
     }
 
     /// <summary>

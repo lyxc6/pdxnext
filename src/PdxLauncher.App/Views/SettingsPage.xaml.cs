@@ -425,6 +425,15 @@ public sealed partial class SettingsPage : Page
     private void OnOpenAppDataDirectoryClick(object sender, RoutedEventArgs e) =>
         OpenPath(AppServices.DataRoot, T(Keys.SettingsAppDataCurrent));
 
+    /// <summary>
+    /// 打开「安装目录」：已安装时是本程序目录，路径不一致时是卸载记录里的目录
+    /// （便于用户判断是不是装了两份）。目录不存在时按钮已禁用，这里再兜一次。
+    /// </summary>
+    private void OnOpenInstallModeDirectoryClick(object sender, RoutedEventArgs e) =>
+        OpenPath(
+            _viewModel.InstallModeDirectory,
+            T(Keys.SettingsAboutInstallModeDirectory));
+
     private async void OnClearLegacyDataClick(object sender, RoutedEventArgs e) =>
         await RunGuardedAsync(
             "SettingsPage 清理旧 C 盘数据失败",

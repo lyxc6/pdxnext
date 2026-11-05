@@ -754,10 +754,23 @@ public sealed partial class Localizer
         ["settings.about.checkNowName"] = "立即检查更新",
         ["settings.about.checking"] = "正在检查更新…",
         ["settings.about.installMode"] = "安装模式",
+        ["settings.about.installModeChecking"] = "正在检查安装方式…",
+        ["settings.about.installModeDataDirectory"] = "数据目录",
+        ["settings.about.installModeDataNote"] = "数据目录位于每机器安装的数据位置（{0}），不在程序目录内。",
+        ["settings.about.installModeDirectory"] = "安装目录",
+        ["settings.about.installModeExeMissing"] = "便携运行（卸载记录指向本目录，但主程序缺失）",
+        ["settings.about.installModeExeMissingHint"] = "可能正在更新，或安装不完整。",
+        ["settings.about.installModeInstalledPerMachine"] = "已安装（Inno Setup，所有用户）",
+        ["settings.about.installModeInstalledPerUser"] = "已安装（Inno Setup，当前用户）",
+        ["settings.about.installModeMarkerOnly"] = "便携运行（仅有安装标记，未找到卸载记录）",
+        ["settings.about.installModeMarkerOnlyHint"] = "证据不足，可能是绿色拷贝或注册表被清理。",
         ["settings.about.installModeName"] = "当前安装方式",
-        ["settings.about.installModePerMachine"] = "所有用户（更新需要管理员权限）",
-        ["settings.about.installModePerUser"] = "仅当前用户",
-        ["settings.about.installModePortable"] = "便携 / 未安装",
+        ["settings.about.installModeNoEntry"] = "便携运行（未找到安装记录）",
+        ["settings.about.installModeOpenDirectory"] = "打开安装目录",
+        ["settings.about.installModePathMismatch"] = "便携运行（找到卸载记录，但目录与本程序不一致）",
+        ["settings.about.installModeRecordedDirectory"] = "记录中的目录",
+        ["settings.about.installModeVersion"] = "{0}",
+        ["settings.about.installModeVersionLabel"] = "安装记录版本",
         ["settings.about.lastCheck"] = "上次检查：{0}",
         ["settings.about.lastCheckLabel"] = "上次检查",
         ["settings.about.launcherVersion"] = "启动器版本",
@@ -2106,10 +2119,23 @@ public sealed partial class Localizer
         ["settings.about.checkNowName"] = "Check for updates now",
         ["settings.about.checking"] = "Checking for updates…",
         ["settings.about.installMode"] = "Installation mode",
+        ["settings.about.installModeChecking"] = "Checking how this copy is installed…",
+        ["settings.about.installModeDataDirectory"] = "Data folder",
+        ["settings.about.installModeDataNote"] = "The data folder is in the per-machine location ({0}), not inside the program folder.",
+        ["settings.about.installModeDirectory"] = "Install folder",
+        ["settings.about.installModeExeMissing"] = "Portable (the uninstall record points here, but the main executable is missing)",
+        ["settings.about.installModeExeMissingHint"] = "An update may be in progress, or the installation is incomplete.",
+        ["settings.about.installModeInstalledPerMachine"] = "Installed (Inno Setup, all users)",
+        ["settings.about.installModeInstalledPerUser"] = "Installed (Inno Setup, current user)",
+        ["settings.about.installModeMarkerOnly"] = "Portable (install marker only, no uninstall record found)",
+        ["settings.about.installModeMarkerOnlyHint"] = "Not enough evidence: this may be a portable copy, or the registry was cleaned.",
         ["settings.about.installModeName"] = "How this copy is installed",
-        ["settings.about.installModePerMachine"] = "All users (updates need administrator approval)",
-        ["settings.about.installModePerUser"] = "Current user only",
-        ["settings.about.installModePortable"] = "Portable / not installed",
+        ["settings.about.installModeNoEntry"] = "Portable (no installation record found)",
+        ["settings.about.installModeOpenDirectory"] = "Open install folder",
+        ["settings.about.installModePathMismatch"] = "Portable (an uninstall record exists, but it points to a different folder)",
+        ["settings.about.installModeRecordedDirectory"] = "Recorded folder",
+        ["settings.about.installModeVersion"] = "{0}",
+        ["settings.about.installModeVersionLabel"] = "Registered install version",
         ["settings.about.lastCheck"] = "Last checked: {0}",
         ["settings.about.lastCheckLabel"] = "Last checked",
         ["settings.about.launcherVersion"] = "Launcher version",
@@ -3458,10 +3484,23 @@ public sealed partial class Localizer
         ("settings.about.checkNowName", "SettingsAboutCheckNowName"),
         ("settings.about.checking", "SettingsAboutChecking"),
         ("settings.about.installMode", "SettingsAboutInstallMode"),
+        ("settings.about.installModeChecking", "SettingsAboutInstallModeChecking"),
+        ("settings.about.installModeDataDirectory", "SettingsAboutInstallModeDataDirectory"),
+        ("settings.about.installModeDataNote", "SettingsAboutInstallModeDataNote"),
+        ("settings.about.installModeDirectory", "SettingsAboutInstallModeDirectory"),
+        ("settings.about.installModeExeMissing", "SettingsAboutInstallModeExeMissing"),
+        ("settings.about.installModeExeMissingHint", "SettingsAboutInstallModeExeMissingHint"),
+        ("settings.about.installModeInstalledPerMachine", "SettingsAboutInstallModeInstalledPerMachine"),
+        ("settings.about.installModeInstalledPerUser", "SettingsAboutInstallModeInstalledPerUser"),
+        ("settings.about.installModeMarkerOnly", "SettingsAboutInstallModeMarkerOnly"),
+        ("settings.about.installModeMarkerOnlyHint", "SettingsAboutInstallModeMarkerOnlyHint"),
         ("settings.about.installModeName", "SettingsAboutInstallModeName"),
-        ("settings.about.installModePerMachine", "SettingsAboutInstallModePerMachine"),
-        ("settings.about.installModePerUser", "SettingsAboutInstallModePerUser"),
-        ("settings.about.installModePortable", "SettingsAboutInstallModePortable"),
+        ("settings.about.installModeNoEntry", "SettingsAboutInstallModeNoEntry"),
+        ("settings.about.installModeOpenDirectory", "SettingsAboutInstallModeOpenDirectory"),
+        ("settings.about.installModePathMismatch", "SettingsAboutInstallModePathMismatch"),
+        ("settings.about.installModeRecordedDirectory", "SettingsAboutInstallModeRecordedDirectory"),
+        ("settings.about.installModeVersion", "SettingsAboutInstallModeVersion"),
+        ("settings.about.installModeVersionLabel", "SettingsAboutInstallModeVersionLabel"),
         ("settings.about.lastCheck", "SettingsAboutLastCheck"),
         ("settings.about.lastCheckLabel", "SettingsAboutLastCheckLabel"),
         ("settings.about.launcherVersion", "SettingsAboutLauncherVersion"),
@@ -4808,10 +4847,23 @@ public sealed partial class Localizer
     public string SettingsAboutCheckNowName => Format("settings.about.checkNowName");
     public string SettingsAboutChecking => Format("settings.about.checking");
     public string SettingsAboutInstallMode => Format("settings.about.installMode");
+    public string SettingsAboutInstallModeChecking => Format("settings.about.installModeChecking");
+    public string SettingsAboutInstallModeDataDirectory => Format("settings.about.installModeDataDirectory");
+    public string SettingsAboutInstallModeDataNote => Format("settings.about.installModeDataNote");
+    public string SettingsAboutInstallModeDirectory => Format("settings.about.installModeDirectory");
+    public string SettingsAboutInstallModeExeMissing => Format("settings.about.installModeExeMissing");
+    public string SettingsAboutInstallModeExeMissingHint => Format("settings.about.installModeExeMissingHint");
+    public string SettingsAboutInstallModeInstalledPerMachine => Format("settings.about.installModeInstalledPerMachine");
+    public string SettingsAboutInstallModeInstalledPerUser => Format("settings.about.installModeInstalledPerUser");
+    public string SettingsAboutInstallModeMarkerOnly => Format("settings.about.installModeMarkerOnly");
+    public string SettingsAboutInstallModeMarkerOnlyHint => Format("settings.about.installModeMarkerOnlyHint");
     public string SettingsAboutInstallModeName => Format("settings.about.installModeName");
-    public string SettingsAboutInstallModePerMachine => Format("settings.about.installModePerMachine");
-    public string SettingsAboutInstallModePerUser => Format("settings.about.installModePerUser");
-    public string SettingsAboutInstallModePortable => Format("settings.about.installModePortable");
+    public string SettingsAboutInstallModeNoEntry => Format("settings.about.installModeNoEntry");
+    public string SettingsAboutInstallModeOpenDirectory => Format("settings.about.installModeOpenDirectory");
+    public string SettingsAboutInstallModePathMismatch => Format("settings.about.installModePathMismatch");
+    public string SettingsAboutInstallModeRecordedDirectory => Format("settings.about.installModeRecordedDirectory");
+    public string SettingsAboutInstallModeVersion => Format("settings.about.installModeVersion");
+    public string SettingsAboutInstallModeVersionLabel => Format("settings.about.installModeVersionLabel");
     public string SettingsAboutLastCheck => Format("settings.about.lastCheck");
     public string SettingsAboutLastCheckLabel => Format("settings.about.lastCheckLabel");
     public string SettingsAboutLauncherVersion => Format("settings.about.launcherVersion");
@@ -6161,10 +6213,23 @@ internal static class Keys
     public const string SettingsAboutCheckNowName = "settings.about.checkNowName";
     public const string SettingsAboutChecking = "settings.about.checking";
     public const string SettingsAboutInstallMode = "settings.about.installMode";
+    public const string SettingsAboutInstallModeChecking = "settings.about.installModeChecking";
+    public const string SettingsAboutInstallModeDataDirectory = "settings.about.installModeDataDirectory";
+    public const string SettingsAboutInstallModeDataNote = "settings.about.installModeDataNote";
+    public const string SettingsAboutInstallModeDirectory = "settings.about.installModeDirectory";
+    public const string SettingsAboutInstallModeExeMissing = "settings.about.installModeExeMissing";
+    public const string SettingsAboutInstallModeExeMissingHint = "settings.about.installModeExeMissingHint";
+    public const string SettingsAboutInstallModeInstalledPerMachine = "settings.about.installModeInstalledPerMachine";
+    public const string SettingsAboutInstallModeInstalledPerUser = "settings.about.installModeInstalledPerUser";
+    public const string SettingsAboutInstallModeMarkerOnly = "settings.about.installModeMarkerOnly";
+    public const string SettingsAboutInstallModeMarkerOnlyHint = "settings.about.installModeMarkerOnlyHint";
     public const string SettingsAboutInstallModeName = "settings.about.installModeName";
-    public const string SettingsAboutInstallModePerMachine = "settings.about.installModePerMachine";
-    public const string SettingsAboutInstallModePerUser = "settings.about.installModePerUser";
-    public const string SettingsAboutInstallModePortable = "settings.about.installModePortable";
+    public const string SettingsAboutInstallModeNoEntry = "settings.about.installModeNoEntry";
+    public const string SettingsAboutInstallModeOpenDirectory = "settings.about.installModeOpenDirectory";
+    public const string SettingsAboutInstallModePathMismatch = "settings.about.installModePathMismatch";
+    public const string SettingsAboutInstallModeRecordedDirectory = "settings.about.installModeRecordedDirectory";
+    public const string SettingsAboutInstallModeVersion = "settings.about.installModeVersion";
+    public const string SettingsAboutInstallModeVersionLabel = "settings.about.installModeVersionLabel";
     public const string SettingsAboutLastCheck = "settings.about.lastCheck";
     public const string SettingsAboutLastCheckLabel = "settings.about.lastCheckLabel";
     public const string SettingsAboutLauncherVersion = "settings.about.launcherVersion";

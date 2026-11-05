@@ -948,6 +948,45 @@
                                                     ValueAutomationId="txtInstallMode"
                                                     ValueAutomationName="{x:Bind L.SettingsAboutInstallModeName, Mode=OneWay}" />
 
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsAboutInstallModeVersionLabel, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.InstallModeVersionText, Mode=OneWay}"
+                                                    ValueAutomationId="txtInstallModeVersion"
+                                                    ValueAutomationName="{x:Bind L.SettingsAboutInstallModeVersionLabel, Mode=OneWay}"
+                                                    Visibility="{x:Bind ViewModel.HasInstallModeVersion, Mode=OneWay}" />
+
+                        <controls:SettingsCard Header="{x:Bind ViewModel.InstallModeDirectoryLabel, Mode=OneWay}"
+                                               Visibility="{x:Bind ViewModel.HasInstallModeDirectory, Mode=OneWay}">
+                            <controls:SettingsCard.ActionContent>
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock AutomationProperties.AutomationId="txtInstallModeDirectory"
+                                               AutomationProperties.Name="{x:Bind ViewModel.InstallModeDirectoryLabel, Mode=OneWay}"
+                                               Text="{x:Bind ViewModel.InstallModeDirectory, Mode=OneWay}"
+                                               MaxWidth="380" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{x:Bind ViewModel.InstallModeDirectory, Mode=OneWay}" />
+                                    <Button AutomationProperties.AutomationId="btnOpenInstallModeDirectory"
+                                            AutomationProperties.Name="{x:Bind L.SettingsAboutInstallModeOpenDirectory, Mode=OneWay}"
+                                            Content="{x:Bind L.SettingsAboutInstallModeOpenDirectory, Mode=OneWay}"
+                                            IsEnabled="{x:Bind ViewModel.CanOpenInstallModeDirectory, Mode=OneWay}"
+                                            Click="OnOpenInstallModeDirectoryClick" />
+                                </StackPanel>
+                            </controls:SettingsCard.ActionContent>
+                        </controls:SettingsCard>
+
+                        <TextBlock AutomationProperties.AutomationId="txtInstallModeHint"
+                                   Text="{x:Bind ViewModel.InstallModeHintText, Mode=OneWay}"
+                                   Style="{StaticResource SettingsHintTextStyle}"
+                                   Visibility="{x:Bind ViewModel.HasInstallModeHint, Mode=OneWay}" />
+
+                        <controls:SettingsValueCard Header="{x:Bind L.SettingsAboutInstallModeDataDirectory, Mode=OneWay}"
+                                                    Value="{x:Bind ViewModel.InstallModeDataDirectory, Mode=OneWay}"
+                                                    ValueAutomationId="txtInstallModeDataDirectory"
+                                                    ValueAutomationName="{x:Bind L.SettingsAboutInstallModeDataDirectory, Mode=OneWay}" />
+
+                        <TextBlock AutomationProperties.AutomationId="txtInstallModeDataNote"
+                                   Text="{x:Bind ViewModel.InstallModeDataNoteText, Mode=OneWay}"
+                                   Style="{StaticResource SettingsHintTextStyle}"
+                                   Visibility="{x:Bind ViewModel.ShowInstallModeDataNote, Mode=OneWay}" />
+
                         <controls:SettingsCard Header="{x:Bind L.SettingsAboutAutoCheck, Mode=OneWay}">
                             <controls:SettingsCard.ActionContent>
                                 <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglAutoCheckUpdates"
