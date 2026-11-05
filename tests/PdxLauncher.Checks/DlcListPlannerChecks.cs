@@ -21,6 +21,8 @@ public static class DlcListPlannerChecks
         CheckDiskNameWins();
         CheckBlankNamesSkipped();
         CheckCatalogTooLarge();
+        CheckUntrustedKeepsDiskRows();
+        CheckOwnedSectionLabel();
         CheckCatalogAtLimit();
         CheckEmptyNameRatio();
         CheckEmptyNameRatioAtLimit();
@@ -145,6 +147,57 @@ public static class DlcListPlannerChecks
     }
 
     // ------------------------------------------------------------ 报告不可用
+
+    private static void CheckUntrustedKeepsDiskRows()
+    {
+        // 闸门只该拦「未拥有」段的合成，绝不能把磁盘行连同算好的拥有态一起清掉
+        // （曾经把 entries.Clear() 写进不可信分支，Checks 全绿却把已拥有段清空）。
+        var oversized = Enumerable
+            .Range(0, DlcListPlanner.MaxCatalogEntries + 1)
+            .Select(i => Dlc((3000 + i).ToString(System.Globalization.CultureInfo.InvariantCulture), "Loader Row " + i))
+            .ToList();
+
+        var plan = DlcListPlanner.Create(
+            [Disk("10", "On Disk Owned"), Disk("11", "On Disk Unowned")],
+            Report(oversized, owned: ["10"]));
+
+        ChecksContext.Equal("planner: 不可信报告时磁盘行仍保留", 2, plan.Entries.Count);
+        ChecksContext.Check(
+            "planner: 不可信报告不清空已拥有行的拥有态",
+            plan.Entries.Single(static e => e.SteamId == "10").Owned == true);
+        ChecksContext.Check(
+            "planner: 不可信报告下未拥有的磁盘行仍是 false",
+            plan.Entries.Single(static e => e.SteamId == "11").Owned == false);
+        ChecksContext.Equal("planner: 不可信报告时已拥有计数保留", 1, plan.OwnedCount);
+        ChecksContext.Equal("planner: 不可信报告不合成未拥有行", 0, plan.Unowned.Count);
+        ChecksContext.Equal("planner: 不可信报告状态不变", DlcUnownedListState.UntrustedCatalog, plan.UnownedState);
+    }
+
+    private static void CheckOwnedSectionLabel()
+    {
+        var fullyOwned = DlcListPlanner.Create(
+            [Disk("10", "A"), Disk("11", "B")],
+            Report([Dlc("10", "A"), Dlc("11", "B")], owned: ["10", "11"]));
+
+        ChecksContext.Equal("planner: 全部已拥有 → 标题用「已拥有」", DlcOwnedSectionLabel.Owned, fullyOwned.OwnedSectionLabel);
+        ChecksContext.Equal("planner: 全部已拥有时计数等于已拥有数", 2, fullyOwned.OwnedCount);
+        ChecksContext.Equal("planner: 全部已拥有时计数也等于磁盘行数", fullyOwned.DiskCount, fullyOwned.OwnedCount);
+
+        var partial = DlcListPlanner.Create(
+            [Disk("10", "A"), Disk("11", "B")],
+            Report([Dlc("10", "A"), Dlc("11", "B")], owned: ["10"]));
+
+        ChecksContext.Equal("planner: 有未拥有行 → 标题改叫「本地 DLC」", DlcOwnedSectionLabel.Local, partial.OwnedSectionLabel);
+
+        // Steam 没跑：磁盘 2 行、已拥有 0；标题若拿磁盘行数冒充已拥有数就会出现「已拥有（2）」+ 两条「授权未知」。
+        var unknown = DlcListPlanner.Create(
+            [Disk("10", "A"), Disk("11", "B")],
+            Report([], state: SteamOwnershipState.SteamNotRunning));
+
+        ChecksContext.Equal("planner: Steam 没跑 → 标题用「本地 DLC」", DlcOwnedSectionLabel.Local, unknown.OwnedSectionLabel);
+        ChecksContext.Equal("planner: Steam 没跑时已拥有数为 0", 0, unknown.OwnedCount);
+        ChecksContext.Equal("planner: Steam 没跑时磁盘行数仍是 2", 2, unknown.DiskCount);
+    }
 
     private static void CheckNullReport()
     {

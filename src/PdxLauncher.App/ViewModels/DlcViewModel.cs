@@ -124,8 +124,14 @@ public sealed class DlcViewModel : LocalizedObservableObject
     /// </summary>
     public bool CanListUnowned => !_isSteamDlcList && Game is { SupportsContentManagement: true };
 
-    /// <summary>「已拥有」段标题（带行数）；CS2 与无游戏时不显示。</summary>
-    public string OwnedSectionTitle => T(Keys.DlcOwnedSection, Dlcs.Count);
+    /// <summary>
+    /// 第一段的标题（带行数）。口径由 Core 规划器判定：全部磁盘行都已拥有才叫「已拥有」，
+    /// 否则（Steam 没跑 → 全是「授权未知」，或报告里有未拥有行）叫「本地 DLC」，
+    /// 避免出现「已拥有（31）」下面 31 条「授权未知」这种自相矛盾的标题。
+    /// </summary>
+    public string OwnedSectionTitle => _plan is { OwnedSectionLabel: DlcOwnedSectionLabel.Owned } plan
+        ? T(Keys.DlcOwnedSection, plan.OwnedCount)
+        : T(Keys.DlcLocalSection, Dlcs.Count);
 
     /// <summary>「已拥有」段标题是否可见（列表为空时整段不显示）。</summary>
     public bool HasOwnedSection => CanListUnowned && Dlcs.Count > 0;

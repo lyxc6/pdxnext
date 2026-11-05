@@ -74,6 +74,7 @@
   "dlc.ownershipRowToolTip": "Steam AppID {0}",
   "dlc.ownershipRowNoSteam": "没有 Steam AppID，无法判定授权",
   "dlc.ownedSection": "已拥有（{0}）",
+  "dlc.localSection": "本地 DLC（{0}）",
   "dlc.unownedSection": "未拥有（{0}）",
   "dlc.unownedListName": "未拥有的 DLC",
   "dlc.unownedNoteSteamOff": "Steam 未运行，无法列出未拥有的 DLC。",

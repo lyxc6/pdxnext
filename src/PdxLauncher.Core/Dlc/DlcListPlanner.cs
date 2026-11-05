@@ -25,6 +25,21 @@ public enum DlcUnownedListState
     UntrustedCatalog,
 }
 
+/// <summary>
+/// 「已拥有」段标题的口径。标题必须和行里的徽标说同一件事：
+/// 只有每一行磁盘 DLC 都被报告判定为已拥有时才敢叫「已拥有」；
+/// 有「授权未知」或「未拥有」的行时改叫「本地 DLC」，否则会出现
+/// 「已拥有（31）」下面 31 条「授权未知」的自相矛盾。
+/// </summary>
+public enum DlcOwnedSectionLabel
+{
+    /// <summary>全部磁盘行都已拥有：标题用「已拥有 (N)」。</summary>
+    Owned,
+
+    /// <summary>存在未知/未拥有的行（含没有报告）：标题用「本地 DLC (N)」。</summary>
+    Local,
+}
+
 /// <summary>规划 DLC 列表时的磁盘行输入（只保留规划要用的字段，不拖 <c>DlcInfo</c> 进来）。</summary>
 /// <param name="SteamId">磁盘描述文件里写的 Steam AppID；可能为空。</param>
 /// <param name="DisplayName">磁盘描述文件里的名字（优先于 Steam 的名字）。</param>
@@ -65,6 +80,18 @@ public sealed record DlcListPlan(
 
     /// <summary>磁盘行里判定为已拥有的条数。</summary>
     public int OwnedCount => Entries.Count(static entry => entry.Owned == true);
+
+    /// <summary>
+    /// 「已拥有」段标题的口径：只有每一行磁盘 DLC 都被判定为已拥有时才用「已拥有」。
+    /// <para>
+    /// 没有报告（Steam 没跑）时所有行都是「授权未知」，此时若还写「已拥有（磁盘行数）」，
+    /// 标题就和行里的徽标打架——所以改口叫「本地 DLC」，数量用磁盘行数。
+    /// </para>
+    /// </summary>
+    public DlcOwnedSectionLabel OwnedSectionLabel =>
+        Entries.Count > 0 && Entries.All(static entry => entry.Owned == true)
+            ? DlcOwnedSectionLabel.Owned
+            : DlcOwnedSectionLabel.Local;
 
     /// <summary>未拥有条数。</summary>
     public int UnownedCount => Unowned.Count;
@@ -221,7 +248,14 @@ public static class DlcListPlanner
         return StringComparer.Ordinal.Compare(left.FilePath, right.FilePath);
     }
 
-    /// <summary>可靠性闸门：条数过多，或超过一半没有名字，都说明这份清单不是本游戏的真实目录。</summary>
+    /// <summary>
+    /// 可靠性闸门：条数过多，或超过一半没有名字，都说明这份清单不是本游戏的真实目录。
+    /// <para>
+    /// 空名占比这一条在生产路径上目前是防御性保留：<c>SteamDllProbe</c> 在读出条目时会先丢掉空名字
+    /// （<c>SteamDllProbe.cs:229-233</c>），所以真实的 loader 模板只会撞到「条数 &gt; 200」那一半。
+    /// 留着它是因为 loader 模板的形态会变（例如改成条数不多但没有名字），真变了这里要能兜住。
+    /// </para>
+    /// </summary>
     private static bool IsUntrusted(int catalogCount, int emptyNameCount) =>
         catalogCount > MaxCatalogEntries
         || (catalogCount > 0 && (long)emptyNameCount * 100 > (long)catalogCount * MaxEmptyNamePercent);

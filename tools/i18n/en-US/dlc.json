@@ -74,6 +74,7 @@
   "dlc.ownershipRowToolTip": "Steam AppID {0}",
   "dlc.ownershipRowNoSteam": "This DLC has no Steam AppID, so ownership cannot be determined",
   "dlc.ownedSection": "Owned ({0})",
+  "dlc.localSection": "Local DLC ({0})",
   "dlc.unownedSection": "Not owned ({0})",
   "dlc.unownedListName": "DLC you do not own",
   "dlc.unownedNoteSteamOff": "Steam is not running, so the DLC you do not own cannot be listed.",

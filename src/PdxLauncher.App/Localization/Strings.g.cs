@@ -198,6 +198,7 @@ public sealed partial class Localizer
         ["dlc.enableAllName"] = "启用全部 DLC",
         ["dlc.listName"] = "DLC 列表",
         ["dlc.loadFailed"] = "加载失败：{0}",
+        ["dlc.localSection"] = "本地 DLC（{0}）",
         ["dlc.noGameHint"] = "请先在游戏库里选择一款游戏",
         ["dlc.noGameTitle"] = "（未选择游戏）",
         ["dlc.ownedBadge"] = "已拥有",
@@ -1547,6 +1548,7 @@ public sealed partial class Localizer
         ["dlc.enableAllName"] = "Enable all DLCs",
         ["dlc.listName"] = "DLC list",
         ["dlc.loadFailed"] = "Failed to load: {0}",
+        ["dlc.localSection"] = "Local DLC ({0})",
         ["dlc.noGameHint"] = "Select a game in your library first",
         ["dlc.noGameTitle"] = "(No game selected)",
         ["dlc.ownedBadge"] = "Owned",
@@ -2896,6 +2898,7 @@ public sealed partial class Localizer
         ("dlc.enableAllName", "DlcEnableAllName"),
         ("dlc.listName", "DlcListName"),
         ("dlc.loadFailed", "DlcLoadFailed"),
+        ("dlc.localSection", "DlcLocalSection"),
         ("dlc.noGameHint", "DlcNoGameHint"),
         ("dlc.noGameTitle", "DlcNoGameTitle"),
         ("dlc.ownedBadge", "DlcOwnedBadge"),
@@ -4243,6 +4246,7 @@ public sealed partial class Localizer
     public string DlcEnableAllName => Format("dlc.enableAllName");
     public string DlcListName => Format("dlc.listName");
     public string DlcLoadFailed => Format("dlc.loadFailed");
+    public string DlcLocalSection => Format("dlc.localSection");
     public string DlcNoGameHint => Format("dlc.noGameHint");
     public string DlcNoGameTitle => Format("dlc.noGameTitle");
     public string DlcOwnedBadge => Format("dlc.ownedBadge");
@@ -5593,6 +5597,7 @@ internal static class Keys
     public const string DlcEnableAllName = "dlc.enableAllName";
     public const string DlcListName = "dlc.listName";
     public const string DlcLoadFailed = "dlc.loadFailed";
+    public const string DlcLocalSection = "dlc.localSection";
     public const string DlcNoGameHint = "dlc.noGameHint";
     public const string DlcNoGameTitle = "dlc.noGameTitle";
     public const string DlcOwnedBadge = "dlc.ownedBadge";
