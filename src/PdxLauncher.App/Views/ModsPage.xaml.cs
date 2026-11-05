@@ -332,7 +332,8 @@ public sealed partial class ModsPage : Page
                 Localizer.Instance.ModsToolbarDeleteName,
                 content,
                 Localizer.Instance.CommonDelete,
-                Localizer.Instance.CommonCancel);
+                Localizer.Instance.CommonCancel,
+                initialFocus: InitialFocus.Cancel);
             if (!confirmed)
             {
                 return;
