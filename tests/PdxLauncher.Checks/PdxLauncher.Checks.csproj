@@ -176,5 +176,12 @@
       口径错了表现为「连点切游戏后新请求的进度环被旧请求提前关掉」，由 SteamAchievementsChecks 钉住。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\AchievementRequestTracker.cs" Link="Linked\AchievementRequestTracker.cs" />
+    <!--
+      拉起 Steam 宿主子进程的客户端与成就数据源。两者都只依赖 Core + System.*，
+      可以原样链接；取消传播口径错了会把「切游戏」写成「Steam 不可用」，由
+      SteamAchievementsChecks 用「自检 exe 充当假宿主」的取消用例钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\SteamHostClient.cs" Link="Linked\SteamHostClient.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\SteamAchievementSource.cs" Link="Linked\SteamAchievementSource.cs" />
   </ItemGroup>
 </Project>

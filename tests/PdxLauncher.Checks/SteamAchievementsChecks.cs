@@ -27,6 +27,8 @@ public static class SteamAchievementsChecks
         CheckMapping();
         CheckRunnerDispatch();
         CheckRequestTracker();
+        CheckInitFailureCode();
+        CheckCancellation(fs);
         CheckNativeLayout();
 
         return ChecksContext.Failures - before;
@@ -326,6 +328,111 @@ public static class SteamAchievementsChecks
         ChecksContext.Check("代次: 当前代次是最大值", concurrent.IsCurrent(newest));
     }
 
+    // ------------------------------------------------------------ Init 失败的结果码
+
+    private static void CheckInitFailureCode()
+    {
+        // 真机复现过：Steam 在跑 + appid 999999，Init 失败，但 IsSteamRunning 在受限会话里也返回 false。
+        // 只信 IsSteamRunning 会报成 steamNotRunning；补上进程表旁证后必须报 initFailed。
+        ChecksContext.Equal(
+            "Init 失败: Steam 在跑（IsSteamRunning=true）→ initFailed",
+            SteamAchievementCodes.InitFailed,
+            SteamAchievementsHostOperation.ClassifyInitFailure(isSteamRunning: true, steamClientProcessFound: false));
+
+        ChecksContext.Equal(
+            "Init 失败: IsSteamRunning=false 但进程表有 Steam（appid 无效场景）→ initFailed",
+            SteamAchievementCodes.InitFailed,
+            SteamAchievementsHostOperation.ClassifyInitFailure(isSteamRunning: false, steamClientProcessFound: true));
+
+        ChecksContext.Equal(
+            "Init 失败: 确实没跑（无进程、判据为 false）→ steamNotRunning",
+            SteamAchievementCodes.SteamNotRunning,
+            SteamAchievementsHostOperation.ClassifyInitFailure(isSteamRunning: false, steamClientProcessFound: false));
+
+        ChecksContext.Equal(
+            "Init 失败: 判不出来（导出缺失）→ initFailed，不武断说没运行",
+            SteamAchievementCodes.InitFailed,
+            SteamAchievementsHostOperation.ClassifyInitFailure(isSteamRunning: null, steamClientProcessFound: false));
+    }
+
+    // ------------------------------------------------------------ 取消传播
+
+    private static void CheckCancellation(IFileSystem fs)
+    {
+        var hostPath = FindFakeHostPath();
+        ChecksContext.Check("取消: 找到假宿主可执行文件", hostPath is not null, "构建输出里应有 PdxLauncher.Checks.exe");
+        if (hostPath is null)
+        {
+            return;
+        }
+
+        var logger = new SilentLogger();
+
+        // 宿主客户端层：调用方取消必须抛 OperationCanceledException，不能变成一个「失败结果」。
+        var client = new SteamHostClient(logger, hostPath);
+        using (var cts = new CancellationTokenSource())
+        {
+            cts.CancelAfter(TimeSpan.FromMilliseconds(300));
+            Exception? caught = null;
+            try
+            {
+                client.AchievementsAsync("pdxnext-no-such.dll", 1158310, cts.Token).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                caught = ex;
+            }
+
+            ChecksContext.Check(
+                "取消: 客户端把调用方取消原样抛出（不是 hostFailed）",
+                caught is OperationCanceledException,
+                caught is null ? "没有抛出" : caught.GetType().Name);
+        }
+
+        // 数据源层：取消不能被 catch 吞成 SteamUnavailable。
+        var source = new SteamAchievementSource(
+            new SteamHostClient(logger, hostPath),
+            new SteamApiLocator(fs, logger),
+            logger,
+            () => Path.Combine(AppContext.BaseDirectory, "PdxLauncher.Checks.dll"),
+            () => null);
+        using (var cts = new CancellationTokenSource())
+        {
+            cts.CancelAfter(TimeSpan.FromMilliseconds(300));
+            Exception? caught = null;
+            AchievementSnapshot? snapshot = null;
+            try
+            {
+                snapshot = source.GetAsync("ck3", cts.Token).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                caught = ex;
+            }
+
+            ChecksContext.Check(
+                "取消: 数据源把取消原样抛出而不是 SteamUnavailable",
+                caught is OperationCanceledException,
+                caught is null ? "返回了 " + snapshot?.Availability : caught.GetType().Name);
+        }
+    }
+
+    private static string? FindFakeHostPath()
+    {
+        var own = Path.Combine(AppContext.BaseDirectory, "PdxLauncher.Checks.exe");
+        if (File.Exists(own))
+        {
+            return own;
+        }
+
+        var process = Environment.ProcessPath;
+        return process is not null
+            && File.Exists(process)
+            && !process.EndsWith("dotnet.exe", StringComparison.OrdinalIgnoreCase)
+                ? process
+                : null;
+    }
+
     // ------------------------------------------------------------ 原生布局
 
     private static void CheckNativeLayout()
@@ -337,5 +444,20 @@ public static class SteamAchievementsChecks
             "原生: 成就上限定为 4096（防止脏 count 撑爆内存）",
             4096,
             SteamAchievementsHostOperation.MaxAchievements);
+    }
+
+    private sealed class SilentLogger : IAppLogger
+    {
+        public void Info(string message)
+        {
+        }
+
+        public void Warn(string message)
+        {
+        }
+
+        public void Error(string message, Exception? exception = null)
+        {
+        }
     }
 }

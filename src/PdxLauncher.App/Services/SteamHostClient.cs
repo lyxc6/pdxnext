@@ -459,8 +459,15 @@ public sealed class SteamHostClient
             }
             catch (OperationCanceledException)
             {
-                timedOut = !cancellationToken.IsCancellationRequested;
                 TryKill(process);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    // 调用方取消（切游戏 / 离开页面）不是超时：原样抛出，
+                    // 否则上层会把旧请求写成「Steam 不可用」。
+                    throw;
+                }
+
+                timedOut = true;
             }
 
             var stdout = await SafeAwait(stdoutTask).ConfigureAwait(false);
@@ -473,6 +480,12 @@ public sealed class SteamHostClient
                 stderr.Length == 0 ? string.Empty : "，stderr=" + Trim(stderr)));
 
             return new HostRun(timedOut ? -1 : process.ExitCode, stdout, stderr, timedOut, true);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // 与内部超时分支对称：调用方取消要一路抛到调用方，不能变成 HostFailed。
+            stopwatch.Stop();
+            throw;
         }
         catch (Exception ex)
         {
@@ -543,8 +556,15 @@ public sealed class SteamHostClient
             }
             catch (OperationCanceledException)
             {
-                timedOut = !cancellationToken.IsCancellationRequested;
                 TryKill(process);
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    // 调用方取消（切游戏 / 离开页面）不是超时：原样抛出，
+                    // 否则上层会把旧请求写成「Steam 不可用」。
+                    throw;
+                }
+
+                timedOut = true;
             }
 
             var stdout = await SafeAwait(stdoutTask).ConfigureAwait(false);
@@ -557,6 +577,12 @@ public sealed class SteamHostClient
                 stderr.Length == 0 ? string.Empty : "，stderr=" + Trim(stderr)));
 
             return new HostRun(timedOut ? -1 : process.ExitCode, stdout, stderr, timedOut, true);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // 与内部超时分支对称：调用方取消要一路抛到调用方，不能变成 HostFailed。
+            stopwatch.Stop();
+            throw;
         }
         catch (Exception ex)
         {
