@@ -19,14 +19,14 @@ public static class AccountPageLayoutChecks
     /// <summary>页面必须保留的 AutomationId：UI 自动化脚本与 HANDOFF 的走查都靠它们。</summary>
     private static readonly string[] RequiredAutomationIds =
     [
+        "imgAccountSignInAvatar",
+        "cardAccountSignIn",
         "imgAccountAvatar",
         "txtAccountProfileName",
         "txtAccountStatus",
-        "btnAccountPrimary",
         "btnAccountSignOut",
         "infoAccountStatus",
         "txtAccountStatusBar",
-        "expAccountSignIn",
         "txtAccountEmail",
         "txtAccountPassword",
         "swAccountRemember",
@@ -51,6 +51,7 @@ public static class AccountPageLayoutChecks
         var xaml = File.ReadAllText(xamlPath);
 
         CheckStatusBarIsSingleLine(xaml);
+        CheckSignInCardIsSingleStep(xaml);
         CheckTogglesHaveNoOnOffText(xaml);
         CheckContentColumnStretches(xaml);
         CheckCardsShareBrushes(xaml);
@@ -60,6 +61,47 @@ public static class AccountPageLayoutChecks
         return ChecksContext.Failures - before;
     }
 
+    /// <summary>
+    /// 未登录时不该再点一次才看到表单：整页就是一张登录卡，输入框与主按钮都在卡里。
+    /// 这条需求来自真机截图（身份卡上的「登录」只负责展开下面的 Expander，点两次才看到输入框）。
+    /// </summary>
+    private static void CheckSignInCardIsSingleStep(string xaml)
+    {
+        ChecksContext.Check(
+            "账号页: 未登录不再用 Expander 藏表单",
+            !xaml.Contains("<Expander", StringComparison.Ordinal));
+
+        var start = xaml.IndexOf("AutomationId=\"cardAccountSignIn\"", StringComparison.Ordinal);
+        if (!ChecksContext.Check("账号页: 登录卡仍在", start >= 0))
+        {
+            return;
+        }
+
+        var end = xaml.IndexOf("</Border>", start, StringComparison.Ordinal);
+        if (!ChecksContext.Check("账号页: 登录卡闭合标签", end > start))
+        {
+            return;
+        }
+
+        var card = xaml[start..end];
+        ChecksContext.Check(
+            "账号页: 邮箱框在登录卡里",
+            card.Contains("AutomationId=\"txtAccountEmail\"", StringComparison.Ordinal),
+            "输入框必须在首屏可见的卡片内");
+        ChecksContext.Check(
+            "账号页: 密码框在登录卡里",
+            card.Contains("AutomationId=\"txtAccountPassword\"", StringComparison.Ordinal),
+            "输入框必须在首屏可见的卡片内");
+        ChecksContext.Check(
+            "账号页: 登录按钮在登录卡里",
+            card.Contains("AutomationId=\"btnAccountSignIn\"", StringComparison.Ordinal),
+            "主操作不能只留在身份卡上");
+        ChecksContext.Check(
+            "账号页: 登录卡是两列（说明 + 表单）",
+            card.Contains("<Grid.ColumnDefinitions>", StringComparison.Ordinal)
+                && card.Contains("Width=\"200\"", StringComparison.Ordinal),
+            "左列说明、右列表单");
+    }
     /// <summary>
     /// 状态条只有一行文字。
     /// InfoBar 同时有 Title 与 Content 时是「标题行 + 内容行」的布局，两行之间空一大截；
