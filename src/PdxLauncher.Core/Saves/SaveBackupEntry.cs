@@ -24,4 +24,12 @@ public sealed record SaveBackupEntry(
     string GameId,
     string? GameVersion,
     string? GameDate,
-    DateTimeOffset CreatedUtc);
+    DateTimeOffset CreatedUtc)
+{
+    /// <summary>
+    /// 是否为「孤儿备份」降级条目：<c>.bak</c> 正文存在，但同名 sidecar 缺失或损坏。
+    /// 这种条目没有原始路径与哈希（<see cref="Sha256"/> 为空），只能删除、不能恢复；
+    /// 它仍然计入配额，所以必须出现在列表里，否则用户永远无法清理它。
+    /// </summary>
+    public bool IsDegraded => Sha256.Length == 0;
+}

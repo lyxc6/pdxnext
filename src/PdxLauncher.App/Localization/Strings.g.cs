@@ -751,18 +751,22 @@ public sealed partial class Localizer
         ["saves.action.backup"] = "备份",
         ["saves.action.delete"] = "删除",
         ["saves.action.deleteBackup"] = "删除备份",
+        ["saves.action.pruneBackups"] = "清理旧备份",
         ["saves.action.restore"] = "恢复",
         ["saves.backup.created"] = "备份于 {0}",
         ["saves.backup.empty"] = "还没有备份",
+        ["saves.backup.orphan"] = "缺少说明文件",
         ["saves.backup.quotaFull"] = "备份空间已满（可删除旧备份）",
         ["saves.backup.rowName"] = "{0}，{1}",
         ["saves.backup.title"] = "备份",
-        ["saves.backup.usage"] = "已用 {0} · {1} 个备份",
+        ["saves.backup.usage"] = "已用 {0} / 上限 {1} · {2} 个备份",
         ["saves.city"] = "城市：{0}",
         ["saves.confirm.deleteBackup.content"] = "将删除备份「{0}」及其说明文件，无法撤销。",
         ["saves.confirm.deleteBackup.title"] = "删除备份",
         ["saves.confirm.deleteSave.content"] = "将把「{0}」移入回收站（trash 目录），不会永久删除文件。",
         ["saves.confirm.deleteSave.title"] = "删除存档",
+        ["saves.confirm.pruneBackups.content"] = "将只保留最新 {0} 份备份，删除其余备份及其说明文件（含缺少说明文件的孤儿备份），无法撤销。",
+        ["saves.confirm.pruneBackups.title"] = "清理旧备份",
         ["saves.confirm.restore.content"] = "将把备份恢复到存档目录，并新建一个带「(恢复 日期-时间)」后缀的副本，不会覆盖现有存档。",
         ["saves.confirm.restore.title"] = "恢复备份",
         ["saves.country"] = "国家：{0}",
@@ -783,6 +787,7 @@ public sealed partial class Localizer
         ["saves.notice.backedUp"] = "已备份：{0}",
         ["saves.notice.deletedBackup"] = "已删除备份：{0}",
         ["saves.notice.deletedSave"] = "已移入回收站：{0}",
+        ["saves.notice.pruned"] = "已清理 {0} 份备份",
         ["saves.notice.restored"] = "已恢复副本：{0}",
         ["saves.notice.sourceMissing"] = "存档已不存在，已刷新列表。",
         ["saves.refresh"] = "刷新",
@@ -2165,18 +2170,22 @@ public sealed partial class Localizer
         ["saves.action.backup"] = "Back up",
         ["saves.action.delete"] = "Delete",
         ["saves.action.deleteBackup"] = "Delete backup",
+        ["saves.action.pruneBackups"] = "Clean up old backups",
         ["saves.action.restore"] = "Restore",
         ["saves.backup.created"] = "Backed up {0}",
         ["saves.backup.empty"] = "No backups yet",
+        ["saves.backup.orphan"] = "Sidecar missing",
         ["saves.backup.quotaFull"] = "Backup space is full — delete old backups",
         ["saves.backup.rowName"] = "{0}, {1}",
         ["saves.backup.title"] = "Backups",
-        ["saves.backup.usage"] = "{0} used · {1} backups",
+        ["saves.backup.usage"] = "{0} used / {1} limit · {2} backups",
         ["saves.city"] = "City: {0}",
         ["saves.confirm.deleteBackup.content"] = "The backup “{0}” and its sidecar file will be deleted. This cannot be undone.",
         ["saves.confirm.deleteBackup.title"] = "Delete backup",
         ["saves.confirm.deleteSave.content"] = "“{0}” will be moved into the trash folder. The file is not permanently deleted.",
         ["saves.confirm.deleteSave.title"] = "Delete save",
+        ["saves.confirm.pruneBackups.content"] = "Only the newest {0} backups will be kept. All other backups and their sidecar files will be deleted, including backups whose sidecar is missing. This cannot be undone.",
+        ["saves.confirm.pruneBackups.title"] = "Clean up old backups",
         ["saves.confirm.restore.content"] = "The backup will be restored into the save folder as a new copy with a “(restored date-time)” suffix. Existing saves are not overwritten.",
         ["saves.confirm.restore.title"] = "Restore backup",
         ["saves.country"] = "Country: {0}",
@@ -2197,6 +2206,7 @@ public sealed partial class Localizer
         ["saves.notice.backedUp"] = "Backed up: {0}",
         ["saves.notice.deletedBackup"] = "Backup deleted: {0}",
         ["saves.notice.deletedSave"] = "Moved to trash: {0}",
+        ["saves.notice.pruned"] = "{0} backups cleaned up",
         ["saves.notice.restored"] = "Restored copy: {0}",
         ["saves.notice.sourceMissing"] = "The save no longer exists; the list was refreshed.",
         ["saves.refresh"] = "Refresh",
@@ -3579,9 +3589,11 @@ public sealed partial class Localizer
         ("saves.action.backup", "SavesActionBackup"),
         ("saves.action.delete", "SavesActionDelete"),
         ("saves.action.deleteBackup", "SavesActionDeleteBackup"),
+        ("saves.action.pruneBackups", "SavesActionPruneBackups"),
         ("saves.action.restore", "SavesActionRestore"),
         ("saves.backup.created", "SavesBackupCreated"),
         ("saves.backup.empty", "SavesBackupEmpty"),
+        ("saves.backup.orphan", "SavesBackupOrphan"),
         ("saves.backup.quotaFull", "SavesBackupQuotaFull"),
         ("saves.backup.rowName", "SavesBackupRowName"),
         ("saves.backup.title", "SavesBackupTitle"),
@@ -3591,6 +3603,8 @@ public sealed partial class Localizer
         ("saves.confirm.deleteBackup.title", "SavesConfirmDeleteBackupTitle"),
         ("saves.confirm.deleteSave.content", "SavesConfirmDeleteSaveContent"),
         ("saves.confirm.deleteSave.title", "SavesConfirmDeleteSaveTitle"),
+        ("saves.confirm.pruneBackups.content", "SavesConfirmPruneBackupsContent"),
+        ("saves.confirm.pruneBackups.title", "SavesConfirmPruneBackupsTitle"),
         ("saves.confirm.restore.content", "SavesConfirmRestoreContent"),
         ("saves.confirm.restore.title", "SavesConfirmRestoreTitle"),
         ("saves.country", "SavesCountry"),
@@ -3611,6 +3625,7 @@ public sealed partial class Localizer
         ("saves.notice.backedUp", "SavesNoticeBackedUp"),
         ("saves.notice.deletedBackup", "SavesNoticeDeletedBackup"),
         ("saves.notice.deletedSave", "SavesNoticeDeletedSave"),
+        ("saves.notice.pruned", "SavesNoticePruned"),
         ("saves.notice.restored", "SavesNoticeRestored"),
         ("saves.notice.sourceMissing", "SavesNoticeSourceMissing"),
         ("saves.refresh", "SavesRefresh"),
@@ -4991,9 +5006,11 @@ public sealed partial class Localizer
     public string SavesActionBackup => Format("saves.action.backup");
     public string SavesActionDelete => Format("saves.action.delete");
     public string SavesActionDeleteBackup => Format("saves.action.deleteBackup");
+    public string SavesActionPruneBackups => Format("saves.action.pruneBackups");
     public string SavesActionRestore => Format("saves.action.restore");
     public string SavesBackupCreated => Format("saves.backup.created");
     public string SavesBackupEmpty => Format("saves.backup.empty");
+    public string SavesBackupOrphan => Format("saves.backup.orphan");
     public string SavesBackupQuotaFull => Format("saves.backup.quotaFull");
     public string SavesBackupRowName => Format("saves.backup.rowName");
     public string SavesBackupTitle => Format("saves.backup.title");
@@ -5003,6 +5020,8 @@ public sealed partial class Localizer
     public string SavesConfirmDeleteBackupTitle => Format("saves.confirm.deleteBackup.title");
     public string SavesConfirmDeleteSaveContent => Format("saves.confirm.deleteSave.content");
     public string SavesConfirmDeleteSaveTitle => Format("saves.confirm.deleteSave.title");
+    public string SavesConfirmPruneBackupsContent => Format("saves.confirm.pruneBackups.content");
+    public string SavesConfirmPruneBackupsTitle => Format("saves.confirm.pruneBackups.title");
     public string SavesConfirmRestoreContent => Format("saves.confirm.restore.content");
     public string SavesConfirmRestoreTitle => Format("saves.confirm.restore.title");
     public string SavesCountry => Format("saves.country");
@@ -5023,6 +5042,7 @@ public sealed partial class Localizer
     public string SavesNoticeBackedUp => Format("saves.notice.backedUp");
     public string SavesNoticeDeletedBackup => Format("saves.notice.deletedBackup");
     public string SavesNoticeDeletedSave => Format("saves.notice.deletedSave");
+    public string SavesNoticePruned => Format("saves.notice.pruned");
     public string SavesNoticeRestored => Format("saves.notice.restored");
     public string SavesNoticeSourceMissing => Format("saves.notice.sourceMissing");
     public string SavesRefresh => Format("saves.refresh");
@@ -6406,9 +6426,11 @@ internal static class Keys
     public const string SavesActionBackup = "saves.action.backup";
     public const string SavesActionDelete = "saves.action.delete";
     public const string SavesActionDeleteBackup = "saves.action.deleteBackup";
+    public const string SavesActionPruneBackups = "saves.action.pruneBackups";
     public const string SavesActionRestore = "saves.action.restore";
     public const string SavesBackupCreated = "saves.backup.created";
     public const string SavesBackupEmpty = "saves.backup.empty";
+    public const string SavesBackupOrphan = "saves.backup.orphan";
     public const string SavesBackupQuotaFull = "saves.backup.quotaFull";
     public const string SavesBackupRowName = "saves.backup.rowName";
     public const string SavesBackupTitle = "saves.backup.title";
@@ -6418,6 +6440,8 @@ internal static class Keys
     public const string SavesConfirmDeleteBackupTitle = "saves.confirm.deleteBackup.title";
     public const string SavesConfirmDeleteSaveContent = "saves.confirm.deleteSave.content";
     public const string SavesConfirmDeleteSaveTitle = "saves.confirm.deleteSave.title";
+    public const string SavesConfirmPruneBackupsContent = "saves.confirm.pruneBackups.content";
+    public const string SavesConfirmPruneBackupsTitle = "saves.confirm.pruneBackups.title";
     public const string SavesConfirmRestoreContent = "saves.confirm.restore.content";
     public const string SavesConfirmRestoreTitle = "saves.confirm.restore.title";
     public const string SavesCountry = "saves.country";
@@ -6438,6 +6462,7 @@ internal static class Keys
     public const string SavesNoticeBackedUp = "saves.notice.backedUp";
     public const string SavesNoticeDeletedBackup = "saves.notice.deletedBackup";
     public const string SavesNoticeDeletedSave = "saves.notice.deletedSave";
+    public const string SavesNoticePruned = "saves.notice.pruned";
     public const string SavesNoticeRestored = "saves.notice.restored";
     public const string SavesNoticeSourceMissing = "saves.notice.sourceMissing";
     public const string SavesRefresh = "saves.refresh";

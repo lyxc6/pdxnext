@@ -51,9 +51,11 @@ internal static class Keys
     public const string SavesActionBackup = "saves.action.backup";
     public const string SavesActionDelete = "saves.action.delete";
     public const string SavesActionDeleteBackup = "saves.action.deleteBackup";
+    public const string SavesActionPruneBackups = "saves.action.pruneBackups";
     public const string SavesActionRestore = "saves.action.restore";
     public const string SavesBackupCreated = "saves.backup.created";
     public const string SavesBackupEmpty = "saves.backup.empty";
+    public const string SavesBackupOrphan = "saves.backup.orphan";
     public const string SavesBackupQuotaFull = "saves.backup.quotaFull";
     public const string SavesBackupRowName = "saves.backup.rowName";
     public const string SavesBackupTitle = "saves.backup.title";
@@ -63,6 +65,8 @@ internal static class Keys
     public const string SavesConfirmDeleteBackupTitle = "saves.confirm.deleteBackup.title";
     public const string SavesConfirmDeleteSaveContent = "saves.confirm.deleteSave.content";
     public const string SavesConfirmDeleteSaveTitle = "saves.confirm.deleteSave.title";
+    public const string SavesConfirmPruneBackupsContent = "saves.confirm.pruneBackups.content";
+    public const string SavesConfirmPruneBackupsTitle = "saves.confirm.pruneBackups.title";
     public const string SavesConfirmRestoreContent = "saves.confirm.restore.content";
     public const string SavesConfirmRestoreTitle = "saves.confirm.restore.title";
     public const string SavesCountry = "saves.country";
@@ -82,6 +86,7 @@ internal static class Keys
     public const string SavesNoticeBackedUp = "saves.notice.backedUp";
     public const string SavesNoticeDeletedBackup = "saves.notice.deletedBackup";
     public const string SavesNoticeDeletedSave = "saves.notice.deletedSave";
+    public const string SavesNoticePruned = "saves.notice.pruned";
     public const string SavesNoticeRestored = "saves.notice.restored";
     public const string SavesNoticeSourceMissing = "saves.notice.sourceMissing";
     public const string SavesRowNamePair = "saves.rowNamePair";

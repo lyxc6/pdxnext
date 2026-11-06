@@ -252,6 +252,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Text="{x:Bind L.SavesBackupTitle, Mode=OneWay}"
                                Style="{StaticResource BodyStrongTextBlockStyle}" />
@@ -262,14 +263,14 @@
                                HorizontalAlignment="Right"
                                VerticalAlignment="Center"
                                AutomationProperties.AutomationId="txtBackupUsage" />
+                    <Button Grid.Column="2"
+                            Content="{x:Bind L.SavesActionPruneBackups, Mode=OneWay}"
+                            IsEnabled="{x:Bind ViewModel.CanPrune, Mode=OneWay}"
+                            Click="OnPruneBackupsClick"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="btnPruneBackups"
+                            AutomationProperties.Name="{x:Bind L.SavesActionPruneBackups, Mode=OneWay}" />
                 </Grid>
-
-                <TextBlock Text="{x:Bind L.SavesBackupQuotaFull, Mode=OneWay}"
-                           Style="{StaticResource CaptionTextBlockStyle}"
-                           Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                           Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsQuotaFull), Mode=OneWay}"
-                           AutomationProperties.AutomationId="txtBackupQuotaFull"
-                           TextWrapping="Wrap" />
 
                 <TextBlock Text="{x:Bind L.SavesBackupEmpty, Mode=OneWay}"
                            Style="{StaticResource CaptionTextBlockStyle}"
