@@ -14,9 +14,12 @@
         三种原因（未接入 / 连不上 Steam / 确实没有成就）各自独立，不合并成一句「暂无数据」。
         取数期间显示进度环并把统计置为「—」，不沿用上一款游戏的结论；
         有磁盘缓存时先把缓存渲染出来，再后台刷新（见 AchievementsViewModel）。
+        列表上方的工具条只做客户端过滤 / 搜索（状态 + 名称 / 说明），不重新取数；
+        「显示 N / 共 M」里的 M 恒为整份快照，与页头的「已解锁 X / Y」口径一致。
     -->
     <Grid Padding="24" RowSpacing="16">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -59,8 +62,53 @@
                           AutomationProperties.Name="{x:Bind L.CommonLoading, Mode=OneWay}" />
         </Grid>
 
+        <!--
+            工具条：状态筛选（全部 / 已解锁 / 未解锁）+ 搜索框 + 「显示 N / 共 M」。
+            三个筛选项来自 ViewModel.FilterOptions（随语言重建），SelectedIndex 与 FilterIndex 双向绑定；
+            搜索框固定 200 宽，输入即筛；计数靠右，宽度变化不会挤压前面的控件。
+        -->
+        <Grid Grid.Row="1"
+              ColumnSpacing="16"
+              AutomationProperties.AutomationId="barAchievementFilters">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <RadioButtons Grid.Column="0"
+                          x:Name="StatusFilter"
+                          MaxColumns="3"
+                          VerticalAlignment="Center"
+                          IsEnabled="{x:Bind ViewModel.IsAvailable, Mode=OneWay}"
+                          ItemsSource="{x:Bind ViewModel.FilterOptions, Mode=OneWay}"
+                          SelectedIndex="{x:Bind ViewModel.FilterIndex, Mode=TwoWay}"
+                          AutomationProperties.AutomationId="radAchievementFilter"
+                          AutomationProperties.Name="{x:Bind L.AchievementsFilterName, Mode=OneWay}" />
+
+            <AutoSuggestBox Grid.Column="1"
+                            x:Name="SearchBox"
+                            Width="200"
+                            VerticalAlignment="Center"
+                            IsEnabled="{x:Bind ViewModel.IsAvailable, Mode=OneWay}"
+                            QueryIcon="Find"
+                            PlaceholderText="{x:Bind L.AchievementsSearchPlaceholder, Mode=OneWay}"
+                            Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
+                            TextChanged="OnSearchTextChanged"
+                            AutomationProperties.AutomationId="txtAchievementSearch"
+                            AutomationProperties.Name="{x:Bind L.AchievementsSearchName, Mode=OneWay}" />
+
+            <TextBlock Grid.Column="2"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Right"
+                       Text="{x:Bind ViewModel.VisibleCountText, Mode=OneWay}"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       AutomationProperties.AutomationId="txtAchievementFilterCount" />
+        </Grid>
+
         <!-- 空状态：必须解释原因（未接入 / 连不上 Steam / 确实没有成就 / 未选游戏） -->
-        <Border Grid.Row="1"
+        <Border Grid.Row="2"
                 Padding="16"
                 CornerRadius="8"
                 Background="{ThemeResource PdxCardGlassBrush}"
@@ -93,7 +141,7 @@
             右侧必须给 WinUI 的悬浮滚动条留出固定空白：ListView.Padding 16 + 行内 Padding 16，
             文字右缘到可视区右缘恒为 32px，滚动条出现/消失都不会压住状态文字，也不会让行内容左右跳动。
         -->
-        <ListView Grid.Row="2"
+        <ListView Grid.Row="3"
                   x:Name="AchievementList"
                   ItemsSource="{x:Bind ViewModel.Achievements, Mode=OneWay}"
                   SelectionMode="None"
@@ -177,5 +225,39 @@
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
+
+        <!--
+            筛选空状态：数据取到了、但当前筛选条件一行都不匹配。
+            与上方「没有数据源」的空状态互斥（ShowEmptyState / ShowFilterEmptyState 不可能同时为真），
+            文案也刻意不同——不能把「筛没了」说成「这款游戏没有成就」。
+        -->
+        <Border Grid.Row="3"
+                Padding="16"
+                CornerRadius="8"
+                VerticalAlignment="Top"
+                Background="{ThemeResource PdxCardGlassBrush}"
+                BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                BorderThickness="1"
+                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowFilterEmptyState), Mode=OneWay}"
+                AutomationProperties.AutomationId="panelAchievementFilterEmpty">
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <FontIcon Glyph="&#xE71C;"
+                          FontSize="20"
+                          VerticalAlignment="Top"
+                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                          AutomationProperties.AccessibilityView="Raw" />
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{x:Bind L.AchievementsFilterEmptyTitle, Mode=OneWay}"
+                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                               TextWrapping="Wrap"
+                               AutomationProperties.AutomationId="txtAchievementFilterEmptyTitle" />
+                    <TextBlock Text="{x:Bind L.AchievementsFilterEmptyMessage, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               AutomationProperties.AutomationId="txtAchievementFilterEmptyMessage" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
     </Grid>
 </Page>

@@ -110,6 +110,25 @@ public sealed partial class AchievementsPage : Page
         }
     }
 
+    /// <summary>
+    /// 搜索框输入：只在用户真的打字时把文本回写 ViewModel。
+    /// 程序化改写（切游戏重置、绑定回写）进来时 Reason 不是 UserInput，必须直接返回，
+    /// 否则会和 ViewModel 的重置互相触发，还会把光标位置抢回去。
+    /// </summary>
+    private void OnSearchTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
+        {
+            return;
+        }
+
+        var text = sender.Text ?? string.Empty;
+        if (!string.Equals(text, _viewModel.SearchText, StringComparison.Ordinal))
+        {
+            _viewModel.SearchText = text;
+        }
+    }
+
     private Task ReloadAsync(bool force = false)
     {
         var game = AppServices.CurrentGame;

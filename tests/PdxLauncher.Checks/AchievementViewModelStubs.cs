@@ -19,6 +19,11 @@ public abstract class LocalizedObservableObject : INotifyPropertyChanged
     protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
+    /// <summary>与真实基类同名：语言切换后重建带本地化文字的集合（这里什么都不用做）。</summary>
+    protected virtual void Relocalize()
+    {
+    }
+
     protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? name = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value))
@@ -37,9 +42,18 @@ internal static class Keys
 {
     public const string AchievementsCounts = "achievements.counts";
     public const string AchievementsEmptyTitle = "achievements.empty.title";
+    public const string AchievementsFilterAll = "achievements.filter.all";
+    public const string AchievementsFilterCount = "achievements.filter.count";
+    public const string AchievementsFilterEmptyMessage = "achievements.filter.empty.message";
+    public const string AchievementsFilterEmptyTitle = "achievements.filter.empty.title";
+    public const string AchievementsFilterLocked = "achievements.filter.locked";
+    public const string AchievementsFilterName = "achievements.filter.name";
+    public const string AchievementsFilterUnlocked = "achievements.filter.unlocked";
     public const string AchievementsHiddenDescription = "achievements.hiddenDescription";
     public const string AchievementsLastUpdated = "achievements.lastUpdated";
     public const string AchievementsRarity = "achievements.rarity";
+    public const string AchievementsSearchName = "achievements.search.name";
+    public const string AchievementsSearchPlaceholder = "achievements.search.placeholder";
     public const string AchievementsStatusHidden = "achievements.statusHidden";
     public const string AchievementsStatusLocked = "achievements.statusLocked";
     public const string AchievementsStatusUnlocked = "achievements.statusUnlocked";

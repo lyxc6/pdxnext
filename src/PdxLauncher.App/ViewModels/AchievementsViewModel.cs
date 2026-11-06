@@ -30,12 +30,22 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
     private readonly AchievementSnapshotCache? _cache;
     private readonly DdsPngCache? _iconPngCache;
 
+    /// <summary>
+    /// 当前游戏的全部成就行（未过滤）。<see cref="Achievements"/> 只是它的一份可见投影：
+    /// 过滤 / 搜索时只重排集合引用，行实例（连同惰性解析出来的图标）原样复用，
+    /// 所以反复改筛选不会重新解码任何 DDS。
+    /// </summary>
+    private readonly List<AchievementRowViewModel> _allRows = [];
+
     private GameInstallation? _game;
     private AchievementAvailability _availability = AchievementAvailability.NotSupported;
     private bool _isBusy;
     private DateTimeOffset? _lastUpdatedUtc;
     private string? _renderedGameKey;
     private bool _hasRenderedSnapshot;
+    private int _filterIndex;
+    private string _searchText = string.Empty;
+    private IReadOnlyList<string> _filterOptions = [];
 
     /// <summary>构造（不带磁盘缓存，数据源直读；自检与降级路径用）。</summary>
     public AchievementsViewModel(IAchievementSource source)
@@ -65,10 +75,64 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
         _source = source;
         _cache = cache;
         _iconPngCache = iconPngCache;
+        RebuildFilterOptions();
     }
 
-    /// <summary>当前展示的成就行；切游戏 / 重新取数时整体清空重建。</summary>
+    /// <summary>当前展示的成就行（已应用状态筛选与搜索）；切游戏 / 重新取数时整体清空重建。</summary>
     public ObservableCollection<AchievementRowViewModel> Achievements { get; } = new();
+
+    /// <summary>
+    /// 状态筛选的三个选项（全部 / 已解锁 / 未解锁），随界面语言重建。
+    /// 用字符串列表而不是写死三个 RadioButton：切换语言时整表替换即可，XAML 只绑一次。
+    /// </summary>
+    public IReadOnlyList<string> FilterOptions => _filterOptions;
+
+    /// <summary>
+    /// 当前状态筛选在 <see cref="FilterOptions"/> 里的序号：0 全部 / 1 已解锁 / 2 未解锁。
+    /// 越界（含 RadioButtons 初始化时的 -1）一律回落到「全部」，不接受「什么都没选中」这种中间态。
+    /// </summary>
+    public int FilterIndex
+    {
+        get => _filterIndex;
+        set
+        {
+            var index = value is >= 0 and <= 2 ? value : 0;
+            if (_filterIndex == index)
+            {
+                return;
+            }
+
+            _filterIndex = index;
+            OnPropertyChanged();
+            RebuildVisibleRows();
+        }
+    }
+
+    /// <summary>搜索词：按名称与说明过滤，输入即筛；大小写不敏感。</summary>
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            var text = value ?? string.Empty;
+            if (string.Equals(_searchText, text, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _searchText = text;
+            OnPropertyChanged();
+            RebuildVisibleRows();
+        }
+    }
+
+    /// <summary>筛选或搜索是否处于「收窄」状态；全空时不显示「没有匹配」的空状态。</summary>
+    public bool HasActiveFilter => _filterIndex != 0 || _searchText.Trim().Length > 0;
+
+    /// <summary>工具条右侧的「显示 N / 共 M」：N 是过滤后的行数，M 是当前游戏的全部成就数。</summary>
+    public string VisibleCountText => IsAvailable
+        ? T(Keys.AchievementsFilterCount, Achievements.Count, _allRows.Count)
+        : "—";
 
     public GameInstallation? Game
     {
@@ -125,9 +189,10 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
     /// <summary>是否正在取数：为 true 时页面只显示进度环，不显示空状态说明。</summary>
     public bool IsLoading => Availability == AchievementAvailability.Loading;
 
-    public int TotalCount => Achievements.Count;
+    /// <summary>当前游戏的全部成就数：不受筛选影响，页头「已解锁 X / Y」始终指整份快照。</summary>
+    public int TotalCount => _allRows.Count;
 
-    public int UnlockedCount => Achievements.Count(static row => row.IsUnlocked);
+    public int UnlockedCount => _allRows.Count(static row => row.IsUnlocked);
 
     /// <summary>
     /// 顶部统计文案：「已解锁 X / Y」。
@@ -150,6 +215,15 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
     /// </para>
     /// </summary>
     public bool ShowEmptyState => !IsAvailable && !IsLoading && Achievements.Count == 0;
+
+    /// <summary>
+    /// 筛选 / 搜索把行全滤掉时的空状态：与「没有数据源」的空状态互斥。
+    /// <para>
+    /// 判据是「确实取到了成就（<c>_allRows</c> 非空）但当前一行都不匹配」，
+    /// 所以数据源不可用时这里恒为 false，绝不会把「连不上 Steam」说成「没有符合条件的成就」。
+    /// </para>
+    /// </summary>
+    public bool ShowFilterEmptyState => IsAvailable && _allRows.Count > 0 && Achievements.Count == 0;
 
     public string EmptyStateTitle => ShowEmptyState ? T(Keys.AchievementsEmptyTitle) : string.Empty;
 
@@ -206,6 +280,8 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
         {
             _renderedGameKey = null;
             _hasRenderedSnapshot = false;
+            ResetFilters();
+            _allRows.Clear();
             Achievements.Clear();
             SetLastUpdated(null);
             NotifyCountsChanged();
@@ -216,8 +292,10 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
 
         if (gameChanged)
         {
-            // 切游戏：上一款的成就一条都不能留在屏幕上。
+            // 切游戏：上一款的成就与筛选条件一条都不能留在屏幕上。
+            ResetFilters();
             Achievements.Clear();
+            _allRows.Clear();
             NotifyCountsChanged();
             _hasRenderedSnapshot = false;
             SetLastUpdated(null);
@@ -256,7 +334,7 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
             }
 
             Apply(game, snapshot);
-            _hasRenderedSnapshot = Achievements.Count > 0;
+            _hasRenderedSnapshot = _allRows.Count > 0;
             _renderedGameKey = gameKey;
             SetLastUpdated(snapshot.FetchedAtUtc);
 
@@ -281,11 +359,12 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
         ArgumentNullException.ThrowIfNull(snapshot);
 
         var entries = snapshot.Entries ?? [];
-        Achievements.Clear();
+        _allRows.Clear();
         foreach (var entry in entries)
         {
             // 惰性：行容器实化并读取 IconUrl 时才解析 / 解码，198 个 DDS 不会在进页面时同步解开。
-            Achievements.Add(new AchievementRowViewModel(entry, () => ResolveIcon(game, entry)));
+            // 行只在这里建一次；之后改筛选 / 搜索只重排引用，图标解码绝不会重跑。
+            _allRows.Add(new AchievementRowViewModel(entry, () => ResolveIcon(game, entry)));
         }
 
         // 数据源说「可用」但一条都没有：按 Empty 解释，页面才有话说，而不是留一块空白。
@@ -293,7 +372,8 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
             ? AchievementAvailability.Empty
             : snapshot.Availability;
 
-        NotifyCountsChanged();
+        // 切游戏时筛选已被重置为「全部」，所以这里重建出来的就是整份列表。
+        RebuildVisibleRows();
     }
 
     /// <summary>
@@ -301,7 +381,7 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
     /// </summary>
     private bool ShouldKeepCached(AchievementSnapshot snapshot) =>
         _hasRenderedSnapshot
-        && Achievements.Count > 0
+        && _allRows.Count > 0
         && snapshot.Availability is AchievementAvailability.NotSupported or AchievementAvailability.SteamUnavailable;
 
     /// <summary>
@@ -415,9 +495,88 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(UnlockedCount));
         OnPropertyChanged(nameof(CountsText));
 
+        // 可见行数变了，工具条右侧的「显示 N / 共 M」与筛选态判定也要跟着刷。
+        OnPropertyChanged(nameof(VisibleCountText));
+        OnPropertyChanged(nameof(HasActiveFilter));
+        OnPropertyChanged(nameof(ShowFilterEmptyState));
+
         // 行的增减直接决定空状态横条是否该出现：有行就不许再显示「没有可显示的成就」。
         OnPropertyChanged(nameof(ShowEmptyState));
         OnPropertyChanged(nameof(EmptyStateTitle));
         OnPropertyChanged(nameof(EmptyStateMessage));
+    }
+
+    /// <summary>
+    /// 三个筛选项的文案随界面语言重建（RadioButtons 的 ItemsSource 整表替换，Selection 序号不变）。
+    /// </summary>
+    private void RebuildFilterOptions()
+    {
+        _filterOptions =
+        [
+            T(Keys.AchievementsFilterAll),
+            T(Keys.AchievementsFilterUnlocked),
+            T(Keys.AchievementsFilterLocked),
+        ];
+
+        OnPropertyChanged(nameof(FilterOptions));
+    }
+
+    /// <summary>语言切换后重建筛选项文案；其余公开属性由基类统一重发通知。</summary>
+    protected override void Relocalize() => RebuildFilterOptions();
+
+    /// <summary>
+    /// 按当前筛选与搜索词重排 <see cref="Achievements"/>。
+    /// <para>
+    /// 只重排集合引用、复用行实例：图上那一行还是同一个 <see cref="AchievementRowViewModel"/>，
+    /// 已经解析出来的图标不会因为改一次筛选就重新解码一遍 DDS。
+    /// </para>
+    /// </summary>
+    private void RebuildVisibleRows()
+    {
+        var query = _searchText.Trim();
+        var filter = _filterIndex;
+
+        Achievements.Clear();
+        foreach (var row in _allRows)
+        {
+            if (Matches(row, filter, query))
+            {
+                Achievements.Add(row);
+            }
+        }
+
+        NotifyCountsChanged();
+    }
+
+    /// <summary>一行的匹配判定：状态筛选 + 名称 / 说明关键词（大小写不敏感）。</summary>
+    private static bool Matches(AchievementRowViewModel row, int filterIndex, string query)
+    {
+        if ((filterIndex == 1 && !row.IsUnlocked) || (filterIndex == 2 && row.IsUnlocked))
+        {
+            return false;
+        }
+
+        return query.Length == 0
+            || row.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+            || row.DescriptionText.Contains(query, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 切游戏时把筛选 / 搜索退回默认（全部 + 空搜索词）。
+    /// 这里只改字段并补通知，不重建行：调用方紧接着就会清空整份列表。
+    /// </summary>
+    private void ResetFilters()
+    {
+        var changed = _filterIndex != 0 || _searchText.Length > 0;
+        _filterIndex = 0;
+        _searchText = string.Empty;
+        if (!changed)
+        {
+            return;
+        }
+
+        OnPropertyChanged(nameof(FilterIndex));
+        OnPropertyChanged(nameof(SearchText));
+        OnPropertyChanged(nameof(HasActiveFilter));
     }
 }
