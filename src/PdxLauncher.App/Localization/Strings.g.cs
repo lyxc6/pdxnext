@@ -47,10 +47,19 @@ public sealed partial class Localizer
         ["account.title"] = "Paradox 账号",
         ["achievements.counts"] = "已解锁 {0} / {1}",
         ["achievements.empty.title"] = "没有可显示的成就",
+        ["achievements.filter.all"] = "全部",
+        ["achievements.filter.count"] = "显示 {0} / 共 {1}",
+        ["achievements.filter.empty.message"] = "试试别的关键词，或把状态切回「全部」",
+        ["achievements.filter.empty.title"] = "没有符合条件的成就",
+        ["achievements.filter.locked"] = "未解锁",
+        ["achievements.filter.name"] = "按解锁状态筛选",
+        ["achievements.filter.unlocked"] = "已解锁",
         ["achievements.hiddenDescription"] = "解锁后显示说明",
         ["achievements.lastUpdated"] = "上次更新：{0}",
         ["achievements.listName"] = "成就列表",
         ["achievements.rarity"] = "全球解锁率 {0}%",
+        ["achievements.search.name"] = "搜索成就",
+        ["achievements.search.placeholder"] = "搜索名称或描述",
         ["achievements.status.hidden"] = "隐藏成就",
         ["achievements.status.locked"] = "未解锁",
         ["achievements.status.unlocked"] = "已解锁",
@@ -1461,10 +1470,19 @@ public sealed partial class Localizer
         ["account.title"] = "Paradox account",
         ["achievements.counts"] = "Unlocked {0} / {1}",
         ["achievements.empty.title"] = "No achievements to show",
+        ["achievements.filter.all"] = "All",
+        ["achievements.filter.count"] = "Showing {0} of {1}",
+        ["achievements.filter.empty.message"] = "Try a different keyword, or switch the status filter back to All",
+        ["achievements.filter.empty.title"] = "No matching achievements",
+        ["achievements.filter.locked"] = "Locked",
+        ["achievements.filter.name"] = "Filter by unlock status",
+        ["achievements.filter.unlocked"] = "Unlocked",
         ["achievements.hiddenDescription"] = "Unlocks to reveal the description",
         ["achievements.lastUpdated"] = "Last updated: {0}",
         ["achievements.listName"] = "Achievement list",
         ["achievements.rarity"] = "{0}% of players unlocked",
+        ["achievements.search.name"] = "Search achievements",
+        ["achievements.search.placeholder"] = "Search name or description",
         ["achievements.status.hidden"] = "Hidden achievement",
         ["achievements.status.locked"] = "Locked",
         ["achievements.status.unlocked"] = "Unlocked",
@@ -2875,10 +2893,19 @@ public sealed partial class Localizer
         ("account.title", "AccountTitle"),
         ("achievements.counts", "AchievementsCounts"),
         ("achievements.empty.title", "AchievementsEmptyTitle"),
+        ("achievements.filter.all", "AchievementsFilterAll"),
+        ("achievements.filter.count", "AchievementsFilterCount"),
+        ("achievements.filter.empty.message", "AchievementsFilterEmptyMessage"),
+        ("achievements.filter.empty.title", "AchievementsFilterEmptyTitle"),
+        ("achievements.filter.locked", "AchievementsFilterLocked"),
+        ("achievements.filter.name", "AchievementsFilterName"),
+        ("achievements.filter.unlocked", "AchievementsFilterUnlocked"),
         ("achievements.hiddenDescription", "AchievementsHiddenDescription"),
         ("achievements.lastUpdated", "AchievementsLastUpdated"),
         ("achievements.listName", "AchievementsListName"),
         ("achievements.rarity", "AchievementsRarity"),
+        ("achievements.search.name", "AchievementsSearchName"),
+        ("achievements.search.placeholder", "AchievementsSearchPlaceholder"),
         ("achievements.status.hidden", "AchievementsStatusHidden"),
         ("achievements.status.locked", "AchievementsStatusLocked"),
         ("achievements.status.unlocked", "AchievementsStatusUnlocked"),
@@ -4287,10 +4314,19 @@ public sealed partial class Localizer
     public string AccountTitle => Format("account.title");
     public string AchievementsCounts => Format("achievements.counts");
     public string AchievementsEmptyTitle => Format("achievements.empty.title");
+    public string AchievementsFilterAll => Format("achievements.filter.all");
+    public string AchievementsFilterCount => Format("achievements.filter.count");
+    public string AchievementsFilterEmptyMessage => Format("achievements.filter.empty.message");
+    public string AchievementsFilterEmptyTitle => Format("achievements.filter.empty.title");
+    public string AchievementsFilterLocked => Format("achievements.filter.locked");
+    public string AchievementsFilterName => Format("achievements.filter.name");
+    public string AchievementsFilterUnlocked => Format("achievements.filter.unlocked");
     public string AchievementsHiddenDescription => Format("achievements.hiddenDescription");
     public string AchievementsLastUpdated => Format("achievements.lastUpdated");
     public string AchievementsListName => Format("achievements.listName");
     public string AchievementsRarity => Format("achievements.rarity");
+    public string AchievementsSearchName => Format("achievements.search.name");
+    public string AchievementsSearchPlaceholder => Format("achievements.search.placeholder");
     public string AchievementsStatusHidden => Format("achievements.status.hidden");
     public string AchievementsStatusLocked => Format("achievements.status.locked");
     public string AchievementsStatusUnlocked => Format("achievements.status.unlocked");
@@ -5702,10 +5738,19 @@ internal static class Keys
     public const string AccountTitle = "account.title";
     public const string AchievementsCounts = "achievements.counts";
     public const string AchievementsEmptyTitle = "achievements.empty.title";
+    public const string AchievementsFilterAll = "achievements.filter.all";
+    public const string AchievementsFilterCount = "achievements.filter.count";
+    public const string AchievementsFilterEmptyMessage = "achievements.filter.empty.message";
+    public const string AchievementsFilterEmptyTitle = "achievements.filter.empty.title";
+    public const string AchievementsFilterLocked = "achievements.filter.locked";
+    public const string AchievementsFilterName = "achievements.filter.name";
+    public const string AchievementsFilterUnlocked = "achievements.filter.unlocked";
     public const string AchievementsHiddenDescription = "achievements.hiddenDescription";
     public const string AchievementsLastUpdated = "achievements.lastUpdated";
     public const string AchievementsListName = "achievements.listName";
     public const string AchievementsRarity = "achievements.rarity";
+    public const string AchievementsSearchName = "achievements.search.name";
+    public const string AchievementsSearchPlaceholder = "achievements.search.placeholder";
     public const string AchievementsStatusHidden = "achievements.status.hidden";
     public const string AchievementsStatusLocked = "achievements.status.locked";
     public const string AchievementsStatusUnlocked = "achievements.status.unlocked";
