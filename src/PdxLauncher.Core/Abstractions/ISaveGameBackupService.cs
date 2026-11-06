@@ -51,7 +51,11 @@ public interface ISaveGameBackupService
     /// <summary>当前备份用量（只统计 <c>.bak</c> 字节，不含 sidecar 与回收站）。</summary>
     Task<SaveBackupUsage> GetUsageAsync(CancellationToken cancellationToken);
 
-    /// <summary>列出某个游戏的备份，按创建时间降序；sidecar 缺失或无法解析的条目不返回。</summary>
+    /// <summary>
+    /// 列出某个游戏的备份，按创建时间降序。sidecar 缺失或无法解析的条目以「降级条目」返回
+    /// （<see cref="SaveBackupEntry.IsDegraded"/> 为 true，只有文件名/大小/文件时间），
+    /// 因为它们仍占用配额，必须可见、可删除。
+    /// </summary>
     Task<IReadOnlyList<SaveBackupEntry>> ListBackupsAsync(string gameId, CancellationToken cancellationToken);
 
     /// <summary>

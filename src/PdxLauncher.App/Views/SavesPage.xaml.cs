@@ -240,6 +240,26 @@ public sealed partial class SavesPage : Page
         await InvokeAsync(() => _viewModel.DeleteBackupAsync(row, _lifetime.Token));
     }
 
+    /// <summary>
+    /// 清理旧备份：批量删除不可撤销，确认框默认焦点在「取消」；
+    /// 只保留最新 <see cref="SavesViewModel.PruneKeepNewest"/> 份，其余（含孤儿备份）由服务删除。
+    /// </summary>
+    private async void OnPruneBackupsClick(object sender, RoutedEventArgs e)
+    {
+        var confirmed = await ConfirmOverlay.ConfirmAsync(
+            L.SavesConfirmPruneBackupsTitle,
+            L.T(Keys.SavesConfirmPruneBackupsContent, SavesViewModel.PruneKeepNewest),
+            L.SavesActionPruneBackups,
+            L.CommonCancel,
+            initialFocus: InitialFocus.Cancel);
+        if (!confirmed)
+        {
+            return;
+        }
+
+        await InvokeAsync(() => _viewModel.PruneAsync(_lifetime.Token));
+    }
+
     private void OnNoticeClose(InfoBar sender, object args) => _viewModel.DismissNotice();
 
     private static SaveGameRowViewModel? RowFrom(object sender) =>

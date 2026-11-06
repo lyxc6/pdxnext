@@ -39,8 +39,15 @@ public sealed class SaveBackupRowViewModel : LocalizedObservableObject
     public string AutomationName =>
         T(Keys.SavesBackupRowName, FileName, CreatedText);
 
-    public string CreatedText =>
-        T(
+    /// <summary>
+    /// 孤儿备份（.bak 在、sidecar 缺失或损坏）：服务返回的降级条目。
+    /// 这类行只显示文件名 / 大小 / 「缺少说明文件」，不能恢复，只能删除。
+    /// </summary>
+    public bool IsDegraded => Entry.IsDegraded;
+
+    public string CreatedText => IsDegraded
+        ? T(Keys.SavesBackupOrphan)
+        : T(
             Keys.SavesBackupCreated,
             Entry.CreatedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture));
 
@@ -60,8 +67,11 @@ public sealed class SaveBackupRowViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>页面整体忙碌（扫描或任一写操作）期间禁用，防止确认后静默 no-op。</summary>
-    public bool CanRestore => !IsBusy && _actionAllowed;
+    /// <summary>
+    /// 页面整体忙碌（扫描或任一写操作）期间禁用，防止确认后静默 no-op。
+    /// 孤儿备份没有 sidecar（原始路径/哈希），无法恢复，恒为禁用。
+    /// </summary>
+    public bool CanRestore => !IsDegraded && !IsBusy && _actionAllowed;
 
     /// <summary>页面整体忙碌期间禁用，防止确认后静默 no-op。</summary>
     public bool CanDelete => !IsBusy && _actionAllowed;
