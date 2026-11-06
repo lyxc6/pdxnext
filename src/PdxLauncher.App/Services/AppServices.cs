@@ -67,6 +67,9 @@ public static class AppServices
     /// <summary>DLC 简介（磁盘缓存 + 可选的 Steam 商店补全）。</summary>
     public static IDlcDescriptionService DlcDescriptions { get; private set; } = null!;
 
+    /// <summary>DLC 头图（Steam 商店 header_image；磁盘 .dlc 没有图片）。</summary>
+    public static IDlcArtworkService DlcArtwork { get; private set; } = null!;
+
     /// <summary>官方启动器公告卡（Braze content cards；磁盘缓存 + 可选联网）。</summary>
     public static INewsFeedService NewsFeed { get; private set; } = null!;
 
@@ -242,6 +245,7 @@ public static class AppServices
         IContinueGameReader continueGame,
         IDlcSignatureService dlcSignatures,
         IDlcDescriptionService dlcDescriptions,
+        IDlcArtworkService dlcArtwork,
         INewsFeedService newsFeed,
         IMetadataClient metadata,
         IAssetDownloader assets,
@@ -278,6 +282,7 @@ public static class AppServices
         ArgumentNullException.ThrowIfNull(continueGame);
         ArgumentNullException.ThrowIfNull(dlcSignatures);
         ArgumentNullException.ThrowIfNull(dlcDescriptions);
+        ArgumentNullException.ThrowIfNull(dlcArtwork);
         ArgumentNullException.ThrowIfNull(newsFeed);
         ArgumentNullException.ThrowIfNull(metadata);
         ArgumentNullException.ThrowIfNull(assets);
@@ -316,6 +321,7 @@ public static class AppServices
         SaveBackups = new SaveBackupService(fileSystem, logger);
         DlcSignatures = dlcSignatures;
         DlcDescriptions = dlcDescriptions;
+        DlcArtwork = dlcArtwork;
         NewsFeed = newsFeed;
         Metadata = metadata;
         Assets = assets;

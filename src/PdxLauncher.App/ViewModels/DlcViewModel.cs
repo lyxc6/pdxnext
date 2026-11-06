@@ -319,6 +319,9 @@ public sealed class DlcViewModel : LocalizedObservableObject
 
             // 简介是弱依赖：先显示列表，再补简介（失败不影响列表）。
             await FillDescriptionsAsync(cancellationToken).ConfigureAwait(true);
+
+            // 头图同样是弱依赖：放后台跑，不阻塞列表显示。
+            _ = FillArtworkAsync(cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -451,6 +454,7 @@ public sealed class DlcViewModel : LocalizedObservableObject
 
         // 简介是弱依赖：先把清单显示出来，再按 Steam appid 慢慢补（失败不影响列表）。
         await FillDescriptionsAsync(cancellationToken).ConfigureAwait(true);
+        _ = FillArtworkAsync(cancellationToken);
     }
 
     /// <summary>按探测报告重建 CS2 的 DLC 行；报告不可用时清空。</summary>
@@ -836,6 +840,48 @@ public sealed class DlcViewModel : LocalizedObservableObject
         }
     }
 
+    /// <summary>
+    /// 补 DLC 头图：磁盘上的 .dlc 只带名字，未拥有的 DLC 也没有本地素材，所以按 Steam appid 取商店头图。
+    /// 弱依赖：失败只记 Warn，占位图标照旧；不阻塞列表与切换游戏的取消。
+    /// </summary>
+    private async Task FillArtworkAsync(CancellationToken cancellationToken)
+    {
+        var missing = Dlcs
+            .Where(static d => !d.HasImage && !string.IsNullOrWhiteSpace(d.SteamId))
+            .ToList();
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var artwork = await AppServices.DlcArtwork
+                .GetArtworkAsync(missing.Select(static d => d.SteamId).ToList(), cancellationToken)
+                .ConfigureAwait(true);
+
+            var filled = 0;
+            foreach (var row in missing)
+            {
+                if (artwork.TryGetValue(row.SteamId, out var path) && !string.IsNullOrWhiteSpace(path))
+                {
+                    row.SetArtworkPath(path);
+                    filled++;
+                }
+            }
+
+            AppServices.Logger.Info(
+                "DLC 头图已就位：" + filled + "/" + missing.Count + " 个（gameId=" + (Game?.GameId ?? "<null>") + "）");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // 切游戏/离页：安静退出，不写状态。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("DLC 头图获取失败（只影响图片显示）：" + ex.Message);
+        }
+    }
     private void OnRowEnabledChanged(DlcRowViewModel row)
     {
         RaiseCounts();

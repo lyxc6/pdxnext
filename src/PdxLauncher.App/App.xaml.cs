@@ -240,6 +240,7 @@ public partial class App : Application
             continueGame,
             dlcSignatures,
             network.Descriptions,
+            network.Artwork,
             network.NewsFeed,
             network.Metadata,
             network.Assets,

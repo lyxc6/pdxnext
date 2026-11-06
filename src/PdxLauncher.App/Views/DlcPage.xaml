@@ -46,8 +46,8 @@
                                   VerticalAlignment="Center"
                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                   AutomationProperties.AccessibilityView="Raw"
-                                  Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasThumbnail), Mode=OneWay}" />
-                        <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath, 208), Mode=OneTime}"
+                                  Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasImage), Mode=OneWay}" />
+                        <Image Source="{x:Bind svc:XamlImage.FromPath(ImagePath, 208), Mode=OneWay}"
                                Stretch="UniformToFill"
                                AutomationProperties.Name="{x:Bind DisplayName, Mode=OneTime}" />
                     </Grid>

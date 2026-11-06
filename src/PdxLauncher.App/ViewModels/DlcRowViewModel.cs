@@ -15,6 +15,7 @@ public sealed class DlcRowViewModel : LocalizedObservableObject
     private readonly Action<DlcRowViewModel>? _onEnabledChanged;
     private bool _isEnabled;
     private string _description;
+    private string _artworkPath = string.Empty;
     private bool? _isOwned;
 
     /// <param name="dlc">磁盘上的 DLC 描述。</param>
@@ -88,6 +89,15 @@ public sealed class DlcRowViewModel : LocalizedObservableObject
     public bool HasThumbnail => !string.IsNullOrWhiteSpace(ThumbnailPath);
 
     /// <summary>
+    /// 实际显示的图片：磁盘缩略图优先，没有时用 Steam 商店头图（由 <c>DlcViewModel</c> 后台补全）。
+    /// 未拥有的 DLC 没有本地素材，只有这一条路能出图；拿不到就继续显示占位图标。
+    /// </summary>
+    public string ImagePath => HasThumbnail ? ThumbnailPath : _artworkPath;
+
+    /// <summary>是否有任何可显示的图片（占位图按它切换）。</summary>
+    public bool HasImage => !string.IsNullOrWhiteSpace(ImagePath);
+
+    /// <summary>
     /// 简介：优先用描述文件自带的值（V3 的 description.en），否则由 <c>DlcViewModel</c> 用 Steam 商店数据回填。
     /// 可写是因为它要等联网结果，UI 用 OneWay 绑定监听变化。
     /// </summary>
@@ -110,6 +120,28 @@ public sealed class DlcRowViewModel : LocalizedObservableObject
 
     /// <summary>悬停提示（完整简介；没有简介时返回 null，避免空提示框）。</summary>
     public string? DescriptionToolTip => HasDescription ? _description : null;
+
+    /// <summary>
+    /// 后台补到的商店头图路径。只由 <c>DlcViewModel</c> 在联网补全后设置；
+    /// 已经有磁盘缩略图时忽略（本地素材更准）。
+    /// </summary>
+    public void SetArtworkPath(string? path)
+    {
+        if (HasThumbnail || string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        var text = path.Trim();
+        if (string.Equals(_artworkPath, text, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _artworkPath = text;
+        OnPropertyChanged(nameof(ImagePath));
+        OnPropertyChanged(nameof(HasImage));
+    }
 
     /// <summary>启用开关的自动化 Id（用有效 id，保证每个 DLC 唯一，供 UI 测试定位）。</summary>
     public string ToggleAutomationId => "dlcToggle_" + EffectiveId;
