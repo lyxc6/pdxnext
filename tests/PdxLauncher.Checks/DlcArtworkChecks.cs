@@ -25,6 +25,8 @@ public static class DlcArtworkChecks
         try
         {
             CheckDownloadAndHit(fs, tempRoot);
+            CheckDuplicateIds(fs, tempRoot);
+            CheckUnownedRowsUseArtwork();
             CheckFailureBackoff(fs, tempRoot);
             CheckWhitelist(fs, tempRoot);
             CheckUnavailable(fs, tempRoot);
@@ -78,6 +80,77 @@ public static class DlcArtworkChecks
 
         var second = service.GetArtworkAsync(["4232900"], CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Check("DLC 头图: 二次命中不再联网", http.GetCallCount == 2 && second.ContainsKey("4232900"), http.GetCallCount.ToString());
+    }
+
+    // ------------------------------------------------------------ 同一 appid 只取一次
+
+    private static void CheckDuplicateIds(IFileSystem fs, string tempRoot)
+    {
+        var cache = Path.Combine(tempRoot, "dup");
+        var clock = new FakeClock(DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
+        var detailsCalls = 0;
+        var http = new FakeHttpFetcher(uri =>
+        {
+            if (uri.AbsoluteUri.Contains("appdetails", StringComparison.Ordinal))
+            {
+                System.Threading.Interlocked.Increment(ref detailsCalls);
+                return Json(
+                    "{\"777\":{\"success\":true,\"data\":{\"header_image\":\"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/777/x/header.jpg\"}}}");
+            }
+
+            return JpegBytes;
+        });
+        var service = new DlcArtworkService(fs, http, clock, new NullLogger(), cache);
+
+        var result = service.GetArtworkAsync(["777", "777"], CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("DLC 头图: 重复 appid 只查一次接口", detailsCalls == 1, detailsCalls.ToString());
+        ChecksContext.Check("DLC 头图: 重复 appid 只落一份结果", result.Count == 1, result.Count.ToString());
+    }
+
+    // ------------------------------------------------------------ 未拥有行也参与取图（源码契约）
+
+    private static void CheckUnownedRowsUseArtwork()
+    {
+        var root = FindRepositoryRoot();
+        var path = Path.Combine(root, "src", "PdxLauncher.App", "ViewModels", "DlcViewModel.cs");
+        if (!ChecksContext.Check("DLC 头图: DlcViewModel.cs 存在", File.Exists(path), path))
+        {
+            return;
+        }
+
+        var text = File.ReadAllText(path);
+        var start = text.IndexOf("private async Task FillArtworkAsync", StringComparison.Ordinal);
+        var end = text.IndexOf("private void OnRowEnabledChanged", StringComparison.Ordinal);
+        if (!ChecksContext.Check("DLC 头图: 找到 FillArtworkAsync", start >= 0 && end > start, start + "/" + end))
+        {
+            return;
+        }
+
+        var body = text[start..end];
+        ChecksContext.Check(
+            "DLC 头图: 未拥有的行也参与取图",
+            body.Contains("UnownedDlcs", StringComparison.Ordinal),
+            "FillArtworkAsync 体内是否提到 UnownedDlcs");
+        ChecksContext.Check(
+            "DLC 头图: 按 appid 去重后再请求",
+            body.Contains("Distinct(", StringComparison.Ordinal),
+            "FillArtworkAsync 体内是否去重");
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, "tests", "fixtures")))
+            {
+                return dir.FullName;
+            }
+
+            dir = dir.Parent;
+        }
+
+        return Directory.GetCurrentDirectory();
     }
 
     // ------------------------------------------------------------ 失败退避
