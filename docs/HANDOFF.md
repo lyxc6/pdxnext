@@ -7235,3 +7235,93 @@ mod 名和行尾三个按钮完全看不见，右栏也不能滚动到这些内�
 - 页面 `NavigationCacheMode="Required"`，所以同一次会话内切走再切回宽度会保留，重启回到 400 DIP。
 - 构建 `bin/x64` 时如果用户正开着启动器会锁 `PdxLauncher.Core.dll`（`MSB3026`），
   本次改用 `-p:OutputPath=.scratch\run\` 单独产出、再把 `data/` 复制过去复现，避免影响用户数据。
+## 0.87 2026-11-06：存档管理页（浏览 / 两段式加载 / 备份 / 恢复 / 删除）
+
+**问题**：1.2 只有主页一个「最近存档」卡（已删），用户没有任何入口看游戏存档，更不能备份或清理；用户要求「浏览 + 备份/恢复/删除」。
+
+**改法**：
+- Core 新增 `Saves/SaveGameScanner.cs`（`ISaveGameLibrary`）、`SaveGameMeta`、`SaveLocationCatalog`（ck3 `.ck3` / victoria3 `.v3` / eu5 `.eu5` / stellaris `.sav` / cities_skylines_2 `.cok`）、`SavContainerReader`（SAV0 头 4 KB 文本、zip 只读 `meta`、CK3 大 `meta_data` 256 KB 流式、V3 命名档是「SAV0 头 + zip」的嗅探回退、CS2 JSON 元数据、EU5 可选小时）。
+- 备份服务 `Saves/SaveBackupService.cs`：落 `<data>\save-backups\<gameId>\<yyyyMMdd-HHmmss>__<安全名>.bak` + 同名 `.bak.json` 自述，先写 `.tmp` 再原子 Move；恢复默认生成「(恢复 yyyyMMdd-HHmm)」副本，覆盖时先把原档移 trash；删除真实存档只移 trash；配额 2 GiB / 每游戏 200 条，只报错不自动清理。
+- 页面 `SavesPage`：两段式加载（先路径/大小/时间出粗略行，再后台按批补存档名/国家/版本）、行无障碍名随细节更新（`SaveRowAutomationWatcher` 订阅 `PropertyChanged`，因为 WinUI 的 `Style Setter.Value` 不认 `{Binding}`）、备份段支持恢复/删除/清理旧备份（保留 10 份）、孤儿备份以降级条目显示但不可恢复。
+
+**验证**：本机 76 个真实存档只读扫描约 159 ms（VIC3 12 档首段约 4 ms、Stellaris 27 档约 8 ms）；CK3 元数据读出 1.19.0.6 / 1066.9.29 / 芒斯特小王国，VIC3 12/12、EU5 日期 12/27（其余为无日期串的 autosave）、CS2 8/8；删除进 `trash\`、恢复生成副本、占用文件返回 `Failed` 带 Win32 码；`检查类` 中存档相关断言全绿。
+
+**注意**：存档清单不写 `pdxnext.sqlite`（磁盘是真源）；绝不写游戏 Documents 目录；V3/EU5 的字段解析是启发式，页面按「文件名/时间 + 尽力而为」呈现，CS2 `.cok` 标「实验性」。
+
+## 0.88 2026-11-06：成就页接入 Steam（常驻宿主 / DLL 候选回落 / 中文化 / 解锁率）
+
+**问题**：1.2 无成就页；用户要求看自己在游戏里的成就，且「游戏内是中文、这里却是英文」。
+
+**改法**：
+- 宿主动词 `--steam-host achievements --appid <id>`：Init 只在子进程，先 Init 失败后才问 `IsSteamRunning`（反序会把真机误报成「Steam 没运行」）；等 `UserStatsReceived_t`(1101) 10 s；用 `SteamAPICallCompleted_t`(703) + `ManualDispatch_GetAPICallResult` 取 1110 全局解锁率（此前只在回调泵里等，导致解锁率恒空）。
+- `--steam-host serve` 常驻 worker + App 侧会话复用 + 窗口可见 2 s 后预热：首进从 1.1–3.0 s 降到约 0.18 s（热态 8 ms）。
+- DLL 候选：优先原版备份（`steam_api64_o/orig/original`），每个候选先 `api-check`（只 Load/查导出，不 Init），`initFailed`/崩溃才换下一份（最多 3 份），`steamNotRunning`/`noSteamUser`/`timeout` 立即返回。修的是「打了 DLC 补丁的游戏被选中 loader 时成就 0 条」。
+- 中文化：读游戏 `localization/<lang>/*_l_<lang>.yml` 的 `ACHIEVEMENT_<apiName>`，语言取 `pdx_settings.txt`，处理 `"$ACHIEVEMENT_xxx$"` 别名链（带环检测）；名称回退链＝本地化 → Steam displayName → 「—」。
+
+**验证**：CK3 198 条、VIC3 152 条，中文名与描述 198/198、152/152，解锁率 198/198、152/152（与 Steam 社区页抽样误差 ≤0.3）；补丁 loader（834,560 B）强制先试 → `initFailed` → 自动回落原版 → 198 条 1.7 s。
+
+**注意**：`GetAchievementDisplayAttribute` 的名字随**每游戏语言**（`appmanifest_<appid>.acf` 的 `UserConfig.language`）变，不随 Steam 客户端语言；`SetGameLanguage` 在本机 DLL 与 SDK flat API 里都不存在，不能靠它切语言。
+
+## 0.89 2026-11-06：成就页图标、空快照与筛选
+
+**问题**：成就页没有图；CK3 有时整页「暂无成就」；条目多时无法筛。
+
+**改法**：
+- `AchievementIconResolver` 从游戏安装目录取图：VIC3/Stellaris 用 `<apiName>.jpg` / `<apiName>_notachieved.jpg`；CK3 只有 `.dds`，用 `PdxLauncher.Imaging` 的 DDS 解码成 PNG 缓存到 `data\achievement-icons\<appid>\`，命中前校验 PNG 签名/IHDR/IEND，坏文件删除重建，临时名带 GUID + finally 清理。
+- 空快照防御：`Available + 0 条` 不再写缓存；读取到毒快照（`Available` 但空）立即删除重取；`ShowEmptyState` 需 `!IsAvailable && !IsLoading && Count==0`。
+- 筛选：状态（全部/已解锁/未解锁）+ 关键词（名称/描述，`OrdinalIgnoreCase`），行实例复用、过滤不触发图标解码。
+
+**验证**：CK3 198 行中 55 解锁，首屏实化 46 行只生成 46 张 PNG；并发 6 线程同 key 无半写；过滤后计数「显示 N / 共 M」正确。
+
+## 0.90 2026-11-06：DLC 页列出未拥有项、Steam 头图、VIC3 新版元数据
+
+**问题**：DLC 页只能看到磁盘上已安装的 DLC，看不到「游戏有但我没有」；没有图片；VIC3 1.15 的新 DLC 不出现。
+
+**改法**：
+- `DlcListPlanner`（Core 纯函数）：已拥有＝`OwnedAppIds ∪ TrustedDisabledDlc`；未拥有＝Steam 报告减磁盘减已拥有；可靠性闸门（报告 >200 条或空名 >50%）判 `UntrustedCatalog`，不合成未拥有段，只显示说明。
+- 头图 `DlcArtworkService`：`appdetails?appids=<id>&filters=basic` 取 `header_image`（带 hash，猜 `cdn.../header.jpg` 是 404），缓存 `<data>\dlc-artwork\<appid>.jpg`，URL 有效 14 天、失败退避 30 分钟、限 2 MiB、只下载白名单 https；已拥有与未拥有行都填充。
+- `DlcCatalog` 增加 `dlc_metadata/*.txt` 解析（Clausewitz 块语法）：VIC3 1.15 的 `dlc019 State and Revolution`（4314660）只在元数据里；CK3 的 `00_dlc_metadata.txt` 与 Stellaris 的嵌套 `dlcs = {}` 形态被 schema 闸门识别后跳过，避免每次扫描刷 30 条「缺少 name」告警。
+
+**验证**：VIC3 17→18 条（CK3 25、Stellaris 31、EU5 4 不变）；CK3 4232900 头图 37,340 B、4232880 61,666 B；未拥有段 8 行有图。
+
+**注意**：`docs/DATA-FORMATS.md` 里「拥有 x/y」是某次实测样本，随账号变动，不要当常量断言。
+
+## 0.91 2026-11-06：设置页显示真实安装形态、更新器不再误提权
+
+**问题**：装在 D 盘的 Inno 安装被显示成「便携 / 未安装」；更新器又按「数据目录语义」决定是否传 `/ALLUSERS`。
+
+**改法**：Core 纯函数 `InstallModeResolver.Resolve(baseDir, marker, uninstallEntries)` + `IUninstallEntrySource`（App 侧读 HKCU/HKLM × 64/32）；设置页显示「已安装（Inno Setup，当前用户/所有用户）」+ 安装目录 + 打开目录按钮，删除旧的「在 `%LOCALAPPDATA%\Programs` 下才算已安装」启发式；`UpdateService` 改用同一判定（`InstalledInno + MatchedInstallDir + PerMachine` 才传 `/ALLUSERS`）。
+
+**验证**：本机 `D:\app\PdxNext` → `InstalledInno / PerUser / Registry64 / 1.2.2`；`/ALLUSERS` 只在该三元组成立时出现。
+
+**注意**：判定输入是进程目录 + 注册表，运行中重装必须退出进程；`PdxDataRoot.IsPerMachineInstall` 只保留数据目录语义，不要再拿它决定「是否安装」。
+
+## 0.92 2026-11-06：离线模型真实状态、可复核删除与打开文件夹
+
+**问题**：删除后仍显示「已删除本地模型：…」；删完立刻显示未安装，用户不知道是否真删。
+
+**改法**：`GetInstallState` 五态（未安装/已安装/大小不符/缺配置/校验失败）、`Remove` 返回 `Removed / RemovedWithResidue / NotFound / Failed` 并复核目录确实消失、释放翻译引擎后再删、150 ms 重试一次、残留清单 + 脱敏错误上屏；行内加「校验」（深校验哈希）与「打开文件夹」；删除前若翻译在途则提示而不是硬删。
+
+**验证**：占用文件返回 `RemovedWithResidue` 且 Residue 只列相对名，解除占用后重删 `Removed`；界面四类结果文案均由服务状态驱动。
+
+## 0.93 2026-11-06：EU5 主页改用 Steam 官方库页大图 + 内置金色字标 + 无美术游戏换原生按钮
+
+**问题**：EU5 主页背景停在内置静态图、按钮是「幽灵样式」（半透明白底、无品牌感）；Paradox 元数据对 EU5 返回空（`{"data":{"games":[]}}`），既没背景也没按钮素材。
+
+**改法**：`ThemeResolver` 在 metadata 无背景时用 appdetails 的 `header_image` 推导 `library_hero.jpg`（必须去掉 hash 目录、且白名单要放行 `shared.akamai.steamstatic.com` / `cdn.cloudflare.steamstatic.com`）；`ApplyBundled` 把「背景」与「Logo」分开补齐，hero 背景时仍合并内置字标；主页按钮按 `ThemeAssetSource` 判定：`BuiltInPlaceholder`/`Bundled`/`SteamHero` 用 WinUI 原生按钮（`AccentButtonStyle`/`DefaultButtonStyle`），真正有主题的 `InstallDir`/`OnlineCache`/`SteamCapsule` 保留皮肤。
+
+**验证**：真机 `library_hero.jpg` 200 / 245,266 B / 1920×620；伪装的 hero 缓存下按钮仍原生、标题显示金色 `EUROPA UNIVERSALIS V`；CS2 主题按钮未变。
+
+## 0.94 2026-11-06：工坊评论表情渲染 + 三处杂修
+
+**问题**：创意工坊评论区里的 Steam 表情（`/economy/emoticon/<name>`，无扩展名）显示不出来；另外三处小毛病：若干对话框正文里出现字面 `\n`、原子写失败留下 `.pdxnext.tmp`、删数据类确认框默认焦点在「确认」。
+
+**改法**：
+- 表情：白名单加 `community.fastly.steamstatic.com`（整域放行，头像/徽章/表情同域），评论 `Body.ImageUrls` 入队下载，评论模板挂 `ImageResolver`；`MarkdownView` 用 `MarkdownInlineFlow.RequiresRichText` 无条件下钻 styled/link，表情以 20×20 `InlineUIContainer` 内联（必须在 `RichTextBlock`，`Hyperlink.Inlines` 不允许），粗体/斜体/链接包表情都不崩。
+- i18n：三键六处字面 `\\n` 改成真实换行，并加「i18n 源文件不得含字面 `\\n`」自检。
+- 原子写：`WriteAllBytesAtomic` 失败路径 finally 删临时文件，补「目标被目录占住」用例。
+- 确认框：`ConfirmOverlay` 加 `InitialFocus`（默认 Confirm），9 个破坏性调用点传 Cancel，Enter 随焦点、Escape 恒取消。
+
+**验证**：V3 工坊 3822538803 五条评论里两张表情均为约 20px 小图（22,405 B / 15,801 B），HOI4 的「粗体+斜体包表情」评论正常；破坏性确认框 Enter 不执行清理。
+
+**注意**：`InlineUIContainer` 只能挂在 `RichTextBlock` 的段落里；白名单做到主机级放行，路径校验交给表情识别侧，避免为了一个域把 `IsAllowedHost` 泛化成任意 URL 下载器。
