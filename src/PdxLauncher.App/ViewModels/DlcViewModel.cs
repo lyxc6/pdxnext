@@ -846,22 +846,29 @@ public sealed class DlcViewModel : LocalizedObservableObject
     /// </summary>
     private async Task FillArtworkAsync(CancellationToken cancellationToken)
     {
-        var missing = Dlcs
+        // 未拥有的行同样没有本地素材：磁盘 .dlc 只有已安装项，Steam 报告里的未拥有项更没有图。
+        // 两边按 SteamId 去重后一次请求，再把同一张图回填给所有命中该 appid 的行。
+        var wanted = Dlcs
+            .Concat(UnownedDlcs)
             .Where(static d => !d.HasImage && !string.IsNullOrWhiteSpace(d.SteamId))
             .ToList();
-        if (missing.Count == 0)
+        if (wanted.Count == 0)
         {
             return;
         }
 
         try
         {
+            var ids = wanted
+                .Select(static d => d.SteamId)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
             var artwork = await AppServices.DlcArtwork
-                .GetArtworkAsync(missing.Select(static d => d.SteamId).ToList(), cancellationToken)
+                .GetArtworkAsync(ids, cancellationToken)
                 .ConfigureAwait(true);
 
             var filled = 0;
-            foreach (var row in missing)
+            foreach (var row in wanted)
             {
                 if (artwork.TryGetValue(row.SteamId, out var path) && !string.IsNullOrWhiteSpace(path))
                 {
@@ -871,7 +878,8 @@ public sealed class DlcViewModel : LocalizedObservableObject
             }
 
             AppServices.Logger.Info(
-                "DLC 头图已就位：" + filled + "/" + missing.Count + " 个（gameId=" + (Game?.GameId ?? "<null>") + "）");
+                "DLC 头图已就位：" + filled + "/" + wanted.Count + " 行（" + ids.Count + " 个 appid，gameId="
+                + (Game?.GameId ?? "<null>") + "）");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
