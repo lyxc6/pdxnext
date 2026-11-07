@@ -7356,6 +7356,22 @@ mod 名和行尾三个按钮完全看不见，右栏也不能滚动到这些内�
 
 ---
 
+## 0.96 2026-11-08：每个对话一个分支（sess/*）
+
+**问题**：规范只写到「单个功能开 `feat/<task>`」，§4 又要求写码默认在 `feat/1.3` 主干工作树上做，粒度是「任务」而不是「对话」；根目录也没有 `AGENTS.md`，新对话不会被要求先开分支。执行同样不到位：历史上 31 次合并用了 git 默认信息，§8 要求的 `merge: 中文说明` 只出现 2 次。
+
+**改法**：
+- 新增根目录 `AGENTS.md`：开工三步（读 `HANDOFF` 顶部 → `git status` → `scripts/session.ps1 open <slug>`）、收尾三步（`dev.cmd build` → `session.ps1 close` → 四行汇报）、硬约束（不 push、不动 `version.props`、不写安装目录）。
+- 新增 `scripts/session.ps1`：`open` 建 `sess/YYYYMMDD-<slug>`，基线 = 对话开始时的当前分支；已有未提交改动跟随到新分支并提交成 `wip(session)` 基线（只是检查点）。`close` 校验工作区 → 构建 + 自检（纯 `*.md` 自动跳过，`-SkipVerify` 强制跳过）→ `git merge --no-ff` → 删分支并切回；冲突时中止合并、停在 sess 分支。`list` 列出进行中的对话分支、基线与领先提交数。基线记在 `git config branch.<name>.pdxBase`，不落盘。
+- `docs/AGENT-WORKFLOW.md` §2/§3/§4/§8/§9 改为对话级：`feat/<task>` 只在 worktree 内并行时使用，基线 / 合回目标都是本对话的 sess 分支；派活模板、验收七条不变。
+- `docs/VERSIONING.md` §5 补「`sess/*` 是对话级临时分支，永不作为发布来源」；`docs/DEVELOPMENT.md` §1、`docs/HANDOFF.md` 文件头、`docs/CONTROLS-UPGRADE-REPORT.md` B8 同步。
+
+**验证**：临时 clone 里跑通 `open` / `close` / `list`，以及脏工作区 `close`（退出 3）、冲突（退出 2，停在 sess 分支）、纯文档自动跳过构建、`-From` 远程基线；真实仓库首次 `open docs-session-rules` 建本分支、`close` 合回 `feat/1.3`。
+
+**注意**：`close` 不 push、不删 worktree；子 agent 一律不建 / 不切分支。丢弃未完成的分支是破坏性操作，脚本不提供——按用户明确指令手工 `git switch <起始分支>; git branch -D sess/...`。
+
+---
+
 ## 2026-11-06 勘误（设置页 6→8 分类、14→16 DIP）
 
 以 `feat/1.3` HEAD `ac7225e` 复核现状，本轮只改文档、未动代码。以下与正文若干历史小节不一致之处，以此节为准：
