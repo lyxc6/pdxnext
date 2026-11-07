@@ -1,5 +1,6 @@
 namespace PdxLauncher.Core.Dlc;
 
+using PdxLauncher.Core.Patch;
 using PdxLauncher.Core.Steam;
 
 /// <summary>DLC 列表里一条记录的来源。</summary>
@@ -52,12 +53,17 @@ public sealed record DlcListDiskRow(string SteamId, string DisplayName, string F
 /// <param name="FilePath">列表行的唯一键；Steam 独占行用 <c>steam:&lt;appid&gt;</c>。</param>
 /// <param name="Owned">是否已拥有；null 表示授权未知（没有报告、报告不可用或这行没有 appid）。</param>
 /// <param name="Section">这一条来自磁盘还是只来自 Steam。</param>
+/// <param name="Coverage">
+/// 这条 DLC 与补丁清单的关系（见 <see cref="DlcPatchCoverage"/>）。
+/// 放在最后并带默认值：既有的按位置构造调用点不必改。
+/// </param>
 public sealed record DlcListEntry(
     string SteamId,
     string DisplayName,
     string FilePath,
     bool? Owned,
-    DlcListSection Section);
+    DlcListSection Section,
+    DlcPatchCoverage Coverage = DlcPatchCoverage.None);
 
 /// <summary>
 /// 一次 DLC 列表规划的结果：磁盘行（已拥有段）+ Steam 独占的未拥有行 + 未拥有段的可用状态。
@@ -108,6 +114,11 @@ public sealed record DlcListPlan(
 /// <item>未拥有 = 报告 <c>Dlcs</c> 里「不在磁盘、也不在已拥有」的条目；名字取报告；空名字/空 appid 直接丢弃（绝不造空行）。</item>
 /// <item>可靠性闸门：报告条数 &gt; 200 或空名字占比 &gt; 50% 视为 loader 模板/不可信，整段不合成。</item>
 /// <item>报告为 null 或不是 <see cref="SteamOwnershipReport.HasOwnership"/> 时只保留磁盘行，拥有态记 null。</item>
+/// <item>
+/// loader 在岗时权威清单换成备份 <c>_o</c> 探到的账号视图（<c>report.Account</c>）：进程内 probe 读的是
+/// loader 的 ini 全表，条数又多又不是本游戏的，不能拿它算未拥有段。
+/// </item>
+/// <item>补丁覆盖：清单里有 + loader 在岗 = 已生效；清单里有但 loader 不在岗 = 可覆盖；读不到清单 = 未知。</item>
 /// <item>排序按名字（序数比较，不随系统语言变化），同名再按 appid、路径兜底，保证结果稳定。</item>
 /// </list>
 /// </summary>
@@ -120,22 +131,59 @@ public static class DlcListPlanner
     public const int MaxEmptyNamePercent = 50;
 
     /// <summary>
-    /// 规划列表：合并磁盘行与 Steam 报告，算出拥有态、未拥有条目与未拥有段状态。
+    /// 规划列表：合并磁盘行与 Steam 报告，算出拥有态、未拥有条目、补丁覆盖与未拥有段状态。
     /// </summary>
     /// <param name="diskRows">磁盘 DLC 行（顺序无所谓，输出会重新排序）。</param>
     /// <param name="report">最近一次授权探测的报告；null 表示没探测或 Steam 没运行。</param>
-    public static DlcListPlan Create(IEnumerable<DlcListDiskRow>? diskRows, SteamOwnershipReport? report)
+    /// <param name="patchedDlc">
+    /// 本游戏的补丁清单（<c>PatchDlcCatalog.ForGame</c>）。null 表示读不到清单
+    /// （素材缺失 / 解析失败），此时所有条目记 <see cref="DlcPatchCoverage.Unknown"/>；空列表表示清单里没有本游戏。
+    /// </param>
+    /// <param name="patchStatus">当前补丁态，决定「清单里有的 DLC」是已生效还是只是可覆盖。</param>
+    public static DlcListPlan Create(
+        IEnumerable<DlcListDiskRow>? diskRows,
+        SteamOwnershipReport? report,
+        IReadOnlyList<DlcEntry>? patchedDlc = null,
+        GamePatchStatus patchStatus = GamePatchStatus.Unsupported)
     {
-        var catalog = report?.Dlcs ?? (IReadOnlyList<SteamDlcOwnership>)Array.Empty<SteamDlcOwnership>();
+        // loader 在岗时，进程内 probe 读到的是 loader 自己的 ini 全表（真机 490 条，11 款游戏共用），
+        // 既撞「>200 条不可信」闸门、又把别人的 DLC 当成这游戏的。此时改用备份 _o 探到的账号视图：
+        // 那是 Steam 客户端的真实目录（Vic3 23 条、Stellaris 56 条），与 DlcOwnershipVerdict 的口径一致。
+        var loaderActive = report is { IsLoaderActive: true };
+        var accountView = loaderActive && report!.Account is { HasOwnership: true } account && account.Dlcs.Count > 0
+            ? account
+            : null;
+
+        var catalog = (IReadOnlyList<SteamDlcOwnership>?)accountView?.Dlcs
+            ?? report?.Dlcs
+            ?? Array.Empty<SteamDlcOwnership>();
         var trusted = report is { HasOwnership: true };
 
         // 已拥有 = 订阅集合 ∪ 采信的 DisabledDLC；两边都可能有空白项，统一 trim 后再比。
+        // loader 在岗时主探测的 OwnedAppIds 同样被 loader 污染（全表都算订阅），一并换成账号视图的。
         var owned = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (trusted)
         {
-            AddAll(owned, report!.OwnedAppIds);
-            AddAll(owned, report.TrustedDisabledDlc);
+            AddAll(owned, accountView is not null ? accountView.OwnedAppIds : report!.OwnedAppIds);
+            AddAll(owned, report!.TrustedDisabledDlc);
         }
+
+        // 补丁清单 → appid 集合；null 表示读不到清单，不能对任何一条下结论。
+        HashSet<string>? patched = null;
+        if (patchedDlc is not null)
+        {
+            patched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in patchedDlc)
+            {
+                var appId = entry?.SteamAppId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                if (!string.IsNullOrEmpty(appId))
+                {
+                    patched.Add(appId);
+                }
+            }
+        }
+
+        var loaderOnDuty = patchStatus is GamePatchStatus.Patched or GamePatchStatus.PatchedOther;
 
         var entries = new List<DlcListEntry>();
         var diskIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -165,7 +213,8 @@ public static class DlcListPlanner
                 row.DisplayName ?? string.Empty,
                 filePath,
                 isOwned,
-                DlcListSection.Disk));
+                DlcListSection.Disk,
+                CoverageOf(steamId, patched, loaderOnDuty)));
         }
 
         entries.Sort(CompareEntries);
@@ -221,7 +270,8 @@ public static class DlcListPlanner
                     name,
                     SteamDlcListBuilder.BuildDlcId(appId),
                     Owned: false,
-                    DlcListSection.SteamOnly));
+                    DlcListSection.SteamOnly,
+                    Coverage: CoverageOf(appId, patched, loaderOnDuty)));
             }
 
             unowned.Sort(CompareEntries);
@@ -259,6 +309,28 @@ public static class DlcListPlanner
     private static bool IsUntrusted(int catalogCount, int emptyNameCount) =>
         catalogCount > MaxCatalogEntries
         || (catalogCount > 0 && (long)emptyNameCount * 100 > (long)catalogCount * MaxEmptyNamePercent);
+
+    /// <summary>
+    /// 一条 DLC 的补丁覆盖判定。
+    /// <para>
+    /// 只有「清单里有」+「loader 在岗」才是 <see cref="DlcPatchCoverage.Applied"/>；
+    /// 清单里有但 loader 不在岗（含被 Steam 更新覆盖）只能说「可覆盖」——绝不能标成已打补丁。
+    /// </para>
+    /// </summary>
+    private static DlcPatchCoverage CoverageOf(string steamId, HashSet<string>? patched, bool loaderOnDuty)
+    {
+        if (patched is null)
+        {
+            return DlcPatchCoverage.Unknown;
+        }
+
+        if (steamId.Length == 0 || !patched.Contains(steamId))
+        {
+            return DlcPatchCoverage.None;
+        }
+
+        return loaderOnDuty ? DlcPatchCoverage.Applied : DlcPatchCoverage.Covered;
+    }
 
     private static void AddAll(HashSet<string> target, IReadOnlySet<string>? source)
     {

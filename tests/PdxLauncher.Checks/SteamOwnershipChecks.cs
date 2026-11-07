@@ -751,9 +751,12 @@ public static class SteamOwnershipChecks
         public GamePatchReport Inspect(GameInstallation game)
             => new(_status, _appId, _apiDirectory, _apiFileName, null, false, false, Array.Empty<string>());
 
-        public GamePatchReport Apply(GameInstallation game) => Inspect(game);
+        public GamePatchReport Apply(GameInstallation game, bool allowUnverifiedVersion = false) => Inspect(game);
 
         public GamePatchReport Revert(GameInstallation game) => Inspect(game);
+
+        /// <summary>本假服务没有素材目录，一律当作「读不到清单」。</summary>
+        public IReadOnlyList<DlcEntry>? DlcCatalogFor(string? gameId) => null;
     }
 
     /// <summary>可编程的假探针：既能返结果，也能断言「这条路不该探测」。</summary>

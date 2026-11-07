@@ -132,7 +132,8 @@ public sealed class ImageArtCache
             tasks.Add(EnsureAsync(pending[index], cancellationToken));
         }
 
-        await Task.WhenAll(tasks).ConfigureAwait(true);
+        // 预热只有文件 IO 与解码，没有 UI 属性赋值：不再回 UI 线程排队。
+        await Task.WhenAll(tasks).ConfigureAwait(false);
 
         if (pending.Count > eager)
         {
@@ -243,9 +244,12 @@ public sealed class ImageArtCache
                 return null;
             }
 
-            await _slots.WaitAsync(cancellationToken).ConfigureAwait(true);
+            await _slots.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                // 解码、编码、建目录、落盘全部留在同一个线程池任务里：这几步都是纯文件 IO，
+                // 以前最后两步跑在 UI 线程上，一页 30 张缩略图就能把消息泵按住好几秒。
+                // Remember 只往 _resolved 写一条（lock _gate），线程安全，不需要回 UI 线程。
                 var png = await Task.Run(
                     () =>
                     {
@@ -256,18 +260,24 @@ public sealed class ImageArtCache
                             return null;
                         }
 
-                        return DdsImage.EncodePng(DdsImage.ForceOpaque(decoded.Pixels));
+                        var bytes = DdsImage.EncodePng(DdsImage.ForceOpaque(decoded.Pixels));
+                        if (bytes.Length == 0)
+                        {
+                            return null;
+                        }
+
+                        _fileSystem.EnsureDirectory(_cacheDirectory);
+                        _fileSystem.WriteAllBytesAtomic(cached, bytes);
+                        Remember(path, cached);
+                        return bytes;
                     },
-                    cancellationToken).ConfigureAwait(true);
+                    cancellationToken).ConfigureAwait(false);
 
                 if (png is null || png.Length == 0)
                 {
                     return null;
                 }
 
-                _fileSystem.EnsureDirectory(_cacheDirectory);
-                _fileSystem.WriteAllBytesAtomic(cached, png);
-                Remember(path, cached);
                 _logger.Info("DDS 缩略图已转 PNG: " + path + " → " + cached);
                 return cached;
             }

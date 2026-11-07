@@ -20,4 +20,9 @@ public interface IPatchAssets
 
     /// <summary>取 <c>cream_api.ini</c> 模板文本；内置资源也缺失时返回 false。</summary>
     bool TryGetIniTemplate(out string text);
+
+    /// <summary>
+    /// 取按游戏分节的 DLC 源清单（<c>dlc-catalog.json</c>）；外部覆盖目录优先，内置资源也缺失时返回 false。
+    /// </summary>
+    bool TryGetDlcCatalog(out PatchDlcCatalog catalog);
 }

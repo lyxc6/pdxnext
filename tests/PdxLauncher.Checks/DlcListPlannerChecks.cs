@@ -32,6 +32,10 @@ public static class DlcListPlannerChecks
         CheckDiskRowsMatchReport();
         CheckStableOrder();
         CheckCatalogDeduplication();
+        CheckLoaderUsesAccountCatalog();
+        CheckPatchCoveredWhenLoaderOff();
+        CheckPatchUnknownWhenCatalogUnreadable();
+        CheckSteamOverwroteIsNotApplied();
         CheckTrustedDisabledCountsAsOwned();
         CheckEmptyDiskRows();
         CheckEmptyInputs();
@@ -272,6 +276,99 @@ public static class DlcListPlannerChecks
         ChecksContext.Equal("planner: 重复 appid 先到先得", "First", plan.Unowned[0].DisplayName);
     }
 
+    // ------------------------------------------------------------ 补丁覆盖
+
+    private static void CheckLoaderUsesAccountCatalog()
+    {
+        // 真机 Stellaris：打上补丁后，进程内 probe 读到的是 loader 的 ini（490 条 11 款游戏的全表），
+        // 会被「>200 条不可信」闸门拦下、未拥有段整段消失；备份 _o 探到的账号视图才是本游戏的 56 条。
+        var loaderRows = Range(490, 5000, "Loader Row ");
+        var accountRows = Range(56, 4000, "Account DLC ");
+        var patched = accountRows
+            .Select(static d => new DlcEntry(int.Parse(d.AppId, System.Globalization.CultureInfo.InvariantCulture), d.Name))
+            .ToList();
+
+        var plan = DlcListPlanner.Create(
+            [],
+            Report(
+                loaderRows,
+                account: AccountView(accountRows),
+                loaderActive: true,
+                patchStatus: GamePatchStatus.Patched),
+            patchedDlc: patched,
+            patchStatus: GamePatchStatus.Patched);
+
+        // 语义变化（连同 CheckCatalogTooLarge 一起看）：loader 在岗时不再拿被污染的主探测判可信度。
+        ChecksContext.Equal("planner: loader 在岗改读账号视图，未拥有 = 账号清单 56 条", 56, plan.UnownedCount);
+        ChecksContext.Equal("planner: loader 在岗时未拥有段可展示", DlcUnownedListState.Available, plan.UnownedState);
+        ChecksContext.Equal("planner: loader 在岗时的清单条数取账号视图", 56, plan.CatalogCount);
+        ChecksContext.Check(
+            "planner: 补丁生效时清单内的未拥有 DLC 记 Applied",
+            plan.Unowned.All(static e => e.Coverage == DlcPatchCoverage.Applied));
+    }
+
+    private static void CheckPatchCoveredWhenLoaderOff()
+    {
+        var accountRows = Range(56, 4100, "Account DLC ");
+        var patched = accountRows
+            .Select(static d => new DlcEntry(int.Parse(d.AppId, System.Globalization.CultureInfo.InvariantCulture), d.Name))
+            .ToList();
+
+        // 没打补丁（Vanilla）：清单里有它，但 loader 不在岗 —— 只能说「可覆盖」。
+        var plan = DlcListPlanner.Create(
+            [],
+            Report(accountRows),
+            patchedDlc: patched,
+            patchStatus: GamePatchStatus.Vanilla);
+
+        ChecksContext.Equal("planner: 未打补丁时未拥有仍可列出", 56, plan.UnownedCount);
+        ChecksContext.Check(
+            "planner: 未打补丁时清单内的 DLC 记 Covered",
+            plan.Unowned.All(static e => e.Coverage == DlcPatchCoverage.Covered));
+        ChecksContext.Check(
+            "planner: 未打补丁时绝不记 Applied",
+            plan.Unowned.All(static e => e.Coverage != DlcPatchCoverage.Applied));
+    }
+
+    private static void CheckPatchUnknownWhenCatalogUnreadable()
+    {
+        var accountRows = Range(56, 4200, "Account DLC ");
+
+        var plan = DlcListPlanner.Create(
+            [],
+            Report(accountRows, loaderActive: true, patchStatus: GamePatchStatus.Patched),
+            patchedDlc: null,
+            patchStatus: GamePatchStatus.Patched);
+
+        ChecksContext.Equal("planner: 清单读不到时未拥有仍可列出", 56, plan.UnownedCount);
+        ChecksContext.Check(
+            "planner: 清单读不到时一律记 Unknown（UI 不显示补丁徽标）",
+            plan.Unowned.All(static e => e.Coverage == DlcPatchCoverage.Unknown));
+    }
+
+    private static void CheckSteamOverwroteIsNotApplied()
+    {
+        var accountRows = Range(8, 4300, "Account DLC ");
+        var patched = accountRows
+            .Select(static d => new DlcEntry(int.Parse(d.AppId, System.Globalization.CultureInfo.InvariantCulture), d.Name))
+            .ToList();
+
+        // Steam 更新覆盖了补丁：清单里有这些 DLC，但补丁没在岗。
+        // 这里必须停在 Covered（UI 显示「补丁被覆盖」），绝不能升级成 Applied（「已打补丁」）。
+        var plan = DlcListPlanner.Create(
+            [],
+            Report(accountRows, patchStatus: GamePatchStatus.SteamOverwrote),
+            patchedDlc: patched,
+            patchStatus: GamePatchStatus.SteamOverwrote);
+
+        ChecksContext.Check(
+            "planner: 补丁被 Steam 覆盖时记 Covered 而不是 Applied",
+            plan.Unowned.All(static e => e.Coverage == DlcPatchCoverage.Covered));
+        ChecksContext.Check(
+            "planner: 补丁被 Steam 覆盖时没有任何已打补丁标记",
+            plan.Unowned.All(static e => e.Coverage != DlcPatchCoverage.Applied));
+    }
+
     private static void CheckTrustedDisabledCountsAsOwned()
     {
         var plan = DlcListPlanner.Create(
@@ -326,14 +423,39 @@ public static class DlcListPlannerChecks
 
     private static SteamDlcOwnership Dlc(string appId, string name) => new(appId, name, false, false);
 
+    /// <summary>造 <paramref name="count"/> 条未拥有的 Steam 清单行，AppID 从 <paramref name="firstAppId"/> 递增。</summary>
+    private static List<SteamDlcOwnership> Range(int count, int firstAppId, string namePrefix) =>
+        Enumerable
+            .Range(0, count)
+            .Select(i => Dlc(
+                (firstAppId + i).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                namePrefix + i))
+            .ToList();
+
+    /// <summary>账号视图（备份 _o 探到的那份清单）。</summary>
+    private static DlcAccountOwnership AccountView(
+        IReadOnlyList<SteamDlcOwnership> dlcs,
+        IEnumerable<string>? owned = null) =>
+        new(
+            State: SteamOwnershipState.Succeeded,
+            ApiFilePath: @"X:\steamapps\common\Stellaris\steam_api64_o.dll",
+            SteamId64: 76561198370719182,
+            Dlcs: dlcs,
+            OwnedAppIds: new HashSet<string>(owned ?? [], StringComparer.OrdinalIgnoreCase),
+            ErrorKey: null,
+            Detail: null);
+
     private static SteamOwnershipReport Report(
         IReadOnlyList<SteamDlcOwnership> dlcs,
         IEnumerable<string>? owned = null,
         IEnumerable<string>? trusted = null,
-        SteamOwnershipState state = SteamOwnershipState.Succeeded) =>
+        SteamOwnershipState state = SteamOwnershipState.Succeeded,
+        GamePatchStatus patchStatus = GamePatchStatus.Vanilla,
+        bool loaderActive = false,
+        DlcAccountOwnership? account = null) =>
         new(
             State: state,
-            PatchStatus: GamePatchStatus.Vanilla,
+            PatchStatus: patchStatus,
             SteamAppId: 281990,
             ApiDirectory: @"X:\steamapps\common\Stellaris",
             ApiFileName: "steam_api64.dll",
@@ -345,5 +467,7 @@ public static class DlcListPlannerChecks
             OwnedAppIds: new HashSet<string>(owned ?? [], StringComparer.OrdinalIgnoreCase),
             TrustedDisabledDlc: new HashSet<string>(trusted ?? [], StringComparer.OrdinalIgnoreCase),
             ErrorKey: null,
-            Detail: null);
+            Detail: null,
+            IsLoaderActive: loaderActive,
+            Account: account);
 }

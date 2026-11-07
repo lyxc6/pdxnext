@@ -112,6 +112,9 @@ public sealed class DlcArtworkService : IDlcArtworkService
                 {
                     index.Failures[id] = now;
                     touched = true;
+                    _logger.Warn(
+                        "DLC 头图：Steam appdetails 未返回可用头图（appid=" + id
+                        + "，可能是 bundle / 地区限制，或 header_image 不在白名单）");
                     continue;
                 }
 

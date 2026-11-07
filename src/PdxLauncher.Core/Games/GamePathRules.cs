@@ -25,5 +25,5 @@ public static class GamePathRules
 
     /// <summary>需要 ASCII 限制时返回对应的提示文案键，否则 null。</summary>
     public static string? DescribeAsciiRuleKey(string? gameId) =>
-        RequiresAsciiPaths(gameId) ? "mods.warnNonAsciiPath" : null;
+        RequiresAsciiPaths(gameId) ? "ModsWarnNonAsciiPath" : null;
 }

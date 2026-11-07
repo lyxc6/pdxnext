@@ -20,6 +20,13 @@ public enum GamePatchStatus
 
     /// <summary>Steam 更新把 api 文件覆盖回原版，但 <c>_o</c> 备份还在。</summary>
     SteamOverwrote,
+
+    /// <summary>
+    /// 未验证版本：目标 api 文件不在已知原版登记表里（未知版本 / 未知哈希）。
+    /// 这是「打补丁前被拦下等确认」的中间状态：此时没有写盘，UI 提示后允许用户确认再打
+    /// （<c>Apply(game, allowUnverifiedVersion: true)</c>）。
+    /// </summary>
+    UnverifiedVersion,
 }
 
 /// <summary>一次状态检查 / 打补丁 / 还原动作的结果。</summary>
@@ -41,6 +48,26 @@ public sealed record GamePatchReport(
     bool CanRevert,
     IReadOnlyList<string> PatchedFiles)
 {
+    /// <summary>
+    /// 当前「原版」文件（loader 在岗时是 <c>_o</c>，否则是当前 api 文件）在已知版本登记表里的匹配情况。
+    /// </summary>
+    public PatchVersionState VersionState { get; init; } = PatchVersionState.NotChecked;
+
+    /// <summary>命中登记表时的游戏版本号（例如 <c>1.15.0 (Ivan-Chai)</c>）；未命中为 null。</summary>
+    public string? MatchedVersion { get; init; }
+
+    /// <summary>命中登记表时的 Steam buildid；未命中为 null。</summary>
+    public string? MatchedBuildId { get; init; }
+
+    /// <summary>
+    /// 打补丁时发现已存在 <c>_o</c> 备份、且它既不是已知原版也不等于当前文件：
+    /// 为免毁掉唯一的原版，没有覆盖它，把要替换的当前文件另存归档。true 表示备份来源存疑。
+    /// </summary>
+    public bool BackupSuspect { get; init; }
+
+    /// <summary>备份来源存疑时，被替换掉的当前文件另存的归档路径（<c>steam_api64_o.bak-时间戳</c>）。</summary>
+    public string? BackupArchivePath { get; init; }
+
     /// <summary>是否已经有补丁痕迹（不论是不是本启动器打的）。</summary>
     public bool IsPatched =>
         Status is GamePatchStatus.Patched or GamePatchStatus.PatchedOther or GamePatchStatus.SteamOverwrote;

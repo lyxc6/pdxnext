@@ -137,7 +137,11 @@ public sealed class BitmapLoader
         }
     }
 
-    private static async Task<ImageSource?> CreateImageAsync(
+    /// <summary>
+    /// 字节 → ImageSource（.svg 走 <see cref="SvgImageSource"/>）。UI 线程只发起请求，解码自身异步。
+    /// 供 <see cref="ThemeApplier"/> 之类的调用方复用：它们自己在线程池读字节，避免重复实现流封送。
+    /// </summary>
+    internal static async Task<ImageSource?> CreateImageAsync(
         byte[] bytes,
         string path,
         int decodePixelWidth,

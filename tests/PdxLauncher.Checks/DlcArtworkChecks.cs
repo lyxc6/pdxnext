@@ -27,6 +27,9 @@ public static class DlcArtworkChecks
             CheckDownloadAndHit(fs, tempRoot);
             CheckDuplicateIds(fs, tempRoot);
             CheckUnownedRowsUseArtwork();
+            CheckEu5PrefersWideArtwork();
+            CheckSteamArtworkLetterboxed();
+            CheckRecheckRefillsArtwork();
             CheckFailureBackoff(fs, tempRoot);
             CheckWhitelist(fs, tempRoot);
             CheckUnavailable(fs, tempRoot);
@@ -135,6 +138,91 @@ public static class DlcArtworkChecks
             "DLC 头图: 按 appid 去重后再请求",
             body.Contains("Distinct(", StringComparison.Ordinal),
             "FillArtworkAsync 体内是否去重");
+        ChecksContext.Check(
+            "DLC 头图: 需要商店图的行由行视图模型判定",
+            body.Contains("NeedsSteamArtwork", StringComparison.Ordinal),
+            "FillArtworkAsync 体内是否用 NeedsSteamArtwork（EU5 本地行也要取图）");
+    }
+
+    // ------------------------------------------------------------ EU5 方形缩略图改用宽幅商店图（源码契约）
+
+    private static void CheckEu5PrefersWideArtwork()
+    {
+        var root = FindRepositoryRoot();
+        var path = Path.Combine(root, "src", "PdxLauncher.App", "ViewModels", "DlcViewModel.cs");
+        if (!ChecksContext.Check("DLC 头图: DlcViewModel.cs 存在（EU5）", File.Exists(path), path))
+        {
+            return;
+        }
+
+        var text = File.ReadAllText(path);
+        ChecksContext.Check(
+            "DLC 头图: EU5 行标记为方形缩略图",
+            text.Contains("LoadFileFormat.PlaysetsJsonV1", StringComparison.Ordinal)
+                && text.Contains("hasSquareThumbnail: isEu5", StringComparison.Ordinal),
+            "EU5 行是否传 hasSquareThumbnail");
+        ChecksContext.Check(
+            "DLC 头图: EU5 行优先商店宽幅图",
+            text.Contains("preferSteamArtwork: isEu5", StringComparison.Ordinal),
+            "EU5 行是否传 preferSteamArtwork");
+    }
+
+    // ------------------------------------------------------------ Steam 头图按原比例显示（源码契约）
+
+    private static void CheckSteamArtworkLetterboxed()
+    {
+        var root = FindRepositoryRoot();
+        var page = Path.Combine(root, "src", "PdxLauncher.App", "Views", "DlcPage.xaml");
+        if (!ChecksContext.Check("DLC 头图: DlcPage.xaml 存在", File.Exists(page), page))
+        {
+            return;
+        }
+
+        var text = File.ReadAllText(page);
+        ChecksContext.Check(
+            "DLC 头图: Steam 头图按原比例完整显示",
+            text.Contains("XamlStretch.ForDlcImage(FillsImageBox)", StringComparison.Ordinal),
+            "行模板的 Image.Stretch 是否走 XamlStretch（头图/方图用 Uniform，不裁角标）");
+
+        var helper = Path.Combine(root, "src", "PdxLauncher.App", "Services", "XamlStretch.cs");
+        if (!ChecksContext.Check("DLC 头图: XamlStretch 存在", File.Exists(helper), helper))
+        {
+            return;
+        }
+
+        ChecksContext.Check(
+            "DLC 头图: 本地横图填满、头图/方图留边",
+            File.ReadAllText(helper).Contains(
+                "fill ? Stretch.UniformToFill : Stretch.Uniform",
+                StringComparison.Ordinal),
+            helper);
+    }
+
+    // ------------------------------------------------------------ 「重新检测」后补图（源码契约）
+
+    private static void CheckRecheckRefillsArtwork()
+    {
+        var root = FindRepositoryRoot();
+        var path = Path.Combine(root, "src", "PdxLauncher.App", "ViewModels", "DlcViewModel.cs");
+        if (!ChecksContext.Check("DLC 头图: DlcViewModel.cs 存在", File.Exists(path), path))
+        {
+            return;
+        }
+
+        var text = File.ReadAllText(path);
+        var start = text.IndexOf("public async Task RefreshOwnershipAsync", StringComparison.Ordinal);
+        var end = text.IndexOf("private async Task<SteamOwnershipReport?> ProbeOwnershipAsync", StringComparison.Ordinal);
+        if (!ChecksContext.Check("DLC 头图: 找到 RefreshOwnershipAsync", start >= 0 && end > start, start + "/" + end))
+        {
+            return;
+        }
+
+        var body = text[start..end];
+        ChecksContext.Check(
+            "DLC 头图: 「重新检测」后补回头图",
+            body.Contains("if (force)", StringComparison.Ordinal)
+                && body.Contains("FillArtworkAsync", StringComparison.Ordinal),
+            "RefreshOwnershipAsync 是否在 force 时重新取图");
     }
 
     private static string FindRepositoryRoot()
@@ -224,10 +312,15 @@ public static class DlcArtworkChecks
         var cache = Path.Combine(tempRoot, "missing");
         var clock = new FakeClock(DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
         var http = new FakeHttpFetcher(_ => Json("{\"333\":{\"success\":false}}"));
-        var service = new DlcArtworkService(fs, http, clock, new NullLogger(), cache);
+        var logger = new RecordingLogger();
+        var service = new DlcArtworkService(fs, http, clock, logger, cache);
 
         var result = service.GetArtworkAsync(["333"], CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Check("DLC 头图: success=false 不抛且无路径", result.Count == 0, result.Count.ToString());
+        ChecksContext.Check(
+            "DLC 头图: 取不到图时写 Warn（带 appid）",
+            logger.Warnings.Exists(static w => w.Contains("333", StringComparison.Ordinal)),
+            string.Join(" | ", logger.Warnings));
     }
 
     // ------------------------------------------------------------ 取消
@@ -302,5 +395,21 @@ public static class DlcArtworkChecks
         public void Error(string message, Exception? exception = null)
         {
         }
+    }
+
+    /// <summary>收集 Warn/Error 的 logger：用来断言「取不到图」不是静默失败。</summary>
+    private sealed class RecordingLogger : IAppLogger
+    {
+        public List<string> Warnings { get; } = [];
+
+        public List<string> Errors { get; } = [];
+
+        public void Info(string message)
+        {
+        }
+
+        public void Warn(string message) => Warnings.Add(message);
+
+        public void Error(string message, Exception? exception = null) => Errors.Add(message);
     }
 }
