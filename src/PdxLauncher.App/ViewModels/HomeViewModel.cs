@@ -226,6 +226,10 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
             return;
         }
 
+        // 启动结果只经 LaunchCompleted → HomeInfoBar 展示；底部状态行只承载非启动状态，
+        // 这里先清掉上一段状态，避免旧文案与启动提示同时出现。
+        ClearStatus();
+
         IsBusy = true;
         try
         {
@@ -237,18 +241,6 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
             {
                 AppServices.Logger.Info(
                     "已启动 " + game.DisplayName + "（pid=" + (result.ProcessId?.ToString() ?? "未知") + "）");
-                SetStatus(Keys.HomeStatusLaunched, game.DisplayName);
-            }
-            else
-            {
-                if (result.ErrorMessage is { } errorMessage)
-                {
-                    SetStatus(Keys.HomeStatusLaunchFailed, errorMessage);
-                }
-                else
-                {
-                    SetStatus(Keys.HomeStatusLaunchFailedUnknown);
-                }
             }
 
             LaunchCompleted?.Invoke(this, result);
@@ -256,7 +248,6 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
         catch (Exception ex)
         {
             AppServices.Logger.Error("启动游戏异常（gameId=" + game.GameId + "）", ex);
-            SetStatus(Keys.HomeStatusLaunchFailed, ex.Message);
             LaunchCompleted?.Invoke(this, ProcessStartResult.Failure(ex.Message));
         }
         finally

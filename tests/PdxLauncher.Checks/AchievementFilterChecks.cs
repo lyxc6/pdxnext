@@ -314,43 +314,44 @@ public static class AchievementFilterChecks
     {
         foreach (var language in new[] { "zh-CN", "en-US" })
         {
-            var path = Path.Combine(workspace, "tools", "i18n", language, "achievements.json");
-            if (!ChecksContext.Check("成就筛选: " + language + " achievements.json 存在", File.Exists(path), path))
+            var path = I18nResw.ResourcesPath(workspace, language);
+            if (!ChecksContext.Check("成就筛选: " + language + " Resources.resw 存在", File.Exists(path), path))
             {
                 continue;
             }
 
-            using var document = JsonDocument.Parse(File.ReadAllText(path));
+            var table = I18nResw.Read(workspace, language);
             foreach (var key in FilterKeys)
             {
                 ChecksContext.Check(
                     "成就筛选: " + language + " 有 " + key,
-                    HasNonEmptyString(document.RootElement, key));
+                    !string.IsNullOrWhiteSpace(I18nResw.Get(table, key)));
             }
 
             // 「显示 N / 共 M」必须带两个占位符，否则计数永远显示成字面量。
+            var countText = I18nResw.Get(table, FilterCount);
             ChecksContext.Check(
                 "成就筛选: " + language + " filter.count 带两个占位符",
-                HasNonEmptyString(document.RootElement, FilterCount)
-                    && document.RootElement.GetProperty(FilterCount).GetString()!.Contains("{0}", StringComparison.Ordinal)
-                    && document.RootElement.GetProperty(FilterCount).GetString()!.Contains("{1}", StringComparison.Ordinal));
+                !string.IsNullOrWhiteSpace(countText)
+                    && countText.Contains("{0}", StringComparison.Ordinal)
+                    && countText.Contains("{1}", StringComparison.Ordinal));
         }
 
         // 筛选筛空的文案必须区别于「没有数据源」的三条：用户不能把「筛没了」读成「这游戏没成就」。
-        var zh = Path.Combine(workspace, "tools", "i18n", "zh-CN", "achievements.json");
+        var zh = I18nResw.ResourcesPath(workspace, "zh-CN");
         if (!File.Exists(zh))
         {
             return;
         }
 
-        using var zhDocument = JsonDocument.Parse(File.ReadAllText(zh));
-        var filterEmptyTitle = Read(zhDocument.RootElement, FilterEmptyTitle);
-        var filterEmptyMessage = Read(zhDocument.RootElement, FilterEmptyMessage);
+        var zhTable = I18nResw.Read(workspace, "zh-CN");
+        var filterEmptyTitle = I18nResw.Get(zhTable, FilterEmptyTitle) ?? string.Empty;
+        var filterEmptyMessage = I18nResw.Get(zhTable, FilterEmptyMessage) ?? string.Empty;
         var unavailable = new[]
         {
-            Read(zhDocument.RootElement, "achievements.unavailable.empty"),
-            Read(zhDocument.RootElement, "achievements.unavailable.notSupported"),
-            Read(zhDocument.RootElement, "achievements.unavailable.steamUnavailable"),
+            I18nResw.Get(zhTable, "achievements.unavailable.empty") ?? string.Empty,
+            I18nResw.Get(zhTable, "achievements.unavailable.notSupported") ?? string.Empty,
+            I18nResw.Get(zhTable, "achievements.unavailable.steamUnavailable") ?? string.Empty,
         };
 
         ChecksContext.Check(

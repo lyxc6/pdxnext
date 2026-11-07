@@ -1,5 +1,5 @@
 // 仅供 PdxLauncher.Checks 链接 App/ViewModels/AchievementsViewModel.cs 使用的最小本地化替身。
-// 真实实现依赖 WinUI 工程的 Localizer/Strings.g.cs；自检只关心状态机与文案键，不需要真译文。
+// 真实实现依赖 WinUI 工程的 Localizer 与 resw；自检只关心状态机与文案键，不需要真译文。
 namespace PdxLauncher.App.Localization;
 
 using System.Collections.Generic;
@@ -37,7 +37,7 @@ public abstract class LocalizedObservableObject : INotifyPropertyChanged
     }
 }
 
-/// <summary>成就相关文案键；取值与 Strings.g.cs 一致，避免自检与真实键名漂移。</summary>
+/// <summary>成就相关文案键；取值与 Resources.resw 一致，避免自检与真实键名漂移。</summary>
 internal static class Keys
 {
     public const string AchievementsCounts = "achievements.counts";
@@ -111,4 +111,17 @@ internal static class Keys
     public const string SavesStatusReading = "saves.status.reading";
     public const string SavesStatusScanning = "saves.status.scanning";
     public const string SavesVersion = "saves.version";
+
+    // DLC 行视图模型（DlcImageChecks 链接 DlcRowViewModel.cs 用）。取值与 Resources.resw 一致。
+    public const string DlcOwnedBadge = "dlc.ownedBadge";
+    public const string DlcOwnershipRowNoSteam = "dlc.ownershipRowNoSteam";
+    public const string DlcOwnershipRowToolTip = "dlc.ownershipRowToolTip";
+    public const string DlcPatchAppliedBadge = "dlc.patchAppliedBadge";
+    public const string DlcPatchCoverageToolTip = "dlc.patchCoverageToolTip";
+    public const string DlcPatchCoveredBadge = "dlc.patchCoveredBadge";
+    public const string DlcPatchOverwrittenBadge = "dlc.patchOverwrittenBadge";
+    public const string DlcToggleToolTip = "dlc.toggleToolTip";
+    public const string DlcToggleToolTipLocked = "dlc.toggleToolTipLocked";
+    public const string DlcUnknownBadge = "dlc.unknownBadge";
+    public const string DlcUnownedBadge = "dlc.unownedBadge";
 }

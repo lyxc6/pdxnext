@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:PdxLauncher.App.Controls"
+    xmlns:ct="using:CommunityToolkit.WinUI.Controls"
     xmlns:svc="using:PdxLauncher.App.Services"
     xmlns:vm="using:PdxLauncher.App.ViewModels"
     NavigationCacheMode="Disabled"
@@ -20,27 +21,50 @@
         </Style>
 
         <DataTemplate x:Key="MetricRowTemplate" x:DataType="vm:DiagnosticMetricViewModel">
-            <controls:SettingsValueCard Margin="0,0,0,8"
-                                        Header="{x:Bind Title}"
-                                        Description="{x:Bind Detail}"
-                                        Value="{x:Bind Value}"
-                                        ValueAutomationId="{x:Bind AutomationId}"
-                                        MaxValueWidth="320" />
+            <ct:SettingsCard Header="{x:Bind Title}"
+                             Description="{x:Bind Detail}"
+                             Background="{ThemeResource PdxCardBackgroundBrush}"
+                             BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                             BorderThickness="1"
+                             CornerRadius="8"
+                             MinHeight="56"
+                             Padding="16,12"
+                             IsClickEnabled="False"
+                             Margin="0,0,0,8">
+                <TextBlock Text="{x:Bind Value}"
+                           AutomationProperties.AutomationId="{x:Bind AutomationId}"
+                           ToolTipService.ToolTip="{x:Bind Value}"
+                           MaxWidth="320" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center" />
+            </ct:SettingsCard>
         </DataTemplate>
 
         <DataTemplate x:Key="HintRowTemplate" x:DataType="vm:DiagnosticHintViewModel">
-            <controls:SettingsCard Margin="0,0,0,8"
+            <ct:SettingsCard Margin="0,0,0,8"
                                    Header="{x:Bind Title}"
                                    Description="{x:Bind Detail}"
-                                   AutomationProperties.AutomationId="{x:Bind AutomationId}" />
+                                   AutomationProperties.AutomationId="{x:Bind AutomationId}"
+                             Background="{ThemeResource PdxCardBackgroundBrush}"
+                             BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                             BorderThickness="1"
+                             CornerRadius="8"
+                             MinHeight="56"
+                             Padding="16,12"
+                             IsClickEnabled="False" />
         </DataTemplate>
 
         <DataTemplate x:Key="CacheRowTemplate" x:DataType="vm:CacheRowViewModel">
-            <controls:SettingsCard Margin="0,0,0,8"
+            <ct:SettingsCard Margin="0,0,0,8"
                                    Header="{x:Bind Title, Mode=OneWay}"
                                    Description="{x:Bind Description, Mode=OneWay}"
-                                   ToolTipService.ToolTip="{x:Bind Path}">
-                <controls:SettingsCard.ActionContent>
+                                   ToolTipService.ToolTip="{x:Bind Path}"
+                             Background="{ThemeResource PdxCardBackgroundBrush}"
+                             BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                             BorderThickness="1"
+                             CornerRadius="8"
+                             MinHeight="56"
+                             Padding="16,12"
+                             IsClickEnabled="False">
                     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                         <ProgressRing Width="16"
                                       Height="16"
@@ -54,16 +78,21 @@
                                 IsEnabled="{x:Bind CanClear, Mode=OneWay}"
                                 Click="OnClearCacheRowClick" />
                     </StackPanel>
-                </controls:SettingsCard.ActionContent>
-            </controls:SettingsCard>
+            </ct:SettingsCard>
         </DataTemplate>
 
         <DataTemplate x:Key="NetworkRowTemplate" x:DataType="vm:NetworkHostRowViewModel">
-            <controls:SettingsCard Margin="0,0,0,8"
+            <ct:SettingsCard Margin="0,0,0,8"
                                    Header="{x:Bind Host}"
                                    Description="{x:Bind StatsText}"
-                                   AutomationProperties.AutomationId="{x:Bind AutomationId}">
-                <controls:SettingsCard.ActionContent>
+                                   AutomationProperties.AutomationId="{x:Bind AutomationId}"
+                             Background="{ThemeResource PdxCardBackgroundBrush}"
+                             BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                             BorderThickness="1"
+                             CornerRadius="8"
+                             MinHeight="56"
+                             Padding="16,12"
+                             IsClickEnabled="False">
                     <StackPanel VerticalAlignment="Center" Spacing="4">
                         <TextBlock Text="{x:Bind LastRequestText}"
                                    HorizontalAlignment="Right"
@@ -74,21 +103,25 @@
                                    Style="{StaticResource CaptionTextBlockStyle}"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </StackPanel>
-                </controls:SettingsCard.ActionContent>
-            </controls:SettingsCard>
+            </ct:SettingsCard>
         </DataTemplate>
 
         <DataTemplate x:Key="StartupRowTemplate" x:DataType="vm:StartupMarkRowViewModel">
-            <controls:SettingsCard Margin="0,0,0,8"
+            <ct:SettingsCard Margin="0,0,0,8"
                                    Header="{x:Bind Label}"
                                    Description="{x:Bind DeltaText}"
-                                   AutomationProperties.AutomationId="{x:Bind AutomationId}">
-                <controls:SettingsCard.ActionContent>
+                                   AutomationProperties.AutomationId="{x:Bind AutomationId}"
+                             Background="{ThemeResource PdxCardBackgroundBrush}"
+                             BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                             BorderThickness="1"
+                             CornerRadius="8"
+                             MinHeight="56"
+                             Padding="16,12"
+                             IsClickEnabled="False">
                     <TextBlock Text="{x:Bind ElapsedText}"
                                VerticalAlignment="Center"
                                FontFamily="Cascadia Mono, Consolas" />
-                </controls:SettingsCard.ActionContent>
-            </controls:SettingsCard>
+            </ct:SettingsCard>
         </DataTemplate>
     </Page.Resources>
 
@@ -213,9 +246,15 @@
                         </ItemsControl>
 
                         <TextBlock Text="{x:Bind L.DiagnosticsOverviewCountersTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
-                        <controls:SettingsCard Header="{x:Bind ViewModel.CacheTotalText, Mode=OneWay}"
-                                               Description="{x:Bind L.DiagnosticsCacheHint, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
+                        <ct:SettingsCard Header="{x:Bind ViewModel.CacheTotalText, Mode=OneWay}"
+                                               Description="{x:Bind L.DiagnosticsCacheHint, Mode=OneWay}"
+                                         Background="{ThemeResource PdxCardBackgroundBrush}"
+                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                         BorderThickness="1"
+                                         CornerRadius="8"
+                                         MinHeight="56"
+                                         Padding="16,12"
+                                         IsClickEnabled="False">
                                 <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                                     <ProgressRing Width="16" Height="16"
                                                   IsActive="{x:Bind ViewModel.IsCacheBusy, Mode=OneWay}"
@@ -224,8 +263,7 @@
                                             Content="{x:Bind L.SettingsCacheRefresh, Mode=OneWay}"
                                             Click="OnRefreshCacheClick" />
                                 </StackPanel>
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
+                        </ct:SettingsCard>
 
                         <TextBlock Text="{x:Bind L.DiagnosticsOverviewHintsTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
                         <ItemsControl ItemsSource="{x:Bind ViewModel.Hints, Mode=OneWay}"
@@ -246,8 +284,14 @@
                         <TextBlock Text="{x:Bind L.DiagnosticsSectionCache, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
                         <TextBlock Text="{x:Bind L.DiagnosticsCacheHint, Mode=OneWay}" Style="{StaticResource DiagnosticsHintTextStyle}" />
 
-                        <controls:SettingsCard Header="{x:Bind ViewModel.CacheTotalText, Mode=OneWay}">
-                            <controls:SettingsCard.ActionContent>
+                        <ct:SettingsCard Header="{x:Bind ViewModel.CacheTotalText, Mode=OneWay}"
+                                         Background="{ThemeResource PdxCardBackgroundBrush}"
+                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                         BorderThickness="1"
+                                         CornerRadius="8"
+                                         MinHeight="56"
+                                         Padding="16,12"
+                                         IsClickEnabled="False">
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                     <ProgressRing Width="16" Height="16"
                                                   IsActive="{x:Bind ViewModel.IsCacheBusy, Mode=OneWay}"
@@ -259,8 +303,7 @@
                                             Content="{x:Bind L.SettingsCacheClearAll, Mode=OneWay}"
                                             Click="OnClearAllCachesClick" />
                                 </StackPanel>
-                            </controls:SettingsCard.ActionContent>
-                        </controls:SettingsCard>
+                        </ct:SettingsCard>
 
                         <ItemsControl ItemsSource="{x:Bind ViewModel.CacheRows, Mode=OneWay}"
                                       ItemTemplate="{StaticResource CacheRowTemplate}">
@@ -277,8 +320,15 @@
                         <TextBlock Text="{x:Bind L.DiagnosticsSectionNetwork, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
                         <TextBlock Text="{x:Bind L.DiagnosticsNetworkHint, Mode=OneWay}" Style="{StaticResource DiagnosticsHintTextStyle}" />
 
-                        <controls:SettingsCard Header="{x:Bind L.DiagnosticsNetworkProxyTitle, Mode=OneWay}"
-                                               Description="{x:Bind ViewModel.ProxyText, Mode=OneWay}" />
+                        <ct:SettingsCard Header="{x:Bind L.DiagnosticsNetworkProxyTitle, Mode=OneWay}"
+                                               Description="{x:Bind ViewModel.ProxyText, Mode=OneWay}"
+                                         Background="{ThemeResource PdxCardBackgroundBrush}"
+                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                         BorderThickness="1"
+                                         CornerRadius="8"
+                                         MinHeight="56"
+                                         Padding="16,12"
+                                         IsClickEnabled="False" />
                         <InfoBar Severity="Warning"
                                  IsOpen="{x:Bind ViewModel.HasProxyWarning, Mode=OneWay}"
                                  IsClosable="False"
@@ -304,8 +354,15 @@
                         <TextBlock Text="{x:Bind L.DiagnosticsSectionStartup, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
                         <TextBlock Text="{x:Bind L.DiagnosticsPageSubtitle, Mode=OneWay}" Style="{StaticResource DiagnosticsHintTextStyle}" />
 
-                        <controls:SettingsCard Header="{x:Bind ViewModel.StartupTotalText, Mode=OneWay}"
-                                               Description="{x:Bind L.DiagnosticsStartupNote, Mode=OneWay}" />
+                        <ct:SettingsCard Header="{x:Bind ViewModel.StartupTotalText, Mode=OneWay}"
+                                               Description="{x:Bind L.DiagnosticsStartupNote, Mode=OneWay}"
+                                         Background="{ThemeResource PdxCardBackgroundBrush}"
+                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                         BorderThickness="1"
+                                         CornerRadius="8"
+                                         MinHeight="56"
+                                         Padding="16,12"
+                                         IsClickEnabled="False" />
                         <TextBlock Text="{x:Bind L.DiagnosticsStartupEmpty, Mode=OneWay}"
                                    Style="{StaticResource DiagnosticsHintTextStyle}"
                                    Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(ViewModel.HasStartupMarks), Mode=OneWay}" />
@@ -338,9 +395,15 @@
                     <TextBlock Text="{x:Bind L.DiagnosticsSectionLog, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
                     <TextBlock Text="{x:Bind L.DiagnosticsLogHint, Mode=OneWay}" Style="{StaticResource DiagnosticsHintTextStyle}" />
 
-                    <controls:SettingsCard Header="{x:Bind ViewModel.LogSummaryText, Mode=OneWay}"
-                                           Description="{x:Bind ViewModel.LogRotationText, Mode=OneWay}">
-                        <controls:SettingsCard.ActionContent>
+                    <ct:SettingsCard Header="{x:Bind ViewModel.LogSummaryText, Mode=OneWay}"
+                                           Description="{x:Bind ViewModel.LogRotationText, Mode=OneWay}"
+                                     Background="{ThemeResource PdxCardBackgroundBrush}"
+                                     BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                     BorderThickness="1"
+                                     CornerRadius="8"
+                                     MinHeight="56"
+                                     Padding="16,12"
+                                     IsClickEnabled="False">
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                 <ProgressRing Width="16" Height="16"
                                               IsActive="{x:Bind ViewModel.IsLogBusy, Mode=OneWay}"
@@ -352,8 +415,7 @@
                                         Content="{x:Bind L.DiagnosticsLogOpenFolder, Mode=OneWay}"
                                         Click="OnOpenLogFolderClick" />
                             </StackPanel>
-                        </controls:SettingsCard.ActionContent>
-                    </controls:SettingsCard>
+                    </ct:SettingsCard>
 
                     <TextBlock Text="{x:Bind ViewModel.LogLastWriteText, Mode=OneWay}"
                                Style="{StaticResource CaptionTextBlockStyle}"

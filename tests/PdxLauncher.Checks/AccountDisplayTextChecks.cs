@@ -82,18 +82,17 @@ public static class AccountDisplayTextChecks
 
         foreach (var language in languages)
         {
-            var path = RepoPath(Path.Combine("tools", "i18n", language, "account.json"));
+            var path = I18nResw.ResourcesPath(I18nResw.RepoRoot(), language);
             if (!File.Exists(path))
             {
                 ChecksContext.Check("账号页: 文案表存在", false, path);
                 continue;
             }
 
-            var lines = File.ReadAllLines(path);
+            var table = I18nResw.Read(I18nResw.RepoRoot(), language);
             foreach (var key in keys)
             {
-                var needle = "\"" + key + "\":";
-                var found = lines.Any(line => line.TrimStart().StartsWith(needle, StringComparison.Ordinal));
+                var found = I18nResw.Get(table, key) is not null;
                 ChecksContext.Check("账号页: " + language + " 有键 " + key, found, path);
             }
         }

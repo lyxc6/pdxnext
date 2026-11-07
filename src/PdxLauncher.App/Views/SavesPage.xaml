@@ -156,11 +156,54 @@
                         </Grid.ColumnDefinitions>
 
                         <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="4">
-                            <TextBlock Text="{x:Bind FileName, Mode=OneTime}"
-                                       Style="{StaticResource BodyStrongTextBlockStyle}"
-                                       TextWrapping="NoWrap"
-                                       TextTrimming="CharacterEllipsis"
-                                       ToolTipService.ToolTip="{x:Bind FilePath, Mode=OneTime}" />
+                            <!-- 文件名与「启发式解析 / 元数据不可读」标记同一行：标记不单独占行。
+                                 独立成行会让每行固定多出一段空白，滚动后徽标浮在行间；
+                                 第二段解析出降级标记时整行还会突然长高。 -->
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0"
+                                           Text="{x:Bind FileName, Mode=OneTime}"
+                                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"
+                                           ToolTipService.ToolTip="{x:Bind FilePath, Mode=OneTime}" />
+
+                                <StackPanel Grid.Column="1"
+                                            Orientation="Horizontal"
+                                            Spacing="8"
+                                            VerticalAlignment="Center"
+                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(HasTags), Mode=OneWay}">
+                                    <Border Padding="8,4"
+                                            CornerRadius="4"
+                                            VerticalAlignment="Center"
+                                            Background="{ThemeResource PdxCardGlassBrush}"
+                                            BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                            BorderThickness="1"
+                                            ToolTipService.ToolTip="{x:Bind ExperimentalTooltip, Mode=OneWay}"
+                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(IsExperimental), Mode=OneWay}">
+                                        <TextBlock Text="{x:Bind ExperimentalText, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </Border>
+
+                                    <Border Padding="8,4"
+                                            CornerRadius="4"
+                                            VerticalAlignment="Center"
+                                            Background="{ThemeResource PdxCardGlassBrush}"
+                                            BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                            BorderThickness="1"
+                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(IsDegraded), Mode=OneWay}">
+                                        <TextBlock Text="{x:Bind DegradedText, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
 
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <TextBlock Text="{x:Bind DateText, Mode=OneWay}"
@@ -179,35 +222,6 @@
                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                            TextTrimming="CharacterEllipsis"
                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(HasDetails), Mode=OneWay}" />
-                            </StackPanel>
-
-                            <StackPanel Orientation="Horizontal"
-                                        Spacing="8"
-                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(HasTags), Mode=OneWay}">
-                                <Border Padding="8,4"
-                                        CornerRadius="4"
-                                        VerticalAlignment="Center"
-                                        Background="{ThemeResource PdxCardGlassBrush}"
-                                        BorderBrush="{ThemeResource PdxCardStrokeBrush}"
-                                        BorderThickness="1"
-                                        ToolTipService.ToolTip="{x:Bind ExperimentalTooltip, Mode=OneWay}"
-                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(IsExperimental), Mode=OneWay}">
-                                    <TextBlock Text="{x:Bind ExperimentalText, Mode=OneWay}"
-                                               Style="{StaticResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                </Border>
-
-                                <Border Padding="8,4"
-                                        CornerRadius="4"
-                                        VerticalAlignment="Center"
-                                        Background="{ThemeResource PdxCardGlassBrush}"
-                                        BorderBrush="{ThemeResource PdxCardStrokeBrush}"
-                                        BorderThickness="1"
-                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(IsDegraded), Mode=OneWay}">
-                                    <TextBlock Text="{x:Bind DegradedText, Mode=OneWay}"
-                                               Style="{StaticResource CaptionTextBlockStyle}"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                </Border>
                             </StackPanel>
                         </StackPanel>
 

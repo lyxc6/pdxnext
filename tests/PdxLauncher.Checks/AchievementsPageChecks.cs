@@ -177,41 +177,30 @@ public static class AchievementsPageChecks
     {
         foreach (var language in new[] { "zh-CN", "en-US" })
         {
-            var achievementsPath = Path.Combine(root, "tools", "i18n", language, "achievements.json");
-            var shellPath = Path.Combine(root, "tools", "i18n", language, "shell.json");
-
+            var path = I18nResw.ResourcesPath(root, language);
             if (!ChecksContext.Check(
-                    "成就页: " + language + " achievements.json 存在",
-                    File.Exists(achievementsPath),
-                    achievementsPath))
+                    "成就页: " + language + " Resources.resw 存在",
+                    File.Exists(path),
+                    path))
             {
                 continue;
             }
 
-            using var achievements = JsonDocument.Parse(File.ReadAllText(achievementsPath));
+            var table = I18nResw.Read(root, language);
             foreach (var key in EmptyStateKeys)
             {
                 ChecksContext.Check(
                     "成就页: " + language + " 有 " + key,
-                    HasNonEmptyString(achievements.RootElement, key));
+                    !string.IsNullOrWhiteSpace(I18nResw.Get(table, key)));
             }
 
             ChecksContext.Check(
                 "成就页: " + language + " 有 achievements.title",
-                HasNonEmptyString(achievements.RootElement, "achievements.title"));
+                !string.IsNullOrWhiteSpace(I18nResw.Get(table, "achievements.title")));
 
-            if (!ChecksContext.Check(
-                    "成就页: " + language + " shell.json 存在",
-                    File.Exists(shellPath),
-                    shellPath))
-            {
-                continue;
-            }
-
-            using var shell = JsonDocument.Parse(File.ReadAllText(shellPath));
             ChecksContext.Check(
                 "成就页: " + language + " 有 shell.nav.achievements",
-                HasNonEmptyString(shell.RootElement, "shell.nav.achievements"));
+                !string.IsNullOrWhiteSpace(I18nResw.Get(table, "shell.nav.achievements")));
         }
 
         CheckEmptyStateMessagesAreDistinct(root);
@@ -222,20 +211,19 @@ public static class AchievementsPageChecks
     /// </summary>
     private static void CheckEmptyStateMessagesAreDistinct(string root)
     {
-        var path = Path.Combine(root, "tools", "i18n", "zh-CN", "achievements.json");
+        var path = I18nResw.ResourcesPath(root, "zh-CN");
         if (!File.Exists(path))
         {
             return;
         }
 
-        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var table = I18nResw.Read(root, "zh-CN");
         var values = new List<string>();
         foreach (var key in EmptyStateKeys)
         {
-            if (document.RootElement.TryGetProperty(key, out var value)
-                && value.ValueKind == JsonValueKind.String)
+            if (I18nResw.Get(table, key) is { } value)
             {
-                values.Add(value.GetString() ?? string.Empty);
+                values.Add(value);
             }
         }
 

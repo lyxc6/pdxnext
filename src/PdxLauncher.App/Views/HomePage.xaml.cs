@@ -245,7 +245,12 @@ public sealed partial class HomePage : Page
         try
         {
             var spec = game?.Theme ?? ThemeApplier.CreatePlaceholderSpec();
-            var visuals = _themeApplier?.Create(spec);
+
+            // 素材解码交给 ThemeApplier 的异步版：整窗背景/字标动辄 1900px，
+            // 同步 new BitmapImage { UriSource } 会在 UI 线程上开文件读头，切游戏时就是一段卡顿。
+            var visuals = _themeApplier is null
+                ? null
+                : await _themeApplier.CreateAsync(spec, cancellationToken).ConfigureAwait(true);
             if (visuals is null)
             {
                 return;

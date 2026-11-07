@@ -33,7 +33,35 @@ internal static class SearchSuggestBox
             return;
         }
 
-        box.ItemsSource = items;
+        // 建议列表没变就不要重设 ItemsSource：每按一个键都换一遍会让下拉整块重建、
+        // 已选中的候选项丢失，视觉上就是下拉闪一下。
+        if (!IsSameSequence(box.ItemsSource, items))
+        {
+            box.ItemsSource = items;
+        }
+
         box.IsSuggestionListOpen = true;
+    }
+
+    /// <summary>比较当前 ItemsSource 与刚算出来的建议是否完全一致。</summary>
+    private static bool IsSameSequence(object? current, IReadOnlyList<string> items)
+    {
+        if (current is not IEnumerable<string> existing)
+        {
+            return false;
+        }
+
+        var index = 0;
+        foreach (var item in existing)
+        {
+            if (index >= items.Count || !string.Equals(item, items[index], StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            index++;
+        }
+
+        return index == items.Count;
     }
 }

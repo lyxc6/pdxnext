@@ -436,37 +436,26 @@ public static class SavesPageChecks
     {
         foreach (var language in new[] { "zh-CN", "en-US" })
         {
-            var savesPath = Path.Combine(root, "tools", "i18n", language, "saves.json");
-            var shellPath = Path.Combine(root, "tools", "i18n", language, "shell.json");
-
+            var path = I18nResw.ResourcesPath(root, language);
             if (!ChecksContext.Check(
-                    "存档页: " + language + " saves.json 存在",
-                    File.Exists(savesPath),
-                    savesPath))
+                    "存档页: " + language + " Resources.resw 存在",
+                    File.Exists(path),
+                    path))
             {
                 continue;
             }
 
-            using var saves = JsonDocument.Parse(File.ReadAllText(savesPath));
+            var table = I18nResw.Read(root, language);
             foreach (var key in RequiredKeys.Concat(EmptyStateKeys))
             {
                 ChecksContext.Check(
                     "存档页: " + language + " 有 " + key,
-                    HasNonEmptyString(saves.RootElement, key));
+                    !string.IsNullOrWhiteSpace(I18nResw.Get(table, key)));
             }
 
-            if (!ChecksContext.Check(
-                    "存档页: " + language + " shell.json 存在",
-                    File.Exists(shellPath),
-                    shellPath))
-            {
-                continue;
-            }
-
-            using var shell = JsonDocument.Parse(File.ReadAllText(shellPath));
             ChecksContext.Check(
                 "存档页: " + language + " 有 shell.nav.saves",
-                HasNonEmptyString(shell.RootElement, "shell.nav.saves"));
+                !string.IsNullOrWhiteSpace(I18nResw.Get(table, "shell.nav.saves")));
         }
 
         CheckEmptyStateMessagesAreDistinct(root);
@@ -478,13 +467,12 @@ public static class SavesPageChecks
     /// </summary>
     private static void CheckEmptyStateMessagesAreDistinct(string root)
     {
-        var path = Path.Combine(root, "tools", "i18n", "zh-CN", "saves.json");
-        if (!File.Exists(path))
+        if (!File.Exists(I18nResw.ResourcesPath(root, "zh-CN")))
         {
             return;
         }
 
-        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var table = I18nResw.Read(root, "zh-CN");
         var values = new List<string>();
         foreach (var key in new[]
                  {
@@ -493,10 +481,9 @@ public static class SavesPageChecks
                      "saves.empty.failed.message",
                  })
         {
-            if (document.RootElement.TryGetProperty(key, out var value)
-                && value.ValueKind == JsonValueKind.String)
+            if (I18nResw.Get(table, key) is { } value)
             {
-                values.Add(value.GetString() ?? string.Empty);
+                values.Add(value);
             }
         }
 

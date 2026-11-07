@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:PdxLauncher.App.Controls"
+    xmlns:ct="using:CommunityToolkit.WinUI.Controls"
     xmlns:svc="using:PdxLauncher.App.Services"
     NavigationCacheMode="Disabled"
     Background="{ThemeResource PdxPageVeilBrush}">
@@ -205,17 +206,22 @@
                     </Grid>
                 </Border>
 
-                <controls:SettingsCard Header="{x:Bind L.AccountRemember, Mode=OneWay}"
-                                       Description="{x:Bind L.AccountRememberHint, Mode=OneWay}">
-                    <controls:SettingsCard.ActionContent>
+                <ct:SettingsCard Header="{x:Bind L.AccountRemember, Mode=OneWay}"
+                                       Description="{x:Bind L.AccountRememberHint, Mode=OneWay}"
+                                 Background="{ThemeResource PdxCardBackgroundBrush}"
+                                 BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                 BorderThickness="1"
+                                 CornerRadius="8"
+                                 MinHeight="56"
+                                 Padding="16,12"
+                                 IsClickEnabled="False">
                         <ToggleSwitch AutomationProperties.AutomationId="swAccountRememberSignedIn"
                                       AutomationProperties.Name="{x:Bind L.AccountRemember, Mode=OneWay}"
                                       OnContent=""
                                       OffContent=""
                                       IsOn="{x:Bind ViewModel.Remember, Mode=TwoWay}"
                                       IsEnabled="{x:Bind ViewModel.IsSignedIn, Mode=OneWay}" />
-                    </controls:SettingsCard.ActionContent>
-                </controls:SettingsCard>
+                </ct:SettingsCard>
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

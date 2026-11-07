@@ -657,23 +657,22 @@ public static class SavesActionsChecks
 
     private static void CheckLocalizationKeys(string workspace)
     {
-        var zhPath = Path.Combine(workspace, "tools", "i18n", "zh-CN", "saves.json");
-        var enPath = Path.Combine(workspace, "tools", "i18n", "en-US", "saves.json");
+        var zhPath = I18nResw.ResourcesPath(workspace, "zh-CN");
+        var enPath = I18nResw.ResourcesPath(workspace, "en-US");
         if (!ChecksContext.Check("存档页文案: 中文源存在", File.Exists(zhPath), zhPath)
             || !ChecksContext.Check("存档页文案: 英文源存在", File.Exists(enPath), enPath))
         {
             return;
         }
 
-        var zh = File.ReadAllText(zhPath);
-        var en = File.ReadAllText(enPath);
+        var zh = I18nResw.Read(workspace, "zh-CN");
+        var en = I18nResw.Read(workspace, "en-US");
 
         foreach (var key in NewLocalizationKeys)
         {
-            var token = "\"" + key + "\"";
             ChecksContext.Check(
                 "存档页文案: 中英都有 " + key,
-                zh.Contains(token, StringComparison.Ordinal) && en.Contains(token, StringComparison.Ordinal));
+                I18nResw.Get(zh, key) is not null && I18nResw.Get(en, key) is not null);
         }
     }
 
