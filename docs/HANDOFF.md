@@ -7372,6 +7372,23 @@ mod 名和行尾三个按钮完全看不见，右栏也不能滚动到这些内�
 
 ---
 
+## 0.97 2026-11-08：版本大分支的生命周期（1.3 → main → 1.4）
+
+**问题**：§0.96 只解决了「版本内」的对话分支。`feat/1.3 → main` 没有可执行步骤（VERSIONING §4 第 4 步只写「提交并推送 main」，预设人已经在 main 上），开 1.4 的时机与命令完全没写，版本分支名散落在 `AGENTS.md` / `AGENT-WORKFLOW.md` / `VERSIONING.md` 共 6 处，发版时必漏改；发版时还挂着 `sess/*` 也没有规则。
+
+**改法**：
+- 新增仓库根 `integration-branch`（一行 `feat/1.3`）作为当前集成分支的**唯一来源**。`scripts/session.ps1 open` 硬校验当前分支必须是它（`-Force` 只给发版 / 热修），`list` 打印它，`close` 在基线与它不一致时提醒（1.3.x 维护仍可合回旧分支）。
+- `docs/VERSIONING.md` §4 第 4 步改成可执行命令：`git switch main` → `git pull --ff-only` → `git merge --no-ff <集成分支> -m "merge: 发布 <version>（<集成分支>）"` → `git push origin main`，并要求发版前 `session.ps1 list` 为空。
+- 新增 §5.1「发完版开下一个大分支」：从 `main` 拉 `feat/1.4`、`push -u`、把 `integration-branch` 改成新分支、`version.props` 仍停 1.3.0、旧 `feat/1.3` 保留到 1.4.0 只做维护。
+- §5 补：`main` 只接受当前集成分支或 `hotfix/*`；hotfix 合进 main 后在研集成分支必须把 main 合回来；对话分支不 push。
+- `AGENTS.md` 去掉写死的 `feat/1.3`（改为指向 `integration-branch`），新增「1.3 换 1.4 时只改哪一处」；`docs/AGENT-WORKFLOW.md` §2 同步。
+
+**验证**：脚本语法检查；`open` 在非集成分支上被拒、`-Force` 放行；`close` 合回后 `integration-branch` 与当前分支一致；`list` 正确打印集成分支。
+
+**注意**：以后换版本只改 `integration-branch` 一行，不要在其他文档里写死版本分支名；`HANDOFF.md` 历史条目里的 `feat/1.3` 是当时快照，保留不改。
+
+---
+
 ## 2026-11-06 勘误（设置页 6→8 分类、14→16 DIP）
 
 以 `feat/1.3` HEAD `ac7225e` 复核现状，本轮只改文档、未动代码。以下与正文若干历史小节不一致之处，以此节为准：

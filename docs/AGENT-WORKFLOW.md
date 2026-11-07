@@ -17,22 +17,27 @@
 
 ## 2. 分支
 
-- `main` 永远可发布；1.3 期间的集成分支是 `feat/1.3`。
-- **一个对话一个分支**：每轮新对话开工先跑
+- `main` 永远可发布；**当前集成分支**记在仓库根 `integration-branch`（一行，1.3 期间是 `feat/1.3`，
+  1.4 起是 `feat/1.4`）。这是唯一来源，不要把版本分支名写死在别的文档或脚本里。
+- **一个对话一个分支**：每轮新对话先 `git switch <集成分支>`，再跑
 
   ```bat
   pwsh -File scripts/session.ps1 open <slug>
   ```
 
-  得到 `sess/YYYYMMDD-<slug>`，基线是**对话开始时的当前分支**（通常是 `feat/1.3`）。
-  对话期间所有提交都留在它上面，不往起始分支写任何东西。
+  得到 `sess/YYYYMMDD-<slug>`，基线是**对话开始时的当前分支**。
+  `open` 会硬校验当前分支就是 `integration-branch` 记录的集成分支；发版 / 热修要从别处起才加 `-Force`。
+  对话期间所有提交都留在 sess 分支，不往起始分支写任何东西。
 - 对话结束、验收通过后跑 `pwsh -File scripts/session.ps1 close -Message "中文说明"`：
   `--no-ff` 合回起始分支（合并信息 `merge: 中文说明（sess/…）`），删掉 sess 分支并切回起始分支。
   **一个对话只合并一次**；没做完就不合并，分支留着写进汇报。
 - 并行写任务仍在 worktree 里开 `feat/<task>`，但基线是**本对话的 sess 分支**，合回也是 sess 分支，
-  不再直接合 `feat/1.3`。
-- 1.3.0 发版时才 `feat/1.3` → `main`，并按 `docs/VERSIONING.md` §4 全流程走（含本机安装版本校验）。
-- **1.3 期间不改 `version.props`**，版本号停在 1.2.2；改动累积在 `CHANGELOG.md` 的 `[Unreleased]` 下。
+  不再直接合集成分支。
+- **发版前先收尾**：`pwsh -File scripts/session.ps1 list` 必须为空。发版后集成分支保持只读（只接受
+  `<version>.x` 维护改动，如 1.3.x 修 bug），新对话一律在新集成分支上开。
+- `<version>.0` 发版时才 `集成分支 → main`，按 `docs/VERSIONING.md` §4 走完整流程（含本机安装版本校验）；
+  发版后按 §5.1 开下一个大分支，并把 `integration-branch` 指向它。
+- **发版前不改 `version.props`**，版本号停在上一个已发布版本；改动累积在 `CHANGELOG.md` 的 `[Unreleased]` 下。
 
 ## 3. 派活模板（每个 subagent 的 brief 必须包含这七项）
 

@@ -29,6 +29,7 @@
 
 ### Changed
 
+- 版本大分支的生命周期写进规范：仓库根新增 `integration-branch`（唯一记录当前集成分支，现在是 `feat/1.3`），`scripts/session.ps1 open` 硬校验必须站在它上面（`-Force` 只给发版 / 热修），`list` 打印它，`close` 在基线与它不一致时提醒。`docs/VERSIONING.md` §4 把「提交并推送 main」改成可执行的 `git merge --no-ff <集成分支>` 并加发版前收尾 `sess/*` 检查，新增 §5.1「发完版开下一个大分支」（1.3.0 发布后从 `main` 拉 `feat/1.4`、推送、改 `integration-branch`，旧分支保留到 1.4.0 只做维护）；§5 补 `main` 只接受当前集成分支或 `hotfix/*`、hotfix 后要把 `main` 合回在研集成分支。`AGENTS.md` 与 `docs/AGENT-WORKFLOW.md` §2 同步去掉写死的版本分支名。
 - 协作规范改为**一个对话一个分支**：根目录新增 `AGENTS.md`（开工 / 收尾硬规则）与 `scripts/session.ps1`（`open` 建 `sess/YYYYMMDD-<slug>`、`close` 构建自检后 `--no-ff` 合回起始分支并删除、`list` 查看进行中的对话）；开工时已存在的未提交改动会跟随到新分支并提交成 `wip(session)` 基线。`docs/AGENT-WORKFLOW.md` §2/§3/§4/§8/§9 同步从「任务级 `feat/<task>` 直接合 `feat/1.3`」改为「对话级 sess 分支，`feat/<task>` 仅在 worktree 内并行时使用」。
 - 移除 `run.cmd` / `run-debug.cmd` 两个纯启动脚本：Release 只启动改用 `dev.cmd nobuild`，Debug 用 `start.cmd debug`（构建后启动）；同步删除 `R_*` / `RD_*` 文案、VS Code「启动 Debug」任务与文档里的引用。
 - 创意工坊筛选栏：标签列表不再被每组的 240 DIP 内层滚动条压缩（V3 的 24 个类别以前只显示 10 行），现在整组铺开、窗口不够高时由外侧整栏滚动。

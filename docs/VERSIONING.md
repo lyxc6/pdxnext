@@ -64,7 +64,17 @@ PdxNext 采用 [Semantic Versioning 2.0](https://semver.org/lang/zh-CN/)：`MAJO
 
    安装后如果启动器自动拉起，先退出再跑校验。**校验不通过不能提交发版。**
 
-4. 提交并推送 `main`。
+4. 把集成分支合进 `main`（`--no-ff`，保留一个发布点）：
+
+   ```bat
+   git switch main
+   git pull --ff-only
+   git merge --no-ff <集成分支> -m "merge: 发布 <version>（<集成分支>）"
+   git push origin main
+   ```
+
+   集成分支就是仓库根 `integration-branch` 的内容（1.3 期间是 `feat/1.3`）。
+   发版前先确认没有未收尾的对话分支：`pwsh -File scripts/session.ps1 list` 应为空。
 5. 打 tag 并推送：
 
    ```bat
@@ -82,12 +92,44 @@ PdxNext 采用 [Semantic Versioning 2.0](https://semver.org/lang/zh-CN/)：`MAJO
 
 ## 5. 分支与热修
 
-- `main` 始终保持可发布；功能在 `feat/*`，修复在 `fix/*`。
-- `sess/YYYYMMDD-*` 是**对话级临时分支**（`scripts/session.ps1 open/close` 管理）：从当前分支拉出、
+- `main` 始终保持可发布；日常开发在**当前集成分支**上（仓库根 `integration-branch` 的内容，
+  1.3 期间是 `feat/1.3`），每个对话再从它拉 `sess/YYYYMMDD-*`。
+- `sess/*` 是**对话级临时分支**（`scripts/session.ps1 open/close` 管理）：从当前分支拉出、
   对话结束 `--no-ff` 合回后删除，**永不作为发布来源**，也不打 tag。
-- `main` 只接受 `feat/1.3`（发版）或 `hotfix/*`（线上故障）合入。
-- 线上故障：从对应 tag 拉 `hotfix/x.y.z`，只改最小范围，PATCH +1，走同一套 tag 流程。
+- `main` 只接受**当前集成分支**（发版）或 `hotfix/*`（线上故障）合入。
+- 集成分支在发版后进入维护期：只接受 `<version>.x` 修 bug，新功能一律去新集成分支。
+- 线上故障：从对应 tag 拉 `hotfix/x.y.z`，只改最小范围，PATCH +1，走同一套 tag 流程；
+  合进 `main` 后，在研集成分支必须把 `main` 合回来，否则下个版本会丢掉这个热修。
 - 不做“静默改版本号”的 force push；`version.props` 一旦进入 Release 就不再改，重新发版必须递增。
+- 集成分支与 `main` 的推送只由协调者在发版流程里做；对话分支不 push。
+
+## 5.1 发完版开下一个大分支
+
+以 1.3.0 → 1.4 为例：
+
+1. 收尾所有对话分支：`pwsh -File scripts/session.ps1 list` 为空。
+2. 确认 1.3.0 已按 §4 合进 `main` 并打好 tag `v1.3.0`。
+3. 从 `main` 拉新集成分支（不要在旧集成分支上继续开发）：
+
+   ```bat
+   git switch main
+   git pull --ff-only
+   git switch -c feat/1.4
+   git push -u origin feat/1.4
+   ```
+
+4. 把仓库根 `integration-branch` 改成新分支并提交——这是唯一需要改的配置：
+
+   ```bat
+   echo feat/1.4> integration-branch
+   git add integration-branch
+   git commit -m "chore(branch): 1.4 集成分支改为 feat/1.4"
+   ```
+
+5. `version.props` 先不动（仍停 1.3.0），`CHANGELOG.md` 保留 `[Unreleased]`；
+   等 1.4.0 发版时才按 §4 改。
+6. 旧 `feat/1.3` **保留到 1.4.0 发版**，期间只接受 1.3.x 维护改动（同样用 `sess/*` 分支，
+   基线写 `feat/1.3`）；1.4.0 发布后再删除。
 
 ## 6. 与安装/更新的兼容约定
 
