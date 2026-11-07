@@ -16,6 +16,7 @@ using PdxLauncher.Core.Steam;
 /// <para>
 /// 本类**不**加载任何原生库、**不**调 <c>SteamAPI_Init</c>：原生调用全部发生在
 /// <c>--steam-host achievements</c> 的子进程里（见 <see cref="SteamHostProtocol.AchievementsVerb"/>）。
+/// 子进程是一次性的：读完即退，Steam 侧的「游戏正在运行」登记随之消失。
 /// 这里只做四件事：判断 appid、找 <c>steam_api64.dll</c>、解析宿主那行 JSON、
 /// 用游戏自己的 <c>localization/&lt;lang&gt;/*.yml</c> 覆盖显示名/描述。
 /// </para>
@@ -34,20 +35,15 @@ public sealed class SteamAchievementSource : IAchievementSource
     private readonly Func<string?> _settingsApiPath;
     private readonly Func<GameInstallation?> _currentGame;
     private readonly Func<string?> _uiLanguage;
-    private readonly SteamHostSession? _session;
 
     /// <summary>构造。</summary>
-    /// <param name="client">宿主客户端（一次性调用的兜底路径）。</param>
+    /// <param name="client">宿主客户端（一次性调用）。</param>
     /// <param name="locator"><c>steam_api64.dll</c> 定位器。</param>
     /// <param name="fileSystem">文件系统（读游戏本地化）。</param>
     /// <param name="logger">日志。</param>
     /// <param name="settingsApiPath">取「用户手填的 DLL 路径」；每次调用时现取，设置改了立即生效。</param>
     /// <param name="currentGame">取当前游戏（用于在游戏目录里找 DLL 和本地化）；每次调用时现取。</param>
     /// <param name="uiLanguage">取启动器界面语言（语言回退链的第二级）；为空时读 <see cref="CultureInfo.DefaultThreadCurrentUICulture"/>。</param>
-    /// <param name="session">
-    /// 常驻宿主会话；给了就走「worker 复用」，没给（或会话已释放）就走原来的一次性宿主。
-    /// 会话内部自己处理「起不来 / 版本不符 / 崩溃」的回落，所以这里不需要再判断。
-    /// </param>
     public SteamAchievementSource(
         SteamHostClient client,
         SteamApiLocator locator,
@@ -55,8 +51,7 @@ public sealed class SteamAchievementSource : IAchievementSource
         IAppLogger logger,
         Func<string?> settingsApiPath,
         Func<GameInstallation?> currentGame,
-        Func<string?>? uiLanguage = null,
-        SteamHostSession? session = null)
+        Func<string?>? uiLanguage = null)
     {
         _client = client ?? throw new ArgumentNullException(nameof(client));
         _locator = locator ?? throw new ArgumentNullException(nameof(locator));
@@ -65,7 +60,6 @@ public sealed class SteamAchievementSource : IAchievementSource
         _settingsApiPath = settingsApiPath ?? throw new ArgumentNullException(nameof(settingsApiPath));
         _currentGame = currentGame ?? throw new ArgumentNullException(nameof(currentGame));
         _uiLanguage = uiLanguage ?? (() => CultureInfo.DefaultThreadCurrentUICulture?.Name);
-        _session = session;
     }
 
     /// <summary>一次读取最多试几份 DLL（每份要多起 1-2 个宿主进程，不能无限试）。</summary>
@@ -157,16 +151,9 @@ public sealed class SteamAchievementSource : IAchievementSource
                     continue;
                 }
 
-                // 有常驻会话就走会话（Init 只付一次、崩溃重启一次、不行再回落一次性宿主）；
-                // 没有会话或降低到一次性宿主时，仍按老路子起短命子进程。
-                // 会话内部已经把崩溃 / 非 0 退出处理成结果码了，所以这里把退出码记成 0，
-                // 免得下面的「崩溃换候选」分支把会话刚做过的一次性回落又当成本份 DLL 崩溃。
-                var run = _session is { } session
-                    ? new SteamAchievementsHostRun(
-                        await session.ReadAchievementsAsync(candidate, appId, cancellationToken).ConfigureAwait(false),
-                        SteamHostProtocol.ExitOk,
-                        TimedOut: false)
-                    : await _client.AchievementsRunAsync(candidate, appId, cancellationToken).ConfigureAwait(false);
+                // 一次性宿主：每份候选起一个短命进程，读完即退。刻意不做常驻复用，
+                // 否则 Steam 在两次读取之间仍会把这个 appid 登记成「游戏正在运行」。
+                var run = await _client.AchievementsRunAsync(candidate, appId, cancellationToken).ConfigureAwait(false);
                 if (SteamHostClient.IsCrashExit(run.ExitCode))
                 {
                     // loader 形态的 DLL 会在 DllMain / 初始化里直接崩掉子进程（0xC0000005），

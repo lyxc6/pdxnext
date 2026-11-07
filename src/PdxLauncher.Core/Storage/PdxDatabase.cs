@@ -36,6 +36,13 @@ public sealed class PdxDatabase
     private readonly IAppLogger _logger;
     private readonly SemaphoreSlim _gate;
 
+    /// <summary>
+    /// 建表/迁移是否已完成。每次 <see cref="Open"/> 都重跑 <c>CREATE TABLE IF NOT EXISTS</c>
+    /// 是一串同步 SQLite 调用，挡在 UI 线程上时每开一次连接就要几毫秒；同一个库对象初始化一次足矣。
+    /// 库文件被换掉（损坏重建、外部替换）时置回 false。
+    /// </summary>
+    private volatile bool _schemaReady;
+
     /// <summary>创建一个指向 <paramref name="path"/> 的库对象；文件本身在首次访问时才创建。</summary>
     /// <param name="fileSystem">文件系统抽象。</param>
     /// <param name="logger">日志。</param>
@@ -80,7 +87,11 @@ public sealed class PdxDatabase
         try
         {
             ApplyPragmas(connection);
-            EnsureSchema(connection);
+            if (!_schemaReady)
+            {
+                EnsureSchema(connection);
+                _schemaReady = true;
+            }
         }
         catch (SqliteException exception)
         {
@@ -97,6 +108,7 @@ public sealed class PdxDatabase
             connection = rebuilt;
             ApplyPragmas(connection);
             EnsureSchema(connection);
+            _schemaReady = true;
         }
 
         return connection;
@@ -393,6 +405,9 @@ public sealed class PdxDatabase
 
     private void RecoverCorrupt()
     {
+        // 文件要换掉了：下一次 Open 必须重新建表/迁移，不能沿用上一个实例的「已就绪」。
+        _schemaReady = false;
+
         if (!_fileSystem.FileExists(Path))
         {
             return;

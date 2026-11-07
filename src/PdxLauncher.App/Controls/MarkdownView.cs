@@ -19,9 +19,9 @@ using PdxLauncher.Core.Text;
 /// 这里直接用 StackPanel 拼 TextBlock，层级清晰、主题前景色自动继承。
 /// </para>
 /// <para>
-/// 行内图片按「文字段 / 图片块」分段渲染：图片单独成块（受 MaxWidth/MaxHeight 限制），
-/// 避免把排版撑破；本地文件由 <see cref="ImageResolver"/> 提供，未就绪先显示占位图标，
-/// 下载完成后调 <see cref="RefreshImages"/> 原地换图，不重建整页。
+/// 行内图片按「文字段 / 图片块」分段渲染：图片单独成块，宽度跟随正文列宽（小图不放大），
+/// 高度按原比例撑开，避免长图被压成细条；本地文件由 <see cref="ImageResolver"/> 提供，
+/// 未就绪先显示占位图标，下载完成后调 <see cref="RefreshImages"/> 原地换图，不重建整页。
 /// </para>
 /// </summary>
 public sealed partial class MarkdownView : ContentControl
@@ -29,8 +29,18 @@ public sealed partial class MarkdownView : ContentControl
     /// <summary>已渲染的图片元素，key 是图片 URL（用于下载完成后原地刷新）。</summary>
     private readonly Dictionary<string, ImageSlot> _imageSlots = new(StringComparer.Ordinal);
 
+    /// <summary>所有已建图片（含同一 URL 的重复图），用于按控件宽度重算 MaxWidth。</summary>
+    private readonly List<ImageSlot> _imageSlotList = [];
+
     /// <summary>已渲染的评论表情（无扩展名的小图，下载完成后原地换成图片）。</summary>
     private readonly List<EmoticonSlot> _emoticonSlots = [];
+
+    /// <summary>初始化正文渲染控件。</summary>
+    public MarkdownView()
+    {
+        // 描述列的可用宽度随窗口变化：图片不写死宽高，按 Steam 的 max-width:100% 跟随。
+        SizeChanged += (_, _) => ApplyImageWidths();
+    }
 
     /// <summary>链接被点击（参数是 URL）。</summary>
     public event EventHandler<string>? LinkRequested;
@@ -90,6 +100,7 @@ public sealed partial class MarkdownView : ContentControl
     private void Rebuild()
     {
         _imageSlots.Clear();
+        _imageSlotList.Clear();
         _emoticonSlots.Clear();
 
         var host = new StackPanel { Spacing = 4 };
@@ -308,12 +319,13 @@ public sealed partial class MarkdownView : ContentControl
     /// <summary>单张正文配图：圆角容器 + 占位图标 + 实际图片，点击进全屏查看器。</summary>
     private FrameworkElement BuildImage(string url)
     {
+        var width = WorkshopGalleryLayout.DescriptionImageMaxWidth(ActualWidth);
+
         var picture = new Image
         {
             Stretch = Stretch.Uniform,
             HorizontalAlignment = HorizontalAlignment.Left,
-            MaxWidth = 640,
-            MaxHeight = 420,
+            MaxWidth = width,
             Visibility = Visibility.Collapsed,
         };
 
@@ -329,7 +341,7 @@ public sealed partial class MarkdownView : ContentControl
         var host = new Grid
         {
             HorizontalAlignment = HorizontalAlignment.Left,
-            MinWidth = 240,
+            MinWidth = WorkshopGalleryLayout.PlaceholderMinWidth(width),
             MinHeight = 160,
             Padding = new Thickness(8),
         };
@@ -354,8 +366,9 @@ public sealed partial class MarkdownView : ContentControl
             ImageRequested?.Invoke(this, url);
         };
 
-        var slot = new ImageSlot(picture, placeholder);
+        var slot = new ImageSlot(picture, placeholder, host, width);
         _imageSlots[url] = slot;
+        _imageSlotList.Add(slot);
 
         if (ImageResolver?.Invoke(url) is { Length: > 0 } localPath)
         {
@@ -365,13 +378,54 @@ public sealed partial class MarkdownView : ContentControl
         return border;
     }
 
-    /// <summary>一张正文配图的宿主元素（图片 + 占位图标）。</summary>
-    private sealed class ImageSlot(Image picture, FontIcon placeholder)
+    /// <summary>控件宽度变化时，把新的配图列宽写进所有已建图片。</summary>
+    private void ApplyImageWidths()
     {
+        var width = WorkshopGalleryLayout.DescriptionImageMaxWidth(ActualWidth);
+        foreach (var slot in _imageSlotList)
+        {
+            slot.ApplyWidth(width);
+        }
+    }
+
+    /// <summary>一张正文配图的宿主元素（图片 + 占位图标）。</summary>
+    private sealed class ImageSlot(Image picture, FontIcon placeholder, Grid host, double maxWidth)
+    {
+        /// <summary>当前可用宽度（DIP），同时决定解码宽度与占位框的下限。</summary>
+        private double _maxWidth = maxWidth;
+
+        /// <summary>上次解码时用的宽度；窗口明显变宽时按新宽度重新解码，避免放大后发糊。</summary>
+        private double _decodedWidth;
+
+        /// <summary>本地文件路径；窗口变宽时用它重新解码。</summary>
+        private string? _path;
+
+        /// <summary>按新的列宽重算图片上限；宽度没变时不动，避免每帧都触发重新布局。</summary>
+        public void ApplyWidth(double width)
+        {
+            if (!double.IsFinite(width) || width <= 0 || Math.Abs(width - _maxWidth) < 0.5)
+            {
+                return;
+            }
+
+            _maxWidth = width;
+            picture.MaxWidth = width;
+            host.MinWidth = WorkshopGalleryLayout.PlaceholderMinWidth(width);
+
+            // 只在下限明显变大时重解；变窄继续用已解码的大图，省一次 IO。
+            if (_path is { Length: > 0 } && width > _decodedWidth * 1.25)
+            {
+                Show(_path);
+            }
+        }
+
         /// <summary>切到本地文件显示。</summary>
         public void Show(string path)
         {
-            var source = XamlImage.FromPath(path, 1024);
+            _path = path;
+            _decodedWidth = _maxWidth;
+
+            var source = XamlImage.FromPath(path, _maxWidth);
             if (source is null)
             {
                 return;

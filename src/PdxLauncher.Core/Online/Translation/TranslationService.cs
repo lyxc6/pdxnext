@@ -64,10 +64,15 @@ public sealed class TranslationService
     /// <param name="texts">原文列表。</param>
     /// <param name="options">选项（引擎模式、目标语言、缓存天数）。</param>
     /// <param name="cancellationToken">取消令牌。</param>
+    /// <param name="onItemTranslated">
+    /// 每条译文就绪时的进度回调（索引与 <paramref name="texts"/> 对应）：缓存命中和引擎结果都会回调。
+    /// 可能在线程池线程上触发，写界面属性前要自行切回 UI 线程。
+    /// </param>
     public async Task<IReadOnlyList<string?>> TranslateAsync(
         IReadOnlyList<string> texts,
         TranslationOptions options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<int, string?>? onItemTranslated = null)
     {
         ArgumentNullException.ThrowIfNull(texts);
         var results = new string?[texts.Count];
@@ -90,6 +95,7 @@ public sealed class TranslationService
             if (cached is not null)
             {
                 results[i] = cached;
+                NotifyItemTranslated(onItemTranslated, i, cached);
                 continue;
             }
 
@@ -111,6 +117,11 @@ public sealed class TranslationService
             {
                 await TrySetCachedAsync(outcome.EngineId, options, texts[pending[i]], outcome.Text, cancellationToken)
                     .ConfigureAwait(false);
+            }
+
+            if (!string.IsNullOrEmpty(outcome.Text))
+            {
+                NotifyItemTranslated(onItemTranslated, pending[i], outcome.Text);
             }
         }
 
@@ -203,6 +214,29 @@ public sealed class TranslationService
         }
 
         return outcomes;
+    }
+
+    /// <summary>
+    /// 通知调用方某一条译文已就绪；回调异常只记日志，不能把整批翻译打断。
+    /// </summary>
+    /// <param name="callback">调用方传入的进度回调；null 表示不需要进度。</param>
+    /// <param name="index">原文在入参列表里的索引。</param>
+    /// <param name="text">译文。</param>
+    private void NotifyItemTranslated(Action<int, string?>? callback, int index, string? text)
+    {
+        if (callback is null)
+        {
+            return;
+        }
+
+        try
+        {
+            callback(index, text);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("翻译进度回调失败：" + ex.Message);
+        }
     }
 
     /// <summary>

@@ -2,9 +2,9 @@ namespace PdxLauncher.App.Services;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Accounts;
-using PdxLauncher.Core.Achievements;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.CrashAnalysis;
 using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Online.Translation.Local;
@@ -141,26 +141,14 @@ public static class AppServices
     /// <summary>
     /// 成就数据源：走「Steam 宿主子进程」读真实成就（appid 未知 / Steam 不可用 / 没有成就
     /// 分别对应不同的空状态）。原生调用只在子进程里发生，主进程不碰 Steamworks。
+    /// <para>
+    /// 每次读取都是一次性的 <c>--steam-host achievements</c> 进程：读完即退，Steam 侧的
+    /// 「游戏正在运行」登记随进程退出消失。这里刻意不保留常驻 worker、也不做启动 / 切游戏
+    /// 预热 —— Steam 会把调过 <c>SteamAPI_Init</c> 的进程登记成该游戏的 game process，
+    /// 常驻会话会让 Steam 在两次读取之间一直把游戏显示成「运行中」。
+    /// </para>
     /// </summary>
     public static IAchievementSource Achievements { get; private set; } = new NullAchievementSource();
-
-    /// <summary>
-    /// 常驻 Steam 宿主会话。第一条成就命令拉起 worker 并付一次 <c>SteamAPI_Init</c>，
-    /// 之后整场会话复用；崩溃 / 版本不符 / 起不来时自动回落一次性宿主，页面行为不变。
-    /// 退出时由 <see cref="StartAchievementPrewarm"/> 注册的 ProcessExit 兜底 Kill。
-    /// </summary>
-    public static SteamHostSession? AchievementsSession { get; private set; }
-
-    /// <summary>
-    /// 成就预热：主窗口可见后读一次当前游戏并写快照。失败只记日志，不影响任何页面。
-    /// </summary>
-    public static AchievementPrewarmService? AchievementPrewarm { get; private set; }
-
-    /// <summary>
-    /// 由 <see cref="App"/> 在窗口 Activate 之后调用一次：开始「空闲预热当前游戏」。
-    /// 只调度，不等待，也不占 UI 线程。
-    /// </summary>
-    public static void StartAchievementPrewarm() => AchievementPrewarm?.Start();
 
     public static AppSettingsStore SettingsStore { get; private set; } = null!;
 
@@ -338,9 +326,10 @@ public static class AppServices
         LocalTranslation = localTranslation;
         GamePatch = gamePatch;
         DlcOwnership = dlcOwnership;
+        // 成就读取一律走一次性宿主：拉起 `--steam-host achievements`、读一次、进程退出，
+        // Steam 侧的「游戏正在运行」登记随进程退出消失。这里刻意不保留常驻 worker、
+        // 也不做启动 / 切游戏预热 —— 两者都会让 Steam 在用户没启动游戏时显示「运行中」。
         var steamHostClient = new SteamHostClient(logger);
-        var achievementsSession = new SteamHostSession(logger, steamHostClient);
-        AchievementsSession = achievementsSession;
         Achievements = new SteamAchievementSource(
             steamHostClient,
             new SteamApiLocator(fileSystem, logger),
@@ -348,23 +337,7 @@ public static class AppServices
             logger,
             () => Settings.SteamApiDllPath,
             () => CurrentGame,
-            () => PdxLauncher.App.Localization.Localizer.Instance.Language,
-            achievementsSession);
-        AchievementPrewarm = new AchievementPrewarmService(
-            Achievements,
-            new AchievementSnapshotCache(
-                fileSystem,
-                Path.Combine(DataRoot, AchievementPrewarmService.CacheDirectoryName)),
-            () => CurrentGame,
-            logger);
-
-        // 进程退出兜底：把常驻宿主的 stdin 关掉（worker 读到 EOF 会自己 Shutdown 并退出），
-        // 万一卡住再 Kill 整棵进程树，避免留下孤儿 steam_api 子进程。
-        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
-        {
-            AchievementPrewarm?.Dispose();
-            AchievementsSession?.Dispose();
-        };
+            () => PdxLauncher.App.Localization.Localizer.Instance.Language);
         SettingsStore = settingsStore;
         Database = database;
         Documents = documents;
@@ -458,8 +431,9 @@ public static class AppServices
 
         CurrentGameChanged?.Invoke(null, game);
 
-        // 切游戏后预热新游戏（服务内部去抖 2 s，连续切换只预热最后停下的那款）。
-        AchievementPrewarm?.NotifyGameChanged();
+        // 刻意不在这里预热成就：预热会立刻拉起 Steam 宿主并调 SteamAPI_Init，
+        // Steam 会把当前游戏登记成「正在运行」，而用户并没有启动游戏。
+        // 成就只在用户打开成就页时按需读取，且每次都是一次性宿主，读完即退。
     }
 
     /// <summary>立即把设置写盘；失败返回 <see cref="AppResult{T}"/>，调用方据此提示，不再静默当成功。</summary>
@@ -551,8 +525,26 @@ public static class AppServices
     /// </summary>
     public static string WorkshopCacheRoot => Path.Combine(DataRoot, "workshop-info");
 
+    /// <summary>
+    /// 工坊筛选目录的落盘位置（<c>workshop-filters\{appid}.json</c>）。
+    /// 目录随 Steam 列表页 SSR 更新，按 appid 存最近一次快照，重启/离线时先显示已知最新版本。
+    /// </summary>
+    public static string WorkshopFilterRoot => Path.Combine(DataRoot, "workshop-filters");
+
     /// <summary>本启动器自己的日志路径。</summary>
     public static string LogPath => Path.Combine(DataRoot, "logs", "pdxnext.log");
+
+    private static GameCrashAnalyzer? _crashAnalysis;
+
+    /// <summary>
+    /// 游戏崩溃分析器：只读扫描游戏崩溃包/日志，不联网、不写游戏目录。
+    /// 首次访问时创建；依赖 FileSystem / LoadFiles / Logger / Clock 都是已装配好的只读服务。
+    /// </summary>
+    public static GameCrashAnalyzer CrashAnalysis => _crashAnalysis ??= new GameCrashAnalyzer(
+        FileSystem,
+        LoadFiles,
+        Logger,
+        Clock);
 
     private static ThemeImageFlattener? _themeImages;
 
