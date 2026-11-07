@@ -156,6 +156,12 @@ public sealed class AppSettings
     public int? LastDiagnosticsSection { get; set; }
 
     /// <summary>
+    /// 崩溃分析页上次停留的分节（0 起，对应左栏 4 项）；null 或越界时落到诊断结论。
+    /// 与性能与日志页分开记，互不影响。
+    /// </summary>
+    public int? LastCrashAnalysisSection { get; set; }
+
+    /// <summary>
     /// 性能与日志页的日志尾部是否自动换行。默认关（长行用横向滚动条），
     /// 打开后长行折行显示；只影响观感，不改日志内容。
     /// </summary>
@@ -266,4 +272,10 @@ public sealed class AppSettings
     /// 但文档里若显式写了 null，调用点要按 <c>?? []</c> 兜底。
     /// </summary>
     public List<string> WorkshopSearchHistory { get; set; } = [];
+
+    /// <summary>
+    /// 创意工坊每页条数（10 / 15 / 30 / 50，默认 30，与 Steam 网页一致）。
+    /// 旧设置文件里没有这个键时读到 0，由视图模型归一化回默认值。
+    /// </summary>
+    public int WorkshopPageSize { get; set; } = 30;
 }

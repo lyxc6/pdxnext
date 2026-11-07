@@ -69,10 +69,6 @@ public partial class App : Application
         // 「停顿 N ms + 最近位置」，比窗口卡死后什么都抓不到要强。
         AppServices.AttachWatchdog(UiThreadWatchdog.Start(AppServices.Logger, _window.DispatcherQueue));
         StartupTimeline.Mark(StartupTimeline.WindowCreated);
-
-        // 窗口已经可见：把当前游戏的成就读取挪到后台空闲时做，用户点成就页时直接命中快照。
-        // 只调度、不等待；失败只记日志（预热服务内部已兜住所有异常）。
-        AppServices.StartAchievementPrewarm();
     }
 
     /// <summary>手工构造服务图并交给 <see cref="AppServices"/>，不使用任何 DI 容器。</summary>

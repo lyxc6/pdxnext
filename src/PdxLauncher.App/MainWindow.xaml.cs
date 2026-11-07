@@ -99,6 +99,12 @@ public sealed partial class MainWindow : Window
     public Localizer L => Localizer.Instance;
 
     /// <summary>
+    /// XAML 里取外壳数据的入口：左栏「游戏库」徽标直接绑 <see cref="ShellViewModel.GamesCount"/>
+    /// 与 <see cref="ShellViewModel.LibraryBadgeName"/>。
+    /// </summary>
+    public ShellViewModel ViewModel { get; }
+
+    /// <summary>
     /// 全局确认浮层：所有「确认 / 取消」对话框都走它，
     /// 这样「取消」在左、「确认（主色）」在右在所有页面保持一致。
     /// </summary>
@@ -115,6 +121,7 @@ public sealed partial class MainWindow : Window
 
         _navigation = new NavigationService(AppServices.Logger);
         _viewModel = new ShellViewModel(_navigation);
+        ViewModel = _viewModel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         _viewModel.NavigationRequested += OnNavigationRequested;
 
@@ -757,15 +764,29 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // 排队而不是就地切页：用户点导航时，上一个页面可能正处在秒级的加载里
+        // （工坊首屏、mod 扫描）。High 优先级让这次点击在加载的下一个空隙就插进去，
+        // 而不是等整段加载跑完才「补」一次跳转。
+        if (!DispatcherQueue.TryEnqueue(DispatcherQueuePriority.High, () => NavigateCore(tag)))
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Warn("无法派发导航: " + tag);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 真正切页。失败或异常除了写日志，还要给用户一条可见提示：
+    /// 只写日志的话，界面表现就是「点了没反应」，和线程卡死没法区分。
+    /// </summary>
+    private void NavigateCore(string tag)
+    {
         try
         {
             if (!_navigation.Navigate(tag))
             {
-                if (AppServices.IsInitialized)
-                {
-                    AppServices.Logger.Warn("导航失败: " + tag);
-                }
-
+                ReportNavigationFailure(tag);
                 return;
             }
 
@@ -777,7 +798,30 @@ public sealed partial class MainWindow : Window
             {
                 AppServices.Logger.Error("导航异常: " + tag, ex);
             }
+
+            ReportNavigationFailure(tag);
         }
+    }
+
+    /// <summary>导航失败提示：复用窗口上已有的 <see cref="ConfirmOverlay"/>，不另造弹窗机制。</summary>
+    private void ReportNavigationFailure(string tag)
+    {
+        if (AppServices.IsInitialized)
+        {
+            AppServices.Logger.Warn("导航失败: " + tag);
+        }
+
+        if (ConfirmOverlay.Host is null)
+        {
+            // 窗口还没建好（启动早期的导航）：没有宿主就只剩日志，此时用户也还没在点。
+            return;
+        }
+
+        // 浮层只有一层：连点失败时后到的会按「取消」立刻返回，不会叠出多个框。
+        _ = ConfirmOverlay.ShowMessage(
+            Localizer.Instance.T(Keys.ShellNavFailedTitle),
+            Localizer.Instance.T(Keys.ShellNavFailedBody),
+            Localizer.Instance.T(Keys.CommonClose));
     }
 
     private void SyncSelectedNavItem(string tag)
