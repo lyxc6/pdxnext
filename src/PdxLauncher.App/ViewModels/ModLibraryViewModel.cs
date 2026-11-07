@@ -8,6 +8,7 @@ using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Online;
+using PdxLauncher.Core.Online.Translation;
 using PdxLauncher.Core.Playsets;
 using PdxLauncher.Core.Steam;
 
@@ -38,9 +39,30 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         Keys.ModlibSourceFilterSubscribed,
     ];
 
+    /// <summary>名称翻译去抖时长：搜索词连续变化时合并成一批，避免每敲一个字都起一次引擎请求。</summary>
+    private static readonly TimeSpan NameTranslationDebounce = TimeSpan.FromMilliseconds(250);
+
     private readonly ModLibraryService _service;
     private readonly IModThumbnailService _thumbnails;
     private readonly IAppLogger _logger;
+
+    /// <summary>
+    /// 本页已知的名称译名：按 mod 主键存原文、目标语言与译文。
+    /// 搜索 / 排序 / 来源筛选只重建行，译文直接从这份字典回填，不重复请求翻译。
+    /// </summary>
+    private readonly Dictionary<Guid, TranslationCache.NameTranslation> _nameTranslations = new();
+
+    /// <summary>本轮名称翻译的代次；重建行时自增，迟到的旧批次不再回填。</summary>
+    private int _translationVersion;
+
+    /// <summary>名称翻译去抖令牌：新批次接管时取消上一批，避免批次越积越多。</summary>
+    private CancellationTokenSource? _translationDebounce;
+
+    /// <summary>名称翻译进度回调来自线程池；回填行属性前切回创建本 VM 的 UI 线程。</summary>
+    private Microsoft.UI.Dispatching.DispatcherQueue? _dispatcher;
+
+    /// <summary>页面生命周期令牌（由 <see cref="LoadAsync"/> 记录）；刷新与重建行都沿用它。</summary>
+    private CancellationToken _pageToken = CancellationToken.None;
 
     /// <summary>最近一次加载的快照；搜索与排序只裁剪展示，不动这份完整数据。</summary>
     private ModLibrarySnapshot _snapshot = ModLibrarySnapshot.Empty;
@@ -146,6 +168,9 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
     public async Task LoadAsync(GameInstallation? game, CancellationToken cancellationToken)
     {
+        // 刷新、搜索与 Steam 写操作之后的重载都沿用这个令牌，页面关闭后不再继续翻译。
+        _pageToken = cancellationToken;
+
         Game = game;
         _snapshot = ModLibrarySnapshot.Empty;
         _managedByGame = game?.SupportsContentManagement == false;
@@ -174,12 +199,16 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         {
             _snapshot = await _service.LoadAsync(game, cancellationToken).ConfigureAwait(true);
 
+            // 名称译名与引擎/缓存天数无关，先把持久化的旧译名读回来：
+            // 重建行时直接显示，不用在每次进入 Mod 库时重新等一遍翻译。
+            await LoadCachedNameTranslationsAsync(cancellationToken).ConfigureAwait(true);
+
             // DDS 缩略图先转成 PNG，行里才是真实封面而不是占位图。
             await AppServices.ImageArt
                 .PrewarmAsync(_snapshot.Mods.Select(static m => m.ThumbnailPath), cancellationToken)
                 .ConfigureAwait(true);
 
-            RebuildRows(cancellationToken);
+            RebuildRows();
             IsLoaded = true;
 
             // 列表先按本地图片显示完整一屏，联网补图在后台继续（不占用 IsBusy）。
@@ -260,8 +289,8 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>刷新：按当前游戏重新加载一次。</summary>
-    public Task RefreshAsync() => LoadAsync(Game, CancellationToken.None);
+    /// <summary>刷新：按当前游戏重新加载一次（沿用页面生命周期令牌）。</summary>
+    public Task RefreshAsync() => LoadAsync(Game, _pageToken);
 
     /// <summary>
     /// 重新问一次 Steam 的工坊状态（丢掉缓存后重载）。
@@ -280,7 +309,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
             AppServices.WorkshopStates.Invalidate(appId);
         }
 
-        await LoadAsync(Game, CancellationToken.None).ConfigureAwait(true);
+        await LoadAsync(Game, _pageToken).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -373,7 +402,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
                 SetStatus(successText());
             }
 
-            await LoadAsync(Game, CancellationToken.None).ConfigureAwait(true);
+            await LoadAsync(Game, _pageToken).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -523,9 +552,12 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     }
 
     /// <summary>按当前搜索词与排序方式重建可见行，并更新状态栏文案。</summary>
-    /// <param name="cancellationToken">页面生命周期取消令牌（供后台译名使用）。</param>
-    private void RebuildRows(CancellationToken cancellationToken = default)
+    private void RebuildRows()
     {
+        // 新一批行取代旧行：先作废旧译名批次，避免标题栏一直被旧批次占着「正在翻译」。
+        _translationVersion++;
+        CancelPendingNameTranslation();
+
         if (!HasGame)
         {
             Mods.Clear();
@@ -540,54 +572,141 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
 
         // 行 VM 需要游戏版本判断 requiredVersion 是否过旧；Game 在此路径上必然非 null。
         var gameVersion = Game?.Version;
+        var targetLanguage = GetNameTranslationTargetLanguage();
         Mods.Clear();
         foreach (var entry in ApplySort(filtered))
         {
-            Mods.Add(new ModLibraryRowViewModel(
+            var row = new ModLibraryRowViewModel(
                 entry,
                 gameVersion,
-                ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize)));
+                ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize));
+
+            // 已经译过的名称直接回填：搜索 / 排序 / 筛选重建行时不再等一轮翻译。
+            if (targetLanguage is not null
+                && _nameTranslations.TryGetValue(entry.ModId, out var cached)
+                && string.Equals(cached.TargetLanguage, targetLanguage, StringComparison.Ordinal)
+                && string.Equals(cached.SourceName, entry.Name, StringComparison.Ordinal)
+                && !string.IsNullOrWhiteSpace(cached.Translation))
+            {
+                row.TranslatedName = cached.Translation;
+            }
+
+            Mods.Add(row);
         }
 
         StatusMessage = BuildStatusMessage(query);
         RaiseDerived();
 
-        StartNameTranslation(cancellationToken);
+        StartNameTranslation();
     }
 
     /// <summary>
     /// 后台给可见行补译名：翻译是网络操作，不能挡着列表显示。
+    /// 只翻译还没有译名的行；连续重建时先取消上一批，250ms 内的多次变化合并成一批。
     /// </summary>
-    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    private void StartNameTranslation(CancellationToken cancellationToken)
+    private void StartNameTranslation()
     {
-        if (!AppServices.Settings.TranslateNamesEnabled || !AppServices.Translation.IsEnabled)
+        var targetLanguage = GetNameTranslationTargetLanguage();
+        if (targetLanguage is null)
         {
             return;
         }
 
-        var pending = Mods.Where(static row => !string.IsNullOrWhiteSpace(row.Name)).ToList();
+        var pending = Mods
+            .Where(static row => !string.IsNullOrWhiteSpace(row.Name)
+                && string.IsNullOrWhiteSpace(row.TranslatedName))
+            .ToList();
         if (pending.Count == 0)
         {
             return;
         }
 
-        _ = TranslateNamesAsync(pending, cancellationToken);
+        CancelPendingNameTranslation();
+        _dispatcher ??= Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+
+        var version = _translationVersion;
+        var debounce = CancellationTokenSource.CreateLinkedTokenSource(_pageToken);
+        _translationDebounce = debounce;
+        _ = TranslateNamesAfterDebounceAsync(pending, targetLanguage, version, debounce);
     }
 
-    /// <summary>整页名称一次性批翻（引擎内部并发），译完统一回填。</summary>
+    /// <summary>去抖到点后翻这一批；令牌被新批次取消时什么都不做。</summary>
+    private async Task TranslateNamesAfterDebounceAsync(
+        IReadOnlyList<ModLibraryRowViewModel> rows,
+        string targetLanguage,
+        int version,
+        CancellationTokenSource debounce)
+    {
+        try
+        {
+            await Task.Delay(NameTranslationDebounce, debounce.Token).ConfigureAwait(true);
+            await TranslateNamesAsync(rows, targetLanguage, version, debounce.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // 被新批次取代：这一批作废。
+        }
+        finally
+        {
+            if (ReferenceEquals(_translationDebounce, debounce))
+            {
+                _translationDebounce = null;
+            }
+
+            debounce.Dispose();
+        }
+    }
+
+    /// <summary>取消还没到点/没跑完的名称翻译批次。</summary>
+    private void CancelPendingNameTranslation()
+    {
+        var previous = _translationDebounce;
+        _translationDebounce = null;
+        if (previous is null)
+        {
+            return;
+        }
+
+        try
+        {
+            previous.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 上一批刚好自己收尾释放了令牌，不用再取消。
+        }
+    }
+
+    /// <summary>
+    /// 整页名称一次性批翻（引擎内部并发）；命中缓存或引擎出结果时立刻回填对应行，
+    /// 不再让一页已缓存的名字等未命中的名字跑完整个引擎回落。
+    /// </summary>
     private async Task TranslateNamesAsync(
         IReadOnlyList<ModLibraryRowViewModel> rows,
+        string targetLanguage,
+        int version,
         CancellationToken cancellationToken)
     {
         try
         {
             var names = rows.Select(static row => row.Name).ToList();
             var translated = await AppServices.Translation
-                .TranslateBatchAsync(names, cancellationToken)
+                .TranslateBatchAsync(
+                    names,
+                    cancellationToken,
+                    (index, translatedName) => ApplyTranslatedName(
+                        rows,
+                        index,
+                        translatedName,
+                        targetLanguage,
+                        version))
                 .ConfigureAwait(true);
 
-            var anyTranslated = false;
+            if (cancellationToken.IsCancellationRequested || version != _translationVersion)
+            {
+                return;
+            }
+
             for (var i = 0; i < rows.Count && i < translated.Count; i++)
             {
                 var translatedName = translated[i];
@@ -596,10 +715,12 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
                     continue;
                 }
 
-                rows[i].TranslatedName = translatedName;
-                anyTranslated = true;
+                // 进度回调通常已经回填；这里兜底处理回调被丢弃的情况。
+                ApplyTranslatedName(rows, i, translatedName, targetLanguage, version);
             }
 
+            // 以行上的实际结果为准：设置变更导致整批返回空时，缓存命中的那部分仍算已译出。
+            var anyTranslated = rows.Any(static row => !string.IsNullOrWhiteSpace(row.TranslatedName));
             if (!anyTranslated)
             {
                 // 这一页没有状态条，失败只落日志；原因带上引擎与错误，便于排查。
@@ -615,6 +736,156 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         {
             _logger.Warn("Mod 库名称翻译失败：" + ex.Message);
         }
+        finally
+        {
+            // 页面关闭或批次被新搜索取代时，已经回填到行的译名仍然有效：
+            // 落盘后下次进入 Mod 库可以直接显示，不必重翻这一批。
+            await SaveNameTranslationsAsync(rows, targetLanguage).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// 把这一批新拿到的译名按 ModId 持久化，下次进入 Mod 库或换引擎模式时直接复用。
+    /// </summary>
+    private async Task SaveNameTranslationsAsync(
+        IReadOnlyList<ModLibraryRowViewModel> rows,
+        string targetLanguage)
+    {
+        var updates = new List<TranslationCache.NameTranslation>(rows.Count);
+        foreach (var row in rows)
+        {
+            var translatedName = row.TranslatedName;
+            if (string.IsNullOrWhiteSpace(row.Name) || string.IsNullOrWhiteSpace(translatedName))
+            {
+                continue;
+            }
+
+            updates.Add(new TranslationCache.NameTranslation(
+                row.ModId,
+                row.Name,
+                targetLanguage,
+                translatedName));
+        }
+
+        if (updates.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await AppServices.Translation
+                .SaveNameTranslationsAsync(targetLanguage, updates, CancellationToken.None)
+                .ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("Mod 库名称译名持久化失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 读回持久化的名称译名（按当前目标语言过滤）；读不到不影响后续正常翻译。
+    /// 磁盘读取丢线程池，避免首次进入 Mod 库时在 UI 线程上同步读缓存文档。
+    /// </summary>
+    private async Task LoadCachedNameTranslationsAsync(CancellationToken cancellationToken)
+    {
+        _nameTranslations.Clear();
+        var targetLanguage = GetNameTranslationTargetLanguage();
+        if (targetLanguage is null)
+        {
+            return;
+        }
+
+        try
+        {
+            // 用 Func<Task<…>> 明确选中 Task.Run 的异步重载，别把内层 Task 当成结果。
+            Func<Task<IReadOnlyDictionary<Guid, TranslationCache.NameTranslation>>> load =
+                () => AppServices.Translation.LoadNameTranslationsAsync(targetLanguage, cancellationToken);
+            var cached = await Task.Run(load, cancellationToken).ConfigureAwait(true);
+            foreach (var pair in cached)
+            {
+                _nameTranslations[pair.Key] = pair.Value;
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("Mod 库名称译名缓存读取失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>当前该用的名称翻译目标语言；名称翻译或翻译总开关关闭时返回 null。</summary>
+    private static string? GetNameTranslationTargetLanguage()
+    {
+        if (!AppServices.Settings.TranslateNamesEnabled)
+        {
+            return null;
+        }
+
+        var options = AppServices.Translation.CurrentOptions;
+        return options.Enabled ? options.TargetLanguage : null;
+    }
+
+    /// <summary>
+    /// 把一条译文回填到对应行；回调可能来自线程池，切回 UI 线程后再改行属性。
+    /// 旧批次的迟到回调按代次丢弃，免得把已经换掉的行写乱。
+    /// </summary>
+    private void ApplyTranslatedName(
+        IReadOnlyList<ModLibraryRowViewModel> rows,
+        int index,
+        string? translatedName,
+        string targetLanguage,
+        int version)
+    {
+        if (string.IsNullOrWhiteSpace(translatedName) || version != _translationVersion)
+        {
+            return;
+        }
+
+        if (_dispatcher is null || _dispatcher.HasThreadAccess)
+        {
+            ApplyTranslatedNameOnUi(rows, index, translatedName, targetLanguage, version);
+            return;
+        }
+
+        _dispatcher.TryEnqueue(
+            () => ApplyTranslatedNameOnUi(rows, index, translatedName, targetLanguage, version));
+    }
+
+    /// <summary>在 UI 线程上写行与名称译名字典。</summary>
+    private void ApplyTranslatedNameOnUi(
+        IReadOnlyList<ModLibraryRowViewModel> rows,
+        int index,
+        string translatedName,
+        string targetLanguage,
+        int version)
+    {
+        if (version != _translationVersion || index < 0 || index >= rows.Count)
+        {
+            return;
+        }
+
+        var row = rows[index];
+        if (string.IsNullOrWhiteSpace(row.Name))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(row.TranslatedName))
+        {
+            row.TranslatedName = translatedName;
+        }
+
+        // 即使这一行已经被筛掉也记下来：下次搜索 / 排序重建时可以直接复用。
+        _nameTranslations[row.ModId] = new TranslationCache.NameTranslation(
+            row.ModId,
+            row.Name,
+            targetLanguage,
+            translatedName);
     }
 
     /// <summary>

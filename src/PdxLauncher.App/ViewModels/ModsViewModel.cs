@@ -1027,6 +1027,28 @@ public sealed class ModsViewModel : LocalizedObservableObject
         return PositionEditResult.Applied;
     }
 
+    // ------------------------------------------------------------ 行右键菜单的状态栏反馈
+
+    /// <summary>右键菜单「打开本地文件夹」成功后写状态栏。</summary>
+    public void ReportOpenedFolder(ModRowViewModel row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        StatusMessage = T(Keys.ModsStatusOpenedFolder, row.Name);
+    }
+
+    /// <summary>行既没有目录也没有压缩包时写状态栏；菜单项通常已被 HasLocalFiles 禁用，这里兜底。</summary>
+    public void ReportNoLocalFiles() => StatusMessage = T(Keys.ModsStatusNoLocalFiles);
+
+    /// <summary>行没有可用的创意工坊 id 时写状态栏（复用 Mod 库页的现成文案）。</summary>
+    public void ReportNoWorkshopAddress() => StatusMessage = T(Keys.ModlibStatusNoWorkshopAddress);
+
+    /// <summary>右键菜单「复制注册 ID」成功后写状态栏。</summary>
+    public void ReportClipboardCopied(ModRowViewModel row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        StatusMessage = T(Keys.ModsStatusCopiedId, row.Name);
+    }
+
     /// <summary>启用全部 / 禁用全部（作用于可见行），随后自动保存。</summary>
     public void SetAllEnabled(bool enabled)
     {

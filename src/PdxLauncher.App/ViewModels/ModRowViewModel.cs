@@ -172,6 +172,29 @@ public sealed class ModRowViewModel : LocalizedObservableObject
     /// <summary>序号编辑态输入框的自动化 Id。</summary>
     public string PositionEditAutomationId => "modPositionEdit_" + ModId.ToString("N");
 
+    /// <summary>右键菜单「打开本地文件夹 / 在文件夹中显示」的自动化 Id。</summary>
+    public string OpenFolderMenuAutomationId => "modOpenFolder_" + ModId.ToString("N");
+
+    /// <summary>右键菜单「在 Steam 中打开」的自动化 Id。</summary>
+    public string OpenSteamMenuAutomationId => "modOpenSteam_" + ModId.ToString("N");
+
+    /// <summary>右键菜单「复制注册 ID」的自动化 Id。</summary>
+    public string CopyIdMenuAutomationId => "modCopyId_" + ModId.ToString("N");
+
+    /// <summary>这一行有没有本地文件（目录型或压缩包型）；右键菜单据此禁用「打开本地文件夹」。</summary>
+    public bool HasLocalFiles => !string.IsNullOrWhiteSpace(DirPath) || !string.IsNullOrWhiteSpace(ArchivePath);
+
+    /// <summary>右键菜单第一项文案：目录型是「打开本地文件夹」，只有压缩包时是「在文件夹中显示」。</summary>
+    public string RowMenuOpenFolderText => string.IsNullOrWhiteSpace(DirPath)
+        ? T(Keys.ModsRowMenuLocateArchive)
+        : T(Keys.ModsRowMenuOpenFolder);
+
+    /// <summary>右键菜单「在 Steam 中打开」文案。</summary>
+    public string RowMenuOpenSteamText => T(Keys.ModsRowMenuOpenSteam);
+
+    /// <summary>右键菜单「复制注册 ID」文案。</summary>
+    public string RowMenuCopyIdText => T(Keys.ModsRowMenuCopyId);
+
     /// <summary>上移一格（由页面按钮的 Command 调用）。</summary>
     public ICommand MoveUpCommand { get; }
 

@@ -575,7 +575,13 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
 
         var publication = SelectedRow.Publication;
         var descriptor = SelectedRow.Descriptor;
-        UploadTitle = publication?.Title ?? descriptor?.Name ?? SelectedRow.Name;
+        var publishedTitle = publication?.Title;
+
+        // 早期版本把 Steam 的 UTF-8 标题按 ANSI 解过，存量记录里会留下 U+FFFD；这种标题不能再填回上传框，
+        // 否则用户一上传就把「锟斤拷」原样写回工坊，回退到 mod 描述符里的名字。
+        UploadTitle = publishedTitle is not null && !publishedTitle.Contains('\uFFFD')
+            ? publishedTitle
+            : descriptor?.Name ?? SelectedRow.Name;
         UploadDescription = publication?.Description ?? descriptor?.Description ?? string.Empty;
         UploadModId = publication?.PublishedFileId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty;
         UploadDirectory = SelectedRow.DirPath ?? string.Empty;

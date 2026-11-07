@@ -17,8 +17,12 @@ public sealed class AddModRowViewModel : LocalizedObservableObject
     /// <summary>「添加模组」子页的候选行 Id 前缀。</summary>
     public const string DefaultAutomationPrefix = "addModCandidate";
 
+    /// <summary>mod 没有声明支持版本时的占位：一个短横，避免版本列在长名字右侧忽宽忽窄。</summary>
+    public const string MissingVersionText = "—";
+
     private readonly Action<AddModRowViewModel, bool>? _onSelectionChanged;
     private readonly string _automationPrefix;
+    private readonly string? _gameVersion;
     private bool _isSelected;
 
     /// <summary>创建一行候选 mod。</summary>
@@ -28,10 +32,12 @@ public sealed class AddModRowViewModel : LocalizedObservableObject
     /// 行与勾选框的 AutomationId 前缀。默认值等于「添加模组」子页用的 <c>addModCandidate</c>，
     /// 播放集页左栏传 <c>modCandidate</c>，两处的 Id 不会撞车（UI 自动化脚本靠 Id 定位）。
     /// </param>
+    /// <param name="gameVersion">当前游戏版本，只用于判断「声明的支持版本是否偏低」；未知时传 null。</param>
     public AddModRowViewModel(
         ModLibraryEntry entry,
         Action<AddModRowViewModel, bool>? onSelectionChanged = null,
-        string automationPrefix = DefaultAutomationPrefix)
+        string automationPrefix = DefaultAutomationPrefix,
+        string? gameVersion = null)
     {
         ArgumentNullException.ThrowIfNull(entry);
         ArgumentException.ThrowIfNullOrWhiteSpace(automationPrefix);
@@ -39,6 +45,7 @@ public sealed class AddModRowViewModel : LocalizedObservableObject
         Entry = entry;
         _onSelectionChanged = onSelectionChanged;
         _automationPrefix = automationPrefix;
+        _gameVersion = gameVersion;
     }
 
     /// <summary>对应的 mod 库条目。</summary>
@@ -84,6 +91,31 @@ public sealed class AddModRowViewModel : LocalizedObservableObject
 
     /// <summary>勾选框的 AutomationId。</summary>
     public string CheckAutomationId => _automationPrefix + "Check_" + ModId.ToString("N");
+
+    /// <summary>版本列的 AutomationId。</summary>
+    public string VersionAutomationId => _automationPrefix + "Version_" + ModId.ToString("N");
+
+    /// <summary>
+    /// 版本列文案：有声明时是「支持 1.9.*」，没有声明时是一个短横（保持列宽稳定）。
+    /// </summary>
+    public string RequiredVersionText => string.IsNullOrWhiteSpace(Entry.RequiredVersion)
+        ? MissingVersionText
+        : T(Keys.ModsAddPageVersion, Entry.RequiredVersion);
+
+    /// <summary>
+    /// 声明的支持版本是否低于当前游戏版本：判定复用 <see cref="ModLibraryWarnings"/>，
+    /// 这里不自己做版本比较（版本号解析规则只该有一份）。
+    /// </summary>
+    public bool HasVersionWarning
+        => ModLibraryWarnings.ClassifyVersionSupport(Entry.RequiredVersion, _gameVersion)
+            == ModVersionSupport.Below;
+
+    /// <summary>版本列的提示文案：只在版本偏低时给一句解释，否则为空串。</summary>
+    public string VersionWarningText => HasVersionWarning
+        ? T(Keys.ModlibVersionSupportDeclared, Entry.RequiredVersion, _gameVersion)
+            + " "
+            + T(Keys.ModlibVersionSupportBelow)
+        : string.Empty;
 
     /// <summary>是否被勾选（要加入播放集）。</summary>
     public bool IsSelected

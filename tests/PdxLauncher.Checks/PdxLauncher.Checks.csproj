@@ -121,6 +121,7 @@
       页面状态快照：只有 record 与静态字段，不碰 UI 类型，可以直接链接。
       它错了的表现是「回到页面筛选/滚动丢了」，编译器和真机都不容易发现，所以由 PageStateChecks 钉住字段与默认值。
     -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\AddModsState.cs" Link="Linked\AddModsState.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\ModLibraryState.cs" Link="Linked\ModLibraryState.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\ModStudioDraft.cs" Link="Linked\ModStudioDraft.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\ModStudioState.cs" Link="Linked\ModStudioState.cs" />
@@ -191,13 +192,6 @@
     <Compile Include="..\..\src\PdxLauncher.App\Services\SteamHostClient.cs" Link="Linked\SteamHostClient.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\SteamAchievementSource.cs" Link="Linked\SteamAchievementSource.cs" />
     <!--
-      常驻宿主会话与启动预热。两者都只依赖 Core + System.*，可以原样链接；
-      复用 / 崩溃重启一次 / 回落一次性 / 切游戏去抖全靠 SteamAchievementSessionChecks
-      与 AchievementPrewarmChecks 用「自检 exe 充当假宿主」钉住。
-    -->
-    <Compile Include="..\..\src\PdxLauncher.App\Services\SteamHostSession.cs" Link="Linked\SteamHostSession.cs" />
-    <Compile Include="..\..\src\PdxLauncher.App\Services\AchievementPrewarmService.cs" Link="Linked\AchievementPrewarmService.cs" />
-    <!--
       主页「继续 / 开始游戏」按钮的样式判据。它只认 ThemeAssetSource，不碰 UI 类型，
       所以能原样链接进来。判据错了不会崩，只在真机上表现为「有官方美术的游戏被剥掉了皮肤」
       或「没美术的游戏还画着幽灵按钮」，编译器看不见，因此必须由 HomeButtonStyleChecks 直接测。
@@ -228,5 +222,12 @@
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveGameRowViewModel.cs" Link="Linked\SaveGameRowViewModel.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SavesViewModel.cs" Link="Linked\SavesViewModel.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveBackupRowViewModel.cs" Link="Linked\SaveBackupRowViewModel.cs" />
+    <!--
+      DLC 行视图模型：本地缩略图 / Steam 宽幅头图的显示优先级与 Stretch 判据都在这里。
+      它只依赖 Core 的 DlcInfo / DlcCatalog 与本地化基类（自检用 AchievementViewModelStubs 的替身），
+      不碰 WinUI，因此可以原样链接。判据错了不会崩，只会在真机上表现为「EU5 方图被上下裁掉」，
+      编译器和人工点测都不容易发现，所以由 DlcImageChecks 直接钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\DlcRowViewModel.cs" Link="Linked\DlcRowViewModel.cs" />
   </ItemGroup>
 </Project>

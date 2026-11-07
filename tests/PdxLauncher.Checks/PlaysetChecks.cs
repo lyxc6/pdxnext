@@ -1119,11 +1119,11 @@ public static class PlaysetChecks
             + string.Join(" / ", metadataDlcs.Select(dlc => dlc.DisplayName + "（steam_id " + dlc.SteamId + "）")));
         ChecksContext.Check("V3 磁盘描述文件条目 >= 17", diskDlcs.Count >= 17, diskDlcs.Count.ToString(CultureInfo.InvariantCulture));
         // Victoria 3 1.15 起新 DLC 只写 game/dlc_metadata/00_dlc_metadata.txt（不再补 .dlc.json）；
-        // 真机 1.15：17 个磁盘描述文件 + State and Revolution = 18。
+        // 1.16 的真机又回到逐个 .dlc.json，所以这里只锁「条目存在」，不锁它来自哪种存储形态。
         ChecksContext.Check("V3 DLC 条目数 >= 18（含 dlc_metadata 增量）", dlcsAll.Count >= 18, dlcsAll.Count.ToString(CultureInfo.InvariantCulture));
         ChecksContext.Check(
-            "V3 dlc_metadata 合成条目含 State and Revolution / 4314660",
-            metadataDlcs.Any(dlc => dlc.SteamId == "4314660" && dlc.DisplayName == "State and Revolution"));
+            "V3 含 State and Revolution / 4314660",
+            dlcsAll.Any(dlc => dlc.SteamId == "4314660" && dlc.DisplayName == "State and Revolution"));
         ChecksContext.Check(
             "V3 dlc_metadata 合成条目相对路径形如 dlc_metadata/<块名>",
             metadataDlcs.All(dlc => dlc.FilePathRelativeToDlcPath.StartsWith("dlc_metadata/", StringComparison.Ordinal)

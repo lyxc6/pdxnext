@@ -35,7 +35,7 @@ public static class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         Console.WriteLine("workspace root: " + root);
 
-        // 排查单个检查类时用：PdxLauncher.Checks.exe --only SteamAchievementSessionChecks。
+        // 排查单个检查类时用：PdxLauncher.Checks.exe --only SteamAchievementsChecks。
         // 全套跑一次要十几分钟，定位挂起/慢用例时不必每次全跑。
         var only = OptionValue(args, "--only");
         Console.WriteLine(only is null ? "检查范围: 全部" : "检查范围: 名字包含 " + only);

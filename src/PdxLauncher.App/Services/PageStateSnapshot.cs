@@ -3,7 +3,7 @@ namespace PdxLauncher.App.Services;
 using System.Text.Json;
 
 /// <summary>
-/// 页面状态快照的落盘形态：Mod 库页与 Mod 创建页各一份，存在自有库
+/// 页面状态快照的落盘形态：Mod 库页、Mod 创建页与「添加模组」页各一份，存在自有库
 /// <c>documents</c> 表的 <see cref="PdxLauncher.Core.Storage.JsonDocumentKeys.UiPageState"/> 键下。
 /// <para>
 /// 只存「回到页面时该恢复什么」，不存业务数据；JSON 很小（几百字节），坏掉就当没有，
@@ -12,7 +12,11 @@ using System.Text.Json;
 /// </summary>
 /// <param name="ModLibrary">Mod 库页状态。</param>
 /// <param name="ModStudio">Mod 创建页状态。</param>
-public sealed record PageStateSnapshot(ModLibraryState? ModLibrary, ModStudioState? ModStudio)
+/// <param name="AddMods">「添加模组」页状态；旧版本 JSON 没有该字段时按 null 处理。</param>
+public sealed record PageStateSnapshot(
+    ModLibraryState? ModLibrary,
+    ModStudioState? ModStudio,
+    AddModsState? AddMods = null)
 {
     private static readonly JsonSerializerOptions Options = new()
     {

@@ -1,7 +1,5 @@
 namespace PdxLauncher.App.ViewModels;
 
-using System.Collections.ObjectModel;
-
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
@@ -17,6 +15,17 @@ using PdxLauncher.Core.Contracts;
 /// </remarks>
 public sealed class AddModsViewModel : LocalizedObservableObject
 {
+    /// <summary>
+    /// 排序方式的键（默认名称 A-Z）。下拉框里显示的是这些键的本地化文案，
+    /// 选中项存的也是文案，所以切换语言时要按键把选中项换到新语言的文案上。
+    /// </summary>
+    private static readonly string[] SortKeys =
+    [
+        Keys.ModsAddPageSortByName,
+        Keys.ModsAddPageSortBySize,
+        Keys.ModsAddPageSortBySubscribed,
+    ];
+
     private readonly IPlaySetRepository _playSets;
     private readonly ModLibraryService _modLibrary;
     private readonly IAppLogger _logger;
@@ -27,8 +36,12 @@ public sealed class AddModsViewModel : LocalizedObservableObject
     private string _searchText = string.Empty;
     private string _playSetName = string.Empty;
     private string _statusMessage = string.Empty;
+    private string _selectedSortMode = string.Empty;
+    private IReadOnlyList<string> _sortModes = Array.Empty<string>();
+    private bool _isRelocalizing;
     private bool _isBusy;
     private int _selectedCount;
+    private IReadOnlyList<AddModRowViewModel> _rows = Array.Empty<AddModRowViewModel>();
 
     /// <summary>创建 ViewModel。</summary>
     /// <param name="playSets">播放集仓储（用来读目标播放集已有的 mod）。</param>
@@ -43,10 +56,24 @@ public sealed class AddModsViewModel : LocalizedObservableObject
         _playSets = playSets;
         _modLibrary = modLibrary;
         _logger = logger;
+
+        _sortModes = BuildSortModes();
+        _selectedSortMode = _sortModes[0];
     }
 
-    /// <summary>当前可见的候选行（受搜索过滤）。</summary>
-    public ObservableCollection<AddModRowViewModel> Rows { get; } = new();
+    /// <summary>
+    /// 当前可见的候选行（受搜索过滤）。整表一次性替换：每次搜索只发一次 PropertyChanged，
+    /// ListView 收到一次新的 ItemsSource 后自己回收容器，不再「Clear() 再逐条 Add」抖动。
+    /// </summary>
+    public IReadOnlyList<AddModRowViewModel> Rows
+    {
+        get => _rows;
+        private set
+        {
+            _rows = value;
+            OnPropertyChanged();
+        }
+    }
 
     /// <summary>页面标题。</summary>
     public string Title => T(Keys.ModsAddPageTitle);
@@ -148,6 +175,42 @@ public sealed class AddModsViewModel : LocalizedObservableObject
         }
     }
 
+    /// <summary>排序下拉框的选项（按当前语言生成，语言切换时整体替换）。</summary>
+    public IReadOnlyList<string> SortModes
+    {
+        get => _sortModes;
+        private set
+        {
+            _sortModes = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>当前排序方式，取值来自 <see cref="SortModes"/>；变化后立即重排可见行。</summary>
+    public string SelectedSortMode
+    {
+        get => _selectedSortMode;
+        set
+        {
+            var mode = value ?? string.Empty;
+            if (string.Equals(_selectedSortMode, mode, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _selectedSortMode = mode;
+            OnPropertyChanged();
+
+            if (!_isRelocalizing)
+            {
+                RebuildVisibleRows();
+            }
+        }
+    }
+
+    /// <summary>排序下拉框的无障碍名称。</summary>
+    public string SortName => T(Keys.ModsAddPageSortName);
+
     /// <summary>设置目标播放集名称（只用于副标题展示）。</summary>
     public void SetPlaySet(string? playSetName)
     {
@@ -192,7 +255,8 @@ public sealed class AddModsViewModel : LocalizedObservableObject
                     continue;
                 }
 
-                _allRows.Add(new AddModRowViewModel(entry, OnRowSelectionChanged));
+                // 带上当前游戏版本：版本列要判断「声明支持的版本是否偏低」，判定交给 ModLibraryWarnings。
+                _allRows.Add(new AddModRowViewModel(entry, OnRowSelectionChanged, AddModRowViewModel.DefaultAutomationPrefix, game.Version));
             }
 
             _selectedCount = 0;
@@ -225,25 +289,90 @@ public sealed class AddModsViewModel : LocalizedObservableObject
             .ToList();
     }
 
-    /// <summary>按搜索关键字重建可见行（行对象复用，勾选状态因此保留）。</summary>
+    /// <summary>
+    /// 语言切换：下拉框的显示文案同时就是选中项的值，要按新语言重建选项并把选中项换过去；
+    /// 行自己会随属性通知刷新，这里不重排也不重建列表（保留滚动位置）。
+    /// </summary>
+    protected override void Relocalize()
+    {
+        var sortKey = ResolveSortKey();
+        SortModes = BuildSortModes();
+
+        _isRelocalizing = true;
+        try
+        {
+            SelectedSortMode = T(sortKey);
+        }
+        finally
+        {
+            _isRelocalizing = false;
+        }
+
+        // 新旧语言的文案可能恰好相同，那样上面的赋值不会变更，仍需通知一次让下拉框重新选中。
+        OnPropertyChanged(nameof(SelectedSortMode));
+    }
+
+    /// <summary>按搜索关键字重算可见行（行对象复用，勾选状态因此保留）。</summary>
+    /// <remarks>
+    /// 只换 <see cref="Rows"/> 的引用、不清空逐条加：搜索框每敲一个字都会走到这里，
+    /// <c>ObservableCollection.Clear()</c> + 每行一次 CollectionChanged 会让 ListView 拆掉全部容器、
+    /// 再一条条建回来，滚动条和行高都会跳一下。一次性赋一个新列表，界面只收到一次变更。
+    /// 排序在过滤之后做，搜索与排序可以叠加。
+    /// </remarks>
     private void RebuildVisibleRows()
     {
         var query = (_searchText ?? string.Empty).Trim();
-        var visible = query.Length == 0
-            ? _allRows
-            : _allRows.Where(row => row.Matches(query)).ToList();
-
-        Rows.Clear();
-        foreach (var row in visible)
-        {
-            Rows.Add(row);
-        }
+        Rows = query.Length == 0
+            ? ApplySort(_allRows).ToArray()
+            : ApplySort(_allRows.Where(row => row.Matches(query))).ToArray();
 
         OnPropertyChanged(nameof(HasRows));
         OnPropertyChanged(nameof(ShowEmptyState));
         OnPropertyChanged(nameof(ShowNoMatch));
         OnPropertyChanged(nameof(CandidateCountText));
     }
+
+    /// <summary>按当前语言生成排序下拉框的选项。</summary>
+    private static IReadOnlyList<string> BuildSortModes() => SortKeys.Select(static key => T(key)).ToArray();
+
+    /// <summary>
+    /// 选中项对应的排序方式键。选中项可能是语言切换前的旧文案，
+    /// 对不上任何键时回落到默认排序（名称 A-Z）。
+    /// </summary>
+    private string ResolveSortKey()
+    {
+        foreach (var key in SortKeys)
+        {
+            if (string.Equals(T(key), SelectedSortMode, StringComparison.Ordinal))
+            {
+                return key;
+            }
+        }
+
+        return SortKeys[0];
+    }
+
+    /// <summary>
+    /// 排序：名称 A-Z（默认，忽略大小写）；大小降序与订阅时间降序时未知值排最后，
+    /// 名称始终作为次级键，保证顺序稳定。
+    /// </summary>
+    private IEnumerable<AddModRowViewModel> ApplySort(IEnumerable<AddModRowViewModel> rows) =>
+        ResolveSortKey() switch
+        {
+            Keys.ModsAddPageSortBySize => rows
+                .OrderByDescending(static row => row.Entry.SizeBytes.HasValue)
+                .ThenByDescending(static row => row.Entry.SizeBytes ?? long.MinValue)
+                .ThenBy(static row => row.Entry.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static row => row.Entry.ModId),
+            Keys.ModsAddPageSortBySubscribed => rows
+                .OrderByDescending(static row => row.Entry.SubscribedOn.HasValue)
+                .ThenByDescending(static row => row.Entry.SubscribedOn ?? DateTimeOffset.MinValue)
+                .ThenBy(static row => row.Entry.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static row => row.Entry.ModId),
+            _ => rows
+                .OrderBy(static row => row.Entry.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(static row => row.Entry.ModId),
+        };
 
     /// <summary>行的勾选状态变化：只更新计数，勾选本身由行自己持有。</summary>
     private void OnRowSelectionChanged(AddModRowViewModel row, bool isSelected)

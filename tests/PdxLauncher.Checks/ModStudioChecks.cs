@@ -68,11 +68,11 @@ public static class ModStudioChecks
         ChecksContext.Check("CS2 没有 Steam 工坊", !ModDescriptorRules.CanPublish("cities_skylines_2"));
         Equal(
             "旧式描述符文案键",
-            "modstudio.descriptorLegacy",
+            "ModstudioDescriptorLegacy",
             ModDescriptorRules.DescribeKey(ModDescriptorFamily.Legacy));
         Equal(
             "metadata 描述符文案键",
-            "modstudio.descriptorMetadata",
+            "ModstudioDescriptorMetadata",
             ModDescriptorRules.DescribeKey(ModDescriptorFamily.Metadata));
     }
 
