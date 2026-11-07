@@ -7,9 +7,12 @@
     本仓库的约定是「每个新对话一个 sess/YYYYMMDD-<slug> 分支，从对话开始时的当前分支拉出，
     做完 --no-ff 合回那一支」。这个脚本把三步都代劳，避免只写在文档里没人执行。
 
-        pwsh -File scripts/session.ps1 open <slug> [-From <branch>]
+        pwsh -File scripts/session.ps1 open <slug> [-From <branch>] [-Force]
         pwsh -File scripts/session.ps1 close [-Message <文字>] [-Into <branch>] [-SkipVerify] [-AllowDirty]
         pwsh -File scripts/session.ps1 list
+
+    当前集成分支记在仓库根 `integration-branch`（一行，例如 `feat/1.3`）。open 默认要求当前
+    就站在它上面；发版 / 热修要从别的分支起时加 -Force，并在汇报里写明原因。
 
     open   ：建 sess/YYYYMMDD-<slug>。工作区已有未提交改动时，改动跟着带到新分支并提交成
              wip(session) 基线，起始分支立刻变干净。基线记在 git config branch.<name>.pdxBase。
@@ -36,7 +39,8 @@ param(
     [string]$Into,
     [string]$From,
     [switch]$SkipVerify,
-    [switch]$AllowDirty
+    [switch]$AllowDirty,
+    [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
@@ -138,6 +142,15 @@ function Get-BranchBase([string]$BranchName) {
     return ("$base").Trim()
 }
 
+# 当前集成分支的唯一来源：仓库根 integration-branch（一行，例如 feat/1.3）。
+function Get-IntegrationBranch {
+    $file = Join-Path $root 'integration-branch'
+    if (-not (Test-Path $file)) { return $null }
+    $line = Get-Content -LiteralPath $file -TotalCount 1 -ErrorAction SilentlyContinue
+    if (-not $line) { return $null }
+    return ("$line").Trim()
+}
+
 # 该分支是否还被「别的」worktree 检出；返回 worktree 路径数组。
 # 当前工作树不算——close 本来就在对话分支自己的工作树里执行。
 function Get-WorktreesForBranch([string]$BranchName) {
@@ -179,15 +192,16 @@ function ConvertTo-Slug([string]$Text) {
 function Show-Usage {
     Write-Host @'
 用法：
-  pwsh -File scripts/session.ps1 open <slug> [-From <branch>]
+  pwsh -File scripts/session.ps1 open <slug> [-From <branch>] [-Force]
   pwsh -File scripts/session.ps1 close [-Message <文字>] [-Into <branch>] [-SkipVerify] [-AllowDirty]
   pwsh -File scripts/session.ps1 list
 
 open  建 sess/YYYYMMDD-<slug>，基线是当前分支（或 -From 指定的分支）。
+      当前必须站在 integration-branch 记录的集成分支上；-Force 可跳过（发版 / 热修）。
       工作区已有改动会跟随到新分支并提交成 wip(session) 基线。
 close 构建 + 自检后 --no-ff 合回基线分支，删除对话分支并切回。
       纯 .md 改动自动跳过构建；-SkipVerify 强制跳过。
-list  列出对话分支、基线与领先提交数。
+list  列出当前集成分支、对话分支、基线与领先提交数。
 '@
 }
 
@@ -211,6 +225,19 @@ function Invoke-Open {
     if ($current -like 'sess/*') {
         Write-Fail "[错误] 已经在对话分支 $current 上。要开新对话，先 close，或 git switch 回起始分支。"
         exit 1
+    }
+
+    $integration = Get-IntegrationBranch
+    if (-not $integration) {
+        Write-Warn '[提醒] 找不到仓库根 integration-branch，跳过「必须站在集成分支」校验。'
+    } elseif ($current -ne $integration) {
+        if (-not $Force) {
+            Write-Fail "[错误] 当前分支是 $current，不是当前集成分支 $integration。"
+            Write-Host "新对话只在集成分支上开：git switch $integration，然后重跑 open。"
+            Write-Host '发版 / 热修确实要从别的分支起的，加 -Force，并在汇报里写明原因。'
+            exit 1
+        }
+        Write-Warn "[提醒] -Force：从 $current 而不是集成分支 $integration 起对话分支。"
     }
 
     $base = $current
@@ -281,6 +308,7 @@ function Invoke-Open {
     Write-Host ''
     Write-Host "SESSION_BRANCH=$branchName"
     Write-Host "SESSION_BASE=$base"
+    Write-Host "SESSION_INTEGRATION=$integration"
     Write-Host "SESSION_WIP=$($dirty.Count)"
 }
 
@@ -310,6 +338,11 @@ function Invoke-Close {
     if ($base -eq $branchName) {
         Write-Fail '[错误] 基线与对话分支相同。'
         exit 1
+    }
+
+    $integration = Get-IntegrationBranch
+    if ($integration -and $base -ne $integration) {
+        Write-Warn "[提醒] 基线 $base 不是当前集成分支 $integration；本次只合回 $base（例如 1.3.x 维护）。"
     }
 
     $worktrees = @(Get-WorktreesForBranch $branchName)
@@ -414,6 +447,13 @@ function Invoke-Close {
 
 function Invoke-List {
     Assert-Git
+
+    $integration = Get-IntegrationBranch
+    if ($integration) {
+        Write-Host "当前集成分支：$integration"
+    } else {
+        Write-Warn '[提醒] 找不到仓库根 integration-branch。'
+    }
 
     $refs = @(& git -C $root for-each-ref 'refs/heads/sess' --format='%(refname:short)' 2>$null)
     $refs = @($refs | Where-Object { $_ })
