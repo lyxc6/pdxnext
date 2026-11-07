@@ -84,6 +84,9 @@ pwsh -File scripts/session.ps1 list                     :: 看进行中的对话
 pwsh -File scripts/session.ps1 close -Message "中文说明"  :: 构建 + 自检 → --no-ff 合回 → 删分支
 ```
 
+`open` 要求当前站在仓库根 `integration-branch` 记录的集成分支上（1.3 期间是 `feat/1.3`）；
+不在就先切过去。发版 / 热修要从别的分支起时才加 `-Force`。
+
 其他对话或自动化脚本统一用 `dev.cmd`，不要用 `start.cmd`（它遇到已运行实例会直接退出，也不负责验收）：
 
 ```bat

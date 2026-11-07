@@ -1,7 +1,8 @@
 # Agent 入口（PdxNext）
 
 本文件给下个对话 / 自动化 agent 用：先照这里开工，细节再读 `docs/AGENT-WORKFLOW.md`。
-仓库根：`G:\Work\paradox启动器`；当前集成分支 `feat/1.3`。默认用中文汇报。
+仓库根：`G:\Work\paradox启动器`；当前集成分支记在仓库根 `integration-branch`（现在是 `feat/1.3`）。
+默认用中文汇报。
 
 ## 1. 对话生命周期：一个对话一个分支
 
@@ -18,7 +19,10 @@
    `slug` 用英文 kebab-case，例如 `fix-dlc-artwork`、`docs-session-rules`。
    没有 `pwsh` 时用 `powershell -File`，参数相同。
 
-- 分支名 `sess/YYYYMMDD-<slug>`，基线是**对话开始时所在的当前分支**（通常是 `feat/1.3`）。
+   `open` 会校验你**必须站在 `integration-branch` 记录的集成分支上**；不在就先
+   `git switch <集成分支>`。只有发版 / 热修确实要从别的分支起时，才加 `-Force` 并在汇报里写明原因。
+
+- 分支名 `sess/YYYYMMDD-<slug>`，基线是**对话开始时所在的当前分支**（通常是集成分支 `feat/1.3`）。
 - 开工时已有的未提交改动会跟着带到新分支，并由脚本提交成 `wip(session): ...` 基线提交；
   它只是检查点，不是交付内容。
 - 本对话的所有提交都留在 sess 分支；**不往起始分支写任何东西**。
@@ -42,6 +46,13 @@
    并写明本对话分支去向：`sess/… → 已合回 <分支>（commit）`。
 
 **没做完就不要 `close`**：分支留着，在汇报里写清停在哪、下个对话从哪接。
+
+### 1.3 换版本时（1.3 → 1.4）
+
+- 发版顺序见 `docs/VERSIONING.md` §4；发版后开下一个大分支见 §5.1。
+- 唯一需要改的配置是仓库根 `integration-branch`：内容改成新分支名（如 `feat/1.4`），提交后所有新对话自动跟随。
+  不要把版本分支名写死在其它文档或脚本里。
+- 发版前先 `pwsh -File scripts/session.ps1 list`，确认没有未收尾的 `sess/*` 分支。
 
 ## 2. 三条命令
 
