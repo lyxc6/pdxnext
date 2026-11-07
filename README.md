@@ -96,8 +96,7 @@ CK3、VIC3、EU5、Stellaris 与 CS2 各有自己的存档落点（文档下的 
 ```bat
 git clone https://github.com/lyxc6/pdxnext.git
 cd pdxnext
-build.cmd
-run.cmd
+start.cmd
 ```
 
 - 需要 .NET SDK 10 与 Windows 10/11 SDK；Windows App SDK 以自包含方式随包，无需单独安装。

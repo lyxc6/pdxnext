@@ -7,6 +7,7 @@
 
 ### Added
 
+- 崩溃分析页：页脚新增「崩溃分析」，只读扫描当前游戏的 `crashes\` 崩溃包（`exception.txt` / `meta.yml` / minidump 大小）与 `logs\`（error / game / debug / system / graphics / warning），把异常码、启动到崩溃的时长、启用 Mod 与日志错误聚合成「结论 + 证据 + 建议」。会把报错里的 `common/...` 脚本路径按文件是否存在映射到具体 Mod（本机 VIC3 样本把 `sakuya_cheat_b6_effects.txt` 正确归到创意工坊 **Cheat Menu Pro**，识别出崩溃前 13 秒仍有脚本错误（20:55:22）、136 次 `create_building` 自动放置建筑错误与启动后 101 秒崩溃）；同一错误同时写进 error.log / game.log / debug.log 时按文件取最大次数，不把一份日志算三遍。页面不写游戏目录、不联网、不解析 minidump，只提供打开目录/复制报告。
 - 本地离线模型：安装状态从「文件在不在 + 尺寸对不对」的单一布尔改成五态（未安装 / 缺文件 / 尺寸不符 / 缺 `config.txt` / 已安装），删除改成可复核的四态结果（已删除 / 删了文件但目录有残留（列出残留清单）/ 原本就不存在 / 失败），并且只有删除后重新确认目录不存在才报「已删除」。新增整仓级 SHA-256 深校验，可指出具体哪个文件不对。此前递归删除时 `IOException` / `UnauthorizedAccessException` 被整个吞掉，删一半也报成功。
 - `docs/AGENT-WORKFLOW.md`：1.3 起由协调者派活、实现者只改指定范围、独立验收者复核；包含派活模板、并发与 worktree 规则、固定检查三命令、验收七条与汇报格式。
 - 主页背景：Paradox 元数据没有背图的游戏（目前是 EU5）改用 Steam 官方库页大图（`library_hero`），取不到时回落到安装包内置图，设置页来源显示「Steam 官方库页」。
@@ -22,19 +23,29 @@
 - DLC 页：Victoria 3 1.15 的新 DLC 只写在 `game\dlc_metadata\00_dlc_metadata.txt`，现在会一并解析（如「State and Revolution」）；CK3 与 Stellaris 的同名目录结构不同，不会被误当成 V3 格式。
 - 工坊评论表情：评论里的 Steam 表情（`…/economy/emoticon/<名字>`）按 20 px 内联图片渲染，被粗体、斜体或链接包住时也不会整段退化成纯文字。
 - 主页按钮：没有官方美术素材的游戏（内置占位图 / 安装包内置图 / Steam 库页大图）改用 WinUI 原生按钮；EU5 补上官方金色字标（1299×497 PNG），与 Steam 官方库页大图同时生效。
-- 成就页：Steam 宿主改成常驻子进程（`--steam-host serve`，stdin/stdout 逐行 JSON，Init 只做一次、空闲 10 分钟退出），启动后后台预热当前游戏的成就并写快照；预热后首次进页约 176 ms、二次约 88 ms（冷启直进仍是约 1.2 s，其中约 0.7 s 是 Steam 初始化）。
 - 成就 DLL 定位：同一目录里的原版备份（`steam_api64_o.dll` 等）优先于 `steam_api64.dll`；打了 DLC 补丁的游戏以前会选中补丁 loader 而 `Init` 失败、成就显示 0 条，现在会依次换候选（最多 3 份）并记住崩溃/失败的 DLL。新增 `--steam-host api-check` 只检查 DLL 能不能加载与导出是否齐全，不调用 `Init`。
 - DLC 页：Stellaris 这类在 Steam 里有 DLC 清单的游戏，现在分「已拥有（N）/ 未拥有（N）」两段列出，未拥有项只读。未拥有清单来自 Steam 的 DLC 表（`GetDLCCount` / `BGetDLCDataByIndex`）减去已拥有与磁盘上已存在的 `.dlc`；清单不可信（条目过多或大量空名）时不合成该段而是明确提示。Steam 没运行时标题改为「本地 DLC（N）」，不会再出现「已拥有（31）」但每行都写「授权未知」。
+- 开发入口：新增 `dev.cmd`（结束旧实例 → Release 构建 + 自检 → 启动，末尾输出 `DEV_RESULT` / `DEV_EXE` / `DEV_DATA` / `DEV_LOG` / `DEV_PID` 标记与 0–4 退出码）和 `status.cmd`（只读显示分支、已暂存 / 未暂存 / 未跟踪计数、改动文件、diff 统计、最近提交、运行态与构建时间）；同时补根 `AGENTS.md` 与 `docs/AGENT-WORKFLOW.md` §10，让其他对话按同一套命令开发与验收。
 
 ### Changed
 
+- 协作规范改为**一个对话一个分支**：根目录新增 `AGENTS.md`（开工 / 收尾硬规则）与 `scripts/session.ps1`（`open` 建 `sess/YYYYMMDD-<slug>`、`close` 构建自检后 `--no-ff` 合回起始分支并删除、`list` 查看进行中的对话）；开工时已存在的未提交改动会跟随到新分支并提交成 `wip(session)` 基线。`docs/AGENT-WORKFLOW.md` §2/§3/§4/§8/§9 同步从「任务级 `feat/<task>` 直接合 `feat/1.3`」改为「对话级 sess 分支，`feat/<task>` 仅在 worktree 内并行时使用」。
+- 移除 `run.cmd` / `run-debug.cmd` 两个纯启动脚本：Release 只启动改用 `dev.cmd nobuild`，Debug 用 `start.cmd debug`（构建后启动）；同步删除 `R_*` / `RD_*` 文案、VS Code「启动 Debug」任务与文档里的引用。
+- 创意工坊筛选栏：标签列表不再被每组的 240 DIP 内层滚动条压缩（V3 的 24 个类别以前只显示 10 行），现在整组铺开、窗口不够高时由外侧整栏滚动。
+- 创意工坊标签中文化：筛选栏与详情页的 Steam 标签（V3 24 个 + CK3 / Stellaris / EU4 / HOI4 / Imperator 的差异项，共 34 个）按界面语言显示；未收录的新标签回退英文，发给 Steam 的机器名与筛选请求保持不变。
 - 主页背景图缓存 TTL 从 5 天缩到 24 小时；设置页「立即检查」现在会真正绕过 TTL 与退避，以前它只是再走一遍解析，等于什么都没做。
 - 成就页列表右侧留出 16 px，WinUI 的悬浮滚动条不再压住「未解锁 / 已解锁·时间」那一列。
 - 主题刷新失败后的重试从「进程级一次性闩」改成 10 分钟退避 + 一次重试：以前进程活过一次就不再自动刷，断网启动一次后整天都不会再取图。
 - 破坏性操作的确认框默认焦点改到「取消」（删存档、清缓存等 9 处），按 Enter 不再直接执行删除；「取消」也支持 Esc。
+- 成就页不再在启动 / 切游戏时后台预热，也不再保留常驻 `--steam-host serve` worker：冷启首次直进从约 0.18 s 回到约 1–2 s，换来的是 Steam 不会在用户没启动游戏时把当前游戏显示成「运行中」。
 
 ### Fixed
 
+- 创意工坊正文配图点击跳浏览器：查看器只在顶部截图墙里按 URL 精确匹配，而正文配图从 0.43 起就单独存在 `_inlineImages` 里，永远匹配不到。现在按「同一份正文里的配图」成组打开内置查看器，可左右翻页、缩放，顶部截图墙仍保持独立。
+- 创意工坊正文长图被压成细条：`MarkdownView` 给正文图写死 `MaxWidth=640 / MaxHeight=420`，300×1600 的长图会被等比缩成约 79×420。现在取消高度上限，宽度跟随正文列宽（小图不放大，大图最多 944），描述与更新日志卡片收在 992 DIP（内容 960），对齐 Steam 物品页约 950 px 的阅读宽度。
+- PDX 正文 / 更新日志里的 Markdown 图片只显示占位：`ApplyPdxAsync` 只下载截图、不下载正文配图。现在两类图片走同一份内联缓存与查看器。
+- 选中游戏后 Steam 把该游戏显示成「正在运行」：成就预热 2 s 去抖后拉起常驻 `--steam-host serve` worker，worker 用游戏 appid 调 `SteamAPI_Init`，Steam 把它登记成该 appid 的 game process；worker 读完后不退出（空闲 10 分钟才退，打开成就页刷新还会重置计时），所以「运行中」会持续。现在删除启动 / 切游戏预热与常驻会话，成就只在打开成就页时按需读取，每次一个一次性 `--steam-host achievements` 子进程，读完即退；选定游戏、冷启动、主题刷新都不再产生任何 Steam 侧登记。
+- DLC 页未拥有的头图被裁掉：Steam 头图是 460×215（2.14:1），缩略图框是 208×117（16:9），`UniformToFill` 会放大约 20% 并左右各裁约 8.5%，角标和两侧装饰缺一块、看起来「歪」。现在本地横图（280×160）仍填满，Steam 头图改用 `Uniform` 完整显示（上下各留约 10 DIP 底色边）。同时修「重新检测 Steam 授权」后未拥有行头图退回占位图标（重建行后没有重新取图），并给取不到 `header_image` 的 appid（如 bundle 3596990）补一条 Warn 日志。
 - 成就页在打了 DLC 补丁的游戏里显示「没有可显示的成就」：一是补丁 loader 的 `Init` 必然失败且以前不会换候选，二是「可用但 0 条」的结果也会被写成缓存并被后续刷新继续沿用。现在初始化失败会换下一份 DLL，空结果不再落盘、加载到空快照时视为未命中并重新读取。
 - 背景图退避形同虚设：`IsCacheStale` 在 `now < retryAfter` 时没有提前返回，落到 5 天 TTL 判断上，失败后仍会每次解析都去撞 CDN。
 - 背景图条件请求从来没生效过：`HttpFetcher` 类声明漏了 `IConditionalHttpFetcher`，而下载器靠 `is` 探测它，结果生产永远走普通下载、`If-None-Match` 从不发送、ETag 恒为 null，304 分支是死代码（自检全绿是因为测试用了 fake 下载器）。现在接口真正实现，并加了「接口是否被实现」的自检钉住回归。
