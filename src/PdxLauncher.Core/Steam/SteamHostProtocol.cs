@@ -82,8 +82,11 @@ public static class SteamHostProtocol
     /// <summary>
     /// 常驻宿主：进程起一次、<c>SteamAPI_Init</c> 只做一次，之后从 stdin 逐行收命令、往 stdout 逐行回结果。
     /// <para>
-    /// 与一次性动词共用 <c>--steam-host</c> 入口和 <c>--api</c>/<c>--appid</c> 参数，但生命期由 App 侧
-    /// 的会话对象管理（启动、复用、崩溃重启一次、退出 Kill）。行格式见 <see cref="SteamHostWorkerProtocol"/>。
+    /// 与一次性动词共用 <c>--steam-host</c> 入口和 <c>--api</c>/<c>--appid</c> 参数。
+    /// <b>产品路径已不再使用它</b>：Steam 会把调过 <c>SteamAPI_Init</c> 的进程登记成该 appid 的
+    /// game process，常驻 worker 会让 Steam 在两次读取之间一直显示「游戏正在运行」。
+    /// 成就读取改走一次性 <see cref="AchievementsVerb"/>；重新接线前必须先处理这个副作用。
+    /// 行格式见 <see cref="SteamHostWorkerProtocol"/>。
     /// </para>
     /// </summary>
     public const string ServeVerb = "serve";

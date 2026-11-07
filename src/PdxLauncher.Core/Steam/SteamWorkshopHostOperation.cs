@@ -1024,9 +1024,9 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
         return new SteamHostMineItemResult(
             true,
             detail.PublishedFileId == 0 ? publishedFileId : detail.PublishedFileId,
-            detail.Title ?? string.Empty,
-            detail.Description ?? string.Empty,
-            SplitTagList(detail.Tags),
+            ReadFixedUtf8(detail.Title),
+            ReadFixedUtf8(detail.Description),
+            SplitTagList(ReadFixedUtf8(detail.Tags)),
             detail.Visibility,
             detail.OwnerSteamId64,
             detail.FileSize,
@@ -1039,7 +1039,7 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
     /// <summary>自检用：枚举结果结构体的托管尺寸（钉住布局，字段或修饰符漂移时立刻红）。</summary>
     internal static int OwnEnumerateResultSize => Marshal.SizeOf<OwnEnumerateFilesResult>();
 
-    /// <summary>自检用：详情结果结构体的托管尺寸（期望 9760，主要是 8000 字节的描述缓冲 + 各定长 char 数组）。</summary>
+    /// <summary>自检用：详情结果结构体的托管尺寸（期望 9760，主要是 8000 字节的描述缓冲 + 各定长字节缓冲）。</summary>
     internal static int OwnDetailResultSize => Marshal.SizeOf<OwnFileDetailResult>();
 
     private static IReadOnlyList<string> SplitTagList(string? tags)
@@ -1061,6 +1061,33 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
 
         return values;
     }
+
+    /// <summary>
+    /// 读 Steam 的定长 <c>char</c> 缓冲：SDK 里存的是 UTF-8 字节，遇到 0 截断后按 UTF-8 解。
+    /// <para>
+    /// 不能交给 <c>ByValTStr</c>：那会按系统 ANSI（简体中文 = CP936）解码，UTF-8 的中文标题
+    /// 就变成「锟斤拷」。这里只做解码，非法字节由 <see cref="Encoding.UTF8"/> 换成 U+FFFD，
+    /// 不抛异常（脏数据不该让整条工坊详情读失败）。
+    /// </para>
+    /// </summary>
+    private static string ReadFixedUtf8(byte[]? buffer)
+    {
+        if (buffer is null || buffer.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var length = Array.IndexOf(buffer, (byte)0);
+        if (length < 0)
+        {
+            length = buffer.Length;
+        }
+
+        return length == 0 ? string.Empty : Encoding.UTF8.GetString(buffer, 0, length);
+    }
+
+    /// <summary>自检用：让 Checks 直接走到私有的定长 UTF-8 解码路径（与 <see cref="OwnDetailResultSize"/> 同一用途）。</summary>
+    internal static string ReadFixedUtf8ForCheck(byte[]? buffer) => ReadFixedUtf8(buffer);
 
     /// <inheritdoc />
     public void Dispose()
@@ -1826,7 +1853,7 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
     /// 传大一点给 <c>GetAPICallResult</c> 是安全的。
     /// </para>
     /// </summary>
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    [StructLayout(LayoutKind.Sequential)]
     private struct OwnEnumerateFilesResult
     {
         public int Result;
@@ -1844,10 +1871,13 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
     /// <c>isteamremotestorage.h:52-58</c>（129 / 8000 / 1025 / 260 / 256）。
     /// <b>三个 <c>bool</c> 必须显式标 <see cref="UnmanagedType.I1"/></b>：C# 默认把 <c>bool</c> 按 4 字节
     /// 封送，而 SDK 里是 1 字节，不标就会把后面的 <c>char[1025]</c> 整体错位。
-    /// 期望 <c>Marshal.SizeOf</c> = 9760（起头的 4 字节 int 之后按 8 对齐；描述缓冲 8000 字节 + 其余定长 char 数组）。
+    /// <b>五个定长 <c>char</c> 缓冲必须是 <c>byte[]</c></b>：SDK 里是 UTF-8 字节，标 <c>ByValTStr</c> 会让
+    /// .NET 按系统 ANSI（简体中文 = CP936）解码，中文标题变成「锟斤拷」；字节数组原样收下，交给
+    /// <see cref="ReadFixedUtf8"/> 按 UTF-8 解。
+    /// 期望 <c>Marshal.SizeOf</c> = 9760（起头的 4 字节 int 之后按 8 对齐；描述缓冲 8000 字节 + 其余定长缓冲）。
     /// </para>
     /// </summary>
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+    [StructLayout(LayoutKind.Sequential)]
     private struct OwnFileDetailResult
     {
         public int Result;
@@ -1855,11 +1885,11 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
         public uint CreatorAppId;
         public uint ConsumerAppId;
 
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 129)]
-        public string Title;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 129)]
+        public byte[] Title;
 
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 8000)]
-        public string Description;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8000)]
+        public byte[] Description;
 
         public ulong FileHandle;
         public ulong PreviewFileHandle;
@@ -1871,20 +1901,20 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
         [MarshalAs(UnmanagedType.I1)]
         public bool Banned;
 
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 1025)]
-        public string Tags;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 1025)]
+        public byte[] Tags;
 
         [MarshalAs(UnmanagedType.I1)]
         public bool TagsTruncated;
 
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
-        public string FileName;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 260)]
+        public byte[] FileName;
 
         public int FileSize;
         public int PreviewFileSize;
 
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
-        public string Url;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 256)]
+        public byte[] Url;
 
         public int FileType;
 

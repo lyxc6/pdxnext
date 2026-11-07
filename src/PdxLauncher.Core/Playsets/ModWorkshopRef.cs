@@ -33,19 +33,19 @@ public sealed record ModWorkshopRef(WorkshopSource Source, string Id, string? St
     /// <summary>CS2 注册 ID 的 pdx 前缀：GameRegistryId = "pdx:&lt;sourceId&gt;"。</summary>
     internal const string PdxRegistryPrefix = "pdx:";
 
-    // 下面四个键必须与 tools/i18n/*\/modlib.json 的键逐字一致（Core 不能引用 App 生成的 Keys 常量，
-    // 所以在这里写成字符串常量，由自检 ModWorkshopRefChecks 保证键名没写错）。
+    // 下面四个键必须与 src/PdxLauncher.App/Strings/*/Resources.resw 的资源名逐字一致（Core 不引用 App 生成的
+    // Keys 常量，所以在这里写成字符串常量，由自检 ModWorkshopRefChecks 保证键名没写错）。
     /// <summary>这行根本没有工坊编号（本地 mod）。</summary>
-    public const string StatusKeyNoWorkshop = "modlib.detailNoWorkshop";
+    public const string StatusKeyNoWorkshop = "ModlibDetailNoWorkshop";
 
     /// <summary>Steam 渠道，但注册 ID 里没有 ugc_ 编号。</summary>
-    public const string StatusKeySteamUnresolved = "modlib.detailSteamUnresolved";
+    public const string StatusKeySteamUnresolved = "ModlibDetailSteamUnresolved";
 
     /// <summary>Paradox 渠道，但 pdx: 后面的编号不是纯数字。</summary>
-    public const string StatusKeyPdxUnresolved = "modlib.detailPdxUnresolved";
+    public const string StatusKeyPdxUnresolved = "ModlibDetailPdxUnresolved";
 
     /// <summary>来源字段认不出来，不猜平台。</summary>
-    public const string StatusKeyUnknownSource = "modlib.detailUnknownSource";
+    public const string StatusKeyUnknownSource = "ModlibDetailUnknownSource";
 
     /// <summary>
     /// 解析一行 Mod 库记录。

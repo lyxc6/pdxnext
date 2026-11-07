@@ -46,14 +46,42 @@ public static class WorkshopPageCacheChecks
         var f = WorkshopPageCache.Key(WorkshopSource.Steam, "ck3", "ui", "Trend", 30, 0);
         var g = WorkshopPageCache.Key(WorkshopSource.Steam, "stellaris", null, "Trend", 30, 0);
 
-        ChecksContext.Equal("页面缓存键：基本形态", "steam|ck3||Trend|30|0", a);
-        ChecksContext.Equal("页面缓存键：PDX 无时间范围", "pdx|ck3||Trend|-|0", e);
+        ChecksContext.Equal("页面缓存键：基本形态", "steam|ck3||Trend|30|0|30|-|-|-|-|0|0", a);
+        ChecksContext.Equal("页面缓存键：PDX 无时间范围", "pdx|ck3||Trend|-|0|30|-|-|-|-|0|0", e);
         ChecksContext.Check("页面缓存键：页码区分", a != b);
         ChecksContext.Check("页面缓存键：排序区分", a != c);
         ChecksContext.Check("页面缓存键：时间范围区分", a != d);
         ChecksContext.Check("页面缓存键：来源区分", a != e);
         ChecksContext.Check("页面缓存键：关键词区分", a != f);
         ChecksContext.Check("页面缓存键：游戏区分", a != g);
+
+        // 左侧筛选栏与每页条数都是新的查询维度：任一不同都必须生成不同的键。
+        var pageSize = WorkshopPageCache.Key(WorkshopSource.Steam, "ck3", null, "Trend", 30, 0, 50);
+        var required = WorkshopPageCache.Key(
+            WorkshopSource.Steam, "ck3", null, "Trend", 30, 0, 30, ["Gameplay"]);
+        var excluded = WorkshopPageCache.Key(
+            WorkshopSource.Steam, "ck3", null, "Trend", 30, 0, 30, null, ["Gameplay"]);
+        var dlc = WorkshopPageCache.Key(
+            WorkshopSource.Steam, "ck3", null, "Trend", 30, 0, 30, null, null, [2071471]);
+        var incompatible = WorkshopPageCache.Key(
+            WorkshopSource.Steam, "ck3", null, "Trend", 30, 0, 30, null, null, null, null, true);
+        var special = WorkshopPageCache.Key(
+            WorkshopSource.Steam, "ck3", null, "Trend", 30, 0, 30, null, null, null, null, false,
+            SteamWorkshopSpecialFilter.InCollections);
+
+        ChecksContext.Check("页面缓存键：每页条数区分", a != pageSize);
+        ChecksContext.Check("页面缓存键：必须包含标签区分", a != required);
+        ChecksContext.Check("页面缓存键：必须排除标签区分", a != excluded && required != excluded);
+        ChecksContext.Check("页面缓存键：所需 DLC 区分", a != dlc);
+        ChecksContext.Check("页面缓存键：不兼容开关区分", a != incompatible);
+        ChecksContext.Check("页面缓存键：特别筛选区分", a != special && incompatible != special);
+
+        // 标签顺序与重复不影响键（URL 里也是排序去重后的）。
+        var orderedFirst = WorkshopPageCache.Key(
+            WorkshopSource.Steam, "ck3", null, "Trend", 30, 0, 30, ["Gameplay", "Flags"]);
+        var orderedSecond = WorkshopPageCache.Key(
+            WorkshopSource.Steam, "ck3", null, "Trend", 30, 0, 30, ["Flags", "Gameplay", "Flags"]);
+        ChecksContext.Equal("页面缓存键：标签排序去重", orderedFirst, orderedSecond);
     }
 
     private static void CheckSetAndGet(MutableClock clock)

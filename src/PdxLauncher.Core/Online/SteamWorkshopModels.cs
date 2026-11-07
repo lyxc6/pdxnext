@@ -31,6 +31,26 @@ public enum SteamWorkshopSort
     TextSearch,
 }
 
+/// <summary>
+/// 创意工坊左侧筛选栏的「特别筛选条件」。
+/// <para>
+/// 取值来自网页实测（2026-11）：<c>special_filter=6</c> 表示「其他项目需要」，
+/// <c>special_filter=7</c> 表示「在合集中」。选中的同时服务端还会把排序换成
+/// <c>num_parent_items</c> / <c>num_parent_collections</c>，见 <see cref="SteamWorkshopClient.BuildBrowseUri"/>。
+/// </para>
+/// </summary>
+public enum SteamWorkshopSpecialFilter
+{
+    /// <summary>无（不传参数）。</summary>
+    None = 0,
+
+    /// <summary>其他项目需要（<c>special_filter=6</c>）。</summary>
+    RequiredByOtherItems = 6,
+
+    /// <summary>在合集中（<c>special_filter=7</c>）。</summary>
+    InCollections = 7,
+}
+
 /// <summary>创意工坊列表查询条件。页码从 0 开始，与服务端 <c>p</c>（从 1 开始）差一由客户端换算。</summary>
 /// <param name="SearchText">关键词；为空表示纯浏览。</param>
 /// <param name="Sort">排序档位。</param>
@@ -41,17 +61,47 @@ public enum SteamWorkshopSort
 /// 1 = 今天、7 = 1 周、30 = 30 天、90 = 3 个月、180 = 6 个月、365 = 1 年、-1 = 发布至今。
 /// 只对最热门/最受好评有意义；null 表示不传（服务端默认 7 天）。
 /// </param>
+/// <param name="RequiredTags">必须包含的标签（<c>requiredtags[]</c>，值是标签名，不是 id）。</param>
+/// <param name="ExcludedTags">必须排除的标签（<c>excludedtags[]</c>）。</param>
+/// <param name="RequiredAppIds">必须依赖的 DLC appid（<c>appids_required_for_use[]</c>）。</param>
+/// <param name="ExcludedAppIds">必须排除的 DLC appid（<c>excluded_appids_required_for_use[]</c>）。</param>
+/// <param name="ShowIncompatible">是否显示不兼容项目（<c>requiredflags[]=incompatible</c>）。</param>
+/// <param name="SpecialFilter">特别筛选条件。</param>
 public sealed record SteamWorkshopQuery(
     string? SearchText,
     SteamWorkshopSort Sort,
     int Page,
     int PageSize = SteamWorkshopClient.DefaultPageSize,
-    int? Days = null);
+    int? Days = null,
+    IReadOnlyList<string>? RequiredTags = null,
+    IReadOnlyList<string>? ExcludedTags = null,
+    IReadOnlyList<int>? RequiredAppIds = null,
+    IReadOnlyList<int>? ExcludedAppIds = null,
+    bool ShowIncompatible = false,
+    SteamWorkshopSpecialFilter SpecialFilter = SteamWorkshopSpecialFilter.None);
 
 /// <summary>条目标签。</summary>
 /// <param name="Tag">机器标签。</param>
 /// <param name="DisplayName">展示名。</param>
 public sealed record SteamWorkshopTag(string Tag, string DisplayName);
+
+/// <summary>
+/// 工坊左侧筛选栏的一个分组（类别 / 更新兼容性 / 所需的 DLC）。
+/// <para>
+/// 前两组来自 SSR 的 <c>declared_tags_v6.readytouse_tags</c>，<see cref="SteamWorkshopTag.Tag"/> 是标签名；
+/// DLC 组来自 <c>workshop_required_dlc_v5</c>，<see cref="SteamWorkshopTag.Tag"/> 是 DLC 的 appid 字符串，
+/// 因为服务端参数是 <c>appids_required_for_use[]</c> 而不是标签。
+/// </para>
+/// </summary>
+/// <param name="Key">稳定键（<c>category</c> / <c>compatibility</c> / <c>dlc</c>，SSR 未知组用原标题）。</param>
+/// <param name="Title">服务端给的原始标题（可能为空，界面按 <see cref="Key"/> 本地化）。</param>
+/// <param name="Tags">分组里的选项。</param>
+/// <param name="IsDlc">是否是「所需的 DLC」组（选项值是 appid）。</param>
+public sealed record SteamWorkshopFilterGroup(
+    string Key,
+    string Title,
+    IReadOnlyList<SteamWorkshopTag> Tags,
+    bool IsDlc = false);
 
 /// <summary>创意工坊列表里的一条。</summary>
 /// <param name="PublishedFileId">Steam 已发布文件 id（字符串，避免前导零/精度问题）。</param>
@@ -92,13 +142,18 @@ public sealed record SteamWorkshopItem(
 /// <param name="Page">页码（从 0 开始）。</param>
 /// <param name="PageSize">每页条数。</param>
 /// <param name="TotalPages">总页数。</param>
+/// <param name="FilterGroups">左侧筛选栏的可用分组（缺失时为空）。</param>
 public sealed record SteamWorkshopPage(
     IReadOnlyList<SteamWorkshopItem> Items,
     int TotalCount,
     int Page,
     int PageSize,
-    int TotalPages)
+    int TotalPages,
+    IReadOnlyList<SteamWorkshopFilterGroup>? FilterGroups = null)
 {
+    /// <summary>筛选组（非 null，便于界面直接绑定）。</summary>
+    public IReadOnlyList<SteamWorkshopFilterGroup> Groups => FilterGroups ?? [];
+
     /// <summary>空页（用于页码越界时兜底）。</summary>
     public static SteamWorkshopPage Empty(int page, int pageSize) =>
         new([], 0, page, pageSize, 0);

@@ -8,8 +8,9 @@ using PdxLauncher.Core.Steam;
 /// 自检工程兼作「假 Steam 宿主」：被 <c>--steam-host</c> 拉起时走这里。
 /// <para>
 /// 行为由环境变量 <c>PDXNEXT_FAKE_MODE</c> 控制，默认 <c>sleep</c>（保持旧用例：
-/// 挂住不返回，验证调用方取消原样传播）。其余模式用于钉住常驻会话的复用、崩溃重启一次、
-/// 坏版本回落、结果码透传与空闲退出。
+/// 挂住不返回，验证调用方取消原样传播）。其余模式用于一次性宿主的协议用例
+/// （坏回包、结果码透传、崩溃）。常驻 <c>serve</c> 分支随 <c>SteamHostSession</c>
+/// 一起退出产品路径，仅保留实现以便协议自检。
 /// </para>
 /// <para>
 /// 每次启动把「第几次启动」写到 <c>PDXNEXT_FAKE_STATE</c> 目录下的 <c>starts.txt</c>，

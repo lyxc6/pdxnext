@@ -1,6 +1,7 @@
 namespace PdxLauncher.App.ViewModels;
 
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -29,14 +30,20 @@ using PdxLauncher.Core.Online;
 /// </summary>
 public sealed partial class WorkshopViewModel : LocalizedObservableObject
 {
-    /// <summary>PDX Mods 每页条数。</summary>
-    private const int PdxPageSize = 24;
+    /// <summary>默认每页条数（与 Steam 网页一致）。</summary>
+    private const int DefaultPageSize = 30;
+
+    /// <summary>「每页」下拉框的档位（与 Steam 网页一致：10 / 15 / 30 / 50）。</summary>
+    private static readonly int[] PageSizeChoices = [10, 15, 30, 50];
 
     /// <summary>创意工坊所在的 host：限流冷却按 host 记账，提示文案要查它。</summary>
     private const string SteamCommunityHost = "steamcommunity.com";
 
-    /// <summary>Steam 每页条数。</summary>
-    private const int SteamPageSize = SteamWorkshopClient.DefaultPageSize;
+    /// <summary>
+    /// 筛选变化到发请求之间的去抖：一口连点几个「+/-」只查一次。
+    /// Steam 对同一主机的最小请求间隔是 1 秒，700 ms 去抖后仍会被限流层兜住。
+    /// </summary>
+    private static readonly TimeSpan FilterDebounce = TimeSpan.FromMilliseconds(700);
 
     /// <summary>Steam 的排序档位（与网页一致，含「搜索相关度」）。</summary>
     private static readonly string[] SteamSortKeys =
@@ -102,6 +109,39 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
     /// <summary>当前页码（0 基）。</summary>
     private int _page;
+
+    /// <summary>当前每页条数（Steam / PDX 共用）。</summary>
+    private int _pageSize = DefaultPageSize;
+
+    /// <summary>筛选去抖令牌；每次筛选变化都取消上一轮。</summary>
+    private CancellationTokenSource? _filterDebounce;
+
+    /// <summary>上一次生成的页码序列；相同就不重建集合，避免 x:Bind 抖动。</summary>
+    private string _pageButtonsSignature = string.Empty;
+
+    /// <summary>按 appId 记住上次解析到的筛选组：切回看过的游戏时，命中页缓存也能显示侧栏。</summary>
+    private readonly Dictionary<int, IReadOnlyList<SteamWorkshopFilterGroup>> _filterGroupsByApp = new();
+
+    /// <summary>筛选目录的落盘缓存（最近一次抓到的分组 + 抓取时刻 + 本地游戏版本）。</summary>
+    private readonly WorkshopFilterCatalogCache _catalogCache;
+
+    /// <summary>当前 app 的目录快照；null 表示还没抓到过（此时用静态目录兜底）。</summary>
+    private WorkshopFilterCatalogSnapshot? _catalogSnapshot;
+
+    /// <summary>目录刷新失败的时刻（内存退避，成功后清空）。</summary>
+    private DateTimeOffset _lastCatalogFailureUtc = DateTimeOffset.MinValue;
+
+    /// <summary>目录刷新是否在途（单飞，避免进页面时连发请求）。</summary>
+    private bool _catalogRefreshing;
+
+    /// <summary>在途的目录刷新令牌；换游戏 / 页面卸载时取消。</summary>
+    private CancellationTokenSource? _catalogCts;
+
+    /// <summary>本轮查询里因为标签消失而被取消的筛选，需要在查询结束后重查一次。</summary>
+    private bool _pendingFilterRequery;
+
+    /// <summary>目录快照最小写盘间隔（结构没变时最多每小时写一次）。</summary>
+    private static readonly TimeSpan CatalogSaveMinInterval = TimeSpan.FromHours(1);
 
     /// <summary>服务端报告的总条数。</summary>
     private int _totalCount;
@@ -192,6 +232,14 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     [ObservableProperty]
     private bool _isFillingCovers;
 
+    /// <summary>当前选中的每页条数（分页器下拉框）。</summary>
+    [ObservableProperty]
+    private int _selectedPageSize = DefaultPageSize;
+
+    /// <summary>是否展开左侧筛选栏（工具条上的「筛选」按钮切换）。</summary>
+    [ObservableProperty]
+    private bool _showFilterPanel = true;
+
     public WorkshopViewModel(
         SteamWorkshopClient steam,
         PdxModsClient pdx,
@@ -199,6 +247,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         IAssetDownloader assets,
         WorkshopInfoCache info,
         WorkshopPageCache pages,
+        WorkshopFilterCatalogCache catalogCache,
         IAppLogger logger)
     {
         ArgumentNullException.ThrowIfNull(steam);
@@ -207,6 +256,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         ArgumentNullException.ThrowIfNull(assets);
         ArgumentNullException.ThrowIfNull(info);
         ArgumentNullException.ThrowIfNull(pages);
+        ArgumentNullException.ThrowIfNull(catalogCache);
         ArgumentNullException.ThrowIfNull(logger);
 
         _steam = steam;
@@ -215,16 +265,30 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _assets = assets;
         _info = info;
         _pages = pages;
+        _catalogCache = catalogCache;
         _logger = logger;
 
         SortModes = BuildSortModes(WorkshopSource.None);
         _selectedSortMode = SortModes[0];
         TimeRangeModes = BuildTimeRangeModes();
         _selectedTimeRange = TimeRangeModes[DefaultTimeRangeIndex];
+
+        Filters = new WorkshopFiltersViewModel();
+        Filters.Changed += OnFiltersChanged;
+        Filters.PropertyChanged += OnFiltersPropertyChanged;
     }
 
     /// <summary>当前可见的创意工坊行。</summary>
     public ObservableCollection<WorkshopRowViewModel> Rows { get; } = new();
+
+    /// <summary>左侧筛选栏的状态（分组、标签、DLC、不兼容、特别筛选）。</summary>
+    public WorkshopFiltersViewModel Filters { get; }
+
+    /// <summary>「每页」下拉框的档位。</summary>
+    public IReadOnlyList<int> PageSizeOptions => PageSizeChoices;
+
+    /// <summary>分页器上的页码/省略号。</summary>
+    public ObservableCollection<WorkshopPageButton> PageButtons { get; } = new();
 
     /// <summary>游戏名（页头副标题）；没有游戏时为空串。</summary>
     public string GameTitle => Game?.DisplayName ?? string.Empty;
@@ -277,6 +341,15 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// </summary>
     public bool ShowTimeRange => Source == WorkshopSource.Steam && IsTimeRangeSort();
 
+    /// <summary>只有 Steam 来源有筛选栏（PDX Mods 没有标签/DLC 维度）。</summary>
+    public bool ShowFilters => Source == WorkshopSource.Steam;
+
+    /// <summary>工具条上的「筛选」按钮是否可见：来源支持且确实拿到了分组数据。</summary>
+    public bool CanShowFilters => ShowFilters && Filters.HasGroups;
+
+    /// <summary>实际是否显示筛选栏：来源支持、用户没收起、且确实拿到了分组数据。</summary>
+    public bool ShowFilterSidebar => ShowFilterPanel && ShowFilters && Filters.HasGroups;
+
     /// <summary>
     /// 换游戏 / 首次进入：重置页码与列表，判定来源后查一次。
     /// </summary>
@@ -289,12 +362,34 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
         // 换游戏 / 重新加载：上一轮查询作废；已提交的搜索词跟随输入框当前内容。
         CancelPendingQuery();
+        CancelPendingFilterQuery();
+        CancelCatalogRefresh();
+        _pendingFilterRequery = false;
+        ApplyPersistedPageSize();
+
+        // 每个游戏从「无筛选」开始；分组数据会在来源判定后按 appId 重新装载。
+        Filters.Reset();
         _pageToken = cancellationToken;
         _appliedSearch = SearchText.Trim();
 
         // 独立安装读不到 appmanifest 时 SteamAppId 是 null，这里用映射表兜底，
         // 否则 EU4 / CS1 / 监狱建筑师这些明明有 Steam 工坊的游戏会被误判成没有。
         _steamAppId = WorkshopSourceChooser.ResolveAppId(game?.SteamAppId, game?.GameId);
+
+        // 先把上次落盘的筛选目录读出来：重启/离线时侧栏直接显示已知最新版本，
+        // 不必等首屏网络请求，也不会退回写死 1.13 的静态目录。
+        _catalogSnapshot = null;
+        if (_steamAppId is { } catalogAppId)
+        {
+            var snapshot = await Task
+                .Run(() => _catalogCache.TryLoad(catalogAppId), cancellationToken)
+                .ConfigureAwait(true);
+            if (!cancellationToken.IsCancellationRequested)
+            {
+                _catalogSnapshot = snapshot;
+            }
+        }
+
         _page = 0;
         _totalCount = 0;
         _totalPages = 0;
@@ -339,6 +434,10 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             AppServices.Breadcrumb("工坊 来源=" + Source + "（" + watch.ElapsedMilliseconds + " ms）");
             RaiseDerived();
             await RunQueryAsync(resetPage: false, force: false).ConfigureAwait(true);
+
+            // 列表本身可能完全来自页缓存（或刚刚查完），但筛选目录有自己的 24h TTL /
+            // 本地版本判断；不新鲜时在后台补一次，不挡列表显示。
+            _ = RefreshCatalogIfStaleAsync(cancellationToken);
             _logger.Info("创意工坊加载完成（game=" + game.GameId + "）：" + watch.ElapsedMilliseconds + " ms");
         }
         catch (OperationCanceledException)
@@ -528,6 +627,135 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _pageToken = cancellationToken;
         await RunQueryAsync(resetPage: false, force: false).ConfigureAwait(true);
     }
+
+    /// <summary>跳到指定页（0 基）；越界或与当前页相同都不动。</summary>
+    /// <param name="pageIndex">目标页码，从 0 开始。</param>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public async Task GoToPageAsync(int pageIndex, CancellationToken cancellationToken)
+    {
+        if (pageIndex < 0 || (_totalPages > 0 && pageIndex >= _totalPages) || pageIndex == _page)
+        {
+            return;
+        }
+
+        _page = pageIndex;
+        _pageToken = cancellationToken;
+        await RunQueryAsync(resetPage: false, force: false).ConfigureAwait(true);
+    }
+
+    /// <summary>切换每页条数：回到第 1 页并跳过缓存（页缓存键里已经带了页大小）。</summary>
+    /// <param name="pageSize">新的每页条数（不在档位里时回落到默认 30）。</param>
+    public Task ChangePageSizeAsync(int pageSize)
+    {
+        var normalized = NormalizePageSize(pageSize);
+        if (normalized == _pageSize)
+        {
+            return Task.CompletedTask;
+        }
+
+        _pageSize = normalized;
+        SelectedPageSize = normalized;
+        AppServices.Settings.WorkshopPageSize = normalized;
+        AppServices.SaveSettingsDeferred();
+        return RunQueryAsync(resetPage: true, force: true);
+    }
+
+    /// <summary>筛选变化：去抖后回到第 1 页重查。</summary>
+    private void OnFiltersChanged(object? sender, EventArgs e)
+    {
+        if (!HasGame || Source != WorkshopSource.Steam || _pageToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        CancelPendingFilterQuery();
+        var debounce = CancellationTokenSource.CreateLinkedTokenSource(_pageToken);
+        _filterDebounce = debounce;
+        _ = ApplyFiltersAfterDebounceAsync(debounce);
+    }
+
+    /// <summary>去抖到点后按新筛选查第一页；令牌被取代时什么都不做。</summary>
+    private async Task ApplyFiltersAfterDebounceAsync(CancellationTokenSource debounce)
+    {
+        try
+        {
+            await Task.Delay(FilterDebounce, debounce.Token).ConfigureAwait(true);
+            _queryTask = RunQueryAsync(resetPage: true, force: true);
+            await _queryTask.ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // 被下一次筛选 / 换游戏 / 页面卸载取代：正常路径。
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("创意工坊筛选查询失败（game=" + _gameId + "）", ex);
+        }
+        finally
+        {
+            if (ReferenceEquals(_filterDebounce, debounce))
+            {
+                _filterDebounce = null;
+            }
+
+            debounce.Dispose();
+        }
+    }
+
+    /// <summary>取消尚未触发的筛选去抖（换游戏 / 页面卸载时用）。</summary>
+    public void CancelPendingFilterQuery()
+    {
+        var pending = _filterDebounce;
+        _filterDebounce = null;
+        if (pending is null)
+        {
+            return;
+        }
+
+        try
+        {
+            pending.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 已经收尾，忽略。
+        }
+
+        pending.Dispose();
+    }
+
+    /// <summary>从设置里恢复每页条数（不在档位里就回到默认 30）。</summary>
+    private void ApplyPersistedPageSize()
+    {
+        var stored = NormalizePageSize(AppServices.Settings.WorkshopPageSize);
+        _pageSize = stored;
+        SelectedPageSize = stored;
+    }
+
+    private static int NormalizePageSize(int value)
+    {
+        foreach (var choice in PageSizeChoices)
+        {
+            if (choice == value)
+            {
+                return choice;
+            }
+        }
+
+        return DefaultPageSize;
+    }
+
+    /// <summary>筛选栏的派生状态（是否显示）变化时通知绑定。</summary>
+    private void OnFiltersPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(WorkshopFiltersViewModel.HasGroups))
+        {
+            OnPropertyChanged(nameof(ShowFilterSidebar));
+            OnPropertyChanged(nameof(CanShowFilters));
+        }
+    }
+
+    partial void OnShowFilterPanelChanged(bool value) => OnPropertyChanged(nameof(ShowFilterSidebar));
 
     /// <summary>
     /// 提交搜索框里的关键词并重查第一页。只有回车（或刷新按钮）走到这里 ——
@@ -722,10 +950,19 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
             // 过期的页仍然先显示，再悄悄刷新一次；用户不必盯着转圈。
             // 同一页两分钟内只补一次，否则来回切页会重复打同一个地址。
+            var refreshingPage = false;
             if (!_pages.IsFresh(cached) && _pages.CanReattempt(cached, SilentRefreshMinInterval))
             {
                 _pages.MarkAttempt(key);
+                refreshingPage = true;
                 _queryTask = RefreshSilentlyAsync(key, version, cancellationToken);
+            }
+
+            // 页缓存新鲜时不会发列表请求，筛选目录可能已经过期（兼容性版本更新）；
+            // 静默刷新本来就会带回目录，所以只在没刷新页时补一次。
+            if (!refreshingPage)
+            {
+                _ = RefreshCatalogIfStaleAsync(cancellationToken);
             }
 
             return;
@@ -798,11 +1035,18 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             {
                 IsBusy = false;
                 RaiseDerived();
+
+                // 目录刷新发现已选标签消失：本页是按失效标签查的，收尾后重新查第 1 页。
+                if (_pendingFilterRequery)
+                {
+                    _pendingFilterRequery = false;
+                    _queryTask = RunQueryAsync(resetPage: true, force: true);
+                }
             }
         }
     }
 
-    /// <summary>生成页缓存的键：来源、游戏、已提交的关键词、排序、时间范围、页码都参与。</summary>
+    /// <summary>生成页缓存的键：来源、游戏、已提交的关键词、排序、时间范围、页码、页大小、筛选栏都参与。</summary>
     private string BuildPageKey()
     {
         var search = _appliedSearch.Length == 0 ? null : _appliedSearch;
@@ -810,10 +1054,30 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         {
             var sort = ResolveSteamSort();
             var days = sort is SteamWorkshopSort.Trend or SteamWorkshopSort.TopRated ? ResolveDays() : (int?)null;
-            return WorkshopPageCache.Key(WorkshopSource.Steam, _gameId, search, sort.ToString(), days, _page);
+            return WorkshopPageCache.Key(
+                WorkshopSource.Steam,
+                _gameId,
+                search,
+                sort.ToString(),
+                days,
+                _page,
+                _pageSize,
+                Filters.RequiredTags,
+                Filters.ExcludedTags,
+                Filters.RequiredAppIds,
+                Filters.ExcludedAppIds,
+                Filters.ShowIncompatible,
+                Filters.SpecialFilter);
         }
 
-        return WorkshopPageCache.Key(WorkshopSource.Pdx, _gameId, search, ResolvePdxSort().ToString(), null, _page);
+        return WorkshopPageCache.Key(
+            WorkshopSource.Pdx,
+            _gameId,
+            search,
+            ResolvePdxSort().ToString(),
+            null,
+            _page,
+            _pageSize);
     }
 
     /// <summary>把缓存的一页直接铺到列表上（封面只认磁盘命中，不联网）。</summary>
@@ -1022,6 +1286,16 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         {
             _logger.Warn("创意工坊静默刷新失败：" + ex.Message);
         }
+        finally
+        {
+            // 静默刷新不走 RunQueryAsync，失效标签的重查要在这里收口；
+            // 否则标记会留到下一条无关查询，造成一次莫名其妙的跳页。
+            if (_pendingFilterRequery && !cancellationToken.IsCancellationRequested)
+            {
+                _pendingFilterRequery = false;
+                _queryTask = RunQueryAsync(resetPage: true, force: true);
+            }
+        }
     }
 
     /// <summary>取消当前这一轮封面下载。</summary>
@@ -1072,8 +1346,14 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             _appliedSearch.Length == 0 ? null : _appliedSearch,
             sort,
             _page,
-            SteamPageSize,
-            days);
+            _pageSize,
+            days,
+            Filters.RequiredTags,
+            Filters.ExcludedTags,
+            Filters.RequiredAppIds,
+            Filters.ExcludedAppIds,
+            Filters.ShowIncompatible,
+            Filters.SpecialFilter);
 
         var result = await _steam.BrowseAsync(appId, query, cancellationToken).ConfigureAwait(true);
 
@@ -1102,16 +1382,71 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         var page = result.Value;
         _totalCount = page.TotalCount;
         _totalPages = page.TotalPages;
+        AppServices.Breadcrumb("工坊 结果已回（" + page.Items.Count + " 条）");
+
+        // 筛选组以页面数据为准；页面改版/解析不到时退回持久化快照 / 内置目录（Victoria 3）。
+        var applyResult = ApplyFilterGroups(page.Groups);
 
         var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
-        var rows = new List<WorkshopRowViewModel>(page.Items.Count);
-        var entries = new List<WorkshopInfoCacheEntry>(page.Items.Count);
-        foreach (var item in page.Items)
+
+        // 建行时每条都要读写一次工坊信息缓存，而那是同步 SQLite（每条一次开连接 + 提交），
+        // 30 条实测 5 秒多，全压在 UI 线程上就是切页面卡死。整段丢线程池，
+        // 回 UI 线程只做 ReplaceRows 与绑定（行模型本身不是 UI 对象）。
+        var (rows, entries) = await Task
+            .Run(() => BuildSteamRows(page.Items, size, cancellationToken), cancellationToken)
+            .ConfigureAwait(true);
+
+        AppServices.Breadcrumb("工坊 建行完成 " + rows.Count + " 行");
+        ReplaceRows(rows);
+        AppServices.Breadcrumb("工坊 列表已铺 " + rows.Count + " 行");
+        StartNameTranslation(rows, cancellationToken);
+        _pages.Set(pageKey, entries, _totalCount, _totalPages);
+        AppServices.Breadcrumb("工坊 页缓存已写");
+
+        // 30 条累加后只落盘一次（逐条 Save 会卡在同步 IO 上），并放到后台线程，不占 UI 线程。
+        await FlushInfoCacheAsync().ConfigureAwait(true);
+        AppServices.Breadcrumb("工坊 信息已落盘");
+        StatusMessage = rows.Count == 0
+            ? T(Keys.WorkshopStatusEmpty, _appliedSearch)
+            : IsRelevanceWithoutKeyword()
+                ? T(Keys.WorkshopSortRelevanceNeedsKeyword)
+                : T(Keys.WorkshopStatusLoaded, _totalCount);
+        RaiseDerived();
+
+        _ = FillCoversAsync(cancellationToken);
+
+        if (applyResult.RemovedActiveTags.Count > 0)
         {
+            // Steam 移除了已勾选的标签：Apply 已经静默取消选择，但这一页仍按旧标签查过，
+            // 等本轮回合收尾后回第 1 页重查，避免列表停在失效筛选上。
+            _logger.Info("创意工坊筛选条件已失效，准备重查：" + string.Join(", ", applyResult.RemovedActiveTags));
+            _pendingFilterRequery = true;
+        }
+    }
+
+    /// <summary>
+    /// 在线程池上建好 Steam 列表页的行模型：每条都要读写一次工坊信息缓存（同步 SQLite），
+    /// 放在 UI 线程上 30 条就是几秒的停顿。
+    /// </summary>
+    /// <param name="items">列表页条目。</param>
+    /// <param name="thumbnailSize">缩略图边长（像素）。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>行模型与对应的缓存条目快照。</returns>
+    private (List<WorkshopRowViewModel> Rows, List<WorkshopInfoCacheEntry> Entries) BuildSteamRows(
+        IReadOnlyList<SteamWorkshopItem> items,
+        int thumbnailSize,
+        CancellationToken cancellationToken)
+    {
+        var rows = new List<WorkshopRowViewModel>(items.Count);
+        var entries = new List<WorkshopInfoCacheEntry>(items.Count);
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
             // 先把元数据并进缓存，再从缓存取封面文件名：同一个 id 第二次出现不必再下载图片。
             RecordSteamItem(item);
             var cacheKey = WorkshopInfoCache.Key(WorkshopSource.Steam, item.PublishedFileId);
-            var row = WorkshopRowViewModel.FromSteam(item, size);
+            var row = WorkshopRowViewModel.FromSteam(item, thumbnailSize);
             if (_info.TryGetCachedCover(cacheKey, out var cover))
             {
                 row.CoverPath = cover;
@@ -1124,20 +1459,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             }
         }
 
-        ReplaceRows(rows);
-        StartNameTranslation(rows, cancellationToken);
-        _pages.Set(pageKey, entries, _totalCount, _totalPages);
-
-        // 30 条累加后只落盘一次（逐条 Save 会卡在同步 IO 上），并放到后台线程，不占 UI 线程。
-        await FlushInfoCacheAsync().ConfigureAwait(true);
-        StatusMessage = rows.Count == 0
-            ? T(Keys.WorkshopStatusEmpty, _appliedSearch)
-            : IsRelevanceWithoutKeyword()
-                ? T(Keys.WorkshopSortRelevanceNeedsKeyword)
-                : T(Keys.WorkshopStatusLoaded, _totalCount);
-        RaiseDerived();
-
-        _ = FillCoversAsync(cancellationToken);
+        return (rows, entries);
     }
 
     /// <summary>PDX Mods 查询。</summary>
@@ -1156,7 +1478,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             ResolvePdxSort(),
             Descending: true,
             Page: _page,
-            PageSize: PdxPageSize);
+            PageSize: _pageSize);
 
         var result = await _pdx
             .SearchAsync(gameId, query, _account.Session, cancellationToken)
@@ -1182,7 +1504,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
         var page = result.Value;
         _totalCount = page.TotalCount;
-        _totalPages = page.TotalCount == 0 ? 0 : ((page.TotalCount - 1) / PdxPageSize) + 1;
+        _totalPages = page.TotalCount == 0 ? 0 : ((page.TotalCount - 1) / _pageSize) + 1;
 
         var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
         var rows = new List<WorkshopRowViewModel>(page.Items.Count);
@@ -1307,9 +1629,16 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         using var gate = new SemaphoreSlim(MaxConcurrentCovers);
         try
         {
-            AppServices.FileSystem.EnsureDirectory(root);
-            AppServices.FileSystem.EnsureDirectory(AppServices.FileSystem.Combine(root, "steam"));
-            AppServices.FileSystem.EnsureDirectory(AppServices.FileSystem.Combine(root, "pdx"));
+            // 目录准备是纯文件 IO：丢线程池，别让 UI 线程在这里等磁盘（后面每张封面都要用到这三个目录）。
+            await Task.Run(
+                    () =>
+                    {
+                        AppServices.FileSystem.EnsureDirectory(root);
+                        AppServices.FileSystem.EnsureDirectory(AppServices.FileSystem.Combine(root, "steam"));
+                        AppServices.FileSystem.EnsureDirectory(AppServices.FileSystem.Combine(root, "pdx"));
+                    },
+                    token)
+                .ConfigureAwait(true);
 
             await Task.WhenAll(pending.Select(row =>
                     Task.Run(
@@ -1560,8 +1889,192 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     {
         // 来源换了，排序档位跟着换（Steam 6 档 / PDX 3 档）；重置到第一档避免选中项越界。
         RebuildSortModes(value);
+
+        // 先按游戏装载筛选组（Victoria 3 有内置目录），首屏就能看到侧栏；
+        // 等服务端结果回来再以 SSR 数据为准。
+        ApplyFilterGroups([]);
         OnPropertyChanged(nameof(ShowTimeRange));
+        OnPropertyChanged(nameof(ShowFilters));
+        OnPropertyChanged(nameof(CanShowFilters));
+        OnPropertyChanged(nameof(ShowFilterSidebar));
         RaiseDerived();
+    }
+
+    /// <summary>
+    /// 把筛选组套到侧栏：服务端数据优先，其次本会话缓存、持久化快照，最后才是内置目录。
+    /// 服务端数据同时更新内存与落盘快照，下次启动/离线仍能看到最新兼容性版本。
+    /// </summary>
+    /// <param name="serverGroups">列表页 SSR 解析出的分组；为空表示这次没有新数据。</param>
+    private WorkshopFilterApplyResult ApplyFilterGroups(IReadOnlyList<SteamWorkshopFilterGroup> serverGroups)
+    {
+        if (Source != WorkshopSource.Steam || _steamAppId is not { } appId)
+        {
+            CancelCatalogRefresh();
+            var cleared = Filters.Apply([]);
+            OnPropertyChanged(nameof(ShowFilterSidebar));
+            return cleared;
+        }
+
+        if (serverGroups.Count > 0)
+        {
+            _filterGroupsByApp[appId] = serverGroups;
+            UpdateCatalogSnapshot(appId, serverGroups);
+        }
+
+        var groups = _filterGroupsByApp.TryGetValue(appId, out var session) && session.Count > 0
+            ? session
+            : _catalogSnapshot is { Groups.Count: > 0 } snapshot && snapshot.AppId == appId
+                ? snapshot.Groups
+                : WorkshopFilterCatalog.ForApp(appId);
+
+        var result = Filters.Apply(groups);
+        OnPropertyChanged(nameof(ShowFilterSidebar));
+        return result;
+    }
+
+    /// <summary>
+    /// 用这次 SSR 的分组更新目录快照；结构变了或距上次写盘超过 1 小时才落盘，
+    /// 避免翻页时反复写同一个文件。
+    /// </summary>
+    private void UpdateCatalogSnapshot(int appId, IReadOnlyList<SteamWorkshopFilterGroup> groups)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var previous = _catalogSnapshot;
+        var version = Game?.Version ?? string.Empty;
+        var changed = previous is null
+                      || previous.AppId != appId
+                      || !string.Equals(
+                          WorkshopFilterCatalogPolicy.Signature(previous.Groups),
+                          WorkshopFilterCatalogPolicy.Signature(groups),
+                          StringComparison.Ordinal);
+
+        // 本地版本变化也要落盘：否则下次启动读到旧版本，会白白多抓一次目录。
+        var versionChanged = previous is not null
+                             && !string.Equals(previous.GameVersion, version, StringComparison.OrdinalIgnoreCase);
+
+        _catalogSnapshot = new WorkshopFilterCatalogSnapshot(appId, version, now, groups);
+
+        if (!changed && !versionChanged && previous is not null && now - previous.FetchedAtUtc < CatalogSaveMinInterval)
+        {
+            return;
+        }
+
+        var snapshot = _catalogSnapshot;
+        _ = Task.Run(() =>
+        {
+            if (!_catalogCache.TrySave(snapshot))
+            {
+                _logger.Warn("创意工坊筛选目录落盘失败（appId=" + appId + "）");
+            }
+        });
+    }
+
+    /// <summary>
+    /// 目录过期（24h / 本地版本变化）时后台补一次。
+    /// <para>
+    /// 跳过条件：非 Steam、没有 appId、列表查询进行中、Steam 冷却期、已在刷新、刚失败过 30 分钟。
+    /// 这个方法自己收口所有异常，调用方可以安全地 fire-and-forget。
+    /// </para>
+    /// </summary>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public async Task RefreshCatalogIfStaleAsync(CancellationToken cancellationToken)
+    {
+        if (Source != WorkshopSource.Steam || _steamAppId is not { } appId || !HasGame)
+        {
+            return;
+        }
+
+        if (_catalogRefreshing || IsBusy || _queryTask is { IsCompleted: false } || cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (TryGetCooldown(out _))
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (!WorkshopFilterCatalogPolicy.NeedsRefresh(_catalogSnapshot, Game?.Version, now))
+        {
+            return;
+        }
+
+        if (_lastCatalogFailureUtc != default
+            && now - _lastCatalogFailureUtc < WorkshopFilterCatalogPolicy.FailureBackoff)
+        {
+            return;
+        }
+
+        _catalogRefreshing = true;
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _catalogCts = cts;
+        try
+        {
+            var result = await _steam.GetFilterGroupsAsync(appId, cts.Token).ConfigureAwait(true);
+            if (cts.IsCancellationRequested
+                || Source != WorkshopSource.Steam
+                || _steamAppId != appId)
+            {
+                return;
+            }
+
+            if (!result.IsSuccess || result.Value is not { Count: > 0 })
+            {
+                _lastCatalogFailureUtc = DateTimeOffset.UtcNow;
+                _logger.Warn("创意工坊筛选目录刷新失败（appId=" + appId + "）：" + (result.ErrorMessage ?? "empty"));
+                return;
+            }
+
+            _lastCatalogFailureUtc = default;
+            var applyResult = ApplyFilterGroups(result.Value);
+            if (applyResult.RemovedActiveTags.Count > 0)
+            {
+                _logger.Info("创意工坊筛选条件已失效，准备重查：" + string.Join(", ", applyResult.RemovedActiveTags));
+                _queryTask = RunQueryAsync(resetPage: true, force: true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 换游戏 / 页面卸载 / 冷却切换：正常路径。
+        }
+        catch (Exception ex)
+        {
+            _lastCatalogFailureUtc = DateTimeOffset.UtcNow;
+            _logger.Warn("创意工坊筛选目录刷新失败（appId=" + appId + "）：" + ex.Message);
+        }
+        finally
+        {
+            if (ReferenceEquals(_catalogCts, cts))
+            {
+                _catalogCts = null;
+            }
+
+            cts.Dispose();
+            _catalogRefreshing = false;
+        }
+    }
+
+    /// <summary>取消在途的目录刷新（换游戏 / 页面卸载时用）。</summary>
+    public void CancelCatalogRefresh()
+    {
+        var pending = _catalogCts;
+        _catalogCts = null;
+        if (pending is null)
+        {
+            return;
+        }
+
+        try
+        {
+            pending.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 已经收尾，忽略。
+        }
+
+        pending.Dispose();
     }
 
     /// <summary>当前排序是否属于「带时间范围」的两档（最热门 / 最受好评）。</summary>
@@ -1629,7 +2142,83 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(ShowEmptyState));
         OnPropertyChanged(nameof(ShowSignInHint));
         OnPropertyChanged(nameof(ShowTimeRange));
+        OnPropertyChanged(nameof(ShowFilters));
+        OnPropertyChanged(nameof(CanShowFilters));
+        OnPropertyChanged(nameof(ShowFilterSidebar));
         OnPropertyChanged(nameof(ShowCoverProgress));
         OnPropertyChanged(nameof(CoverProgressText));
+        RebuildPageButtons();
+    }
+
+    /// <summary>
+    /// 重建分页器上的页码格子：始终给首页、末页与当前页左右一页，
+    /// 中间用省略号连接；总数不足时全部显示。页码序列没变就不动集合。
+    /// </summary>
+    private void RebuildPageButtons()
+    {
+        var buttons = BuildPageButtons(_page, _totalPages);
+        var signature = string.Join(
+            "|",
+            buttons.Select(static button => button.IsEllipsis
+                ? "*"
+                : (button.PageIndex + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                  + (button.IsCurrent ? "!" : string.Empty)));
+        if (string.Equals(signature, _pageButtonsSignature, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _pageButtonsSignature = signature;
+        PageButtons.Clear();
+        foreach (var button in buttons)
+        {
+            PageButtons.Add(button);
+        }
+    }
+
+    private static List<WorkshopPageButton> BuildPageButtons(int page, int totalPages)
+    {
+        var result = new List<WorkshopPageButton>();
+        if (totalPages <= 0)
+        {
+            return result;
+        }
+
+        var pages = new SortedSet<int> { 0, totalPages - 1 };
+        for (var index = Math.Max(0, page - 1); index <= Math.Min(totalPages - 1, page + 1); index++)
+        {
+            pages.Add(index);
+        }
+
+        // 靠前时补足前三页（1 2 3 … N），靠后时补足最后三页（1 … N-2 N-1 N）。
+        if (page <= 1)
+        {
+            for (var index = 0; index < Math.Min(3, totalPages); index++)
+            {
+                pages.Add(index);
+            }
+        }
+
+        if (page >= totalPages - 2)
+        {
+            for (var index = Math.Max(0, totalPages - 3); index < totalPages; index++)
+            {
+                pages.Add(index);
+            }
+        }
+
+        var previous = -2;
+        foreach (var index in pages)
+        {
+            if (index - previous > 1)
+            {
+                result.Add(new WorkshopPageButton(0, IsEllipsis: true, IsCurrent: false));
+            }
+
+            result.Add(new WorkshopPageButton(index, IsEllipsis: false, IsCurrent: index == page));
+            previous = index;
+        }
+
+        return result;
     }
 }

@@ -147,6 +147,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     [ObservableProperty]
     private bool _isTranslatingComments;
 
+    /// <summary>Steam 原始标签名（切语言时重新拼 <see cref="TagsText"/>）。</summary>
+    private IReadOnlyList<string> _steamTagNames = [];
+
     /// <summary>标签拼成的单行文本。</summary>
     [ObservableProperty]
     private string _tagsText = string.Empty;
@@ -983,6 +986,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         IsTranslatingChangelog = false;
         IsTranslatingComments = false;
         TagsText = string.Empty;
+        _steamTagNames = [];
         DependencySummary = string.Empty;
         CommentsSummary = string.Empty;
         ErrorText = string.Empty;
@@ -1051,7 +1055,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         var item = row.SteamItem;
         MetaText = BuildSteamMeta(item, detail);
         AuthorProfileUrl = detail.CreatorProfileUrl;
-        TagsText = BuildSteamTags(detail, item);
+        _steamTagNames = GetSteamTagNames(detail, item);
+        TagsText = JoinSteamTags(_steamTagNames);
         CommentsStatusText = string.Empty;
 
         // 缓存命中的 CreatedUtc 是「抓取时间」，不是发布时间，所以只认列表条目里的真实值。
@@ -1199,7 +1204,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             return;
         }
 
-        ApplyDescription(MarkdownParser.Parse(detail.LongDescription), cancellationToken);
+        var description = MarkdownParser.Parse(detail.LongDescription);
+        ApplyDescription(description, cancellationToken);
         var changelog = MarkdownParser.Parse(detail.Changelog);
         ChangelogDocument = changelog;
         if (!changelog.IsEmpty)
@@ -1210,11 +1216,18 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         CreatedText = detail.Summary.CreatedOn is { } created && created > DateTimeOffset.UnixEpoch
             ? T(Keys.WorkshopDetailCreated, WorkshopText.FormatDate(created))
             : string.Empty;
+        _steamTagNames = [];
         TagsText = WorkshopText.Join(detail.Summary.Tags, " · ");
         IsInstalled = detail.IsInstalled;
 
         BuildLinks(detail);
         BuildGallery(row, detail.ScreenshotUrls);
+
+        // PDX 的正文 / 更新日志也是 Markdown，图片走与 Steam 相同的内联缓存与查看器。
+        var inlineUrls = description.ImageUrls
+            .Concat(changelog.ImageUrls)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
 
         await BuildDependenciesAsync(detail, cancellationToken).ConfigureAwait(true);
         await LoadSubscriptionStateAsync(cancellationToken).ConfigureAwait(true);
@@ -1222,7 +1235,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         NotifyStateChanged();
 
         // 正文与元信息已经能看了，就不该再挂着「正在读取详情…」——
-        // 剩下只有截图在下载，改用截图卡里的独立进度提示。
+        // 剩下只有截图与正文配图在下载，改用截图卡里的独立进度提示。
         IsLoading = false;
         _galleryTracker.Begin(Screenshots.Count);
         NotifyGalleryActivity();
@@ -1230,7 +1243,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
         try
         {
-            await DownloadGalleryAsync(row, cancellationToken).ConfigureAwait(true);
+            await Task.WhenAll(
+                DownloadGalleryAsync(row, cancellationToken),
+                DownloadInlineImagesAsync(row, inlineUrls, cancellationToken)).ConfigureAwait(true);
         }
         finally
         {
@@ -1272,6 +1287,139 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         _ = TranslateDescriptionAsync(document, cancellationToken);
     }
 
+    /// <summary>
+    /// 判断译文是否值得显示：块数与图片节点数必须和原文一致；纯图片描述没有可翻译文字，
+    /// 结构对上了就算译成，不能再用「纯文本相等」误判成翻译失败。
+    /// </summary>
+    private static bool HasTranslatedResult(MarkdownDocument original, MarkdownDocument translated)
+    {
+        if (translated.Blocks.Count != original.Blocks.Count
+            || CountImageInlines(translated) != CountImageInlines(original))
+        {
+            return false;
+        }
+
+        return !HasTextInlines(original)
+            || !string.Equals(translated.ToPlainText(), original.ToPlainText(), StringComparison.Ordinal);
+    }
+
+    /// <summary>统计文档里的图片节点数（含引用块、链接与强调样式里的图片）。</summary>
+    private static int CountImageInlines(MarkdownDocument document)
+    {
+        var count = 0;
+        foreach (var block in document.Blocks)
+        {
+            count += CountImageInlines(block);
+        }
+
+        return count;
+    }
+
+    private static int CountImageInlines(MarkdownBlock block)
+    {
+        switch (block)
+        {
+            case MarkdownHeading heading:
+                return CountImageInlines(heading.Inlines);
+            case MarkdownParagraph paragraph:
+                return CountImageInlines(paragraph.Inlines);
+            case MarkdownListItem item:
+                return CountImageInlines(item.Inlines);
+            case MarkdownQuote quote:
+            {
+                var count = 0;
+                foreach (var child in quote.Blocks)
+                {
+                    count += CountImageInlines(child);
+                }
+
+                return count;
+            }
+
+            default:
+                return 0;
+        }
+    }
+
+    private static int CountImageInlines(IReadOnlyList<MarkdownInline> inlines)
+    {
+        var count = 0;
+        foreach (var inline in inlines)
+        {
+            switch (inline)
+            {
+                case MarkdownImageInline:
+                    count++;
+                    break;
+                case MarkdownLinkInline link:
+                    count += CountImageInlines(link.Inlines);
+                    break;
+                case MarkdownStyledInline styled:
+                    count += CountImageInlines(styled.Inlines);
+                    break;
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>原文里是否有可交给翻译器的文字（代码、图片替代文本都不算）。</summary>
+    private static bool HasTextInlines(MarkdownDocument document)
+    {
+        foreach (var block in document.Blocks)
+        {
+            if (HasTextInlines(block))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasTextInlines(MarkdownBlock block)
+    {
+        switch (block)
+        {
+            case MarkdownHeading heading:
+                return HasTextInlines(heading.Inlines);
+            case MarkdownParagraph paragraph:
+                return HasTextInlines(paragraph.Inlines);
+            case MarkdownListItem item:
+                return HasTextInlines(item.Inlines);
+            case MarkdownQuote quote:
+                foreach (var child in quote.Blocks)
+                {
+                    if (HasTextInlines(child))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    private static bool HasTextInlines(IReadOnlyList<MarkdownInline> inlines)
+    {
+        foreach (var inline in inlines)
+        {
+            switch (inline)
+            {
+                case MarkdownTextInline text when !string.IsNullOrWhiteSpace(text.Text):
+                    return true;
+                case MarkdownLinkInline link when HasTextInlines(link.Inlines):
+                    return true;
+                case MarkdownStyledInline styled when HasTextInlines(styled.Inlines):
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>翻译简介正文并写回译文属性。</summary>
     private async Task TranslateDescriptionAsync(MarkdownDocument document, CancellationToken cancellationToken)
     {
@@ -1287,9 +1435,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             }
 
             var plain = translated.ToPlainText();
-            if (string.Equals(plain, document.ToPlainText(), StringComparison.Ordinal))
+            if (!HasTranslatedResult(document, translated))
             {
-                // 没翻出不同内容，就不重复显示一遍原文。
+                // 没翻出不同内容（或结构没保住），就不重复显示一遍原文。
                 ReportTranslationFailure("description");
                 return;
             }
@@ -1339,10 +1487,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             }
 
             // 更新日志没翻出不同内容时保留原文，并提示一次「翻译没出结果」。
-            if (string.Equals(
-                    translated.ToPlainText(),
-                    document.ToPlainText(),
-                    StringComparison.Ordinal))
+            if (!HasTranslatedResult(document, translated))
             {
                 ReportTranslationFailure("changelog");
                 return;
@@ -1653,16 +1798,29 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     }
 
     /// <summary>Steam 标签：详情接口给了就用，没有就退回列表条目。</summary>
-    private static string BuildSteamTags(SteamWorkshopItemDetail detail, SteamWorkshopItem? item)
+    private static IReadOnlyList<string> GetSteamTagNames(SteamWorkshopItemDetail detail, SteamWorkshopItem? item)
     {
         if (detail.TagList.Count > 0)
         {
-            return WorkshopText.Join(detail.TagList, " · ");
+            return detail.TagList;
         }
 
         return item is null
-            ? string.Empty
-            : WorkshopText.Join(item.Tags.Select(static tag => tag.DisplayName), " · ");
+            ? []
+            : item.Tags.Select(static tag => tag.DisplayName).ToList();
+    }
+
+    /// <summary>把 Steam 标签换成当前界面语言再拼成一行。</summary>
+    private static string JoinSteamTags(IReadOnlyList<string> tags) =>
+        WorkshopText.Join(tags.Select(static tag => WorkshopTagText.Localize(tag)), " · ");
+
+    /// <summary>切语言后 Steam 标签跟着换（详情页不重建）。</summary>
+    protected override void Relocalize()
+    {
+        if (_steamTagNames.Count > 0)
+        {
+            TagsText = JoinSteamTags(_steamTagNames);
+        }
     }
 
     /// <summary>PDX 的元信息一行：评分 · 订阅 · 体积 · 更新于。</summary>

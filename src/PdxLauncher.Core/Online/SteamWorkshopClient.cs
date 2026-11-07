@@ -29,6 +29,9 @@ public sealed class SteamWorkshopClient
     /// <summary>默认每页条数（服务端 <c>num_per_page</c> 上限 50，超过会回落到 30）。</summary>
     public const int DefaultPageSize = 30;
 
+    /// <summary>只抓筛选目录时用的每页条数：目录与页大小无关，10 条的 HTML 更小。</summary>
+    public const int FilterCatalogPageSize = 10;
+
     /// <summary><c>num_per_page</c> 的安全上限。</summary>
     public const int MaxPageSize = 50;
 
@@ -79,6 +82,13 @@ public sealed class SteamWorkshopClient
             sort = SortValue(SteamWorkshopSort.Trend);
         }
 
+        // 「特别筛选条件」不是普通排序：Steam 网页选中后会把 browsesort 换成
+        // num_parent_items / num_parent_collections（实测 2026-11），这里保持一致。
+        if (query.SpecialFilter != SteamWorkshopSpecialFilter.None)
+        {
+            sort = SpecialFilterSortValue(query.SpecialFilter);
+        }
+
         var builder = new StringBuilder(OnlineHosts.SteamWorkshopBrowseEndpoint.AbsoluteUri);
         builder.Append("?appid=").Append(appId.ToString(CultureInfo.InvariantCulture));
         builder.Append("&section=readytouseitems&browsesort=").Append(sort);
@@ -98,8 +108,84 @@ public sealed class SteamWorkshopClient
             builder.Append("&days=").Append(days.ToString(CultureInfo.InvariantCulture));
         }
 
+        AppendFilterParams(builder, query);
+
         return new Uri(builder.ToString());
     }
+
+    /// <summary>
+    /// 追加左侧筛选栏对应的参数。参数名全部来自 2026-11 对 Steam 工坊页的实测：
+    /// 标签是 <c>requiredtags[]</c> / <c>excludedtags[]</c>（值是标签名）；
+    /// DLC 是 <c>appids_required_for_use[]</c> / <c>excluded_appids_required_for_use[]</c>（值是 DLC appid）；
+    /// 「显示不兼容的项目」是 <c>requiredflags[]=incompatible</c>。
+    /// <para>
+    /// 标签与 DLC 都先排序去重再拼：同一个筛选条件不能因为点选顺序不同而生成两个 URL，
+    /// 否则在途请求合并和页缓存都会各存一份。所有值都转义，端点本身仍是固定常量。
+    /// </para>
+    /// </summary>
+    private static void AppendFilterParams(StringBuilder builder, SteamWorkshopQuery query)
+    {
+        AppendRepeated(builder, "requiredtags[]", query.RequiredTags);
+        AppendRepeated(builder, "excludedtags[]", query.ExcludedTags);
+
+        if (query.ShowIncompatible)
+        {
+            builder.Append("&requiredflags%5B%5D=incompatible");
+        }
+
+        if (query.SpecialFilter != SteamWorkshopSpecialFilter.None)
+        {
+            builder.Append("&special_filter=")
+                .Append(((int)query.SpecialFilter).ToString(CultureInfo.InvariantCulture));
+        }
+
+        AppendRepeatedInt(builder, "appids_required_for_use[]", query.RequiredAppIds);
+        AppendRepeatedInt(builder, "excluded_appids_required_for_use[]", query.ExcludedAppIds);
+    }
+
+    private static void AppendRepeated(StringBuilder builder, string name, IReadOnlyList<string>? values)
+    {
+        if (values is null || values.Count == 0)
+        {
+            return;
+        }
+
+        var encodedName = Uri.EscapeDataString(name);
+        foreach (var value in values
+                     .Where(static value => !string.IsNullOrWhiteSpace(value))
+                     .Select(static value => value.Trim())
+                     .Distinct(StringComparer.Ordinal)
+                     .OrderBy(static value => value, StringComparer.Ordinal))
+        {
+            builder.Append('&').Append(encodedName).Append('=').Append(Uri.EscapeDataString(value));
+        }
+    }
+
+    private static void AppendRepeatedInt(StringBuilder builder, string name, IReadOnlyList<int>? values)
+    {
+        if (values is null || values.Count == 0)
+        {
+            return;
+        }
+
+        var encodedName = Uri.EscapeDataString(name);
+        foreach (var value in values
+                     .Where(static value => value > 0)
+                     .Distinct()
+                     .OrderBy(static value => value))
+        {
+            builder.Append('&').Append(encodedName).Append('=')
+                .Append(value.ToString(CultureInfo.InvariantCulture));
+        }
+    }
+
+    /// <summary>「特别筛选条件」对应的 browsesort（实测值）。</summary>
+    private static string SpecialFilterSortValue(SteamWorkshopSpecialFilter filter) => filter switch
+    {
+        SteamWorkshopSpecialFilter.RequiredByOtherItems => "num_parent_items",
+        SteamWorkshopSpecialFilter.InCollections => "num_parent_collections",
+        _ => "trend",
+    };
 
     /// <summary>浏览一页创意工坊。</summary>
     /// <param name="appId">Steam appid。</param>
@@ -115,6 +201,52 @@ public sealed class SteamWorkshopClient
         // key 用完整的列表 URI：翻页、换排序、换关键词都是不同请求，绝不能并成一个。
         var key = "browse:" + appId.ToString(CultureInfo.InvariantCulture) + "|" + BuildBrowseUri(appId, query).AbsoluteUri;
         return _coalesce.RunAsync(key, ct => BrowseCoreAsync(appId, query, ct), cancellationToken);
+    }
+
+    /// <summary>
+    /// 只取筛选目录（类别 / 更新兼容性 / 所需 DLC）。
+    /// <para>
+    /// Steam 没有单独的标签目录接口：改标签时页面自身也是重新抓整页
+    /// <c>/workshop/browse/</c>（2026-11 实测）。这里用最小页（<c>num_per_page=10</c>）
+    /// 把 HTML 从约 555 KB 降到约 388 KB，并且和列表请求共用同一个在途合并器。
+    /// </para>
+    /// </summary>
+    /// <param name="appId">Steam appid。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public Task<AppResult<IReadOnlyList<SteamWorkshopFilterGroup>>> GetFilterGroupsAsync(
+        int appId,
+        CancellationToken cancellationToken)
+    {
+        var key = "filter-groups:" + appId.ToString(CultureInfo.InvariantCulture);
+        return _coalesce.RunAsync(key, ct => GetFilterGroupsCoreAsync(appId, ct), cancellationToken);
+    }
+
+    private async Task<AppResult<IReadOnlyList<SteamWorkshopFilterGroup>>> GetFilterGroupsCoreAsync(
+        int appId,
+        CancellationToken cancellationToken)
+    {
+        var query = new SteamWorkshopQuery(
+            null,
+            SteamWorkshopSort.Trend,
+            Page: 0,
+            PageSize: FilterCatalogPageSize);
+        var browse = await BrowseAsync(appId, query, cancellationToken).ConfigureAwait(false);
+        if (!browse.IsSuccess || browse.Value is null)
+        {
+            return AppResult<IReadOnlyList<SteamWorkshopFilterGroup>>.Fail(
+                browse.Kind,
+                browse.ErrorMessage ?? "steam-workshop-groups");
+        }
+
+        var groups = browse.Value.Groups;
+        if (groups.Count == 0)
+        {
+            return AppResult<IReadOnlyList<SteamWorkshopFilterGroup>>.Fail(
+                ErrorKind.Unsupported,
+                "steam-workshop-groups-empty");
+        }
+
+        return AppResult<IReadOnlyList<SteamWorkshopFilterGroup>>.Ok(groups);
     }
 
     private async Task<AppResult<SteamWorkshopPage>> BrowseCoreAsync(

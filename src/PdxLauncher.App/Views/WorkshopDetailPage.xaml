@@ -436,11 +436,12 @@
                                    AutomationProperties.AutomationId="txtWorkshopDetailTranslationNotice" />
                     </Border>
 
-                    <!-- 4. 描述（Markdown / HTML 富文本） -->
+                    <!-- 4. 描述（Markdown / HTML 富文本）；宽窗口下按 Steam 物品页的阅读列宽收在 992（内容 960）。 -->
                     <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
+                            MaxWidth="992"
                             Padding="16">
                         <StackPanel Spacing="8">
                             <TextBlock Text="{x:Bind L.WorkshopDetailDescription, Mode=OneWay}"
@@ -554,11 +555,12 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- 6. 更新日志（PDX 有，Markdown） -->
+                    <!-- 6. 更新日志（PDX 有，Markdown）；与描述用同一阅读列宽 992（内容 960）。 -->
                     <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
+                            MaxWidth="992"
                             Padding="16"
                             Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasChangelog), Mode=OneWay}">
                         <StackPanel Spacing="8">

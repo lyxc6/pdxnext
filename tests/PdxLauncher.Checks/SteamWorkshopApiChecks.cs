@@ -27,6 +27,8 @@ public static class SteamWorkshopApiChecks
         CheckBrowseUri();
         CheckSourceChooser();
         CheckHtmlParser();
+        CheckFilterGroups();
+        CheckFilterGroupsRequest();
         CheckAppDetails();
         CheckDetailParsing();
         CheckDetailRequest();
@@ -130,6 +132,78 @@ public static class SteamWorkshopApiChecks
             "URI：负数页码归 0",
             SteamWorkshopClient.BuildBrowseUri(Ck3AppId, new SteamWorkshopQuery(null, SteamWorkshopSort.Trend, -3))
                 .AbsoluteUri.Contains("p=1", StringComparison.Ordinal));
+
+        // 左侧筛选栏的参数名来自 2026-11 对 Steam 页面的实测。
+        var filtered = SteamWorkshopClient.BuildBrowseUri(
+            Ck3AppId,
+            new SteamWorkshopQuery(
+                null,
+                SteamWorkshopSort.Trend,
+                0,
+                RequiredTags: ["Gameplay", "Flags", "Flags"],
+                ExcludedTags: ["Sound"],
+                RequiredAppIds: [2071471, 2071471],
+                ExcludedAppIds: [9],
+                ShowIncompatible: true)).AbsoluteUri;
+        ChecksContext.Check(
+            "URI：必须包含标签",
+            filtered.Contains("requiredtags%5B%5D=Gameplay", StringComparison.Ordinal), filtered);
+        ChecksContext.Check(
+            "URI：标签按序排序",
+            filtered.IndexOf("requiredtags%5B%5D=Flags", StringComparison.Ordinal)
+            < filtered.IndexOf("requiredtags%5B%5D=Gameplay", StringComparison.Ordinal), filtered);
+        ChecksContext.Check("URI：必须排除标签", filtered.Contains("excludedtags%5B%5D=Sound", StringComparison.Ordinal), filtered);
+        ChecksContext.Check(
+            "URI：不兼容开关",
+            filtered.Contains("requiredflags%5B%5D=incompatible", StringComparison.Ordinal), filtered);
+        ChecksContext.Check(
+            "URI：所需 DLC",
+            filtered.Contains("appids_required_for_use%5B%5D=2071471", StringComparison.Ordinal), filtered);
+        ChecksContext.Check(
+            "URI：排除的 DLC",
+            filtered.Contains("excluded_appids_required_for_use%5B%5D=9", StringComparison.Ordinal), filtered);
+
+        var spacedTag = SteamWorkshopClient.BuildBrowseUri(
+            Ck3AppId,
+            new SteamWorkshopQuery(null, SteamWorkshopSort.Trend, 0, RequiredTags: ["Total Conversion"])).AbsoluteUri;
+        ChecksContext.Check(
+            "URI：标签值转义",
+            spacedTag.Contains("requiredtags%5B%5D=Total%20Conversion", StringComparison.Ordinal), spacedTag);
+
+        var special = SteamWorkshopClient.BuildBrowseUri(
+            Ck3AppId,
+            new SteamWorkshopQuery(
+                null,
+                SteamWorkshopSort.TopRated,
+                0,
+                30,
+                90,
+                SpecialFilter: SteamWorkshopSpecialFilter.InCollections)).AbsoluteUri;
+        ChecksContext.Check(
+            "URI：特别筛选覆盖排序",
+            special.Contains("browsesort=num_parent_collections", StringComparison.Ordinal), special);
+        ChecksContext.Check("URI：特别筛选参数", special.Contains("special_filter=7", StringComparison.Ordinal), special);
+        ChecksContext.Check("URI：特别筛选仍保留时间范围", special.Contains("days=90", StringComparison.Ordinal), special);
+
+        var requiredByOthers = SteamWorkshopClient.BuildBrowseUri(
+            Ck3AppId,
+            new SteamWorkshopQuery(
+                null,
+                SteamWorkshopSort.Trend,
+                0,
+                SpecialFilter: SteamWorkshopSpecialFilter.RequiredByOtherItems)).AbsoluteUri;
+        ChecksContext.Check(
+            "URI：其他项目需要排序",
+            requiredByOthers.Contains("browsesort=num_parent_items", StringComparison.Ordinal), requiredByOthers);
+
+        var size10 = SteamWorkshopClient.BuildBrowseUri(
+            Ck3AppId,
+            new SteamWorkshopQuery(null, SteamWorkshopSort.Trend, 0, 10)).AbsoluteUri;
+        var size15 = SteamWorkshopClient.BuildBrowseUri(
+            Ck3AppId,
+            new SteamWorkshopQuery(null, SteamWorkshopSort.Trend, 0, 15)).AbsoluteUri;
+        ChecksContext.Check("URI：每页 10", size10.Contains("num_per_page=10", StringComparison.Ordinal), size10);
+        ChecksContext.Check("URI：每页 15", size15.Contains("num_per_page=15", StringComparison.Ordinal), size15);
     }
 
     // ------------------------------------------------------------ 来源判定
@@ -220,6 +294,202 @@ public static class SteamWorkshopApiChecks
         var empty = SteamWorkshopHtmlParser.Parse(BuildBrowseHtml(0), 0, 30);
         ChecksContext.Check("解析：零条目仍然返回页", empty is not null);
         ChecksContext.Equal("解析：零条目计数", 0, empty?.Items.Count ?? -1);
+    }
+
+    // ------------------------------------------------------------ 筛选组解析
+
+    /// <summary>
+    /// 2026-11 的真实 SSR 结构：queryData 里是多条 React Query，
+    /// 列表在 workshop_browse，标签组在 declared_tags_v6，DLC 在 workshop_required_dlc_v5（名称来自 StoreItem）。
+    /// </summary>
+    private static void CheckFilterGroups()
+    {
+        var browse = new JsonObject
+        {
+            ["state"] = new JsonObject
+            {
+                ["data"] = new JsonObject
+                {
+                    ["total_count"] = 1,
+                    ["total_pages"] = 1,
+                    ["results"] = new JsonArray(new JsonObject
+                    {
+                        ["publishedfileid"] = "1",
+                        ["title"] = "Mod A",
+                    }),
+                },
+            },
+            ["queryKey"] = new JsonArray("workshop_browse", new JsonObject { ["appid"] = 529340 }, 1),
+        };
+
+        var tags = new JsonObject
+        {
+            ["state"] = new JsonObject
+            {
+                ["data"] = new JsonObject
+                {
+                    ["readytouse_tags"] = new JsonArray(
+                        new JsonObject
+                        {
+                            ["name"] = string.Empty,
+                            ["tags"] = new JsonArray(
+                                new JsonObject { ["name"] = "Gameplay", ["display_name"] = "Gameplay" },
+                                new JsonObject { ["name"] = "Flags", ["display_name"] = "Flags" }),
+                        },
+                        new JsonObject
+                        {
+                            ["name"] = "Update Compatibility",
+                            ["tags"] = new JsonArray(
+                                new JsonObject { ["name"] = "1.13", ["display_name"] = "1.13" }),
+                        }),
+                },
+            },
+            ["queryKey"] = new JsonArray("declared_tags_v6", 529340, "schinese", false),
+        };
+
+        var dlc = new JsonObject
+        {
+            ["state"] = new JsonObject
+            {
+                ["data"] = new JsonArray(new JsonObject { ["appid"] = 2071471, ["count"] = 9 }),
+            },
+            ["queryKey"] = new JsonArray("workshop_required_dlc_v5", 529340, new JsonArray(3, 4, 1), 1),
+        };
+
+        var storeItem = new JsonObject
+        {
+            ["state"] = new JsonObject
+            {
+                ["data"] = new JsonObject { ["name"] = "Victoria 3: American Buildings Pack" },
+            },
+            ["queryKey"] = new JsonArray("StoreItem", "app_2071471", "default_info"),
+        };
+
+        var appHub = new JsonObject
+        {
+            ["state"] = new JsonObject
+            {
+                ["data"] = new JsonObject { ["name"] = "Victoria 3" },
+            },
+            ["queryKey"] = new JsonArray("apphub", 529340),
+        };
+
+        var queryData = new JsonObject
+        {
+            ["mutations"] = new JsonArray(),
+            ["queries"] = new JsonArray(appHub, browse, tags, dlc, storeItem),
+        };
+
+        var ssr = new JsonObject
+        {
+            ["renderContext"] = new JsonObject { ["queryData"] = queryData.ToJsonString() },
+        };
+
+        var html = "<html><body><script type=\"application/json\" id=\"valve-ssr-data\">"
+                   + ssr.ToJsonString()
+                   + "</script></body></html>";
+
+        var page = SteamWorkshopHtmlParser.Parse(html, 0, 30);
+        ChecksContext.Check("筛选解析：返回非 null", page is not null);
+        if (page is null)
+        {
+            return;
+        }
+
+        ChecksContext.Equal("筛选解析：条目数", 1, page.Items.Count);
+        ChecksContext.Equal("筛选解析：分组数", 3, page.Groups.Count);
+
+        var category = page.Groups.FirstOrDefault(static group => group.Key == "category");
+        ChecksContext.Check("筛选解析：类别组存在", category is not null);
+        ChecksContext.Equal("筛选解析：类别组标签数", 2, category?.Tags.Count ?? -1);
+        ChecksContext.Equal("筛选解析：类别组值是标签名", "Gameplay", category?.Tags[0].Tag ?? "?");
+
+        var compatibility = page.Groups.FirstOrDefault(static group => group.Key == "compatibility");
+        ChecksContext.Check("筛选解析：兼容性组按标题识别", compatibility is not null);
+        ChecksContext.Equal("筛选解析：兼容性组标签", "1.13", compatibility?.Tags[0].Tag ?? "?");
+
+        var dlcGroup = page.Groups.FirstOrDefault(static group => group.IsDlc);
+        ChecksContext.Check("筛选解析：DLC 组存在", dlcGroup is not null);
+        ChecksContext.Equal("筛选解析：DLC 组值是 appid", "2071471", dlcGroup?.Tags[0].Tag ?? "?");
+        ChecksContext.Equal("筛选解析：DLC 名称去掉游戏前缀", "American Buildings Pack", dlcGroup?.Tags[0].DisplayName ?? "?");
+
+        // 没有筛选数据的页面（老结构）不能因此解析失败。
+        var legacy = SteamWorkshopHtmlParser.Parse(BuildBrowseHtml(1), 0, 30);
+        ChecksContext.Check("筛选解析：老页面没有分组也能解析", legacy is not null);
+        ChecksContext.Equal("筛选解析：老页面分组为空", 0, legacy?.Groups.Count ?? -1);
+    }
+
+    /// <summary>
+    /// 目录刷新只抓最小页：num_per_page=10、trend、p=1；解析不到分组时返回失败而不是空页。
+    /// </summary>
+    private static void CheckFilterGroupsRequest()
+    {
+        var http = new CapturingHttpFetcher();
+        http.Responses["steamcommunity.com/workshop/browse/"] = BuildGroupsOnlyHtml();
+        var client = new SteamWorkshopClient(http, new NullLogger());
+
+        var result = client.GetFilterGroupsAsync(529340, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("筛选目录请求：成功", result.IsSuccess);
+        ChecksContext.Equal("筛选目录请求：分组数", 1, result.Value?.Count ?? -1);
+
+        var uri = http.LastGetUri?.AbsoluteUri ?? string.Empty;
+        ChecksContext.Check("筛选目录请求：最小页 10", uri.Contains("num_per_page=10", StringComparison.Ordinal), uri);
+        ChecksContext.Check("筛选目录请求：trend 排序", uri.Contains("browsesort=trend", StringComparison.Ordinal), uri);
+        ChecksContext.Check("筛选目录请求：第一页", uri.Contains("p=1", StringComparison.Ordinal), uri);
+
+        var broken = new CapturingHttpFetcher();
+        broken.Responses["steamcommunity.com/workshop/browse/"] = "<html><body>no data</body></html>";
+        var failed = new SteamWorkshopClient(broken, new NullLogger())
+            .GetFilterGroupsAsync(529340, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Check("筛选目录请求：解析失败返回失败", !failed.IsSuccess);
+    }
+
+    private static string BuildGroupsOnlyHtml()
+    {
+        var queryData = new JsonObject
+        {
+            ["queries"] = new JsonArray(
+                new JsonObject
+                {
+                    ["state"] = new JsonObject
+                    {
+                        ["data"] = new JsonObject
+                        {
+                            ["total_count"] = 0,
+                            ["total_pages"] = 0,
+                            ["results"] = new JsonArray(),
+                        },
+                    },
+                    ["queryKey"] = new JsonArray("workshop_browse", new JsonObject { ["appid"] = 529340 }, 1),
+                },
+                new JsonObject
+                {
+                    ["state"] = new JsonObject
+                    {
+                        ["data"] = new JsonObject
+                        {
+                            ["readytouse_tags"] = new JsonArray(new JsonObject
+                            {
+                                ["name"] = string.Empty,
+                                ["tags"] = new JsonArray(
+                                    new JsonObject { ["name"] = "Gameplay", ["display_name"] = "Gameplay" }),
+                            }),
+                        },
+                    },
+                    ["queryKey"] = new JsonArray("declared_tags_v6", 529340, "schinese", false),
+                }),
+        };
+
+        var ssr = new JsonObject
+        {
+            ["renderContext"] = new JsonObject { ["queryData"] = queryData.ToJsonString() },
+        };
+
+        return "<html><body><script type=\"application/json\" id=\"valve-ssr-data\">"
+               + ssr.ToJsonString()
+               + "</script></body></html>";
     }
 
     // ------------------------------------------------------------ appdetails
@@ -709,6 +979,8 @@ public static class SteamWorkshopApiChecks
 
         public string? LastFormBody { get; private set; }
 
+        public Uri? LastGetUri { get; private set; }
+
         public string? FormResponse { get; set; }
 
         public int GetCalls { get; private set; }
@@ -718,6 +990,7 @@ public static class SteamWorkshopApiChecks
         public Task<Stream> GetAsync(Uri uri, CancellationToken cancellationToken)
         {
             GetCalls++;
+            LastGetUri = uri;
             if (GetException is not null)
             {
                 throw GetException;

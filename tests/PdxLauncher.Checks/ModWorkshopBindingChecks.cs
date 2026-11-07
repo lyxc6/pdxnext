@@ -1,6 +1,7 @@
 namespace PdxLauncher.Checks;
 
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 
 using PdxLauncher.Core.Abstractions;
@@ -40,6 +41,7 @@ public static class ModWorkshopBindingChecks
         CheckHostProtocol();
         CheckDetailResult();
         CheckNativeLayout();
+        CheckFixedUtf8Buffers();
         CheckStoreKeyStability();
 
         return ChecksContext.Failures == before ? 0 : 1;
@@ -181,19 +183,19 @@ public static class ModWorkshopBindingChecks
 
         foreach (var language in new[] { "zh-CN", "en-US" })
         {
-            var path = RepoPath(Path.Combine("tools", "i18n", language, "modstudio.json"));
+            var path = I18nResw.ResourcesPath(I18nResw.RepoRoot(), language);
             if (!File.Exists(path))
             {
                 ChecksContext.Check("文案表存在：" + language, false, path);
                 continue;
             }
 
-            var text = File.ReadAllText(path);
+            var table = I18nResw.Read(I18nResw.RepoRoot(), language);
             foreach (var key in keys)
             {
                 ChecksContext.Check(
                     language + " 有键 " + key,
-                    text.Contains("\"" + key + "\":", StringComparison.Ordinal),
+                    I18nResw.Get(table, key) is not null,
                     path);
             }
         }
@@ -306,6 +308,40 @@ public static class ModWorkshopBindingChecks
         // 详情结构是 9753 → 9760（描述缓冲 8000 字节是最大的一块，别再按「看起来像 1760」的直觉改）。
         ChecksContext.Equal("布局：枚举结果结构大小", 416, SteamWorkshopHostOperation.OwnEnumerateResultSize);
         ChecksContext.Equal("布局：条目详情结构大小", 9760, SteamWorkshopHostOperation.OwnDetailResultSize);
+    }
+
+    /// <summary>
+    /// 定长 UTF-8 缓冲的读取口径：SDK 里的 <c>char[]</c> 是 UTF-8 字节，按 0 截断。
+    /// 交给 <c>ByValTStr</c> 会按系统 ANSI 解码，中文标题就成了「锟斤拷」，所以这里钉住解码结果。
+    /// </summary>
+    private static void CheckFixedUtf8Buffers()
+    {
+        var title = new byte[129];
+        Encoding.UTF8.GetBytes("维多利亚 3 中文模组").CopyTo(title, 0);
+        ChecksContext.Equal(
+            "UTF-8 缓冲：中文标题原样取回",
+            "维多利亚 3 中文模组",
+            SteamWorkshopHostOperation.ReadFixedUtf8ForCheck(title));
+
+        ChecksContext.Equal(
+            "UTF-8 缓冲：全 0 取回空串",
+            string.Empty,
+            SteamWorkshopHostOperation.ReadFixedUtf8ForCheck(new byte[129]));
+        ChecksContext.Equal(
+            "UTF-8 缓冲：null 取回空串",
+            string.Empty,
+            SteamWorkshopHostOperation.ReadFixedUtf8ForCheck(null));
+
+        // 「中文 + 0 + 残留字节」：0 之后的字节属于缓冲区里的上一轮垃圾，必须丢掉。
+        var dirty = new byte[129];
+        var head = Encoding.UTF8.GetBytes("中文");
+        head.CopyTo(dirty, 0);
+        dirty[head.Length] = 0;
+        Encoding.UTF8.GetBytes("残留").CopyTo(dirty, head.Length + 1);
+        ChecksContext.Equal(
+            "UTF-8 缓冲：只取 0 之前的部分",
+            "中文",
+            SteamWorkshopHostOperation.ReadFixedUtf8ForCheck(dirty));
     }
 
     /// <summary>记录键按「游戏 + 规范化路径哈希」生成：大小写与尾部分隔符不能各算一条。</summary>

@@ -41,6 +41,7 @@ public sealed partial class WorkshopPage : Page
             AppServices.Assets,
             AppServices.WorkshopInfo,
             AppServices.WorkshopPages,
+            new WorkshopFilterCatalogCache(AppServices.FileSystem, AppServices.WorkshopFilterRoot),
             AppServices.Logger);
 
         Loaded += OnLoaded;
@@ -87,6 +88,16 @@ public sealed partial class WorkshopPage : Page
                 TimeRangeBox.SelectedItem = _viewModel.SelectedTimeRange;
             }
 
+            if (PageSizeBox.SelectedItem is null)
+            {
+                PageSizeBox.SelectedItem = _viewModel.SelectedPageSize;
+            }
+
+            if (SpecialFilterBox.SelectedItem is null)
+            {
+                SpecialFilterBox.SelectedItem = _viewModel.Filters.CurrentSpecialFilterLabel;
+            }
+
             if (!AppServices.IsInitialized)
             {
                 await _viewModel.LoadAsync(null, _lifetime.Token).ConfigureAwait(true);
@@ -98,6 +109,8 @@ public sealed partial class WorkshopPage : Page
             if (_isListLoaded &&
                 string.Equals(_loadedGameId, AppServices.CurrentGame?.GameId, StringComparison.Ordinal))
             {
+                // 列表不重查，但筛选目录有 24h TTL / 本地版本判断；过期时后台补一次。
+                _ = _viewModel.RefreshCatalogIfStaleAsync(_lifetime.Token);
                 return;
             }
 
@@ -118,6 +131,8 @@ public sealed partial class WorkshopPage : Page
     {
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         _viewModel.CancelPendingQuery();
+        _viewModel.CancelPendingFilterQuery();
+        _viewModel.CancelCatalogRefresh();
         _lifetime.Cancel();
     }
 
@@ -336,6 +351,97 @@ public sealed partial class WorkshopPage : Page
         catch (Exception ex)
         {
             AppServices.Logger.Error("WorkshopPage 下一页失败", ex);
+        }
+    }
+
+    /// <summary>点页码：直接跳到那一页（0 基，来自按钮的 Tag）。</summary>
+    private async void OnPageNumberClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is not FrameworkElement element || element.Tag is not int pageIndex)
+            {
+                return;
+            }
+
+            await _viewModel.GoToPageAsync(pageIndex, _lifetime.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面已关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("WorkshopPage 跳页失败", ex);
+        }
+    }
+
+    /// <summary>每页条数变化：写回 ViewModel（会回到第 1 页并跳过缓存）。</summary>
+    private async void OnPageSizeSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
+    {
+        try
+        {
+            if (e.SelectedItem is not int pageSize)
+            {
+                return;
+            }
+
+            await _viewModel.ChangePageSizeAsync(pageSize).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面已关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("WorkshopPage 切换每页条数失败", ex);
+        }
+    }
+
+    /// <summary>特别筛选条件下拉变化：写回下标，由 ViewModel 去抖后重查。</summary>
+    private void OnSpecialFilterSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
+    {
+        try
+        {
+            if (e.SelectedItem is not string label)
+            {
+                return;
+            }
+
+            var modes = _viewModel.Filters.SpecialFilterModes;
+            var index = -1;
+            for (var i = 0; i < modes.Count; i++)
+            {
+                if (string.Equals(modes[i], label, StringComparison.Ordinal))
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            if (index < 0 || index == _viewModel.Filters.SpecialFilterIndex)
+            {
+                return;
+            }
+
+            _viewModel.Filters.SpecialFilterIndex = index;
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("WorkshopPage 切换特别筛选失败", ex);
+        }
+    }
+
+    /// <summary>清空全部筛选条件（标签、DLC、不兼容、特别筛选）。</summary>
+    private void OnClearFiltersClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _viewModel.Filters.Clear();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("WorkshopPage 清除筛选失败", ex);
         }
     }
 

@@ -28,6 +28,10 @@ public sealed partial class WorkshopDetailPage : Page
     private readonly WorkshopDetailViewModel _viewModel;
     private readonly SteamWorkshopHostBackend? _steamBackend;
     private readonly HashSet<MarkdownView> _commentMarkdownViews = [];
+
+    /// <summary>查看器当前显示的一组图片：顶部截图墙或正文配图，二选一。</summary>
+    private IReadOnlyList<WorkshopScreenshotViewModel> _viewerItems = [];
+
     private WorkshopRowViewModel? _row;
 
     /// <summary>
@@ -77,6 +81,10 @@ public sealed partial class WorkshopDetailPage : Page
         // 图片下载完成后再由 GalleryImageReady 原地刷新，不重建整页。
         DescriptionView.ImageResolver = _viewModel.ResolveImagePath;
         ChangelogView.ImageResolver = _viewModel.ResolveImagePath;
+
+        // 译文视图是另一份 MarkdownView，解析器不会从原文视图继承：漏接就永远显示占位图标。
+        TranslatedDescriptionView.ImageResolver = _viewModel.ResolveImagePath;
+        TranslatedChangelogView.ImageResolver = _viewModel.ResolveImagePath;
         _viewModel.GalleryImageReady += OnGalleryImageReady;
 
         Loaded += OnLoaded;
@@ -87,6 +95,8 @@ public sealed partial class WorkshopDetailPage : Page
     {
         DescriptionView.RefreshImages();
         ChangelogView.RefreshImages();
+        TranslatedDescriptionView.RefreshImages();
+        TranslatedChangelogView.RefreshImages();
 
         foreach (var view in _commentMarkdownViews)
         {
@@ -413,25 +423,60 @@ public sealed partial class WorkshopDetailPage : Page
     }
 
     /// <summary>
-    /// 正文里内嵌的图片：如果它也在图片墙里就打开查看器，否则退回浏览器——
-    /// 这样「描述里的大图」和「图片墙」共享同一套翻页/缩放体验。
+    /// 正文里内嵌的图片：打开内置查看器，并在同一份文档的配图之间左右翻页。
+    /// 只有本地文件确实取不到（例如仅剩占位图）时才退回浏览器。
     /// </summary>
     private void OnMarkdownImageRequested(object? sender, string url)
     {
-        var index = -1;
+        var targetUrl = SteamEmoticon.NormalizeUrl(url);
 
-        for (var position = 0; position < _viewModel.Screenshots.Count; position++)
+        // 同一份文档的配图按正文顺序成组；表情和未下载完的图不进查看器。
+        var urls = (sender as MarkdownView)?.Markdown?.ImageUrls;
+        if (urls is { Count: > 0 })
         {
-            if (string.Equals(_viewModel.Screenshots[position].Url, url, StringComparison.Ordinal))
+            var items = new List<WorkshopScreenshotViewModel>(urls.Count);
+            var target = -1;
+            foreach (var candidate in urls)
             {
-                index = position;
-                break;
+                if (SteamEmoticon.TryCreate(candidate, alt: null, out _, out _))
+                {
+                    continue;
+                }
+
+                if (_viewModel.ResolveImagePath(candidate) is not { Length: > 0 } path)
+                {
+                    continue;
+                }
+
+                if (string.Equals(candidate, targetUrl, StringComparison.Ordinal))
+                {
+                    target = items.Count;
+                }
+
+                items.Add(new WorkshopScreenshotViewModel(items.Count, candidate) { Path = path });
+            }
+
+            if (target >= 0)
+            {
+                OpenViewer(items, target);
+                return;
             }
         }
 
-        if (index >= 0)
+        // 正文文档里没有（或本地文件还没下好）：先看它是不是顶部截图墙里的同一张。
+        for (var position = 0; position < _viewModel.Screenshots.Count; position++)
         {
-            OpenViewer(index);
+            if (string.Equals(_viewModel.Screenshots[position].Url, targetUrl, StringComparison.Ordinal))
+            {
+                OpenViewer(_viewModel.Screenshots, position);
+                return;
+            }
+        }
+
+        // 单张图也能看大图，不再把用户甩去浏览器。
+        if (_viewModel.ResolveImagePath(targetUrl) is { Length: > 0 } singlePath)
+        {
+            OpenViewer([new WorkshopScreenshotViewModel(0, targetUrl) { Path = singlePath }], 0);
             return;
         }
 
@@ -458,23 +503,35 @@ public sealed partial class WorkshopDetailPage : Page
     /// <summary>点内联大图：打开全屏查看器并停在同一张。</summary>
     private void OnInlineImageTapped(object sender, TappedRoutedEventArgs e)
     {
-        OpenViewer(FlipWorkshopScreenshots.SelectedIndex);
+        OpenViewer(_viewModel.Screenshots, FlipWorkshopScreenshots.SelectedIndex);
     }
 
     /// <summary>打开全屏图片查看器（页面内浮层，不是 ContentDialog）。</summary>
-    private void OpenViewer(int index)
+    /// <param name="items">要翻的一组图：顶部截图墙或正文配图。</param>
+    /// <param name="index">初始停在那一张。</param>
+    private void OpenViewer(IReadOnlyList<WorkshopScreenshotViewModel> items, int index)
     {
-        if (_viewModel.Screenshots.Count == 0)
+        if (items.Count == 0)
         {
             return;
         }
 
-        var target = Math.Clamp(index, 0, _viewModel.Screenshots.Count - 1);
-        FlipWorkshopScreenshots.SelectedIndex = target;
-        FlipWorkshopViewer.ItemsSource = _viewModel.Screenshots;
+        _viewerItems = items;
+        var target = Math.Clamp(index, 0, items.Count - 1);
+        var fromGallery = ReferenceEquals(items, _viewModel.Screenshots);
+
+        if (fromGallery)
+        {
+            FlipWorkshopScreenshots.SelectedIndex = target;
+        }
+
+        FlipWorkshopViewer.ItemsSource = items;
         FlipWorkshopViewer.SelectedIndex = target;
         UpdateCounter(target);
-        SyncCurrentShot(target);
+        if (fromGallery)
+        {
+            SyncCurrentShot(target);
+        }
 
         ImageOverlay.Visibility = Visibility.Visible;
 
@@ -485,8 +542,16 @@ public sealed partial class WorkshopDetailPage : Page
 
     private void OnCloseImageViewer(object sender, RoutedEventArgs e)
     {
+        var wasGallery = ReferenceEquals(_viewerItems, _viewModel.Screenshots);
         ImageOverlay.Visibility = Visibility.Collapsed;
         FlipWorkshopViewer.ItemsSource = null;
+        _viewerItems = [];
+        txtWorkshopImageCounter.Text = string.Empty;
+
+        if (!wasGallery)
+        {
+            return;
+        }
 
         // 关掉浮层后把焦点还给当前缩略图，键盘用户不会「丢焦点」。
         var index = Math.Clamp(FlipWorkshopScreenshots.SelectedIndex, 0, Math.Max(0, _viewModel.Screenshots.Count - 1));
@@ -504,8 +569,16 @@ public sealed partial class WorkshopDetailPage : Page
     private void OnGallerySelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         var index = FlipWorkshopViewer.SelectedIndex;
+        if (index < 0 || _viewerItems.Count == 0)
+        {
+            return;
+        }
+
         UpdateCounter(index);
-        SyncCurrentShot(index);
+        if (ReferenceEquals(_viewerItems, _viewModel.Screenshots))
+        {
+            SyncCurrentShot(index);
+        }
 
         // 翻到新的一页时容器是刚实体化的，Max 宽高要再写一次。
         DispatcherQueue.TryEnqueue(ApplyViewerSize);
@@ -576,7 +649,7 @@ public sealed partial class WorkshopDetailPage : Page
     /// <summary>把「1x 刚好放进浮层」的可用宽高写进每张截图，模板靠 x:Bind 拿到。</summary>
     private void ApplyViewerSize()
     {
-        if (ImageOverlay.Visibility != Visibility.Visible)
+        if (ImageOverlay.Visibility != Visibility.Visible || _viewerItems.Count == 0)
         {
             return;
         }
@@ -590,7 +663,7 @@ public sealed partial class WorkshopDetailPage : Page
             ImageOverlay.ActualHeight,
             headerHeight);
 
-        foreach (var shot in _viewModel.Screenshots)
+        foreach (var shot in _viewerItems)
         {
             shot.ApplyViewerSize(width, height);
         }
@@ -651,7 +724,7 @@ public sealed partial class WorkshopDetailPage : Page
 
     private void UpdateCounter(int index)
     {
-        var total = _viewModel.Screenshots.Count;
+        var total = _viewerItems.Count;
         txtWorkshopImageCounter.Text = total <= 0
             ? string.Empty
             : (Math.Clamp(index, 0, total - 1) + 1) + " / " + total;

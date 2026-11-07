@@ -70,7 +70,8 @@ public sealed class WorkshopPageCache
     }
 
     /// <summary>
-    /// 生成页键。六个维度都参与，避免切排序/时间范围/关键词后拿到别的页。
+    /// 生成页键。来源、游戏、搜索词、排序、时间范围、页码，加上左侧筛选栏的每个维度都参与，
+    /// 避免切排序/时间范围/标签/DLC/页大小后拿到别的页。
     /// </summary>
     /// <param name="source">来源。</param>
     /// <param name="gameId">游戏 ID。</param>
@@ -78,6 +79,13 @@ public sealed class WorkshopPageCache
     /// <param name="sort">排序参数原值（例如 trend / lastupdated）。</param>
     /// <param name="days">Steam 时间范围天数；非 Steam 传 null。</param>
     /// <param name="page">从 0 开始的页码。</param>
+    /// <param name="pageSize">每页条数。</param>
+    /// <param name="requiredTags">必须包含的标签。</param>
+    /// <param name="excludedTags">必须排除的标签。</param>
+    /// <param name="requiredAppIds">必须依赖的 DLC appid。</param>
+    /// <param name="excludedAppIds">必须排除的 DLC appid。</param>
+    /// <param name="showIncompatible">是否显示不兼容项目。</param>
+    /// <param name="specialFilter">特别筛选条件。</param>
     /// <returns>稳定可比较的字符串键。</returns>
     public static string Key(
         WorkshopSource source,
@@ -85,7 +93,14 @@ public sealed class WorkshopPageCache
         string? search,
         string sort,
         int? days,
-        int page)
+        int page,
+        int pageSize = SteamWorkshopClient.DefaultPageSize,
+        IReadOnlyList<string>? requiredTags = null,
+        IReadOnlyList<string>? excludedTags = null,
+        IReadOnlyList<int>? requiredAppIds = null,
+        IReadOnlyList<int>? excludedAppIds = null,
+        bool showIncompatible = false,
+        SteamWorkshopSpecialFilter specialFilter = SteamWorkshopSpecialFilter.None)
     {
         var tag = WorkshopInfoCache.SourceTag(source);
         return string.Join(
@@ -95,8 +110,35 @@ public sealed class WorkshopPageCache
             search ?? string.Empty,
             sort ?? string.Empty,
             days?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-",
-            page.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            page.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            pageSize.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            TagSignature(requiredTags),
+            TagSignature(excludedTags),
+            AppSignature(requiredAppIds),
+            AppSignature(excludedAppIds),
+            showIncompatible ? "1" : "0",
+            ((int)specialFilter).ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
+
+    private static string TagSignature(IReadOnlyList<string>? values) => values is null || values.Count == 0
+        ? "-"
+        : string.Join(
+            ',',
+            values
+                .Where(static value => !string.IsNullOrWhiteSpace(value))
+                .Select(static value => value.Trim())
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(static value => value, StringComparer.Ordinal));
+
+    private static string AppSignature(IReadOnlyList<int>? values) => values is null || values.Count == 0
+        ? "-"
+        : string.Join(
+            ',',
+            values
+                .Where(static value => value > 0)
+                .Distinct()
+                .OrderBy(static value => value)
+                .Select(static value => value.ToString(System.Globalization.CultureInfo.InvariantCulture)));
 
     /// <summary>取一页；TTL 内才算新鲜命中（过期也返回 true，用 <see cref="IsFresh"/> 判断）。</summary>
     /// <param name="key">页键。</param>
