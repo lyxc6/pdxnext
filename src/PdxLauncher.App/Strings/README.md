@@ -1,36 +1,29 @@
 # 界面文案（i18n）约定
 
-目标：全 UI 双语（`zh-CN` 默认、`en-US`），**切换语言后立即生效**（不重启）。
+目标：全 UI 双语（`zh-CN` 默认、`en-US`），**不重启即可切换**（`{x:Bind L.Xxx, Mode=OneWay}` 会随 `Localizer.Apply` 刷新）。
 
 ## 1. 文案源
 
 ```
-tools/i18n/zh-CN/<area>.json
-tools/i18n/en-US/<area>.json
+src/PdxLauncher.App/Strings/zh-CN/Resources.resw
+src/PdxLauncher.App/Strings/en-US/Resources.resw
 ```
 
-- 扁平键值 JSON，键里不要出现嵌套对象。
-- 两种语言**必须同键集**，缺少或多出都会让生成器报错。
-- 占用位统一写成 `{0}`、`{1}`…；两种语言的占位符**数量与序号必须一致**。
-- 值不能为空、首尾不能有空格。
-
-### 键命名
-
-`<area>.<主题>[.<子项>]`，每段正则 `^[a-z][a-zA-Z0-9]*$`，至少两段。
-同一个键**不允许**出现在两个 `<area>.json` 里（会报"重复键"），所以每个 area 文件只放自己前缀的键。
-
-标识符由生成器从键推导：每段首字母大写后拼接。
-`app.name` → `AppName`；`common.copyPath` → `CommonCopyPath`；`mods.card.enabledCount` → `ModsCardEnabledCount`。
-所以**不要**在同一个 area 里写出会撞名的键（`common.copyPath` 与 `common.copy.path` 都会变成 `CommonCopyPath`）。
+- WinUI 官方 `.resw` 格式；编译时由 `makepri` 编进 `PdxLauncher.App.pri`，运行期由 Windows App SDK 的 `ResourceManager` 读取。
+- **资源名必须是不含点的 PascalCase 标识符**。`.resw` 里的 `.` 是「属性分隔符」（`Foo.Text` 会变成子树 `Foo`），带点会被 makepri 拆开，`ResourceLoader` 按平名取不到。
+- 标识符由原点分键推导：每段首字母大写后拼接（`mods.title` → `ModsTitle`）。
+- 两种语言的资源名必须完全一致；占位符统一 `{0}`、`{1}`…，两种语言的数量与序号必须一致。
+- 值不能为空、首尾不能有空格；多行文案在 XML 里写真实换行，不要写字面 `\n`。
 
 ## 2. 生成
 
-```bash
-PYTHONIOENCODING=utf-8 python tools/gen-i18n.py          # 生成 Strings.g.cs
-PYTHONIOENCODING=utf-8 python tools/gen-i18n.py --check  # 只校验（CI 用）
-```
+编译期由 `src/PdxLauncher.Localization.Generator`（Roslyn 增量源生成器）读取这两个 `.resw`，生成：
 
-产物 `src/PdxLauncher.App/Localization/Strings.g.cs` 是机器生成文件，**禁止手改**。它也提供 `internal static class Keys`（每个键一个 `public const string`），VM 里用 `Keys.ModsTitle` 比裸字符串安全。
+- `Localizer` 的 partial：每个资源一个只读属性；
+- `internal static class Keys`：每个资源一个 `public const string`；
+- `AllKeys` 表（切语言时批量发 `PropertyChanged`）。
+
+生成物只存在于内存，**不落盘、不需要提交**。缺键、两语言键集不一致、占位符不一致都会在编译期报 `PDXI18N001/002`。
 
 ## 3. XAML 用法
 
@@ -42,7 +35,7 @@ using PdxLauncher.App.Localization;
 public Localizer L => Localizer.Instance;
 ```
 
-绑定一律 **`Mode=OneWay`**（x:Bind 默认是 OneTime，切语言不会更新）：
+绑定一律 **`Mode=OneWay`**（`x:Bind` 默认是 OneTime，切语言不会更新）：
 
 ```xml
 <TextBlock Text="{x:Bind L.ModsTitle, Mode=OneWay}" />
@@ -75,7 +68,7 @@ public sealed partial class ModsViewModel : LocalizedObservableObject
 }
 ```
 
-- `T(...)` / `L` 都是**每次访问时**去当前语言表里取值，所以计算属性天然会跟着变；只有"缓存到字段里的文案"才需要 `Relocalize()` 重建。
+- `T(...)` / `L` 都是**每次访问时**去当前 `ResourceContext` 取值，所以计算属性天然会跟着变；只有"缓存到字段里的文案"才需要 `Relocalize()` 重建。
 - 用枚举/选项类承载文案的（catalog），文案必须放在**属性 getter 里取**，不能在构造时算好存字段；集合是 `IReadOnlyList<Option>` 时，在 `Relocalize()` 里重建集合再 `OnPropertyChanged`。
 - 代码后置里的对话框：
 
@@ -108,10 +101,9 @@ var dialog = new ContentDialog
 ## 7. 验证
 
 ```bash
-bash tools/build-app.sh -v q     # 已内置 gen-i18n + 构建锁，输出最后 20 行
+bash tools/build-app.sh -v q     # 0 警告 0 错误（生成器会在编译期校验键集）
+dotnet "tests/PdxLauncher.Checks/bin/Release/net10.0/PdxLauncher.Checks.dll"
 ```
-
-必须 **0 警告 0 错误**。多个智能体同时构建由脚本里的锁串行化，看到等锁是正常的。
 
 自查残留（PowerShell/终端里都可用）：
 
@@ -124,6 +116,6 @@ grep -nP '(Text|Content|Header|PlaceholderText|Description|AutomationProperties\
 
 ## 8. 边界
 
-- 只改分配给你的文件；其它文件（尤其是 `Localization/*.cs`、`common.json`、别人的 `<area>.json`、`tools/gen-i18n.py`、`tools/build-app.sh`）不要动。
-- 需要公共键（比如"确定"）先看 `tools/i18n/zh-CN/common.json` 里有没有，没有就在任务里报给 Lead，不要自己加。
+- 只改分配给你的文件；其它文件（尤其是 `Localization/*.cs`、`Strings/*/Resources.resw`、`PdxLauncher.Localization.Generator`）不要动。
+- 需要公共键（比如"确定"）先在 `Strings/zh-CN/Resources.resw` 里找 `Common*`，没有就在任务里报给 Lead，不要自己加。
 - 不要执行 `git add`/`commit`/`checkout` 等改变仓库状态的命令。

@@ -26,10 +26,24 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!--
+      官方设置项控件（SettingsCard / SettingsExpander）。离线构建要求本机缓存里已有
+      这 5 个包：SettingsControls → Triggers → Helpers → Extensions → Common。
+      见 docs/SETTINGS-OFFICIAL-MIGRATION.md 与 docs/DEVELOPMENT.md 的「离线依赖」。
+    -->
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\PdxLauncher.Core\PdxLauncher.Core.csproj" />
     <ProjectReference Include="..\PdxLauncher.Imaging\PdxLauncher.Imaging.csproj" />
+    <!-- 文案源 .resw → Localizer 属性/Keys 的编译期生成器（不落盘）。 -->
+    <ProjectReference Include="..\PdxLauncher.Localization.Generator\PdxLauncher.Localization.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <!-- 生成器在编译期读取这些文件；makepri 也会把 .resw 编进 .pri。 -->
+  <ItemGroup>
+    <AdditionalFiles Include="Strings\**\Resources.resw" />
   </ItemGroup>
   <!--
     Steam 工坊直连订阅需要 steam_api64.dll。它属于 Valve 的可再发行组件：
