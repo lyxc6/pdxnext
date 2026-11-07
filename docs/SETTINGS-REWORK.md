@@ -1,12 +1,12 @@
-﻿# 设置页改版说明（2025-10-27）
+﻿# 设置页改版说明（2026-10-27）
 
-> **2026-10-28 追加**：Paradox 账号分节（曾经的 `navSettingsAccount`，`Tag=4`）已从设置页移出，改成左栏底部独立「账号」页（`src/PdxLauncher.App/Views/AccountPage.xaml`）。设置页回到本文描述的 **6 个分节**（`Tag="0".."5"`），`CacheSectionIndex` 回到 `4`；文案键 `settings.nav.account` / `settings.section.account` / 全部 `settings.account.*` 已删，迁到 `tools/i18n/*/account.json`（`account.*`）。详见 `docs/HANDOFF.md` §0.26。
+> **2026-10-28 追加**：Paradox 账号分节（曾经的 `navSettingsAccount`，`Tag=4`）已从设置页移出，改成左栏底部独立「账号」页（`src/PdxLauncher.App/Views/AccountPage.xaml`）。设置页当天回到 **6 个分节**（`Tag="0".."5"`），`CacheSectionIndex` 回到 `4`；**此后 2026-10-30 新增「翻译」（`Tag=6`，`navSettingsTranslation`）、2026-11-03 新增「关于与更新」（`Tag=7`，`navSettingsAbout`），现为 8 个分节（`Tag="0".."7"`），见文末「2026-11-06 勘误」。** 文案键 `settings.nav.account` / `settings.section.account` / 全部 `settings.account.*` 已删，迁到 `src/PdxLauncher.App/Strings/*/Resources.resw`（`account.*`）。详见 `docs/HANDOFF.md` §0.26。
 
 ## 目标与结果
 
 把原来「一整列 10 张卡片、每张卡里 160/`*` 左标签右控件」的设置页，改成 Windows 11 设置风格：
 
-- 左侧 216px 子分类导航（外观 / 启动 / 路径 / 联网 / 缓存 / 高级），右侧只显示当前分类。
+- 左侧 216 DIP 子分类导航（外观 / 启动 / 路径 / 联网 / 缓存 / 高级 / 翻译 / 关于与更新），右侧只显示当前分类。
 - 每行一个 `SettingsCard`（标题 + 可选说明 + 右侧控件），行卡统一描边、圆角、56px 最小高度。
 - 状态栏移出滚动区、固定在页面底部；无文案时自动收起。
 - 页头（标题 + 当前游戏名）与导航同列显示。
@@ -21,18 +21,20 @@ Page
    │  │   PaneDisplayMode=Left、OpenPaneLength=216、IsPaneToggleButtonVisible=False、
    │  │   IsSettingsVisible=False、Background=Transparent）
    │  │   ├─ PaneHeader：页头（标题 + 当前游戏名）
-   │  │   └─ MenuItems：六个 NavigationViewItem（Tag=0..5，各带 SymbolIcon），
+   │  │   └─ MenuItems：八个 NavigationViewItem（Tag=0..7，各带 SymbolIcon），
    │  │       SelectionChanged=OnSectionChanged，AutomationId 见下
    │  └─ Col1 ScrollViewer（VerticalScrollBarVisibility=Visible 常显、
    │        HorizontalScrollBarVisibility=Disabled、HorizontalContentAlignment=Stretch）
-   │     └─ StackPanel Spacing=12 Margin=0,0,14,0（右侧 14 DIP 是滚动条通道）
+   │     └─ StackPanel Spacing=12 Margin=0,0,16,0（右侧 16 DIP 是滚动条通道）
    │        ├─ StackPanel x:Name=secAppearance
-   │        ├─ StackPanel x:Name=secLaunch   Visibility=Collapsed
-   │        ├─ StackPanel x:Name=secPaths    Visibility=Collapsed
-   │        ├─ StackPanel x:Name=secOnline   Visibility=Collapsed
-   │        ├─ StackPanel x:Name=secCache    Visibility=Collapsed
-   │        └─ StackPanel x:Name=secAdvanced Visibility=Collapsed
-   └─ Row1 Border（状态栏，txtSettingsStatus，同样 14 DIP 右侧通道以对齐右缘）
+   │        ├─ StackPanel x:Name=secLaunch      Visibility=Collapsed
+   │        ├─ StackPanel x:Name=secPaths       Visibility=Collapsed
+   │        ├─ StackPanel x:Name=secOnline      Visibility=Collapsed
+   │        ├─ StackPanel x:Name=secCache       Visibility=Collapsed
+   │        ├─ StackPanel x:Name=secAdvanced    Visibility=Collapsed
+   │        ├─ StackPanel x:Name=secTranslation Visibility=Collapsed
+   │        └─ StackPanel x:Name=secAbout       Visibility=Collapsed
+   └─ Row1 Border（状态栏，txtSettingsStatus，同样 16 DIP 右侧通道以对齐右缘）
 ```
 
 - 自绘控件：`src/PdxLauncher.App/Controls/SettingsCard.xaml(.cs)`，三个依赖属性
@@ -40,21 +42,23 @@ Page
   边框用 `PdxCardBackgroundBrush` / `PdxCardStrokeBrush`，与主题（浅色/深色/高对比）联动。
 - **滚动条通道**：WinUI 3 的 Fluent 滚动条是浮层指示器，贴在 `ScrollViewer` 右边缘绘制、
   不占内容宽度。初版内容一路撑到右边缘，轨道和滑块就压在卡片的 1 px 描边与 8 px 圆角上
-  （悬停/滚动时表现为「内容和滚动条重叠」）。修法是滚动内容与状态栏各留 14 DIP 右侧通道
-  （12 DIP 滚动条通道 + 2 DIP 余量），滚动条改画在通道里。注意只能给**内容**留白：
+  （悬停/滚动时表现为「内容和滚动条重叠」）。修法是滚动内容与状态栏各留 16 DIP 右侧通道
+  （原为 12 DIP 滚动条通道 + 2 DIP 余量；2026-11-04 对齐 4px 网格时由 14 DIP 调为 16，见文末勘误），
+  滚动条改画在通道里。注意只能给**内容**留白：
   给 `ScrollViewer` 本身加 Margin 只会把轨道跟着卡片一起往里挪，问题不变。
-- **分节导航控件**：左侧六分类用官方 `NavigationView`（与主窗口左栏同一控件、同 216 宽），
+- **分节导航控件**：左侧八分类用官方 `NavigationView`（与主窗口左栏同一控件、同 216 宽），
   不是自绘。选中指示条（3 DIP）左侧按 WinUI 规范留的是**图标位**：条目带 `SymbolIcon`
   后依次是「条 → 图标 → 文字」。初版用纯文字 `ListView`，文字直接落在条目内边距 8 DIP 处，
   紧贴指示条（视觉上「条和字太近」），换控件 + 加图标后条右缘到文字 ≈ 41 DIP。
   用 `ListView` 也能通过加大 `Padding` 拉开，但那样条与字之间仍是空的，不符合导航规范。
 - 分节切换在 `SettingsPage.xaml.cs`：
   `OnSectionChanged(NavigationView, NavigationViewSelectionChangedEventArgs)` →
-  `CurrentSectionIndex()`（解析 `NavigationViewItem.Tag`，"0"–"5"）→ `ShowSection(index, refreshCache)`；
+  `CurrentSectionIndex()`（解析 `NavigationViewItem.Tag`，"0"–"7"）→ `ShowSection(index, refreshCache)`；
   切到缓存节时后台刷新缓存体积（`CacheSectionIndex = 4`）。
 - 新增 AutomationId：`lstSettingsSections`（沿用旧名，挂在 `NavigationView` 上，未改成 navSettingsSections）、
   `navSettingsAppearance`、`navSettingsLaunch`、
-  `navSettingsPaths`、`navSettingsOnline`、`navSettingsCache`、`navSettingsAdvanced`。
+  `navSettingsPaths`、`navSettingsOnline`、`navSettingsCache`、`navSettingsAdvanced`；
+  两个后加分节再补 `navSettingsTranslation`（Tag=6）与 `navSettingsAbout`（Tag=7）。
   原有 39 个 AutomationId 全部保留原值。
 
 ### 高级节：补丁区（2026-10-28）
@@ -92,9 +96,10 @@ advanced 节 AutomationId 并存；补丁区只在选中游戏后可操作（`Ca
 
 ## 文案与本地化
 
-- 新增 6 个导航文案键：`settings.nav.{appearance,launch,paths,online,cache,advanced}`；
-  危险区新增 `settings.danger.regenerateTitle`。`tools/i18n/{zh-CN,en-US}/settings.json` 同步维护，
-  `python tools/gen-i18n.py` 生成 `Localization/Strings.g.cs`（当前 499 个键，`--check` 通过）。
+- 导航文案键现为 8 个：`settings.nav.{appearance,launch,paths,online,cache,advanced}`
+  （改版时的 6 个）+ `settings.nav.translation` / `settings.nav.about`（2026-10-30 / 2026-11-03 两个新分节）；
+  危险区新增 `settings.danger.regenerateTitle`。`src/PdxLauncher.App/Strings/{zh-CN,en-US}/Resources.resw` 同步维护，
+  源生成器在编译期读取 `Strings/*/Resources.resw` 生成 `Localizer` 属性（改版当时 499 个键；2026-11-06 已增至 1424 个）。
 - 9 段长说明（主题 / 代理 / 界面 / DLC / 公告 / 程序数据 / 缩略图 / 缓存 / 危险）各压成一句话。
   改版前的完整长文案留在 `backup-settings-0350/settings.zh-CN.json`、`settings.en-US.json`（仓库根目录）。
 
@@ -102,11 +107,12 @@ advanced 节 AutomationId 并存；补丁区只在选中游戏后可操作（`Ca
 
 - `dotnet build "PdxLauncher.sln" -c Release -m:1`：0 警告 0 错误。
 - `bash .scratch/rework/build-checks.sh`：15 个检查类、断言失败 0。
-- `python tools/gen-i18n.py --check`：499 个键合法。
-- UI 自动化（`powershell -File scripts/verify-settings-sections.ps1`）：六个分类逐个切换，
+- `python src/PdxLauncher.Localization.Generator --check`：499 个键合法。
+- UI 自动化（`powershell -File scripts/verify-settings-sections.ps1`）：按当前脚本为八个分类逐个切换
+  （2026-10-27 改版时只覆盖 6 个；`navSettingsTranslation` / `navSettingsAbout` 后加，脚本的 want 列表已同步），
   各节期望的 AutomationId 全部命中（每节 missing 全空；count 含公共导航与状态栏、且随缓存统计/进度环浮动，不作为断言），
-  截图见 `.scratch/rework/settings-{appearance,launch,paths,online,cache,advanced}.png`，另附缓存节滚动到底的
-  `settings-cache-bottom.png`。
+  截图见 `.scratch/rework/settings-{appearance,launch,paths,online,cache,advanced}.png`（翻译 / 关于两节为后加，
+  暂无同名截图），另附缓存节滚动到底的 `settings-cache-bottom.png`。
 - 症状回归（`powershell -File scripts/verify-settings-regression.ps1`）：切换「背景显示方式」与开关「窗口置顶」后，
   其它下拉与开关的值保持不变；被操作控件的位置与尺寸在前后完全一致（`1323,940,492x60`），
   即不再出现整页跳动。
@@ -136,6 +142,9 @@ advanced 节 AutomationId 并存；补丁区只在选中游戏后可操作（`Ca
 
 ### 滚动条通道（2026-10-27 14:50）
 
+> 注：本节记录的是 14 DIP 通道时代的取证。2026-11-04 对齐 WinUI 4px 网格时通道已改为 **16 DIP**（见文末勘误），
+> 下面的像素读数与「14 DIP 是常数」等表述保留原值，不再代表现状。
+
 用户反馈「设置页面的内容和滚动条重叠了」。WinUI 3 的 Fluent 滚动条是浮层指示器，贴在
 `ScrollViewer` 右边缘绘制、不占内容宽度；改版初版内容一路撑到右边缘，悬停/滚动时轨道直接画在卡片的
 1 px 描边和 8 px 圆角上。现在给滚动内容与状态栏各留 14 DIP 右侧通道，滚动条落在通道里。
@@ -150,7 +159,7 @@ advanced 节 AutomationId 并存；补丁区只在选中游戏后可操作（`Ca
   开关「窗口置顶」前后位置尺寸完全一致 = `1302,940,492x60`；比改版记录的 `1323,940,492x60` 左移 21 px
   （14 DIP × 150% DPI），宽度 492、高度 60、y=940 不变。
 - 六分类 UIA 计数复核：appearance 42 / launch 35 / paths 42 / online 41 / cache 34 / advanced 34，`missing=[]`。
-- `cmd /c build.cmd`：16 个检查类、失败 0、断言失败 0；`python tools/gen-i18n.py --check`：499 个键合法。
+- `cmd /c build.cmd`：16 个检查类、失败 0、断言失败 0；`python src/PdxLauncher.Localization.Generator --check`：499 个键合法。
 
 ### 分节导航改用 NavigationView（2026-10-27 15:10）
 
@@ -202,4 +211,23 @@ advanced 节 AutomationId 并存；补丁区只在选中游戏后可操作（`Ca
   换确定性，避免强杀进程丢掉最后 300ms 的改动。
 - 自检 `SettingsChecks`（round-trip 含新增字段、缺文件默认、坏 JSON 回退、延迟写 `Flush`）已加入，
   当前 27 个检查类 / 失败 0。
-- 注意：`NavigationView` 当前是 6 个分类（账号已迁到左栏独立页），`CacheSectionIndex = 4`。
+- 注意：`NavigationView` 当前是 8 个分类（Tag=0..7；账号已迁到左栏独立页，Tag=6「翻译」与 Tag=7「关于与更新」为 2026-10-30 / 2026-11-03 追加），`CacheSectionIndex = 4`（「缓存」仍是 Tag=4，未随新增分节改变）。
+
+---
+
+## 2026-11-06 勘误（文档与代码对齐）
+
+以 `feat/1.3` HEAD `ac7225e` 为准复核，本轮只改文档，代码未动：
+
+- **分节数 6 → 8**：`SettingsPage.xaml` 的 `NavigationView.MenuItems` 现有 8 个 `NavigationViewItem`，`Tag="0".."7"`，
+  依次为 外观 / 启动 / 路径 / 联网 / 缓存 / 高级 / 翻译 / 关于与更新（第 65–120 行；`navSettingsTranslation` 在第 107 行、
+  `navSettingsAbout` 在第 114 行）。`SettingsPage.xaml.cs` 的 `ShowSection` 数组也是 8 项（第 169 行），
+  `CacheSectionIndex` 仍为 `4`。两个新分节的来源：翻译见 `docs/HANDOFF.md` §0.56（2026-10-30），
+  关于与更新见 §0.74.3（2026-11-03）。
+- **滚动条通道 14 DIP → 16 DIP**：滚动内容 `StackPanel` 的 `Margin="0,0,16,0"`（第 135 行）与状态栏 `Border`
+  的 `Margin="0,0,16,0"`（第 1024 行）。改动来自 2026-11-04 的 `7e95e57`「间距全量对齐 WinUI 的 4px 网格」
+  （见 `docs/HANDOFF.md` §0.82）：14 不是 4 的倍数，归一化为 16。
+- **代码注释仍写 14 DIP**：`SettingsPage.xaml` 第 131 行与第 1021 行的注释未随数值更新；
+  按本轮「只改 docs」的约束未动代码，待代码侧顺手修正。
+- 本文历史小节（`2026-10-27 14:50` 的 14 DIP 量测、`2026-10-27 15:10` 的六个 `NavigationViewItem`、
+  「验证记录」里的六分类截图）按写作时的事实保留，不篡改。

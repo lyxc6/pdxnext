@@ -192,6 +192,40 @@ function SelectDropDownIndex([string]$id, [int]$index) {
   return $ok
 }
 
+# 折叠区（ct:SettingsExpander）里的卡片默认不在 UIA 树里（Visibility=Collapsed 的内容
+# 不进 automation tree）。校验前先把当前节里折叠的 Expander 展开，截完图再还原，
+# 这样「默认折叠」的产品行为不变，而 checks 仍能覆盖折叠区内的控件。
+$script:expandedRegions = @()
+function ExpandCollapsedRegions {
+  $script:expandedRegions = @()
+  $all = $win.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+  foreach ($e in $all) {
+    $id = $e.Current.AutomationId
+    if (-not $id -or -not $id.StartsWith('exp')) { continue }
+    $ecp = $null
+    $target = $e
+    # SettingsExpander 暴露成 ControlType.Group，ExpandCollapsePattern 挂在内部标题 Button 上。
+    if (-not $target.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$ecp)) {
+      $btnCond = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Button)
+      $btn = $e.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $btnCond)
+      if (-not $btn) { continue }
+      $target = $btn
+      if (-not $target.TryGetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern, [ref]$ecp)) { continue }
+    }
+    if ($ecp.Current.ExpandCollapseState -eq [System.Windows.Automation.ExpandCollapseState]::Collapsed) {
+      $ecp.Expand()
+      $script:expandedRegions += $ecp
+    }
+  }
+  if ($script:expandedRegions.Count -gt 0) { Start-Sleep -Milliseconds 800 }
+}
+function RestoreCollapsedRegions {
+  foreach ($ecp in $script:expandedRegions) { try { $ecp.Collapse() } catch { } }
+  $script:expandedRegions = @()
+}
+
 $failed = 0
 foreach ($s in $sections) {
   $el = ById $s.id
@@ -220,6 +254,7 @@ foreach ($s in $sections) {
     }
   }
 
+  ExpandCollapsedRegions
   $ids = Ids
   $missing = @()
   foreach ($w in $s.want.Split(',')) { if ($ids -notcontains $w) { $missing += $w } }
@@ -227,6 +262,7 @@ foreach ($s in $sections) {
   "$($s.name): count=$($ids.Count) missing=[$($missing -join ',')]"
 
   Shot "settings-$($s.name)"
+  RestoreCollapsedRegions
 
   if ($s.name -eq 'cache' -and (ScrollToBottom)) {
     Shot 'settings-cache-bottom'

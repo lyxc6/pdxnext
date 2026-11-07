@@ -56,6 +56,7 @@ public sealed partial class SettingsPage : Page
             AlwaysOnTopService.Changed -= OnAlwaysOnTopChanged;
             AlwaysOnTopService.Changed += OnAlwaysOnTopChanged;
             _viewModel.RefreshAlwaysOnTop();
+            UpdateContentColumnWidth();
 
             if (!AppServices.IsInitialized)
             {
@@ -136,7 +137,29 @@ public sealed partial class SettingsPage : Page
 
     // ------------------------------------------------------------ 分节导航
 
-    /// <summary>「缓存」在左侧六分类里的序号，与 XAML 里 secCache 的顺序一致。</summary>
+    // 内容列上限 1040 DIP（官方建议 1000–1100）；左右各留 16 DIP，右侧给浮层滚动条。
+    private const double ContentColumnMaxWidth = 1040;
+    private const double ContentColumnGutter = 16;
+
+    /// <summary>
+    /// 视口变化时重算内容列宽度。ScrollViewer 水平滚动被禁用，窗口变窄时必须跟着收缩，
+    /// 否则右侧会被裁掉；窗口够宽时锁在 1040 并靠 Grid 的 Center 对齐。
+    /// </summary>
+    private void OnSettingsScrollerSizeChanged(object sender, SizeChangedEventArgs e) =>
+        UpdateContentColumnWidth();
+
+    private void UpdateContentColumnWidth()
+    {
+        var available = settingsScroller.ViewportWidth - (ContentColumnGutter * 2);
+        if (double.IsNaN(available) || available <= 0)
+        {
+            return;
+        }
+
+        settingsContentGrid.Width = Math.Min(ContentColumnMaxWidth, available);
+    }
+
+    /// <summary>「缓存」在左侧八个分节里的序号，与 XAML 里 secCache 的顺序一致。</summary>
     private const int CacheSectionIndex = 4;
 
     /// <summary>切换左侧分类：只显示选中的那一节，其余折叠（同一时刻只排版一类设置）。</summary>
@@ -574,6 +597,26 @@ public sealed partial class SettingsPage : Page
             }
 
             await _viewModel.ApplyPatchAsync(_lifetime.Token).ConfigureAwait(true);
+
+            // Core 不弹窗：版本不在已知登记表里时它只返回「未验证版本」并暂停写盘，
+            // 这里提示用户，确认后才带 allowUnverifiedVersion 重试。
+            if (!_viewModel.PatchNeedsVersionConfirm)
+            {
+                return;
+            }
+
+            var proceed = await ConfirmOverlay.ConfirmAsync(
+                T(Keys.SettingsPatchUnverifiedDialogTitle),
+                T(Keys.SettingsPatchUnverifiedDialogContent),
+                T(Keys.SettingsPatchUnverifiedConfirm),
+                T(Keys.CommonCancel),
+                initialFocus: InitialFocus.Cancel);
+            if (!proceed)
+            {
+                return;
+            }
+
+            await _viewModel.ApplyPatchAsync(_lifetime.Token, allowUnverifiedVersion: true).ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {

@@ -29,7 +29,7 @@ public static class InstallModeUiChecks
         "SettingsAboutInstallModeNoEntry",
     ];
 
-    /// <summary>两种语言都必须存在的文案键（点分形式，来自 tools/i18n/*/settings.json）。</summary>
+    /// <summary>两种语言都必须存在的文案键（点分写法，经 I18nResw 转成资源名查找）。</summary>
     private static readonly string[] I18nKeys =
     [
         "settings.about.installMode",
@@ -148,7 +148,7 @@ public static class InstallModeUiChecks
     {
         ChecksContext.Check(
             "安装模式界面: 安装模式文案绑定在 ViewModel.InstallModeText",
-            pageXaml.Contains("Value=\"{x:Bind ViewModel.InstallModeText, Mode=OneWay}\"", StringComparison.Ordinal));
+            pageXaml.Contains("Text=\"{x:Bind ViewModel.InstallModeText, Mode=OneWay}\"", StringComparison.Ordinal));
         ChecksContext.Check(
             "安装模式界面: 安装目录文本框存在",
             pageXaml.Contains("AutomationId=\"txtInstallModeDirectory\"", StringComparison.Ordinal));
@@ -164,7 +164,7 @@ public static class InstallModeUiChecks
             pageCode.Contains("_viewModel.InstallModeDirectory", StringComparison.Ordinal));
         ChecksContext.Check(
             "安装模式界面: 当前数据目录一并显示",
-            pageXaml.Contains("Value=\"{x:Bind ViewModel.InstallModeDataDirectory, Mode=OneWay}\"", StringComparison.Ordinal));
+            pageXaml.Contains("Text=\"{x:Bind ViewModel.InstallModeDataDirectory, Mode=OneWay}\"", StringComparison.Ordinal));
         ChecksContext.Check(
             "安装模式界面: 数据目录解释句在页面上",
             pageXaml.Contains("AutomationId=\"txtInstallModeDataNote\"", StringComparison.Ordinal));
@@ -187,13 +187,15 @@ public static class InstallModeUiChecks
 
         foreach (var key in I18nKeys)
         {
-            ChecksContext.Check("安装模式界面: zh-CN 有 " + key, zh.ContainsKey(key));
-            ChecksContext.Check("安装模式界面: en-US 有 " + key, en.ContainsKey(key));
+            ChecksContext.Check("安装模式界面: zh-CN 有 " + key, I18nResw.Get(zh, key) is not null);
+            ChecksContext.Check("安装模式界面: en-US 有 " + key, I18nResw.Get(en, key) is not null);
         }
 
         foreach (var key in I18nKeys)
         {
-            if (!zh.TryGetValue(key, out var zhText) || !en.TryGetValue(key, out var enText))
+            var zhText = I18nResw.Get(zh, key);
+            var enText = I18nResw.Get(en, key);
+            if (zhText is null || enText is null)
             {
                 continue;
             }
@@ -204,27 +206,8 @@ public static class InstallModeUiChecks
         }
     }
 
-    private static Dictionary<string, string> LoadTemplates(string root, string language)
-    {
-        var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        var directory = Path.Combine(root, "tools", "i18n", language);
-        if (!Directory.Exists(directory))
-        {
-            return result;
-        }
-
-        foreach (var path in Directory.EnumerateFiles(directory, "*.json").OrderBy(p => p, StringComparer.Ordinal))
-        {
-            using var stream = File.OpenRead(path);
-            using var document = JsonDocument.Parse(stream);
-            foreach (var property in document.RootElement.EnumerateObject())
-            {
-                result[property.Name] = property.Value.GetString() ?? string.Empty;
-            }
-        }
-
-        return result;
-    }
+    private static Dictionary<string, string> LoadTemplates(string root, string language) =>
+        I18nResw.Read(root, language);
 
     private static string FindWorkspaceRoot()
     {

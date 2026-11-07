@@ -253,33 +253,29 @@ public static class LocalModelUiChecks
     {
         foreach (var language in new[] { "zh-CN", "en-US" })
         {
-            var path = Path.Combine(root, "tools", "i18n", language, "settings.json");
+            var path = I18nResw.ResourcesPath(root, language);
             if (!ChecksContext.Check("本地模型: " + language + " 文案文件存在", File.Exists(path), path))
             {
                 continue;
             }
 
-            var json = File.ReadAllText(path);
+            var table = I18nResw.Read(root, language);
             foreach (var key in NewLocalizationKeys)
             {
                 ChecksContext.Check(
                     "本地模型: " + language + " 含 " + key,
-                    json.Contains("\"" + key + "\"", StringComparison.Ordinal));
+                    I18nResw.Get(table, key) is not null);
             }
         }
 
-        var zhPath = Path.Combine(root, "tools", "i18n", "zh-CN", "settings.json");
-        var enPath = Path.Combine(root, "tools", "i18n", "en-US", "settings.json");
-        if (File.Exists(zhPath) && File.Exists(enPath))
-        {
-            var zh = File.ReadAllText(zhPath);
-            var en = File.ReadAllText(enPath);
-            ChecksContext.Check(
-                "本地模型: 残留收尾是中英一致的总数语义（7 项 → 等共 7 项 / 7 in total）",
-                zh.Contains("\"settings.translate.localModelResidueMore\": \"…等共 {0} 项\"", StringComparison.Ordinal)
-                && en.Contains("\"settings.translate.localModelResidueMore\": \"… ({0} in total)\"", StringComparison.Ordinal),
-                "MaxItems=6 时列 6 项，收尾若写「and 7 more」就自相矛盾；断言钉死总数语义");
-        }
+        var zh = I18nResw.Read(root, "zh-CN");
+        var en = I18nResw.Read(root, "en-US");
+        var zhMore = I18nResw.Get(zh, "settings.translate.localModelResidueMore");
+        var enMore = I18nResw.Get(en, "settings.translate.localModelResidueMore");
+        ChecksContext.Check(
+            "本地模型: 残留收尾是中英一致的总数语义（7 项 → 等共 7 项 / 7 in total）",
+            zhMore == "…等共 {0} 项" && enMore == "… ({0} in total)",
+            "MaxItems=6 时列 6 项，收尾若写「and 7 more」就自相矛盾；断言钉死总数语义");
     }
 
     private static string? ReadRequired(string root, string label, params string[] parts)

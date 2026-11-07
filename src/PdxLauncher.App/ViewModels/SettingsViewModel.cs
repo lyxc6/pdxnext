@@ -1019,6 +1019,12 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     public bool HasPatchDetail => !string.IsNullOrEmpty(PatchDetailText);
 
+    /// <summary>
+    /// 上一次「打补丁」因为版本未验证被暂停，等待用户确认后继续。
+    /// 页面据此弹二次确认，再以 <c>allowUnverifiedVersion</c> 重试；Core 不弹窗。
+    /// </summary>
+    public bool PatchNeedsVersionConfirm { get; private set; }
+
     /// <summary>没选游戏时整个补丁区只显示提示，按钮都不可用。</summary>
     public bool HasPatchInfo => Game is not null;
 
@@ -1064,8 +1070,13 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// <summary>
     /// 一键打补丁（页面必须先弹 ContentDialog 确认）。
     /// 先备份当前 steam_api 再覆盖 loader，失败只在状态栏说明原因，不动已备份的原文件。
+    /// <para>
+    /// 目标文件不在已知原版登记表里时，Core 返回 <see cref="GamePatchStatus.UnverifiedVersion"/> 且不写盘：
+    /// 这里只记下 <see cref="PatchNeedsVersionConfirm"/>，由页面提示用户确认后再带
+    /// <paramref name="allowUnverifiedVersion"/> 调一次。
+    /// </para>
     /// </summary>
-    public async Task ApplyPatchAsync(CancellationToken cancellationToken)
+    public async Task ApplyPatchAsync(CancellationToken cancellationToken, bool allowUnverifiedVersion = false)
     {
         if (Game is null)
         {
@@ -1074,10 +1085,13 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
 
         IsBusy = true;
+        PatchNeedsVersionConfirm = false;
         try
         {
             var game = Game;
-            var report = await Task.Run(() => AppServices.GamePatch.Apply(game), cancellationToken)
+            var report = await Task.Run(
+                    () => AppServices.GamePatch.Apply(game, allowUnverifiedVersion),
+                    cancellationToken)
                 .ConfigureAwait(true);
 
             _patchReport = report;
@@ -1095,6 +1109,12 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                     report.ApiFileName ?? string.Empty,
                     report.SteamAppId?.ToString(CultureInfo.InvariantCulture) ?? "-");
                 AppServices.Logger.Info("已打补丁（gameId=" + game.GameId + "，dir=" + report.ApiDirectory + "）");
+            }
+            else if (report.Status == GamePatchStatus.UnverifiedVersion)
+            {
+                PatchNeedsVersionConfirm = true;
+                SetStatus(Keys.SettingsPatchStatusNeedsConfirm);
+                AppServices.Logger.Info("补丁暂停：版本未验证，等待用户确认（gameId=" + game.GameId + "）");
             }
             else
             {
@@ -1175,10 +1195,11 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         GamePatchStatus.Patched => Keys.SettingsPatchStatePatched,
         GamePatchStatus.PatchedOther => Keys.SettingsPatchStatePatchedOther,
         GamePatchStatus.SteamOverwrote => Keys.SettingsPatchStateSteamOverwrote,
+        GamePatchStatus.UnverifiedVersion => Keys.SettingsPatchStateUnverifiedVersion,
         _ => Keys.SettingsPatchStateUnsupported,
     };
 
-    /// <summary>细节行：实际目录 + appId，失败/特殊情况再加一行原因。</summary>
+    /// <summary>细节行：实际目录 + appId + 版本，失败/特殊情况再加一行原因。</summary>
     private string BuildPatchDetail(GamePatchReport report)
     {
         var parts = new List<string>();
@@ -1192,11 +1213,26 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             parts.Add(T(Keys.SettingsPatchDetailAppId, appId.ToString(CultureInfo.InvariantCulture)));
         }
 
+        if (report.VersionState == PatchVersionState.Known && !string.IsNullOrEmpty(report.MatchedVersion))
+        {
+            parts.Add(T(Keys.SettingsPatchDetailVersion, report.MatchedVersion, report.MatchedBuildId ?? "-"));
+        }
+        else if (report.VersionState == PatchVersionState.Unknown)
+        {
+            parts.Add(T(Keys.SettingsPatchDetailVersionUnknown));
+        }
+
         parts.Add(T(AppServices.GamePatch.UsesExternalAssets
             ? Keys.SettingsPatchAssetsExternal
             : Keys.SettingsPatchAssetsBuiltIn));
 
-        if (!string.IsNullOrEmpty(report.Detail))
+        if (report.BackupSuspect)
+        {
+            parts.Add(T(Keys.SettingsPatchDetailBackupSuspect, report.BackupArchivePath ?? "-"));
+        }
+
+        // 「未验证版本」的 Detail 是给日志看的技术串，界面已经用本地化文案说明，不再重复。
+        if (!string.IsNullOrEmpty(report.Detail) && report.Status != GamePatchStatus.UnverifiedVersion)
         {
             parts.Add(report.Detail);
         }

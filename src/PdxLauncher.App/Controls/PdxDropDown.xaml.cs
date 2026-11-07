@@ -136,13 +136,6 @@ public partial class PdxDropDown : UserControl
         flyout.Hide();
     }
 
-    internal void SelectItemFromAutomation(object item)
-    {
-        SelectedItem = item;
-        CloseDropDown();
-        RaiseSelectionChanged(item);
-    }
-
     internal string GetItemDisplayText(object? item)
     {
         if (item is null)
