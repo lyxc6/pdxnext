@@ -18,6 +18,5 @@ done
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
 
 cd "$ROOT" || exit 1
-python tools/gen-i18n.py || exit 1
 dotnet build "$ROOT/src/PdxLauncher.App/PdxLauncher.App.csproj" -c Release -m:1 --nologo "$@" 2>&1 | tail -n 20
 exit "${PIPESTATUS[0]}"

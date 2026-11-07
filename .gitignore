@@ -8,6 +8,8 @@
 # 发布 / 打包产物
 dist/
 publish/
+*.nupkg
+*.snupkg
 
 # 本地临时目录、手工备份与 UI 测试产物
 .scratch/
@@ -16,6 +18,9 @@ publish/
 backup*/
 ui-test-artifacts/
 artifacts/
+
+# agent 把绝对路径当相对路径拼接时会在仓根造出 Work/<仓库名>/，只锚定根目录
+/Work/
 
 # 运行时数据（默认在 exe 目录下的 data/，通常已被 bin/ 覆盖，这里再兜底）
 data/
@@ -36,6 +41,9 @@ TestResults/
 # 工具缓存
 __pycache__/
 *.pyc
+*.pyo
+.venv/
+venv/
 
 # Valve 的可再发行组件与本地 Steamworks SDK：本启动器不随包分发它们的二进制。
 # 用户自己下载的 sdk/ 与运行期生成的 steam_appid.txt 都不进仓。
@@ -49,9 +57,17 @@ steam_appid.txt
 !.vscode/tasks.json
 !.vscode/settings.json
 !.vscode/extensions.json
+*.binlog
+
+# 系统杂项（Windows 缩略图 / 文件夹配置，macOS Finder 元数据）
+Thumbs.db
+desktop.ini
+.DS_Store
 
 # agent 工作区（含链接 worktree，动辄数百 MB；不能靠 .agents/worktrees/.gitignore 挡，
 # 那是本机产物、不会进仓）
+.zcode
+.mimosa
 .agents/
 
 # 临时核对目录与备份文件

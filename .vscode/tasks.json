@@ -35,11 +35,21 @@
       "problemMatcher": "$msbuild"
     },
     {
-      "label": "启动 Debug",
-      "detail": "启动已构建的 Debug 版 PdxNext（run-debug.cmd）",
+      "label": "Dev 启动（构建 + 自检 + 重启）",
+      "detail": "结束旧实例、构建 Release、跑自检并启动（dev.cmd）",
       "type": "process",
       "command": "cmd",
-      "args": ["/c", "${workspaceFolder}\\run-debug.cmd"],
+      "args": ["/c", "${workspaceFolder}\\dev.cmd"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": "$msbuild"
+    },
+    {
+      "label": "查看当前修改状态",
+      "detail": "分支、未提交改动、运行态与构建时间（status.cmd nopause）",
+      "type": "process",
+      "command": "cmd",
+      "args": ["/c", "${workspaceFolder}\\status.cmd", "nopause"],
       "options": { "cwd": "${workspaceFolder}" },
       "presentation": { "reveal": "always", "panel": "shared", "clear": true },
       "problemMatcher": []
