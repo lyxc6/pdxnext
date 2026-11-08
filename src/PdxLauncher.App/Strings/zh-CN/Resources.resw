@@ -4676,9 +4676,6 @@
   <data name="WorkshopDetailInfo" xml:space="preserve">
     <value>信息</value>
   </data>
-  <data name="WorkshopDetailInstalled" xml:space="preserve">
-    <value>已订阅</value>
-  </data>
   <data name="WorkshopDetailLinks" xml:space="preserve">
     <value>相关链接</value>
   </data>
@@ -4724,9 +4721,6 @@
   <data name="WorkshopDetailSteamSubscribeHintOff" xml:space="preserve">
     <value>未开启直连订阅：按钮只会在 Steam 客户端里打开该 mod。可在设置页的「Steam 工坊直连订阅」里打开。</value>
   </data>
-  <data name="WorkshopDetailSteamSubscribeHintOn" xml:space="preserve">
-    <value>已开启直连订阅：按钮会直接调用 Steam 客户端订阅 / 取消订阅。</value>
-  </data>
   <data name="WorkshopDetailSteamUnsubscribeConfirm" xml:space="preserve">
     <value>将取消订阅这个工坊物品。Steam 会在游戏退出后移除已下载的内容。确定继续吗？</value>
   </data>
@@ -4735,9 +4729,6 @@
   </data>
   <data name="WorkshopDetailSubscribeFailed" xml:space="preserve">
     <value>订阅失败：{0}</value>
-  </data>
-  <data name="WorkshopDetailSubscribeOk" xml:space="preserve">
-    <value>已订阅</value>
   </data>
   <data name="WorkshopDetailSubscribePlaysetHint" xml:space="preserve">
     <value>订阅会加入播放集 PdxNext，下次启动时生效</value>
@@ -4768,9 +4759,6 @@
   </data>
   <data name="WorkshopDetailUnsubscribeFailed" xml:space="preserve">
     <value>取消订阅失败：{0}</value>
-  </data>
-  <data name="WorkshopDetailUnsubscribeOk" xml:space="preserve">
-    <value>已取消订阅</value>
   </data>
   <data name="WorkshopDetailViewImage" xml:space="preserve">
     <value>查看大图</value>

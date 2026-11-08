@@ -267,18 +267,9 @@
                                 VerticalAlignment="Stretch"
                                 Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSubscribeCard), Mode=OneWay}">
                             <StackPanel Spacing="12">
+                                <!-- 订阅状态不入徽章：已订阅时按钮文案就是「取消订阅」，再挂一颗「已订阅」是同一句话说两遍。 -->
                                 <TextBlock Text="{x:Bind L.WorkshopDetailSubscribe, Mode=OneWay}"
                                            Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                <Border HorizontalAlignment="Left"
-                                        Padding="8,4"
-                                        CornerRadius="4"
-                                        BorderThickness="1"
-                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsInstalled), Mode=OneWay}">
-                                    <TextBlock Text="{x:Bind L.WorkshopDetailInstalled, Mode=OneWay}"
-                                               Style="{StaticResource CaptionTextBlockStyle}" />
-                                </Border>
                                 <Button x:Name="btnWorkshopDetailSubscribe"
                                         HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Center"
@@ -295,15 +286,6 @@
                                         IsEnabled="{x:Bind ViewModel.CanToggleSteamSubscription, Mode=OneWay}"
                                         Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSteamSubscribeButton), Mode=OneWay}"
                                         AutomationProperties.AutomationId="btnWorkshopDetailSubscribeSteam" />
-                                <Border Padding="8,4"
-                                        HorizontalAlignment="Left"
-                                        Background="{ThemeResource AccentFillColorDefaultBrush}"
-                                        CornerRadius="4"
-                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSteamSubscribeState), Mode=OneWay}">
-                                    <TextBlock Text="{x:Bind L.WorkshopDetailInstalled, Mode=OneWay}"
-                                               Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
-                                               Style="{StaticResource CaptionTextBlockStyle}" />
-                                </Border>
                                 <Border Padding="8,4"
                                         HorizontalAlignment="Left"
                                         Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
@@ -329,6 +311,7 @@
                                               HorizontalAlignment="Left"
                                               IsActive="{x:Bind ViewModel.IsSubscribing, Mode=OneWay}"
                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsSubscribing), Mode=OneWay}" />
+                                <!-- 只报失败：成功后按钮文案/状态已经变了，再写一句「已订阅」就是重复。 -->
                                 <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"

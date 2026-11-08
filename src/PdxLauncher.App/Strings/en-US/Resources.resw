@@ -4676,9 +4676,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="WorkshopDetailInfo" xml:space="preserve">
     <value>Info</value>
   </data>
-  <data name="WorkshopDetailInstalled" xml:space="preserve">
-    <value>Subscribed</value>
-  </data>
   <data name="WorkshopDetailLinks" xml:space="preserve">
     <value>Links</value>
   </data>
@@ -4724,9 +4721,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="WorkshopDetailSteamSubscribeHintOff" xml:space="preserve">
     <value>Direct subscription is off: the button only opens this item in the Steam client. Turn it on in Settings.</value>
   </data>
-  <data name="WorkshopDetailSteamSubscribeHintOn" xml:space="preserve">
-    <value>Direct subscription is on: the button subscribes or unsubscribes through the Steam client.</value>
-  </data>
   <data name="WorkshopDetailSteamUnsubscribeConfirm" xml:space="preserve">
     <value>This unsubscribes from the Workshop item. Steam removes the downloaded content after the game quits. Continue?</value>
   </data>
@@ -4735,9 +4729,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="WorkshopDetailSubscribeFailed" xml:space="preserve">
     <value>Subscribe failed: {0}</value>
-  </data>
-  <data name="WorkshopDetailSubscribeOk" xml:space="preserve">
-    <value>Subscribed</value>
   </data>
   <data name="WorkshopDetailSubscribePlaysetHint" xml:space="preserve">
     <value>Adds the mod to play set PdxNext; applies on next launch</value>
@@ -4768,9 +4759,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="WorkshopDetailUnsubscribeFailed" xml:space="preserve">
     <value>Unsubscribe failed: {0}</value>
-  </data>
-  <data name="WorkshopDetailUnsubscribeOk" xml:space="preserve">
-    <value>Unsubscribed</value>
   </data>
   <data name="WorkshopDetailViewImage" xml:space="preserve">
     <value>View image</value>

@@ -817,6 +817,11 @@ PdxLauncher.App.exe --steam-host workshop-publish --api <steam_api64.dll> --appi
   （`modstudio.rowPublished`）只用于副标题 `SubtitleText` 与详情面板的「发布状态」行。
   原因：`Localizer.Format(key)` 在 `args` 为空时**原样返回模板**，把带占位符的键直接绑到 XAML 会在界面上
   打出字面的 `{0}`；`LocalizationBindingChecks` 现在扫描所有 `{x:Bind L.Xxx}` 并断言模板里没有 `{n}`。
+- **按钮说了就不再挂同义徽章**：同一个原则也适用于工坊详情页的订阅卡 —— 已订阅时按钮文案就是「取消订阅」，
+  所以「已订阅」徽章与成功反馈行都删掉了（`WorkshopDetailInstalled` / `WorkshopDetailSubscribeOk` /
+  `WorkshopDetailUnsubscribeOk` / `WorkshopDetailSteamSubscribeHintOn` 四个键一并移除）；订阅只报失败，
+  而且失败文案属于当前 mod，`ResetForLoad` 必须清空 `StatusText`，否则切 mod 会串到下一个详情页。
+  `WorkshopDetailSubscribeCardChecks` 守这两条。
 - **上传面板的出口**：`Pane` 的三个值（Detail / Create / Upload）互斥，发布**成功**、**取消**、以及
   **在上传页切换选中的 mod** 都会回到 `Detail`；只有发布**失败**留在 `Upload`，以保留表单与错误信息供重试。
   页面是 `NavigationCacheMode="Required"`，实例常驻，所以复位必须写在视图模型里（`PublishAsync` 的取消分支、

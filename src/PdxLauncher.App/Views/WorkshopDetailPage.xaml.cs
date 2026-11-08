@@ -346,8 +346,10 @@ public sealed partial class WorkshopDetailPage : Page
         }
 
         var result = await _viewModel.ToggleSubscriptionAsync(subscribe, CurrentToken);
+
+        // 成功静默：按钮文案与状态已经变了，再写一句「已订阅」是重复；失败必须留下原因。
         _viewModel.StatusText = result.IsSuccess
-            ? (subscribe ? L.WorkshopDetailSubscribeOk : L.WorkshopDetailUnsubscribeOk)
+            ? string.Empty
             : L.T(
                 subscribe ? Keys.WorkshopDetailSubscribeFailed : Keys.WorkshopDetailUnsubscribeFailed,
                 result.ErrorMessage ?? string.Empty);
@@ -378,8 +380,10 @@ public sealed partial class WorkshopDetailPage : Page
             }
 
             var result = await _viewModel.ToggleSteamSubscriptionAsync(subscribe, CurrentToken);
+
+            // 成功静默，理由同 PDX 分支。
             _viewModel.StatusText = result.Ok
-                ? (subscribe ? L.WorkshopDetailSubscribeOk : L.WorkshopDetailUnsubscribeOk)
+                ? string.Empty
                 : L.T(
                     subscribe ? Keys.WorkshopDetailSubscribeFailed : Keys.WorkshopDetailUnsubscribeFailed,
                     result.ErrorText ?? string.Empty);
