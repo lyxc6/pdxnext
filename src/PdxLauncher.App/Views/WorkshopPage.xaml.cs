@@ -432,6 +432,34 @@ public sealed partial class WorkshopPage : Page
         }
     }
 
+    /// <summary>
+    /// 点一个筛选胶囊：未选 → 必须包含 → 必须排除 → 未选。
+    /// 状态只改 ViewModel，胶囊本身只负责显示；去抖与重新查询由 Filters 统一负责。
+    /// </summary>
+    private void OnTagChipClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is FrameworkElement { DataContext: WorkshopTagOption option })
+            {
+                option.Cycle();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("WorkshopPage 切换筛选胶囊失败", ex);
+        }
+    }
+
+    /// <summary>点分组标题：展开 / 收起这一组（标题按钮的 DataContext 就是分组视图模型）。</summary>
+    private void OnFilterGroupHeaderClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: WorkshopFilterGroupViewModel group })
+        {
+            group.IsExpanded = !group.IsExpanded;
+        }
+    }
+
     /// <summary>清空全部筛选条件（标签、DLC、不兼容、特别筛选）。</summary>
     private void OnClearFiltersClick(object sender, RoutedEventArgs e)
     {

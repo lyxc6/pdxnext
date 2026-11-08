@@ -4757,14 +4757,14 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="WorkshopFilterClear" xml:space="preserve">
     <value>Clear all</value>
   </data>
+  <data name="WorkshopFilterCycleHint" xml:space="preserve">
+    <value>Click to cycle: include, exclude, clear</value>
+  </data>
   <data name="WorkshopFilterDlcEmpty" xml:space="preserve">
     <value>No matching DLC</value>
   </data>
   <data name="WorkshopFilterDlcSearch" xml:space="preserve">
     <value>Filter by name</value>
-  </data>
-  <data name="WorkshopFilterExclude" xml:space="preserve">
-    <value>Exclude</value>
   </data>
   <data name="WorkshopFilterGroupCategory" xml:space="preserve">
     <value>Category</value>
@@ -4774,9 +4774,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="WorkshopFilterGroupDlc" xml:space="preserve">
     <value>Required DLC</value>
-  </data>
-  <data name="WorkshopFilterInclude" xml:space="preserve">
-    <value>Include</value>
   </data>
   <data name="WorkshopFilterShowIncompatible" xml:space="preserve">
     <value>Show incompatible items</value>

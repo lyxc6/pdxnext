@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:PdxLauncher.App.Controls">
+
+    <!--
+        三态胶囊（未选 / 必须包含 / 必须排除）的默认样式。
+        颜色全部走 WinUI 内置主题资源（AccentFillColor* / SystemFillColorCritical*），不新增画笔，
+        这样 Light / Dark / HighContrast 由框架统一负责；三种状态是互斥的 VisualState，
+        悬停/按下只在最上层叠一层半透明 tint，不会盖掉状态底色。
+    -->
+    <Style TargetType="local:PdxTagChip">
+        <Setter Property="Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+        <!-- 卡片描边比 ControlStrokeColorDefault 明显：胶囊浮在玻璃卡上，太细会看成裸文字。 -->
+        <Setter Property="BorderBrush" Value="{ThemeResource PdxCardStrokeBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="32" />
+        <!-- 侧栏内宽 240：单颗胶囊不越过一列，过长的 DLC 名靠省略号收尾。 -->
+        <Setter Property="MaxWidth" Value="232" />
+        <Setter Property="Padding" Value="12,4" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:PdxTagChip">
+                    <Grid x:Name="Root"
+                          Padding="{TemplateBinding Padding}"
+                          Background="{TemplateBinding Background}"
+                          BorderBrush="{TemplateBinding BorderBrush}"
+                          BorderThickness="{TemplateBinding BorderThickness}"
+                          CornerRadius="{TemplateBinding CornerRadius}">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="Overlay.Opacity" Value="1" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="Overlay.Opacity" Value="0.6" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Opacity" Value="0.4" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+
+                            <VisualStateGroup x:Name="TagStates">
+                                <VisualState x:Name="None" />
+                                <VisualState x:Name="Include">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        <Setter Target="Root.BorderBrush" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        <Setter Target="StateIcon.Glyph" Value="&#xE710;" />
+                                        <Setter Target="StateIcon.Opacity" Value="1" />
+                                        <Setter Target="StateIcon.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                        <Setter Target="Label.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Exclude">
+                                    <VisualState.Setters>
+                                        <Setter Target="Root.Background" Value="{ThemeResource SystemFillColorCriticalBackgroundBrush}" />
+                                        <Setter Target="Root.BorderBrush" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                                        <Setter Target="StateIcon.Glyph" Value="&#xE738;" />
+                                        <Setter Target="StateIcon.Opacity" Value="1" />
+                                        <Setter Target="StateIcon.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                                        <Setter Target="Label.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                                        <Setter Target="Label.TextDecorations" Value="Strikethrough" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+
+                        <!-- 悬停/按下的半透明叠层：不改变状态底色，只提亮一点。 -->
+                        <Border x:Name="Overlay"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                CornerRadius="8"
+                                Opacity="0" />
+
+                        <StackPanel Orientation="Horizontal"
+                                    Spacing="4"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center">
+                            <!-- 图标位始终占宽，未选时只是透明，避免切换状态时文字左右跳。 -->
+                            <FontIcon x:Name="StateIcon"
+                                      FontSize="10"
+                                      Glyph="&#xE710;"
+                                      Opacity="0" />
+                            <TextBlock x:Name="Label"
+                                       Text="{TemplateBinding Text}"
+                                       TextTrimming="CharacterEllipsis"
+                                       TextWrapping="NoWrap"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

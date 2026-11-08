@@ -4757,14 +4757,14 @@
   <data name="WorkshopFilterClear" xml:space="preserve">
     <value>清除全部</value>
   </data>
+  <data name="WorkshopFilterCycleHint" xml:space="preserve">
+    <value>点击切换：包含 → 排除 → 取消</value>
+  </data>
   <data name="WorkshopFilterDlcEmpty" xml:space="preserve">
     <value>没有匹配的 DLC</value>
   </data>
   <data name="WorkshopFilterDlcSearch" xml:space="preserve">
     <value>按名称筛选</value>
-  </data>
-  <data name="WorkshopFilterExclude" xml:space="preserve">
-    <value>排除</value>
   </data>
   <data name="WorkshopFilterGroupCategory" xml:space="preserve">
     <value>类别</value>
@@ -4774,9 +4774,6 @@
   </data>
   <data name="WorkshopFilterGroupDlc" xml:space="preserve">
     <value>所需的 DLC</value>
-  </data>
-  <data name="WorkshopFilterInclude" xml:space="preserve">
-    <value>包含</value>
   </data>
   <data name="WorkshopFilterShowIncompatible" xml:space="preserve">
     <value>显示不兼容的项目</value>

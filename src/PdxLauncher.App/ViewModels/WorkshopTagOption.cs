@@ -8,8 +8,8 @@ using PdxLauncher.App.Services;
 /// <summary>
 /// 筛选栏里的一个选项（类别标签、更新兼容性，或「所需的 DLC」里的一个 DLC）。
 /// <para>
-/// 界面用两个 ToggleButton 分别绑 <see cref="IsRequired"/> / <see cref="IsExcluded"/>，
-/// 两者互斥：点「+」就取消「−」，反之亦然。选项本身不触发查询，
+/// 界面用三态胶囊（<see cref="Controls.PdxTagChip"/>）显示：未选 → 必须包含 → 必须排除 → 未选，
+/// 由 <see cref="Cycle"/> 轮换。两个布尔量仍然互斥，选项本身不触发查询，
 /// 由 <see cref="WorkshopFilterGroupViewModel"/> 聚合成一次 <c>Changed</c>。
 /// </para>
 /// </summary>
@@ -35,11 +35,11 @@ public sealed partial class WorkshopTagOption : LocalizedObservableObject
     /// <summary>展示名（标签随界面语言切换；DLC 商品名保持原文）。</summary>
     public string DisplayName => _localize ? WorkshopTagText.Localize(Tag, _displayName) : _displayName;
 
-    /// <summary>是否必须包含（对应「+」）。</summary>
+    /// <summary>是否必须包含（胶囊的「+」态）。</summary>
     [ObservableProperty]
     private bool _isRequired;
 
-    /// <summary>是否必须排除（对应「−」）。</summary>
+    /// <summary>是否必须排除（胶囊的「−」态）。</summary>
     [ObservableProperty]
     private bool _isExcluded;
 
@@ -71,5 +71,30 @@ public sealed partial class WorkshopTagOption : LocalizedObservableObject
     {
         IsRequired = false;
         IsExcluded = false;
+    }
+
+    /// <summary>
+    /// 按胶囊点击轮换状态：未选 → 必须包含 → 必须排除 → 未选。
+    /// <para>
+    /// 两个布尔量互斥的规则仍由 <c>OnIsRequiredChanged</c> / <c>OnIsExcludedChanged</c> 保证，
+    /// 这里只决定下一步该置哪个，避免两处各写一份互斥逻辑。
+    /// </para>
+    /// </summary>
+    public void Cycle()
+    {
+        if (IsRequired)
+        {
+            // 先置排除再清包含：中间态始终只有一个为真。
+            IsExcluded = true;
+            IsRequired = false;
+        }
+        else if (IsExcluded)
+        {
+            IsExcluded = false;
+        }
+        else
+        {
+            IsRequired = true;
+        }
     }
 }
