@@ -29,6 +29,12 @@ public sealed partial class ModStudioPage : Page
     /// <summary>当前上传的取消源；只在上传期间存在。</summary>
     private CancellationTokenSource? _publishLifetime;
 
+    /// <summary>
+    /// 上传面板的草稿轮询：AI 通过 MCP 写草稿后，用户不点任何按钮也能看到内容。
+    /// 只在上传面板可见时读一个小 JSON，代价可以忽略；页面卸载时停掉。
+    /// </summary>
+    private DispatcherTimer? _draftTimer;
+
     private bool _isReloading;
 
     /// <summary>预览图选择器允许的格式；Steam 侧只吃静态图片，视频走 YouTube 链接。</summary>
@@ -74,6 +80,11 @@ public sealed partial class ModStudioPage : Page
             AppServices.CurrentGameChanged -= OnCurrentGameChanged;
             AppServices.CurrentGameChanged += OnCurrentGameChanged;
 
+            _draftTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _draftTimer.Tick -= OnDraftTimerTick;
+            _draftTimer.Tick += OnDraftTimerTick;
+            _draftTimer.Start();
+
             await ReloadAsync().ConfigureAwait(true);
             await RestoreStateAsync().ConfigureAwait(true);
         }
@@ -94,8 +105,18 @@ public sealed partial class ModStudioPage : Page
         _publishLifetime?.Cancel();
         _publishLifetime?.Dispose();
         _publishLifetime = null;
+        if (_draftTimer is not null)
+        {
+            _draftTimer.Stop();
+            _draftTimer.Tick -= OnDraftTimerTick;
+            _draftTimer = null;
+        }
+
         _lifetime.Cancel();
     }
+
+    /// <summary>每秒检查一次 AI 草稿；只有上传面板可见且没有正在上传时才应用。</summary>
+    private void OnDraftTimerTick(object? sender, object e) => _viewModel.RefreshUploadDraft();
 
     private void OnCurrentGameChanged(object? sender, GameInstallation? game)
     {
@@ -164,7 +185,7 @@ public sealed partial class ModStudioPage : Page
         // 页面是重新建出来的：恢复完页面状态后，再把离开期间 AI 写的新草稿盖上去。
         if (_viewModel.Pane == ModStudioPane.Upload)
         {
-            _viewModel.ReloadUploadDraft(notifyWhenMissing: false);
+            _viewModel.RefreshUploadDraft();
         }
 
         var (target, offset) = _viewModel.Pane switch
@@ -341,15 +362,6 @@ public sealed partial class ModStudioPage : Page
         }
     }
 
-    private void OnReloadUploadDraftClick(object sender, RoutedEventArgs e)
-    {
-        if (!_viewModel.CanEditUploadFields)
-        {
-            return;
-        }
-
-        _viewModel.ReloadUploadDraft();
-    }
 
     private void OnRefreshClick(object sender, RoutedEventArgs e)
     {

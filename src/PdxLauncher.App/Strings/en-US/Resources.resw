@@ -5513,14 +5513,8 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="ModstudioMcpDocsButton" xml:space="preserve">
     <value>AI assistant (MCP)</value>
   </data>
-  <data name="ModstudioMcpReloadDraftButton" xml:space="preserve">
-    <value>Load AI draft</value>
-  </data>
   <data name="ModstudioMcpDraftApplied" xml:space="preserve">
     <value>AI draft loaded ({0})</value>
-  </data>
-  <data name="ModstudioMcpDraftNone" xml:space="preserve">
-    <value>No AI draft found</value>
   </data>
   <data name="ModstudioMcpDraftOutdated" xml:space="preserve">
     <value>AI draft is older than the last upload and was ignored</value>
@@ -5529,7 +5523,7 @@ Applying still backs up the original file first, but the backup cannot be verifi
     <value>Edit upload content with AI (MCP)</value>
   </data>
   <data name="ModstudioMcpDocsIntro" xml:space="preserve">
-    <value>PdxNext ships a standalone MCP program, PdxLauncher.Mcp.exe. AI clients can use it to list games and local mods, then save a draft with title, description, tags and visibility. Come back here and press "Load AI draft"; publishing still requires your confirmation.</value>
+    <value>PdxNext ships a standalone MCP program, PdxLauncher.Mcp.exe. AI clients can use it to list games and local mods, then save a draft with title, description, tags and visibility. The upload pane shows AI changes automatically; publishing still requires your confirmation.</value>
   </data>
   <data name="ModstudioMcpDocsStepConfig" xml:space="preserve">
     <value>1. Add the JSON below to your AI client's MCP config (Claude Desktop: %APPDATA%\Claude\claude_desktop_config.json; Cursor: mcp.json).</value>
@@ -5538,7 +5532,7 @@ Applying still backs up the original file first, but the backup cannot be verifi
     <value>2. Restart the client and confirm pdxnext appears in the tool list (list_games, list_mods, ...).</value>
   </data>
   <data name="ModstudioMcpDocsStepAsk" xml:space="preserve">
-    <value>3. Ask the AI to call list_games / list_mods, then save_upload_draft. After it saves, come back and press "Load AI draft".</value>
+    <value>3. Ask the AI to call list_games / list_mods, then save_upload_draft. The upload pane shows the AI content automatically after it saves.</value>
   </data>
   <data name="ModstudioMcpDocsConfigLabel" xml:space="preserve">
     <value>Client config (JSON)</value>

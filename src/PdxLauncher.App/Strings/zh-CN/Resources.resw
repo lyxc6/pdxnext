@@ -5513,14 +5513,8 @@
   <data name="ModstudioMcpDocsButton" xml:space="preserve">
     <value>AI 助手（MCP）</value>
   </data>
-  <data name="ModstudioMcpReloadDraftButton" xml:space="preserve">
-    <value>载入 AI 草稿</value>
-  </data>
   <data name="ModstudioMcpDraftApplied" xml:space="preserve">
     <value>已载入 AI 草稿（{0}）</value>
-  </data>
-  <data name="ModstudioMcpDraftNone" xml:space="preserve">
-    <value>没有找到 AI 草稿</value>
   </data>
   <data name="ModstudioMcpDraftOutdated" xml:space="preserve">
     <value>AI 草稿早于上次上传，已忽略</value>
@@ -5529,7 +5523,7 @@
     <value>用 AI 编辑上传内容（MCP）</value>
   </data>
   <data name="ModstudioMcpDocsIntro" xml:space="preserve">
-    <value>启动器附带独立的 MCP 程序 PdxLauncher.Mcp.exe。AI 客户端可以通过它读取游戏和本地 mod，并把标题、描述、标签、可见性等保存成上传草稿；回到本页点「载入 AI 草稿」即可填入，发布仍由你确认。</value>
+    <value>启动器附带独立的 MCP 程序 PdxLauncher.Mcp.exe。AI 客户端可以通过它读取游戏和本地 mod，并把标题、描述、标签、可见性等保存成上传草稿；上传面板会自动显示 AI 写入的内容，发布仍由你确认。</value>
   </data>
   <data name="ModstudioMcpDocsStepConfig" xml:space="preserve">
     <value>1. 把下面的 JSON 加进 AI 客户端的 MCP 配置（Claude Desktop 用 %APPDATA%\Claude\claude_desktop_config.json，Cursor 用 mcp.json）。</value>
@@ -5538,7 +5532,7 @@
     <value>2. 重启客户端，确认工具列表里出现 pdxnext（list_games、list_mods 等）。</value>
   </data>
   <data name="ModstudioMcpDocsStepAsk" xml:space="preserve">
-    <value>3. 让 AI 先调用 list_games / list_mods，再用 save_upload_draft 写草稿；保存后回到本页点「载入 AI 草稿」。</value>
+    <value>3. 让 AI 先调用 list_games / list_mods，再用 save_upload_draft 写草稿；保存后上传面板会自动显示 AI 的内容。</value>
   </data>
   <data name="ModstudioMcpDocsConfigLabel" xml:space="preserve">
     <value>客户端配置（JSON）</value>

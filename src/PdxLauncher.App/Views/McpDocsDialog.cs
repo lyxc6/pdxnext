@@ -3,6 +3,7 @@ namespace PdxLauncher.App.Views;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -44,13 +45,15 @@ internal static class McpDocsDialog
         panel.Children.Add(Caption(localizer.ModstudioMcpDocsConfigLabel));
         var configBox = new TextBox
         {
-            Text = config,
+            // 先把多行/换行能力设好，再赋 Text；否则 WinUI 可能在 AcceptsReturn=false 时
+            // 把第一行之后的内容丢掉，界面上只剩一个 "{"。
             IsReadOnly = true,
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
             FontFamily = new FontFamily("Consolas"),
             MinHeight = 160,
         };
+        configBox.Text = config;
         AutomationProperties.SetAutomationId(configBox, "txtModStudioMcpConfig");
         panel.Children.Add(configBox);
 
@@ -102,7 +105,15 @@ internal static class McpDocsDialog
             },
         };
 
-        return JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+        return JsonSerializer.Serialize(
+            config,
+            new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                // 安装路径里常有中文（例如 G:\Work\paradox启动器）；默认会转成 \uXXXX，
+                // 复制到客户端配置里虽然能用，但用户看不懂。这里保留原字符。
+                Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            });
     }
 
     private static void CopyToClipboard(string text)

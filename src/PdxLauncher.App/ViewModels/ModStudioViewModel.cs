@@ -44,13 +44,13 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
     private string? _lastAutoFolder;
     private UploadDraftNoticeKind _uploadDraftNoticeKind;
     private DateTimeOffset? _uploadDraftAppliedAt;
+    private DateTimeOffset? _lastAppliedDraftUpdatedAt;
 
     /// <summary>上传草稿提示的状态。</summary>
     private enum UploadDraftNoticeKind
     {
         None,
         Applied,
-        Missing,
         Outdated,
     }
 
@@ -427,7 +427,6 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
     {
         UploadDraftNoticeKind.Applied when _uploadDraftAppliedAt is { } appliedAt =>
             T(Keys.ModstudioMcpDraftApplied, appliedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)),
-        UploadDraftNoticeKind.Missing => T(Keys.ModstudioMcpDraftNone),
         UploadDraftNoticeKind.Outdated => T(Keys.ModstudioMcpDraftOutdated),
         _ => string.Empty,
     };
@@ -569,26 +568,33 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
         }
 
         // 进入上传面板时自动应用最新的 AI 草稿；没有草稿就不打扰用户。
-        ApplyLatestUploadDraft(notifyWhenMissing: false);
+        ApplyLatestUploadDraft(onlyIfNewer: true);
         Pane = ModStudioPane.Upload;
         RaiseDerived();
     }
 
-    /// <summary>重新从磁盘读取 AI 草稿并填入上传表单。</summary>
-    /// <param name="notifyWhenMissing">没有草稿时是否在状态栏说明；页面恢复时用 false。</param>
-    public void ReloadUploadDraft(bool notifyWhenMissing = true)
+    /// <summary>
+    /// 轮询磁盘上的 AI 草稿；有更新就应用。
+    /// <para>
+    /// 上传面板每秒调用一次，MCP 保存草稿后用户不必点任何按钮就能看到 AI 写的内容。
+    /// 只在面板可见且没有发布中时生效。
+    /// </para>
+    /// </summary>
+    public void RefreshUploadDraft()
     {
-        ApplyLatestUploadDraft(notifyWhenMissing);
-        if (_uploadDraftNoticeKind != UploadDraftNoticeKind.None)
+        if (Pane != ModStudioPane.Upload || IsPublishing)
         {
-            StatusMessage = UploadDraftNotice;
+            return;
         }
+
+        ApplyLatestUploadDraft(onlyIfNewer: true);
     }
 
     /// <summary>把选中的 mod 信息填进上传表单。</summary>
     public void ResetUploadForm()
     {
         SetUploadDraftNotice(UploadDraftNoticeKind.None);
+        _lastAppliedDraftUpdatedAt = null;
         UploadTarget = ModUploadTarget.Steam;
         if (SelectedRow is null)
         {
@@ -630,31 +636,39 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
     }
 
     /// <summary>把磁盘上最新的 AI 草稿填进上传表单。</summary>
-    private void ApplyLatestUploadDraft(bool notifyWhenMissing)
+    /// <param name="onlyIfNewer">true 时只在草稿时间戳比上次已应用的更新时才应用（轮询用）。</param>
+    private void ApplyLatestUploadDraft(bool onlyIfNewer)
     {
         if (Game is null || SelectedRow is null)
         {
-            SetUploadDraftNotice(
-                notifyWhenMissing ? UploadDraftNoticeKind.Missing : UploadDraftNoticeKind.None);
+            SetUploadDraftNotice(UploadDraftNoticeKind.None);
             return;
         }
 
         var draft = _service.TryGetUploadDraft(Game, SelectedRow.Entry);
         if (draft is null)
         {
-            SetUploadDraftNotice(
-                notifyWhenMissing ? UploadDraftNoticeKind.Missing : UploadDraftNoticeKind.None);
+            SetUploadDraftNotice(UploadDraftNoticeKind.None);
+            return;
+        }
+
+        if (onlyIfNewer
+            && _lastAppliedDraftUpdatedAt is { } lastApplied
+            && draft.UpdatedAt <= lastApplied)
+        {
             return;
         }
 
         // 草稿早于上次发布：它描述的是已经上传过的内容，再填回去只会让用户误以为有新改动。
         if (SelectedRow.Publication is { } publication && draft.UpdatedAt <= publication.UpdatedAt)
         {
+            _lastAppliedDraftUpdatedAt = draft.UpdatedAt;
             SetUploadDraftNotice(UploadDraftNoticeKind.Outdated);
             return;
         }
 
         ApplyUploadDraft(draft);
+        _lastAppliedDraftUpdatedAt = draft.UpdatedAt;
         SetUploadDraftNotice(UploadDraftNoticeKind.Applied, draft.UpdatedAt);
     }
 

@@ -38,18 +38,31 @@
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
-            <AutoSuggestBox Grid.Column="1"
-                            MinWidth="180"
-                            MaxWidth="320"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Center"
-                            QueryIcon="Find"
-                            PlaceholderText="{x:Bind L.ModstudioSearchPlaceholder, Mode=OneWay}"
-                            Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
-                            TextChanged="OnSearchTextChanged"
-                            QuerySubmitted="OnSearchQuerySubmitted"
-                            AutomationProperties.AutomationId="modStudioSearch"
-                            AutomationProperties.Name="{x:Bind L.ModstudioSearchName, Mode=OneWay}" />
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center">
+                <AutoSuggestBox MinWidth="180"
+                                MaxWidth="320"
+                                VerticalAlignment="Center"
+                                QueryIcon="Find"
+                                PlaceholderText="{x:Bind L.ModstudioSearchPlaceholder, Mode=OneWay}"
+                                Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
+                                TextChanged="OnSearchTextChanged"
+                                QuerySubmitted="OnSearchQuerySubmitted"
+                                AutomationProperties.AutomationId="modStudioSearch"
+                                AutomationProperties.Name="{x:Bind L.ModstudioSearchName, Mode=OneWay}" />
+                <Button VerticalAlignment="Center"
+                        Click="OnMcpDocsClick"
+                        AutomationProperties.AutomationId="btnModStudioMcpDocs"
+                        AutomationProperties.Name="{x:Bind L.ModstudioMcpDocsButton, Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE8A5;" FontSize="14" />
+                        <TextBlock Text="{x:Bind L.ModstudioMcpDocsButton, Mode=OneWay}" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
 
             <Button Grid.Column="2"
                     VerticalAlignment="Center"
@@ -399,17 +412,6 @@
                             <TextBlock Text="{x:Bind L.ModstudioUploadTitle, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" />
                             <TextBlock Text="{x:Bind L.ModstudioUploadHint, Mode=OneWay}" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Button Click="OnMcpDocsClick"
-                                        AutomationProperties.AutomationId="btnModStudioMcpDocs">
-                                    <TextBlock Text="{x:Bind L.ModstudioMcpDocsButton, Mode=OneWay}" />
-                                </Button>
-                                <Button Click="OnReloadUploadDraftClick"
-                                        IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
-                                        AutomationProperties.AutomationId="btnModStudioLoadAiDraft">
-                                    <TextBlock Text="{x:Bind L.ModstudioMcpReloadDraftButton, Mode=OneWay}" />
-                                </Button>
-                            </StackPanel>
                             <TextBlock Text="{x:Bind ViewModel.UploadDraftNotice, Mode=OneWay}"
                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasUploadDraftNotice), Mode=OneWay}"
                                        TextWrapping="Wrap"
