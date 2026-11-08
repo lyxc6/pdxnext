@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>PdxLauncher.Mcp</RootNamespace>
+    <AssemblyName>PdxLauncher.Mcp</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <!--
+      输出路径不要跟 Platform 走：解决方案构建给 App 传 x64，而 MCP 是 AnyCPU；
+      若允许追加 x64，App 的 CopyMcpHost 会去 bin\x64\Release 找，和解决方案构建的
+      bin\Release 对不上，exe 就静默漏拷。
+    -->
+    <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PdxLauncher.Core\PdxLauncher.Core.csproj" />
+  </ItemGroup>
+</Project>

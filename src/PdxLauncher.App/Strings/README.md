@@ -91,6 +91,7 @@ var dialog = new ContentDialog
 - 代码注释、XML 文档注释保持中文。
 - 文件路径、JSON 键、注册表值、枚举持久化值、`AutomationId`、`Tag`、`x:Name`。
 - 商店/发行商/游戏名等**数据**（来自 Steam/Paradox 的字符串）不翻译。
+- 例外：Steam 工坊标签的**展示名**要翻译（`WorkshopTagText` / `WorkshopTagKeys`）；发给 Steam 的机器名保持英文。工坊筛选、Mod Studio 上传标签与 Mod 详情标签都按展示名显示。
 - 唯一例外：给用户看的异常/失败提示（对话框、状态栏文案）**要**翻译。
 
 ## 6. 数字与格式

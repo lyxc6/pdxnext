@@ -42,6 +42,17 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
     private IReadOnlyList<ModStudioEntry> _entries = Array.Empty<ModStudioEntry>();
     private bool _managedByGame;
     private string? _lastAutoFolder;
+    private UploadDraftNoticeKind _uploadDraftNoticeKind;
+    private DateTimeOffset? _uploadDraftAppliedAt;
+    private DateTimeOffset? _lastAppliedDraftUpdatedAt;
+
+    /// <summary>上传草稿提示的状态。</summary>
+    private enum UploadDraftNoticeKind
+    {
+        None,
+        Applied,
+        Outdated,
+    }
 
     /// <summary>当前游戏。</summary>
     [ObservableProperty]
@@ -411,6 +422,18 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
         Keys.ModstudioUploadTagCount,
         UploadTagOptions.Count(option => option.IsSelected));
 
+    /// <summary>AI 草稿提示文案；没有提示时为空串。</summary>
+    public string UploadDraftNotice => _uploadDraftNoticeKind switch
+    {
+        UploadDraftNoticeKind.Applied when _uploadDraftAppliedAt is { } appliedAt =>
+            T(Keys.ModstudioMcpDraftApplied, appliedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)),
+        UploadDraftNoticeKind.Outdated => T(Keys.ModstudioMcpDraftOutdated),
+        _ => string.Empty,
+    };
+
+    /// <summary>是否有 AI 草稿提示。</summary>
+    public bool HasUploadDraftNotice => _uploadDraftNoticeKind != UploadDraftNoticeKind.None;
+
     /// <summary>新建表单的文件夹提示。</summary>
     public string CreateFolderHintText => T(Keys.ModstudioCreateFolderHint);
 
@@ -544,13 +567,34 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
             return;
         }
 
+        // 进入上传面板时自动应用最新的 AI 草稿；没有草稿就不打扰用户。
+        ApplyLatestUploadDraft(onlyIfNewer: true);
         Pane = ModStudioPane.Upload;
         RaiseDerived();
+    }
+
+    /// <summary>
+    /// 轮询磁盘上的 AI 草稿；有更新就应用。
+    /// <para>
+    /// 上传面板每秒调用一次，MCP 保存草稿后用户不必点任何按钮就能看到 AI 写的内容。
+    /// 只在面板可见且没有发布中时生效。
+    /// </para>
+    /// </summary>
+    public void RefreshUploadDraft()
+    {
+        if (Pane != ModStudioPane.Upload || IsPublishing)
+        {
+            return;
+        }
+
+        ApplyLatestUploadDraft(onlyIfNewer: true);
     }
 
     /// <summary>把选中的 mod 信息填进上传表单。</summary>
     public void ResetUploadForm()
     {
+        SetUploadDraftNotice(UploadDraftNoticeKind.None);
+        _lastAppliedDraftUpdatedAt = null;
         UploadTarget = ModUploadTarget.Steam;
         if (SelectedRow is null)
         {
@@ -589,6 +633,81 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
         ResetLanguageEditing(UploadTitle, UploadDescription);
         ApplyPublicationExtras(publication);
         BuildUploadTagOptions(publication?.Tags ?? descriptor?.Tags ?? Array.Empty<string>());
+    }
+
+    /// <summary>把磁盘上最新的 AI 草稿填进上传表单。</summary>
+    /// <param name="onlyIfNewer">true 时只在草稿时间戳比上次已应用的更新时才应用（轮询用）。</param>
+    private void ApplyLatestUploadDraft(bool onlyIfNewer)
+    {
+        if (Game is null || SelectedRow is null)
+        {
+            SetUploadDraftNotice(UploadDraftNoticeKind.None);
+            return;
+        }
+
+        var draft = _service.TryGetUploadDraft(Game, SelectedRow.Entry);
+        if (draft is null)
+        {
+            SetUploadDraftNotice(UploadDraftNoticeKind.None);
+            return;
+        }
+
+        if (onlyIfNewer
+            && _lastAppliedDraftUpdatedAt is { } lastApplied
+            && draft.UpdatedAt <= lastApplied)
+        {
+            return;
+        }
+
+        // 草稿早于上次发布：它描述的是已经上传过的内容，再填回去只会让用户误以为有新改动。
+        if (SelectedRow.Publication is { } publication && draft.UpdatedAt <= publication.UpdatedAt)
+        {
+            _lastAppliedDraftUpdatedAt = draft.UpdatedAt;
+            SetUploadDraftNotice(UploadDraftNoticeKind.Outdated);
+            return;
+        }
+
+        ApplyUploadDraft(draft);
+        _lastAppliedDraftUpdatedAt = draft.UpdatedAt;
+        SetUploadDraftNotice(UploadDraftNoticeKind.Applied, draft.UpdatedAt);
+    }
+
+    /// <summary>应用草稿里与上传表单同名的字段；预览图、附加语言和 Mod ID 保持原样。</summary>
+    private void ApplyUploadDraft(ModUploadDraft draft)
+    {
+        // 先保存当前语言的草稿，避免用户切到别的语言时把正在编辑的内容丢掉。
+        SaveCurrentLanguageDraft();
+
+        UploadTitle = draft.Title;
+        UploadDescription = draft.Description;
+        UploadChangeNote = draft.ChangeNote ?? string.Empty;
+        UploadVisibility = draft.Visibility;
+        UploadPublic = draft.Visibility == SteamWorkshopVisibility.Public;
+        BuildUploadTagOptions(draft.Tags);
+
+        UploadSelectedLanguage = SteamWorkshopLanguages.All.First(option => IsDefaultLanguage(option.Code));
+        _localizedDrafts[SteamWorkshopLanguages.Default] = new ModLocalizedText(
+            SteamWorkshopLanguages.Default,
+            draft.Title,
+            draft.Description);
+        OnPropertyChanged(nameof(UploadExtraLanguageSummary));
+
+        if (draft.ContentDescriptors is { } descriptors)
+        {
+            UploadDescriptorNudity = descriptors.Contains(1);
+            UploadDescriptorViolence = descriptors.Contains(2);
+            UploadDescriptorAdultOnly = descriptors.Contains(3);
+            UploadDescriptorFrequentNudity = descriptors.Contains(4);
+            UploadDescriptorAdult = descriptors.Contains(5);
+        }
+    }
+
+    private void SetUploadDraftNotice(UploadDraftNoticeKind kind, DateTimeOffset? appliedAt = null)
+    {
+        _uploadDraftNoticeKind = kind;
+        _uploadDraftAppliedAt = appliedAt;
+        OnPropertyChanged(nameof(UploadDraftNotice));
+        OnPropertyChanged(nameof(HasUploadDraftNotice));
     }
 
     /// <summary>语言编辑重置到 english，并把它作为默认槽位。</summary>

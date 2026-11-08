@@ -21,6 +21,7 @@ public sealed class ModStudioService
     private readonly IFileSystem _fileSystem;
     private readonly IAppLogger _logger;
     private readonly ModPublicationStore _publications;
+    private readonly ModUploadDraftStore _uploadDrafts;
     private readonly SteamHostClient _steamHost;
     private readonly SteamApiLocator _locator;
     private readonly string? _settingsPath;
@@ -32,6 +33,7 @@ public sealed class ModStudioService
         IFileSystem fileSystem,
         IAppLogger logger,
         ModPublicationStore publications,
+        ModUploadDraftStore uploadDrafts,
         SteamHostClient steamHost,
         SteamApiLocator locator,
         string? settingsPath)
@@ -41,6 +43,7 @@ public sealed class ModStudioService
         _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _publications = publications ?? throw new ArgumentNullException(nameof(publications));
+        _uploadDrafts = uploadDrafts ?? throw new ArgumentNullException(nameof(uploadDrafts));
         _steamHost = steamHost ?? throw new ArgumentNullException(nameof(steamHost));
         _locator = locator ?? throw new ArgumentNullException(nameof(locator));
         _settingsPath = settingsPath;
@@ -165,6 +168,27 @@ public sealed class ModStudioService
         return result;
     }
 
+    /// <summary>读外部工具（MCP）写入的上传草稿；没有时返回 null。</summary>
+    public ModUploadDraft? TryGetUploadDraft(GameInstallation game, ModStudioEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(entry);
+        return string.IsNullOrWhiteSpace(entry.Mod.DirPath)
+            ? null
+            : _uploadDrafts.TryGet(game.GameId, entry.Mod.DirPath!);
+    }
+
+    /// <summary>删除外部工具写入的上传草稿；上传成功后调用。</summary>
+    public void DeleteUploadDraft(GameInstallation game, ModStudioEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(entry);
+        if (!string.IsNullOrWhiteSpace(entry.Mod.DirPath))
+        {
+            _uploadDrafts.Delete(game.GameId, entry.Mod.DirPath!);
+        }
+    }
+
     /// <summary>把本地 mod 发布到 Steam 创意工坊，并保存工坊 id 映射。</summary>
     public async Task<ModPublishResult> PublishAsync(
         GameInstallation game,
@@ -270,6 +294,12 @@ public sealed class ModStudioService
         if (publishedId is not null || previous is not null)
         {
             _publications.Save(publication);
+        }
+
+        if (result.Ok)
+        {
+            // 草稿已经变成正式发布内容；留着它会在下次打开上传面板时把旧内容再填一遍。
+            DeleteUploadDraft(game, entry);
         }
 
         if (result.Ok)

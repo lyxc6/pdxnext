@@ -5543,4 +5543,49 @@
   <data name="WorkshopUpdated" xml:space="preserve">
     <value>更新于 {0}</value>
   </data>
+  <data name="ModstudioMcpDocsButton" xml:space="preserve">
+    <value>AI 助手（MCP）</value>
+  </data>
+  <data name="ModstudioMcpDraftApplied" xml:space="preserve">
+    <value>已载入 AI 草稿（{0}）</value>
+  </data>
+  <data name="ModstudioMcpDraftOutdated" xml:space="preserve">
+    <value>AI 草稿早于上次上传，已忽略</value>
+  </data>
+  <data name="ModstudioMcpDocsTitle" xml:space="preserve">
+    <value>用 AI 编辑上传内容（MCP）</value>
+  </data>
+  <data name="ModstudioMcpDocsIntro" xml:space="preserve">
+    <value>启动器附带独立的 MCP 程序 PdxLauncher.Mcp.exe。AI 客户端可以通过它读取游戏和本地 mod，并把标题、描述、标签、可见性等保存成上传草稿；上传面板会自动显示 AI 写入的内容，发布仍由你确认。</value>
+  </data>
+  <data name="ModstudioMcpDocsStepConfig" xml:space="preserve">
+    <value>1. 把下面的 JSON 加进 AI 客户端的 MCP 配置（Claude Desktop 用 %APPDATA%\Claude\claude_desktop_config.json，Cursor 用 mcp.json）。</value>
+  </data>
+  <data name="ModstudioMcpDocsStepRestart" xml:space="preserve">
+    <value>2. 重启客户端，确认工具列表里出现 pdxnext（list_games、list_mods 等）。</value>
+  </data>
+  <data name="ModstudioMcpDocsStepAsk" xml:space="preserve">
+    <value>3. 让 AI 先调用 list_games / list_mods，再用 save_upload_draft 写草稿；保存后上传面板会自动显示 AI 的内容。</value>
+  </data>
+  <data name="ModstudioMcpDocsConfigLabel" xml:space="preserve">
+    <value>客户端配置（JSON）</value>
+  </data>
+  <data name="ModstudioMcpDocsToolsLabel" xml:space="preserve">
+    <value>可用工具</value>
+  </data>
+  <data name="ModstudioMcpDocsToolsBody" xml:space="preserve">
+    <value>list_games · list_mods · list_tags · get_upload_draft · save_upload_draft · clear_upload_draft</value>
+  </data>
+  <data name="ModstudioMcpDocsSafety" xml:space="preserve">
+    <value>MCP 只读写 data\mcp\upload-drafts 下的草稿：不会自动发布，也不会修改游戏或 mod 文件。</value>
+  </data>
+  <data name="ModstudioMcpDocsExeMissing" xml:space="preserve">
+    <value>找不到 {0}；请重新构建或安装后再配置。</value>
+  </data>
+  <data name="ModstudioMcpDocsCopied" xml:space="preserve">
+    <value>已复制</value>
+  </data>
+  <data name="ModstudioMcpDocsFailed" xml:space="preserve">
+    <value>打开 MCP 文档失败：{0}</value>
+  </data>
 </root>
