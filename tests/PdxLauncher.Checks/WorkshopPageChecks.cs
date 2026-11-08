@@ -430,8 +430,10 @@ public static class WorkshopPageChecks
                 && row2.Contains("IsRequired=\"{x:Bind IsRequired, Mode=OneWay}\"", StringComparison.Ordinal)
                 && row2.Contains("IsExcluded=\"{x:Bind IsExcluded, Mode=OneWay}\"", StringComparison.Ordinal));
             ChecksContext.Check(
-                "创意工坊页: 胶囊按宽度换行排布",
-                row2.Contains("<controls:PdxWrapPanel", StringComparison.Ordinal));
+                "创意工坊页: 胶囊单列整行排布",
+                row2.Contains("<ItemsPanelTemplate>", StringComparison.Ordinal)
+                && row2.Contains("<StackPanel Spacing=\"4\" />", StringComparison.Ordinal)
+                && !row2.Contains("<controls:PdxWrapPanel", StringComparison.Ordinal));
             ChecksContext.Check(
                 "创意工坊页: DLC 组有名称过滤框",
                 row2.Contains("txtWorkshopDlcFilter", StringComparison.Ordinal));

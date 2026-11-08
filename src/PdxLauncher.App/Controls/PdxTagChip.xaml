@@ -17,11 +17,10 @@
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="MinWidth" Value="0" />
         <Setter Property="MinHeight" Value="32" />
-        <!-- 侧栏内宽 240：单颗胶囊不越过一列，过长的 DLC 名靠省略号收尾。 -->
-        <Setter Property="MaxWidth" Value="232" />
         <Setter Property="Padding" Value="12,4" />
         <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="HorizontalAlignment" Value="Left" />
+        <!-- 侧栏里一行一个，横向铺满；文字太长时靠省略号收尾。 -->
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
         <Setter Property="Template">
@@ -87,7 +86,7 @@
 
                         <StackPanel Orientation="Horizontal"
                                     Spacing="4"
-                                    HorizontalAlignment="Center"
+                                    HorizontalAlignment="Left"
                                     VerticalAlignment="Center">
                             <!-- 图标位始终占宽，未选时只是透明，避免切换状态时文字左右跳。 -->
                             <FontIcon x:Name="StateIcon"
