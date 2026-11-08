@@ -9,6 +9,11 @@ namespace PdxLauncher.Core.Contracts;
 /// 来源（mods.source：local / steam / paradox / pdx_mods），磁盘扫描时按「有没有工坊 id」给。
 /// 展示层用 <see cref="PdxLauncher.Core.Playsets.ModOrigins.Normalize"/> 归一成「本地 / 订阅」。
 /// </param>
+/// <param name="ModVersion">
+/// mod 作者自己写的版本（.mod 的 <c>version</c>、metadata.json 的 <c>version</c>、
+/// 官方库的 <c>metadataVersion</c>），与 <paramref name="RequiredVersion"/>（支持的游戏版本）不是一回事；
+/// 作者没写时为空串。
+/// </param>
 public sealed record PlaySetMod(
     Guid ModId,
     string Name,
@@ -21,4 +26,5 @@ public sealed record PlaySetMod(
     bool Enabled,
     int Position,
     string? SteamId = null,
-    string? Source = null);
+    string? Source = null,
+    string? ModVersion = null);

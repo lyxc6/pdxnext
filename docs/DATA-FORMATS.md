@@ -209,6 +209,13 @@ CK3 的 playsets_dlcs 为空 ⇒ disabled_dlcs: []，与真机文件一致。
 - 支持版本 = `mods.requiredVersion`（CK3 实测形如 `1.19.*` / `1.20.*` / `1.*.*`），来源是 .mod 的
   `supported_version` 或 metadata.json 的 `supported_game_version`。界面原样显示为「支持版本 1.19.*」，
   不做换算、不补全通配符。
+- mod 版本（作者版本）= `mods.metadataVersion`（官方启动器从 metadata.json 的 `version` 抄入；更老的库回退 `mods.version`），
+  磁盘扫描时取 .mod 的 `version` 或 metadata.json 的 `version`。**它与支持的游戏版本是两回事**：
+  V3 实测 69 个工坊 mod 里 45 个 `supported_game_version` 为空，但其中 7 个仍有 `version`，31 个有 `metadataVersion`；
+  官方启动器在详情弹窗里显示的「Mod version」就是这一项。Mod 库行显示为「mod 版本 8.0」，
+  添加模组页版本列第一行显示作者版本、第二行显示「支持 1.15.*」。
+  两者都没有时，Mod 库显示「未声明版本」（与「读取失败」区分），添加模组页保留短横占位。
+  已登记行的版本以磁盘扫描值优先（作者更新 metadata.json 后官方库可能还是旧值），磁盘没写的才用库里的值。
 - 三角提示的三种来源（判定优先级）：未登记的磁盘 mod、status ≠ ready_to_play、requiredVersion 的 major.minor 低于当前游戏版本（只比较 major.minor，例如 V3 的 [1.11] mod 对 1.13 游戏）。
   **提示文案只讲版本支持**：先说「这个 mod 声明支持哪个版本」，再说对照结论（未声明 / 当前游戏版本未知 / 不低于当前版本 / 低于当前版本），
   登记情况与库里的原始 status 只作为补充说明，不再表述成「mod 装不了 / 状态异常」。
@@ -223,9 +230,9 @@ CK3 的 playsets_dlcs 为空 ⇒ disabled_dlcs: []，与真机文件一致。
 ## 5. mod
 
 - .mod 描述符目录：<gameDataDir>\mod。CK3 **382** 个 .mod（2026-10-27 实测，此前 387）；Stellaris **313**；V3 **0**（V3 mod 全在 workshop）。
-- .mod 键：name→displayName、version、tags、picture、supported_version→requiredVersion、path→dirPath、archive→archivePath、remote_file_id→steamId。
+- .mod 键：name→displayName、version→modVersion、tags、picture、supported_version→requiredVersion、path→dirPath、archive→archivePath、remote_file_id→steamId。
 - 命名：ugc_<steamId>.mod / pdx_<pdxId>.mod / <dirname>.mod；本地目录 mod 目录内有 descriptor.mod。
-- V3 workshop mod 无 .mod：元数据在 <modDir>\.metadata\metadata.json，键 name, id, version, supported_game_version, short_description, **picture**（封面的相对路径，相对 `.metadata` 目录；历史写法 `thumbnail` 本项目仍兼容读取）, tags, relationships, game_custom_data。EU5 实测 22 个 mod 里 13 个带 `picture`，值多为 `thumbnail.png`，`thumbnail` 键一次都没出现。
+- V3 workshop mod 无 .mod：元数据在 <modDir>\.metadata\metadata.json，键 name, id, **version→modVersion**, supported_game_version→requiredVersion, short_description, **picture**（封面的相对路径，相对 `.metadata` 目录；历史写法 `thumbnail` 本项目仍兼容读取）, tags, relationships, game_custom_data。EU5 实测 22 个 mod 里 13 个带 `picture`，值多为 `thumbnail.png`，`thumbnail` 键一次都没出现。
 - **启动器新建 mod 的写法**（`ModCreator`，2026-10-31）：legacy 游戏写 `<modDir>/<folder>.mod`（带绝对 `path`，正斜杠）+ `<folder>/descriptor.mod`（同字段但**不带** `path`）+ `<folder>/thumbnail.png`；V3/EU5 写 `<folder>/.metadata/metadata.json`（`id` 为空串、`tags` 数组、`relationships: []`、`game_custom_data.multiplayer_synchronized = true`）+ `.metadata/thumbnail.png`，`picture` 固定 `thumbnail.png`。名称/文件夹名限制 ASCII `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`；V3 目标路径含非 ASCII 直接拒绝。
 - **启动器编辑 mod 的写法**（`ModDescriptorEditor`，2026-11-04）：只改 name / version / supported_version / tags（V3 另加 short_description），其余原样保留。
   - legacy：`.mod` 是行级替换 —— `LegacyDescriptorText` 解析出顶层 `key=value` 的**值区间**单独替换，注释、未知键、`path` 与缩进都不动；缺的键补在 `name` 所在行之后（没有 name 就补在文件头）。外层 `<folder>.mod` 与 `<folder>/descriptor.mod` 两份一起写（顺序：先内层后外层），内容没变的文件不重写；

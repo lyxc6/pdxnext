@@ -245,7 +245,10 @@
                                            TextTrimming="CharacterEllipsis" />
                             </Grid>
 
-                            <!-- 版本列：声明支持的版本；缺失给短横，偏低于当前游戏版本时加警告图标。 -->
+                            <!--
+                                版本列：第一行是 mod 作者版本，第二行是声明支持的游戏版本；
+                                缺失给短横（支持版本）或不显示（mod 版本），偏低于当前游戏版本时加警告图标。
+                            -->
                             <StackPanel Grid.Column="3"
                                         Orientation="Horizontal"
                                         Spacing="4"
@@ -259,14 +262,29 @@
                                           Visibility="{x:Bind svc:XamlVisibility.FromBool(HasVersionWarning), Mode=OneWay}"
                                           ToolTipService.ToolTip="{x:Bind VersionWarningText, Mode=OneWay}"
                                           AutomationProperties.Name="{x:Bind VersionWarningText, Mode=OneWay}" />
-                                <TextBlock Text="{x:Bind RequiredVersionText, Mode=OneWay}"
-                                           VerticalAlignment="Center"
-                                           TextAlignment="Right"
-                                           Style="{StaticResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           ToolTipService.ToolTip="{x:Bind RequiredVersionText, Mode=OneWay}"
-                                           AutomationProperties.AutomationId="{x:Bind VersionAutomationId, Mode=OneTime}"
-                                           AutomationProperties.Name="{x:Bind RequiredVersionText, Mode=OneWay}" />
+                                <StackPanel Orientation="Vertical"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Text="{x:Bind ModVersionText, Mode=OneWay}"
+                                               HorizontalAlignment="Right"
+                                               TextAlignment="Right"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{x:Bind ModVersionName, Mode=OneWay}"
+                                               AutomationProperties.AutomationId="{x:Bind ModVersionAutomationId, Mode=OneTime}"
+                                               AutomationProperties.Name="{x:Bind ModVersionName, Mode=OneWay}"
+                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(HasModVersion), Mode=OneWay}" />
+                                    <TextBlock Text="{x:Bind RequiredVersionText, Mode=OneWay}"
+                                               HorizontalAlignment="Right"
+                                               TextAlignment="Right"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{x:Bind RequiredVersionText, Mode=OneWay}"
+                                               AutomationProperties.AutomationId="{x:Bind VersionAutomationId, Mode=OneTime}"
+                                               AutomationProperties.Name="{x:Bind RequiredVersionText, Mode=OneWay}" />
+                                </StackPanel>
                             </StackPanel>
                         </Grid>
                     </DataTemplate>

@@ -121,28 +121,44 @@ public sealed class ModLibraryService
             catalog = Array.Empty<PlaySetMod>();
         }
 
-        // 数据库里的 steamId 可能为空（老库、或官方启动器没写这一列），而磁盘上 mod 的
-        // .mod 描述文件 / metadata.json 一般带着创意工坊 id：用扫描结果给已登记的行补齐，
-        // 播放集页与 Mod 库页的「在 Steam / 浏览器中打开」才不会平白少一半。
-        var scannedSteamIds = new Dictionary<Guid, string>();
+        // 磁盘扫描是版本信息的「最新」来源：官方库里的 requiredVersion 是上次应用元数据时抄进去的，
+        // 作者后来改了 metadata.json、而用户没再跑过官方启动器时，库里会停在旧值（实测有 1.13.* 对 1.15.*）。
+        // metadata.json 的 version（作者版本）也一样：Vic3 有近一半 mod 没写 supported_game_version，
+        // 但这一项常常有值，官方库把它放在 metadataVersion。这里统一用磁盘值覆盖库里值；
+        // 磁盘没写的（比如 mod 已卸载、只剩库里的记录）保留库里值。
+        // steamId 沿用原逻辑：库里空才用扫描值补。
+        var scannedMods = new Dictionary<Guid, PlaySetMod>();
         foreach (var mod in catalog)
         {
-            if (!string.IsNullOrWhiteSpace(mod.SteamId))
-            {
-                scannedSteamIds[mod.ModId] = mod.SteamId;
-            }
+            scannedMods[mod.ModId] = mod;
         }
 
-        if (scannedSteamIds.Count > 0)
+        for (var index = 0; index < merged.Count; index++)
         {
-            for (var index = 0; index < merged.Count; index++)
+            var entry = merged[index];
+            if (!scannedMods.TryGetValue(entry.ModId, out var scanned))
             {
-                var entry = merged[index];
-                if (string.IsNullOrWhiteSpace(entry.SteamId)
-                    && scannedSteamIds.TryGetValue(entry.ModId, out var scannedSteamId))
+                continue;
+            }
+
+            var steamId = string.IsNullOrWhiteSpace(entry.SteamId) ? scanned.SteamId : entry.SteamId;
+            var requiredVersion = string.IsNullOrWhiteSpace(scanned.RequiredVersion)
+                ? entry.RequiredVersion
+                : scanned.RequiredVersion;
+            var modVersion = string.IsNullOrWhiteSpace(scanned.ModVersion)
+                ? entry.ModVersion
+                : scanned.ModVersion;
+
+            if (!string.Equals(entry.SteamId, steamId, StringComparison.Ordinal)
+                || !string.Equals(entry.RequiredVersion, requiredVersion, StringComparison.Ordinal)
+                || !string.Equals(entry.ModVersion, modVersion, StringComparison.Ordinal))
+            {
+                merged[index] = entry with
                 {
-                    merged[index] = entry with { SteamId = scannedSteamId };
-                }
+                    SteamId = steamId,
+                    RequiredVersion = requiredVersion,
+                    ModVersion = modVersion,
+                };
             }
         }
 
@@ -173,7 +189,8 @@ public sealed class ModLibraryService
                 SubscribedOn: null,
                 Array.Empty<Guid>(),
                 IsUnregistered: true,
-                SteamId: mod.SteamId));
+                SteamId: mod.SteamId,
+                ModVersion: mod.ModVersion));
         }
 
         await InjectSteamStatesAsync(game, merged, cancellationToken).ConfigureAwait(false);

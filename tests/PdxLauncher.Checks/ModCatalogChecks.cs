@@ -26,6 +26,7 @@ public static class ModCatalogChecks
         var logger = new NullLogger();
 
         CheckWorkshopFolderNameWins(fs, logger);
+        CheckModVersionFromDescriptor(fs, logger);
         CheckMetadataIdFallback(fs, logger);
         CheckLocalModDoesNotInventSteamId(fs, logger);
         CheckComposePrefersNumericSqliteId(fs, logger);
@@ -53,7 +54,7 @@ public static class ModCatalogChecks
                 "content",
                 WorkshopAppId,
                 "3742679779");
-            WriteMetadata(fs, modDirectory, "Daoyu Cheat", "akagilnc@gmail.com-daoyu-cheat-113", "1.13.*");
+            WriteMetadata(fs, modDirectory, "Daoyu Cheat", "akagilnc@gmail.com-daoyu-cheat-113", "1.13.*", "0.3dev");
 
             var mod = DiscoverSingle(fs, logger, game, "Daoyu Cheat");
             ChecksContext.Equal("工坊目录名是数字时压过 PDX 侧 metadata id", "3742679779", mod.SteamId ?? "<null>");
@@ -62,6 +63,35 @@ public static class ModCatalogChecks
                 "https://steamcommunity.com/sharedfiles/filedetails/?id=3742679779",
                 SteamWorkshop.GetBrowserAddress(SteamWorkshop.GetWorkshopId(mod.SteamId, mod.GameRegistryId)) ?? "<null>");
             ChecksContext.Check("工坊 mod 的 requiredVersion 来自 supported_game_version", mod.RequiredVersion == "1.13.*", mod.RequiredVersion);
+            // Vic3 大量 mod 没写 supported_game_version，但 metadata.json 的 version 往往有值：
+            // 这一个是「作者版本」，与支持的游戏版本分开保存、分开展示。
+            ChecksContext.Equal("工坊 mod 的 modVersion 来自 metadata.json 的 version", "0.3dev", mod.ModVersion ?? "<null>");
+        }
+        finally
+        {
+            PlaysetChecks.TryDelete(fs, root);
+        }
+    }
+
+    /// <summary>
+    /// legacy .mod 描述文件的 version 是作者版本，supported_version 才是支持的游戏版本；
+    /// 两者都要读出来，不能把 version 丢掉（Mod 库与添加模组页要分开显示）。
+    /// </summary>
+    private static void CheckModVersionFromDescriptor(IFileSystem fs, NullLogger logger)
+    {
+        Console.WriteLine("[ModCatalogChecks] .mod 的 version 与 supported_version");
+        var root = PlaysetChecks.CreateTempRoot(fs, "modcatalog-descriptor-version");
+        try
+        {
+            var game = CreateGame(fs, root);
+            fs.EnsureDirectory(Path.Combine(game.ModDir, "Legacy Mod"));
+            fs.WriteAllTextAtomic(
+                Path.Combine(game.ModDir, "Legacy Mod.mod"),
+                "name=\"Legacy Mod\"\nversion=\"2.4.1\"\nsupported_version=\"1.19.*\"\npath=\"mod/Legacy Mod\"\n");
+
+            var mod = DiscoverSingle(fs, logger, game, "Legacy Mod");
+            ChecksContext.Equal(".mod 的 supported_version 进 RequiredVersion", "1.19.*", mod.RequiredVersion);
+            ChecksContext.Equal(".mod 的 version 进 ModVersion", "2.4.1", mod.ModVersion ?? "<null>");
         }
         finally
         {
@@ -150,6 +180,8 @@ public static class ModCatalogChecks
                 "库里已登记的行沿用库里的 Guid",
                 mod.ModId == Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
                 mod.ModId.ToString("D"));
+            // metadata.json 没写 version 时，官方库的 metadataVersion 要顶上。
+            ChecksContext.Equal("库里的 metadataVersion 补成 modVersion", "1.6'", mod.ModVersion ?? "<null>");
         }
         finally
         {
@@ -192,7 +224,8 @@ public static class ModCatalogChecks
         string modDirectory,
         string name,
         string metadataId,
-        string? supportedGameVersion)
+        string? supportedGameVersion,
+        string? modVersion = null)
     {
         var metadataDirectory = Path.Combine(modDirectory, ".metadata");
         fs.EnsureDirectory(metadataDirectory);
@@ -201,6 +234,11 @@ public static class ModCatalogChecks
         if (!string.IsNullOrWhiteSpace(supportedGameVersion))
         {
             json += ",\"supported_game_version\":\"" + supportedGameVersion + "\"";
+        }
+
+        if (!string.IsNullOrWhiteSpace(modVersion))
+        {
+            json += ",\"version\":\"" + modVersion + "\"";
         }
 
         json += "}";
@@ -212,12 +250,9 @@ public static class ModCatalogChecks
     {
         using var connection = SqliteConnection.OpenOrCreate(databasePath);
         connection.Execute(
-            "CREATE TABLE mods (id char(36) PRIMARY KEY, displayName varchar(255), thumbnailPath text, " +
-            "dirPath text, archivePath text, gameRegistryId text, steamId text, requiredVersion varchar(255), " +
-            "status text NOT NULL, source text NOT NULL)");
+            "CREATE TABLE mods (id char(36) PRIMARY KEY, displayName varchar(255), thumbnailPath text, dirPath text, archivePath text, gameRegistryId text, steamId text, requiredVersion varchar(255), metadataVersion varchar(255), status text NOT NULL, source text NOT NULL)");
         connection.Execute(
-            "INSERT INTO mods (id, displayName, thumbnailPath, dirPath, archivePath, gameRegistryId, steamId, " +
-            "requiredVersion, status, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO mods (id, displayName, thumbnailPath, dirPath, archivePath, gameRegistryId, steamId, requiredVersion, metadataVersion, status, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             "cccccccc-cccc-cccc-cccc-cccccccccccc",
             "Pdx Style Local",
             null,
@@ -226,6 +261,7 @@ public static class ModCatalogChecks
             string.Empty,
             "3742679779",
             null,
+            "1.6'",
             "ready_to_play",
             "steam");
     }

@@ -305,7 +305,11 @@ public sealed class PlaySetRepository : IPlaySetRepository
                         // steamId 是较新的列：老库缺失时 ReadNullableString 返回 null，
                         // 与「这个 mod 没有创意工坊地址」是同一种展示结果。
                         SteamId: ReadNullableString(row, "steamId"),
-                        ThumbnailUrl: ReadNullableString(row, "thumbnailUrl")));
+                        ThumbnailUrl: ReadNullableString(row, "thumbnailUrl"),
+                        // mod 作者版本：官方启动器从 metadata.json 的 version 抄进 metadataVersion；
+                        // 更老的库可能只有 version 列，依次兜底。两列都缺（老库）时按未声明处理。
+                        ModVersion: NullIfBlank(ReadNullableString(row, "metadataVersion"))
+                            ?? NullIfBlank(ReadNullableString(row, "version"))));
                 }
 
                 // SQLite 的 COLLATE NOCASE 只折叠 ASCII，中文/符号排序和 .NET 不一致；
