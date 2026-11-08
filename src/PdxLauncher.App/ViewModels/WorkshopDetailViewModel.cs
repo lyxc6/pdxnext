@@ -1207,6 +1207,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         var description = MarkdownParser.Parse(detail.LongDescription);
         ApplyDescription(description, cancellationToken);
         var changelog = MarkdownParser.Parse(detail.Changelog);
+        TranslatedChangelogDocument = null;
         ChangelogDocument = changelog;
         if (!changelog.IsEmpty)
         {
@@ -1261,10 +1262,11 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <param name="cancellationToken">页面生命周期取消令牌（供后台译文使用）。</param>
     private void ApplyDescription(MarkdownDocument document, CancellationToken cancellationToken)
     {
-        DescriptionDocument = document.IsEmpty ? null : document;
-        DescriptionText = document.ToPlainText();
+        // 先清旧译文再换原文：界面按块配对显示，旧译文若留在原处会和新原文短暂错配。
         TranslatedDescriptionDocument = null;
         TranslatedDescriptionText = string.Empty;
+        DescriptionDocument = document.IsEmpty ? null : document;
+        DescriptionText = document.ToPlainText();
 
         if (document.IsEmpty)
         {

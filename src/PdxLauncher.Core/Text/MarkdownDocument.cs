@@ -140,6 +140,17 @@ public sealed class MarkdownDocument
         return builder.ToString().Trim();
     }
 
+    /// <summary>
+    /// 把单个块压成纯文本。界面按块把原文与译文配对时，用它判断这一段是否真的翻出了不同内容
+    /// （代码块、分隔线、翻译失败保留原文的段落都相等，不该再重复显示一遍）。
+    /// </summary>
+    public static string ToPlainText(MarkdownBlock block)
+    {
+        var builder = new StringBuilder();
+        AppendBlock(block, builder);
+        return builder.ToString().Trim();
+    }
+
     private static void AppendBlock(MarkdownBlock block, StringBuilder builder)
     {
         switch (block)
