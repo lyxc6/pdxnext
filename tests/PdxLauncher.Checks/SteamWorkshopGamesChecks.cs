@@ -26,7 +26,21 @@ public static class SteamWorkshopGamesChecks
         CheckAliases();
         CheckAppIdTableCovered();
         CheckChooser();
+        CheckLaunchOnlyGames();
         return ChecksContext.Failures - before;
+    }
+
+    /// <summary>
+    /// 仅启动的游戏也要能打开创意工坊：CS1 / PA 的工坊只碰 Steam、不碰游戏目录，
+    /// 所以「有没有工坊」与「能不能管理内容」是两套判定，别被 SupportsContentManagement 一起关掉。
+    /// </summary>
+    private static void CheckLaunchOnlyGames()
+    {
+        ChecksContext.Equal("CS1 是仅启动但仍然有工坊", true, SteamWorkshopGames.HasWorkshop("cities_skylines"));
+        ChecksContext.Equal("PA 是仅启动但仍然有工坊", true, SteamWorkshopGames.HasWorkshop("prison_architect_pc_console"));
+        ChecksContext.Equal("未登记游戏 HasWorkshop 为 false", false, SteamWorkshopGames.HasWorkshop("unknown_game"));
+        ChecksContext.Equal("null gameId → HasWorkshop false", false, SteamWorkshopGames.HasWorkshop(null));
+        ChecksContext.Equal("CS2 走 Paradox Mods → HasWorkshop false", false, SteamWorkshopGames.HasWorkshop("cities_skylines_2"));
     }
 
     /// <summary>有创意工坊的游戏，包括被 appdetails 分类接口误判成「没有」的那几个。</summary>

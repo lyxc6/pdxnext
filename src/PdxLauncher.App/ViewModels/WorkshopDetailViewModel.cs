@@ -876,6 +876,13 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             {
                 IsSteamSubscribed = subscribe;
                 IsSteamStateKnown = true;
+
+                // 订阅变了，Mod 库页与工坊列表页那层 60 秒整库缓存立刻过期，
+                // 否则返回列表要等到 TTL 结束才看到新的订阅 / 下载状态。
+                if (ResolveSteamAppId() is int appId)
+                {
+                    AppServices.WorkshopStates.Invalidate(appId);
+                }
             }
 
             return result;
@@ -916,7 +923,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>下载进度文案：只有真的在下、且拿得到百分比时才出。</summary>
+    /// <summary>下载进度文案：只有真的在下、且拿得到百分比时才出；拿得到字节数就连字节一起说。</summary>
     private string BuildDownloadProgressText(WorkshopInstallState state)
     {
         if (state.IsDownloading != true && state.IsDownloadPending != true)
@@ -924,10 +931,23 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             return string.Empty;
         }
 
-        return state.DownloadPercent is double percent
-            ? T(Keys.WorkshopDetailSteamDownloadProgress, (int)Math.Round(percent))
-            : string.Empty;
+        if (state.DownloadPercent is not double percent)
+        {
+            return string.Empty;
+        }
+
+        var percentText = (int)Math.Round(percent);
+        return state is { BytesDownloaded: { } done, BytesTotal: { } total } && total > 0
+            ? T(
+                Keys.WorkshopDetailSteamDownloadProgressBytes,
+                percentText,
+                ModSizeText.Format(ToLong(done)),
+                ModSizeText.Format(ToLong(total)))
+            : T(Keys.WorkshopDetailSteamDownloadProgress, percentText);
     }
+
+    /// <summary>字节数转 <see cref="ModSizeText"/> 要的 long；超过上限就截断（现实中不会发生）。</summary>
+    private static long ToLong(ulong value) => (long)Math.Min(value, long.MaxValue);
 
     /// <summary>查 Mod 库那层 60 秒整库缓存里有没有这一条。</summary>
     private static bool TryReadCachedSteamState(ulong publishedFileId, out WorkshopInstallState state)

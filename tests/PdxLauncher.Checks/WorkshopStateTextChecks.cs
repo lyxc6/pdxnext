@@ -132,6 +132,8 @@ public static class WorkshopStateTextChecks
         var info = WorkshopStateText.Resolve(half);
         ChecksContext.Equal("徽标：进度 50/200 = 25", 25, info.Percent);
         ChecksContext.Equal("徽标：下载中键名", WorkshopStateText.KeyDownloading, info.Key);
+        ChecksContext.Equal("徽标：下载中带回已下载字节", (ulong?)50, info.BytesDownloaded);
+        ChecksContext.Equal("徽标：下载中带回总字节", (ulong?)200, info.BytesTotal);
 
         var noTotal = new WorkshopInstallState(
             IsSubscribed: true,
@@ -142,6 +144,7 @@ public static class WorkshopStateTextChecks
             BytesTotal: 0);
 
         ChecksContext.Equal("徽标：总量 0 → 无百分比", null, WorkshopStateText.Resolve(noTotal).Percent);
+        ChecksContext.Equal("徽标：总量 0 时字节数仍原样带回", (ulong?)0, WorkshopStateText.Resolve(noTotal).BytesTotal);
     }
 
     private static void CheckUpdateHint()

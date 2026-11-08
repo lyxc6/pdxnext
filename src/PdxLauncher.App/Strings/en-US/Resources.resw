@@ -1447,6 +1447,9 @@
   <data name="HomeSupportNoticeLaunchOnly" xml:space="preserve">
     <value>{0} is launch-only: mods and DLC are managed by the game itself (in-game MOD menu / Steam Workshop); this launcher does not read or write its data.</value>
   </data>
+  <data name="HomeSupportNoticeLaunchOnlyWorkshop" xml:space="preserve">
+    <value>{0} still manages its own mods and DLC, and this launcher does not touch its data; you can browse and subscribe to its Steam Workshop here.</value>
+  </data>
   <data name="HomeSupportNoticeLimited" xml:space="preserve">
     <value>{0} is not adapted yet: it can only be launched, and mod and DLC features are unavailable.</value>
   </data>
@@ -1665,6 +1668,9 @@
   </data>
   <data name="ModlibSteamStateDownloadingNoPercent" xml:space="preserve">
     <value>Downloading</value>
+  </data>
+  <data name="ModlibSteamStateDownloadingWithBytes" xml:space="preserve">
+    <value>Downloading {0}% · {1}/{2}</value>
   </data>
   <data name="ModlibSteamStateInstalled" xml:space="preserve">
     <value>Installed via Steam</value>
@@ -4771,6 +4777,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="WorkshopDetailSteamDownloadProgress" xml:space="preserve">
     <value>Downloading {0}%</value>
+  </data>
+  <data name="WorkshopDetailSteamDownloadProgressBytes" xml:space="preserve">
+    <value>Downloading {0}% · {1} / {2} downloaded</value>
   </data>
   <data name="WorkshopDetailSteamNeedsUpdate" xml:space="preserve">
     <value>A newer version is on Steam; update it in the Steam client or the mod library.</value>
