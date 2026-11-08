@@ -307,6 +307,29 @@ public sealed partial class WorkshopPage : Page
         }
     }
 
+    /// <summary>浏览区段下拉框选择变化：项目 / 合集，写回 ViewModel 触发重查（仅 Steam）。</summary>
+    private void OnSectionSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
+    {
+        try
+        {
+            if (e.SelectedItem is not string section)
+            {
+                return;
+            }
+
+            if (string.Equals(section, _viewModel.SelectedSection, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _viewModel.SelectedSection = section;
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("WorkshopPage 切换浏览区段失败", ex);
+        }
+    }
+
     /// <summary>时间范围下拉框选择变化：写回 ViewModel 触发重查（仅 Steam）。</summary>
     private void OnTimeRangeSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
     {

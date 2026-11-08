@@ -26,9 +26,43 @@ public static class SteamWorkshopItemPageParser
     /// <summary>最多取多少张画廊截图（防止极端页面把图区撑爆）。</summary>
     public const int MaxScreenshots = 20;
 
+    /// <summary>最多取多少条合集子项（防止异常页面把列表撑爆）。</summary>
+    public const int MaxCollectionItems = 500;
+
     private static readonly Regex TotalCountRegex = new(
         "\"total_count\"\\s*:\\s*(\\d+)",
         RegexOptions.CultureInvariant);
+
+    /// <summary>合集物品页里每个子项的容器（实测 2026-11：<c>&lt;div … id="sharedfile_&lt;id&gt;" class="collectionItem"&gt;</c>）。</summary>
+    private static readonly Regex CollectionItemTagRegex = new(
+        "<div[^>]*class=\"collectionItem\"[^>]*>",
+        RegexOptions.CultureInvariant);
+
+    /// <summary>从容器标签里取子项 id。</summary>
+    private static readonly Regex SharedFileIdRegex = new(
+        "id=\"sharedfile_(\\d+)\"",
+        RegexOptions.CultureInvariant);
+
+    private static readonly Regex CollectionTitleRegex = new(
+        "class=\"workshopItemTitle\"[^>]*>(.*?)</div>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
+
+    private static readonly Regex CollectionPreviewRegex = new(
+        "<img[^>]*class=\"workshopItemPreviewImage\"[^>]*src=\"([^\"]+)\"",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static readonly Regex CollectionAuthorRegex = new(
+        "class=\"workshopItemAuthorName\"[^>]*>\\s*<a[^>]*>(.*?)</a>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
+
+    private static readonly Regex CollectionShortDescRegex = new(
+        "class=\"workshopItemShortDesc\"[^>]*>(.*?)</div>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant);
+
+    private static readonly Regex HtmlTagRegex = new(
+        "<[^>]+>",
+        RegexOptions.CultureInvariant);
+
 
     private static readonly Regex ImageRegex = new(
         "<img[^>]*?src=\"([^\"]+)\"",
@@ -69,8 +103,9 @@ public static class SteamWorkshopItemPageParser
         var screenshots = ExtractScreenshotUrls(html);
         var comments = ParseComments(html);
         var totalComments = ExtractTotalComments(html);
+        var collectionItems = ExtractCollectionItems(html);
 
-        if (authorName is null && descriptionHtml is null && comments.Count == 0)
+        if (authorName is null && descriptionHtml is null && comments.Count == 0 && collectionItems.Count == 0)
         {
             return null;
         }
@@ -82,7 +117,74 @@ public static class SteamWorkshopItemPageParser
             ImageUrls: images,
             ScreenshotUrls: screenshots,
             TotalComments: totalComments,
-            Comments: comments);
+            Comments: comments,
+            CollectionItems: collectionItems);
+    }
+
+    /// <summary>
+    /// 解析合集子项。页面上每个子项是一个 <c>class="collectionItem"</c> 的 div，
+    /// 标题 / 缩略图 / 作者 / 短描述都在这个块里；块与块之间用下一个块的起点切片。
+    /// 非合集页面返回空列表，解析失败也绝不抛异常。
+    /// </summary>
+    private static IReadOnlyList<SteamWorkshopCollectionItemPage> ExtractCollectionItems(string html)
+    {
+        var starts = new List<(int Index, string Id)>();
+        foreach (Match match in CollectionItemTagRegex.Matches(html))
+        {
+            var idMatch = SharedFileIdRegex.Match(match.Value);
+            if (!idMatch.Success)
+            {
+                continue;
+            }
+
+            starts.Add((match.Index, idMatch.Groups[1].Value));
+        }
+
+        if (starts.Count == 0)
+        {
+            return [];
+        }
+
+        var items = new List<SteamWorkshopCollectionItemPage>(Math.Min(starts.Count, MaxCollectionItems));
+        for (var i = 0; i < starts.Count && items.Count < MaxCollectionItems; i++)
+        {
+            var start = starts[i].Index;
+            var end = i + 1 < starts.Count ? starts[i + 1].Index : html.Length;
+            var block = html[start..end];
+
+            items.Add(new SteamWorkshopCollectionItemPage(
+                PublishedFileId: starts[i].Id,
+                Title: CleanText(CollectionTitleRegex.Match(block)),
+                PreviewUrl: FirstGroupValue(CollectionPreviewRegex.Match(block)),
+                AuthorName: CleanText(CollectionAuthorRegex.Match(block)),
+                ShortDescription: CleanText(CollectionShortDescRegex.Match(block))));
+        }
+
+        return items;
+    }
+
+    /// <summary>取正则第一个捕获组（HTML 解码、去标签、压空白）；没匹配到返回 null。</summary>
+    private static string? FirstGroupValue(Match match)
+    {
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        var value = CleanText(match);
+        return value.Length == 0 ? null : value;
+    }
+
+    /// <summary>把 HTML 片段压成一行纯文本。</summary>
+    private static string CleanText(Match match)
+    {
+        if (!match.Success)
+        {
+            return string.Empty;
+        }
+
+        var text = System.Net.WebUtility.HtmlDecode(HtmlTagRegex.Replace(match.Groups[1].Value, string.Empty));
+        return string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
     }
 
     private static string? ExtractAuthorName(string html)

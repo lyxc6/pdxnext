@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.Online;
@@ -55,6 +56,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// 这一页的「返回」该回哪儿（导航发起方给的 Tag）；null 表示按默认的创意工坊列表处理。
     /// </summary>
     private string? _returnTag;
+
+    /// <summary>上级条目：从合集内容点进来的子项，返回时先回合集详情；null 表示没有上级。</summary>
+    private WorkshopRowViewModel? _parentRow;
 
     /// <summary>正文配图：URL → 本地文件。与顶部图片墙分开，避免重复下载与互相覆盖。</summary>
     private readonly Dictionary<string, string> _inlineImages = new(StringComparer.Ordinal);
@@ -274,6 +278,38 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>图片墙（PDX 截图 + 描述里内嵌的图）。</summary>
     public ObservableCollection<WorkshopScreenshotViewModel> Screenshots { get; } = [];
 
+    /// <summary>合集内容（Steam 合集才有；每行可继续点进详情）。</summary>
+    public ObservableCollection<WorkshopRowViewModel> CollectionItems { get; } = [];
+
+    /// <summary>当前条目是不是 Steam 合集。</summary>
+    [ObservableProperty]
+    private bool _isCollection;
+
+    /// <summary>合集内容是否还在加载。</summary>
+    [ObservableProperty]
+    private bool _isLoadingCollection;
+
+    /// <summary>合集内容的状态说明（加载中 / 失败 / 为空）。</summary>
+    [ObservableProperty]
+    private string _collectionStatusText = string.Empty;
+
+    /// <summary>是否显示合集内容卡。</summary>
+    public bool ShowCollectionCard => IsCollection;
+
+    /// <summary>是否有已加载的合集子项。</summary>
+    public bool HasCollectionItems => CollectionItems.Count > 0;
+
+    /// <summary>是否有合集状态说明。</summary>
+    public bool HasCollectionStatus => !string.IsNullOrWhiteSpace(CollectionStatusText);
+
+    /// <summary>合集内容摘要（「共 N 项」）；加载完成前为空串。</summary>
+    public string CollectionSummaryText => !IsCollection || CollectionItems.Count == 0
+        ? string.Empty
+        : T(Keys.WorkshopDetailCollectionSummary, CollectionItems.Count);
+
+    /// <summary>是否有合集内容摘要。</summary>
+    public bool HasCollectionSummary => !string.IsNullOrWhiteSpace(CollectionSummaryText);
+
     /// <summary>外链列表（含论坛帖）。</summary>
     public ObservableCollection<WorkshopLinkViewModel> Links { get; } = [];
 
@@ -411,9 +447,14 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// 从 Mod 库进来是「返回 Mod 库」—— 按钮永远只是「回上一页」，
     /// 但用户需要知道这一下会回到哪儿。
     /// </summary>
-    public string BackText => string.Equals(_returnTag, NavigationService.ModLibraryTag, StringComparison.OrdinalIgnoreCase)
-        ? T(Keys.WorkshopDetailBackLibrary)
-        : T(Keys.WorkshopDetailBack);
+    public string BackText => _parentRow is not null
+        ? T(Keys.WorkshopDetailBackCollection)
+        : string.Equals(_returnTag, NavigationService.ModLibraryTag, StringComparison.OrdinalIgnoreCase)
+            ? T(Keys.WorkshopDetailBackLibrary)
+            : T(Keys.WorkshopDetailBack);
+
+    /// <summary>上级条目（返回时用）；null 表示返回直接回列表页。</summary>
+    public WorkshopRowViewModel? ParentRow => _parentRow;
 
     /// <summary>
     /// 评论总数超过一页、而且拿到了作者 SteamID 才显示分页控件。
@@ -512,6 +553,14 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>是否有 Steam 订阅说明。</summary>
     public bool HasSteamSubscribeHint => !string.IsNullOrWhiteSpace(SteamSubscribeHint);
 
+    /// <summary>合集订阅提示：订阅合集会由 Steam 一并订阅其中全部项目。</summary>
+    public string CollectionSubscribeHint => IsCollection && ShowSteamSubscribeButton
+        ? T(Keys.WorkshopDetailCollectionSubscribeHint)
+        : string.Empty;
+
+    /// <summary>是否有合集订阅提示。</summary>
+    public bool HasCollectionSubscribeHint => !string.IsNullOrWhiteSpace(CollectionSubscribeHint);
+
     /// <summary>Steam 直连不可用的具体原因（找不到 dll 等），有才显示。</summary>
     public bool HasSteamUnavailableReason =>
         ShowSteamSubscribeButton && !string.IsNullOrWhiteSpace(SteamUnavailableReason);
@@ -532,15 +581,18 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// 「返回」按钮要回到的页面 Tag（null 表示创意工坊列表）。详情页能被多个页面复用，
     /// 由发起方说回来处，正文与文案都按它调整。
     /// </param>
+    /// <param name="parent">上级条目（合集内容点进来的子项）；null 表示没有上级。</param>
     public async Task LoadAsync(
         WorkshopRowViewModel row,
         CancellationToken cancellationToken,
-        string? returnTag = null)
+        string? returnTag = null,
+        WorkshopRowViewModel? parent = null)
     {
         ArgumentNullException.ThrowIfNull(row);
 
         Row = row;
         _returnTag = returnTag;
+        _parentRow = parent;
         ResetForLoad(row);
         NotifyStateChanged();
 
@@ -580,7 +632,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>重新加载当前行（「重试」按钮）；返回目标沿用上一次加载拿到的值。</summary>
     /// <param name="cancellationToken">取消令牌。</param>
     public Task ReloadAsync(CancellationToken cancellationToken) =>
-        Row is null ? Task.CompletedTask : LoadAsync(Row, cancellationToken, _returnTag);
+        Row is null ? Task.CompletedTask : LoadAsync(Row, cancellationToken, _returnTag, _parentRow);
 
     /// <summary>
     /// 解析评论翻页要用的作者 SteamID64：详情 → 列表行 → 物品页作者主页地址，逐级兜底。
@@ -1042,6 +1094,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         Links.Clear();
         Dependencies.Clear();
         Comments.Clear();
+        CollectionItems.Clear();
+        IsCollection = false;
+        IsLoadingCollection = false;
+        CollectionStatusText = string.Empty;
     }
 
     /// <summary>封面：列表没给就按缓存复用/下载补一张。</summary>
@@ -1063,8 +1119,16 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// </summary>
     private async Task ApplySteamAsync(WorkshopRowViewModel row, CancellationToken cancellationToken)
     {
-        var detailTask = _source.GetSteamDetailAsync(row.Id, row.Name, cancellationToken);
-        var pageTask = _source.GetSteamItemPageAsync(row.Id, cancellationToken);
+        // 合集必须绕过详情缓存：缓存不存 file_type / children，命中后会把合集当普通条目。
+        var detailTask = _source.GetSteamDetailAsync(
+            row.Id,
+            row.Name,
+            cancellationToken,
+            bypassCache: row.IsCollection);
+        var pageTask = _source.GetSteamItemPageAsync(
+            row.Id,
+            cancellationToken,
+            requireCollectionItems: row.IsCollection);
 
         var detailResult = await detailTask.ConfigureAwait(true);
         if (detailResult is not { IsSuccess: true, Value: { } detail })
@@ -1072,6 +1136,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             UseCachedDescription(row, detailResult.ErrorMessage);
             return;
         }
+
+        // 合集：详情接口对匿名调用不返回 file_type / children，真正的子项在物品页的
+        // collectionItem 块里；这里先记下详情侧的线索，等物品页回来再铺列表。
+        var detailIsCollection = detail.IsCollection;
 
         var item = row.SteamItem;
         MetaText = BuildSteamMeta(item, detail);
@@ -1110,6 +1178,15 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         {
             _logger.Info("Steam 物品页不可用，评论区与描述配图降级: " + row.Id);
             CommentsSummary = string.Empty;
+        }
+
+        // 合集识别：列表区段提示 / 详情 file_type / 物品页 collectionItem 三路任一命中都算。
+        IsCollection = row.IsCollection
+            || detailIsCollection
+            || page is { IsCollectionPage: true };
+        if (IsCollection)
+        {
+            await LoadCollectionItemsAsync(detail, page, cancellationToken).ConfigureAwait(true);
         }
 
         // 翻页接口要的是作者 SteamID64，取不到就只能显示物品页内嵌的那十条。
@@ -1212,6 +1289,91 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             _galleryTracker.FinishAll();
             NotifyGalleryActivity();
             NotifyStateChanged();
+        }
+    }
+
+    /// <summary>
+    /// 加载合集的子项。子项来源按优先级取：
+    /// <list type="number">
+    /// <item>物品页上的 <c>collectionItem</c> 块 —— 2026-11 实测这是匿名调用唯一稳定的来源，
+    /// 一次页面请求就能拿到全部子项的 id / 标题 / 缩略图 / 作者；</item>
+    /// <item>详情接口的 <c>children</c> —— 目前 <c>GetPublishedFileDetails</c> 对匿名调用不返回，
+    /// 保留为兜底（Steam 以后补上就直接可用），再用批量详情补元数据。</item>
+    /// </list>
+    /// </summary>
+    private async Task LoadCollectionItemsAsync(
+        SteamWorkshopItemDetail detail,
+        SteamWorkshopItemPage? page,
+        CancellationToken cancellationToken)
+    {
+        IsLoadingCollection = true;
+        CollectionStatusText = T(Keys.WorkshopDetailCollectionLoading);
+        NotifyCollectionState();
+
+        try
+        {
+            var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
+
+            // 首选：物品页已经解析好的子项，不再额外请求。
+            if (page is { CollectionItemList.Count: > 0 } parsed)
+            {
+                foreach (var child in parsed.CollectionItemList)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    CollectionItems.Add(WorkshopRowViewModel.FromSteamCollectionItem(child, size));
+                }
+
+                CollectionStatusText = string.Empty;
+                return;
+            }
+
+            if (detail.ChildList.Count == 0)
+            {
+                CollectionStatusText = T(Keys.WorkshopDetailCollectionEmpty);
+                return;
+            }
+
+            // 兜底：详情接口给了 children 时才批量取详情。
+            var ids = detail.ChildList.Select(static child => child.PublishedFileId).ToList();
+            var result = await _source.GetSteamDetailsAsync(ids, cancellationToken).ConfigureAwait(true);
+            if (result is not { IsSuccess: true, Value: { } children })
+            {
+                CollectionStatusText = T(Keys.WorkshopDetailCollectionFailed);
+                return;
+            }
+
+            var byId = new Dictionary<string, SteamWorkshopItemDetail>(StringComparer.Ordinal);
+            foreach (var child in children)
+            {
+                byId[child.PublishedFileId] = child;
+            }
+
+            foreach (var child in detail.ChildList)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (byId.TryGetValue(child.PublishedFileId, out var childDetail))
+                {
+                    CollectionItems.Add(WorkshopRowViewModel.FromSteamDetail(childDetail, size));
+                }
+            }
+
+            CollectionStatusText = CollectionItems.Count == 0
+                ? T(Keys.WorkshopDetailCollectionEmpty)
+                : string.Empty;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("合集内容加载失败（" + detail.PublishedFileId + "）：" + ex.Message);
+            CollectionStatusText = T(Keys.WorkshopDetailCollectionFailed);
+        }
+        finally
+        {
+            IsLoadingCollection = false;
+            NotifyCollectionState();
         }
     }
 
@@ -2081,6 +2243,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(CanToggleSteamSubscription));
         OnPropertyChanged(nameof(SteamSubscribeHint));
         OnPropertyChanged(nameof(HasSteamSubscribeHint));
+        OnPropertyChanged(nameof(CollectionSubscribeHint));
+        OnPropertyChanged(nameof(HasCollectionSubscribeHint));
         OnPropertyChanged(nameof(HasSteamUnavailableReason));
         OnPropertyChanged(nameof(ShowSteamSubscribeState));
     }
@@ -2210,4 +2374,20 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     partial void OnSteamDownloadProgressTextChanged(string value) =>
         OnPropertyChanged(nameof(HasSteamDownloadProgress));
+
+    partial void OnIsCollectionChanged(bool value) => NotifyCollectionState();
+
+    partial void OnCollectionStatusTextChanged(string value) => OnPropertyChanged(nameof(HasCollectionStatus));
+
+    /// <summary>合集卡片相关派生属性一次性重发通知。</summary>
+    private void NotifyCollectionState()
+    {
+        OnPropertyChanged(nameof(ShowCollectionCard));
+        OnPropertyChanged(nameof(HasCollectionItems));
+        OnPropertyChanged(nameof(HasCollectionStatus));
+        OnPropertyChanged(nameof(CollectionSummaryText));
+        OnPropertyChanged(nameof(HasCollectionSummary));
+        OnPropertyChanged(nameof(CollectionSubscribeHint));
+        OnPropertyChanged(nameof(HasCollectionSubscribeHint));
+    }
 }

@@ -82,6 +82,13 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>默认时间范围的索引（30 天，与 Steam 网页默认一致）。</summary>
     private const int DefaultTimeRangeIndex = 2;
 
+    /// <summary>Steam 浏览区段的文案键（顺序与 <see cref="SteamWorkshopSection"/> 一致）。</summary>
+    private static readonly string[] SectionKeys =
+    [
+        Keys.WorkshopSectionItems,
+        Keys.WorkshopSectionCollections,
+    ];
+
     /// <summary>
     /// 未登记游戏的来源探测预算。HttpFetcher 的连接超时是 30 秒、总超时 180 秒，
     /// 不设上限时页面会长时间停在「正在判断…」，所以只等 5 秒，超时按 Paradox Mods 处理。
@@ -230,6 +237,14 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     [ObservableProperty]
     private IReadOnlyList<string> _timeRangeModes = [];
 
+    /// <summary>浏览区段（项目 / 合集），取值来自 <see cref="SectionModes"/>（仅 Steam）。</summary>
+    [ObservableProperty]
+    private string _selectedSection = string.Empty;
+
+    /// <summary>浏览区段下拉框的选项（按当前语言生成）。</summary>
+    [ObservableProperty]
+    private IReadOnlyList<string> _sectionModes = [];
+
     /// <summary>当前显示的来源。</summary>
     [ObservableProperty]
     private WorkshopSource _source;
@@ -281,6 +296,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _selectedSortMode = SortModes[0];
         TimeRangeModes = BuildTimeRangeModes();
         _selectedTimeRange = TimeRangeModes[DefaultTimeRangeIndex];
+        SectionModes = BuildSectionModes();
+        _selectedSection = SectionModes[(int)SteamWorkshopSection.ReadyToUseItems];
 
         Filters = new WorkshopFiltersViewModel();
         Filters.Changed += OnFiltersChanged;
@@ -344,11 +361,16 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>PDX 来源且未登录时显示「去登录」提示条。</summary>
     public bool ShowSignInHint => Source == WorkshopSource.Pdx && !_account.IsSignedIn;
 
-    /// <summary>
-    /// 时间范围只对 Steam 的「最热门 / 最受好评」有意义（Steam 网页也只在这两个排序下给时间范围），
+    /// <summary>时间范围只对 Steam 的「最热门 / 最受好评」有意义（Steam 网页也只在这两个排序下给时间范围），
     /// 其他排序或 PDX 来源都隐藏这个下拉。
     /// </summary>
     public bool ShowTimeRange => Source == WorkshopSource.Steam && IsTimeRangeSort();
+
+    /// <summary>浏览区段切换只对 Steam 有意义（PDX Mods 没有合集）。</summary>
+    public bool ShowSectionPicker => Source == WorkshopSource.Steam;
+
+    /// <summary>当前是否在浏览合集。</summary>
+    public bool IsCollectionsSection => ResolveSection() == SteamWorkshopSection.Collections;
 
     /// <summary>只有 Steam 来源有筛选栏（PDX Mods 没有标签/DLC 维度）。</summary>
     public bool ShowFilters => Source == WorkshopSource.Steam;
@@ -1076,7 +1098,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
                 Filters.RequiredAppIds,
                 Filters.ExcludedAppIds,
                 Filters.ShowIncompatible,
-                Filters.SpecialFilter);
+                Filters.SpecialFilter,
+                ResolveSection());
         }
 
         return WorkshopPageCache.Key(
@@ -1098,10 +1121,11 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _totalPages = page.TotalPages;
 
         var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
+        var collectionsSection = IsCollectionsSection;
         var rows = new List<WorkshopRowViewModel>(page.Items.Count);
         foreach (var entry in page.Items)
         {
-            var row = WorkshopRowViewModel.FromCache(entry, size);
+            var row = WorkshopRowViewModel.FromCache(entry, size, collectionsSection);
             if (_info.TryGetCachedCover(WorkshopInfoCache.Key(row.Source, row.Id), out var cover))
             {
                 row.CoverPath = cover;
@@ -1430,7 +1454,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             Filters.RequiredAppIds,
             Filters.ExcludedAppIds,
             Filters.ShowIncompatible,
-            Filters.SpecialFilter);
+            Filters.SpecialFilter,
+            ResolveSection());
 
         var result = await _steam.BrowseAsync(appId, query, cancellationToken).ConfigureAwait(true);
 
@@ -1469,8 +1494,9 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         // 建行时每条都要读写一次工坊信息缓存，而那是同步 SQLite（每条一次开连接 + 提交），
         // 30 条实测 5 秒多，全压在 UI 线程上就是切页面卡死。整段丢线程池，
         // 回 UI 线程只做 ReplaceRows 与绑定（行模型本身不是 UI 对象）。
+        var collectionsSection = IsCollectionsSection;
         var (rows, entries) = await Task
-            .Run(() => BuildSteamRows(page.Items, size, cancellationToken), cancellationToken)
+            .Run(() => BuildSteamRows(page.Items, size, collectionsSection, cancellationToken), cancellationToken)
             .ConfigureAwait(true);
 
         AppServices.Breadcrumb("工坊 建行完成 " + rows.Count + " 行");
@@ -1512,6 +1538,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     private (List<WorkshopRowViewModel> Rows, List<WorkshopInfoCacheEntry> Entries) BuildSteamRows(
         IReadOnlyList<SteamWorkshopItem> items,
         int thumbnailSize,
+        bool collectionsSection,
         CancellationToken cancellationToken)
     {
         var rows = new List<WorkshopRowViewModel>(items.Count);
@@ -1523,7 +1550,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             // 先把元数据并进缓存，再从缓存取封面文件名：同一个 id 第二次出现不必再下载图片。
             RecordSteamItem(item);
             var cacheKey = WorkshopInfoCache.Key(WorkshopSource.Steam, item.PublishedFileId);
-            var row = WorkshopRowViewModel.FromSteam(item, thumbnailSize);
+            var row = WorkshopRowViewModel.FromSteam(item, thumbnailSize, collectionsSection);
             if (_info.TryGetCachedCover(cacheKey, out var cover))
             {
                 row.CoverPath = cover;
@@ -1934,6 +1961,24 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>时间范围下拉框的选项。</summary>
     private static string[] BuildTimeRangeModes() => TimeRangeKeys.Select(static key => T(key)).ToArray();
 
+    /// <summary>浏览区段下拉框的选项。</summary>
+    private static string[] BuildSectionModes() => SectionKeys.Select(static key => T(key)).ToArray();
+
+    /// <summary>当前区段下拉框的序号；找不到时按「项目」处理。</summary>
+    private int CurrentSectionIndex()
+    {
+        var index = Array.FindIndex(
+            SectionModes.ToArray(),
+            item => string.Equals(item, SelectedSection, StringComparison.Ordinal));
+        return index < 0 ? 0 : index;
+    }
+
+    /// <summary>把当前选中的区段文案反查成枚举。</summary>
+    private SteamWorkshopSection ResolveSection() =>
+        CurrentSectionIndex() == (int)SteamWorkshopSection.Collections
+            ? SteamWorkshopSection.Collections
+            : SteamWorkshopSection.ReadyToUseItems;
+
     partial void OnSearchTextChanged(string value)
     {
         // 打字只更新绑定值：真正发请求的是回车 / 刷新走的提交路径。
@@ -1962,6 +2007,17 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _queryTask = RunQueryAsync(resetPage: true, force: true);
     }
 
+    partial void OnSelectedSectionChanged(string value)
+    {
+        if (_isRelocalizing)
+        {
+            return;
+        }
+
+        OnPropertyChanged(nameof(IsCollectionsSection));
+        _queryTask = RunQueryAsync(resetPage: true, force: true);
+    }
+
     partial void OnSourceChanged(WorkshopSource value)
     {
         // 来源换了，排序档位跟着换（Steam 6 档 / PDX 3 档）；重置到第一档避免选中项越界。
@@ -1971,6 +2027,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         // 等服务端结果回来再以 SSR 数据为准。
         ApplyFilterGroups([]);
         OnPropertyChanged(nameof(ShowTimeRange));
+        OnPropertyChanged(nameof(ShowSectionPicker));
         OnPropertyChanged(nameof(ShowFilters));
         OnPropertyChanged(nameof(CanShowFilters));
         OnPropertyChanged(nameof(ShowFilterSidebar));
@@ -2185,6 +2242,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     {
         var sortIndex = CurrentSortIndex();
         var timeIndex = CurrentTimeRangeIndex();
+        var sectionIndex = CurrentSectionIndex();
 
         _isRelocalizing = true;
         try
@@ -2193,6 +2251,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             SelectedSortMode = SortModes[Math.Clamp(sortIndex, 0, SortModes.Count - 1)];
             TimeRangeModes = BuildTimeRangeModes();
             SelectedTimeRange = TimeRangeModes[Math.Clamp(timeIndex, 0, TimeRangeModes.Count - 1)];
+            SectionModes = BuildSectionModes();
+            SelectedSection = SectionModes[Math.Clamp(sectionIndex, 0, SectionModes.Count - 1)];
         }
         finally
         {
@@ -2202,6 +2262,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         // 新旧文案可能相同（例如中英文都是「最热门」），显式补一次通知让 x:Bind 刷新。
         OnPropertyChanged(nameof(SelectedSortMode));
         OnPropertyChanged(nameof(SelectedTimeRange));
+        OnPropertyChanged(nameof(SelectedSection));
         RaiseDerived();
     }
 

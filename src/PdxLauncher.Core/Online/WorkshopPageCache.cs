@@ -86,6 +86,7 @@ public sealed class WorkshopPageCache
     /// <param name="excludedAppIds">必须排除的 DLC appid。</param>
     /// <param name="showIncompatible">是否显示不兼容项目。</param>
     /// <param name="specialFilter">特别筛选条件。</param>
+    /// <param name="section">浏览区段（普通条目 / 合集），合集页不能和条目页共用缓存。</param>
     /// <returns>稳定可比较的字符串键。</returns>
     public static string Key(
         WorkshopSource source,
@@ -100,7 +101,8 @@ public sealed class WorkshopPageCache
         IReadOnlyList<int>? requiredAppIds = null,
         IReadOnlyList<int>? excludedAppIds = null,
         bool showIncompatible = false,
-        SteamWorkshopSpecialFilter specialFilter = SteamWorkshopSpecialFilter.None)
+        SteamWorkshopSpecialFilter specialFilter = SteamWorkshopSpecialFilter.None,
+        SteamWorkshopSection section = SteamWorkshopSection.ReadyToUseItems)
     {
         var tag = WorkshopInfoCache.SourceTag(source);
         return string.Join(
@@ -117,7 +119,8 @@ public sealed class WorkshopPageCache
             AppSignature(requiredAppIds),
             AppSignature(excludedAppIds),
             showIncompatible ? "1" : "0",
-            ((int)specialFilter).ToString(System.Globalization.CultureInfo.InvariantCulture));
+            ((int)specialFilter).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ((int)section).ToString(System.Globalization.CultureInfo.InvariantCulture));
     }
 
     private static string TagSignature(IReadOnlyList<string>? values) => values is null || values.Count == 0
