@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Online;
 
 /// <summary>
 /// 当前游戏主页视图模型：主题素材路径、继续游戏信息、播放集/mod/DLC 计数、启动命令。
@@ -104,9 +105,16 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
                 return string.Empty;
             }
 
-            return game.Support == GameSupport.LaunchOnly
-                ? T(Keys.HomeSupportNoticeLaunchOnly, game.DisplayName)
-                : T(Keys.HomeSupportNoticeLimited, game.DisplayName);
+            if (game.Support != GameSupport.LaunchOnly)
+            {
+                return T(Keys.HomeSupportNoticeLimited, game.DisplayName);
+            }
+
+            // 仅启动的游戏也分两种：有 Steam 工坊的（CS1 / PA）可以在这里浏览与订阅，
+            // 文案要不提工坊，否则和左栏出现的「创意工坊」页自相矛盾。
+            return SteamWorkshopGames.HasWorkshop(game.GameId)
+                ? T(Keys.HomeSupportNoticeLaunchOnlyWorkshop, game.DisplayName)
+                : T(Keys.HomeSupportNoticeLaunchOnly, game.DisplayName);
         }
     }
 

@@ -15,6 +15,7 @@ using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
 using PdxLauncher.App.Views;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Online;
 
 /// <summary>
 /// 主窗口：系统标题栏（TitleBar 控件）+ 左侧 NavigationView + 右侧 Frame。
@@ -779,8 +780,10 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 内容管理导航项（播放集 / Mod 库 / DLC）只在当前游戏能管理内容时才出现；
-    /// 仅启动的游戏（如 Prison Architect）下直接隐藏，并把停在这些页上的用户送回主页。
+    /// 内容管理导航项：播放集 / Mod 库 / Mod 创建 / DLC 只在当前游戏能管理内容时才出现；
+    /// 创意工坊另算——仅启动的游戏（Cities: Skylines 1 / Prison Architect）也能浏览与订阅 Steam 工坊，
+    /// 那里只碰 Steam、不碰游戏目录，所以按内置表单独放行。
+    /// 落在被隐藏页面上的用户会被送回主页。
     /// </summary>
     private void UpdateContentNavState()
     {
@@ -788,15 +791,17 @@ public sealed partial class MainWindow : Window
         {
             var game = AppServices.IsInitialized ? AppServices.CurrentGame : null;
             var manageable = game is null || game.SupportsContentManagement;
+            var workshopAvailable = manageable
+                || (game is not null && SteamWorkshopGames.HasWorkshop(game.GameId));
 
-            // 隐藏而不是置灰：置灰的三项看起来像坏了，而且禁用的 NavigationViewItem 不弹 ToolTip，
+            // 隐藏而不是置灰：置灰的项看起来像坏了，而且禁用的 NavigationViewItem 不弹 ToolTip，
             // 只能在左栏底部塞一段解释文字（窄列折行更难看）。干脆不显示。
             var contentVisibility = manageable ? Visibility.Visible : Visibility.Collapsed;
             NavPlaySets.Visibility = contentVisibility;
             NavModLibrary.Visibility = contentVisibility;
             NavModStudio.Visibility = contentVisibility;
-            NavWorkshop.Visibility = contentVisibility;
             NavDlc.Visibility = contentVisibility;
+            NavWorkshop.Visibility = workshopAvailable ? Visibility.Visible : Visibility.Collapsed;
 
             if (manageable)
             {
@@ -807,8 +812,9 @@ public sealed partial class MainWindow : Window
                 && (string.Equals(tag, NavigationService.PlaySetsTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.ModLibraryTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.ModStudioTag, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(tag, NavigationService.WorkshopTag, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(tag, NavigationService.WorkshopDetailTag, StringComparison.OrdinalIgnoreCase)
+                    || (!workshopAvailable
+                        && (string.Equals(tag, NavigationService.WorkshopTag, StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(tag, NavigationService.WorkshopDetailTag, StringComparison.OrdinalIgnoreCase)))
                     || string.Equals(tag, NavigationService.AddModsTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.DlcTag, StringComparison.OrdinalIgnoreCase)))
             {
