@@ -400,6 +400,24 @@
                             <TextBlock Text="{x:Bind L.ModstudioUploadHint, Mode=OneWay}" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
                             <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Click="OnMcpDocsClick"
+                                        AutomationProperties.AutomationId="btnModStudioMcpDocs">
+                                    <TextBlock Text="{x:Bind L.ModstudioMcpDocsButton, Mode=OneWay}" />
+                                </Button>
+                                <Button Click="OnReloadUploadDraftClick"
+                                        IsEnabled="{x:Bind ViewModel.CanEditUploadFields, Mode=OneWay}"
+                                        AutomationProperties.AutomationId="btnModStudioLoadAiDraft">
+                                    <TextBlock Text="{x:Bind L.ModstudioMcpReloadDraftButton, Mode=OneWay}" />
+                                </Button>
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind ViewModel.UploadDraftNotice, Mode=OneWay}"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasUploadDraftNotice), Mode=OneWay}"
+                                       TextWrapping="Wrap"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                       AutomationProperties.AutomationId="txtModStudioAiDraftNotice" />
+
+                            <StackPanel Orientation="Horizontal" Spacing="8">
                                 <TextBlock Text="{x:Bind L.ModstudioUploadMod, Mode=OneWay}" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 <TextBlock Text="{x:Bind ViewModel.UploadModName, Mode=OneWay}" Style="{StaticResource BodyStrongTextBlockStyle}" />
                             </StackPanel>
@@ -632,7 +650,7 @@
                                 </ItemsRepeater.Layout>
                                 <ItemsRepeater.ItemTemplate>
                                     <DataTemplate x:DataType="vm:ModTagOption">
-                                        <CheckBox Content="{x:Bind Name}"
+                                        <CheckBox Content="{x:Bind DisplayName, Mode=OneWay}"
                                                   IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
                                                   Margin="0,0,8,4" />
                                     </DataTemplate>

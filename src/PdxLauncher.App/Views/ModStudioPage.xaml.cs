@@ -45,6 +45,7 @@ public sealed partial class ModStudioPage : Page
                 AppServices.FileSystem,
                 AppServices.Logger,
                 new ModPublicationStore(AppServices.Documents),
+                new ModUploadDraftStore(AppServices.FileSystem, AppServices.DataRoot),
                 new SteamHostClient(AppServices.Logger),
                 new SteamApiLocator(AppServices.FileSystem, AppServices.Logger),
                 AppServices.Settings.SteamApiDllPath),
@@ -158,6 +159,12 @@ public sealed partial class ModStudioPage : Page
         if (Enum.TryParse<ModStudioPane>(state.Pane, ignoreCase: true, out var pane))
         {
             _viewModel.Pane = pane;
+        }
+
+        // 页面是重新建出来的：恢复完页面状态后，再把离开期间 AI 写的新草稿盖上去。
+        if (_viewModel.Pane == ModStudioPane.Upload)
+        {
+            _viewModel.ReloadUploadDraft(notifyWhenMissing: false);
         }
 
         var (target, offset) = _viewModel.Pane switch
@@ -319,6 +326,29 @@ public sealed partial class ModStudioPage : Page
         }
 
         _viewModel.ShowUpload();
+    }
+
+    private async void OnMcpDocsClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await McpDocsDialog.ShowAsync(XamlRoot).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("打开 MCP 文档失败", ex);
+            _viewModel.SetStatus(L.T(Keys.ModstudioMcpDocsFailed, ex.Message));
+        }
+    }
+
+    private void OnReloadUploadDraftClick(object sender, RoutedEventArgs e)
+    {
+        if (!_viewModel.CanEditUploadFields)
+        {
+            return;
+        }
+
+        _viewModel.ReloadUploadDraft();
     }
 
     private void OnRefreshClick(object sender, RoutedEventArgs e)

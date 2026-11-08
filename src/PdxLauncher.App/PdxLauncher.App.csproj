@@ -36,6 +36,14 @@
   <ItemGroup>
     <ProjectReference Include="..\PdxLauncher.Core\PdxLauncher.Core.csproj" />
     <ProjectReference Include="..\PdxLauncher.Imaging\PdxLauncher.Imaging.csproj" />
+    <!--
+      AI 用的独立 MCP 程序只负责构建顺序与把 exe 复制到输出目录；App 不引用它的任何类型，
+      所以 ReferenceOutputAssembly=false，避免把 MCP 的依赖再复制一遍。
+    -->
+    <ProjectReference Include="..\PdxLauncher.Mcp\PdxLauncher.Mcp.csproj"
+                      ReferenceOutputAssembly="false"
+                      Private="false"
+                      Condition="'$(ManualBuild)' != 'true'" />
     <!-- 文案源 .resw → Localizer 属性/Keys 的编译期生成器（不落盘）。 -->
     <ProjectReference Include="..\PdxLauncher.Localization.Generator\PdxLauncher.Localization.Generator.csproj"
                       OutputItemType="Analyzer"
@@ -67,6 +75,37 @@
   </ItemGroup>
 
   <!--
+    把独立 MCP 程序复制到 App 输出目录：MCP 是自包含 exe，但运行时文件（hostfxr/coreclr）
+    App 目录里已经有一份，所以只带 4 个自己的文件即可；AI 客户端直接启动
+    <exe 目录>\PdxLauncher.Mcp.exe。
+  -->
+  <Target Name="CopyMcpHost" AfterTargets="Build" Condition="'$(ManualBuild)' != 'true'">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)..\PdxLauncher.Mcp\PdxLauncher.Mcp.csproj"
+             Targets="GetTargetPath"
+             Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="_McpTargetPath" />
+    </MSBuild>
+
+    <PropertyGroup>
+      <_McpTargetDir>@(_McpTargetPath->'%(RootDir)%(Directory)')</_McpTargetDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <_McpHostFile Include="@(_McpTargetPath)" Condition="Exists('@(_McpTargetPath)')" />
+      <_McpHostFile Include="$(_McpTargetDir)PdxLauncher.Mcp.exe"
+                    Condition="Exists('$(_McpTargetDir)PdxLauncher.Mcp.exe')" />
+      <_McpHostFile Include="$(_McpTargetDir)PdxLauncher.Mcp.deps.json"
+                    Condition="Exists('$(_McpTargetDir)PdxLauncher.Mcp.deps.json')" />
+      <_McpHostFile Include="$(_McpTargetDir)PdxLauncher.Mcp.runtimeconfig.json"
+                    Condition="Exists('$(_McpTargetDir)PdxLauncher.Mcp.runtimeconfig.json')" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(_McpHostFile)"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <!--
     ============================ publish 修复 ============================
     问题：dotnet publish 的产物缺 App.xbf / MainWindow.xbf / Views\*.xbf /
     <AssemblyName>.pri / Assets\，双击 exe 立即退出（退出码 127，无窗口、无日志）。
@@ -94,6 +133,15 @@
       <_WinUIPublishPri Include="$(OutDir)$(AssemblyName).pri" />
       <!-- Assets\（含多级子目录） -->
       <_WinUIPublishAsset Include="$(OutDir)Assets\**\*.*" />
+      <!-- 独立 MCP 程序（由 CopyMcpHost 在 Build 阶段放进 $(OutDir)） -->
+      <_WinUIPublishMcp Include="$(OutDir)PdxLauncher.Mcp.exe"
+                        Condition="Exists('$(OutDir)PdxLauncher.Mcp.exe')" />
+      <_WinUIPublishMcp Include="$(OutDir)PdxLauncher.Mcp.dll"
+                        Condition="Exists('$(OutDir)PdxLauncher.Mcp.dll')" />
+      <_WinUIPublishMcp Include="$(OutDir)PdxLauncher.Mcp.deps.json"
+                        Condition="Exists('$(OutDir)PdxLauncher.Mcp.deps.json')" />
+      <_WinUIPublishMcp Include="$(OutDir)PdxLauncher.Mcp.runtimeconfig.json"
+                        Condition="Exists('$(OutDir)PdxLauncher.Mcp.runtimeconfig.json')" />
     </ItemGroup>
 
     <ItemGroup>
@@ -111,6 +159,9 @@
       </_WinUIPublishXamlArtifact>
       <_WinUIPublishXamlArtifact Include="@(_WinUIPublishAsset)">
         <RelativePath>Assets\%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+      </_WinUIPublishXamlArtifact>
+      <_WinUIPublishXamlArtifact Include="@(_WinUIPublishMcp)">
+        <RelativePath>%(Filename)%(Extension)</RelativePath>
       </_WinUIPublishXamlArtifact>
     </ItemGroup>
 

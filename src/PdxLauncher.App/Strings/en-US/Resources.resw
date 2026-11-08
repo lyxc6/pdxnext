@@ -5510,4 +5510,55 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="WorkshopUpdated" xml:space="preserve">
     <value>Updated {0}</value>
   </data>
+  <data name="ModstudioMcpDocsButton" xml:space="preserve">
+    <value>AI assistant (MCP)</value>
+  </data>
+  <data name="ModstudioMcpReloadDraftButton" xml:space="preserve">
+    <value>Load AI draft</value>
+  </data>
+  <data name="ModstudioMcpDraftApplied" xml:space="preserve">
+    <value>AI draft loaded ({0})</value>
+  </data>
+  <data name="ModstudioMcpDraftNone" xml:space="preserve">
+    <value>No AI draft found</value>
+  </data>
+  <data name="ModstudioMcpDraftOutdated" xml:space="preserve">
+    <value>AI draft is older than the last upload and was ignored</value>
+  </data>
+  <data name="ModstudioMcpDocsTitle" xml:space="preserve">
+    <value>Edit upload content with AI (MCP)</value>
+  </data>
+  <data name="ModstudioMcpDocsIntro" xml:space="preserve">
+    <value>PdxNext ships a standalone MCP program, PdxLauncher.Mcp.exe. AI clients can use it to list games and local mods, then save a draft with title, description, tags and visibility. Come back here and press "Load AI draft"; publishing still requires your confirmation.</value>
+  </data>
+  <data name="ModstudioMcpDocsStepConfig" xml:space="preserve">
+    <value>1. Add the JSON below to your AI client's MCP config (Claude Desktop: %APPDATA%\Claude\claude_desktop_config.json; Cursor: mcp.json).</value>
+  </data>
+  <data name="ModstudioMcpDocsStepRestart" xml:space="preserve">
+    <value>2. Restart the client and confirm pdxnext appears in the tool list (list_games, list_mods, ...).</value>
+  </data>
+  <data name="ModstudioMcpDocsStepAsk" xml:space="preserve">
+    <value>3. Ask the AI to call list_games / list_mods, then save_upload_draft. After it saves, come back and press "Load AI draft".</value>
+  </data>
+  <data name="ModstudioMcpDocsConfigLabel" xml:space="preserve">
+    <value>Client config (JSON)</value>
+  </data>
+  <data name="ModstudioMcpDocsToolsLabel" xml:space="preserve">
+    <value>Available tools</value>
+  </data>
+  <data name="ModstudioMcpDocsToolsBody" xml:space="preserve">
+    <value>list_games · list_mods · list_tags · get_upload_draft · save_upload_draft · clear_upload_draft</value>
+  </data>
+  <data name="ModstudioMcpDocsSafety" xml:space="preserve">
+    <value>The MCP server only reads and writes drafts under data\mcp\upload-drafts. It never publishes on its own and never modifies game or mod files.</value>
+  </data>
+  <data name="ModstudioMcpDocsExeMissing" xml:space="preserve">
+    <value>Cannot find {0}. Rebuild or reinstall before configuring.</value>
+  </data>
+  <data name="ModstudioMcpDocsCopied" xml:space="preserve">
+    <value>Copied</value>
+  </data>
+  <data name="ModstudioMcpDocsFailed" xml:space="preserve">
+    <value>Failed to open MCP documentation: {0}</value>
+  </data>
 </root>
