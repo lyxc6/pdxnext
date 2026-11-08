@@ -92,6 +92,28 @@ public sealed partial class MarkdownView : ContentControl
         set => SetValue(MarkdownProperty, value);
     }
 
+    /// <summary>译文文档（可选，按块与原文配对显示）。</summary>
+    public static readonly DependencyProperty TranslatedMarkdownProperty = DependencyProperty.Register(
+        nameof(TranslatedMarkdown),
+        typeof(MarkdownDocument),
+        typeof(MarkdownView),
+        new PropertyMetadata(null, OnMarkdownChanged));
+
+    /// <summary>
+    /// 译文文档（可选）。块数与 <see cref="Markdown"/> 一致时按「一段原文 + 紧跟一段译文」交替渲染，
+    /// 译文段包在描边框里；为空、结构对不上或单文档场景下只渲染原文。
+    /// <para>
+    /// 配对能成立是因为翻译层逐块翻译（<c>MarkdownTranslator</c> 保证块数/顺序/图片与原文一一对应），
+    /// 视图模型 <c>HasTranslatedResult</c> 也校验过一次。
+    /// </para>
+    /// <para>名字不能叫 Translation：会隐藏 <c>UIElement.Translation</c> 组合位移属性（CS0108）。</para>
+    /// </summary>
+    public MarkdownDocument? TranslatedMarkdown
+    {
+        get => (MarkdownDocument?)GetValue(TranslatedMarkdownProperty);
+        set => SetValue(TranslatedMarkdownProperty, value);
+    }
+
     private static void OnMarkdownChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)
     {
         (sender as MarkdownView)?.Rebuild();
@@ -105,20 +127,36 @@ public sealed partial class MarkdownView : ContentControl
 
         var host = new StackPanel { Spacing = 4 };
         var document = Markdown;
+        var translation = TranslatedMarkdown;
 
         if (document is not null && !document.IsEmpty)
         {
-            foreach (var block in document.Blocks)
+            if (translation is { IsEmpty: false } && translation.Blocks.Count == document.Blocks.Count)
             {
-                var element = BuildBlock(block, 0);
-                if (element is not null)
+                for (var index = 0; index < document.Blocks.Count; index++)
                 {
-                    host.Children.Add(element);
+                    AddElement(host, BuildBlock(document.Blocks[index], 0));
+                    AddElement(host, BuildTranslatedBlock(document.Blocks[index], translation.Blocks[index]));
+                }
+            }
+            else
+            {
+                foreach (var block in document.Blocks)
+                {
+                    AddElement(host, BuildBlock(block, 0));
                 }
             }
         }
 
         Content = host;
+    }
+
+    private static void AddElement(StackPanel host, FrameworkElement? element)
+    {
+        if (element is not null)
+        {
+            host.Children.Add(element);
+        }
     }
 
     private FrameworkElement? BuildBlock(MarkdownBlock block, int depth)
@@ -213,6 +251,92 @@ public sealed partial class MarkdownView : ContentControl
             default:
                 return null;
         }
+    }
+
+    /// <summary>
+    /// 一段译文的显示：沿用详情页原来的描边框样式。原文块里已经出现过的图片会先剥掉，
+    /// 剥完没有可读文字、或译文与原文完全相同（代码块、分隔线、翻译失败保留原文）时返回 null，
+    /// 避免把原文再重复显示一遍。
+    /// </summary>
+    private FrameworkElement? BuildTranslatedBlock(MarkdownBlock original, MarkdownBlock translated)
+    {
+        var display = StripImages(translated);
+        var text = MarkdownDocument.ToPlainText(display);
+        if (text.Length == 0
+            || string.Equals(text, MarkdownDocument.ToPlainText(StripImages(original)), StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var content = BuildBlock(display, 0);
+        if (content is null)
+        {
+            return null;
+        }
+
+        return new Border
+        {
+            Margin = new Thickness(0, 0, 0, 8),
+            Padding = new Thickness(12),
+            CornerRadius = new CornerRadius(8),
+            BorderThickness = new Thickness(1),
+            BorderBrush = LookupBrush("CardStrokeColorDefaultBrush"),
+            Background = LookupBrush("CardBackgroundFillColorDefaultBrush"),
+            Child = content,
+        };
+    }
+
+    /// <summary>去掉块里的行内图片：原文块已经显示过同一张图，译文框里再放一遍只是重复。</summary>
+    private static MarkdownBlock StripImages(MarkdownBlock block) => block switch
+    {
+        MarkdownHeading heading => heading with { Inlines = StripImages(heading.Inlines) },
+        MarkdownParagraph paragraph => paragraph with { Inlines = StripImages(paragraph.Inlines) },
+        MarkdownListItem item => item with { Inlines = StripImages(item.Inlines) },
+        MarkdownQuote quote => quote with { Blocks = quote.Blocks.Select(inner => StripImages(inner)).ToArray() },
+        _ => block,
+    };
+
+    private static IReadOnlyList<MarkdownInline> StripImages(IReadOnlyList<MarkdownInline> inlines)
+    {
+        var result = new List<MarkdownInline>(inlines.Count);
+        foreach (var inline in inlines)
+        {
+            switch (inline)
+            {
+                case MarkdownImageInline:
+                    continue;
+
+                case MarkdownLinkInline link:
+                {
+                    var children = StripImages(link.Inlines);
+
+                    // 链接里只有图片时剥完就没有可读文字，连链接一起丢掉。
+                    if (children.Count > 0)
+                    {
+                        result.Add(link with { Inlines = children });
+                    }
+
+                    break;
+                }
+
+                case MarkdownStyledInline styled:
+                {
+                    var children = StripImages(styled.Inlines);
+                    if (children.Count > 0)
+                    {
+                        result.Add(styled with { Inlines = children });
+                    }
+
+                    break;
+                }
+
+                default:
+                    result.Add(inline);
+                    break;
+            }
+        }
+
+        return result;
     }
 
     private static double HeadingSize(int level) => level switch

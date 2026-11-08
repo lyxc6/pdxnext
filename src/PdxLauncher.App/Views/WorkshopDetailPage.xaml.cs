@@ -79,12 +79,9 @@ public sealed partial class WorkshopDetailPage : Page
 
         // 正文里的行内图片与顶部图片墙共用同一份缓存文件：先把解析器接上，
         // 图片下载完成后再由 GalleryImageReady 原地刷新，不重建整页。
+        // 译文由同一个 MarkdownView 按块交替渲染，不需要再单独接一份解析器。
         DescriptionView.ImageResolver = _viewModel.ResolveImagePath;
         ChangelogView.ImageResolver = _viewModel.ResolveImagePath;
-
-        // 译文视图是另一份 MarkdownView，解析器不会从原文视图继承：漏接就永远显示占位图标。
-        TranslatedDescriptionView.ImageResolver = _viewModel.ResolveImagePath;
-        TranslatedChangelogView.ImageResolver = _viewModel.ResolveImagePath;
         _viewModel.GalleryImageReady += OnGalleryImageReady;
 
         Loaded += OnLoaded;
@@ -95,8 +92,6 @@ public sealed partial class WorkshopDetailPage : Page
     {
         DescriptionView.RefreshImages();
         ChangelogView.RefreshImages();
-        TranslatedDescriptionView.RefreshImages();
-        TranslatedChangelogView.RefreshImages();
 
         foreach (var view in _commentMarkdownViews)
         {

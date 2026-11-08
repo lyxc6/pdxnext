@@ -446,14 +446,18 @@
                         <StackPanel Spacing="8">
                             <TextBlock Text="{x:Bind L.WorkshopDetailDescription, Mode=OneWay}"
                                        Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <!-- 译文按块与原文交替显示：TranslatedMarkdown 交给同一个 MarkdownView，
+                                 每段原文下方紧跟一段描边框译文（见 MarkdownView.BuildTranslatedBlock）。 -->
                             <ctl:MarkdownView x:Name="DescriptionView"
                                               Markdown="{x:Bind ViewModel.DescriptionDocument, Mode=OneWay}"
+                                              TranslatedMarkdown="{x:Bind ViewModel.TranslatedDescriptionDocument, Mode=OneWay}"
                                               LinkRequested="OnMarkdownLinkRequested"
                                               ImageRequested="OnMarkdownImageRequested"
                                               AutomationProperties.AutomationId="txtWorkshopDetailDescription"
                                               AutomationProperties.Name="{x:Bind ViewModel.DescriptionText, Mode=OneWay}"
                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasDescription), Mode=OneWay}" />
-                            <!-- 翻译在途：等译文时先在译文位置显示环形进度 + 说明，译好原地替换（原文始终可见）。 -->
+                            <!-- 翻译在途：原文照常显示，先在原文下方给一条环形进度；译文到达后自动隐藏，
+                                 译文由上面的 MarkdownView 按块插回各段原文之后。 -->
                             <Border Margin="0,8,0,0"
                                     Padding="12"
                                     CornerRadius="8"
@@ -473,21 +477,6 @@
                                                AutomationProperties.AutomationId="txtTranslatingDescription"
                                                AutomationProperties.LiveSetting="Polite" />
                                 </StackPanel>
-                            </Border>
-                            <!-- 译文：原文与译文同显，译文块放在原文下方的描边框里（决策：不做二选一切换；只显示译文正文，不加「译文」标题）。 -->
-                            <Border Margin="0,8,0,0"
-                                    Padding="12"
-                                    CornerRadius="8"
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1"
-                                    Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasTranslatedDescription), Mode=OneWay}">
-                                <ctl:MarkdownView x:Name="TranslatedDescriptionView"
-                                                  Markdown="{x:Bind ViewModel.TranslatedDescriptionDocument, Mode=OneWay}"
-                                                  LinkRequested="OnMarkdownLinkRequested"
-                                                  ImageRequested="OnMarkdownImageRequested"
-                                                  AutomationProperties.AutomationId="txtWorkshopDetailTranslatedDescription"
-                                                  AutomationProperties.Name="{x:Bind ViewModel.TranslatedDescriptionText, Mode=OneWay}" />
                             </Border>
                             <TextBlock Text="{x:Bind L.WorkshopDetailNoDescription, Mode=OneWay}"
                                        Style="{StaticResource CaptionTextBlockStyle}"
@@ -566,12 +555,14 @@
                         <StackPanel Spacing="8">
                             <TextBlock Text="{x:Bind L.WorkshopDetailChangelog, Mode=OneWay}"
                                        Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <!-- 译文与描述同规则：按块交替显示，每段原文下方紧跟一段描边框译文。 -->
                             <ctl:MarkdownView x:Name="ChangelogView"
                                               Markdown="{x:Bind ViewModel.ChangelogDocument, Mode=OneWay}"
+                                              TranslatedMarkdown="{x:Bind ViewModel.TranslatedChangelogDocument, Mode=OneWay}"
                                               LinkRequested="OnMarkdownLinkRequested"
                                               ImageRequested="OnMarkdownImageRequested"
                                               AutomationProperties.AutomationId="txtWorkshopDetailChangelog" />
-                            <!-- 翻译在途：更新日志也是一次整篇翻译，先在译文位置给一条带文字的环形进度。 -->
+                            <!-- 翻译在途：原文照常显示，先在原文下方给一条环形进度；译文到达后自动隐藏。 -->
                             <Border Margin="0,8,0,0"
                                     Padding="12"
                                     CornerRadius="8"
@@ -591,20 +582,6 @@
                                                AutomationProperties.AutomationId="txtTranslatingChangelog"
                                                AutomationProperties.LiveSetting="Polite" />
                                 </StackPanel>
-                            </Border>
-                            <!-- 译文：原文与译文同显，译文放在描边框里（只显示译文正文，不加「译文」标题）。 -->
-                            <Border Margin="0,8,0,0"
-                                    Padding="12"
-                                    CornerRadius="8"
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1"
-                                    Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasTranslatedChangelog), Mode=OneWay}">
-                                <ctl:MarkdownView x:Name="TranslatedChangelogView"
-                                                  Markdown="{x:Bind ViewModel.TranslatedChangelogDocument, Mode=OneWay}"
-                                                  LinkRequested="OnMarkdownLinkRequested"
-                                                  ImageRequested="OnMarkdownImageRequested"
-                                                  AutomationProperties.AutomationId="txtWorkshopDetailTranslatedChangelog" />
                             </Border>
                         </StackPanel>
                     </Border>

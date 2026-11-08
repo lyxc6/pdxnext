@@ -105,6 +105,15 @@ public static class WorkshopRichTextChecks
         ChecksContext.Check("纯文本含链接地址", plain.Contains("https://example.com/x", StringComparison.Ordinal), plain);
         ChecksContext.Check("纯文本含粗体文字", plain.Contains("粗体", StringComparison.Ordinal), plain);
         ChecksContext.Check("纯文本不含星号", !plain.Contains("**", StringComparison.Ordinal), plain);
+
+        // 单块纯文本：详情页把原文/译文按块配对时，用它判断这一段是否真的翻出了不同内容。
+        var paragraphText = MarkdownDocument.ToPlainText(document.Blocks[1]);
+        ChecksContext.Check("单块纯文本含段落文字", paragraphText.Contains("粗体", StringComparison.Ordinal), paragraphText);
+        ChecksContext.Check("单块纯文本不含星号", !paragraphText.Contains("**", StringComparison.Ordinal), paragraphText);
+        ChecksContext.Equal(
+            "代码块单块纯文本保留原文",
+            "let x = 1;",
+            MarkdownDocument.ToPlainText(new MarkdownCodeBlock("let x = 1;", "csharp")));
     }
 
     /// <summary>超长描述必须截断并打标记，避免一屏渲染几万字。</summary>
