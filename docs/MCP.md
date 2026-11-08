@@ -17,6 +17,9 @@ PdxNext 附带一个独立的 stdio MCP 程序 `PdxLauncher.Mcp.exe`，让 Claud
 `PdxLauncher.Mcp.exe` 由 App 的构建目标复制到 App 输出目录；`publish.cmd` 和安装包
 会把它一起带上。它不启动 WinUI，也不加载 Steam，只引用 `PdxLauncher.Core`。
 
+入口在 Mod 创建页顶部搜索框右侧的「AI 助手（MCP）」按钮：点开是导入步骤、可复制的
+客户端配置和工具列表。
+
 ## 2. 客户端配置
 
 MCP 程序与 `PdxLauncher.App.exe` 在同一目录。启动器上传面板的「AI 助手（MCP）」
