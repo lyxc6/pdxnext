@@ -35,6 +35,12 @@ public sealed class SteamWorkshopClient
     /// <summary><c>num_per_page</c> 的安全上限。</summary>
     public const int MaxPageSize = 50;
 
+    /// <summary>批量详情单次请求的 id 数（保守值；服务端对 <c>itemcount</c> 没有公开上限）。</summary>
+    public const int DetailBatchSize = 100;
+
+    /// <summary>一次批量详情最多取多少条，避免异常合集把请求数放大到不可控。</summary>
+    public const int MaxDetailBatch = 1000;
+
     /// <summary>appdetails 里代表创意工坊的分类名。</summary>
     public const string WorkshopCategory = "Steam Workshop";
 
@@ -91,7 +97,8 @@ public sealed class SteamWorkshopClient
 
         var builder = new StringBuilder(OnlineHosts.SteamWorkshopBrowseEndpoint.AbsoluteUri);
         builder.Append("?appid=").Append(appId.ToString(CultureInfo.InvariantCulture));
-        builder.Append("&section=readytouseitems&browsesort=").Append(sort);
+        builder.Append("&section=").Append(SectionValue(query.Section));
+        builder.Append("&browsesort=").Append(sort);
         builder.Append("&num_per_page=").Append(pageSize.ToString(CultureInfo.InvariantCulture));
         builder.Append("&p=").Append(page.ToString(CultureInfo.InvariantCulture));
         if (hasKeyword)
@@ -351,6 +358,87 @@ public sealed class SteamWorkshopClient
         {
             _logger.Warn("Steam 创意工坊详情解析失败: " + ex.Message);
             return AppResult<SteamWorkshopItemDetail>.Fail(ErrorKind.Io, "steam-workshop-detail-bad-json");
+        }
+    }
+
+    /// <summary>
+    /// 批量取多个条目的详情（合集子项用）。
+    /// <para>
+    /// <c>GetPublishedFileDetails</c> 支持一次请求多个 id（<c>itemcount</c> +
+    /// <c>publishedfileids[i]</c>），合集有几十项时比逐条请求省掉 N-1 次往返。
+    /// 单批上限取 100（保守值），超过就分多批串行取；主机限流层本来也按 250ms 间隔排。
+    /// </para>
+    /// </summary>
+    /// <param name="publishedFileIds">要取的条目 id 列表（会自动去空白、去重、截断到 <see cref="MaxDetailBatch"/>）。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public Task<AppResult<IReadOnlyList<SteamWorkshopItemDetail>>> GetDetailsAsync(
+        IReadOnlyList<string> publishedFileIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(publishedFileIds);
+
+        var ids = publishedFileIds
+            .Where(static id => !string.IsNullOrWhiteSpace(id))
+            .Select(static id => id.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .Take(MaxDetailBatch)
+            .ToArray();
+
+        if (ids.Length == 0)
+        {
+            return Task.FromResult(AppResult<IReadOnlyList<SteamWorkshopItemDetail>>.Ok([]));
+        }
+
+        var key = "details:" + string.Join('|', ids);
+        return _coalesce.RunAsync(key, ct => GetDetailsCoreAsync(ids, ct), cancellationToken);
+    }
+
+    private async Task<AppResult<IReadOnlyList<SteamWorkshopItemDetail>>> GetDetailsCoreAsync(
+        string[] ids,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var details = new List<SteamWorkshopItemDetail>(ids.Length);
+            for (var offset = 0; offset < ids.Length; offset += DetailBatchSize)
+            {
+                var count = Math.Min(DetailBatchSize, ids.Length - offset);
+                var body = new StringBuilder("itemcount=").Append(count.ToString(CultureInfo.InvariantCulture));
+                for (var index = 0; index < count; index++)
+                {
+                    body.Append("&publishedfileids[")
+                        .Append(index.ToString(CultureInfo.InvariantCulture))
+                        .Append("]=")
+                        .Append(Uri.EscapeDataString(ids[offset + index]));
+                }
+
+                var text = await _http
+                    .PostFormAsync(OnlineHosts.SteamPublishedFileDetailsEndpoint, body.ToString(), cancellationToken)
+                    .ConfigureAwait(false);
+                details.AddRange(ParseDetails(text));
+            }
+
+            return AppResult<IReadOnlyList<SteamWorkshopItemDetail>>.Ok(details);
+        }
+        catch (NetworkTimeoutException ex)
+        {
+            _logger.Warn("Steam 创意工坊批量详情连接失败: " + ex.Message);
+            return AppResult<IReadOnlyList<SteamWorkshopItemDetail>>.Fail(ErrorKind.Unknown, "steam-workshop-network");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.Warn("Steam 创意工坊批量详情连接超时");
+            return AppResult<IReadOnlyList<SteamWorkshopItemDetail>>.Fail(ErrorKind.Unknown, "steam-workshop-network");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.Warn("Steam 创意工坊批量详情请求失败: " + ex.Message);
+            return AppResult<IReadOnlyList<SteamWorkshopItemDetail>>.Fail(ErrorKind.Unknown, "steam-workshop-detail-http");
+        }
+        catch (JsonException ex)
+        {
+            _logger.Warn("Steam 创意工坊批量详情解析失败: " + ex.Message);
+            return AppResult<IReadOnlyList<SteamWorkshopItemDetail>>.Fail(ErrorKind.Io, "steam-workshop-detail-bad-json");
         }
     }
 
@@ -692,26 +780,104 @@ public sealed class SteamWorkshopClient
                 return (null, result);
             }
 
-            var detail = new SteamWorkshopItemDetail(
-                PublishedFileId: StringOf(item, "publishedfileid") ?? string.Empty,
-                Title: StringOf(item, "title") ?? string.Empty,
-                Description: StringOf(item, "description") ?? StringOf(item, "file_description") ?? string.Empty,
-                PreviewUrl: StringOf(item, "preview_url"),
-                FileSizeBytes: LongOf(item, "file_size"),
-                CreatedUtc: FromUnixSeconds(LongOf(item, "time_created")),
-                UpdatedUtc: FromUnixSeconds(LongOf(item, "time_updated")),
-                Filename: StringOf(item, "filename"),
-                CreatorSteamId: StringOf(item, "creator"),
-                Tags: TagsOf(item),
-                Views: LongOf(item, "views"),
-                LifetimeSubscriptions: LongOf(item, "lifetime_subscriptions"));
-
-            return (detail, result);
+            return (ParseDetailNode(item), result);
         }
         catch (JsonException)
         {
             return (null, ResultUnknown);
         }
+    }
+
+    /// <summary>
+    /// 批量解析 <c>GetPublishedFileDetails</c> 响应（合集子项用）。
+    /// 只返回 <c>result=1</c> 的条目，顺序与响应一致；解析失败返回空列表，绝不抛异常。
+    /// </summary>
+    /// <param name="json">响应正文。</param>
+    public static IReadOnlyList<SteamWorkshopItemDetail> ParseDetails(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            if (JsonNode.Parse(json)?["response"]?["publishedfiledetails"] is not JsonArray array
+                || array.Count == 0)
+            {
+                return [];
+            }
+
+            var details = new List<SteamWorkshopItemDetail>(array.Count);
+            foreach (var node in array)
+            {
+                if (node is not JsonObject item)
+                {
+                    continue;
+                }
+
+                var raw = LongOf(item, "result");
+                var result = raw > 0 ? (int)Math.Min(raw, int.MaxValue) : 1;
+                if (result == 1)
+                {
+                    details.Add(ParseDetailNode(item));
+                }
+            }
+
+            return details;
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>把响应里的一个条目节点映射成详情模型。</summary>
+    private static SteamWorkshopItemDetail ParseDetailNode(JsonObject item) => new(
+        PublishedFileId: StringOf(item, "publishedfileid") ?? string.Empty,
+        Title: StringOf(item, "title") ?? string.Empty,
+        Description: StringOf(item, "description") ?? StringOf(item, "file_description") ?? string.Empty,
+        PreviewUrl: StringOf(item, "preview_url"),
+        FileSizeBytes: LongOf(item, "file_size"),
+        CreatedUtc: FromUnixSeconds(LongOf(item, "time_created")),
+        UpdatedUtc: FromUnixSeconds(LongOf(item, "time_updated")),
+        Filename: StringOf(item, "filename"),
+        CreatorSteamId: StringOf(item, "creator"),
+        Tags: TagsOf(item),
+        Views: LongOf(item, "views"),
+        LifetimeSubscriptions: LongOf(item, "lifetime_subscriptions"),
+        FileType: (int)LongOf(item, "file_type"),
+        Children: ChildrenOf(item),
+        ConsumerAppId: (int)LongOf(item, "consumer_app_id"));
+
+    /// <summary>取合集的子项列表（<c>children[].publishedfileid</c> + <c>sortorder</c>）。</summary>
+    private static IReadOnlyList<SteamWorkshopCollectionChild> ChildrenOf(JsonObject item)
+    {
+        if (item["children"] is not JsonArray children)
+        {
+            return [];
+        }
+
+        var list = new List<SteamWorkshopCollectionChild>(children.Count);
+        foreach (var entry in children)
+        {
+            if (entry is not JsonObject child)
+            {
+                continue;
+            }
+
+            var id = StringOf(child, "publishedfileid");
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                continue;
+            }
+
+            list.Add(new SteamWorkshopCollectionChild(id, (int)LongOf(child, "sortorder")));
+        }
+
+        // 服务端偶尔不按 sortorder 返回；合集展示顺序以它为准，所以这里排一次。
+        list.Sort(static (left, right) => left.SortOrder.CompareTo(right.SortOrder));
+        return list;
     }
 
     /// <summary>响应里既没有 result 字段、也解析不出条目时用的哨兵值。</summary>
@@ -749,6 +915,10 @@ public sealed class SteamWorkshopClient
 
     private static bool SupportsDays(SteamWorkshopSort sort) =>
         sort is SteamWorkshopSort.Trend or SteamWorkshopSort.TopRated;
+
+    /// <summary>浏览区段对应的 <c>section</c> 值（Steam 网页实测值）。</summary>
+    private static string SectionValue(SteamWorkshopSection section) =>
+        section == SteamWorkshopSection.Collections ? "collections" : "readytouseitems";
 
     private static string SortValue(SteamWorkshopSort sort) => sort switch
     {

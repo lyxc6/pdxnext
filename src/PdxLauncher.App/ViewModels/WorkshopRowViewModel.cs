@@ -43,7 +43,8 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
         string webUrl,
         string? steamUrl,
         SteamWorkshopItem? steamItem,
-        PdxModsSummary? pdxSummary)
+        PdxModsSummary? pdxSummary,
+        bool isCollection = false)
     {
         Source = source;
         Id = id;
@@ -59,7 +60,17 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
         SteamUrl = steamUrl;
         SteamItem = steamItem;
         PdxSummary = pdxSummary;
+        IsCollection = isCollection;
     }
+
+    /// <summary>这行是不是 Steam 合集（列表页按区段判断，详情按 <c>file_type=2</c>）。</summary>
+    public bool IsCollection { get; }
+
+    /// <summary>是否显示「合集」徽标。</summary>
+    public bool ShowCollectionBadge => IsCollection;
+
+    /// <summary>「合集」徽标文案。</summary>
+    public string CollectionBadgeText => T(Keys.WorkshopCollectionBadge);
 
     /// <summary>这行来自哪个平台。</summary>
     public WorkshopSource Source { get; }
@@ -149,7 +160,11 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
     /// <summary>从 Steam 列表条目建一行。</summary>
     /// <param name="item">Steam 条目。</param>
     /// <param name="thumbnailSize">封面边长（像素）。</param>
-    public static WorkshopRowViewModel FromSteam(SteamWorkshopItem item, int thumbnailSize)
+    /// <param name="isCollection">是否是合集列表里的行（SSR 不一定给 <c>file_type</c>，按浏览区段兜底）。</param>
+    public static WorkshopRowViewModel FromSteam(
+        SteamWorkshopItem item,
+        int thumbnailSize,
+        bool isCollection = false)
     {
         ArgumentNullException.ThrowIfNull(item);
 
@@ -187,6 +202,78 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
             SteamWorkshop.GetBrowserAddress(item.PublishedFileId) ?? string.Empty,
             SteamWorkshop.GetSteamAddress(item.PublishedFileId),
             item,
+            null,
+            isCollection || item.IsCollection);
+    }
+
+    /// <summary>
+    /// 从 <c>GetPublishedFileDetails</c> 的详情建一行（合集子项列表用）。
+    /// 详情没有评分/当前订阅数，副标题就只显示作者与体积；这些行只用于展示与跳转。
+    /// </summary>
+    /// <param name="detail">子项详情。</param>
+    /// <param name="thumbnailSize">封面边长（像素）。</param>
+    public static WorkshopRowViewModel FromSteamDetail(SteamWorkshopItemDetail detail, int thumbnailSize)
+    {
+        ArgumentNullException.ThrowIfNull(detail);
+
+        var author = string.IsNullOrWhiteSpace(detail.CreatorSteamId)
+            ? string.Empty
+            : T(Keys.WorkshopAuthor, detail.CreatorSteamId);
+        var updated = detail.UpdatedUtc > DateTimeOffset.UnixEpoch
+            ? T(Keys.WorkshopUpdated, detail.UpdatedUtc.ToLocalTime().ToString("yyyy/MM/dd", CultureInfo.InvariantCulture))
+            : null;
+        var size = detail.FileSizeBytes > 0
+            ? T(Keys.WorkshopSize, ModSizeText.Format(detail.FileSizeBytes))
+            : null;
+
+        return new WorkshopRowViewModel(
+            WorkshopSource.Steam,
+            detail.PublishedFileId,
+            detail.Title,
+            author,
+            null,
+            null,
+            updated,
+            size,
+            detail.PreviewUrl,
+            thumbnailSize,
+            SteamWorkshop.GetBrowserAddress(detail.PublishedFileId) ?? string.Empty,
+            SteamWorkshop.GetSteamAddress(detail.PublishedFileId),
+            null,
+            null,
+            detail.IsCollection);
+    }
+
+    /// <summary>
+    /// 从合集物品页解析出的子项建一行。作者只有显示名（页面不给 SteamID），也没有评分/体积，
+    /// 所以副标题只显示作者；这些行用于合集内容列表与跳转子项详情。
+    /// </summary>
+    /// <param name="item">物品页上的子项。</param>
+    /// <param name="thumbnailSize">封面边长（像素）。</param>
+    public static WorkshopRowViewModel FromSteamCollectionItem(
+        SteamWorkshopCollectionItemPage item,
+        int thumbnailSize)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        var author = string.IsNullOrWhiteSpace(item.AuthorName)
+            ? string.Empty
+            : T(Keys.WorkshopAuthor, item.AuthorName!);
+
+        return new WorkshopRowViewModel(
+            WorkshopSource.Steam,
+            item.PublishedFileId,
+            item.Title,
+            author,
+            null,
+            null,
+            null,
+            null,
+            item.PreviewUrl,
+            thumbnailSize,
+            SteamWorkshop.GetBrowserAddress(item.PublishedFileId) ?? string.Empty,
+            SteamWorkshop.GetSteamAddress(item.PublishedFileId),
+            null,
             null);
     }
 
@@ -237,7 +324,11 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
     /// </summary>
     /// <param name="entry">缓存条目。</param>
     /// <param name="thumbnailSize">封面边长（像素）。</param>
-    public static WorkshopRowViewModel FromCache(WorkshopInfoCacheEntry entry, int thumbnailSize)
+    /// <param name="isCollection">是否是合集列表里的行（页缓存按区段隔离，可直接沿用）。</param>
+    public static WorkshopRowViewModel FromCache(
+        WorkshopInfoCacheEntry entry,
+        int thumbnailSize,
+        bool isCollection = false)
     {
         ArgumentNullException.ThrowIfNull(entry);
 
@@ -278,7 +369,8 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
                 : PdxWebPrefix + entry.Id,
             isSteam ? SteamWorkshop.GetSteamAddress(entry.Id) : null,
             null,
-            null);
+            null,
+            isSteam && isCollection);
     }
 
     /// <summary>

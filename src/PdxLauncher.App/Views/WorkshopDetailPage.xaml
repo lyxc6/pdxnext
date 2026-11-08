@@ -329,6 +329,12 @@
                                            TextWrapping="Wrap"
                                            AutomationProperties.AutomationId="txtWorkshopDetailSteamSubscribeHint"
                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasSteamSubscribeHint), Mode=OneWay}" />
+                                <TextBlock Text="{x:Bind ViewModel.CollectionSubscribeHint, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           TextWrapping="Wrap"
+                                           AutomationProperties.AutomationId="txtWorkshopDetailCollectionSubscribeHint"
+                                           Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasCollectionSubscribeHint), Mode=OneWay}" />
                                 <TextBlock Text="{x:Bind ViewModel.SteamUnavailableReason, Mode=OneWay}"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
@@ -466,6 +472,79 @@
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        TextWrapping="Wrap"
                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowNoDescription), Mode=OneWay}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 4.5 合集内容（Steam 合集才有）：子项按服务端 sortorder 排列，点一行进子项详情。 -->
+                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8"
+                            MaxWidth="992"
+                            Padding="16"
+                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowCollectionCard), Mode=OneWay}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="{x:Bind L.WorkshopDetailCollectionTitle, Mode=OneWay}"
+                                       Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="{x:Bind ViewModel.CollectionSummaryText, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           VerticalAlignment="Center"
+                                           AutomationProperties.AutomationId="txtWorkshopCollectionSummary"
+                                           Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasCollectionSummary), Mode=OneWay}" />
+                                <ProgressRing Width="16"
+                                              Height="16"
+                                              IsActive="{x:Bind ViewModel.IsLoadingCollection, Mode=OneWay}"
+                                              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsLoadingCollection), Mode=OneWay}" />
+                            </StackPanel>
+                            <TextBlock Text="{x:Bind ViewModel.CollectionStatusText, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       TextWrapping="Wrap"
+                                       AutomationProperties.AutomationId="txtWorkshopCollectionStatus"
+                                       AutomationProperties.LiveSetting="Polite"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasCollectionStatus), Mode=OneWay}" />
+                            <ListView ItemsSource="{x:Bind ViewModel.CollectionItems, Mode=OneWay}"
+                                      SelectionMode="None"
+                                      IsItemClickEnabled="True"
+                                      ItemClick="OnCollectionItemClick"
+                                      AutomationProperties.AutomationId="lstWorkshopCollectionItems">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:WorkshopRowViewModel">
+                                        <Grid Padding="4,8"
+                                              ColumnSpacing="8"
+                                              AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
+                                              AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <FontIcon Grid.Column="0"
+                                                      Glyph="&#xE8B9;"
+                                                      FontSize="16"
+                                                      VerticalAlignment="Center" />
+                                            <StackPanel Grid.Column="1" Spacing="4">
+                                                <TextBlock Text="{x:Bind Name, Mode=OneTime}"
+                                                           Style="{StaticResource BodyTextBlockStyle}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{x:Bind SubtitleText, Mode=OneWay}"
+                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Visibility="{x:Bind svc:XamlVisibility.FromString(SubtitleText), Mode=OneWay}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{x:Bind SizeText, Mode=OneWay}"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                       VerticalAlignment="Center"
+                                                       Visibility="{x:Bind svc:XamlVisibility.FromString(SizeText), Mode=OneWay}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
                         </StackPanel>
                     </Border>
 

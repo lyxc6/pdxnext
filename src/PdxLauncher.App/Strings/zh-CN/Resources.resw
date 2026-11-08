@@ -4646,6 +4646,9 @@
   <data name="WorkshopAuthor" xml:space="preserve">
     <value>作者 {0}</value>
   </data>
+  <data name="WorkshopCollectionBadge" xml:space="preserve">
+    <value>合集</value>
+  </data>
   <data name="WorkshopCommentsClosed" xml:space="preserve">
     <value>这个 mod 没有可显示的评论</value>
   </data>
@@ -4706,6 +4709,9 @@
   <data name="WorkshopDetailBackLibrary" xml:space="preserve">
     <value>返回 Mod 库</value>
   </data>
+  <data name="WorkshopDetailBackCollection" xml:space="preserve">
+    <value>返回合集</value>
+  </data>
   <data name="WorkshopDetailCached" xml:space="preserve">
     <value>网络不可用，显示上次缓存的详情</value>
   </data>
@@ -4714,6 +4720,24 @@
   </data>
   <data name="WorkshopDetailCloseViewer" xml:space="preserve">
     <value>关闭大图</value>
+  </data>
+  <data name="WorkshopDetailCollectionEmpty" xml:space="preserve">
+    <value>这个合集里没有可显示的项目</value>
+  </data>
+  <data name="WorkshopDetailCollectionFailed" xml:space="preserve">
+    <value>合集内容加载失败</value>
+  </data>
+  <data name="WorkshopDetailCollectionLoading" xml:space="preserve">
+    <value>正在加载合集内容…</value>
+  </data>
+  <data name="WorkshopDetailCollectionSubscribeHint" xml:space="preserve">
+    <value>订阅合集会由 Steam 一并订阅其中全部项目</value>
+  </data>
+  <data name="WorkshopDetailCollectionSummary" xml:space="preserve">
+    <value>共 {0} 项</value>
+  </data>
+  <data name="WorkshopDetailCollectionTitle" xml:space="preserve">
+    <value>合集内容</value>
   </data>
   <data name="WorkshopDetailComments" xml:space="preserve">
     <value>讨论</value>
@@ -4942,6 +4966,15 @@
   </data>
   <data name="WorkshopSearchPlaceholder" xml:space="preserve">
     <value>搜索创意工坊内容（回车搜索）</value>
+  </data>
+  <data name="WorkshopSectionCollections" xml:space="preserve">
+    <value>合集</value>
+  </data>
+  <data name="WorkshopSectionItems" xml:space="preserve">
+    <value>项目</value>
+  </data>
+  <data name="WorkshopSectionName" xml:space="preserve">
+    <value>浏览类型</value>
   </data>
   <data name="WorkshopSignInAction" xml:space="preserve">
     <value>去登录</value>

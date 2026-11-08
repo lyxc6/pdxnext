@@ -34,6 +34,9 @@ public sealed partial class WorkshopDetailPage : Page
 
     private WorkshopRowViewModel? _row;
 
+    /// <summary>上级合集（从合集内容点进来的子项）；返回时先回它，null 表示直接回列表页。</summary>
+    private WorkshopRowViewModel? _parentRow;
+
     /// <summary>
     /// 「返回」要回到的页面 Tag；由发起方在导航参数里指定。
     /// 写死回创意工坊列表会让从 Mod 库进来的用户被甩到别的页面，所以缺值才回落 <see cref="NavigationService.WorkshopTag"/>。
@@ -170,6 +173,9 @@ public sealed partial class WorkshopDetailPage : Page
     /// <summary>需要导航到别处（例如返回创意工坊列表）时触发。</summary>
     public event EventHandler<string>? NavigationRequested;
 
+    /// <summary>从合集内容里点了一条子项：请外壳打开这条子项的详情。</summary>
+    public event EventHandler<WorkshopDetailNavigationRequest>? DetailRequested;
+
     /// <inheritdoc />
     protected override void OnNavigatedTo(NavigationEventArgs e)
     {
@@ -177,10 +183,12 @@ public sealed partial class WorkshopDetailPage : Page
 
         // 参数可能是「行 + 返回目标」的请求，也可能只是那一行；缺失时页面只显示空壳并报错，不做静默兜底。
         _returnTag = null;
+        _parentRow = null;
         if (e.Parameter is WorkshopDetailNavigationRequest request)
         {
             _row = request.Row;
             _returnTag = request.ReturnTag;
+            _parentRow = request.Parent;
         }
         else
         {
@@ -236,7 +244,7 @@ public sealed partial class WorkshopDetailPage : Page
 
         try
         {
-            await _viewModel.LoadAsync(row, _lifetime.Token, _returnTag);
+            await _viewModel.LoadAsync(row, _lifetime.Token, _returnTag, _parentRow);
         }
         catch (OperationCanceledException)
         {
@@ -289,8 +297,29 @@ public sealed partial class WorkshopDetailPage : Page
 
     private void OnBackClick(object sender, RoutedEventArgs e)
     {
+        // 从合集内容点进来的子项：先回上级合集详情，再点一次才回列表页。
+        if (_parentRow is not null)
+        {
+            DetailRequested?.Invoke(this, new WorkshopDetailNavigationRequest(_parentRow, _returnTag));
+            return;
+        }
+
         // 回到发起方那一页；没有带返回目标（裸行参数）时才回落创意工坊列表。
         NavigationRequested?.Invoke(this, _returnTag ?? NavigationService.WorkshopTag);
+    }
+
+    /// <summary>合集内容里点了一条：交给外壳打开它的详情（返回目标仍是本页的上层列表）。</summary>
+    private void OnCollectionItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is not WorkshopRowViewModel row)
+        {
+            return;
+        }
+
+        // 当前条目就是子项的上级：子项详情的「返回」先回到这里。
+        DetailRequested?.Invoke(
+            this,
+            new WorkshopDetailNavigationRequest(row, _returnTag, _viewModel.Row));
     }
 
     private void OnOpenBrowserClick(object sender, RoutedEventArgs e)

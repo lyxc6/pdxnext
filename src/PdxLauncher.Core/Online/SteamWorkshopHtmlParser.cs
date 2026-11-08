@@ -517,7 +517,30 @@ public static class SteamWorkshopHtmlParser
             Tags: tags,
             StarRating: GetDouble(item, "star_rating"),
             TotalVotes: (int)GetLong(item, "total_votes"),
-            ConsumerAppId: (int)GetLong(item, "consumer_appid"));
+            ConsumerAppId: (int)GetLong(item, "consumer_appid"),
+            FileType: GetFileType(item),
+            ChildCount: GetChildCount(item));
+    }
+
+    /// <summary>
+    /// 读条目类型。SSR 的键名在不同页面版本里出现过 <c>file_type</c> / <c>filetype</c> 两种写法；
+    /// 两个都没有时返回 0（普通条目），合集列表页仍会按区段把整页标成合集，不会误判。
+    /// </summary>
+    private static int GetFileType(JsonObject item)
+    {
+        var direct = GetInt(item, "file_type");
+        return direct != 0 ? direct : GetInt(item, "filetype");
+    }
+
+    /// <summary>读合集子项数量：优先数 <c>children</c> 数组，其次读 <c>num_children</c>。</summary>
+    private static int GetChildCount(JsonObject item)
+    {
+        if (item["children"] is JsonArray children)
+        {
+            return children.Count;
+        }
+
+        return GetInt(item, "num_children");
     }
 
     private static DateTimeOffset FromUnixSeconds(long seconds)

@@ -9,4 +9,11 @@ namespace PdxLauncher.App.ViewModels;
 /// </summary>
 /// <param name="Row">要展示的那一行（已经归一成详情页认识的形状）。</param>
 /// <param name="ReturnTag">返回后要去导航的页面 Tag；null 表示沿用默认（创意工坊列表）。</param>
-public sealed record WorkshopDetailNavigationRequest(WorkshopRowViewModel Row, string? ReturnTag);
+/// <param name="Parent">
+/// 上级条目（从合集内容点进子项时是合集本身）。非 null 时「返回」先回上级条目详情，
+/// 而不是直接跳回创意工坊列表。
+/// </param>
+public sealed record WorkshopDetailNavigationRequest(
+    WorkshopRowViewModel Row,
+    string? ReturnTag,
+    WorkshopRowViewModel? Parent = null);

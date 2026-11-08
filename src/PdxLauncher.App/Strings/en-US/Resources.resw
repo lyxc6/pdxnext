@@ -4646,6 +4646,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="WorkshopAuthor" xml:space="preserve">
     <value>by {0}</value>
   </data>
+  <data name="WorkshopCollectionBadge" xml:space="preserve">
+    <value>Collection</value>
+  </data>
   <data name="WorkshopCommentsClosed" xml:space="preserve">
     <value>This item has no comments</value>
   </data>
@@ -4706,6 +4709,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="WorkshopDetailBackLibrary" xml:space="preserve">
     <value>Back to Mod library</value>
   </data>
+  <data name="WorkshopDetailBackCollection" xml:space="preserve">
+    <value>Back to collection</value>
+  </data>
   <data name="WorkshopDetailCached" xml:space="preserve">
     <value>The network is unavailable; showing the cached details</value>
   </data>
@@ -4714,6 +4720,24 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="WorkshopDetailCloseViewer" xml:space="preserve">
     <value>Close image</value>
+  </data>
+  <data name="WorkshopDetailCollectionEmpty" xml:space="preserve">
+    <value>This collection has no items to show</value>
+  </data>
+  <data name="WorkshopDetailCollectionFailed" xml:space="preserve">
+    <value>Failed to load collection items</value>
+  </data>
+  <data name="WorkshopDetailCollectionLoading" xml:space="preserve">
+    <value>Loading collection items…</value>
+  </data>
+  <data name="WorkshopDetailCollectionSubscribeHint" xml:space="preserve">
+    <value>Subscribing to a collection subscribes to all of its items in Steam</value>
+  </data>
+  <data name="WorkshopDetailCollectionSummary" xml:space="preserve">
+    <value>{0} items</value>
+  </data>
+  <data name="WorkshopDetailCollectionTitle" xml:space="preserve">
+    <value>Collection items</value>
   </data>
   <data name="WorkshopDetailComments" xml:space="preserve">
     <value>Discussion</value>
@@ -4942,6 +4966,15 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="WorkshopSearchPlaceholder" xml:space="preserve">
     <value>Search workshop items (press Enter)</value>
+  </data>
+  <data name="WorkshopSectionCollections" xml:space="preserve">
+    <value>Collections</value>
+  </data>
+  <data name="WorkshopSectionItems" xml:space="preserve">
+    <value>Items</value>
+  </data>
+  <data name="WorkshopSectionName" xml:space="preserve">
+    <value>Browse type</value>
   </data>
   <data name="WorkshopSignInAction" xml:space="preserve">
     <value>Sign in</value>

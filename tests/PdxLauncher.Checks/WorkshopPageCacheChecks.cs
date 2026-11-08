@@ -46,14 +46,20 @@ public static class WorkshopPageCacheChecks
         var f = WorkshopPageCache.Key(WorkshopSource.Steam, "ck3", "ui", "Trend", 30, 0);
         var g = WorkshopPageCache.Key(WorkshopSource.Steam, "stellaris", null, "Trend", 30, 0);
 
-        ChecksContext.Equal("页面缓存键：基本形态", "steam|ck3||Trend|30|0|30|-|-|-|-|0|0", a);
-        ChecksContext.Equal("页面缓存键：PDX 无时间范围", "pdx|ck3||Trend|-|0|30|-|-|-|-|0|0", e);
+        ChecksContext.Equal("页面缓存键：基本形态", "steam|ck3||Trend|30|0|30|-|-|-|-|0|0|0", a);
+        ChecksContext.Equal("页面缓存键：PDX 无时间范围", "pdx|ck3||Trend|-|0|30|-|-|-|-|0|0|0", e);
         ChecksContext.Check("页面缓存键：页码区分", a != b);
         ChecksContext.Check("页面缓存键：排序区分", a != c);
         ChecksContext.Check("页面缓存键：时间范围区分", a != d);
         ChecksContext.Check("页面缓存键：来源区分", a != e);
         ChecksContext.Check("页面缓存键：关键词区分", a != f);
         ChecksContext.Check("页面缓存键：游戏区分", a != g);
+
+        // 合集页与条目页共用同一批筛选维度，必须靠区段区分，否则会互相覆盖。
+        var collections = WorkshopPageCache.Key(
+            WorkshopSource.Steam, "ck3", null, "Trend", 30, 0, 30, null, null, null, null, false,
+            SteamWorkshopSpecialFilter.None, SteamWorkshopSection.Collections);
+        ChecksContext.Check("页面缓存键：浏览区段区分", a != collections);
 
         // 左侧筛选栏与每页条数都是新的查询维度：任一不同都必须生成不同的键。
         var pageSize = WorkshopPageCache.Key(WorkshopSource.Steam, "ck3", null, "Trend", 30, 0, 50);

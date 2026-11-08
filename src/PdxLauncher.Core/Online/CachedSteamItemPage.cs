@@ -26,4 +26,7 @@ public sealed class CachedSteamItemPage
 
     /// <summary>首屏评论。</summary>
     public List<SteamWorkshopComment> Comments { get; set; } = [];
+
+    /// <summary>合集子项（非合集的条目为空）。</summary>
+    public List<SteamWorkshopCollectionItemPage> CollectionItems { get; set; } = [];
 }

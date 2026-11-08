@@ -51,6 +51,22 @@ public enum SteamWorkshopSpecialFilter
     InCollections = 7,
 }
 
+/// <summary>
+/// 创意工坊的浏览区段，对齐网页的 <c>section</c> 参数。
+/// <para>
+/// Steam 把普通条目与合集放在同一个 <c>/workshop/browse/</c> 端点，只靠区段区分：
+/// 普通条目是 <c>readytouseitems</c>，合集是 <c>collections</c>。
+/// </para>
+/// </summary>
+public enum SteamWorkshopSection
+{
+    /// <summary>可用的普通条目（<c>section=readytouseitems</c>）。</summary>
+    ReadyToUseItems,
+
+    /// <summary>合集（<c>section=collections</c>）。</summary>
+    Collections,
+}
+
 /// <summary>创意工坊列表查询条件。页码从 0 开始，与服务端 <c>p</c>（从 1 开始）差一由客户端换算。</summary>
 /// <param name="SearchText">关键词；为空表示纯浏览。</param>
 /// <param name="Sort">排序档位。</param>
@@ -67,6 +83,7 @@ public enum SteamWorkshopSpecialFilter
 /// <param name="ExcludedAppIds">必须排除的 DLC appid（<c>excluded_appids_required_for_use[]</c>）。</param>
 /// <param name="ShowIncompatible">是否显示不兼容项目（<c>requiredflags[]=incompatible</c>）。</param>
 /// <param name="SpecialFilter">特别筛选条件。</param>
+/// <param name="Section">浏览区段（普通条目 / 合集）。</param>
 public sealed record SteamWorkshopQuery(
     string? SearchText,
     SteamWorkshopSort Sort,
@@ -78,7 +95,8 @@ public sealed record SteamWorkshopQuery(
     IReadOnlyList<int>? RequiredAppIds = null,
     IReadOnlyList<int>? ExcludedAppIds = null,
     bool ShowIncompatible = false,
-    SteamWorkshopSpecialFilter SpecialFilter = SteamWorkshopSpecialFilter.None);
+    SteamWorkshopSpecialFilter SpecialFilter = SteamWorkshopSpecialFilter.None,
+    SteamWorkshopSection Section = SteamWorkshopSection.ReadyToUseItems);
 
 /// <summary>条目标签。</summary>
 /// <param name="Tag">机器标签。</param>
@@ -119,6 +137,8 @@ public sealed record SteamWorkshopFilterGroup(
 /// <param name="StarRating">星级评分（0–5）。</param>
 /// <param name="TotalVotes">评分人数。</param>
 /// <param name="ConsumerAppId">所属游戏 appid。</param>
+/// <param name="FileType">Steam 文件类型（<c>0</c> = 普通条目、<c>2</c> = 合集；SSR 没给时为 0）。</param>
+/// <param name="ChildCount">合集里的子项数量；未知时为 0。</param>
 public sealed record SteamWorkshopItem(
     string PublishedFileId,
     string Title,
@@ -134,7 +154,13 @@ public sealed record SteamWorkshopItem(
     IReadOnlyList<SteamWorkshopTag> Tags,
     double StarRating,
     int TotalVotes,
-    int ConsumerAppId);
+    int ConsumerAppId,
+    int FileType = 0,
+    int ChildCount = 0)
+{
+    /// <summary>是不是合集（Steam 的 <c>EWorkshopFileType.Collection</c> = 2）。</summary>
+    public bool IsCollection => FileType == 2;
+}
 
 /// <summary>一页创意工坊结果。</summary>
 /// <param name="Items">条目。</param>
@@ -172,6 +198,9 @@ public sealed record SteamWorkshopPage(
 /// <param name="Tags">标签原文。</param>
 /// <param name="Views">浏览数。</param>
 /// <param name="LifetimeSubscriptions">历史订阅总数。</param>
+/// <param name="FileType">Steam 文件类型（<c>0</c> = 普通条目、<c>2</c> = 合集）。</param>
+/// <param name="Children">合集里的子项（只对合集有值，按 <c>sortorder</c> 排序）。</param>
+/// <param name="ConsumerAppId">所属游戏 appid。</param>
 public sealed record SteamWorkshopItemDetail(
     string PublishedFileId,
     string Title,
@@ -184,16 +213,30 @@ public sealed record SteamWorkshopItemDetail(
     string? CreatorSteamId = null,
     IReadOnlyList<string>? Tags = null,
     long Views = 0,
-    long LifetimeSubscriptions = 0)
+    long LifetimeSubscriptions = 0,
+    int FileType = 0,
+    IReadOnlyList<SteamWorkshopCollectionChild>? Children = null,
+    int ConsumerAppId = 0)
 {
     /// <summary>标签（非 null，便于界面直接绑定）。</summary>
     public IReadOnlyList<string> TagList => Tags ?? [];
+
+    /// <summary>合集子项（非 null，便于界面直接绑定）。</summary>
+    public IReadOnlyList<SteamWorkshopCollectionChild> ChildList => Children ?? [];
+
+    /// <summary>是不是合集（Steam 的 <c>EWorkshopFileType.Collection</c> = 2）。</summary>
+    public bool IsCollection => FileType == 2;
 
     /// <summary>作者主页地址；没有 SteamID 时为 null。</summary>
     public string? CreatorProfileUrl => string.IsNullOrWhiteSpace(CreatorSteamId)
         ? null
         : "https://steamcommunity.com/profiles/" + CreatorSteamId;
 }
+
+/// <summary>合集里的一个子项（来自 <c>GetPublishedFileDetails</c> 的 <c>children</c>）。</summary>
+/// <param name="PublishedFileId">子项的文件 id。</param>
+/// <param name="SortOrder">在合集里的顺序（服务端给的 <c>sortorder</c>，0 基）。</param>
+public sealed record SteamWorkshopCollectionChild(string PublishedFileId, int SortOrder);
 
 /// <summary>创意工坊条目页（HTML）解析结果。</summary>
 /// <param name="AuthorName">作者显示名。</param>
@@ -203,6 +246,7 @@ public sealed record SteamWorkshopItemDetail(
 /// <param name="ScreenshotUrls">官方画廊截图（来自 <c>#highlight_player_area</c>），顺序与页面一致。</param>
 /// <param name="TotalComments">讨论总数（页面上报的 total_count）。</param>
 /// <param name="Comments">首屏评论。</param>
+/// <param name="CollectionItems">合集子项（物品页上的 <c>collectionItem</c> 块；非合集时为空）。</param>
 public sealed record SteamWorkshopItemPage(
     string? AuthorName,
     string? AuthorProfileUrl,
@@ -210,7 +254,31 @@ public sealed record SteamWorkshopItemPage(
     IReadOnlyList<string> ImageUrls,
     IReadOnlyList<string> ScreenshotUrls,
     int TotalComments,
-    IReadOnlyList<SteamWorkshopComment> Comments);
+    IReadOnlyList<SteamWorkshopComment> Comments,
+    IReadOnlyList<SteamWorkshopCollectionItemPage>? CollectionItems = null)
+{
+    /// <summary>合集子项（非 null，便于界面直接绑定）。</summary>
+    public IReadOnlyList<SteamWorkshopCollectionItemPage> CollectionItemList => CollectionItems ?? [];
+
+    /// <summary>物品页上是不是一个合集（有 collectionItem 块）。</summary>
+    public bool IsCollectionPage => CollectionItemList.Count > 0;
+}
+
+/// <summary>
+/// 合集物品页里的一个子项。数据来自物品页 HTML 的 <c>collectionItem</c> 块：
+/// 这里只保留列表展示需要的字段，完整详情仍然点进子项后单独取。
+/// </summary>
+/// <param name="PublishedFileId">子项 id。</param>
+/// <param name="Title">标题。</param>
+/// <param name="PreviewUrl">缩略图地址。</param>
+/// <param name="AuthorName">作者显示名（物品页给的是名字，不是 SteamID）。</param>
+/// <param name="ShortDescription">短描述。</param>
+public sealed record SteamWorkshopCollectionItemPage(
+    string PublishedFileId,
+    string Title,
+    string? PreviewUrl,
+    string? AuthorName,
+    string? ShortDescription);
 
 /// <summary>一条 Steam 创意工坊评论。</summary>
 /// <param name="Id">评论 id（页面上的 <c>comment_&lt;id&gt;</c>）。</param>

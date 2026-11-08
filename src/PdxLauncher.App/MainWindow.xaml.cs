@@ -318,6 +318,7 @@ public sealed partial class MainWindow : Window
         if (_workshopDetailPage is not null)
         {
             _workshopDetailPage.NavigationRequested -= OnPageNavigationRequested;
+            _workshopDetailPage.DetailRequested -= OnWorkshopDetailRequested;
             _workshopDetailPage = null;
         }
 
@@ -369,6 +370,7 @@ public sealed partial class MainWindow : Window
         {
             _workshopDetailPage = workshopDetailPage;
             workshopDetailPage.NavigationRequested += OnPageNavigationRequested;
+            workshopDetailPage.DetailRequested += OnWorkshopDetailRequested;
         }
 
         if (content is ModsPage modsPage)
@@ -589,6 +591,7 @@ public sealed partial class MainWindow : Window
             if (_workshopDetailPage is not null)
             {
                 _workshopDetailPage.NavigationRequested -= OnPageNavigationRequested;
+                _workshopDetailPage.DetailRequested -= OnWorkshopDetailRequested;
                 _workshopDetailPage = null;
             }
 

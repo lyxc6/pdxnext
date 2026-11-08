@@ -37,6 +37,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <!-- 搜索框只在回车（或放大镜/右侧刷新按钮）时提交：打字过程中不发请求。
@@ -65,6 +66,18 @@
                                  AutomationProperties.Name="{x:Bind L.WorkshopSortName, Mode=OneWay}" />
 
             <controls:PdxDropDown Grid.Column="2"
+                                 x:Name="SectionBox"
+                                 MinWidth="100"
+                                 MaxWidth="140"
+                                 VerticalAlignment="Center"
+                                 Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSectionPicker), Mode=OneWay}"
+                                 ItemsSource="{x:Bind ViewModel.SectionModes, Mode=OneWay}"
+                                 SelectedItem="{x:Bind ViewModel.SelectedSection, Mode=OneWay}"
+                                 SelectionChanged="OnSectionSelectionChanged"
+                                 AutomationProperties.AutomationId="cmbWorkshopSection"
+                                 AutomationProperties.Name="{x:Bind L.WorkshopSectionName, Mode=OneWay}" />
+
+            <controls:PdxDropDown Grid.Column="3"
                                  x:Name="TimeRangeBox"
                                  MinWidth="130"
                                  MaxWidth="170"
@@ -76,14 +89,14 @@
                                  AutomationProperties.AutomationId="cmbWorkshopTimeRange"
                                  AutomationProperties.Name="{x:Bind L.WorkshopTimeRangeName, Mode=OneWay}" />
 
-            <ProgressRing Grid.Column="3"
+            <ProgressRing Grid.Column="4"
                           Width="20"
                           Height="20"
                           VerticalAlignment="Center"
                           IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                           AutomationProperties.AutomationId="ringWorkshopBusy" />
 
-            <Button Grid.Column="4"
+            <Button Grid.Column="5"
                     VerticalAlignment="Center"
                     Click="OnRefreshClick"
                     AutomationProperties.AutomationId="btnWorkshopRefresh"
@@ -91,14 +104,14 @@
                 <FontIcon Glyph="&#xE72C;" FontSize="16" />
             </Button>
 
-            <Border Grid.Column="5"
+            <Border Grid.Column="6"
                     Width="1"
                     Height="20"
                     Margin="0"
                     VerticalAlignment="Center"
                     Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-            <Border Grid.Column="6"
+            <Border Grid.Column="7"
                     Padding="8,4"
                     VerticalAlignment="Center"
                     CornerRadius="4"
@@ -111,7 +124,7 @@
                            AutomationProperties.AutomationId="txtWorkshopSource" />
             </Border>
 
-            <Button Grid.Column="7"
+            <Button Grid.Column="8"
                     VerticalAlignment="Center"
                     Click="OnOpenWebClick"
                     AutomationProperties.AutomationId="btnWorkshopOpenWeb"
@@ -121,7 +134,7 @@
             </Button>
 
             <!-- 筛选栏开关：只有 Steam 来源有筛选维度。 -->
-            <ToggleButton Grid.Column="8"
+            <ToggleButton Grid.Column="9"
                           VerticalAlignment="Center"
                           IsChecked="{x:Bind ViewModel.ShowFilterPanel, Mode=TwoWay}"
                           Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.CanShowFilters), Mode=OneWay}"
@@ -346,6 +359,18 @@
                                 <TextBlock Text="{x:Bind Name, Mode=OneTime}"
                                            Style="{StaticResource BodyStrongTextBlockStyle}"
                                            TextTrimming="CharacterEllipsis" />
+                                <!-- 合集徽标：合集列表页的每一行都是合集，详情页的子项也可能嵌套合集。 -->
+                                <Border Padding="8,4"
+                                        CornerRadius="4"
+                                        HorizontalAlignment="Left"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowCollectionBadge), Mode=OneWay}">
+                                    <TextBlock Text="{x:Bind CollectionBadgeText, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </Border>
                                 <!-- 译文：与原文并存，只显示译文正文（不加「译文」标题），翻译没开或失败时整块隐藏。 -->
                                 <Border Margin="0,8,0,0"
                                         Padding="8,4"

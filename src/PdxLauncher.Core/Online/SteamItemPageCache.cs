@@ -120,6 +120,7 @@ public sealed class SteamItemPageCache
             ScreenshotUrls = [.. page.ScreenshotUrls],
             TotalComments = page.TotalComments,
             Comments = [.. page.Comments],
+            CollectionItems = [.. page.CollectionItemList],
         };
 
         if (EstimateBytes(entry) > MaxEntryBytes)
@@ -158,7 +159,8 @@ public sealed class SteamItemPageCache
             entry.ImageUrls,
             entry.ScreenshotUrls,
             entry.TotalComments,
-            entry.Comments);
+            entry.Comments,
+            entry.CollectionItems);
     }
 
     private static int EstimateBytes(CachedSteamItemPage entry) =>
