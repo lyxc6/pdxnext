@@ -353,7 +353,7 @@ public sealed class DlcViewModel : LocalizedObservableObject
             }
             else
             {
-                SetStatus(Keys.DlcStatusLoaded, Dlcs.Count, playSet.Name);
+                SetStatus(Keys.DlcStatusLoaded, playSet.Name);
             }
 
             if (lockedCount > 0)
@@ -543,7 +543,7 @@ public sealed class DlcViewModel : LocalizedObservableObject
     {
         if (Dlcs.Count > 0)
         {
-            SetStatus(Keys.DlcStatusSteamList, Dlcs.Count);
+            SetStatus(Keys.DlcStatusSteamList);
         }
         else if (report is { HasOwnership: true })
         {

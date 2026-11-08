@@ -1298,7 +1298,7 @@
     <value>已启用全部 DLC（尚未保存）</value>
   </data>
   <data name="DlcStatusLoaded" xml:space="preserve">
-    <value>已加载 {0} 个 DLC（播放集「{1}」）</value>
+    <value>已加载（播放集「{0}」）</value>
   </data>
   <data name="DlcStatusLockedSuffix" xml:space="preserve">
     <value>；其中 {0} 个 DLC 的 pops_id 为空，无法通过加载文件禁用，开关已置灰</value>
@@ -1325,7 +1325,7 @@
     <value>Steam 报告该游戏没有任何 DLC</value>
   </data>
   <data name="DlcStatusSteamList" xml:space="preserve">
-    <value>已从 Steam 读取 {0} 个 DLC（该游戏没有 DLC 描述文件，归属与开关由 Steam 授权决定）</value>
+    <value>已从 Steam 读取 DLC 清单（该游戏没有 DLC 描述文件，归属与开关由 Steam 授权决定）</value>
   </data>
   <data name="DlcStatusSteamUnavailable" xml:space="preserve">
     <value>未能从 Steam 读取 DLC 清单：{0}</value>
@@ -1515,9 +1515,6 @@
   </data>
   <data name="LibraryVersionUnknown" xml:space="preserve">
     <value>版本未知</value>
-  </data>
-  <data name="ModlibCountText" xml:space="preserve">
-    <value>{0} 个 mod</value>
   </data>
   <data name="ModlibDetailNoWorkshop" xml:space="preserve">
     <value>这个 mod 没有工坊详情页（本地 mod）</value>
@@ -2367,9 +2364,6 @@
   </data>
   <data name="ModstudioChangeNotePlaceholder" xml:space="preserve">
     <value>这次更新改了什么（可留空）</value>
-  </data>
-  <data name="ModstudioCount" xml:space="preserve">
-    <value>{0} 个本地 mod</value>
   </data>
   <data name="ModstudioCreateButton" xml:space="preserve">
     <value>新建 Mod</value>
@@ -4908,10 +4902,10 @@
     <value>加载失败：{0}</value>
   </data>
   <data name="WorkshopStatusLoaded" xml:space="preserve">
-    <value>已加载 {0} 个结果</value>
+    <value>已加载</value>
   </data>
   <data name="WorkshopStatusLoadedCached" xml:space="preserve">
-    <value>已加载 {0} 个结果（来自缓存）</value>
+    <value>已加载（来自缓存）</value>
   </data>
   <data name="WorkshopStatusLoading" xml:space="preserve">
     <value>正在加载创意工坊…</value>

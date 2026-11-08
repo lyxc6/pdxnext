@@ -1298,7 +1298,7 @@
     <value>All DLCs enabled (not saved yet)</value>
   </data>
   <data name="DlcStatusLoaded" xml:space="preserve">
-    <value>Loaded {0} DLCs (play set "{1}")</value>
+    <value>Loaded (play set "{0}")</value>
   </data>
   <data name="DlcStatusLockedSuffix" xml:space="preserve">
     <value>; {0} of them have an empty pops_id and cannot be disabled through the load file, so their toggles are greyed out</value>
@@ -1325,7 +1325,7 @@
     <value>Steam reports no DLC for this game</value>
   </data>
   <data name="DlcStatusSteamList" xml:space="preserve">
-    <value>Read {0} DLCs from Steam (this game has no DLC manifest; ownership and toggles are decided by Steam)</value>
+    <value>Read the DLC list from Steam (this game has no DLC manifest; ownership and toggles are decided by Steam)</value>
   </data>
   <data name="DlcStatusSteamUnavailable" xml:space="preserve">
     <value>Could not read the DLC list from Steam: {0}</value>
@@ -1515,9 +1515,6 @@
   </data>
   <data name="LibraryVersionUnknown" xml:space="preserve">
     <value>Version unknown</value>
-  </data>
-  <data name="ModlibCountText" xml:space="preserve">
-    <value>{0} mods</value>
   </data>
   <data name="ModlibDetailNoWorkshop" xml:space="preserve">
     <value>This mod has no workshop page (local mod)</value>
@@ -2367,9 +2364,6 @@
   </data>
   <data name="ModstudioChangeNotePlaceholder" xml:space="preserve">
     <value>What changed in this update (optional)</value>
-  </data>
-  <data name="ModstudioCount" xml:space="preserve">
-    <value>{0} local mods</value>
   </data>
   <data name="ModstudioCreateButton" xml:space="preserve">
     <value>New Mod</value>
@@ -4908,10 +4902,10 @@ Applying still backs up the original file first, but the backup cannot be verifi
     <value>Load failed: {0}</value>
   </data>
   <data name="WorkshopStatusLoaded" xml:space="preserve">
-    <value>Loaded {0} results</value>
+    <value>Loaded</value>
   </data>
   <data name="WorkshopStatusLoadedCached" xml:space="preserve">
-    <value>Loaded {0} results (from cache)</value>
+    <value>Loaded (from cache)</value>
   </data>
   <data name="WorkshopStatusLoading" xml:space="preserve">
     <value>Loading workshop…</value>

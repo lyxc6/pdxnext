@@ -945,7 +945,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             }
 
             ApplyCachedPage(cached, cancellationToken);
-            StatusMessage = T(Keys.WorkshopStatusLoadedCached, _totalCount);
+            StatusMessage = T(Keys.WorkshopStatusLoadedCached);
             RaiseDerived();
 
             // 过期的页仍然先显示，再悄悄刷新一次；用户不必盯着转圈。
@@ -1410,7 +1410,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             ? T(Keys.WorkshopStatusEmpty, _appliedSearch)
             : IsRelevanceWithoutKeyword()
                 ? T(Keys.WorkshopSortRelevanceNeedsKeyword)
-                : T(Keys.WorkshopStatusLoaded, _totalCount);
+                : T(Keys.WorkshopStatusLoaded);
         RaiseDerived();
 
         _ = FillCoversAsync(cancellationToken);
@@ -1532,7 +1532,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         await FlushInfoCacheAsync().ConfigureAwait(true);
         StatusMessage = rows.Count == 0
             ? T(Keys.WorkshopStatusEmpty, _appliedSearch)
-            : T(Keys.WorkshopStatusLoaded, _totalCount);
+            : T(Keys.WorkshopStatusLoaded);
         RaiseDerived();
 
         _ = FillCoversAsync(cancellationToken);

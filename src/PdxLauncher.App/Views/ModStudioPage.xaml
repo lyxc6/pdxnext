@@ -33,15 +33,9 @@
 
             <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="4">
                 <TextBlock Text="{x:Bind L.ModstudioTitle, Mode=OneWay}" Style="{StaticResource TitleTextBlockStyle}" />
-                <StackPanel Orientation="Horizontal" Spacing="12">
-                    <TextBlock Text="{x:Bind ViewModel.GameTitle, Mode=OneWay}"
-                               Style="{StaticResource CaptionTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock Text="{x:Bind ViewModel.CountText, Mode=OneWay}"
-                               Style="{StaticResource CaptionTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                               Visibility="{x:Bind svc:XamlVisibility.FromString(ViewModel.CountText), Mode=OneWay}" />
-                </StackPanel>
+                <TextBlock Text="{x:Bind ViewModel.GameTitle, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
             <AutoSuggestBox Grid.Column="1"

@@ -260,11 +260,6 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
     /// <summary>是否有游戏。</summary>
     public bool HasGame => Game is not null;
 
-    /// <summary>计数文案。</summary>
-    public string CountText => HasGame && Game!.SupportsContentManagement
-        ? T(Keys.ModstudioCount, Mods.Count)
-        : string.Empty;
-
     /// <summary>是否能创建 mod。</summary>
     public bool CanCreate => Game is { SupportsContentManagement: true } && ModDescriptorRules.CanCreate(Game.GameId);
 
@@ -1565,7 +1560,6 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
     {
         OnPropertyChanged(nameof(GameTitle));
         OnPropertyChanged(nameof(HasGame));
-        OnPropertyChanged(nameof(CountText));
         OnPropertyChanged(nameof(CanCreate));
         OnPropertyChanged(nameof(CanPublishGame));
         OnPropertyChanged(nameof(CanUploadSelected));
