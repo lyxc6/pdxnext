@@ -203,12 +203,13 @@ public static class WrapPanelChecks
         var strip = Section(xaml, "<controls:PdxWrapPanel Grid.Column=\"0\"", "</controls:PdxWrapPanel>");
         ChecksContext.Check("播放集工具条：左侧按钮簇用的是 PdxWrapPanel", strip.Length > 0);
         // 工具条按钮全部是自闭合的 <Button ... />，所以数开始标签而不是 </Button>。
-        ChecksContext.Equal("播放集工具条：折行面板里 10 个按钮", 10, Occurrences(strip, "<Button"));
+        ChecksContext.Equal("播放集工具条：折行面板里 12 个按钮", 12, Occurrences(strip, "<Button"));
         ChecksContext.Check(
-            "播放集工具条：11 个控件 AutomationId 都在",
+            "播放集工具条：13 个控件 AutomationId 都在",
             new[]
             {
                 "cmbPlaySets", "btnNewPlaySet", "btnRenamePlaySet", "btnDeletePlaySet",
+                "btnImportPlaySet", "btnExportPlaySet",
                 "btnActivatePlaySet", "btnEnableAllMods", "btnDisableAllMods",
                 "btnRepairModPaths", "btnAutoSort", "btnAutoSortCancel", "btnUndoAutoSort",
             }.All(id => strip.Contains(id, StringComparison.Ordinal)));

@@ -135,7 +135,9 @@ public sealed class OwnDatabasePlaySetRepository : IPlaySetRepository
                         PlaySetRepository.ReadBoolean(row, "enabled"),
                         PlaySetRepository.ReadInt32(row, "position"),
                         PlaySetRepository.ReadNullableString(row, "steamId"),
-                        PlaySetRepository.ReadNullableString(row, "source")));
+                        PlaySetRepository.ReadNullableString(row, "source"),
+                        // 自有库没有 mods.pdxId 列：PDX 渠道的 id 存在 gameRegistryId（"pdx:<id>"）。
+                        PdxId: PdxModIds.FromRegistryId(PlaySetRepository.ReadString(row, "gameRegistryId"))));
                 }
 
                 return (IReadOnlyList<PlaySetMod>)result;
@@ -185,7 +187,8 @@ public sealed class OwnDatabasePlaySetRepository : IPlaySetRepository
                         memberships.TryGetValue(modId, out var ids) ? ids : Array.Empty<Guid>(),
                         IsUnregistered: false,
                         SteamId: PlaySetRepository.ReadNullableString(row, "steamId"),
-                        ThumbnailUrl: PlaySetRepository.ReadNullableString(row, "thumbnailUrl")));
+                        ThumbnailUrl: PlaySetRepository.ReadNullableString(row, "thumbnailUrl"),
+                        PdxId: PdxModIds.FromRegistryId(PlaySetRepository.ReadString(row, "gameRegistryId"))));
                 }
 
                 // 官方库那版是按 displayName 排序的；这里同样按名字排，两边的列表顺序才一致。

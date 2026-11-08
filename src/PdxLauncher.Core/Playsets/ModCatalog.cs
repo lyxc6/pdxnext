@@ -524,7 +524,9 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
             Source: ModOrigins.Normalize(FirstNonEmptyOrNull(record?.Source, sqlite?.Source, null), steamId) == ModOrigin.Subscribed
                 ? ModOrigins.SteamSource
                 : ModOrigins.LocalSource,
-            ModVersion: modVersion);
+            ModVersion: modVersion,
+            // 磁盘扫描拿不到真实的 mods.pdxId；只有 registryId 拼了 "pdx:<id>" 时才能还原。
+            PdxId: PdxModIds.FromRegistryId(registryId));
     }
 
     /// <summary>

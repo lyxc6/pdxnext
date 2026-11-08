@@ -363,6 +363,20 @@
                         AutomationProperties.AutomationId="btnDeletePlaySet"
                         AutomationProperties.Name="{x:Bind L.ModsToolbarDeleteName, Mode=OneWay}" />
 
+                <!-- 官方启动器的「分享 / 导入播放集」：文件格式与官方逐字段一致，可互相导入。 -->
+                <Button Content="{x:Bind L.ModsToolbarImport, Mode=OneWay}"
+                        Click="OnImportPlaySetClick"
+                        IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind L.ModsToolbarImportToolTip, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnImportPlaySet"
+                        AutomationProperties.Name="{x:Bind L.ModsToolbarImportName, Mode=OneWay}" />
+                <Button Content="{x:Bind L.ModsToolbarExport, Mode=OneWay}"
+                        Click="OnExportPlaySetClick"
+                        IsEnabled="{x:Bind ViewModel.CanManageSelection, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind L.ModsToolbarExportToolTip, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnExportPlaySet"
+                        AutomationProperties.Name="{x:Bind L.ModsToolbarExportName, Mode=OneWay}" />
+
                 <!-- 分组分隔线：左边改播放集本身，右边作用在当前播放集的 mod 与激活状态上 -->
                 <!-- 竖线做成与按钮同高的 32 高边框，不再用 margin 做交叉轴居中 -->
                 <Border Width="1"

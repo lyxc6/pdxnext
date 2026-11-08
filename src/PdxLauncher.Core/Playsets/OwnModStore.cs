@@ -213,8 +213,26 @@ public sealed class OwnModStore
     internal static string? WorkshopIdOrNull(PlaySetMod mod) =>
         SteamWorkshop.GetWorkshopId(mod.SteamId, mod.GameRegistryId);
 
-    /// <summary>来源：工坊 id 拿得到就是订阅（steam），否则本地（local）。</summary>
-    internal static string SourceFor(PlaySetMod mod) => WorkshopIdOrNull(mod) is null ? "local" : "steam";
+    /// <summary>
+    /// 来源：工坊 id 拿得到就是订阅（steam）；只有 PDX Mods id 时记 pdx_mods；
+    /// 两者都没有才是本地（local）。
+    /// <para>
+    /// 之前只判工坊 id，PDX 渠道 mod 会以 <c>local</c> 落库，导出官方分享 JSON 时被当成
+    /// 「本地 mod」整条排除。PDX id 在 gameRegistryId（<c>pdx:&lt;id&gt;</c>）里还在，所以这里补上。
+    /// </para>
+    /// </summary>
+    internal static string SourceFor(PlaySetMod mod)
+    {
+        if (WorkshopIdOrNull(mod) is not null)
+        {
+            return ModOrigins.SteamSource;
+        }
+
+        return PdxModIds.FromRegistryId(mod.GameRegistryId) is not null
+            || PdxModIds.Normalize(mod.PdxId) is not null
+            ? ModOrigins.PdxModsSource
+            : ModOrigins.LocalSource;
+    }
 
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 }

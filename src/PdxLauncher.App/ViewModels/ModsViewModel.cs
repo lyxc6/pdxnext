@@ -10,6 +10,7 @@ using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.LoadFiles;
 using PdxLauncher.Core.Mods.Sorting;
 using PdxLauncher.Core.Playsets;
+using PdxLauncher.Core.Playsets.Share;
 
 /// <summary>
 /// 「播放集」页的视图模型：播放集列表 + 当前播放集已保存的 mod 行 + 搜索 + 启用/禁用/排序/增删。
@@ -1293,6 +1294,197 @@ public sealed class ModsViewModel : LocalizedObservableObject
         {
             StatusMessage = T(Keys.ModsStatusCreated, trimmed);
         }
+    }
+
+    // ------------------------------------------------------------ 导入 / 导出（官方分享格式）
+
+    /// <summary>
+    /// 只解析分享文件，不写库：先让页面判断本地是否已有同名播放集，再决定合并还是新建副本。
+    /// </summary>
+    public async Task<AppResult<PlaySetSharePeek>> PeekImportAsync(
+        string sourcePath,
+        CancellationToken cancellationToken)
+    {
+        var game = Game;
+        if (game is null)
+        {
+            return AppResult<PlaySetSharePeek>.Fail(ErrorKind.Invalid, "share-no-game");
+        }
+
+        return await AppServices.PlaySetShare
+            .PeekAsync(game, sourcePath, cancellationToken)
+            .ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 导入官方分享文件。成功后重新加载播放集列表并选中目标播放集；
+    /// <paramref name="mergeIntoPlaySetId"/> 非空时合并进已有播放集（补齐缺失条目）。
+    /// </summary>
+    public async Task<AppResult<PlaySetShareImportResult>> ImportPlaySetAsync(
+        string sourcePath,
+        Guid? mergeIntoPlaySetId,
+        CancellationToken cancellationToken)
+    {
+        var game = Game;
+        if (game is null)
+        {
+            return AppResult<PlaySetShareImportResult>.Fail(ErrorKind.Invalid, "share-no-game");
+        }
+
+        try
+        {
+            var result = await AppServices.PlaySetShare
+                .ImportAsync(game, sourcePath, mergeIntoPlaySetId, cancellationToken)
+                .ConfigureAwait(true);
+            if (!result.IsSuccess)
+            {
+                _logger.Warn("导入播放集失败（gameId=" + game.GameId + "）："
+                    + (result.ErrorMessage ?? result.Kind.ToString()));
+                return result;
+            }
+
+            if (result.Value is not { } imported)
+            {
+                return result;
+            }
+
+            await LoadAsync(game, cancellationToken).ConfigureAwait(true);
+            var target = PlaySets.FirstOrDefault(candidate => candidate.Id == imported.PlaySetId);
+            if (target is not null)
+            {
+                await SelectPlaySetAsync(target, cancellationToken).ConfigureAwait(true);
+            }
+
+            StatusMessage = imported.Merged
+                ? T(Keys.ModsStatusImportMerged, imported.PlaySetName, imported.AddedMods)
+                : T(Keys.ModsStatusImportDone, imported.PlaySetName, imported.ImportedMods);
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("导入播放集失败（gameId=" + game.GameId + "）", ex);
+            StatusMessage = T(Keys.ModsStatusImportFailed, ex.Message);
+            return AppResult<PlaySetShareImportResult>.Fail(ErrorKind.Io, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 导出当前选中的播放集。先等未完成的自动保存落盘，避免导出到旧的加载顺序。
+    /// </summary>
+    public async Task<AppResult<PlaySetShareExportResult>> ExportSelectedAsync(
+        string destinationPath,
+        CancellationToken cancellationToken)
+    {
+        var game = Game;
+        var playSet = SelectedPlaySet;
+        if (game is null || playSet is null)
+        {
+            return AppResult<PlaySetShareExportResult>.Fail(ErrorKind.Invalid, "share-no-selection");
+        }
+
+        try
+        {
+            await FlushPendingAutoSaveAsync(cancellationToken).ConfigureAwait(true);
+
+            var result = await AppServices.PlaySetShare
+                .ExportAsync(game, playSet.Id, destinationPath, cancellationToken)
+                .ConfigureAwait(true);
+            if (!result.IsSuccess)
+            {
+                _logger.Warn("导出播放集失败（gameId=" + game.GameId + "）："
+                    + (result.ErrorMessage ?? result.Kind.ToString()));
+                return result;
+            }
+
+            if (result.Value is not { } exported)
+            {
+                return result;
+            }
+
+            StatusMessage = T(Keys.ModsStatusExportDone, playSet.Name, exported.ExportedMods);
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("导出播放集失败（gameId=" + game.GameId + "）", ex);
+            StatusMessage = T(Keys.ModsStatusExportFailed, ex.Message);
+            return AppResult<PlaySetShareExportResult>.Fail(ErrorKind.Io, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 一键订阅导入结果里缺失的 Steam 模组。订阅只是让 Steam 开始下载，
+    /// 下载完成后用户需要再导入同一份文件，条目才会补齐。
+    /// <para>Steam 写操作受设置开关控制；未开启或后端不可用时只更新状态栏，不抛异常。</para>
+    /// </summary>
+    /// <returns>成功提交订阅的条数。</returns>
+    public async Task<int> SubscribeMissingSteamModsAsync(
+        IReadOnlyList<PlaySetShareMissingMod> missing,
+        CancellationToken cancellationToken)
+    {
+        var game = Game;
+        if (game is null)
+        {
+            return 0;
+        }
+
+        if (!AppServices.Settings.SteamWorkshopSubscribeEnabled)
+        {
+            StatusMessage = T(Keys.ModsImportSubscribeNeedsSetting);
+            return 0;
+        }
+
+        var backend = SteamWorkshopBackends.CreateForSubscribe(game);
+        if (backend is null || !backend.IsAvailable)
+        {
+            StatusMessage = T(Keys.ModsImportSubscribeUnavailable, backend?.UnavailableReason ?? string.Empty);
+            return 0;
+        }
+
+        var ids = missing
+            .Where(static mod => PdxModIds.LooksNumeric(mod.SteamId))
+            .Select(static mod => ulong.Parse(mod.SteamId!, CultureInfo.InvariantCulture))
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+        {
+            StatusMessage = T(Keys.ModsImportNoSteamMods);
+            return 0;
+        }
+
+        var succeeded = 0;
+        var failed = 0;
+        for (var index = 0; index < ids.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            StatusMessage = T(Keys.ModsImportSubscribing, index + 1, ids.Count);
+
+            var outcome = await backend
+                .SetSubscribedAsync(ids[index], subscribe: true, cancellationToken)
+                .ConfigureAwait(true);
+            if (outcome.Ok)
+            {
+                succeeded++;
+            }
+            else
+            {
+                failed++;
+                _logger.Warn("订阅缺失的工坊 mod 失败（id=" + ids[index] + "）：" + outcome.ErrorText);
+            }
+        }
+
+        StatusMessage = failed == 0
+            ? T(Keys.ModsImportSubscribeDone, succeeded)
+            : T(Keys.ModsImportSubscribePartial, succeeded, failed);
+        return succeeded;
     }
 
     public async Task RenameSelectedAsync(string newName, CancellationToken cancellationToken)

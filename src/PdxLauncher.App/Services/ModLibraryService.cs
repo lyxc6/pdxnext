@@ -171,7 +171,8 @@ public sealed class ModLibraryService
                 Array.Empty<Guid>(),
                 IsUnregistered: true,
                 SteamId: mod.SteamId,
-                ModVersion: mod.ModVersion));
+                ModVersion: mod.ModVersion,
+                PdxId: mod.PdxId));
         }
 
         await InjectSteamStatesAsync(game, merged, cancellationToken).ConfigureAwait(false);

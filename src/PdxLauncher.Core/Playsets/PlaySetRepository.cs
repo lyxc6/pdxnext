@@ -204,6 +204,8 @@ public sealed class PlaySetRepository : IPlaySetRepository
 
                 // source / steamId 是「本地还是订阅」的唯一依据，必须一起读出来；老库没有这两列时
                 // 只能退回 SELECT 里的其余列（缺列时 SqliteConnection 直接报错，不能硬写）。
+                // pdxId / version / keepLatest 只在较新的官方库里存在，用来还原「分享播放集」里的
+                // pdxId 与锁定版本；老库缺列时对应字段留空。
                 var columns = ReadTableColumns(connection, "mods");
                 var extras = string.Empty;
                 if (columns.Contains("steamId"))
@@ -214,6 +216,23 @@ public sealed class PlaySetRepository : IPlaySetRepository
                 if (columns.Contains("source"))
                 {
                     extras += ", m.source";
+                }
+
+                if (columns.Contains("pdxId"))
+                {
+                    extras += ", m.pdxId";
+                }
+
+                var hasKeepLatest = columns.Contains("keepLatest");
+                var hasVersion = columns.Contains("version");
+                if (hasVersion)
+                {
+                    extras += ", m.version";
+                }
+
+                if (hasKeepLatest)
+                {
+                    extras += ", m.keepLatest";
                 }
 
                 var rows = connection.Query(
@@ -244,7 +263,14 @@ public sealed class PlaySetRepository : IPlaySetRepository
                         ReadBoolean(row, "enabled"),
                         ReadInt32(row, "position"),
                         ReadNullableString(row, "steamId"),
-                        ReadNullableString(row, "source")));
+                        ReadNullableString(row, "source"),
+                        // 官方库的 pdxId 列优先；老库没有该列时退回 gameRegistryId 里的 "pdx:<id>"。
+                        PdxId: PdxModIds.Normalize(ReadNullableString(row, "pdxId"))
+                            ?? PdxModIds.FromRegistryId(ReadNullableString(row, "gameRegistryId")),
+                        // 只有官方库明确 keepLatest=0 时才有锁定版本；缺列一律按「跟随最新」。
+                        PdxVersion: hasKeepLatest && !ReadBoolean(row, "keepLatest")
+                            ? PdxModIds.Normalize(ReadNullableString(row, "version"))
+                            : null));
                 }
 
                 return (IReadOnlyList<PlaySetMod>)result;
@@ -309,7 +335,10 @@ public sealed class PlaySetRepository : IPlaySetRepository
                         // mod 作者版本：官方启动器从 metadata.json 的 version 抄进 metadataVersion；
                         // 更老的库可能只有 version 列，依次兜底。两列都缺（老库）时按未声明处理。
                         ModVersion: NullIfBlank(ReadNullableString(row, "metadataVersion"))
-                            ?? NullIfBlank(ReadNullableString(row, "version"))));
+                            ?? NullIfBlank(ReadNullableString(row, "version")),
+                        // 分享播放集导入时按 pdxId 对齐；老库没有 pdxId 列时退回 registryId。
+                        PdxId: PdxModIds.Normalize(ReadNullableString(row, "pdxId"))
+                            ?? PdxModIds.FromRegistryId(ReadString(row, "gameRegistryId"))));
                 }
 
                 // SQLite 的 COLLATE NOCASE 只折叠 ASCII，中文/符号排序和 .NET 不一致；

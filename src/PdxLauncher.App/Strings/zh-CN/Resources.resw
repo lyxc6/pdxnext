@@ -2245,6 +2245,144 @@
   <data name="ModsToolbarDeleteName" xml:space="preserve">
     <value>删除播放集</value>
   </data>
+  <data name="ModsToolbarExport" xml:space="preserve">
+    <value>导出</value>
+  </data>
+  <data name="ModsToolbarExportName" xml:space="preserve">
+    <value>导出播放集</value>
+  </data>
+  <data name="ModsToolbarExportToolTip" xml:space="preserve">
+    <value>导出为官方分享文件（.json），可发给其他玩家</value>
+  </data>
+  <data name="ModsToolbarImport" xml:space="preserve">
+    <value>导入</value>
+  </data>
+  <data name="ModsToolbarImportName" xml:space="preserve">
+    <value>导入播放集</value>
+  </data>
+  <data name="ModsToolbarImportToolTip" xml:space="preserve">
+    <value>导入其他玩家分享的播放集文件（.json）</value>
+  </data>
+  <data name="ModsExportErrorTitle" xml:space="preserve">
+    <value>无法导出播放集</value>
+  </data>
+  <data name="ModsExportNoticeTitle" xml:space="preserve">
+    <value>已导出播放集</value>
+  </data>
+  <data name="ModsExportNoticeBody" xml:space="preserve">
+    <value>文件已保存到：{0}；共 {1} 个 mod。</value>
+  </data>
+  <data name="ModsExportNoticeLocalExcluded" xml:space="preserve">
+    <value>按官方规则排除了 {0} 个本地 mod（官方分享文件不包含本地 mod）。</value>
+  </data>
+  <data name="ModsExportNoticeUnsupported" xml:space="preserve">
+    <value>有 {0} 个 mod 没有 Steam / PDX 平台 id，未写入文件：{1}</value>
+  </data>
+  <data name="ModsImportCopyMissing" xml:space="preserve">
+    <value>复制清单</value>
+  </data>
+  <data name="ModsImportErrorTitle" xml:space="preserve">
+    <value>无法导入播放集</value>
+  </data>
+  <data name="ModsImportErrDuplicate" xml:space="preserve">
+    <value>分享文件里有重复的 mod：{0}</value>
+  </data>
+  <data name="ModsImportErrFileNotFound" xml:space="preserve">
+    <value>文件不存在：{0}</value>
+  </data>
+  <data name="ModsImportErrInvalidJson" xml:space="preserve">
+    <value>文件不是合法的分享 JSON。</value>
+  </data>
+  <data name="ModsImportErrInvalidMod" xml:space="preserve">
+    <value>分享文件里有无法识别的 mod 条目（第 {0} 条）。</value>
+  </data>
+  <data name="ModsImportErrMissingField" xml:space="preserve">
+    <value>分享文件缺少必需字段：{0}</value>
+  </data>
+  <data name="ModsImportErrNoGame" xml:space="preserve">
+    <value>请先选择游戏。</value>
+  </data>
+  <data name="ModsImportErrNoSelection" xml:space="preserve">
+    <value>请先选中一个播放集。</value>
+  </data>
+  <data name="ModsImportErrWrongGame" xml:space="preserve">
+    <value>这个播放集属于「{0}」，与当前游戏不一致。</value>
+  </data>
+  <data name="ModsImportMergeConfirm" xml:space="preserve">
+    <value>合并</value>
+  </data>
+  <data name="ModsImportMergeNewCopy" xml:space="preserve">
+    <value>新建副本</value>
+  </data>
+  <data name="ModsImportMissingHeader" xml:space="preserve">
+    <value>以下 {0} 个 mod 本地未安装：</value>
+  </data>
+  <data name="ModsImportMissingHint" xml:space="preserve">
+    <value>订阅后等 Steam 下载完成，再导入同一份文件即可自动补齐（同名播放集会合并）。</value>
+  </data>
+  <data name="ModsImportMissingMore" xml:space="preserve">
+    <value>还有 {0} 个未显示。</value>
+  </data>
+  <data name="ModsImportNoSteamMods" xml:space="preserve">
+    <value>缺失的条目里没有可自动订阅的 Steam 模组。</value>
+  </data>
+  <data name="ModsImportResultTitle" xml:space="preserve">
+    <value>导入播放集</value>
+  </data>
+  <data name="ModsImportSameNameContent" xml:space="preserve">
+    <value>本地已有播放集「{0}」。合并会把文件里的 mod 补进它（保留已有条目）；新建副本会另建一个播放集。</value>
+  </data>
+  <data name="ModsImportSameNameTitle" xml:space="preserve">
+    <value>已存在同名播放集</value>
+  </data>
+  <data name="ModsImportSubscribeButton" xml:space="preserve">
+    <value>订阅缺失的 Steam 模组（{0}）</value>
+  </data>
+  <data name="ModsImportSubscribeDone" xml:space="preserve">
+    <value>已提交订阅 {0} 个 Steam 模组；下载完成后重新导入同一份文件即可补齐。</value>
+  </data>
+  <data name="ModsImportSubscribeNeedsSetting" xml:space="preserve">
+    <value>需要先在「设置 → 网络」里开启「Steam 创意工坊写操作」才能订阅缺失的模组。</value>
+  </data>
+  <data name="ModsImportSubscribePartial" xml:space="preserve">
+    <value>已提交订阅 {0} 个，{1} 个失败；下载完成后重新导入同一份文件即可补齐。</value>
+  </data>
+  <data name="ModsImportSubscribeSettingHint" xml:space="preserve">
+    <value>「Steam 创意工坊写操作」当前已关闭；可在「设置 → 网络」里开启后订阅缺失的模组。</value>
+  </data>
+  <data name="ModsImportSubscribing" xml:space="preserve">
+    <value>正在订阅缺失的模组（{0}/{1}）…</value>
+  </data>
+  <data name="ModsImportSubscribeUnavailable" xml:space="preserve">
+    <value>无法订阅 Steam 模组：{0}</value>
+  </data>
+  <data name="ModsImportSummaryCreated" xml:space="preserve">
+    <value>已新建播放集「{0}」，导入 {1} 个 mod。</value>
+  </data>
+  <data name="ModsImportSummaryMerged" xml:space="preserve">
+    <value>已合并到播放集「{0}」，新增 {1} 个 mod。</value>
+  </data>
+  <data name="ModsShareErrUnknown" xml:space="preserve">
+    <value>未知错误，请查看日志。</value>
+  </data>
+  <data name="ModsShareErrUnknownDetail" xml:space="preserve">
+    <value>操作失败：{0}</value>
+  </data>
+  <data name="ModsStatusExportDone" xml:space="preserve">
+    <value>已导出播放集「{0}」，共 {1} 个 mod。</value>
+  </data>
+  <data name="ModsStatusExportFailed" xml:space="preserve">
+    <value>导出播放集失败：{0}</value>
+  </data>
+  <data name="ModsStatusImportDone" xml:space="preserve">
+    <value>已导入播放集「{0}」，共 {1} 个 mod。</value>
+  </data>
+  <data name="ModsStatusImportFailed" xml:space="preserve">
+    <value>导入播放集失败：{0}</value>
+  </data>
+  <data name="ModsStatusImportMerged" xml:space="preserve">
+    <value>已合并到播放集「{0}」，新增 {1} 个 mod。</value>
+  </data>
   <data name="ModsToolbarNew" xml:space="preserve">
     <value>新建</value>
   </data>
