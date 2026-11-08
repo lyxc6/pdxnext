@@ -404,8 +404,8 @@ public static class WorkshopPageChecks
     }
 
     /// <summary>
-    /// 筛选栏：左侧独立一列、分组来自 ViewModel、每个标签有互斥的「+ / −」、DLC 有名称过滤，
-    /// 且筛选变化走 700 ms 去抖后才发请求。
+    /// 筛选栏：左侧独立一列、分组可折叠、每个标签是三态胶囊（包含 / 排除 / 未选）、
+    /// DLC 有名称过滤，且筛选变化走 700 ms 去抖后才发请求。
     /// </summary>
     private static void CheckFilterPanel(string xaml, string viewModel)
     {
@@ -421,9 +421,17 @@ public static class WorkshopPageChecks
                 row2.Contains("ColumnDefinition Width=\"Auto\"", StringComparison.Ordinal)
                 && row2.Contains("ColumnDefinition Width=\"*\"", StringComparison.Ordinal));
             ChecksContext.Check(
-                "创意工坊页: 筛选栏有两组互斥开关",
-                row2.Contains("IsChecked=\"{x:Bind IsRequired, Mode=TwoWay}\"", StringComparison.Ordinal)
-                && row2.Contains("IsChecked=\"{x:Bind IsExcluded, Mode=TwoWay}\"", StringComparison.Ordinal));
+                "创意工坊页: 筛选分组可折叠",
+                row2.Contains("Click=\"OnFilterGroupHeaderClick\"", StringComparison.Ordinal)
+                && row2.Contains("svc:XamlVisibility.FromBool(IsExpanded)", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 标签是三态胶囊（包含/排除由同一控件显示）",
+                row2.Contains("<controls:PdxTagChip", StringComparison.Ordinal)
+                && row2.Contains("IsRequired=\"{x:Bind IsRequired, Mode=OneWay}\"", StringComparison.Ordinal)
+                && row2.Contains("IsExcluded=\"{x:Bind IsExcluded, Mode=OneWay}\"", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 胶囊按宽度换行排布",
+                row2.Contains("<controls:PdxWrapPanel", StringComparison.Ordinal));
             ChecksContext.Check(
                 "创意工坊页: DLC 组有名称过滤框",
                 row2.Contains("txtWorkshopDlcFilter", StringComparison.Ordinal));

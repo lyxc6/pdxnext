@@ -166,7 +166,7 @@
             </Grid.ColumnDefinitions>
 
             <!-- Steam 风格的左侧筛选栏：分组来自列表页 SSR，解析不到时用内置目录兜底。
-                 每一行的「+ / −」是两个互斥的 ToggleButton，勾选后由视图模型去抖再查。 -->
+                 每个标签是一个三态胶囊（未选 → 包含 → 排除 → 未选），点击后由视图模型去抖再查。 -->
             <Border Grid.Column="0"
                     Width="264"
                     CornerRadius="8"
@@ -203,64 +203,87 @@
                                                   AutomationProperties.AutomationId="cmbWorkshopSpecialFilter" />
                         </StackPanel>
 
+                        <!-- 分组可折叠：类别默认展开，其余默认收起，避免几十项一次铺满整栏。
+                             标题用普通 Button（和胶囊同一类控件），点击由页面切换 IsExpanded；
+                             每一项是一个三态胶囊（未选 / 包含 / 排除），点击按顺序轮换。 -->
                         <ItemsControl ItemsSource="{x:Bind ViewModel.Filters.Groups, Mode=OneWay}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:WorkshopFilterGroupViewModel">
-                                    <StackPanel Spacing="4" Margin="0,4,0,0">
-                                        <TextBlock Text="{x:Bind Title, Mode=OneWay}"
-                                                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                    <StackPanel Margin="0,4,0,0">
+                                        <Button HorizontalAlignment="Stretch"
+                                                Padding="8,4"
+                                                CornerRadius="8"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                HorizontalContentAlignment="Stretch"
+                                                Click="OnFilterGroupHeaderClick"
+                                                AutomationProperties.Name="{x:Bind HeaderText, Mode=OneWay}">
+                                            <Grid ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{x:Bind Title, Mode=OneWay}"
+                                                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center" />
+                                                <!-- 折叠时也能看出这组选了几项。 -->
+                                                <Border Grid.Column="1"
+                                                        MinWidth="20"
+                                                        Padding="8,0"
+                                                        CornerRadius="8"
+                                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(HasActive), Mode=OneWay}">
+                                                    <TextBlock Text="{x:Bind ActiveCountText, Mode=OneWay}"
+                                                               FontSize="12"
+                                                               HorizontalAlignment="Center"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                </Border>
+                                                <FontIcon Grid.Column="2"
+                                                          Glyph="{x:Bind HeaderGlyph, Mode=OneWay}"
+                                                          FontSize="12"
+                                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                          VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
 
-                                        <!-- 只有 DLC 组显示名称过滤：它通常有 20 项以上。 -->
-                                        <TextBox Text="{x:Bind NameFilterText, Mode=TwoWay}"
-                                                 PlaceholderText="{x:Bind L.WorkshopFilterDlcSearch, Mode=OneWay}"
-                                                 Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowNameFilter), Mode=OneWay}"
-                                                 AutomationProperties.AutomationId="txtWorkshopDlcFilter" />
-                                        <TextBlock Text="{x:Bind L.WorkshopFilterDlcEmpty, Mode=OneWay}"
-                                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                   Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowDlcEmptyHint), Mode=OneWay}" />
+                                        <StackPanel Spacing="8"
+                                                    Padding="0,4,0,0"
+                                                    Visibility="{x:Bind svc:XamlVisibility.FromBool(IsExpanded), Mode=OneWay}">
+                                            <!-- 只有 DLC 组显示名称过滤：它通常有 20 项以上。 -->
+                                            <TextBox Text="{x:Bind NameFilterText, Mode=TwoWay}"
+                                                     PlaceholderText="{x:Bind L.WorkshopFilterDlcSearch, Mode=OneWay}"
+                                                     Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowNameFilter), Mode=OneWay}"
+                                                     AutomationProperties.AutomationId="txtWorkshopDlcFilter" />
+                                            <TextBlock Text="{x:Bind L.WorkshopFilterDlcEmpty, Mode=OneWay}"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowDlcEmptyHint), Mode=OneWay}" />
 
-                                        <ItemsControl ItemsSource="{x:Bind VisibleOptions, Mode=OneWay}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate x:DataType="vm:WorkshopTagOption">
-                                                    <Grid ColumnSpacing="4"
-                                                          Padding="0,0"
-                                                          ToolTipService.ToolTip="{x:Bind DisplayName, Mode=OneWay}">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="*" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <ToggleButton MinWidth="0"
-                                                                      Width="24"
-                                                                      Height="24"
-                                                                      Padding="0"
-                                                                      CornerRadius="4"
-                                                                      IsChecked="{x:Bind IsRequired, Mode=TwoWay}"
-                                                                      AutomationProperties.Name="{x:Bind L.WorkshopFilterInclude, Mode=OneWay}"
-                                                                      ToolTipService.ToolTip="{x:Bind L.WorkshopFilterInclude, Mode=OneWay}">
-                                                            <FontIcon Glyph="&#xE710;" FontSize="10" />
-                                                        </ToggleButton>
-                                                        <ToggleButton Grid.Column="1"
-                                                                      MinWidth="0"
-                                                                      Width="24"
-                                                                      Height="24"
-                                                                      Padding="0"
-                                                                      CornerRadius="4"
-                                                                      IsChecked="{x:Bind IsExcluded, Mode=TwoWay}"
-                                                                      AutomationProperties.Name="{x:Bind L.WorkshopFilterExclude, Mode=OneWay}"
-                                                                      ToolTipService.ToolTip="{x:Bind L.WorkshopFilterExclude, Mode=OneWay}">
-                                                            <FontIcon Glyph="&#xE738;" FontSize="10" />
-                                                        </ToggleButton>
-                                                        <TextBlock Grid.Column="2"
-                                                                   Text="{x:Bind DisplayName, Mode=OneWay}"
-                                                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                                                   VerticalAlignment="Center"
-                                                                   TextTrimming="CharacterEllipsis" />
-                                                    </Grid>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
+                                            <ItemsControl ItemsSource="{x:Bind VisibleOptions, Mode=OneWay}"
+                                                          AutomationProperties.AutomationId="lstWorkshopFilterOptions">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <!-- WinUI 没有 WrapPanel；PdxWrapPanel 按宽度自动换行。 -->
+                                                        <controls:PdxWrapPanel Spacing="4" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:WorkshopTagOption">
+                                                        <controls:PdxTagChip Text="{x:Bind DisplayName, Mode=OneWay}"
+                                                                             IsRequired="{x:Bind IsRequired, Mode=OneWay}"
+                                                                             IsExcluded="{x:Bind IsExcluded, Mode=OneWay}"
+                                                                             Margin="0,0,0,4"
+                                                                             AutomationProperties.Name="{x:Bind DisplayName, Mode=OneWay}"
+                                                                             AutomationProperties.HelpText="{x:Bind L.WorkshopFilterCycleHint, Mode=OneWay}"
+                                                                             ToolTipService.ToolTip="{x:Bind L.WorkshopFilterCycleHint, Mode=OneWay}"
+                                                                             Click="OnTagChipClick"
+                                                                             ToggleRequested="OnTagChipClick" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
                                     </StackPanel>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

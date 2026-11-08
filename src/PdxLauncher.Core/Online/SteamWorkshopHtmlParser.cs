@@ -324,7 +324,10 @@ public static class SteamWorkshopHtmlParser
                 var key = title.Length switch
                 {
                     0 => "category",
-                    _ when title.Equals("Update Compatibility", StringComparison.OrdinalIgnoreCase) => "compatibility",
+
+                    // Steam 各游戏叫法不同：Update Compatibility / Compatible Version / Compatible …
+                    // 只要标题里带 compatib 就归到这个组，界面才能显示本地化标题。
+                    _ when title.Contains("compatib", StringComparison.OrdinalIgnoreCase) => "compatibility",
                     _ => "other:" + title,
                 };
                 groups.Add(new SteamWorkshopFilterGroup(UniquifyKey(groups, key), title, tags));

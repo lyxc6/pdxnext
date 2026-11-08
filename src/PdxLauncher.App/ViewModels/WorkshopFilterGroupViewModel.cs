@@ -34,6 +34,9 @@ public sealed partial class WorkshopFilterGroupViewModel : LocalizedObservableOb
         RawTitle = title;
         _title = title;
         IsDlc = isDlc;
+
+        // 类别组默认展开，更新兼容性 / DLC 默认折叠：后者动辄几十项，全展开会把整栏挤满。
+        _isExpanded = string.Equals(key, "category", StringComparison.Ordinal);
         Options = new ObservableCollection<WorkshopTagOption>(
             tags.Select(tag => new WorkshopTagOption(tag.Tag, tag.DisplayName, localize: !isDlc)));
         VisibleOptions = new ObservableCollection<WorkshopTagOption>(Options);
@@ -56,6 +59,27 @@ public sealed partial class WorkshopFilterGroupViewModel : LocalizedObservableOb
     /// <summary>分组标题（随语言切换，由父级重设）。</summary>
     [ObservableProperty]
     private string _title;
+
+    /// <summary>展开状态（标题按钮点击时由页面切换；类别组默认展开，其余默认收起）。</summary>
+    [ObservableProperty]
+    private bool _isExpanded;
+
+    /// <summary>标题右侧的箭头图标：展开朝上、收起朝下。</summary>
+    public string HeaderGlyph => IsExpanded ? "\uE70E" : "\uE70D";
+
+    /// <summary>本组已生效的选项数（标题右侧的数字徽标）。</summary>
+    public int ActiveCount => Options.Count(static option => option.IsActive);
+
+    /// <summary>是否有选项生效（没有就不显示徽标）。</summary>
+    public bool HasActive => ActiveCount > 0;
+
+    /// <summary>徽标文字（折叠时也能看出这组选了东西）。</summary>
+    public string ActiveCountText => ActiveCount.ToString(System.Globalization.CultureInfo.CurrentCulture);
+
+    /// <summary>
+    /// 分组标题的读屏文本：有选择时附上数量（折叠着也能知道这组选了几项）。
+    /// </summary>
+    public string HeaderText => HasActive ? $"{Title} · {ActiveCountText}" : Title;
 
     /// <summary>全部选项。</summary>
     public ObservableCollection<WorkshopTagOption> Options { get; }
@@ -120,6 +144,12 @@ public sealed partial class WorkshopFilterGroupViewModel : LocalizedObservableOb
 
     partial void OnNameFilterTextChanged(string value) => ApplyNameFilter();
 
+    /// <summary>切语言时组名会重设，标题（含数量后缀）跟着刷新。</summary>
+    partial void OnTitleChanged(string value) => OnPropertyChanged(nameof(HeaderText));
+
+    /// <summary>展开/收起时箭头描边跟着翻。</summary>
+    partial void OnIsExpandedChanged(bool value) => OnPropertyChanged(nameof(HeaderGlyph));
+
     private void ApplyNameFilter()
     {
         var filter = NameFilterText.Trim();
@@ -139,14 +169,23 @@ public sealed partial class WorkshopFilterGroupViewModel : LocalizedObservableOb
 
     private void OnOptionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is not (nameof(WorkshopTagOption.IsRequired) or nameof(WorkshopTagOption.IsExcluded)))
+        {
+            return;
+        }
+
+        // 徽标数字不受 _suppressChanged 影响：批量恢复选择时界面也要跟着更新，
+        // 只是不需要再抛一次 Changed（那一次由调用方自己决定）。
+        OnPropertyChanged(nameof(ActiveCount));
+        OnPropertyChanged(nameof(HasActive));
+        OnPropertyChanged(nameof(ActiveCountText));
+        OnPropertyChanged(nameof(HeaderText));
+
         if (_suppressChanged)
         {
             return;
         }
 
-        if (e.PropertyName is nameof(WorkshopTagOption.IsRequired) or nameof(WorkshopTagOption.IsExcluded))
-        {
-            Changed?.Invoke(this, EventArgs.Empty);
-        }
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 }
