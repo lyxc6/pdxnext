@@ -1534,6 +1534,12 @@
   <data name="ModlibLoadFailed" xml:space="preserve">
     <value>加载失败：{0}</value>
   </data>
+  <data name="ModlibModVersion" xml:space="preserve">
+    <value>mod 版本 {0}</value>
+  </data>
+  <data name="ModlibModVersionName" xml:space="preserve">
+    <value>mod 版本</value>
+  </data>
   <data name="ModlibNoGameHint" xml:space="preserve">
     <value>请先在游戏库里选择一款游戏</value>
   </data>
@@ -1702,6 +1708,12 @@
   <data name="ModlibVersionSupportUndeclared" xml:space="preserve">
     <value>该 mod 没有声明支持的游戏版本。</value>
   </data>
+  <data name="ModlibVersionUndeclared" xml:space="preserve">
+    <value>未声明版本</value>
+  </data>
+  <data name="ModlibVersionUndeclaredHint" xml:space="preserve">
+    <value>该 mod 既没有声明自己的版本，也没有声明支持的游戏版本。</value>
+  </data>
   <data name="ModlibWarningName" xml:space="preserve">
     <value>版本支持提示</value>
   </data>
@@ -1737,6 +1749,9 @@
   </data>
   <data name="ModsAddPageListName" xml:space="preserve">
     <value>可添加的 mod 列表</value>
+  </data>
+  <data name="ModsAddPageModVersion" xml:space="preserve">
+    <value>mod 版本 {0}</value>
   </data>
   <data name="ModsAddPageNoMatch" xml:space="preserve">
     <value>没有匹配的 mod，换个关键词试试</value>

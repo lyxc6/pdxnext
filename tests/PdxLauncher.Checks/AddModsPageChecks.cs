@@ -154,7 +154,10 @@ public static class AddModsPageChecks
             thumbBlock);
     }
 
-    /// <summary>版本列：绑定 RequiredVersionText，偏低时显示警告图标；判定只用 ModLibraryWarnings。</summary>
+    /// <summary>
+    /// 版本列：第一行 mod 作者版本、第二行 RequiredVersionText；偏低时显示警告图标；
+    /// 判定只用 ModLibraryWarnings。
+    /// </summary>
     private static void CheckVersionColumn(string root)
     {
         var xaml = Read(root, "src", "PdxLauncher.App", "Views", "AddModsPage.xaml");
@@ -174,8 +177,8 @@ public static class AddModsPageChecks
         ChecksContext.Check(
             "添加模组页: 版本列有稳定的 AutomationId（不挂在只在警告时可见的图标上）",
             xaml.Contains("AutomationProperties.AutomationId=\"{x:Bind VersionAutomationId", StringComparison.Ordinal)
-                && ElementBlock(xaml, "VersionAutomationId").Contains("Text=\"{x:Bind RequiredVersionText", StringComparison.Ordinal),
-            ElementBlock(xaml, "VersionAutomationId"));
+                && ElementBlock(xaml, "Bind VersionAutomationId").Contains("Text=\"{x:Bind RequiredVersionText", StringComparison.Ordinal),
+            ElementBlock(xaml, "Bind VersionAutomationId"));
         ChecksContext.Check(
             "添加模组页: 版本偏低时显示警告图标",
             xaml.Contains("HasVersionWarning", StringComparison.Ordinal)
@@ -195,6 +198,21 @@ public static class AddModsPageChecks
         ChecksContext.Check(
             "添加模组页: 没有声明版本时给短横占位",
             rowVm.Contains("MissingVersionText", StringComparison.Ordinal),
+            rowVm);
+
+        // Vic3 有近一半 mod 只写 metadata.json 的 version（作者版本）、不写 supported_game_version：
+        // 版本列必须单独显示这一项，否则这些行只剩一个短横，看起来像「没读到版本」。
+        ChecksContext.Check(
+            "添加模组页: 版本列显示 mod 作者版本（ModVersionText + HasModVersion）",
+            xaml.Contains("Text=\"{x:Bind ModVersionText", StringComparison.Ordinal)
+                && xaml.Contains("HasModVersion", StringComparison.Ordinal)
+                && xaml.Contains("AutomationProperties.AutomationId=\"{x:Bind ModVersionAutomationId", StringComparison.Ordinal),
+            ElementBlock(xaml, "ModVersionAutomationId"));
+        ChecksContext.Check(
+            "添加模组页: 行 ViewModel 暴露 ModVersionText / HasModVersion",
+            rowVm.Contains("public string ModVersionText", StringComparison.Ordinal)
+                && rowVm.Contains("public bool HasModVersion", StringComparison.Ordinal)
+                && rowVm.Contains("ModsAddPageModVersion", StringComparison.Ordinal),
             rowVm);
     }
 

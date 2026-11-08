@@ -166,6 +166,7 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
                     GameRegistryId: registryId,
                     SteamId: Read(values, "remote_file_id"),
                     RequiredVersion: Read(values, "supported_version"),
+                    ModVersion: Read(values, "version"),
                     ThumbnailPath: null,
                     Status: null,
                     Picture: Read(values, "picture"),
@@ -260,6 +261,9 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
                 GameRegistryId: string.Empty,
                 SteamId: steamId,
                 RequiredVersion: ReadJsonProperty(root, "supported_game_version"),
+                // metadata.json 的 version 是作者自己写的 mod 版本；Vic3 大量 mod 没写
+                // supported_game_version，但这一项常常有值（官方启动器把它抄进 mods.metadataVersion）。
+                ModVersion: ReadJsonProperty(root, "version"),
                 ThumbnailPath: null,
                 Status: null,
                 // 真机实测：EU5 的 metadata.json 用的是 "picture"（13/22 个有，9 个没有）；
@@ -403,9 +407,9 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
         try
         {
             using var connection = SqliteConnection.OpenReadOnly(databasePath);
-            var rows = connection.Query(
-                "SELECT id, displayName, dirPath, archivePath, gameRegistryId, steamId, thumbnailPath, " +
-                "requiredVersion, status, source FROM mods");
+            // SELECT *：不同游戏/版本的 mods 表列不完全一致（旧库没有 metadataVersion），
+            // 缺列由 ReadNullableString 当 null 处理，不让一个缺列把整份扫描变成空。
+            var rows = connection.Query("SELECT * FROM mods");
 
             var result = new List<ModRecord>(rows.Count);
             foreach (var row in rows)
@@ -418,6 +422,12 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
                     GameRegistryId: PlaySetRepository.ReadString(row, "gameRegistryId"),
                     SteamId: PlaySetRepository.ReadNullableString(row, "steamId"),
                     RequiredVersion: PlaySetRepository.ReadString(row, "requiredVersion"),
+                    // 官方启动器把 metadata.json 的 version 抄进 metadataVersion；
+                    // 更老的库里可能只有 version 列，依次兜底。
+                    ModVersion: FirstNonEmptyOrNull(
+                        PlaySetRepository.ReadNullableString(row, "metadataVersion"),
+                        PlaySetRepository.ReadNullableString(row, "version"),
+                        null),
                     ThumbnailPath: PlaySetRepository.ReadNullableString(row, "thumbnailPath"),
                     Status: PlaySetRepository.ReadNullableString(row, "status"),
                     Picture: null,
@@ -485,6 +495,7 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
         var archivePath = FirstNonEmpty(record?.ArchivePath, sqlite?.ArchivePath, null);
         var registryId = FirstNonEmpty(record?.GameRegistryId, sqlite?.GameRegistryId, string.Empty);
         var requiredVersion = FirstNonEmpty(record?.RequiredVersion, sqlite?.RequiredVersion, string.Empty);
+        var modVersion = FirstNonEmpty(record?.ModVersion, sqlite?.ModVersion, string.Empty);
         var modId = sqlite?.ModId ?? CreateDeterministicModId(registryId, dirPath, archivePath, name);
 
         // .mod 的 remote_file_id 与 metadata.json 的 id 里都可能带创意工坊 id，但 metadata.json 的 id
@@ -512,7 +523,8 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
             // 两边哪边有 source 用哪边；都没有（纯磁盘扫描）就按有没有工坊 id 判。
             Source: ModOrigins.Normalize(FirstNonEmptyOrNull(record?.Source, sqlite?.Source, null), steamId) == ModOrigin.Subscribed
                 ? ModOrigins.SteamSource
-                : ModOrigins.LocalSource);
+                : ModOrigins.LocalSource,
+            ModVersion: modVersion);
     }
 
     /// <summary>
@@ -641,7 +653,8 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
         string? ThumbnailPath,
         string? Status,
         string? Picture,
-        string? Source = null)
+        string? Source = null,
+        string? ModVersion = null)
     {
         /// <summary>sqlite 行的主键；磁盘扫描得到的记录为 null。</summary>
         public Guid? ModId { get; init; }

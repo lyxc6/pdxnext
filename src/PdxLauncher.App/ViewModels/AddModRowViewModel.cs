@@ -95,6 +95,21 @@ public sealed class AddModRowViewModel : LocalizedObservableObject
     /// <summary>版本列的 AutomationId。</summary>
     public string VersionAutomationId => _automationPrefix + "Version_" + ModId.ToString("N");
 
+    /// <summary>版本列里「mod 版本」那一行的 AutomationId。</summary>
+    public string ModVersionAutomationId => _automationPrefix + "ModVersion_" + ModId.ToString("N");
+
+    /// <summary>
+    /// mod 作者自己写的版本（metadata.json 的 version / .mod 的 version）。
+    /// 与支持的游戏版本分两行显示；作者没写时为空串，这一行不出现。
+    /// </summary>
+    public string ModVersionText => string.IsNullOrWhiteSpace(Entry.ModVersion) ? string.Empty : Entry.ModVersion;
+
+    /// <summary>是否显示「mod 版本」这一行。</summary>
+    public bool HasModVersion => ModVersionText.Length != 0;
+
+    /// <summary>「mod 版本」的无障碍 / 提示文案：mod 版本 1.0。</summary>
+    public string ModVersionName => T(Keys.ModsAddPageModVersion, Entry.ModVersion ?? string.Empty);
+
     /// <summary>
     /// 版本列文案：有声明时是「支持 1.9.*」，没有声明时是一个短横（保持列宽稳定）。
     /// </summary>

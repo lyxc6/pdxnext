@@ -193,6 +193,15 @@
                                           AutomationProperties.Name="{x:Bind L.ModlibWarningName, Mode=OneWay}"
                                           AutomationProperties.HelpText="{x:Bind WarningText, Mode=OneWay}"
                                           Visibility="{x:Bind svc:XamlVisibility.FromBool(HasWarning), Mode=OneTime}" />
+                                <TextBlock Text="{x:Bind ModVersionText, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTipService.ToolTip="{x:Bind ModVersionText, Mode=OneWay}"
+                                           AutomationProperties.AutomationId="{x:Bind ModVersionAutomationId, Mode=OneTime}"
+                                           AutomationProperties.Name="{x:Bind L.ModlibModVersionName, Mode=OneWay}"
+                                           Visibility="{x:Bind svc:XamlVisibility.FromString(ModVersionText), Mode=OneWay}" />
                                 <TextBlock Text="{x:Bind SupportedVersionText, Mode=OneWay}"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -202,6 +211,14 @@
                                            AutomationProperties.AutomationId="{x:Bind VersionAutomationId, Mode=OneTime}"
                                            AutomationProperties.Name="{x:Bind L.ModlibSupportedVersionName, Mode=OneWay}"
                                            Visibility="{x:Bind svc:XamlVisibility.FromString(SupportedVersionText), Mode=OneWay}" />
+                                <TextBlock Text="{x:Bind VersionUndeclaredText, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTipService.ToolTip="{x:Bind VersionUndeclaredHint, Mode=OneWay}"
+                                           AutomationProperties.Name="{x:Bind VersionUndeclaredHint, Mode=OneWay}"
+                                           Visibility="{x:Bind svc:XamlVisibility.FromString(VersionUndeclaredText), Mode=OneWay}" />
                                 <TextBlock Text="{x:Bind PlaySetText, Mode=OneWay}"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"

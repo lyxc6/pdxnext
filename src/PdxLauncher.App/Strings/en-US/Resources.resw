@@ -1534,6 +1534,12 @@
   <data name="ModlibLoadFailed" xml:space="preserve">
     <value>Failed to load: {0}</value>
   </data>
+  <data name="ModlibModVersion" xml:space="preserve">
+    <value>Mod version {0}</value>
+  </data>
+  <data name="ModlibModVersionName" xml:space="preserve">
+    <value>Mod version</value>
+  </data>
   <data name="ModlibNoGameHint" xml:space="preserve">
     <value>Select a game in your library first</value>
   </data>
@@ -1702,6 +1708,12 @@
   <data name="ModlibVersionSupportUndeclared" xml:space="preserve">
     <value>This mod does not declare a supported game version.</value>
   </data>
+  <data name="ModlibVersionUndeclared" xml:space="preserve">
+    <value>No version declared</value>
+  </data>
+  <data name="ModlibVersionUndeclaredHint" xml:space="preserve">
+    <value>This mod declares neither its own version nor a supported game version.</value>
+  </data>
   <data name="ModlibWarningName" xml:space="preserve">
     <value>Version support</value>
   </data>
@@ -1737,6 +1749,9 @@
   </data>
   <data name="ModsAddPageListName" xml:space="preserve">
     <value>Addable Mods List</value>
+  </data>
+  <data name="ModsAddPageModVersion" xml:space="preserve">
+    <value>Mod version {0}</value>
   </data>
   <data name="ModsAddPageNoMatch" xml:space="preserve">
     <value>No mods match. Try another keyword.</value>
