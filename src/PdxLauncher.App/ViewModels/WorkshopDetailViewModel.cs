@@ -391,9 +391,6 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>是否有「翻译没出结果」的页面级提示。</summary>
     public bool HasTranslationNotice => !string.IsNullOrWhiteSpace(TranslationNotice);
 
-    /// <summary>是否显示「已订阅」徽标。</summary>
-    public bool ShowInstalled => IsInstalled;
-
     /// <summary>作者主页是否可用（决定作者那一行能不能点）。</summary>
     public bool HasAuthorProfile => !string.IsNullOrWhiteSpace(AuthorProfileUrl);
 
@@ -482,9 +479,6 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>是否显示 Steam 的订阅按钮（跳客户端）。</summary>
     public bool ShowSteamSubscribeButton => Row?.Source == WorkshopSource.Steam;
 
-    /// <summary>订阅状态是否已确认（未确认时不显示「未订阅」这种断言文案）。</summary>
-    public bool ShowSubscriptionState => CanSubscribe && IsSubscriptionKnown;
-
     /// <summary>Steam 订阅按钮文案：订阅 / 订阅中… / 取消订阅。</summary>
     public string SteamSubscribeActionText => IsSteamSubscribing
         ? T(Keys.WorkshopDetailSubscribing)
@@ -503,12 +497,16 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     public bool CanWriteSteam => AppServices.Settings.SteamWorkshopSubscribeEnabled;
 
     /// <summary>Steam 订阅框的说明（直连开没开 / 只读还是可写）。</summary>
+    /// <remarks>
+    /// 直连可用且允许写时返回空串：按钮已经就是「订阅 / 取消订阅」，再解释一遍
+    /// 「按钮会直接调用 Steam 客户端」是噪音，只在行为不一样时才提示。
+    /// </remarks>
     public string SteamSubscribeHint => !ShowSteamSubscribeButton
         ? string.Empty
         : !IsSteamDirectAvailable
             ? T(Keys.WorkshopDetailSteamSubscribeHintOff)
             : CanWriteSteam
-                ? T(Keys.WorkshopDetailSteamSubscribeHintOn)
+                ? string.Empty
                 : T(Keys.WorkshopDetailSteamReadOnlyHint);
 
     /// <summary>是否有 Steam 订阅说明。</summary>
@@ -1013,6 +1011,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         IsSteamSubscribing = false;
         IsSteamNeedsUpdate = false;
         SteamDownloadProgressText = string.Empty;
+
+        // 订阅操作的失败提示属于上一个 mod，不清掉会串到下一个详情页。
+        StatusText = string.Empty;
 
         // 列表里已经下好的封面先直接用，别在详情页再下一次。
         CoverPath = row.CoverPath;
@@ -2035,7 +2036,6 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasCreated));
         OnPropertyChanged(nameof(HasCachedHint));
         OnPropertyChanged(nameof(HasTranslationNotice));
-        OnPropertyChanged(nameof(ShowInstalled));
         OnPropertyChanged(nameof(HasAuthorProfile));
         OnPropertyChanged(nameof(WebUrl));
         OnPropertyChanged(nameof(HasWebUrl));
@@ -2056,7 +2056,6 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(ShowSubscribeCard));
         OnPropertyChanged(nameof(ShowPdxSubscribeButton));
         OnPropertyChanged(nameof(ShowSteamSubscribeButton));
-        OnPropertyChanged(nameof(ShowSubscriptionState));
         OnPropertyChanged(nameof(HasStatusText));
         OnPropertyChanged(nameof(SteamSubscribeActionText));
         OnPropertyChanged(nameof(CanToggleSteamSubscription));
@@ -2104,8 +2103,6 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     partial void OnIsTranslatingCommentsChanged(bool value) => OnPropertyChanged(nameof(ShowTranslatingComments));
 
-    partial void OnIsInstalledChanged(bool value) => OnPropertyChanged(nameof(ShowInstalled));
-
     partial void OnCachedHintChanged(string value) => OnPropertyChanged(nameof(HasCachedHint));
 
     partial void OnTranslationNoticeChanged(string value) => OnPropertyChanged(nameof(HasTranslationNotice));
@@ -2139,8 +2136,6 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(SubscribeHint));
         OnPropertyChanged(nameof(HasSubscribeHint));
     }
-
-    partial void OnIsSubscriptionKnownChanged(bool value) => OnPropertyChanged(nameof(ShowSubscriptionState));
 
     partial void OnCommentsTotalChanged(int value)
     {
