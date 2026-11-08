@@ -14,11 +14,19 @@ public sealed record SaveBackupResult(
     /// <summary>失败后仍残留的文件绝对路径清单。</summary>
     public IReadOnlyList<string> RemainingPaths { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// 本次备份前为腾出配额而自动删除的旧备份份数；未开启自动清理或不需要清理时为 0。
+    /// </summary>
+    public int AutoPrunedEntries { get; init; }
+
     /// <summary>是否成功。</summary>
     public bool IsSuccess => Status == SaveBackupStatus.Ok;
 
-    internal static SaveBackupResult Success(SaveBackupEntry entry) =>
-        new(SaveBackupStatus.Ok, "存档备份完成。", entry, null);
+    internal static SaveBackupResult Success(SaveBackupEntry entry, int autoPrunedEntries = 0) =>
+        new(SaveBackupStatus.Ok, "存档备份完成。", entry, null)
+        {
+            AutoPrunedEntries = autoPrunedEntries,
+        };
 
     internal static SaveBackupResult Invalid(string message) =>
         new(SaveBackupStatus.InvalidArgument, message, null, null);

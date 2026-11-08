@@ -53,8 +53,7 @@ public sealed class SaveBackupService : ISaveGameBackupService
     private readonly IClock _clock;
     private readonly string _dataRoot;
     private readonly string _backupRoot;
-    private readonly long _maxTotalBytes;
-    private readonly int _maxEntriesPerGame;
+    private volatile SaveBackupPolicy _policy;
 
     /// <param name="fileSystem">文件系统抽象（自检会传临时目录实现）。</param>
     /// <param name="logger">日志；关键路径用中文短语，便于 <c>grep</c>。</param>
@@ -62,13 +61,15 @@ public sealed class SaveBackupService : ISaveGameBackupService
     /// <param name="clock">时钟覆盖；默认 <see cref="SystemClock.Instance"/>。</param>
     /// <param name="maxTotalBytes">备份总字节配额，默认 2 GiB。</param>
     /// <param name="maxEntriesPerGame">单游戏条目数配额，默认 200。</param>
+    /// <param name="autoPruneOldestWhenFull">配额不足时是否自动删除最旧备份，默认关。</param>
     public SaveBackupService(
         IFileSystem fileSystem,
         IAppLogger logger,
         string? dataRoot = null,
         IClock? clock = null,
         long maxTotalBytes = SaveBackupPaths.DefaultMaxTotalBytes,
-        int maxEntriesPerGame = SaveBackupPaths.DefaultMaxEntriesPerGame)
+        int maxEntriesPerGame = SaveBackupPaths.DefaultMaxEntriesPerGame,
+        bool autoPruneOldestWhenFull = false)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(logger);
@@ -80,12 +81,23 @@ public sealed class SaveBackupService : ISaveGameBackupService
         _clock = clock ?? SystemClock.Instance;
         _dataRoot = string.IsNullOrWhiteSpace(dataRoot) ? PdxDataRoot.Directory : dataRoot!;
         _backupRoot = SaveBackupPaths.Root(_dataRoot);
-        _maxTotalBytes = maxTotalBytes;
-        _maxEntriesPerGame = maxEntriesPerGame;
+        _policy = new SaveBackupPolicy(maxTotalBytes, maxEntriesPerGame, autoPruneOldestWhenFull);
     }
 
     /// <inheritdoc />
     public string BackupRootDirectory => _backupRoot;
+
+    /// <inheritdoc />
+    public SaveBackupPolicy Policy => _policy;
+
+    /// <inheritdoc />
+    public void ApplyPolicy(SaveBackupPolicy policy)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(policy.MaxTotalBytes);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(policy.MaxEntriesPerGame);
+        _policy = policy;
+    }
 
     /// <inheritdoc />
     public async Task<SaveBackupResult> BackupAsync(
@@ -113,25 +125,64 @@ public sealed class SaveBackupService : ISaveGameBackupService
             return SaveBackupResult.SourceMissing("备份失败：源存档不存在：" + fullSourcePath);
         }
 
+        var policy = _policy;
         var snapshot = await MeasureAsync(cancellationToken).ConfigureAwait(false);
         var usage = snapshot.ToUsage();
         var sourceBytes = _fileSystem.GetFileSize(fullSourcePath);
         var gameFolder = SaveBackupPaths.SafeGameFolderName(canonicalGameId);
 
-        if (snapshot.TotalBytes + sourceBytes > _maxTotalBytes)
+        if (ExceedsQuota(snapshot, gameFolder, sourceBytes, policy))
         {
-            var message = $"备份失败：备份总量将超过配额（现有 {snapshot.TotalBytes} 字节 + 本次 {sourceBytes} 字节，上限 {_maxTotalBytes} 字节）。";
-            _logger.Warn(BackupFailedLog + "：配额超限，" + fullSourcePath);
-            return SaveBackupResult.Quota(message, usage);
+            if (!policy.AutoPruneOldestWhenFull)
+            {
+                var message = $"备份失败：备份总量或条目数将超过配额（现有 {snapshot.TotalBytes} 字节 / {snapshot.CountFor(gameFolder)} 个，本次 {sourceBytes} 字节，上限 {policy.MaxTotalBytes} 字节 / {policy.MaxEntriesPerGame} 个）。";
+                _logger.Warn(BackupFailedLog + "：配额超限，" + fullSourcePath);
+                return SaveBackupResult.Quota(message, usage);
+            }
+
+            // 只有策略显式开启自动清理时才走到这里：先腾空间，再按最新用量重新判定。
+            var autoPruned = await AutoPruneOldestAsync(
+                    gameFolder,
+                    sourceBytes,
+                    policy,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            snapshot = await MeasureAsync(cancellationToken).ConfigureAwait(false);
+            usage = snapshot.ToUsage();
+            if (ExceedsQuota(snapshot, gameFolder, sourceBytes, policy))
+            {
+                var message = $"备份失败：清理最旧备份后仍超过配额（单份存档 {sourceBytes} 字节，上限 {policy.MaxTotalBytes} 字节）。";
+                _logger.Warn(BackupFailedLog + "：自动清理后仍超限，" + fullSourcePath);
+                return SaveBackupResult.Quota(message, usage);
+            }
+
+            _logger.Info($"{BackupSuccessLog}：已为本次备份自动清理 {autoPruned} 份旧备份");
+            return await BackupCoreAsync(
+                    canonicalGameId,
+                    fullSourcePath,
+                    meta,
+                    autoPruned,
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
 
-        if (snapshot.CountFor(gameFolder) + 1 > _maxEntriesPerGame)
-        {
-            var message = $"备份失败：游戏 {canonicalGameId} 的备份条目将超过配额（现有 {snapshot.CountFor(gameFolder)} 个，上限 {_maxEntriesPerGame} 个）。";
-            _logger.Warn(BackupFailedLog + "：条目数超限，" + canonicalGameId);
-            return SaveBackupResult.Quota(message, usage);
-        }
+        return await BackupCoreAsync(
+                canonicalGameId,
+                fullSourcePath,
+                meta,
+                autoPrunedEntries: 0,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
 
+    /// <summary>配额与目录准备完成后的实际复制；成功结果带上本次自动清理的旧备份份数。</summary>
+    private async Task<SaveBackupResult> BackupCoreAsync(
+        string canonicalGameId,
+        string fullSourcePath,
+        SaveGameMeta? meta,
+        int autoPrunedEntries,
+        CancellationToken cancellationToken)
+    {
         var gameDirectory = SaveBackupPaths.GameDirectory(_dataRoot, canonicalGameId);
         try
         {
@@ -189,7 +240,7 @@ public sealed class SaveBackupService : ISaveGameBackupService
                 meta?.GameDate,
                 createdUtc);
             _logger.Info($"{BackupSuccessLog}：{fullSourcePath} → {backupPath}（{copy.Bytes} 字节，sha256 {ShortHash(copy.Sha256)}）");
-            return SaveBackupResult.Success(entry);
+            return SaveBackupResult.Success(entry, autoPrunedEntries);
         }
         catch (OperationCanceledException)
         {
@@ -204,6 +255,94 @@ public sealed class SaveBackupService : ISaveGameBackupService
             _logger.Warn(BackupFailedLog + "：" + message);
             return SaveBackupResult.Failed(message, remaining);
         }
+    }
+
+    private static bool ExceedsQuota(
+        BackupSnapshot snapshot,
+        string gameFolder,
+        long sourceBytes,
+        SaveBackupPolicy policy) =>
+        snapshot.TotalBytes + sourceBytes > policy.MaxTotalBytes
+        || snapshot.CountFor(gameFolder) + 1 > policy.MaxEntriesPerGame;
+
+    /// <summary>
+    /// 按创建时间从最旧开始删除备份，直到本次写入后不再超出总量与条目配额。
+    /// 跨游戏删除是必要的：总量配额是全局的，只清当前游戏可能永远腾不出空间。
+    /// </summary>
+    private async Task<int> AutoPruneOldestAsync(
+        string gameFolder,
+        long sourceBytes,
+        SaveBackupPolicy policy,
+        CancellationToken cancellationToken)
+    {
+        if (!_fileSystem.DirectoryExists(_backupRoot))
+        {
+            return 0;
+        }
+
+        var candidates = new List<(SaveBackupEntry Entry, string GameFolder)>();
+        foreach (var directory in _fileSystem.EnumerateDirectories(_backupRoot))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var folder = _fileSystem.GetFileName(directory);
+            if (string.Equals(folder, SaveBackupPaths.TrashFolderName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (var entry in EnumerateBackupsInDirectory(directory, folder, recursive: true, cancellationToken))
+            {
+                candidates.Add((entry, folder));
+            }
+        }
+
+        if (candidates.Count == 0)
+        {
+            return 0;
+        }
+
+        var perGame = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (_, folder) in candidates)
+        {
+            perGame[folder] = perGame.GetValueOrDefault(folder) + 1;
+        }
+
+        long totalBytes = 0;
+        foreach (var (entry, _) in candidates)
+        {
+            totalBytes += entry.SizeBytes;
+        }
+
+        // 最旧的先删；同一时间按路径排序，保证结果稳定。
+        candidates.Sort(static (left, right) =>
+        {
+            var byTime = left.Entry.CreatedUtc.CompareTo(right.Entry.CreatedUtc);
+            return byTime != 0 ? byTime : string.CompareOrdinal(left.Entry.BackupPath, right.Entry.BackupPath);
+        });
+
+        var removed = 0;
+        foreach (var (entry, folder) in candidates)
+        {
+            if (totalBytes + sourceBytes <= policy.MaxTotalBytes
+                && perGame.GetValueOrDefault(gameFolder) + 1 <= policy.MaxEntriesPerGame)
+            {
+                break;
+            }
+
+            var result = await DeleteBackupAsync(entry, cancellationToken).ConfigureAwait(false);
+            if (!result.IsSuccess)
+            {
+                _logger.Warn("自动清理旧备份失败：" + entry.BackupPath + "：" + result.Message);
+                continue;
+            }
+
+            totalBytes -= entry.SizeBytes;
+            perGame[folder] = Math.Max(0, perGame.GetValueOrDefault(folder) - 1);
+            removed++;
+            _logger.Info("自动清理旧备份：已删除 " + entry.BackupPath);
+        }
+
+        return removed;
     }
 
     /// <inheritdoc />
@@ -741,7 +880,7 @@ public sealed class SaveBackupService : ISaveGameBackupService
             return entries;
         }
 
-        foreach (var backupPath in EnumerateBackupFiles(gameDirectory, cancellationToken))
+        foreach (var backupPath in EnumerateBackupFiles(gameDirectory, recursive: false, cancellationToken))
         {
             var sidecarPath = SaveBackupPaths.SidecarPath(backupPath);
             if (!_fileSystem.FileExists(sidecarPath))
@@ -774,16 +913,30 @@ public sealed class SaveBackupService : ISaveGameBackupService
 
     private IReadOnlyList<SaveBackupEntry> EnumerateBackupsWithTimestamps(
         string canonicalGameId,
+        CancellationToken cancellationToken) =>
+        EnumerateBackupsInDirectory(
+            SaveBackupPaths.GameDirectory(_dataRoot, canonicalGameId),
+            canonicalGameId,
+            recursive: false,
+            cancellationToken);
+
+    /// <summary>
+    /// 枚举某个目录下的备份，只读 sidecar 的创建时间；sidecar 缺失/损坏时回退到文件时间。
+    /// 返回的条目只用于清理与排序（原始路径与哈希为空），不能直接用于恢复。
+    /// </summary>
+    private IReadOnlyList<SaveBackupEntry> EnumerateBackupsInDirectory(
+        string gameDirectory,
+        string gameId,
+        bool recursive,
         CancellationToken cancellationToken)
     {
         var entries = new List<SaveBackupEntry>();
-        var gameDirectory = SaveBackupPaths.GameDirectory(_dataRoot, canonicalGameId);
         if (!_fileSystem.DirectoryExists(gameDirectory))
         {
             return entries;
         }
 
-        foreach (var backupPath in EnumerateBackupFiles(gameDirectory, cancellationToken))
+        foreach (var backupPath in EnumerateBackupFiles(gameDirectory, recursive, cancellationToken))
         {
             var sidecarPath = SaveBackupPaths.SidecarPath(backupPath);
             var createdUtc = _clock.UtcNow;
@@ -810,7 +963,7 @@ public sealed class SaveBackupService : ISaveGameBackupService
                 _fileSystem.GetFileName(backupPath),
                 _fileSystem.GetFileSize(backupPath),
                 string.Empty,
-                canonicalGameId,
+                gameId,
                 null,
                 null,
                 createdUtc));
@@ -824,9 +977,12 @@ public sealed class SaveBackupService : ISaveGameBackupService
         return entries;
     }
 
-    private IEnumerable<string> EnumerateBackupFiles(string gameDirectory, CancellationToken cancellationToken)
+    private IEnumerable<string> EnumerateBackupFiles(
+        string gameDirectory,
+        bool recursive,
+        CancellationToken cancellationToken)
     {
-        foreach (var path in _fileSystem.EnumerateFiles(gameDirectory, "*" + SaveBackupPaths.BackupExtension, recursive: false))
+        foreach (var path in _fileSystem.EnumerateFiles(gameDirectory, "*" + SaveBackupPaths.BackupExtension, recursive))
         {
             cancellationToken.ThrowIfCancellationRequested();
             yield return path;

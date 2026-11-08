@@ -133,10 +133,12 @@ public static class SavesPageChecks
             xaml.Contains("IsDegraded", StringComparison.Ordinal)
                 && xaml.Contains("DegradedText", StringComparison.Ordinal));
         ChecksContext.Check(
-            "存档页: 实验性格式有可见标签",
-            xaml.Contains("IsExperimental", StringComparison.Ordinal)
-                && xaml.Contains("ExperimentalText", StringComparison.Ordinal)
-                && xaml.Contains("ExperimentalTooltip", StringComparison.Ordinal));
+            "存档页: 实验性解析改为页头一次性提示（不再给每行加徽标）",
+            xaml.Contains("ViewModel.IsExperimentalGame", StringComparison.Ordinal)
+                && xaml.Contains("ViewModel.ExperimentalLabelText", StringComparison.Ordinal)
+                && xaml.Contains("ViewModel.ExperimentalNoticeText", StringComparison.Ordinal)
+                && !xaml.Contains("{x:Bind IsExperimental,", StringComparison.Ordinal)
+                && !xaml.Contains("ExperimentalText", StringComparison.Ordinal));
 
         // UIA 无障碍名：ListView 的 Content 是视图模型对象，名字与自动 id 必须挂在行容器上，
         // 否则读屏把整列都读成类型全名。WinUI 的 Style Setter.Value 不支持 {Binding}（实测
@@ -239,13 +241,15 @@ public static class SavesPageChecks
 
         ChecksContext.Check(
             "存档页: V3/EU5/CS2 标为实验性（CK3/Stellaris 不标）",
-            rowViewModel.Contains("\"victoria3\"", StringComparison.Ordinal)
-                && rowViewModel.Contains("\"eu5\"", StringComparison.Ordinal)
-                && rowViewModel.Contains("\"cities_skylines_2\"", StringComparison.Ordinal));
+            viewModel.Contains("\"victoria3\"", StringComparison.Ordinal)
+                && viewModel.Contains("\"eu5\"", StringComparison.Ordinal)
+                && viewModel.Contains("\"cities_skylines_2\"", StringComparison.Ordinal)
+                && viewModel.Contains("IsExperimentalGame", StringComparison.Ordinal));
         ChecksContext.Check(
             "存档页: 实验性文案走 i18n 键，不写死中文",
-            rowViewModel.Contains("Keys.SavesExperimental", StringComparison.Ordinal)
-                && !rowViewModel.Contains("实验性", StringComparison.Ordinal));
+            viewModel.Contains("Keys.SavesExperimental", StringComparison.Ordinal)
+                && viewModel.Contains("Keys.SavesExperimentalTooltip", StringComparison.Ordinal)
+                && !viewModel.Contains("实验性", StringComparison.Ordinal));
         ChecksContext.Check(
             "存档页: 降级文案走 i18n 键",
             rowViewModel.Contains("Keys.SavesMetadataUnreadable", StringComparison.Ordinal));

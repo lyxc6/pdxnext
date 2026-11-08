@@ -14,6 +14,14 @@ public interface ISaveGameBackupService
     /// <summary>备份根目录绝对路径：<c>&lt;data&gt;\save-backups</c>。</summary>
     string BackupRootDirectory { get; }
 
+    /// <summary>当前配额与自动清理策略。</summary>
+    SaveBackupPolicy Policy { get; }
+
+    /// <summary>
+    /// 更新配额与自动清理策略。只影响之后的备份判定；已在磁盘上的备份不会被立即删除。
+    /// </summary>
+    void ApplyPolicy(SaveBackupPolicy policy);
+
     /// <summary>
     /// 备份一个存档文件：源文件只读，绝不修改/移动。流程为流式复制到
     /// <c>&lt;backup&gt;.tmp</c>、计算 SHA-256、Move 成 <c>.bak</c>、再写 <c>.bak.json</c> sidecar。

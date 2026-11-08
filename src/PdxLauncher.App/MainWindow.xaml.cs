@@ -63,6 +63,12 @@ public sealed partial class MainWindow : Window
     /// <summary>「添加模组」子页；离开它就 detach 事件，避免持有已丢弃页面的引用。</summary>
     private AddModsPage? _addModsPage;
 
+    /// <summary>存档页；它会请求打开「备份」子页。</summary>
+    private SavesPage? _savesPage;
+
+    /// <summary>「备份」子页；离开它就 detach 事件，避免持有已丢弃页面的引用。</summary>
+    private SaveBackupsPage? _saveBackupsPage;
+
     private BitmapLoader? _bitmapLoader;
     private CancellationTokenSource? _backdropLifetime;
 
@@ -327,6 +333,18 @@ public sealed partial class MainWindow : Window
             _addModsPage = null;
         }
 
+        if (_savesPage is not null)
+        {
+            _savesPage.BackupsRequested -= OnSaveBackupsRequested;
+            _savesPage = null;
+        }
+
+        if (_saveBackupsPage is not null)
+        {
+            _saveBackupsPage.NavigationRequested -= OnPageNavigationRequested;
+            _saveBackupsPage = null;
+        }
+
         if (content is GameLibraryPage libraryPage)
         {
             _libraryPage = libraryPage;
@@ -363,6 +381,43 @@ public sealed partial class MainWindow : Window
             _addModsPage = addModsPage;
             addModsPage.NavigationRequested += OnPageNavigationRequested;
             addModsPage.ModsSelected += OnAddModsSelected;
+        }
+
+        if (content is SavesPage savesPage)
+        {
+            _savesPage = savesPage;
+            savesPage.BackupsRequested += OnSaveBackupsRequested;
+        }
+
+        if (content is SaveBackupsPage saveBackupsPage)
+        {
+            _saveBackupsPage = saveBackupsPage;
+            saveBackupsPage.NavigationRequested += OnPageNavigationRequested;
+        }
+    }
+
+    /// <summary>
+    /// 存档页要求打开「备份」子页（页面自己不持导航职责）。
+    /// 故意不同步左栏选中项：子页没有菜单项，选中态应停在「存档」。
+    /// </summary>
+    private void OnSaveBackupsRequested(object? sender, SaveBackupsNavigationRequest request)
+    {
+        try
+        {
+            if (!_navigation.Navigate(NavigationService.SaveBackupsTag, request))
+            {
+                if (AppServices.IsInitialized)
+                {
+                    AppServices.Logger.Warn("导航到备份子页失败: " + request.Game.GameId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Error("导航到备份子页异常: " + request.Game.GameId, ex);
+            }
         }
     }
 
@@ -547,6 +602,18 @@ public sealed partial class MainWindow : Window
                 _addModsPage.NavigationRequested -= OnPageNavigationRequested;
                 _addModsPage.ModsSelected -= OnAddModsSelected;
                 _addModsPage = null;
+            }
+
+            if (_savesPage is not null)
+            {
+                _savesPage.BackupsRequested -= OnSaveBackupsRequested;
+                _savesPage = null;
+            }
+
+            if (_saveBackupsPage is not null)
+            {
+                _saveBackupsPage.NavigationRequested -= OnPageNavigationRequested;
+                _saveBackupsPage = null;
             }
 
             if (!AppServices.IsInitialized)

@@ -79,6 +79,9 @@ public sealed class SaveBackupRowViewModel : LocalizedObservableObject
     /// <summary>行内按钮文案：DataTemplate 里只能绑行 VM，绑不到页面上的 <c>L</c>。</summary>
     public string RestoreText => T(Keys.SavesActionRestore);
 
+    /// <summary>覆盖恢复：先把同名存档移入回收站，再写回原路径。</summary>
+    public string OverwriteText => T(Keys.SavesActionRestoreOverwrite);
+
     public string DeleteText => T(Keys.SavesActionDeleteBackup);
 
     /// <summary>页面忙碌态变化时由视图模型统一下发；不改变行自身的忙碌态。</summary>
