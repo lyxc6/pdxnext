@@ -615,6 +615,86 @@
                                        VerticalAlignment="Center" />
                         </ct:SettingsCard>
 
+                        <!--
+                            连通性自检：创意工坊的列表/详情是启动器自己发的 HTTP，不走 Steam 客户端，
+                            而加速器默认只接管 Steam 进程。测一遍才知道本程序能不能连上。
+                        -->
+                        <ct:SettingsCard Header="{x:Bind L.SettingsProxyProbeTitle, Mode=OneWay}"
+                                         Description="{x:Bind L.SettingsProxyProbeHint, Mode=OneWay}"
+                                         HorizontalAlignment="Stretch"
+                                         Background="{ThemeResource PdxCardBackgroundBrush}"
+                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                         BorderThickness="1"
+                                         CornerRadius="8"
+                                         MinHeight="56"
+                                         Padding="16,12"
+                                         IsClickEnabled="False">
+                            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                <Button AutomationProperties.AutomationId="btnNetworkProbe"
+                                        AutomationProperties.Name="{x:Bind L.SettingsProxyProbeRunName, Mode=OneWay}"
+                                        Content="{x:Bind ViewModel.ProbeRunText, Mode=OneWay}"
+                                        IsEnabled="{x:Bind ViewModel.CanRunNetworkProbe, Mode=OneWay}"
+                                        Click="OnNetworkProbeClick" />
+                                <ProgressRing Width="16" Height="16"
+                                              IsActive="{x:Bind ViewModel.IsProbeRunning, Mode=OneWay}"
+                                              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsProbeRunning), Mode=OneWay}"
+                                              VerticalAlignment="Center" />
+                                <TextBlock Text="{x:Bind ViewModel.ProbeSummaryText, Mode=OneWay}"
+                                           AutomationProperties.AutomationId="txtProbeSummary"
+                                           MaxWidth="240" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ct:SettingsCard>
+
+                        <Grid ColumnSpacing="8"
+                              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasProbeRows), Mode=OneWay}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="200" />
+                                <ColumnDefinition Width="120" />
+                                <ColumnDefinition Width="120" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="1"
+                                       Text="{x:Bind L.SettingsProxyProbeColumnCurrent, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <TextBlock Grid.Column="2"
+                                       Text="{x:Bind L.SettingsProxyProbeColumnDirect, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasDirectProbeColumn), Mode=OneWay}" />
+                        </Grid>
+
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.ProbeRows, Mode=OneWay}"
+                                      Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasProbeRows), Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:NetworkProbeRowViewModel">
+                                    <Grid ColumnSpacing="8" Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="200" />
+                                            <ColumnDefinition Width="120" />
+                                            <ColumnDefinition Width="120" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{x:Bind Host}"
+                                                   VerticalAlignment="Center"
+                                                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="1"
+                                                   AutomationProperties.AutomationId="{x:Bind AutomationId}"
+                                                   Text="{x:Bind CurrentText}"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2"
+                                                   AutomationProperties.AutomationId="{x:Bind DirectAutomationId}"
+                                                   Text="{x:Bind DirectText}"
+                                                   VerticalAlignment="Center"
+                                                   Visibility="{x:Bind svc:XamlVisibility.FromBool(HasDirectText)}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="{x:Bind L.SettingsProxyProbeAcceleratorHint, Mode=OneWay}"
+                                   Style="{StaticResource SettingsHintTextStyle}" />
+
                         <ct:SettingsCard Header="{x:Bind L.SettingsProxyDetected, Mode=OneWay}"
                                          HorizontalAlignment="Stretch"
                                               Description="{x:Bind L.SettingsProxyDetectedHint, Mode=OneWay}"
