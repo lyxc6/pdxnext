@@ -49,7 +49,7 @@ public static class WorkshopTagTextChecks
         Dictionary<string, string> zh,
         Dictionary<string, string> en)
     {
-        ChecksContext.Equal("标签文案键数量", 34, WorkshopTagKeys.AllKeys.Count);
+        ChecksContext.Equal("标签文案键数量", 147, WorkshopTagKeys.AllKeys.Count);
 
         foreach (var key in WorkshopTagKeys.AllKeys)
         {
@@ -125,5 +125,39 @@ public static class WorkshopTagTextChecks
             "Deprecated 中文",
             "已弃用",
             I18nResw.Get(zh, WorkshopTagKeys.KeyDeprecated));
+
+        // 2026-11-08 抓取的工坊 SSR 里新出现的标签，按游戏各挑一条钉住。
+        ChecksContext.Equal(
+            "Character Focuses 中文",
+            "角色侧重点",
+            I18nResw.Get(zh, WorkshopTagKeys.KeyCharacterFocuses));
+        ChecksContext.Equal(
+            "Decisions 中文",
+            "决议",
+            I18nResw.Get(zh, WorkshopTagKeys.KeyDecisions));
+        ChecksContext.Equal(
+            "Submod 中文",
+            "子模组",
+            I18nResw.Get(zh, WorkshopTagKeys.KeySubmod));
+        ChecksContext.Equal(
+            "Spaceships 中文",
+            "太空舰船",
+            I18nResw.Get(zh, WorkshopTagKeys.KeySpaceships));
+        ChecksContext.Equal(
+            "National Focuses 中文",
+            "国家焦点",
+            I18nResw.Get(zh, WorkshopTagKeys.KeyNationalFocuses));
+        ChecksContext.Equal(
+            "Situations 中文",
+            "局势",
+            I18nResw.Get(zh, WorkshopTagKeys.KeySituations));
+        ChecksContext.Equal(
+            "Water & Sewage 中文",
+            "给排水",
+            I18nResw.Get(zh, WorkshopTagKeys.KeyWaterAndSewage));
+        ChecksContext.Equal(
+            "Older 中文",
+            "更早版本",
+            I18nResw.Get(zh, WorkshopTagKeys.KeyOlder));
     }
 }

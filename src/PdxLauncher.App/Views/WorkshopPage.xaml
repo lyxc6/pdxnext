@@ -265,8 +265,8 @@
                                                           AutomationProperties.AutomationId="lstWorkshopFilterOptions">
                                                 <ItemsControl.ItemsPanel>
                                                     <ItemsPanelTemplate>
-                                                        <!-- WinUI 没有 WrapPanel；PdxWrapPanel 按宽度自动换行。 -->
-                                                        <controls:PdxWrapPanel Spacing="4" />
+                                                        <!-- 单列整行：一个标签一行，铺满侧栏宽度，行距 4。 -->
+                                                        <StackPanel Spacing="4" />
                                                     </ItemsPanelTemplate>
                                                 </ItemsControl.ItemsPanel>
                                                 <ItemsControl.ItemTemplate>
@@ -274,7 +274,6 @@
                                                         <controls:PdxTagChip Text="{x:Bind DisplayName, Mode=OneWay}"
                                                                              IsRequired="{x:Bind IsRequired, Mode=OneWay}"
                                                                              IsExcluded="{x:Bind IsExcluded, Mode=OneWay}"
-                                                                             Margin="0,0,0,4"
                                                                              AutomationProperties.Name="{x:Bind DisplayName, Mode=OneWay}"
                                                                              AutomationProperties.HelpText="{x:Bind L.WorkshopFilterCycleHint, Mode=OneWay}"
                                                                              ToolTipService.ToolTip="{x:Bind L.WorkshopFilterCycleHint, Mode=OneWay}"

@@ -288,8 +288,30 @@ public sealed partial class WorkshopFiltersViewModel : LocalizedObservableObject
         "category" => T(Keys.WorkshopFilterGroupCategory),
         "compatibility" => T(Keys.WorkshopFilterGroupCompatibility),
         "dlc" => T(Keys.WorkshopFilterGroupDlc),
-        _ => string.IsNullOrWhiteSpace(rawTitle) ? T(Keys.WorkshopFilterGroupCategory) : rawTitle,
+        _ => LocalizeOtherGroup(key, rawTitle),
     };
+
+    /// <summary>
+    /// SSR 里没归类的分组：Cities: Skylines 的 «Assets» / «Misc» 也要有中文标题；
+    /// 其它游戏将来新增的分组保底显示原标题，不至于变成空白。
+    /// </summary>
+    private static string LocalizeOtherGroup(string key, string rawTitle)
+    {
+        var title = key.StartsWith("other:", StringComparison.Ordinal) ? key["other:".Length..] : rawTitle;
+
+        // UniquifyKey 可能给重复分组加后缀（other:Assets2），所以用前缀判断而不是全等。
+        if (title.StartsWith("Assets", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(Keys.WorkshopFilterGroupAssets);
+        }
+
+        if (title.StartsWith("Misc", StringComparison.OrdinalIgnoreCase))
+        {
+            return T(Keys.WorkshopFilterGroupMisc);
+        }
+
+        return string.IsNullOrWhiteSpace(rawTitle) ? T(Keys.WorkshopFilterGroupCategory) : rawTitle;
+    }
 
     private static WorkshopFilterApplyResult BuildApplyResult(
         IReadOnlyList<SteamWorkshopFilterGroup> sourceGroups,

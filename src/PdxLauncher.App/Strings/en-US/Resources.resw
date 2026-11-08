@@ -4784,6 +4784,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="WorkshopFilterDlcSearch" xml:space="preserve">
     <value>Filter by name</value>
   </data>
+  <data name="WorkshopFilterGroupAssets" xml:space="preserve">
+    <value>Assets</value>
+  </data>
   <data name="WorkshopFilterGroupCategory" xml:space="preserve">
     <value>Category</value>
   </data>
@@ -4792,6 +4795,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="WorkshopFilterGroupDlc" xml:space="preserve">
     <value>Required DLC</value>
+  </data>
+  <data name="WorkshopFilterGroupMisc" xml:space="preserve">
+    <value>Misc</value>
   </data>
   <data name="WorkshopFilterShowIncompatible" xml:space="preserve">
     <value>Show incompatible items</value>
@@ -5050,6 +5056,345 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="WorkshopTagWarfare" xml:space="preserve">
     <value>Warfare</value>
+  </data>
+  <data name="WorkshopTagAdvertiser" xml:space="preserve">
+    <value>Advertiser</value>
+  </data>
+  <data name="WorkshopTagAdvancements" xml:space="preserve">
+    <value>Advancements</value>
+  </data>
+  <data name="WorkshopTagBuilding" xml:space="preserve">
+    <value>Building</value>
+  </data>
+  <data name="WorkshopTagBuildings" xml:space="preserve">
+    <value>Buildings</value>
+  </data>
+  <data name="WorkshopTagCampus" xml:space="preserve">
+    <value>Campus</value>
+  </data>
+  <data name="WorkshopTagCampusArea" xml:space="preserve">
+    <value>Campus Area</value>
+  </data>
+  <data name="WorkshopTagCampusLiberalArtsCollege" xml:space="preserve">
+    <value>Campus Liberal Arts College</value>
+  </data>
+  <data name="WorkshopTagCampusTradeSchool" xml:space="preserve">
+    <value>Campus Trade School</value>
+  </data>
+  <data name="WorkshopTagCampusUniversity" xml:space="preserve">
+    <value>Campus University</value>
+  </data>
+  <data name="WorkshopTagCharacterFocuses" xml:space="preserve">
+    <value>Character Focuses</value>
+  </data>
+  <data name="WorkshopTagCharacterInteractions" xml:space="preserve">
+    <value>Character Interactions</value>
+  </data>
+  <data name="WorkshopTagCinematicCameras" xml:space="preserve">
+    <value>Cinematic Cameras</value>
+  </data>
+  <data name="WorkshopTagCitizen" xml:space="preserve">
+    <value>Citizen</value>
+  </data>
+  <data name="WorkshopTagColorCorrectionLut" xml:space="preserve">
+    <value>Color Correction LUT</value>
+  </data>
+  <data name="WorkshopTagCommercial" xml:space="preserve">
+    <value>Commercial</value>
+  </data>
+  <data name="WorkshopTagCommercialEco" xml:space="preserve">
+    <value>Commercial Eco</value>
+  </data>
+  <data name="WorkshopTagCommercialHigh" xml:space="preserve">
+    <value>Commercial High</value>
+  </data>
+  <data name="WorkshopTagCommercialLeisure" xml:space="preserve">
+    <value>Commercial Leisure</value>
+  </data>
+  <data name="WorkshopTagCommercialLow" xml:space="preserve">
+    <value>Commercial Low</value>
+  </data>
+  <data name="WorkshopTagCommercialTourism" xml:space="preserve">
+    <value>Commercial Tourism</value>
+  </data>
+  <data name="WorkshopTagCommercialWallToWall" xml:space="preserve">
+    <value>Commercial Wall-to-wall</value>
+  </data>
+  <data name="WorkshopTagContent" xml:space="preserve">
+    <value>Content</value>
+  </data>
+  <data name="WorkshopTagConvertedFromCk2" xml:space="preserve">
+    <value>Converted from CKII</value>
+  </data>
+  <data name="WorkshopTagCultureAndArt" xml:space="preserve">
+    <value>Culture &amp; Art</value>
+  </data>
+  <data name="WorkshopTagDeathcare" xml:space="preserve">
+    <value>Deathcare</value>
+  </data>
+  <data name="WorkshopTagDecisions" xml:space="preserve">
+    <value>Decisions</value>
+  </data>
+  <data name="WorkshopTagDistrictStyle" xml:space="preserve">
+    <value>District Style</value>
+  </data>
+  <data name="WorkshopTagEconomy" xml:space="preserve">
+    <value>Economy</value>
+  </data>
+  <data name="WorkshopTagEducation" xml:space="preserve">
+    <value>Education</value>
+  </data>
+  <data name="WorkshopTagElectricity" xml:space="preserve">
+    <value>Electricity</value>
+  </data>
+  <data name="WorkshopTagFireDepartment" xml:space="preserve">
+    <value>Fire Department</value>
+  </data>
+  <data name="WorkshopTagFishingIndustry" xml:space="preserve">
+    <value>Fishing Industry</value>
+  </data>
+  <data name="WorkshopTagFont" xml:space="preserve">
+    <value>Font</value>
+  </data>
+  <data name="WorkshopTagGalaxyGeneration" xml:space="preserve">
+    <value>Galaxy Generation</value>
+  </data>
+  <data name="WorkshopTagGarbage" xml:space="preserve">
+    <value>Garbage</value>
+  </data>
+  <data name="WorkshopTagGovernmentAndEstates" xml:space="preserve">
+    <value>Government and Estates</value>
+  </data>
+  <data name="WorkshopTagGraphicsAndSound" xml:space="preserve">
+    <value>Graphics and Sound</value>
+  </data>
+  <data name="WorkshopTagGuide" xml:space="preserve">
+    <value>Guide</value>
+  </data>
+  <data name="WorkshopTagHealthcare" xml:space="preserve">
+    <value>Healthcare</value>
+  </data>
+  <data name="WorkshopTagHotel" xml:space="preserve">
+    <value>Hotel</value>
+  </data>
+  <data name="WorkshopTagIdeologies" xml:space="preserve">
+    <value>Ideologies</value>
+  </data>
+  <data name="WorkshopTagIndustrial" xml:space="preserve">
+    <value>Industrial</value>
+  </data>
+  <data name="WorkshopTagIndustrialFarming" xml:space="preserve">
+    <value>Industrial Farming</value>
+  </data>
+  <data name="WorkshopTagIndustrialForestry" xml:space="preserve">
+    <value>Industrial Forestry</value>
+  </data>
+  <data name="WorkshopTagIndustrialGeneric" xml:space="preserve">
+    <value>Industrial Generic</value>
+  </data>
+  <data name="WorkshopTagIndustrialOil" xml:space="preserve">
+    <value>Industrial Oil</value>
+  </data>
+  <data name="WorkshopTagIndustrialOre" xml:space="preserve">
+    <value>Industrial Ore</value>
+  </data>
+  <data name="WorkshopTagIndustryArea" xml:space="preserve">
+    <value>Industry Area</value>
+  </data>
+  <data name="WorkshopTagIndustryAreaFarming" xml:space="preserve">
+    <value>Industry Area Farming</value>
+  </data>
+  <data name="WorkshopTagIndustryAreaForestry" xml:space="preserve">
+    <value>Industry Area Forestry</value>
+  </data>
+  <data name="WorkshopTagIndustryAreaOil" xml:space="preserve">
+    <value>Industry Area Oil</value>
+  </data>
+  <data name="WorkshopTagIndustryAreaOre" xml:space="preserve">
+    <value>Industry Area Ore</value>
+  </data>
+  <data name="WorkshopTagInternationalOrganizations" xml:space="preserve">
+    <value>International Organizations</value>
+  </data>
+  <data name="WorkshopTagIntersection" xml:space="preserve">
+    <value>Intersection</value>
+  </data>
+  <data name="WorkshopTagLeaders" xml:space="preserve">
+    <value>Leaders</value>
+  </data>
+  <data name="WorkshopTagLoadingScreen" xml:space="preserve">
+    <value>Loading Screen</value>
+  </data>
+  <data name="WorkshopTagMapTheme" xml:space="preserve">
+    <value>Map Theme</value>
+  </data>
+  <data name="WorkshopTagMilitary" xml:space="preserve">
+    <value>Military</value>
+  </data>
+  <data name="WorkshopTagMissionsAndDecisions" xml:space="preserve">
+    <value>Missions and Decisions</value>
+  </data>
+  <data name="WorkshopTagMod" xml:space="preserve">
+    <value>Mod</value>
+  </data>
+  <data name="WorkshopTagMonument" xml:space="preserve">
+    <value>Monument</value>
+  </data>
+  <data name="WorkshopTagNationalFocuses" xml:space="preserve">
+    <value>National Focuses</value>
+  </data>
+  <data name="WorkshopTagNationalIdeas" xml:space="preserve">
+    <value>National Ideas</value>
+  </data>
+  <data name="WorkshopTagOffice" xml:space="preserve">
+    <value>Office</value>
+  </data>
+  <data name="WorkshopTagOfficeFinancial" xml:space="preserve">
+    <value>Office Financial</value>
+  </data>
+  <data name="WorkshopTagOfficeHighTech" xml:space="preserve">
+    <value>Office High Tech</value>
+  </data>
+  <data name="WorkshopTagOfficeWallToWall" xml:space="preserve">
+    <value>Office Wall-to-wall</value>
+  </data>
+  <data name="WorkshopTagOlder" xml:space="preserve">
+    <value>Older</value>
+  </data>
+  <data name="WorkshopTagOverhaul" xml:space="preserve">
+    <value>Overhaul</value>
+  </data>
+  <data name="WorkshopTagParadeFloat" xml:space="preserve">
+    <value>Parade Float</value>
+  </data>
+  <data name="WorkshopTagParadeGroup" xml:space="preserve">
+    <value>Parade Group</value>
+  </data>
+  <data name="WorkshopTagParadePerformer" xml:space="preserve">
+    <value>Parade Performer</value>
+  </data>
+  <data name="WorkshopTagPark" xml:space="preserve">
+    <value>Park</value>
+  </data>
+  <data name="WorkshopTagParkArea" xml:space="preserve">
+    <value>Park Area</value>
+  </data>
+  <data name="WorkshopTagPoliceDepartment" xml:space="preserve">
+    <value>Police Department</value>
+  </data>
+  <data name="WorkshopTagPrison" xml:space="preserve">
+    <value>Prison</value>
+  </data>
+  <data name="WorkshopTagProp" xml:space="preserve">
+    <value>Prop</value>
+  </data>
+  <data name="WorkshopTagRaceCar" xml:space="preserve">
+    <value>Race Car</value>
+  </data>
+  <data name="WorkshopTagRaceEvent" xml:space="preserve">
+    <value>Race Event</value>
+  </data>
+  <data name="WorkshopTagRaceTeam" xml:space="preserve">
+    <value>Race Team</value>
+  </data>
+  <data name="WorkshopTagResidential" xml:space="preserve">
+    <value>Residential</value>
+  </data>
+  <data name="WorkshopTagResidentialHigh" xml:space="preserve">
+    <value>Residential High</value>
+  </data>
+  <data name="WorkshopTagResidentialHighEco" xml:space="preserve">
+    <value>Residential High Eco</value>
+  </data>
+  <data name="WorkshopTagResidentialLow" xml:space="preserve">
+    <value>Residential Low</value>
+  </data>
+  <data name="WorkshopTagResidentialLowEco" xml:space="preserve">
+    <value>Residential Low Eco</value>
+  </data>
+  <data name="WorkshopTagResidentialWallToWall" xml:space="preserve">
+    <value>Residential Wall-to-wall</value>
+  </data>
+  <data name="WorkshopTagRoad" xml:space="preserve">
+    <value>Road</value>
+  </data>
+  <data name="WorkshopTagSaveGame" xml:space="preserve">
+    <value>SaveGame</value>
+  </data>
+  <data name="WorkshopTagScenario" xml:space="preserve">
+    <value>Scenario</value>
+  </data>
+  <data name="WorkshopTagServicePoint" xml:space="preserve">
+    <value>Service Point</value>
+  </data>
+  <data name="WorkshopTagSituations" xml:space="preserve">
+    <value>Situations</value>
+  </data>
+  <data name="WorkshopTagSpaceships" xml:space="preserve">
+    <value>Spaceships</value>
+  </data>
+  <data name="WorkshopTagSubmod" xml:space="preserve">
+    <value>Submod</value>
+  </data>
+  <data name="WorkshopTagTextures" xml:space="preserve">
+    <value>Textures</value>
+  </data>
+  <data name="WorkshopTagTradeAndEconomics" xml:space="preserve">
+    <value>Trade and Economics</value>
+  </data>
+  <data name="WorkshopTagTransport" xml:space="preserve">
+    <value>Transport</value>
+  </data>
+  <data name="WorkshopTagTransportBus" xml:space="preserve">
+    <value>Transport Bus</value>
+  </data>
+  <data name="WorkshopTagTransportCableCar" xml:space="preserve">
+    <value>Transport Cable Car</value>
+  </data>
+  <data name="WorkshopTagTransportMetro" xml:space="preserve">
+    <value>Transport Metro</value>
+  </data>
+  <data name="WorkshopTagTransportMonorail" xml:space="preserve">
+    <value>Transport Monorail</value>
+  </data>
+  <data name="WorkshopTagTransportPlane" xml:space="preserve">
+    <value>Transport Plane</value>
+  </data>
+  <data name="WorkshopTagTransportShip" xml:space="preserve">
+    <value>Transport Ship</value>
+  </data>
+  <data name="WorkshopTagTransportTaxi" xml:space="preserve">
+    <value>Transport Taxi</value>
+  </data>
+  <data name="WorkshopTagTransportTrain" xml:space="preserve">
+    <value>Transport Train</value>
+  </data>
+  <data name="WorkshopTagTransportTram" xml:space="preserve">
+    <value>Transport Tram</value>
+  </data>
+  <data name="WorkshopTagTransportTrolleybus" xml:space="preserve">
+    <value>Transport Trolleybus</value>
+  </data>
+  <data name="WorkshopTagTree" xml:space="preserve">
+    <value>Tree</value>
+  </data>
+  <data name="WorkshopTagUniqueBuilding" xml:space="preserve">
+    <value>Unique Building</value>
+  </data>
+  <data name="WorkshopTagUniqueFactory" xml:space="preserve">
+    <value>Unique Factory</value>
+  </data>
+  <data name="WorkshopTagUserInterface" xml:space="preserve">
+    <value>User Interface</value>
+  </data>
+  <data name="WorkshopTagVarsitySports" xml:space="preserve">
+    <value>Varsity Sports</value>
+  </data>
+  <data name="WorkshopTagVehicle" xml:space="preserve">
+    <value>Vehicle</value>
+  </data>
+  <data name="WorkshopTagWaterAndSewage" xml:space="preserve">
+    <value>Water &amp; Sewage</value>
   </data>
   <data name="WorkshopThrottlePaused" xml:space="preserve">
     <value>Steam reports too many requests — pausing requests for about {0} minute(s); they resume automatically</value>
