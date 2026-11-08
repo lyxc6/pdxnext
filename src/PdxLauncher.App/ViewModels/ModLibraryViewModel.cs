@@ -163,7 +163,10 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     /// <summary>加载 Mod 库：读快照 → 应用搜索 / 排序 → 刷新计数与状态栏。</summary>
     /// <param name="game">当前游戏；null 表示还没在游戏库里选游戏。</param>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    public async Task LoadAsync(GameInstallation? game, CancellationToken cancellationToken)
+    public async Task LoadAsync(
+        GameInstallation? game,
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         // 刷新、搜索与 Steam 写操作之后的重载都沿用这个令牌，页面关闭后不再继续翻译。
         _pageToken = cancellationToken;
@@ -194,7 +197,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         IsBusy = true;
         try
         {
-            _snapshot = await _service.LoadAsync(game, cancellationToken).ConfigureAwait(true);
+            _snapshot = await _service.LoadAsync(game, cancellationToken, forceRefresh).ConfigureAwait(true);
 
             // 名称译名与引擎/缓存天数无关，先把持久化的旧译名读回来：
             // 重建行时直接显示，不用在每次进入 Mod 库时重新等一遍翻译。
@@ -286,8 +289,8 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>刷新：按当前游戏重新加载一次（沿用页面生命周期令牌）。</summary>
-    public Task RefreshAsync() => LoadAsync(Game, _pageToken);
+    /// <summary>刷新：丢掉 mod 扫描缓存后按当前游戏重新加载一次（沿用页面生命周期令牌）。</summary>
+    public Task RefreshAsync() => LoadAsync(Game, _pageToken, forceRefresh: true);
 
     /// <summary>
     /// 重新问一次 Steam 的工坊状态（丢掉缓存后重载）。

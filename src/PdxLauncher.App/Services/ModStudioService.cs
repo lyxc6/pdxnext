@@ -52,7 +52,8 @@ public sealed class ModStudioService
     /// <summary>读当前游戏的本地 mod、描述符和发布记录。</summary>
     public async Task<IReadOnlyList<ModStudioEntry>> LoadAsync(
         GameInstallation? game,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         if (game is null)
         {
@@ -60,6 +61,13 @@ public sealed class ModStudioService
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+
+        // 用户点刷新时必须绕过 ModCatalog 的 60 秒扫描缓存；否则在资源管理器里删掉
+        // 一个备份目录后，页面仍然把旧记录画出来。
+        if (forceRefresh && _mods is IScanCacheInvalidator invalidatable)
+        {
+            invalidatable.InvalidateCache(game);
+        }
 
         IReadOnlyList<ModLibraryEntry> known;
         try

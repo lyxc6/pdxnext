@@ -5694,28 +5694,37 @@ Applying still backs up the original file first, but the backup cannot be verifi
     <value>Edit upload content with AI (MCP)</value>
   </data>
   <data name="ModstudioMcpDocsIntro" xml:space="preserve">
-    <value>PdxNext ships a standalone MCP program, PdxLauncher.Mcp.exe. AI clients can use it to list games and local mods, then save a draft with title, description, tags and visibility. The upload pane shows AI changes automatically; publishing still requires your confirmation.</value>
+    <value>PdxLauncher.Mcp.exe lets AI read games and local mods, then write a draft with title, description, tags and visibility. The upload pane shows AI changes automatically; you still confirm the publish.</value>
   </data>
-  <data name="ModstudioMcpDocsStepConfig" xml:space="preserve">
-    <value>1. Add the JSON below to your AI client's MCP config (Claude Desktop: %APPDATA%\Claude\claude_desktop_config.json; Cursor: mcp.json).</value>
+  <data name="ModstudioMcpQuickInstallTitle" xml:space="preserve">
+    <value>One-step install</value>
   </data>
-  <data name="ModstudioMcpDocsStepRestart" xml:space="preserve">
-    <value>2. Restart the client and confirm pdxnext appears in the tool list (list_games, list_mods, ...).</value>
+  <data name="ModstudioMcpQuickInstallHint" xml:space="preserve">
+    <value>Copy this prompt to your AI client (Claude Desktop / Cursor); it will add the config and verify it.</value>
   </data>
-  <data name="ModstudioMcpDocsStepAsk" xml:space="preserve">
-    <value>3. Ask the AI to call list_games / list_mods, then save_upload_draft. The upload pane shows the AI content automatically after it saves.</value>
+  <data name="ModstudioMcpQuickInstallPrompt" xml:space="preserve">
+    <value>Add the PdxNext MCP server to this client:
+name pdxnext, command "{0}",
+args ["--data-root", "{1}"];
+then call list_games to verify.</value>
   </data>
-  <data name="ModstudioMcpDocsConfigLabel" xml:space="preserve">
-    <value>Client config (JSON)</value>
+  <data name="ModstudioMcpFlowTitle" xml:space="preserve">
+    <value>How it works</value>
+  </data>
+  <data name="ModstudioMcpFlowBody" xml:space="preserve">
+    <value>list_games / list_mods → save_upload_draft → upload pane updates live</value>
   </data>
   <data name="ModstudioMcpDocsToolsLabel" xml:space="preserve">
     <value>Available tools</value>
   </data>
-  <data name="ModstudioMcpDocsToolsBody" xml:space="preserve">
-    <value>list_games · list_mods · list_tags · get_upload_draft · save_upload_draft · clear_upload_draft</value>
+  <data name="ModstudioMcpManualConfigTitle" xml:space="preserve">
+    <value>Manual config (JSON)</value>
+  </data>
+  <data name="ModstudioMcpDevPathNote" xml:space="preserve">
+    <value>Paths are derived from the current program directory: dev builds use bin output (re-copy after a clean/rebuild), installed builds use the install folder.</value>
   </data>
   <data name="ModstudioMcpDocsSafety" xml:space="preserve">
-    <value>The MCP server only reads and writes drafts under data\mcp\upload-drafts. It never publishes on its own and never modifies game or mod files.</value>
+    <value>The MCP server only writes drafts under data\mcp\upload-drafts. It never publishes on its own and never modifies game or mod files.</value>
   </data>
   <data name="ModstudioMcpDocsExeMissing" xml:space="preserve">
     <value>Cannot find {0}. Rebuild or reinstall before configuring.</value>

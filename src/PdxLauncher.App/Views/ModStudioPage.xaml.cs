@@ -123,7 +123,7 @@ public sealed partial class ModStudioPage : Page
         DispatcherQueue.TryEnqueue(() => _ = ReloadAsync());
     }
 
-    private async Task ReloadAsync()
+    private async Task ReloadAsync(bool forceRefresh = false)
     {
         if (_isReloading || _lifetime.IsCancellationRequested)
         {
@@ -134,7 +134,7 @@ public sealed partial class ModStudioPage : Page
         try
         {
             var game = AppServices.IsInitialized ? AppServices.CurrentGame : null;
-            await _viewModel.LoadAsync(game, _lifetime.Token).ConfigureAwait(true);
+            await _viewModel.LoadAsync(game, _lifetime.Token, forceRefresh: forceRefresh).ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -365,7 +365,7 @@ public sealed partial class ModStudioPage : Page
 
     private void OnRefreshClick(object sender, RoutedEventArgs e)
     {
-        _ = ReloadAsync();
+        _ = ReloadAsync(forceRefresh: true);
     }
 
     // ------------------------------------------------------------ 新建面板
