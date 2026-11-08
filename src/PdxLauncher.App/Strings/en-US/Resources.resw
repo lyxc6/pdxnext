@@ -4730,14 +4730,32 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="WorkshopDetailCollectionLoading" xml:space="preserve">
     <value>Loading collection items…</value>
   </data>
+  <data name="WorkshopDetailCollectionSubscribeAll" xml:space="preserve">
+    <value>Subscribe to all</value>
+  </data>
+  <data name="WorkshopDetailCollectionSubscribeConfirm" xml:space="preserve">
+    <value>This will subscribe to the collection and subscribe/download all {0} items through Steam. Continue?</value>
+  </data>
+  <data name="WorkshopDetailCollectionSubscribed" xml:space="preserve">
+    <value>{0} of {1} items subscribed</value>
+  </data>
   <data name="WorkshopDetailCollectionSubscribeHint" xml:space="preserve">
     <value>Subscribing to a collection subscribes to all of its items in Steam</value>
+  </data>
+  <data name="WorkshopDetailCollectionSubscribingAll" xml:space="preserve">
+    <value>Subscribing to all…</value>
   </data>
   <data name="WorkshopDetailCollectionSummary" xml:space="preserve">
     <value>{0} items</value>
   </data>
   <data name="WorkshopDetailCollectionTitle" xml:space="preserve">
     <value>Collection items</value>
+  </data>
+  <data name="WorkshopDetailCollectionUnsubscribeAll" xml:space="preserve">
+    <value>Unsubscribe from all</value>
+  </data>
+  <data name="WorkshopDetailCollectionUnsubscribeConfirm" xml:space="preserve">
+    <value>This will unsubscribe from the collection and all {0} of its items. Continue?</value>
   </data>
   <data name="WorkshopDetailComments" xml:space="preserve">
     <value>Discussion</value>

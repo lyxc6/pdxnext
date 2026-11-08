@@ -38,7 +38,17 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     private readonly WorkshopSubscriptionService _subscription;
     private readonly IWorkshopSubscribeBackend? _steamBackend;
     private readonly WorkshopSubscriptionReader? _steamReader;
+    private readonly WorkshopStateReader? _steamStates;
     private readonly IAppLogger _logger;
+
+    /// <summary>
+    /// 逐项 / 合集级订阅写操作的串行闸门。
+    /// <para>
+    /// 每次写都会拉起一个 <c>--steam-host</c> 子进程；同时开两个进程调 Steamworks 订阅
+    /// 没有收益，还可能互相打架，所以一次只放一个过去。等待中的行/按钮仍显示忙碌。
+    /// </para>
+    /// </summary>
+    private readonly SemaphoreSlim _steamWriteGate = new(1, 1);
 
     /// <summary>
     /// 截图下载进度：界面上的「正在下载截图…」只看它。
@@ -70,13 +80,15 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <param name="logger">日志。</param>
     /// <param name="steamBackend">Steam 直连订阅后端；null 或不可用表示只能打开客户端。</param>
     /// <param name="steamReader">acf 只读查询（后端不可用时用它显示「已订阅/已安装」）。</param>
+    /// <param name="steamStates">整库订阅状态读取（合集子项状态用；null 表示不显示逐项状态）。</param>
     public WorkshopDetailViewModel(
         WorkshopDetailSource source,
         WorkshopImageCache images,
         WorkshopSubscriptionService subscription,
         IAppLogger logger,
         IWorkshopSubscribeBackend? steamBackend = null,
-        WorkshopSubscriptionReader? steamReader = null)
+        WorkshopSubscriptionReader? steamReader = null,
+        WorkshopStateReader? steamStates = null)
     {
         _source = source;
         _images = images;
@@ -84,6 +96,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         _logger = logger;
         _steamBackend = steamBackend;
         _steamReader = steamReader;
+        _steamStates = steamStates;
         IsSteamDirectAvailable = steamBackend?.IsAvailable ?? false;
         SteamUnavailableReason = steamBackend?.UnavailableReason ?? string.Empty;
     }
@@ -296,6 +309,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>是否显示合集内容卡。</summary>
     public bool ShowCollectionCard => IsCollection;
 
+    /// <summary>是否显示合集概览卡（封面 / 订阅全部 / 统计）。</summary>
+    public bool ShowCollectionHero => IsCollection;
+
     /// <summary>是否有已加载的合集子项。</summary>
     public bool HasCollectionItems => CollectionItems.Count > 0;
 
@@ -309,6 +325,34 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     /// <summary>是否有合集内容摘要。</summary>
     public bool HasCollectionSummary => !string.IsNullOrWhiteSpace(CollectionSummaryText);
+
+    /// <summary>合集里已订阅（或已安装）的子项数量。</summary>
+    public int CollectionSubscribedCount => CollectionItems.Count(static row => row.IsSubscribed);
+
+    /// <summary>「已订阅 X / N 项」；没有子项或一个都没订阅时为空串（避免把「读不到」写成 0）。</summary>
+    public string CollectionSubscribedText => !IsCollection
+        || CollectionItems.Count == 0
+        || CollectionSubscribedCount == 0
+        ? string.Empty
+        : T(Keys.WorkshopDetailCollectionSubscribed, CollectionSubscribedCount, CollectionItems.Count);
+
+    /// <summary>是否有已订阅统计。</summary>
+    public bool HasCollectionSubscribedSummary => !string.IsNullOrWhiteSpace(CollectionSubscribedText);
+
+    /// <summary>合集是否已全部订阅（子项全部已订阅或已安装）。</summary>
+    public bool IsCollectionFullySubscribed =>
+        IsCollection && CollectionItems.Count > 0 && CollectionSubscribedCount == CollectionItems.Count;
+
+    /// <summary>合集级「订阅全部 / 取消订阅全部」按钮文案。</summary>
+    public string CollectionSubscribeActionText => IsSteamSubscribing
+        ? T(Keys.WorkshopDetailCollectionSubscribingAll)
+        : IsCollectionFullySubscribed
+            ? T(Keys.WorkshopDetailCollectionUnsubscribeAll)
+            : T(Keys.WorkshopDetailCollectionSubscribeAll);
+
+    /// <summary>合集级订阅按钮是否可点。</summary>
+    public bool CanToggleCollectionSubscription =>
+        IsCollection && IsSteamDirectAvailable && CanWriteSteam && !IsSteamSubscribing;
 
     /// <summary>外链列表（含论坛帖）。</summary>
     public ObservableCollection<WorkshopLinkViewModel> Links { get; } = [];
@@ -356,9 +400,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// 是否显示顶部图片区。
     /// <para>
     /// PDX 是详情接口给的真实截图；Steam 只有一张大图预览（简介里的配图留在正文，不属于这里）。
+    /// 合集页不显示 mod 式截图画廊：封面进合集概览卡，不额外下载/展示画廊。
     /// </para>
     /// </summary>
-    public bool ShowGalleryCard => HasScreenshots;
+    public bool ShowGalleryCard => !IsCollection && HasScreenshots;
 
     /// <summary>正文配图下载完成（交给页面刷新 MarkdownView 里的图片）。</summary>
     public event EventHandler? GalleryImageReady;
@@ -512,7 +557,12 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     public bool HasStatusText => !string.IsNullOrWhiteSpace(StatusText);
 
     /// <summary>是否显示订阅卡（两种来源都显示：PDX 走平台订阅，Steam 走客户端）。</summary>
-    public bool ShowSubscribeCard => Row is not null;
+    /// <remarks>合集页用合集概览卡承载订阅操作，不再显示 mod 式订阅卡。</remarks>
+    public bool ShowSubscribeCard => Row is not null && !IsCollection;
+
+    /// <summary>是否显示右侧 mod 信息卡（评分/订阅/浏览/体积/标签/发布时间）。</summary>
+    /// <remarks>合集不是 mod，这些元数据对合集没有意义，合集页隐藏整张卡。</remarks>
+    public bool ShowInfoCard => Row is not null && !IsCollection;
 
     /// <summary>是否显示 PDX 的订阅按钮（Steam 显示「在 Steam 中订阅」）。</summary>
     public bool ShowPdxSubscribeButton => CanSubscribe;
@@ -1095,7 +1145,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         Dependencies.Clear();
         Comments.Clear();
         CollectionItems.Clear();
-        IsCollection = false;
+        // 列表页已经标过合集的，首帧就按合集布局，避免先闪一下 mod 页面；
+        // 列表没标（例如以后从别的入口进来）时，等物品页解析出 collectionItem 再切。
+        IsCollection = row.IsCollection;
         IsLoadingCollection = false;
         CollectionStatusText = string.Empty;
     }
@@ -1186,6 +1238,13 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             || page is { IsCollectionPage: true };
         if (IsCollection)
         {
+            // 合集不是 mod：评分/订阅数/浏览/体积/标签/发布时间都不适用，卡片隐藏前先清空，
+            // 免得无障碍朗读或以后复用这些字段时读到误导性的值。
+            MetaText = string.Empty;
+            CreatedText = string.Empty;
+            TagsText = string.Empty;
+            _steamTagNames = [];
+
             await LoadCollectionItemsAsync(detail, page, cancellationToken).ConfigureAwait(true);
         }
 
@@ -1242,22 +1301,26 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
         // 顶部图片区用物品页官方画廊（#highlight_player_area）里的截图；抓不到时退回预览图。
         // 简介里的 <img> 属于正文，单独下载给正文用，不再铺到顶部。
-        var previewUrl = !string.IsNullOrWhiteSpace(detail.PreviewUrl)
-            ? detail.PreviewUrl
-            : !string.IsNullOrWhiteSpace(row.CoverUrl) ? row.CoverUrl : null;
-
+        // 合集页不铺 mod 式画廊：封面在合集概览卡里，截图墙只会多下载一串大图。
         var galleryUrls = new List<string>();
-        if (page is { ScreenshotUrls.Count: > 0 })
+        if (!IsCollection)
         {
-            galleryUrls.AddRange(page.ScreenshotUrls);
-        }
-        else if (previewUrl is not null)
-        {
-            // 只有视频、或页面结构变化抓不到画廊时的兜底：至少显示封面。
-            galleryUrls.Add(previewUrl);
-        }
+            var previewUrl = !string.IsNullOrWhiteSpace(detail.PreviewUrl)
+                ? detail.PreviewUrl
+                : !string.IsNullOrWhiteSpace(row.CoverUrl) ? row.CoverUrl : null;
 
-        BuildGallery(row, galleryUrls);
+            if (page is { ScreenshotUrls.Count: > 0 })
+            {
+                galleryUrls.AddRange(page.ScreenshotUrls);
+            }
+            else if (previewUrl is not null)
+            {
+                // 只有视频、或页面结构变化抓不到画廊时的兜底：至少显示封面。
+                galleryUrls.Add(previewUrl);
+            }
+
+            BuildGallery(row, galleryUrls);
+        }
 
         // Steam 工坊订阅状态：后端可用读实时状态，否则读 acf（都读不到就保持未知）。
         await RefreshSteamSubscriptionAsync(row, cancellationToken).ConfigureAwait(true);
@@ -1279,9 +1342,17 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
         try
         {
-            await Task.WhenAll(
-                DownloadGalleryAsync(row, cancellationToken),
-                DownloadInlineImagesAsync(row, inlineUrls, cancellationToken)).ConfigureAwait(true);
+            if (IsCollection)
+            {
+                // 合集没有截图墙，只把简介内嵌图（以及评论表情）落地。
+                await DownloadInlineImagesAsync(row, inlineUrls, cancellationToken).ConfigureAwait(true);
+            }
+            else
+            {
+                await Task.WhenAll(
+                    DownloadGalleryAsync(row, cancellationToken),
+                    DownloadInlineImagesAsync(row, inlineUrls, cancellationToken)).ConfigureAwait(true);
+            }
         }
         finally
         {
@@ -1313,6 +1384,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         try
         {
             var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
+            var steamActionAvailable = _steamBackend is { IsAvailable: true } && CanWriteSteam;
 
             // 首选：物品页已经解析好的子项，不再额外请求。
             if (page is { CollectionItemList.Count: > 0 } parsed)
@@ -1320,10 +1392,14 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                 foreach (var child in parsed.CollectionItemList)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    CollectionItems.Add(WorkshopRowViewModel.FromSteamCollectionItem(child, size));
+                    CollectionItems.Add(WorkshopRowViewModel.FromSteamCollectionItem(
+                        child,
+                        size,
+                        steamActionAvailable));
                 }
 
                 CollectionStatusText = string.Empty;
+                await EnrichCollectionAsync(cancellationToken).ConfigureAwait(true);
                 return;
             }
 
@@ -1353,13 +1429,20 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                 cancellationToken.ThrowIfCancellationRequested();
                 if (byId.TryGetValue(child.PublishedFileId, out var childDetail))
                 {
-                    CollectionItems.Add(WorkshopRowViewModel.FromSteamDetail(childDetail, size));
+                    CollectionItems.Add(WorkshopRowViewModel.FromSteamDetail(
+                        childDetail,
+                        size,
+                        steamActionAvailable));
                 }
             }
 
             CollectionStatusText = CollectionItems.Count == 0
                 ? T(Keys.WorkshopDetailCollectionEmpty)
                 : string.Empty;
+            if (CollectionItems.Count > 0)
+            {
+                await EnrichCollectionAsync(cancellationToken).ConfigureAwait(true);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -1374,6 +1457,250 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         {
             IsLoadingCollection = false;
             NotifyCollectionState();
+        }
+    }
+
+    /// <summary>子项列表铺好后补两件事：缩略图逐张落地、整库订阅状态一次性映射到各行。</summary>
+    private async Task EnrichCollectionAsync(CancellationToken cancellationToken)
+    {
+        _ = DownloadCollectionCoversAsync(cancellationToken);
+        await ApplyCollectionStatesAsync(cancellationToken).ConfigureAwait(true);
+        NotifyCollectionState();
+    }
+
+    /// <summary>
+    /// 一次读回当前游戏的全部工坊订阅状态（60 秒整库缓存），按子项 id 映射到行上。
+    /// 比逐项 <c>ReadState</c> 便宜得多：逐项每次都会拉起一个 <c>--steam-host</c> 子进程。
+    /// </summary>
+    private async Task ApplyCollectionStatesAsync(CancellationToken cancellationToken)
+    {
+        if (CollectionItems.Count == 0)
+        {
+            return;
+        }
+
+        if (_steamStates is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var states = await _steamStates
+                .ReadAllAsync(AppServices.CurrentGame, cancellationToken)
+                .ConfigureAwait(true);
+
+            foreach (var row in CollectionItems)
+            {
+                if (ulong.TryParse(row.Id, out var fileId) && states.TryGetValue(fileId, out var state))
+                {
+                    row.SteamState = state;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("合集子项订阅状态读取失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 逐项补封面。合集物品页给的是 200px 预览图，比列表页 1900px 原图轻得多；
+    /// 并发限制 4，边下边由 <see cref="WorkshopRowViewModel.CoverPath"/> 的可观察属性刷新行。
+    /// </summary>
+    private async Task DownloadCollectionCoversAsync(CancellationToken cancellationToken)
+    {
+        using var gate = new SemaphoreSlim(4);
+        var tasks = CollectionItems
+            .Where(static row => !string.IsNullOrWhiteSpace(row.CoverUrl) &&
+                                 string.IsNullOrWhiteSpace(row.CoverPath))
+            .Select(async row =>
+            {
+                await gate.WaitAsync(cancellationToken).ConfigureAwait(true);
+                try
+                {
+                    var path = await _images
+                        .EnsureCoverAsync(WorkshopSource.Steam, row.Id, row.CoverUrl, cancellationToken)
+                        .ConfigureAwait(true);
+                    if (!string.IsNullOrWhiteSpace(path))
+                    {
+                        row.CoverPath = path;
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // 页面离开：正常取消。
+                }
+                catch (Exception ex)
+                {
+                    _logger.Warn("合集子项封面下载失败（" + row.Id + "）：" + ex.Message);
+                }
+                finally
+                {
+                    gate.Release();
+                }
+            })
+            .ToList();
+
+        try
+        {
+            await Task.WhenAll(tasks).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // 各子任务自己吞掉取消，这里只兜底。
+        }
+    }
+
+    /// <summary>
+    /// 订阅 / 取消订阅合集里的某一个子项（界面先做二次确认）。
+    /// 成功后乐观更新这一行的状态：Steam 写盘 / 下载状态有延迟，立刻重读会把界面刷回旧值。
+    /// </summary>
+    /// <param name="row">被操作的行。</param>
+    /// <param name="subscribe">true 订阅，false 退订。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<WorkshopSubscribeResult> SetCollectionItemSubscribedAsync(
+        WorkshopRowViewModel row,
+        bool subscribe,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        if (_steamBackend is not { IsAvailable: true } backend)
+        {
+            return WorkshopSubscribeResult.Fail(T(Keys.WorkshopDetailSteamSubscribeHintOff));
+        }
+
+        if (!CanWriteSteam)
+        {
+            return WorkshopSubscribeResult.Fail(T(Keys.WorkshopDetailSteamReadOnlyHint));
+        }
+
+        if (!ulong.TryParse(row.Id, out var fileId))
+        {
+            return WorkshopSubscribeResult.Fail(T(Keys.WorkshopDetailErrorUnknown));
+        }
+
+        row.IsSteamSubscribing = true;
+        var acquired = false;
+        try
+        {
+            await _steamWriteGate.WaitAsync(cancellationToken).ConfigureAwait(true);
+            acquired = true;
+
+            var result = await backend
+                .SetSubscribedAsync(fileId, subscribe, cancellationToken)
+                .ConfigureAwait(true);
+
+            if (result.Ok)
+            {
+                row.SteamState = BuildOptimisticState(row.SteamState, subscribe);
+                InvalidateWorkshopStates();
+                NotifyCollectionState();
+            }
+
+            return result;
+        }
+        finally
+        {
+            if (acquired)
+            {
+                _steamWriteGate.Release();
+            }
+
+            row.IsSteamSubscribing = false;
+        }
+    }
+
+    /// <summary>
+    /// 订阅 / 取消订阅整个合集。Steam 的语义是「订阅合集会一并订阅其中全部子项」，
+    /// 所以成功后把每一行都乐观改成目标状态，再失效整库缓存。
+    /// </summary>
+    /// <param name="subscribe">true 订阅全部，false 退订全部。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<WorkshopSubscribeResult> ToggleCollectionSubscriptionAsync(
+        bool subscribe,
+        CancellationToken cancellationToken)
+    {
+        if (_steamBackend is not { IsAvailable: true } backend)
+        {
+            return WorkshopSubscribeResult.Fail(T(Keys.WorkshopDetailSteamSubscribeHintOff));
+        }
+
+        if (!CanWriteSteam)
+        {
+            return WorkshopSubscribeResult.Fail(T(Keys.WorkshopDetailSteamReadOnlyHint));
+        }
+
+        if (Row is not { } row || !ulong.TryParse(row.Id, out var fileId))
+        {
+            return WorkshopSubscribeResult.Fail(T(Keys.WorkshopDetailErrorUnknown));
+        }
+
+        IsSteamSubscribing = true;
+        NotifyStateChanged();
+        var acquired = false;
+        try
+        {
+            await _steamWriteGate.WaitAsync(cancellationToken).ConfigureAwait(true);
+            acquired = true;
+
+            var result = await backend
+                .SetSubscribedAsync(fileId, subscribe, cancellationToken)
+                .ConfigureAwait(true);
+
+            if (result.Ok)
+            {
+                foreach (var item in CollectionItems)
+                {
+                    item.SteamState = BuildOptimisticState(item.SteamState, subscribe);
+                }
+
+                IsSteamSubscribed = subscribe;
+                IsSteamStateKnown = true;
+                InvalidateWorkshopStates();
+                NotifyCollectionState();
+            }
+
+            return result;
+        }
+        finally
+        {
+            if (acquired)
+            {
+                _steamWriteGate.Release();
+            }
+
+            IsSteamSubscribing = false;
+            NotifyStateChanged();
+        }
+    }
+
+    /// <summary>乐观状态：订阅 = 已订阅 + 下载中；退订 = 未订阅、未安装、未下载。</summary>
+    private static WorkshopInstallState BuildOptimisticState(WorkshopInstallState? current, bool subscribe) =>
+        subscribe
+            ? new WorkshopInstallState(
+                IsSubscribed: true,
+                IsInstalled: current?.IsInstalled == true,
+                IsDownloading: true,
+                AcfPath: current?.AcfPath,
+                IsDisabledLocally: current?.IsDisabledLocally)
+            : new WorkshopInstallState(
+                IsSubscribed: false,
+                IsInstalled: false,
+                IsDownloading: false,
+                AcfPath: current?.AcfPath);
+
+    /// <summary>订阅发生变化：让 Mod 库页 / 工坊列表页的 60 秒整库缓存立刻过期。</summary>
+    private void InvalidateWorkshopStates()
+    {
+        if (ResolveSteamAppId() is int appId)
+        {
+            AppServices.WorkshopStates.Invalidate(appId);
         }
     }
 
@@ -2245,6 +2572,12 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasSteamSubscribeHint));
         OnPropertyChanged(nameof(CollectionSubscribeHint));
         OnPropertyChanged(nameof(HasCollectionSubscribeHint));
+        OnPropertyChanged(nameof(ShowCollectionHero));
+        OnPropertyChanged(nameof(ShowInfoCard));
+        OnPropertyChanged(nameof(CollectionSubscribeActionText));
+        OnPropertyChanged(nameof(CanToggleCollectionSubscription));
+        OnPropertyChanged(nameof(CollectionSubscribedText));
+        OnPropertyChanged(nameof(HasCollectionSubscribedSummary));
         OnPropertyChanged(nameof(HasSteamUnavailableReason));
         OnPropertyChanged(nameof(ShowSteamSubscribeState));
     }
@@ -2350,6 +2683,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     {
         OnPropertyChanged(nameof(CanToggleSteamSubscription));
         OnPropertyChanged(nameof(SteamSubscribeActionText));
+        OnPropertyChanged(nameof(CollectionSubscribeActionText));
+        OnPropertyChanged(nameof(CanToggleCollectionSubscription));
     }
 
     partial void OnIsSteamSubscribedChanged(bool value)
@@ -2363,6 +2698,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     partial void OnIsSteamDirectAvailableChanged(bool value)
     {
         OnPropertyChanged(nameof(CanToggleSteamSubscription));
+        OnPropertyChanged(nameof(CanToggleCollectionSubscription));
         OnPropertyChanged(nameof(SteamSubscribeHint));
         OnPropertyChanged(nameof(HasSteamSubscribeHint));
         OnPropertyChanged(nameof(HasSteamUnavailableReason));
@@ -2383,10 +2719,20 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     private void NotifyCollectionState()
     {
         OnPropertyChanged(nameof(ShowCollectionCard));
+        OnPropertyChanged(nameof(ShowCollectionHero));
+        OnPropertyChanged(nameof(ShowInfoCard));
+        OnPropertyChanged(nameof(ShowSubscribeCard));
+        OnPropertyChanged(nameof(ShowGalleryCard));
         OnPropertyChanged(nameof(HasCollectionItems));
         OnPropertyChanged(nameof(HasCollectionStatus));
         OnPropertyChanged(nameof(CollectionSummaryText));
         OnPropertyChanged(nameof(HasCollectionSummary));
+        OnPropertyChanged(nameof(CollectionSubscribedCount));
+        OnPropertyChanged(nameof(CollectionSubscribedText));
+        OnPropertyChanged(nameof(HasCollectionSubscribedSummary));
+        OnPropertyChanged(nameof(IsCollectionFullySubscribed));
+        OnPropertyChanged(nameof(CollectionSubscribeActionText));
+        OnPropertyChanged(nameof(CanToggleCollectionSubscription));
         OnPropertyChanged(nameof(CollectionSubscribeHint));
         OnPropertyChanged(nameof(HasCollectionSubscribeHint));
     }

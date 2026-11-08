@@ -78,6 +78,10 @@ public sealed partial class WorkshopDetailPage : Page
             new WorkshopSubscriptionReader(
                 AppServices.FileSystem,
                 new SteamLibraryLocator(AppServices.FileSystem, AppServices.Logger),
+                AppServices.Logger),
+            new WorkshopStateReader(
+                SteamWorkshopBackends.CreateForState,
+                AppServices.WorkshopStates,
                 AppServices.Logger));
 
         // 正文里的行内图片与顶部图片墙共用同一份缓存文件：先把解析器接上，
@@ -420,6 +424,96 @@ public sealed partial class WorkshopDetailPage : Page
         }
 
         ShellLauncher.TryOpenSteam(_viewModel.SteamUrl, "创意工坊详情（订阅）");
+    }
+
+    /// <summary>合集级「订阅全部 / 取消订阅全部」：确认后交给 ViewModel 调 Steam 宿主。</summary>
+    private async void OnCollectionSubscribeClick(object sender, RoutedEventArgs e)
+    {
+        if (!_viewModel.CanToggleCollectionSubscription)
+        {
+            return;
+        }
+
+        var subscribe = !_viewModel.IsCollectionFullySubscribed;
+        var count = _viewModel.CollectionItems.Count;
+        var actionText = subscribe
+            ? L.WorkshopDetailCollectionSubscribeAll
+            : L.WorkshopDetailCollectionUnsubscribeAll;
+        var message = L.T(
+            subscribe
+                ? Keys.WorkshopDetailCollectionSubscribeConfirm
+                : Keys.WorkshopDetailCollectionUnsubscribeConfirm,
+            count);
+
+        var confirmed = await ConfirmOverlay.ConfirmAsync(
+            actionText,
+            message,
+            actionText,
+            L.CommonCancel);
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var result = await _viewModel.ToggleCollectionSubscriptionAsync(subscribe, CurrentToken);
+
+        // 成功静默：按钮文案与逐项状态已经变了；失败必须留下原因。
+        _viewModel.StatusText = result.Ok
+            ? string.Empty
+            : L.T(
+                subscribe ? Keys.WorkshopDetailSubscribeFailed : Keys.WorkshopDetailUnsubscribeFailed,
+                result.ErrorText ?? string.Empty);
+    }
+
+    /// <summary>合集里某一项的订阅 / 取消订阅。</summary>
+    private async void OnCollectionItemSubscribeClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not WorkshopRowViewModel row ||
+            !row.CanToggleSteamSubscription)
+        {
+            return;
+        }
+
+        var subscribe = !row.IsSubscribed;
+        var actionText = subscribe ? L.WorkshopDetailSubscribe : L.WorkshopDetailUnsubscribe;
+        var message = subscribe
+            ? L.WorkshopDetailSteamSubscribeConfirm
+            : L.WorkshopDetailSteamUnsubscribeConfirm;
+
+        var confirmed = await ConfirmOverlay.ConfirmAsync(
+            actionText,
+            message,
+            actionText,
+            L.CommonCancel);
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var result = await _viewModel.SetCollectionItemSubscribedAsync(row, subscribe, CurrentToken);
+        _viewModel.StatusText = result.Ok
+            ? string.Empty
+            : L.T(
+                subscribe ? Keys.WorkshopDetailSubscribeFailed : Keys.WorkshopDetailUnsubscribeFailed,
+                result.ErrorText ?? string.Empty);
+    }
+
+    /// <summary>合集子项行内的「在浏览器中打开」。</summary>
+    private void OnCollectionItemOpenBrowserClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is WorkshopRowViewModel row)
+        {
+            ShellLauncher.TryOpenUrl(row.WebUrl, "创意工坊详情");
+        }
+    }
+
+    /// <summary>合集子项行内的「在 Steam 中打开」。</summary>
+    private void OnCollectionItemOpenSteamClick(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is WorkshopRowViewModel row)
+        {
+            ShellLauncher.TryOpenSteam(row.SteamUrl, "创意工坊详情");
+        }
     }
 
     /// <summary>评论翻上一页。</summary>
