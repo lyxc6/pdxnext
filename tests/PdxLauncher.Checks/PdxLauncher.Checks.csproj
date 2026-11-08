@@ -184,6 +184,7 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementsViewModel.cs" Link="Linked\AchievementsViewModel.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementRowViewModel.cs" Link="Linked\AchievementRowViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementIconPresentation.cs" Link="Linked\AchievementIconPresentation.cs" />
     <!--
       拉起 Steam 宿主子进程的客户端与成就数据源。两者都只依赖 Core + System.*，
       可以原样链接；取消传播口径错了会把「切游戏」写成「Steam 不可用」，由

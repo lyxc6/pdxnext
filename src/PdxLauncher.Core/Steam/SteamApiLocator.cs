@@ -133,6 +133,15 @@ public sealed class SteamApiLocator
                     AddDirectory(dir);
                 }
             }
+
+            // ⑤ Unity 引擎把 api 藏在 <游戏>_Data\Plugins\x86_64 里（CS2 就是这样，
+            // 与 GamePatchProfiles.CandidateDirectories 的特判保持同一口径）。
+            // 不找这里的话，CS2 一个候选都没有，成就页只会报「连不上 Steam」。
+            var unityPlugins = _fileSystem.Combine(installRoot!, "Cities2_Data", "Plugins", "x86_64");
+            if (_fileSystem.DirectoryExists(unityPlugins))
+            {
+                AddDirectory(unityPlugins);
+            }
         }
 
         return results;

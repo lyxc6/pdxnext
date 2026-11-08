@@ -27,7 +27,7 @@ public static class AchievementIconBench
 
         var names = Directory.EnumerateFiles(iconsDir, "*.dds")
             .Select(Path.GetFileNameWithoutExtension)
-            .Where(static name => name is not null && !name.EndsWith(AchievementIconResolver.LockedSuffix, StringComparison.OrdinalIgnoreCase))
+            .Where(static name => name is not null && !IsLockedVariant(name!))
             .Select(static name => name!)
             .OrderBy(static name => name, StringComparer.Ordinal)
             .Take(MaxIcons)
@@ -117,14 +117,20 @@ public static class AchievementIconBench
         return ok ? 0 : 1;
     }
 
-    private static string? FindIconsDirectory(string installRoot)
-    {
-        string[] layouts =
-        [
-            Path.Combine(installRoot, "game", "gfx", "interface", "icons", "achievements"),
-            Path.Combine(installRoot, "gfx", "interface", "icons", "achievements"),
-        ];
+    private static string? FindIconsDirectory(string installRoot) =>
+        AchievementIconResolver.FindIconDirectory(installRoot);
 
-        return layouts.FirstOrDefault(Directory.Exists);
+    /// <summary>是否是某个游戏的未解锁变体（_notachieved / _locked / _grey），基准取样只数原图。</summary>
+    private static bool IsLockedVariant(string name)
+    {
+        foreach (var suffix in AchievementIconResolver.LockedSuffixes)
+        {
+            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

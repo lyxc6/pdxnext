@@ -25,6 +25,12 @@ using PdxLauncher.Imaging;
 /// </summary>
 public sealed class AchievementsViewModel : LocalizedObservableObject
 {
+    /// <summary>
+    /// 未解锁、但游戏没有专门灰图时的图标不透明度。与主页禁用态的 0.55 保持一致，
+    /// 既能让玩家一眼看出「没解锁」，又不会把彩色原图压到看不清。
+    /// </summary>
+    private const double LockedIconOpacity = 0.55;
+
     private readonly IAchievementSource _source;
     private readonly AchievementRequestTracker _requests = new();
     private readonly AchievementSnapshotCache? _cache;
@@ -387,29 +393,40 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
     /// <summary>
     /// 解析一行的图标：位图直接用；DDS 先解码落 PNG 再返回 PNG 路径。
     /// 任何一步失败都返回 <see langword="null"/>（界面显示占位方块），且绝不返回 DDS 路径。
+    /// <para>
+    /// 未解锁时，若游戏没有专门的灰图（EU4 只提供彩色原图），解析结果会带上压暗的不透明度，
+    /// 让「未解锁」在图标上也有区分；有灰图的游戏（VIC3 / EU5 / Stellaris / HOI4 / CS2）保持原样。
+    /// </para>
     /// </summary>
-    private string? ResolveIcon(GameInstallation game, AchievementEntry entry)
+    private AchievementIconPresentation? ResolveIcon(GameInstallation game, AchievementEntry entry)
     {
         try
         {
-            var source = AchievementIconResolver.ResolveSource(game.InstallRoot, entry.Id, entry.IsUnlocked);
-            if (source is null)
+            var source = AchievementIconResolver.ResolveSourceDetailed(game.InstallRoot, entry.Id, entry.IsUnlocked);
+            if (source is not { } found)
             {
                 return null;
             }
 
-            if (!source.EndsWith(".dds", StringComparison.OrdinalIgnoreCase))
+            var opacity = entry.IsUnlocked || found.IsLockedArt ? 1.0 : LockedIconOpacity;
+
+            var path = found.Path;
+            if (path.EndsWith(".dds", StringComparison.OrdinalIgnoreCase))
             {
-                return source;
+                if (_iconPngCache is null)
+                {
+                    return null;
+                }
+
+                var relative = IconCacheRelativePath(game, entry);
+                path = relative is null ? null : _iconPngCache.Ensure(path, relative);
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    return null;
+                }
             }
 
-            if (_iconPngCache is null)
-            {
-                return null;
-            }
-
-            var relative = IconCacheRelativePath(game, entry);
-            return relative is null ? null : _iconPngCache.Ensure(source, relative);
+            return new AchievementIconPresentation(path, opacity);
         }
         catch
         {

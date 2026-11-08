@@ -13,16 +13,16 @@ using PdxLauncher.Core.Contracts;
 /// </para>
 /// <para>
 /// 图标解析可以是惰性的：CK3 的图标是 DDS，第一次显示某一行时才解码落成 PNG。
-/// 198 行在进页面时全部解码会卡住首屏，所以 <see cref="IconUrl"/> / <see cref="HasIcon"/>
-/// 第一次被读取时才调用工厂，之后缓存结果。
+/// 198 行在进页面时全部解码会卡住首屏，所以 <see cref="IconUrl"/> / <see cref="HasIcon"/> /
+/// <see cref="IconOpacity"/> 第一次被读取时才调用工厂，之后缓存结果。
 /// </para>
 /// </summary>
 public sealed class AchievementRowViewModel : LocalizedObservableObject
 {
     private readonly AchievementEntry _entry;
-    private readonly Func<string?>? _iconFactory;
+    private readonly Func<AchievementIconPresentation?>? _iconFactory;
 
-    private string? _iconPath;
+    private AchievementIconPresentation? _icon;
     private bool _iconSettled;
 
     /// <summary>
@@ -34,15 +34,15 @@ public sealed class AchievementRowViewModel : LocalizedObservableObject
     {
         ArgumentNullException.ThrowIfNull(entry);
         _entry = entry;
-        _iconPath = string.IsNullOrWhiteSpace(iconPath) ? null : iconPath;
+        _icon = string.IsNullOrWhiteSpace(iconPath) ? null : new AchievementIconPresentation(iconPath!, 1.0);
         _iconSettled = true;
     }
 
     /// <summary>
-    /// 构造。图标在第一次读取 <see cref="IconUrl"/> / <see cref="HasIcon"/> 时才解析，
-    /// 这样列表容器只实化前几行时不会为其余几百行解码 DDS。
+    /// 构造。图标在第一次读取 <see cref="IconUrl"/> / <see cref="HasIcon"/> / <see cref="IconOpacity"/>
+    /// 时才解析，这样列表容器只实化前几行时不会为其余几百行解码 DDS。
     /// </summary>
-    public AchievementRowViewModel(AchievementEntry entry, Func<string?> iconFactory)
+    public AchievementRowViewModel(AchievementEntry entry, Func<AchievementIconPresentation?> iconFactory)
     {
         ArgumentNullException.ThrowIfNull(entry);
         ArgumentNullException.ThrowIfNull(iconFactory);
@@ -58,10 +58,16 @@ public sealed class AchievementRowViewModel : LocalizedObservableObject
 
     public bool IsHidden => _entry.IsHidden;
 
-    public string IconUrl => ResolveIconPath();
+    public string IconUrl => ResolveIcon().Url;
 
     /// <summary>有图标地址时为 true；否则界面显示占位方块。</summary>
     public bool HasIcon => !string.IsNullOrWhiteSpace(IconUrl);
+
+    /// <summary>
+    /// 图标不透明度：未解锁且游戏没有专门灰图时为 0.55，其余为 1.0。
+    /// 没有图标时也返回 1.0（占位方块不该被压暗）。
+    /// </summary>
+    public double IconOpacity => HasIcon ? ResolveIcon().Opacity : 1.0;
 
     /// <summary>平台给了稀有度才显示百分比；没有数据时整行隐藏，不显示 0%。</summary>
     public bool HasRarity => _entry.GlobalPercent.HasValue;
@@ -94,23 +100,30 @@ public sealed class AchievementRowViewModel : LocalizedObservableObject
     /// <summary>列表行的自动化 id：UI 走查按成就 id 定位。</summary>
     public string AutomationId => "achievement_" + Id;
 
-    private string ResolveIconPath()
+    private AchievementIconPresentation ResolveIcon()
     {
         if (!_iconSettled)
         {
             _iconSettled = true;
             try
             {
-                var resolved = _iconFactory?.Invoke();
-                _iconPath = string.IsNullOrWhiteSpace(resolved) ? null : resolved;
+                _icon = _iconFactory?.Invoke();
             }
             catch
             {
                 // 图标只是装饰：解析/解码炸了就回占位方块，不能把整行拖崩。
-                _iconPath = null;
+                _icon = null;
             }
         }
 
-        return _iconPath ?? _entry.IconUrl ?? string.Empty;
+        if (_icon is { Url.Length: > 0 } icon)
+        {
+            return icon;
+        }
+
+        // 本地没有图时退回数据源自带的图标地址（Steam 目前不给，留作兜底）。
+        return string.IsNullOrWhiteSpace(_entry.IconUrl)
+            ? new AchievementIconPresentation(string.Empty, 1.0)
+            : new AchievementIconPresentation(_entry.IconUrl!, 1.0);
     }
 }

@@ -86,6 +86,117 @@ public static class AchievementIconResolverChecks
             flat is not null && flat.EndsWith("ACH_FLAT.jpg", StringComparison.Ordinal),
             flat ?? "null");
 
+        // EU5：<install>\game\main_menu\gfx\interface\icons\achievements
+        var eu5Root = Path.Combine(tempRoot, "eu5");
+        var eu5Icons = Path.Combine(eu5Root, "game", "main_menu", "gfx", "interface", "icons", "achievements");
+        fs.WriteAllBytesAtomic(Path.Combine(eu5Icons, "ACH_EU5.dds"), [1]);
+        fs.WriteAllBytesAtomic(Path.Combine(eu5Icons, "ACH_EU5_notachieved.dds"), [2]);
+        var eu5 = AchievementIconResolver.ResolveSource(eu5Root, "ACH_EU5", unlocked: true);
+        ChecksContext.Check(
+            "成就图标: 兼容 EU5 的 game\\main_menu 布局",
+            eu5 is not null && eu5.EndsWith("ACH_EU5.dds", StringComparison.Ordinal),
+            eu5 ?? "null");
+        var eu5Locked = AchievementIconResolver.ResolveSource(eu5Root, "ACH_EU5", unlocked: false);
+        ChecksContext.Check(
+            "成就图标: EU5 未解锁取 _notachieved",
+            eu5Locked is not null && eu5Locked.EndsWith("ACH_EU5_notachieved.dds", StringComparison.Ordinal),
+            eu5Locked ?? "null");
+
+        // EU4：<install>\gfx\interface\achievements（只有彩色原图，没有灰图）
+        var eu4Root = Path.Combine(tempRoot, "eu4");
+        var eu4Icons = Path.Combine(eu4Root, "gfx", "interface", "achievements");
+        fs.WriteAllBytesAtomic(Path.Combine(eu4Icons, "ACH_EU4.dds"), [3]);
+        var eu4 = AchievementIconResolver.ResolveSource(eu4Root, "ACH_EU4", unlocked: true);
+        ChecksContext.Check(
+            "成就图标: 兼容 EU4 的 gfx\\interface\\achievements 布局",
+            eu4 is not null && eu4.EndsWith("ACH_EU4.dds", StringComparison.Ordinal),
+            eu4 ?? "null");
+        var eu4Locked = AchievementIconResolver.ResolveSourceDetailed(eu4Root, "ACH_EU4", unlocked: false);
+        ChecksContext.Check(
+            "成就图标: 缺灰图时退回原图，并标记 IsLockedArt=false（界面据此压暗）",
+            eu4Locked is { } eu4Fallback
+                && !eu4Fallback.IsLockedArt
+                && eu4Fallback.Path.EndsWith("ACH_EU4.dds", StringComparison.Ordinal),
+            eu4Locked?.Path ?? "null");
+
+        // HOI4：<install>\gfx\achievements，未解锁后缀是 _grey（_not_eligible 不参与）
+        var hoiRoot = Path.Combine(tempRoot, "hoi4");
+        var hoiIcons = Path.Combine(hoiRoot, "gfx", "achievements");
+        fs.WriteAllBytesAtomic(Path.Combine(hoiIcons, "ACH_HOI.dds"), [1]);
+        fs.WriteAllBytesAtomic(Path.Combine(hoiIcons, "ACH_HOI_grey.dds"), [2]);
+        fs.WriteAllBytesAtomic(Path.Combine(hoiIcons, "ACH_HOI_NOT_ELIGIBLE.dds"), [3]);
+        var hoi = AchievementIconResolver.ResolveSourceDetailed(hoiRoot, "ACH_HOI", unlocked: true);
+        ChecksContext.Check(
+            "成就图标: 兼容 HOI4 的 gfx\\achievements 布局，已解锁用彩色原图",
+            hoi is { } hoiBase
+                && !hoiBase.IsLockedArt
+                && hoiBase.Path.EndsWith("ACH_HOI.dds", StringComparison.Ordinal),
+            hoi?.Path ?? "null");
+        var hoiLocked = AchievementIconResolver.ResolveSourceDetailed(hoiRoot, "ACH_HOI", unlocked: false);
+        ChecksContext.Check(
+            "成就图标: HOI4 未解锁取 _grey 并标记 IsLockedArt=true",
+            hoiLocked is { } hoiGrey
+                && hoiGrey.IsLockedArt
+                && hoiGrey.Path.EndsWith("ACH_HOI_grey.dds", StringComparison.Ordinal),
+            hoiLocked?.Path ?? "null");
+
+        // Stellaris / CS2 的未解锁后缀是 _locked
+        var stellarisRoot = Path.Combine(tempRoot, "stellaris");
+        var stellarisIcons = Path.Combine(stellarisRoot, "gfx", "interface", "icons", "achievements");
+        fs.WriteAllBytesAtomic(Path.Combine(stellarisIcons, "ACH_STE.dds"), [1]);
+        fs.WriteAllBytesAtomic(Path.Combine(stellarisIcons, "ACH_STE_locked.dds"), [2]);
+        var stellarisLocked = AchievementIconResolver.ResolveSourceDetailed(stellarisRoot, "ACH_STE", unlocked: false);
+        ChecksContext.Check(
+            "成就图标: Stellaris 未解锁取 _locked",
+            stellarisLocked is { } stellarisArt
+                && stellarisArt.IsLockedArt
+                && stellarisArt.Path.EndsWith("ACH_STE_locked.dds", StringComparison.Ordinal),
+            stellarisLocked?.Path ?? "null");
+
+        // CS2：<install>\Cities2_Data\Content\Game\UI\Media\Game\Achievements（PNG，_locked）
+        var cs2Root = Path.Combine(tempRoot, "cs2");
+        var cs2Icons = Path.Combine(cs2Root, "Cities2_Data", "Content", "Game", "UI", "Media", "Game", "Achievements");
+        fs.WriteAllBytesAtomic(Path.Combine(cs2Icons, "ALittleBitofTLC.png"), [1]);
+        fs.WriteAllBytesAtomic(Path.Combine(cs2Icons, "ALittleBitofTLC_locked.png"), [2]);
+        var cs2 = AchievementIconResolver.Resolve(cs2Root, "ALittleBitofTLC", unlocked: true);
+        ChecksContext.Check(
+            "成就图标: 兼容 CS2 的 Cities2_Data 布局（PNG 直接给界面）",
+            cs2 is not null && cs2.EndsWith("ALittleBitofTLC.png", StringComparison.Ordinal),
+            cs2 ?? "null");
+        var cs2Locked = AchievementIconResolver.Resolve(cs2Root, "ALittleBitofTLC", unlocked: false);
+        ChecksContext.Check(
+            "成就图标: CS2 未解锁取 _locked",
+            cs2Locked is not null && cs2Locked.EndsWith("ALittleBitofTLC_locked.png", StringComparison.Ordinal),
+            cs2Locked ?? "null");
+
+        // CS2 的 Steam API 名带 ACH_ 前缀（实测 ACH_ALITTLEBITOFTLC ↔ ALittleBitofTLC.png）。
+        // Windows 上精确命中返回的是按 API 名大小写拼出的路径，所以这里按大小写不敏感比较。
+        var cs2Prefixed = AchievementIconResolver.Resolve(cs2Root, "ACH_ALITTLEBITOFTLC", unlocked: true);
+        ChecksContext.Check(
+            "成就图标: CS2 的 ACH_ 前缀 API 名仍能命中文件",
+            cs2Prefixed is not null && cs2Prefixed.EndsWith("ALITTLEBITOFTLC.png", StringComparison.OrdinalIgnoreCase),
+            cs2Prefixed ?? "null");
+
+        // 名称写法差异：忽略大小写与分隔符再比一次（Steam API 名与文件名不总是逐字一致）。
+        var normalizedRoot = Path.Combine(tempRoot, "normalized");
+        var normalizedIcons = Path.Combine(normalizedRoot, "gfx", "interface", "achievements");
+        fs.WriteAllBytesAtomic(Path.Combine(normalizedIcons, "ACH_With_Separators.png"), [1]);
+        var normalized = AchievementIconResolver.Resolve(normalizedRoot, "ACHWithSeparators", unlocked: true);
+        ChecksContext.Check(
+            "成就图标: 忽略分隔符后仍能命中同名文件",
+            normalized is not null && normalized.EndsWith("ACH_With_Separators.png", StringComparison.Ordinal),
+            normalized ?? "null");
+
+        // 前缀差异：API 名带 / 不带 achievement_ 前缀，两种都要能找到同一个文件。
+        var prefixRoot = Path.Combine(tempRoot, "prefix");
+        var prefixIcons = Path.Combine(prefixRoot, "gfx", "achievements");
+        fs.WriteAllBytesAtomic(Path.Combine(prefixIcons, "prefix_only_case.dds"), [1]);
+        var prefixed = AchievementIconResolver.ResolveSource(prefixRoot, "ACHIEVEMENT_prefix_only_case", unlocked: true);
+        ChecksContext.Check(
+            "成就图标: API 名多出的 achievement_ 前缀不影响命中",
+            prefixed is not null && prefixed.EndsWith("prefix_only_case.dds", StringComparison.Ordinal),
+            prefixed ?? "null");
+
         // 两种布局都存在时 game/ 优先（VIC3 的实际布局）。
         var mixedRoot = Path.Combine(tempRoot, "mixed");
         fs.WriteAllBytesAtomic(Path.Combine(mixedRoot, "game", "gfx", "interface", "icons", "achievements", "ACH_M.jpg"), [1]);
@@ -220,12 +331,15 @@ public static class AchievementIconResolverChecks
         {
             var viewModel = File.ReadAllText(viewModelPath);
             ChecksContext.Check(
-                "成就图标: ViewModel 走 AchievementIconResolver.ResolveSource",
-                viewModel.Contains("AchievementIconResolver.ResolveSource(", StringComparison.Ordinal));
+                "成就图标: ViewModel 走 AchievementIconResolver.ResolveSourceDetailed",
+                viewModel.Contains("AchievementIconResolver.ResolveSourceDetailed(", StringComparison.Ordinal));
             ChecksContext.Check(
                 "成就图标: ViewModel 对 DDS 走 DdsPngCache 解码",
                 viewModel.Contains("DdsPngCache", StringComparison.Ordinal)
                     && viewModel.Contains("EndsWith(\".dds\"", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "成就页: 行模板按 IconOpacity 压暗未解锁图标",
+                xaml.Contains("Opacity=\"{x:Bind IconOpacity", StringComparison.Ordinal));
         }
 
         if (ChecksContext.Check("成就图标: AchievementsPage.xaml.cs 存在", File.Exists(pageCodePath), pageCodePath))

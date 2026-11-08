@@ -32,6 +32,7 @@ public static class SteamApiLocatorChecks
         CheckOnlyLoaderStillResolves(fs);
         CheckOnlyOriginalBackup(fs);
         CheckThirtyTwoBitFallback(fs);
+        CheckUnityPluginsDirectory(fs);
         CheckMinimumSize(fs);
         CheckNothingUsable(fs);
         return ChecksContext.Failures - before;
@@ -263,6 +264,35 @@ public static class SteamApiLocatorChecks
         }
     }
 
+    /// <summary>
+    /// Unity 引擎的游戏（CS2）把 api 放在 <c>Cities2_Data\Plugins\x86_64</c>，
+    /// 既不在安装根也不在 binaries。不认这个目录的话，CS2 成就一个候选都找不到。
+    /// </summary>
+    private static void CheckUnityPluginsDirectory(IFileSystem fs)
+    {
+        var root = NewTempRoot(fs, "unity-plugins");
+        try
+        {
+            var plugins = fs.Combine(root, "Cities2_Data", "Plugins", "x86_64");
+            fs.EnsureDirectory(plugins);
+
+            var api = fs.Combine(plugins, SteamApiLocator.FileName);
+            fs.WriteAllBytesAtomic(api, new byte[FillerBytes]);
+
+            var game = MakeGame(fs, root, "cities_skylines_2");
+            var locator = new SteamApiLocator(fs, new SilentLogger());
+
+            ChecksContext.Equal(
+                "定位: CS2 的 Cities2_Data\\Plugins\\x86_64 也能被选中",
+                api,
+                locator.Resolve(null, null, game));
+        }
+        finally
+        {
+            SafeDelete(fs, root);
+        }
+    }
+
     /// <summary>体积明显不像 DLL（0 字节占位等）的候选要提前拒掉。</summary>
     private static void CheckMinimumSize(IFileSystem fs)
     {
@@ -318,8 +348,8 @@ public static class SteamApiLocatorChecks
     private static int IndexOf(List<string> paths, string target) =>
         paths.FindIndex(path => string.Equals(path, target, StringComparison.OrdinalIgnoreCase));
 
-    internal static GameInstallation MakeGame(IFileSystem fs, string root) => new(
-        GameId: "ck3",
+    internal static GameInstallation MakeGame(IFileSystem fs, string root, string gameId = "ck3") => new(
+        GameId: gameId,
         DisplayName: "Crusader Kings III",
         Version: "1.0.0",
         InstallRoot: root,

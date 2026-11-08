@@ -204,6 +204,7 @@
                                           AutomationProperties.AccessibilityView="Raw"
                                           Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasIcon), Mode=OneWay}" />
                                 <Image Source="{x:Bind svc:XamlImage.FromPath(IconUrl, 48), Mode=OneTime}"
+                                       Opacity="{x:Bind IconOpacity, Mode=OneTime}"
                                        Stretch="UniformToFill"
                                        AutomationProperties.Name="{x:Bind Name, Mode=OneTime}"
                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(HasIcon), Mode=OneWay}" />
