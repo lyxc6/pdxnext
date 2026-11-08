@@ -22,6 +22,7 @@ public sealed class DlcRowViewModel : LocalizedObservableObject
     private bool? _isOwned;
     private DlcPatchCoverage _coverage = DlcPatchCoverage.None;
     private GamePatchStatus _patchStatus = GamePatchStatus.Unsupported;
+    private DlcContentState _contentState = DlcContentState.Unknown;
 
     /// <param name="dlc">磁盘上的 DLC 描述。</param>
     /// <param name="isEnabled">该 DLC 在激活播放集里是否启用。</param>
@@ -300,6 +301,66 @@ public sealed class DlcRowViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(CoverageText));
         OnPropertyChanged(nameof(CoverageToolTip));
         OnPropertyChanged(nameof(ShowsPatchBadge));
+    }
+
+    /// <summary>
+    /// DLC <strong>内容</strong>的来源（与补丁覆盖是两个维度：补丁只管授权，不管资源文件在不在）。
+    /// </summary>
+    public DlcContentState ContentState => _contentState;
+
+    /// <summary>内容徽标的配色类别：steam / files / missing / none（由 XamlBrush 换成主题画笔）。</summary>
+    public string ContentKind => _contentState switch
+    {
+        DlcContentState.SteamInstalled => "steam",
+        DlcContentState.FilesPresent => "files",
+        DlcContentState.Missing => "missing",
+        _ => "none",
+    };
+
+    /// <summary>内容徽标文字（Steam 已装 / 仅本地文件 / 内容未安装）；无徽标时为空串。</summary>
+    public string ContentText => _contentState switch
+    {
+        DlcContentState.SteamInstalled => T(Keys.DlcContentSteamText),
+        DlcContentState.FilesPresent => T(Keys.DlcContentFilesText),
+        DlcContentState.Missing => T(Keys.DlcContentMissingText),
+        _ => string.Empty,
+    };
+
+    /// <summary>内容徽标的自动化 Id（供 UI 测试确认内容来源确实显示出来了）。</summary>
+    public string ContentAutomationId => "txtDlcContent_" + EffectiveId;
+
+    /// <summary>
+    /// 内容徽标悬停提示：说明这份内容归谁维护、以及缺的时候该怎么补。
+    /// 没有 Steam AppID 的行不会走到这里（那时内容是 <see cref="DlcContentState.Unknown"/>）。
+    /// </summary>
+    public string ContentToolTip => _contentState switch
+    {
+        DlcContentState.SteamInstalled => T(Keys.DlcContentSteamToolTip, SteamId),
+        DlcContentState.FilesPresent => T(Keys.DlcContentFilesToolTip, SteamId),
+        DlcContentState.Missing => T(Keys.DlcContentMissingToolTip, SteamId),
+        _ => string.Empty,
+    };
+
+    /// <summary>
+    /// 是否显示内容徽标：<see cref="DlcContentState.Unknown"/> 表示判不了（没有 steam_id，
+    /// 或 CS2 这种没有磁盘描述文件的游戏），此时不显示比乱标更诚实。
+    /// </summary>
+    public bool ShowsContentBadge => _contentState != DlcContentState.Unknown;
+
+    /// <summary>由 <c>DlcViewModel</c> 在拿到扫描结果与 Steam 清单后一次性回填。</summary>
+    public void SetContentState(DlcContentState state)
+    {
+        if (_contentState == state)
+        {
+            return;
+        }
+
+        _contentState = state;
+        OnPropertyChanged(nameof(ContentState));
+        OnPropertyChanged(nameof(ContentKind));
+        OnPropertyChanged(nameof(ContentText));
+        OnPropertyChanged(nameof(ContentToolTip));
+        OnPropertyChanged(nameof(ShowsContentBadge));
     }
 
     public bool IsEnabled

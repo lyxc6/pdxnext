@@ -1084,6 +1084,24 @@
   <data name="DiagnosticsStatusFailed" xml:space="preserve">
     <value>Operation failed: {0}</value>
   </data>
+  <data name="DlcContentFilesText" xml:space="preserve">
+    <value>Local files only</value>
+  </data>
+  <data name="DlcContentFilesToolTip" xml:space="preserve">
+    <value>Content is on disk but Steam has no depot registered for this DLC (app {0}): the files were copied by hand, so Steam verification and updates will not maintain them</value>
+  </data>
+  <data name="DlcContentMissingText" xml:space="preserve">
+    <value>Content missing</value>
+  </data>
+  <data name="DlcContentMissingToolTip" xml:space="preserve">
+    <value>Only DLC metadata exists, no content files on disk (app {0}): the patch unlocks entitlement only, the game will not show this DLC</value>
+  </data>
+  <data name="DlcContentSteamText" xml:space="preserve">
+    <value>Installed by Steam</value>
+  </data>
+  <data name="DlcContentSteamToolTip" xml:space="preserve">
+    <value>Steam's InstalledDepots registers this content (app {0}): Steam maintains it together with game updates</value>
+  </data>
   <data name="DlcCountsText" xml:space="preserve">
     <value>{0} DLCs in total, {1} enabled</value>
   </data>

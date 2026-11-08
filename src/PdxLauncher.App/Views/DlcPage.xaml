@@ -101,6 +101,20 @@
                                AutomationProperties.Name="{x:Bind CoverageText, Mode=OneWay}"
                                AutomationProperties.HelpText="{x:Bind CoverageToolTip, Mode=OneWay}"
                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowsPatchBadge), Mode=OneWay}" />
+                    <!--
+                        内容徽标：授权归补丁管，资源文件归 Steam / 人工管，两者是两回事。
+                        「Steam 已装」= appmanifest 的 InstalledDepots 登了这个 depot，随游戏更新维护；
+                        「仅本地文件」= 磁盘上有描述文件但 Steam 没登记（人工拷的，Steam 不认）；
+                        「内容未安装」= 只有 dlc_metadata 里的元数据，进游戏看不到这份 DLC。
+                    -->
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
+                               Text="{x:Bind ContentText, Mode=OneWay}"
+                               Foreground="{x:Bind svc:XamlBrush.FromContent(ContentKind), Mode=OneWay}"
+                               ToolTipService.ToolTip="{x:Bind ContentToolTip, Mode=OneWay}"
+                               AutomationProperties.AutomationId="{x:Bind ContentAutomationId, Mode=OneTime}"
+                               AutomationProperties.Name="{x:Bind ContentText, Mode=OneWay}"
+                               AutomationProperties.HelpText="{x:Bind ContentToolTip, Mode=OneWay}"
+                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowsContentBadge), Mode=OneWay}" />
                 </StackPanel>
 
                 <!--

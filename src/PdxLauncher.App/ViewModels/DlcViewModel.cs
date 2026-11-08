@@ -606,6 +606,8 @@ public sealed class DlcViewModel : LocalizedObservableObject
             + "，未拥有 " + plan.UnownedCount + " 个（" + plan.UnownedState + "）"
             + accountText
             + "，结论=" + (_ownershipVerdict?.Kind.ToString() ?? "<null>"));
+
+        LogContentSummary();
     }
 
     private void ResetOwnership()
@@ -638,6 +640,10 @@ public sealed class DlcViewModel : LocalizedObservableObject
             coverageByPath.TryAdd(entry.FilePath, entry.Coverage);
         }
 
+        // 内容维度与授权/补丁两个维度都无关：补丁只让游戏读到授权，不会把 DLC 的资源文件放到磁盘上。
+        // 清单（InstalledDepots）读不到时返回 null，此时任何行都不会被判成「Steam 已装」。
+        var steamInstalledDlcAppIds = ResolveSteamInstalledDlcAppIds();
+
         foreach (var row in Dlcs)
         {
             row.SetOwnership(ownedByPath.TryGetValue(row.FilePathRelativeToDlcPath, out var owned) ? owned : null);
@@ -646,6 +652,10 @@ public sealed class DlcViewModel : LocalizedObservableObject
                     ? coverage
                     : DlcPatchCoverage.None,
                 _patchStatus);
+            row.SetContentState(DlcContentInspector.Classify(
+                row.SteamId,
+                row.FilePathRelativeToDlcPath,
+                steamInstalledDlcAppIds));
         }
 
         UnownedDlcs.Clear();
@@ -676,10 +686,86 @@ public sealed class DlcViewModel : LocalizedObservableObject
                 showsToggle: false);
             row.SetOwnership(entry.Owned);
             row.SetPatchCoverage(entry.Coverage, _patchStatus);
+            row.SetContentState(DlcContentInspector.Classify(
+                entry.SteamId,
+                entry.FilePath,
+                steamInstalledDlcAppIds));
             UnownedDlcs.Add(row);
         }
 
         RaiseSections();
+    }
+
+    /// <summary>
+    /// 读当前游戏的 <c>appmanifest_&lt;appid&gt;.acf</c>，取 <c>InstalledDepots</c> 里登记为 DLC 的 appid。
+    /// <para>读不到（没有 appid、清单缺失、段缺失、解析失败）一律返回 null ＝「不知道」：
+    /// 绝不能拿空集合冒充「一个都没装」，那会把 Steam 装好的 DLC 标成人工拷贝。</para>
+    /// </summary>
+    private IReadOnlySet<int>? ResolveSteamInstalledDlcAppIds()
+    {
+        var game = _game;
+        var resolvedAppId = _ownership?.SteamAppId;
+        if (game is null || resolvedAppId is not int appId || appId <= 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            // 库根传 null：FindLibraryRoot 会从安装目录往上找 steamapps，游戏装在哪个库都能对上。
+            var manifest = new AppManifestLookup(AppServices.FileSystem, AppServices.Logger)
+                .Find(game, appId, libraryRoots: null);
+            if (manifest is null)
+            {
+                AppServices.Logger.Warn("DLC 内容判定：读不到 appmanifest（appid=" + appId + "），只按磁盘文件判断");
+                return null;
+            }
+
+            return manifest.KnowsDlcDepots ? manifest.InstalledDlcAppIds : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            AppServices.Logger.Warn("DLC 内容判定：读取 appmanifest 失败（appid=" + appId + "）：" + ex.Message);
+            return null;
+        }
+    }
+
+    /// <summary>日志里记一行内容来源汇总：「授权通了但 DLC 打不开」常见的真实原因是内容根本没落盘。</summary>
+    private void LogContentSummary()
+    {
+        if (_ownership is null)
+        {
+            return;
+        }
+
+        var steam = 0;
+        var files = 0;
+        var missing = 0;
+        var unknown = 0;
+        foreach (var row in Dlcs.Concat(UnownedDlcs))
+        {
+            switch (row.ContentState)
+            {
+                case DlcContentState.SteamInstalled:
+                    steam++;
+                    break;
+                case DlcContentState.FilesPresent:
+                    files++;
+                    break;
+                case DlcContentState.Missing:
+                    missing++;
+                    break;
+                default:
+                    unknown++;
+                    break;
+            }
+        }
+
+        AppServices.Logger.Info(
+            "DLC 内容（gameId=" + (_game?.GameId ?? "<null>") + "）：Steam 已装 " + steam
+            + " / 仅本地文件 " + files
+            + " / 未安装 " + missing
+            + " / 未知 " + unknown);
     }
 
     /// <summary>磁盘行 → 规划器输入（只传规划要用的三个字段）。</summary>

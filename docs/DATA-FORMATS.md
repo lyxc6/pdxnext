@@ -127,7 +127,7 @@ isOwned = isSubscribedApp(id) || 可信DisabledDLC.contains(id) || isDLCInstalle
 
 本项目 `SteamOwnershipService` 的做法：**用游戏目录里那份 `steam_api64.dll` 去问 Steam**。补丁生效时那份 DLL 就是 CreamAPI loader，所以它报出来的授权 == 游戏实际看到的授权 —— 这样「DLC 页全绿」就等于「补丁真的用上了」，而不是仅仅「账号里有这些 DLC」。
 
-**但 loader 在岗时，这个数字不是 Steam 目录。** CreamAPI 的 `GetDLCCount` / `BGetDLCDataByIndex` 读的是同目录 `cream_api.ini` 的 `[dlc]` 表，而且不按当前 appid 过滤；打补丁时这张表由 `Patch\Assets\dlc-catalog.json` 生成——11 款 Paradox 游戏共用 490 条（CS1 94 / EU4 93 / CK2 74 / HoI4 59 / Stellaris 56 / CK3 37 / CS2 29 / V3 23 / V2 11 / Imperator 9 / EU5 5），每款游戏一节，运行时摊平成唯一一段 `[dlc]`（条数与分节来源：`dlc-catalog.json` 的 `sources[].dlc`）。所以 V3 真机看到「磁盘 17 个 DLC / 游戏读到 490 个」——490 是清单行数，不是账号拥有数，也不是 V3 的 DLC 数。判定条在 loader 在岗时必须写「游戏读到 N 个」，不能写「Steam 报告 N 个」。
+**但 loader 在岗时，这个数字不是 Steam 目录。** CreamAPI 的 `GetDLCCount` / `BGetDLCDataByIndex` 读的是同目录 `cream_api.ini` 的 `[dlc]` 表，而且不按当前 appid 过滤；打补丁时这张表由 `Patch\Assets\dlc-catalog.json` 生成——11 款 Paradox 游戏共用 497 条（CS1 94 / EU4 93 / CK2 74 / HoI4 59 / Stellaris 56 / CK3 37 / CS2 35 / V3 23 / V2 11 / Imperator 9 / EU5 6），每款游戏一节，运行时摊平成唯一一段 `[dlc]`（条数与分节来源：`dlc-catalog.json` 的 `sources[].dlc`）。所以 V3 真机看到「磁盘 18 个 DLC / 游戏读到 497 个」——497 是清单行数，不是账号拥有数，也不是 V3 的 DLC 数。判定条在 loader 在岗时必须写「游戏读到 N 个」，不能写「Steam 报告 N 个」。
 
 - 主探测（游戏可用）：`NativeLibrary.Load(<ApiDirectory>\steam_api64.dll)` → `SteamAPI_Init` → `SteamAPI_SteamApps_v008` / `SteamAPI_SteamUser_v021` → `GetDLCCount` / `BGetDLCDataByIndex` / `BIsSubscribedApp` / `BIsDlcInstalled` → `SteamAPI_Shutdown` + `Free`。刻意不用 `DllImport` 解析器：全进程只能绑一个 DLL 路径。
 - **账号视图（账号真实拥有）**：当 `GamePatchReport.IsLoaderActive`（`Patched` 或 `PatchedOther`）且同目录存在 `steam_api64_o.dll` 时，**再探一次原版备份**，把「账号里到底有哪些」与「游戏实际能用哪些」分开。两份报告都套同一个 `TrustedDisabledDlc` 采信闸门。降级：备份缺失 → 无账号视图（UI 写「缺少原版备份」）；备份与当前文件字节相同、或返回与 loader 完全相同的 id 集合 → 「备份看起来也是加载器」（`backupNotOriginal`）；备份探测失败 → 账号视图不可用并带上失败键。
@@ -135,8 +135,47 @@ isOwned = isSubscribedApp(id) || 可信DisabledDLC.contains(id) || isDLCInstalle
 - 32 位游戏的 `steam_api.dll` 在 x64 进程里会 `BadImageFormat` → 直接报「无法判定（32 位游戏不支持）」。
 - 同一个 DLL 的 Steamworks 只能有一个持有者：`SteamNativeSession` 做进程内闸门（DLC 授权探测 ↔ 创意工坊订阅）；主探测与账号探测**顺序执行**，不并发（同一 appid 两个 `SteamAPI_Init` 会互相打架）。
 - 结果缓存 30 秒（key = DLL 路径 + 字节数 + appid + 补丁状态 + 备份路径 + 备份字节数），DLC 页的「重新检测」与设置页打/撤补丁成功后会 `Invalidate()`。
-- 真机 Stellaris（appid 281990，SteamID64 76561198370719182）：打完补丁 → loader 表 490、拥有 490；用原版 `steam_api64_o.dll` → 53 个、拥有 26。V3 真机（appid 529340）：loader 表 490、账号视图 23、磁盘 17 个 `.dlc.json` → 判定「补丁已生效：游戏读到 490 个、490 个已拥有；账号真实拥有 17/23（加载器表里 467 条不属于本游戏）」。上面这些计数是 2026-11 的实测样本，账号增减 DLC 后会变（本机后续复测账号视图仍是 23 条，但 `BIsSubscribedApp` 返回已拥有 10 条），文档里的「拥有 x/y」不要当常量断言。
+- 真机 Stellaris（appid 281990，SteamID64 76561198370719182）：打完补丁 → loader 表 497、拥有 497；用原版 `steam_api64_o.dll` → 53 个、拥有 26。V3 真机（appid 529340）：loader 表 497、账号视图 23、磁盘 17 个 `.dlc.json` → 判定「补丁已生效：游戏读到 497 个、497 个已拥有；账号真实拥有 17/23（加载器表里 467 条不属于本游戏）」。上面这些计数是 2026-11 的实测样本，账号增减 DLC 后会变（本机后续复测账号视图仍是 23 条，但 `BIsSubscribedApp` 返回已拥有 10 条），文档里的「拥有 x/y」不要当常量断言。
 - 失败键（UI 侧 `dlc.ownershipError*`）：`noAppId` / `noDll` / `x86` / `notWindows` / `busy` / `steamNotRunning` / `initFailed` / `native` / `backupNotOriginal`。
+
+### 3.2 DLC 内容状态判定（内容归 Steam，不归补丁）
+
+补丁（`cream_api.ini` + loader）只打通**授权**，它不会、也无法把 DLC 的资源文件放到磁盘上。
+「授权通了但游戏里看不到这份 DLC」的真实原因是内容没落盘，不是补丁没生效。所以 DLC 页除了
+「拥有 / 未拥有」（3.1）与「补丁覆盖」，还要单独显示**内容来源**，两者是正交维度。
+
+判定依据是 `appmanifest_<appid>.acf` 的 `InstalledDepots`：
+
+```
+"AppState" {
+    "appid" "529340"
+    "buildid" "26453692"
+    "InstalledDepots" {
+        "529341" { "manifest" "…" "size" "12562973323" }                          // 本体 depot，无 dlcappid
+        "2071470" { "manifest" "…" "size" "630473793" "dlcappid" "2071471" }      // DLC depot
+    }
+}
+```
+
+- 只有**带 `dlcappid`** 的 depot 才算「这个 DLC 的内容由 Steam 装过」；本体 depot 与 DLC 判定无关。
+- `InstalledDepots` **段缺失 = 不知道**，不等于「一个都没装」。两者在 UI 上必须区分：
+  `AppManifest.KnowsDlcDepots` 为 false 时，界面不许出现「Steam 已装」。
+- 真机证据（2026-11-08，V3 1.15 / appid 529340）：`InstalledDepots` 里 9 个带 `dlcappid` 的 depot，
+  其 `size` 与 `game\dlc\dlc001…dlc010` 的目录字节数**逐字节相等**；`dlc011…dlc019` 有内容但无 depot 登记
+  ⇒ 前者是 Steam 装的，后者是从整合包人工拷进去的（例如 `dlc019_ip5`，State and Revolution / 4314660）。
+
+`DlcContentInspector` 的判定优先级（顺序有意义）：
+
+| 顺序 | 条件 | 结果 |
+| --- | --- | --- |
+| 1 | `steam_id` 命中 `InstalledDepots` 的 `dlcappid` | `SteamInstalled`（Steam 已装，随游戏更新维护） |
+| 2 | `FilePathRelativeToDlcPath` 以 `steam:` 开头（CS2 这类借 Steam 清单构建的行）且未命中 | `Unknown`（没有磁盘描述文件可依据，不能报缺内容） |
+| 3 | 有磁盘描述文件（路径不以 `dlc_metadata/` 开头） | `FilesPresent`（仅本地文件：人工拷贝，Steam 校验/更新不管它） |
+| 4 | 只有 `game\dlc_metadata\*.txt` 合成的条目 | `Missing`（内容未安装） |
+| 5 | `steam_id` 为空或非数字 | `Unknown`（不显示徽标） |
+
+刻意**不统计目录字节数**：V3 全部 DLC 约 6.5 GB，递归统计会让切页卡顿，而且字节数也判断不出
+「谁装的」（人工拷贝的目录同样可以字节相等）。启动器只如实显示，不下载、不修补内容。
 
 ## 4. launcher-v2.sqlite
 

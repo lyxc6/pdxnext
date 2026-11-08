@@ -27,15 +27,22 @@ public static class DlcPatchChecks
         "ba1d9d4b95ed3eedb1276dbe38f170046e131ddefc875985b69d87006a67e03d";
 
     /// <summary>
-    /// Victoria 3（appId 529340）生成出来的完整 ini。这个 sha256 同时是向后兼容的证据：
-    /// 旧实现「模板自带 490 条大表 + 只改 appid」生成的字节，与现在「模板 + 分节清单」逐字节一致。
+    /// Victoria 3（appId 529340）打补丁生成出来的完整 ini。摊平后的 <c>[dlc]</c> 表包含**全部**游戏的条目，
+    /// 所以任一节增删条目都会改这两个值（2026-11-08 补 7 条：26,677 → 27,059 字节）。
+    /// 它钉住的是当前输出；「与重构前的大表逐字节一致」在 490 条那一代成立过，新增条目后只能用本值复核回归。
     /// </summary>
     private const string ExpectedVictoria3IniSha256 =
-        "ec8f815bded010a1b4d02bbbc2930802c4d465dbc6124aeabf3b178edebdeb8e";
+        "f97af4e3ef3a7a905253a2c87f16be69b151b27a829fed0e86ddd50ac0e92e9d";
 
-    private const int ExpectedVictoria3IniLength = 26_677;
+    private const int ExpectedVictoria3IniLength = 27_059;
 
-    private const int ExpectedDlcTotal = 490;
+    private const int ExpectedDlcTotal = 497;
+
+    /// <summary>Cities: Skylines II 一节条数（1.15 整合包新增 6 条创作者包 / 资料片）。</summary>
+    private const int ExpectedCitiesSkylines2DlcCount = 35;
+
+    /// <summary>Europa Universalis V 一节条数（1.15 整合包新增 Across the Pillars）。</summary>
+    private const int ExpectedEuropaUniversalis5DlcCount = 6;
 
     private const int ExpectedVictoria3DlcCount = 23;
 
@@ -140,6 +147,14 @@ public static class DlcPatchChecks
         var victoria3 = catalog.ForGame("victoria3");
         ChecksContext.Equal("Victoria 3 条数", ExpectedVictoria3DlcCount, victoria3.Count);
         ChecksContext.Equal("Cities Skylines 条数", 94, catalog.ForGame("cities_skylines").Count);
+        ChecksContext.Equal(
+            "Cities Skylines II 条数",
+            ExpectedCitiesSkylines2DlcCount,
+            catalog.ForGame("cities_skylines_2").Count);
+        ChecksContext.Equal(
+            "Europa Universalis V 条数",
+            ExpectedEuropaUniversalis5DlcCount,
+            catalog.ForGame("eu5").Count);
         ChecksContext.Check(
             "State and Revolution 在 Victoria 3 名下",
             victoria3.Any(entry => entry.SteamAppId == StateAndRevolutionAppId
@@ -275,7 +290,7 @@ public static class DlcPatchChecks
         ChecksContext.Check("ini 写入 appid", ini.Contains("appid = 394360", StringComparison.Ordinal), ini.Length.ToString());
         ChecksContext.Check("ini 带 PdxNext 标记", ini.Contains("; PdxNext 自动生成", StringComparison.Ordinal));
         ChecksContext.Check("ini 保留 orgapi64", ini.Contains("orgapi64 = steam_api64_o.dll", StringComparison.Ordinal));
-        ChecksContext.Check("ini 保留 490 条 DLC", ini.Contains("[dlc]", StringComparison.Ordinal));
+        ChecksContext.Check("ini 保留 [dlc] 段", ini.Contains("[dlc]", StringComparison.Ordinal));
 
         var state = fs.ReadAllText(Path.Combine(root, "state-apply.json"));
         ChecksContext.Check("清单记录 api 文件", state.Contains("steam_api64.dll", StringComparison.Ordinal));

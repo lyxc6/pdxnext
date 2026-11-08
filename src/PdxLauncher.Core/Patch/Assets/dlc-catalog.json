@@ -141,7 +141,13 @@
         {"id": 3579830, "name": "Cities: Skylines II - Skyrail Radio"},
         {"id": 3740440, "name": "Cities: Skylines II - Bridges & Ports Bundle"},
         {"id": 4156790, "name": "Cities: Skylines II - Skyscrapers & Supply Chains Bundle"},
-        {"id": 4331590, "name": "Cities: Skylines II - Office Evolution & City Stations Bundle"}
+        {"id": 4331590, "name": "Cities: Skylines II - Office Evolution & City Stations Bundle"},
+        {"id": 4544310, "name": "Cities: Skylines II - Park Adventures"},
+        {"id": 4544320, "name": "Cities: Skylines II - Creator Pack: First Response"},
+        {"id": 4544340, "name": "Cities: Skylines II - Creator Pack: Modern Suburbs"},
+        {"id": 4544350, "name": "Cities: Skylines II - Corner Street Beats"},
+        {"id": 4544360, "name": "Cities: Skylines II - City Vacations"},
+        {"id": 4544370, "name": "Cities: Skylines II - Creator Pack: Map Pack"}
       ]
     },
     {
@@ -384,6 +390,7 @@
       "dlc": [
         {"id": 3698850, "name": "Europa Universalis V: Pre-Purchase Bonus - Europa Universalis IV Original Soundtrack"},
         {"id": 3698980, "name": "Europa Universalis V: Premium Upgrade"},
+        {"id": 3698990, "name": "Europa Universalis V: Across the Pillars"},
         {"id": 3699010, "name": "Europa Universalis V: Fate of the Phoenix"},
         {"id": 3865300, "name": "Europa Universalis V: Sacred Sites"},
         {"id": 4091650, "name": "Europa Universalis V: Ancient Monuments"}
