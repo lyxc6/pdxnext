@@ -4868,14 +4868,32 @@
   <data name="WorkshopDetailCollectionLoading" xml:space="preserve">
     <value>正在加载合集内容…</value>
   </data>
+  <data name="WorkshopDetailCollectionSubscribeAll" xml:space="preserve">
+    <value>订阅全部</value>
+  </data>
+  <data name="WorkshopDetailCollectionSubscribeConfirm" xml:space="preserve">
+    <value>将通过 Steam 订阅这个合集，并订阅、下载其中全部 {0} 个项目。确定继续吗？</value>
+  </data>
+  <data name="WorkshopDetailCollectionSubscribed" xml:space="preserve">
+    <value>已订阅 {0} / {1} 项</value>
+  </data>
   <data name="WorkshopDetailCollectionSubscribeHint" xml:space="preserve">
     <value>订阅合集会由 Steam 一并订阅其中全部项目</value>
+  </data>
+  <data name="WorkshopDetailCollectionSubscribingAll" xml:space="preserve">
+    <value>正在订阅全部…</value>
   </data>
   <data name="WorkshopDetailCollectionSummary" xml:space="preserve">
     <value>共 {0} 项</value>
   </data>
   <data name="WorkshopDetailCollectionTitle" xml:space="preserve">
     <value>合集内容</value>
+  </data>
+  <data name="WorkshopDetailCollectionUnsubscribeAll" xml:space="preserve">
+    <value>取消订阅全部</value>
+  </data>
+  <data name="WorkshopDetailCollectionUnsubscribeConfirm" xml:space="preserve">
+    <value>将取消订阅这个合集，并取消其中全部 {0} 个项目。确定继续吗？</value>
   </data>
   <data name="WorkshopDetailComments" xml:space="preserve">
     <value>讨论</value>
