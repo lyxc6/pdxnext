@@ -5556,28 +5556,37 @@
     <value>用 AI 编辑上传内容（MCP）</value>
   </data>
   <data name="ModstudioMcpDocsIntro" xml:space="preserve">
-    <value>启动器附带独立的 MCP 程序 PdxLauncher.Mcp.exe。AI 客户端可以通过它读取游戏和本地 mod，并把标题、描述、标签、可见性等保存成上传草稿；上传面板会自动显示 AI 写入的内容，发布仍由你确认。</value>
+    <value>PdxLauncher.Mcp.exe 让 AI 读取游戏和本地 mod，并写入标题、描述、标签、可见性。上传面板会自动显示 AI 内容，发布仍由你确认。</value>
   </data>
-  <data name="ModstudioMcpDocsStepConfig" xml:space="preserve">
-    <value>1. 把下面的 JSON 加进 AI 客户端的 MCP 配置（Claude Desktop 用 %APPDATA%\Claude\claude_desktop_config.json，Cursor 用 mcp.json）。</value>
+  <data name="ModstudioMcpQuickInstallTitle" xml:space="preserve">
+    <value>一句话安装</value>
   </data>
-  <data name="ModstudioMcpDocsStepRestart" xml:space="preserve">
-    <value>2. 重启客户端，确认工具列表里出现 pdxnext（list_games、list_mods 等）。</value>
+  <data name="ModstudioMcpQuickInstallHint" xml:space="preserve">
+    <value>把下面这句话复制给 AI 客户端（Claude Desktop / Cursor），它会帮你写入配置并验证。</value>
   </data>
-  <data name="ModstudioMcpDocsStepAsk" xml:space="preserve">
-    <value>3. 让 AI 先调用 list_games / list_mods，再用 save_upload_draft 写草稿；保存后上传面板会自动显示 AI 的内容。</value>
+  <data name="ModstudioMcpQuickInstallPrompt" xml:space="preserve">
+    <value>请把 PdxNext 的 MCP 服务接入当前客户端：
+名称 pdxnext，命令 "{0}"，
+参数 "--data-root" "{1}"；
+接入后调用 list_games 验证。</value>
   </data>
-  <data name="ModstudioMcpDocsConfigLabel" xml:space="preserve">
-    <value>客户端配置（JSON）</value>
+  <data name="ModstudioMcpFlowTitle" xml:space="preserve">
+    <value>使用流程</value>
+  </data>
+  <data name="ModstudioMcpFlowBody" xml:space="preserve">
+    <value>list_games / list_mods → save_upload_draft → 上传面板实时显示</value>
   </data>
   <data name="ModstudioMcpDocsToolsLabel" xml:space="preserve">
     <value>可用工具</value>
   </data>
-  <data name="ModstudioMcpDocsToolsBody" xml:space="preserve">
-    <value>list_games · list_mods · list_tags · get_upload_draft · save_upload_draft · clear_upload_draft</value>
+  <data name="ModstudioMcpManualConfigTitle" xml:space="preserve">
+    <value>手动配置（JSON）</value>
+  </data>
+  <data name="ModstudioMcpDevPathNote" xml:space="preserve">
+    <value>路径按当前程序目录自动生成：dev 版指向 bin 输出（清理/重建后重新复制即可），安装版指向安装目录。</value>
   </data>
   <data name="ModstudioMcpDocsSafety" xml:space="preserve">
-    <value>MCP 只读写 data\mcp\upload-drafts 下的草稿：不会自动发布，也不会修改游戏或 mod 文件。</value>
+    <value>MCP 只写 data\mcp\upload-drafts 下的草稿，不会自动发布，也不会修改游戏或 mod 文件。</value>
   </data>
   <data name="ModstudioMcpDocsExeMissing" xml:space="preserve">
     <value>找不到 {0}；请重新构建或安装后再配置。</value>

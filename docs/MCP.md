@@ -17,13 +17,24 @@ PdxNext 附带一个独立的 stdio MCP 程序 `PdxLauncher.Mcp.exe`，让 Claud
 `PdxLauncher.Mcp.exe` 由 App 的构建目标复制到 App 输出目录；`publish.cmd` 和安装包
 会把它一起带上。它不启动 WinUI，也不加载 Steam，只引用 `PdxLauncher.Core`。
 
-入口在 Mod 创建页顶部搜索框右侧的「AI 助手（MCP）」按钮：点开是导入步骤、可复制的
-客户端配置和工具列表。
+入口在 Mod 创建页顶部搜索框右侧的「AI 助手（MCP）」按钮：点开是卡片式的
+「一句话安装」、三步流程、工具标签和默认收起的手动 JSON 配置。
 
 ## 2. 客户端配置
 
-MCP 程序与 `PdxLauncher.App.exe` 在同一目录。启动器上传面板的「AI 助手（MCP）」
-按钮会按本机实际路径生成同样的 JSON：
+对话框首屏的「一句话安装」可以直接复制给 AI 客户端（Claude Desktop / Cursor）：
+
+```text
+请把 PdxNext 的 MCP 服务接入当前客户端：
+名称 pdxnext，命令 "<程序目录>\PdxLauncher.Mcp.exe"，
+参数 "--data-root" "<程序目录>\data"；
+接入后调用 list_games 验证。
+```
+
+点「手动配置（JSON）」会展开完整 JSON 和当前程序路径。
+
+MCP 程序与 `PdxLauncher.App.exe` 在同一目录。启动器会按本机实际路径生成配置，
+不是写死的：dev 构建指向 `bin` 输出目录，安装版指向安装目录。
 
 ```json
 {

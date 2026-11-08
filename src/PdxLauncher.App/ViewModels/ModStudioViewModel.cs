@@ -460,7 +460,11 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
     public string LegalUrl => "https://steamcommunity.com/sharedfiles/workshoplegalagreement";
 
     /// <summary>加载本地 mod 清单。</summary>
-    public async Task LoadAsync(GameInstallation? game, CancellationToken cancellationToken, bool resetPane = true)
+    public async Task LoadAsync(
+        GameInstallation? game,
+        CancellationToken cancellationToken,
+        bool resetPane = true,
+        bool forceRefresh = false)
     {
         Game = game;
         _entries = Array.Empty<ModStudioEntry>();
@@ -492,7 +496,7 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
         IsBusy = true;
         try
         {
-            _entries = await _service.LoadAsync(game, cancellationToken).ConfigureAwait(true);
+            _entries = await _service.LoadAsync(game, cancellationToken, forceRefresh).ConfigureAwait(true);
             RebuildRows(selectedPath);
             IsLoaded = true;
             if (resetPane)
@@ -525,8 +529,9 @@ public sealed partial class ModStudioViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>刷新当前游戏。</summary>
-    public Task RefreshAsync(CancellationToken cancellationToken) => LoadAsync(Game, cancellationToken, resetPane: false);
+    /// <summary>刷新当前游戏；绕过 mod 扫描缓存，删除过的目录会立刻消失。</summary>
+    public Task RefreshAsync(CancellationToken cancellationToken) =>
+        LoadAsync(Game, cancellationToken, resetPane: false, forceRefresh: true);
 
     /// <summary>切到新建面板，并填入按当前游戏推导的默认值。</summary>
     public void ShowCreate()

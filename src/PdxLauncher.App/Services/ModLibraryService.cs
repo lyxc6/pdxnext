@@ -73,11 +73,19 @@ public sealed class ModLibraryService
     /// <param name="game">当前游戏。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>快照。</returns>
-    public async Task<ModLibrarySnapshot> LoadAsync(GameInstallation? game, CancellationToken cancellationToken)
+    public async Task<ModLibrarySnapshot> LoadAsync(
+        GameInstallation? game,
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         if (game is null)
         {
             return ModLibrarySnapshot.Empty;
+        }
+
+        if (forceRefresh && _mods is IScanCacheInvalidator invalidatable)
+        {
+            invalidatable.InvalidateCache(game);
         }
 
         var entries = await _playSets.GetModLibraryAsync(game, cancellationToken).ConfigureAwait(false);
