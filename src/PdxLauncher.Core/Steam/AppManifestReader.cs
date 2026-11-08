@@ -5,8 +5,8 @@ using PdxLauncher.Core.Parsing;
 
 /// <summary>
 /// 读取 Steam 的 <c>appmanifest_&lt;appid&gt;.acf</c>（Valve KeyValues 格式），
-/// 取出 appid / name / installdir / StateFlags / SizeOnDisk / LastOwner / DisabledDLC。
-/// 坏文件跳过并记 Warn，不抛异常。
+/// 取出 appid / name / installdir / StateFlags / SizeOnDisk / LastOwner / DisabledDLC /
+/// buildid / InstalledDepots。坏文件跳过并记 Warn，不抛异常。
 /// </summary>
 public sealed class AppManifestReader
 {
@@ -75,7 +75,9 @@ public sealed class AppManifestReader
                 ParseInt(appState.GetValue("StateFlags")),
                 ParseLong(appState.GetValue("SizeOnDisk")),
                 ParseLastOwner(appState.GetValue("LastOwner")),
-                ParseDisabledDlc(appState.GetValue("DisabledDLC")));
+                ParseDisabledDlc(appState.GetValue("DisabledDLC")),
+                ParseInstalledDepots(appState.FindChild("InstalledDepots")),
+                ParseNullableText(appState.GetValue("buildid")));
         }
         catch (IOException ex)
         {
@@ -157,6 +159,48 @@ public sealed class AppManifestReader
 
         return items.Count == 0 ? null : items;
     }
+
+    /// <summary>
+    /// <c>InstalledDepots</c>：每个子块是 <c>"&lt;depotid&gt;" { "manifest" "…" "size" "…" ["dlcappid" "…"] }</c>。
+    /// 段不存在时返回 <c>null</c>（＝「不知道」，不能据此断言任何 DLC 已装）；
+    /// 段存在但为空返回空集合（＝「确实一个都没装」）。
+    /// </summary>
+    private static IReadOnlyList<AppDepot>? ParseInstalledDepots(ValveKeyValuesNode? block)
+    {
+        if (block is null || !block.IsBlock)
+        {
+            return null;
+        }
+
+        var results = new List<AppDepot>();
+        foreach (var child in block.Children)
+        {
+            if (string.IsNullOrWhiteSpace(child.Key)
+                || !int.TryParse(child.Key.Trim(), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var depotId)
+                || depotId <= 0)
+            {
+                continue;
+            }
+
+            int? dlcAppId = null;
+            if (int.TryParse(
+                    child.GetValue("dlcappid"),
+                    System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var parsedDlcAppId) && parsedDlcAppId > 0)
+            {
+                dlcAppId = parsedDlcAppId;
+            }
+
+            results.Add(new AppDepot(depotId, dlcAppId, ParseLong(child.GetValue("size"))));
+        }
+
+        return results;
+    }
+
+    /// <summary>去掉首尾空白，空串返回 null（用于 <c>buildid</c> 这类可缺字段）。</summary>
+    private static string? ParseNullableText(string? text) =>
+        string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
     private static int ParseInt(string? text) =>
         int.TryParse(text, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var value)

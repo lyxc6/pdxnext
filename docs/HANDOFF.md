@@ -7554,3 +7554,19 @@ mod 名和行尾三个按钮完全看不见，右栏也不能滚动到这些内�
 - 顺带修正真机检查：Victoria 3 新补丁又把 DLC 写回 `.dlc.json`（`dlc_metadata` 为 0），`PlaysetChecks` 改成只要求 `State and Revolution / 4314660` 条目存在，不再锁存储形态。
 
 **边界**：页面一直开着且 24h 内没有任何操作时不会自动变化；下一次进页/刷新/改筛选/翻页命中 SSR 才更新（符合选定的 24h TTL 策略）。没有新增网络主机，仍走 `HttpFetcher` 白名单与限流。
+
+## 2026-11-08：更正 —— 补丁只打通授权，DLC 内容不归补丁管
+
+**背景**：§16.1 决策 3 写的是「只做解锁层，不碰 DLC 内容文件（实测 V3 的 `game\dlc` 与整合包同名目录 diff 为空；移除补丁只还原 DLL/ini）」。2026-11-08 复核发现这句话把两件事混在一起：diff 为空只能说明整合包与磁盘当时一致，说明不了「内容由谁维护」。
+
+**实测**（V3 1.15，`D:\app\Steam\steamapps\common\Victoria 3`，appid 529340，buildid 26453692）：`game\dlc` 有 18 个目录；`appmanifest_529340.acf` 的 `InstalledDepots` 只登记 9 个带 `dlcappid` 的 depot（2071470 / 2071471 / 2348450 / 2282100 / 2366580 / 2411230 / 2591240 / 2800730 / 2411231），其 `size` 与 `dlc001…dlc010` 的目录字节数逐字节相等 ⇒ 这 9 个是 Steam 装的。`dlc011…dlc019`（9 个，含手工拷入的 `dlc019_ip5` = 4314660 State and Revolution）没有任何 depot 登记 ⇒ 人工拷贝，Steam 校验与更新都不认，「验证文件完整性」或重装后可能被清掉。
+
+**更正**：
+
+1. 补丁（`cream_api.ini` + loader）只决定游戏能不能读到授权，它不会、也无法把 DLC 的资源文件放到磁盘上。
+2. 启动器只做解锁层这一点不变（不下载、不修补内容仍是设计边界），但 DLC 页必须如实显示内容来源；HANDOFF 也不能再用「不碰内容」暗示「内容已由整合包对齐」。
+3. 内容的正规获取途径只有购买对应 DLC 让 Steam 装 depot；启动器不提供也不寻找第三方内容来源。
+
+**实现**（本次）：`AppManifest` 解析 `buildid` 与 `InstalledDepots`（新增 `AppDepot` / `InstalledDlcAppIds` / `KnowsDlcDepots`）；新增 `Core\Dlc\DlcContentState` 与 `DlcContentInspector`（纯计算）；DLC 页每行新增第三枚徽标「Steam 已装 / 仅本地文件 / 内容未安装」；日志每轮记一行内容来源汇总。判定口径见 `docs/DATA-FORMATS.md` §3.2。
+
+**验证**：`dev.cmd build` 通过（146 个检查类、0 失败）；真机探针（用 Core 直连真实安装目录）输出 SteamInstalled 9 / FilesPresent 9，与上面的 depot 对照逐条一致。

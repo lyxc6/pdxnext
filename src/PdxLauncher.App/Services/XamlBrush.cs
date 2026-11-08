@@ -45,6 +45,17 @@ public static class XamlBrush
         _ => Lookup(UnknownKey),
     };
 
+    /// <summary>
+    /// 内容来源徽标的配色：steam（绿，Steam 自己装的）/ missing（提醒色，授权通了但内容没落盘）/
+    /// 其它（中性：仅本地文件、或判不了）。
+    /// </summary>
+    public static Brush FromContent(string? kind) => kind switch
+    {
+        "steam" => Lookup(OwnedKey),
+        "missing" => Lookup(UnownedKey),
+        _ => Lookup(UnknownKey),
+    };
+
     private static Brush Lookup(string key)
     {
         if (Application.Current is { } app

@@ -113,6 +113,12 @@ internal static class Keys
     public const string SavesVersion = "saves.version";
 
     // DLC 行视图模型（DlcImageChecks 链接 DlcRowViewModel.cs 用）。取值与 Resources.resw 一致。
+    public const string DlcContentFilesText = "dlc.contentFilesText";
+    public const string DlcContentFilesToolTip = "dlc.contentFilesToolTip";
+    public const string DlcContentMissingText = "dlc.contentMissingText";
+    public const string DlcContentMissingToolTip = "dlc.contentMissingToolTip";
+    public const string DlcContentSteamText = "dlc.contentSteamText";
+    public const string DlcContentSteamToolTip = "dlc.contentSteamToolTip";
     public const string DlcOwnedBadge = "dlc.ownedBadge";
     public const string DlcOwnershipRowNoSteam = "dlc.ownershipRowNoSteam";
     public const string DlcOwnershipRowToolTip = "dlc.ownershipRowToolTip";

@@ -1084,6 +1084,24 @@
   <data name="DiagnosticsStatusFailed" xml:space="preserve">
     <value>操作失败：{0}</value>
   </data>
+  <data name="DlcContentFilesText" xml:space="preserve">
+    <value>仅本地文件</value>
+  </data>
+  <data name="DlcContentFilesToolTip" xml:space="preserve">
+    <value>内容在磁盘上，但 Steam 清单里没登记这个 DLC 的 depot（Steam AppID {0}）：文件是人工拷贝的，Steam 校验或更新不会维护它</value>
+  </data>
+  <data name="DlcContentMissingText" xml:space="preserve">
+    <value>内容未安装</value>
+  </data>
+  <data name="DlcContentMissingToolTip" xml:space="preserve">
+    <value>只有 DLC 元数据，磁盘上没有内容文件（Steam AppID {0}）：补丁只能打通授权，拿不到内容，游戏里不会出现这份 DLC</value>
+  </data>
+  <data name="DlcContentSteamText" xml:space="preserve">
+    <value>Steam 已装</value>
+  </data>
+  <data name="DlcContentSteamToolTip" xml:space="preserve">
+    <value>Steam 清单的 InstalledDepots 登记了这份内容（Steam AppID {0}）：随游戏更新一起由 Steam 维护</value>
+  </data>
   <data name="DlcCountsText" xml:space="preserve">
     <value>共 {0} 个 DLC，已启用 {1} 个</value>
   </data>
