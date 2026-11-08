@@ -141,9 +141,6 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     /// <summary>当前可见行是否为空（搜索无结果时也为 true）。</summary>
     public bool IsEmpty => Mods.Count == 0;
 
-    /// <summary>工具条上的计数文案（未选中游戏时为空串，XAML 侧据此隐藏）。</summary>
-    public string CountText => HasGame ? T(Keys.ModlibCountText, _snapshot.Mods.Count) : string.Empty;
-
     /// <summary>空状态：还没在游戏库里选游戏。</summary>
     public bool ShowNoGameHint => IsLoaded && !HasGame;
 
@@ -970,7 +967,6 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     {
         OnPropertyChanged(nameof(GameTitle));
         OnPropertyChanged(nameof(HasGame));
-        OnPropertyChanged(nameof(CountText));
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(ShowNoGameHint));
         OnPropertyChanged(nameof(ShowNoModsHint));
