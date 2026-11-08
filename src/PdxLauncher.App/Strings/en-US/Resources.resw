@@ -2827,11 +2827,20 @@
   <data name="SavesActionDeleteBackup" xml:space="preserve">
     <value>Delete backup</value>
   </data>
+  <data name="SavesActionManageBackups" xml:space="preserve">
+    <value>Manage backups</value>
+  </data>
   <data name="SavesActionPruneBackups" xml:space="preserve">
     <value>Clean up old backups</value>
   </data>
   <data name="SavesActionRestore" xml:space="preserve">
     <value>Restore</value>
+  </data>
+  <data name="SavesActionRestoreOverwrite" xml:space="preserve">
+    <value>Restore and overwrite</value>
+  </data>
+  <data name="SavesBackupAutoPruned" xml:space="preserve">
+    <value>Backed up: {0} ({1} oldest backups removed)</value>
   </data>
   <data name="SavesBackupCreated" xml:space="preserve">
     <value>Backed up {0}</value>
@@ -2839,11 +2848,26 @@
   <data name="SavesBackupEmpty" xml:space="preserve">
     <value>No backups yet</value>
   </data>
+  <data name="SavesBackupOpenFolder" xml:space="preserve">
+    <value>Open backup folder</value>
+  </data>
+  <data name="SavesBackupOpenFolderFailed" xml:space="preserve">
+    <value>Could not open the backup folder. See the log for details.</value>
+  </data>
   <data name="SavesBackupOrphan" xml:space="preserve">
     <value>Sidecar missing</value>
   </data>
+  <data name="SavesBackupPageBack" xml:space="preserve">
+    <value>Back</value>
+  </data>
   <data name="SavesBackupQuotaFull" xml:space="preserve">
-    <value>Backup space is full — delete old backups</value>
+    <value>Backup space is insufficient (a single save may exceed the limit)</value>
+  </data>
+  <data name="SavesBackupQuotaHint" xml:space="preserve">
+    <value>The oldest backups are removed automatically when the limit is exceeded.</value>
+  </data>
+  <data name="SavesBackupQuotaLabel" xml:space="preserve">
+    <value>Space limit (GB)</value>
   </data>
   <data name="SavesBackupRowName" xml:space="preserve">
     <value>{0}, {1}</value>
@@ -2880,6 +2904,12 @@
   </data>
   <data name="SavesConfirmRestoreTitle" xml:space="preserve">
     <value>Restore backup</value>
+  </data>
+  <data name="SavesConfirmRestoreOverwriteContent" xml:space="preserve">
+    <value>The existing save “{0}” will be moved into the trash folder before the backup is written back to its original path. This cannot be undone.</value>
+  </data>
+  <data name="SavesConfirmRestoreOverwriteTitle" xml:space="preserve">
+    <value>Overwrite restore</value>
   </data>
   <data name="SavesCountry" xml:space="preserve">
     <value>Country: {0}</value>

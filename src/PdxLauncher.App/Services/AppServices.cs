@@ -306,7 +306,11 @@ public static class AppServices
         var saveGames = new SaveGameScanner(fileSystem, logger);
         SaveGames = saveGames;
         SaveGameFiles = saveGames;
-        SaveBackups = new SaveBackupService(fileSystem, logger);
+        SaveBackups = new SaveBackupService(
+            fileSystem,
+            logger,
+            maxTotalBytes: settings.SaveBackupMaxTotalBytes,
+            autoPruneOldestWhenFull: true);
         DlcSignatures = dlcSignatures;
         DlcDescriptions = dlcDescriptions;
         DlcArtwork = dlcArtwork;

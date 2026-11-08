@@ -28,12 +28,20 @@ public static class SavesActionsChecks
         "saves.action.backup",
         "saves.action.delete",
         "saves.action.deleteBackup",
+        "saves.action.manageBackups",
         "saves.action.pruneBackups",
         "saves.action.restore",
+        "saves.action.restoreOverwrite",
+        "saves.backup.autoPruned",
         "saves.backup.created",
         "saves.backup.empty",
+        "saves.backup.openFolder",
+        "saves.backup.openFolderFailed",
         "saves.backup.orphan",
+        "saves.backup.pageBack",
         "saves.backup.quotaFull",
+        "saves.backup.quotaHint",
+        "saves.backup.quotaLabel",
         "saves.backup.rowName",
         "saves.backup.title",
         "saves.backup.usage",
@@ -45,6 +53,8 @@ public static class SavesActionsChecks
         "saves.confirm.pruneBackups.title",
         "saves.confirm.restore.content",
         "saves.confirm.restore.title",
+        "saves.confirm.restoreOverwrite.content",
+        "saves.confirm.restoreOverwrite.title",
         "saves.notice.backedUp",
         "saves.notice.deletedBackup",
         "saves.notice.deletedSave",
@@ -91,6 +101,27 @@ public static class SavesActionsChecks
                 "PdxLauncher.App",
                 "ViewModels",
                 "SavesViewModel.cs");
+            var backupPage = ReadRequired(
+                workspace,
+                "备份子页代码",
+                "src",
+                "PdxLauncher.App",
+                "Views",
+                "SaveBackupsPage.xaml.cs");
+            var backupXaml = ReadRequired(
+                workspace,
+                "备份子页 XAML",
+                "src",
+                "PdxLauncher.App",
+                "Views",
+                "SaveBackupsPage.xaml");
+            var backupViewModel = ReadRequired(
+                workspace,
+                "备份子页 ViewModel",
+                "src",
+                "PdxLauncher.App",
+                "ViewModels",
+                "SaveBackupsViewModel.cs");
             var backupRow = ReadRequired(
                 workspace,
                 "备份行 ViewModel",
@@ -99,20 +130,22 @@ public static class SavesActionsChecks
                 "ViewModels",
                 "SaveBackupRowViewModel.cs");
 
-            if (page is null || xaml is null || viewModel is null || backupRow is null)
+            if (page is null || xaml is null || viewModel is null || backupRow is null
+                || backupPage is null || backupXaml is null || backupViewModel is null)
             {
                 return ChecksContext.Failures - before;
             }
 
-            CheckDestructiveFocus(page);
-            CheckRestoreDefaults(viewModel);
-            CheckQuotaGuard(viewModel);
+            CheckDestructiveFocus(page, backupPage);
+            CheckRestoreDefaults(backupPage, backupViewModel);
+            CheckAutoPruneWiring(viewModel);
             CheckFailureMessages(viewModel);
-            CheckActionCommitGuard(viewModel);
+            CheckActionCommitGuard(viewModel, backupViewModel);
             CheckBackupRow(backupRow);
-            CheckPruneWiring(page, viewModel);
-            CheckXamlWiring(xaml);
-            CheckNoDirectDelete(page, viewModel);
+            CheckPruneWiring(backupPage, backupViewModel);
+            CheckXamlWiring(xaml, backupXaml);
+            CheckNavigationWiring(workspace, page, backupPage);
+            CheckNoDirectDelete(page, viewModel, backupPage, backupViewModel);
             CheckLocalizationKeys(workspace);
         }
         finally
@@ -238,22 +271,21 @@ public static class SavesActionsChecks
             usageField.SetValue(
                 viewModel,
                 new SaveBackupUsage(SaveBackupPaths.DefaultMaxTotalBytes, 0));
-            ChecksContext.Check("视图模型: 配额满判断", viewModel.IsQuotaFull);
-            ChecksContext.Check(
-                "视图模型: 配额满时用量行包含配额提示键",
-                viewModel.BackupUsageText.Contains(Keys.SavesBackupQuotaFull, StringComparison.Ordinal),
-                viewModel.BackupUsageText);
             ChecksContext.Check(
                 "视图模型: 用量行自带上限（不再需要独立提示块）",
                 viewModel.BackupUsageText.Contains(
                     SizeFormatter.Format(SaveBackupPaths.DefaultMaxTotalBytes),
                     StringComparison.Ordinal),
                 viewModel.BackupUsageText);
+            ChecksContext.Check(
+                "视图模型: 配额满不再把「空间已满」拼进存档页摘要",
+                !viewModel.BackupUsageText.Contains(Keys.SavesBackupQuotaFull, StringComparison.Ordinal),
+                "超量由服务自动清理，提示改在备份子页显示");
 
             usageField.SetValue(viewModel, new SaveBackupUsage(0, 0));
             ChecksContext.Check(
-                "视图模型: 未满时用量行不重复「满了」原因",
-                !viewModel.BackupUsageText.Contains(Keys.SavesBackupQuotaFull, StringComparison.Ordinal),
+                "视图模型: 用量归零后摘要正常",
+                viewModel.BackupUsageText.Contains(SizeFormatter.Format(0), StringComparison.Ordinal),
                 viewModel.BackupUsageText);
         }
 
@@ -375,87 +407,103 @@ public static class SavesActionsChecks
         ChecksContext.Check("孤儿: 删除后正文消失", !fs.FileExists(orphanPath));
     }
 
-    private static void CheckDestructiveFocus(string page)
+    private static void CheckDestructiveFocus(string page, string backupPage)
     {
         Console.WriteLine("[SavesActionsChecks] 破坏性确认框的初始焦点");
 
         var deleteSave = SliceMethod(page, "private async void OnDeleteSaveClick");
-        var deleteBackup = SliceMethod(page, "private async void OnDeleteBackupClick");
-        var prune = SliceMethod(page, "private async void OnPruneBackupsClick");
-        var restore = SliceMethod(page, "private async void OnRestoreBackupClick");
+        var deleteBackup = SliceMethod(backupPage, "private async void OnDeleteBackupClick");
+        var prune = SliceMethod(backupPage, "private async void OnPruneBackupsClick");
+        var restore = SliceMethod(backupPage, "private async void OnRestoreBackupClick");
+        var overwrite = SliceMethod(backupPage, "private async void OnRestoreOverwriteClick");
 
         ChecksContext.Check(
             "存档页: 删除存档的确认框默认焦点在「取消」",
             deleteSave.Contains("initialFocus: InitialFocus.Cancel", StringComparison.Ordinal),
             "真实存档删除是不可逆动作，Enter 不能默认触发删除");
         ChecksContext.Check(
-            "存档页: 删除备份的确认框默认焦点在「取消」",
+            "备份页: 删除备份的确认框默认焦点在「取消」",
             deleteBackup.Contains("initialFocus: InitialFocus.Cancel", StringComparison.Ordinal));
         ChecksContext.Check(
-            "存档页: 清理旧备份的确认框默认焦点在「取消」",
+            "备份页: 清理旧备份的确认框默认焦点在「取消」",
             prune.Contains("initialFocus: InitialFocus.Cancel", StringComparison.Ordinal),
             "清理会批量删除备份，Enter 不能默认触发");
         ChecksContext.Check(
-            "存档页: 清理确认框文案带保留份数",
-            prune.Contains("Keys.SavesConfirmPruneBackupsContent, SavesViewModel.PruneKeepNewest", StringComparison.Ordinal));
+            "备份页: 清理确认框文案带保留份数",
+            prune.Contains("Keys.SavesConfirmPruneBackupsContent, SaveBackupsViewModel.PruneKeepNewest", StringComparison.Ordinal));
         ChecksContext.Check(
-            "存档页: 确认后调用 ViewModel.PruneAsync",
+            "备份页: 确认后调用 ViewModel.PruneAsync",
             prune.Contains("_viewModel.PruneAsync(_lifetime.Token)", StringComparison.Ordinal));
         ChecksContext.Check(
-            "存档页: 恢复的确认框保持默认「确认」焦点",
-            !restore.Contains("InitialFocus.Cancel", StringComparison.Ordinal),
-            "恢复默认 overwrite:false，只新建副本，不属于破坏性操作");
+            "备份页: 普通恢复默认 overwrite:false 且焦点保持「确认」",
+            restore.Contains("RestoreAsync(row, overwrite: false", StringComparison.Ordinal)
+                && !restore.Contains("InitialFocus.Cancel", StringComparison.Ordinal),
+            "恢复默认只新建副本，不属于破坏性操作");
+        ChecksContext.Check(
+            "备份页: 覆盖恢复默认焦点在「取消」且显式 overwrite:true",
+            overwrite.Contains("RestoreAsync(row, overwrite: true", StringComparison.Ordinal)
+                && overwrite.Contains("initialFocus: InitialFocus.Cancel", StringComparison.Ordinal));
 
         ChecksContext.Check(
             "存档页: 删除存档走 DeleteSaveAsync",
             deleteSave.Contains("DeleteSaveAsync(row, _lifetime.Token)", StringComparison.Ordinal));
         ChecksContext.Check(
-            "存档页: 删除备份走 DeleteBackupAsync",
+            "备份页: 删除备份走 DeleteBackupAsync",
             deleteBackup.Contains("DeleteBackupAsync(row, _lifetime.Token)", StringComparison.Ordinal));
-        ChecksContext.Check(
-            "存档页: 恢复走 RestoreAsync",
-            restore.Contains("RestoreAsync(row, _lifetime.Token)", StringComparison.Ordinal));
         ChecksContext.Check(
             "存档页: 构造时注入 AppServices.SaveBackups",
             page.Contains(
                 "new SavesViewModel(AppServices.SaveGameFiles, AppServices.SaveBackups, AppServices.Logger)",
                 StringComparison.Ordinal));
+        ChecksContext.Check(
+            "备份页: 构造时注入 AppServices.SaveBackups",
+            backupPage.Contains(
+                "new SaveBackupsViewModel(AppServices.SaveBackups, AppServices.Logger)",
+                StringComparison.Ordinal));
     }
 
-    private static void CheckRestoreDefaults(string viewModel)
+    private static void CheckRestoreDefaults(string backupPage, string backupViewModel)
     {
         Console.WriteLine("[SavesActionsChecks] 恢复默认不覆盖");
 
-        var restore = SliceMethod(viewModel, "public async Task RestoreAsync");
+        var restore = SliceMethod(backupViewModel, "public async Task RestoreAsync");
         ChecksContext.Check(
-            "视图模型: 恢复显式传 overwrite: false",
-            restore.Contains("overwrite: false", StringComparison.Ordinal),
+            "备份页视图模型: 恢复把 overwrite 原样交给服务",
+            restore.Contains(".RestoreAsync(row.Entry, overwrite, cancellationToken)", StringComparison.Ordinal),
+            "页面负责区分「恢复」与「覆盖恢复」，视图模型不再写死 false");
+        ChecksContext.Check(
+            "备份页: 普通恢复显式传 overwrite:false",
+            backupPage.Contains("RestoreAsync(row, overwrite: false", StringComparison.Ordinal),
             "默认覆盖会毁掉玩家当前存档，必须是新建副本");
         ChecksContext.Check(
-            "视图模型: 恢复成功后重扫存档列表（副本立刻可见）",
-            restore.Contains("await LoadAsync(game, cancellationToken)", StringComparison.Ordinal));
+            "备份页: 覆盖恢复显式传 overwrite:true",
+            backupPage.Contains("RestoreAsync(row, overwrite: true", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "备份页视图模型: 恢复成功提示带新文件名",
+            restore.Contains("Keys.SavesNoticeRestored", StringComparison.Ordinal));
     }
 
-    private static void CheckQuotaGuard(string viewModel)
+    private static void CheckAutoPruneWiring(string viewModel)
     {
-        Console.WriteLine("[SavesActionsChecks] 配额满禁止备份");
+        Console.WriteLine("[SavesActionsChecks] 超量自动清理接线");
 
         var backup = SliceMethod(viewModel, "public async Task BackupAsync");
-        var guard = backup.IndexOf("if (IsQuotaFull)", StringComparison.Ordinal);
-        var call = backup.IndexOf(".BackupAsync(", StringComparison.Ordinal);
-
-        ChecksContext.Check("视图模型: 备份前判断 IsQuotaFull", guard >= 0);
         ChecksContext.Check(
-            "视图模型: 配额满的拦截发生在调用服务之前",
-            guard >= 0 && call > guard,
-            "配额满时不应再发起必然失败的 IO");
+            "视图模型: 不再在调用服务前用 IsQuotaFull 拦截",
+            !backup.Contains("if (IsQuotaFull)", StringComparison.Ordinal),
+            "自动清理需要服务真正收到备份请求，页面预拦截会让它永远触发不到");
         ChecksContext.Check(
-            "视图模型: 配额满提示「可删除旧备份」",
-            backup.Contains("Keys.SavesBackupQuotaFull", StringComparison.Ordinal));
+            "视图模型: 成功提示报告自动清理份数",
+            backup.Contains("result.AutoPrunedEntries > 0", StringComparison.Ordinal)
+                && backup.Contains("Keys.SavesBackupAutoPruned", StringComparison.Ordinal));
         ChecksContext.Check(
             "视图模型: 全局忙碌时统一下发 SetActionAllowed",
             viewModel.Contains("row.SetActionAllowed(actionAllowed)", StringComparison.Ordinal)
                 && viewModel.Contains("var actionAllowed = !IsBusy;", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "视图模型: 备份按钮只受忙碌态约束",
+            viewModel.Contains("row.SetBackupAllowed(actionAllowed)", StringComparison.Ordinal)
+                && !viewModel.Contains("SetBackupAllowed(backupAllowed)", StringComparison.Ordinal));
     }
 
     private static void CheckFailureMessages(string viewModel)
@@ -486,36 +534,47 @@ public static class SavesActionsChecks
     /// 写操作跨越 await 后必须同时检查扫描代次和当前游戏；否则用户切游戏后，
     /// 旧动作的完成回调会把旧存档/备份提示写进新页面。这里把三道闸门钉在源码里。
     /// </summary>
-    private static void CheckActionCommitGuard(string viewModel)
+    private static void CheckActionCommitGuard(string viewModel, string backupViewModel)
     {
         Console.WriteLine("[SavesActionsChecks] 动作完成回调带代次与游戏双重闸门");
 
         ChecksContext.Check(
-            "视图模型: 写操作统一走 TryCommitAction",
+            "存档视图模型: 写操作统一走 TryCommitAction",
             viewModel.Contains("TryCommitAction(int generation, GameInstallation game", StringComparison.Ordinal));
         ChecksContext.Check(
-            "视图模型: 提交前比较当前游戏",
+            "存档视图模型: 提交前比较当前游戏",
             viewModel.Contains("ReferenceEquals(Game, game)", StringComparison.Ordinal));
         ChecksContext.Check(
-            "视图模型: 提交仍受扫描代次约束",
+            "存档视图模型: 提交仍受扫描代次约束",
             viewModel.Contains("_requests.TryCommit(", StringComparison.Ordinal)
             && viewModel.Contains("generation, () =>", StringComparison.Ordinal));
         ChecksContext.Check(
-            "视图模型: 备份列表读取绑定游戏实例",
+            "存档视图模型: 备份列表读取绑定游戏实例",
             viewModel.Contains("LoadBackupsAsync(GameInstallation game", StringComparison.Ordinal));
         ChecksContext.Check(
-            "视图模型: 旧游戏备份列表不能覆盖新列表",
+            "存档视图模型: 旧游戏备份列表不能覆盖新列表",
             viewModel.Contains("version == _backupLoadVersion", StringComparison.Ordinal));
 
         var backup = SliceMethod(viewModel, "public async Task BackupAsync");
         var begin = backup.IndexOf("BeginAction()", StringComparison.Ordinal);
         var start = backup.IndexOf(".BackupAsync(", StringComparison.Ordinal);
         ChecksContext.Check(
-            "视图模型: 动作开始即进入忙碌态（禁止并发写/切页刷新）",
+            "存档视图模型: 动作开始即进入忙碌态（禁止并发写/切页刷新）",
             begin >= 0 && start > begin);
         ChecksContext.Check(
-            "视图模型: 动作结束在 finally 清忙碌态",
+            "存档视图模型: 动作结束在 finally 清忙碌态",
             backup.Contains("EndAction()", StringComparison.Ordinal));
+
+        ChecksContext.Check(
+            "备份视图模型: 写操作统一走 TryCommitAction",
+            backupViewModel.Contains("TryCommitAction(int generation, GameInstallation game", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "备份视图模型: 提交前比较当前游戏",
+            backupViewModel.Contains("ReferenceEquals(Game, game)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "备份视图模型: 读取受代次守卫约束",
+            backupViewModel.Contains("_requests.TryCommit(", StringComparison.Ordinal)
+                && backupViewModel.Contains("var generation = _requests.Begin();", StringComparison.Ordinal));
     }
 
     private static void CheckBackupRow(string backupRow)
@@ -546,39 +605,44 @@ public static class SavesActionsChecks
     /// 清理入口的三段接线：可点（CanPrune）→ 二次确认（默认取消）→ 调服务 → 刷新列表。
     /// 「只删了 N 份提示却没刷新」会让用户仍看到已删除的行，所以刷新也必须钉住。
     /// </summary>
-    private static void CheckPruneWiring(string page, string viewModel)
+    private static void CheckPruneWiring(string backupPage, string backupViewModel)
     {
         Console.WriteLine("[SavesActionsChecks] 清理旧备份接线");
 
-        var prune = SliceMethod(viewModel, "public async Task PruneAsync");
+        var prune = SliceMethod(backupPage, "private async void OnPruneBackupsClick");
+        var pruneAsync = SliceMethod(backupViewModel, "public async Task PruneAsync");
         ChecksContext.Check(
-            "视图模型: 清理保留份数集中在 PruneKeepNewest 常量",
-            viewModel.Contains("public const int PruneKeepNewest = 10;", StringComparison.Ordinal));
+            "备份视图模型: 清理保留份数集中在 PruneKeepNewest 常量",
+            backupViewModel.Contains("public const int PruneKeepNewest = 10;", StringComparison.Ordinal));
         ChecksContext.Check(
-            "视图模型: 只在有游戏且有备份时允许清理",
-            viewModel.Contains("CanPrune => HasGame && !IsBusy && HasBackups", StringComparison.Ordinal));
+            "备份视图模型: 只在有游戏且有备份时允许清理",
+            backupViewModel.Contains("CanPrune => HasGame && !IsBusy && HasBackups", StringComparison.Ordinal));
         ChecksContext.Check(
-            "视图模型: 清理调用服务 PruneAsync（带保留份数）",
-            prune.Contains("_backups", StringComparison.Ordinal)
-                && prune.Contains(".PruneAsync(game.GameId, PruneKeepNewest, cancellationToken)", StringComparison.Ordinal));
+            "备份视图模型: 清理调用服务 PruneAsync（带保留份数）",
+            pruneAsync.Contains("_backups", StringComparison.Ordinal)
+                && pruneAsync.Contains(".PruneAsync(game.GameId, PruneKeepNewest, cancellationToken)", StringComparison.Ordinal));
         ChecksContext.Check(
-            "视图模型: 成功提示报告已清理份数",
-            prune.Contains("T(Keys.SavesNoticePruned, result.DeletedEntries)", StringComparison.Ordinal));
+            "备份视图模型: 成功提示报告已清理份数",
+            pruneAsync.Contains("T(Keys.SavesNoticePruned, result.DeletedEntries)", StringComparison.Ordinal));
         ChecksContext.Check(
-            "视图模型: 失败时显示服务返回的原因",
-            prune.Contains("SetNotice(result.Message, isError: true)", StringComparison.Ordinal));
+            "备份视图模型: 失败时显示服务返回的原因",
+            pruneAsync.Contains("SetNotice(result.Message, isError: true)", StringComparison.Ordinal));
         ChecksContext.Check(
-            "视图模型: 清理后刷新备份列表",
-            prune.Contains("await LoadBackupsAsync(game, cancellationToken)", StringComparison.Ordinal),
+            "备份视图模型: 清理后刷新备份列表",
+            pruneAsync.Contains("await LoadAsync(game, cancellationToken)", StringComparison.Ordinal),
             "部分失败也会改动磁盘，必须重读列表");
         ChecksContext.Check(
-            "视图模型: 清理结果受游戏与代次双重闸门约束",
-            prune.Contains("TryCommitAction(", StringComparison.Ordinal)
-                && prune.Contains("generation,", StringComparison.Ordinal)
-                && prune.Contains("game,", StringComparison.Ordinal));
+            "备份视图模型: 清理结果受游戏与代次双重闸门约束",
+            pruneAsync.Contains("TryCommitAction(", StringComparison.Ordinal)
+                && pruneAsync.Contains("generation,", StringComparison.Ordinal)
+                && pruneAsync.Contains("game,", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "备份页: 清理按钮在确认后才调用视图模型",
+            prune.Contains("ConfirmOverlay.ConfirmAsync", StringComparison.Ordinal)
+                && prune.Contains("_viewModel.PruneAsync(_lifetime.Token)", StringComparison.Ordinal));
     }
 
-    private static void CheckXamlWiring(string xaml)
+    private static void CheckXamlWiring(string xaml, string backupXaml)
     {
         Console.WriteLine("[SavesActionsChecks] XAML 接线");
 
@@ -586,73 +650,167 @@ public static class SavesActionsChecks
                  {
                      "btnBackupSave",
                      "btnDeleteSave",
-                     "btnRestoreBackup",
-                     "btnDeleteBackup",
-                     "btnPruneBackups",
-                     "listSaveBackups",
                      "panelSaveBackups",
+                     "btnManageBackups",
                      "infoSavesSuccess",
                      "infoSavesError",
                  })
         {
             ChecksContext.Check(
-                "XAML: 存在 " + id + " 控件",
+                "存档页 XAML: 存在 " + id + " 控件",
                 xaml.Contains(@"AutomationId=""" + id + @"""", StringComparison.Ordinal),
                 id);
         }
 
         ChecksContext.Check(
-            "XAML: 备份按钮绑定 CanBackup",
+            "存档页 XAML: 备份按钮绑定 CanBackup",
             xaml.Contains(@"IsEnabled=""{x:Bind CanBackup, Mode=OneWay}""", StringComparison.Ordinal));
         ChecksContext.Check(
-            "XAML: 删除存档按钮绑定 CanDelete",
+            "存档页 XAML: 删除存档按钮绑定 CanDelete",
             xaml.Contains(@"IsEnabled=""{x:Bind CanDelete, Mode=OneWay}""", StringComparison.Ordinal));
         ChecksContext.Check(
-            "XAML: 备份段绑定 ViewModel.Backups",
-            xaml.Contains(@"ItemsSource=""{x:Bind ViewModel.Backups, Mode=OneWay}""", StringComparison.Ordinal));
+            "存档页 XAML: 备份摘要只显示用量（唯一一处）",
+            xaml.Split("ViewModel.BackupUsageText", StringSplitOptions.None).Length - 1 == 1);
         ChecksContext.Check(
-            "XAML: 空备份显示「还没有备份」",
+            "存档页 XAML: 空备份显示「还没有备份」",
             xaml.Contains("L.SavesBackupEmpty", StringComparison.Ordinal));
         ChecksContext.Check(
-            "XAML: 未选游戏时隐藏整个备份段",
+            "存档页 XAML: 未选游戏时隐藏备份摘要",
             xaml.Contains("XamlVisibility.FromBool(ViewModel.HasGame)", StringComparison.Ordinal));
         ChecksContext.Check(
-            "XAML: 备份用量显示在标题旁（唯一一处配额提示）",
-            xaml.Split("ViewModel.BackupUsageText", StringSplitOptions.None).Length - 1 == 1,
-            "用量行和独立提示块曾经各说一遍，必须只剩一处");
+            "存档页 XAML: 备份列表与恢复/清理控件已迁到子页",
+            !xaml.Contains("listSaveBackups", StringComparison.Ordinal)
+                && !xaml.Contains("btnRestoreBackup", StringComparison.Ordinal)
+                && !xaml.Contains("btnPruneBackups", StringComparison.Ordinal));
         ChecksContext.Check(
-            "XAML: 不再有独立的配额满提示块",
-            !xaml.Contains("txtBackupQuotaFull", StringComparison.Ordinal)
-                && !xaml.Contains("L.SavesBackupQuotaFull", StringComparison.Ordinal),
-            "配额原因已并入 BackupUsageText");
-        ChecksContext.Check(
-            "XAML: 清理旧备份按钮绑定 CanPrune",
-            xaml.Contains(@"IsEnabled=""{x:Bind ViewModel.CanPrune, Mode=OneWay}""", StringComparison.Ordinal)
-                && xaml.Contains(@"Content=""{x:Bind L.SavesActionPruneBackups, Mode=OneWay}""", StringComparison.Ordinal));
-        ChecksContext.Check(
-            "XAML: 点击处理齐全",
+            "存档页 XAML: 入口与行按钮的点击处理齐全",
             xaml.Contains(@"Click=""OnBackupSaveClick""", StringComparison.Ordinal)
                 && xaml.Contains(@"Click=""OnDeleteSaveClick""", StringComparison.Ordinal)
-                && xaml.Contains(@"Click=""OnRestoreBackupClick""", StringComparison.Ordinal)
-                && xaml.Contains(@"Click=""OnDeleteBackupClick""", StringComparison.Ordinal)
-                && xaml.Contains(@"Click=""OnPruneBackupsClick""", StringComparison.Ordinal));
+                && xaml.Contains(@"Click=""OnManageBackupsClick""", StringComparison.Ordinal));
+
+        foreach (var id in new[]
+                 {
+                     "btnSaveBackupsBack",
+                     "btnRestoreBackup",
+                     "btnRestoreOverwriteBackup",
+                     "btnDeleteBackup",
+                     "btnPruneBackups",
+                     "btnOpenBackupFolder",
+                     "btnBackupsRefresh",
+                     "listSaveBackups",
+                     "panelSaveBackups",
+                     "numBackupQuota",
+                     "infoBackupsSuccess",
+                     "infoBackupsError",
+                 })
+        {
+            ChecksContext.Check(
+                "备份页 XAML: 存在 " + id + " 控件",
+                backupXaml.Contains(@"AutomationId=""" + id + @"""", StringComparison.Ordinal),
+                id);
+        }
+
         ChecksContext.Check(
-            "XAML: 备份行有读屏名（避免整列读类型名）",
-            xaml.Contains(@"AutomationProperties.Name=""{x:Bind AutomationName, Mode=OneWay}""", StringComparison.Ordinal));
+            "备份页 XAML: 列表绑定 ViewModel.Backups",
+            backupXaml.Contains(@"ItemsSource=""{x:Bind ViewModel.Backups, Mode=OneWay}""", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "备份页 XAML: 行按钮分别绑定 CanRestore / CanDelete",
+            backupXaml.Contains(@"IsEnabled=""{x:Bind CanRestore, Mode=OneWay}""", StringComparison.Ordinal)
+                && backupXaml.Contains(@"IsEnabled=""{x:Bind CanDelete, Mode=OneWay}""", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "备份页 XAML: 清理按钮绑定 CanPrune 与文案键",
+            backupXaml.Contains(@"IsEnabled=""{x:Bind ViewModel.CanPrune, Mode=OneWay}""", StringComparison.Ordinal)
+                && backupXaml.Contains(@"Content=""{x:Bind L.SavesActionPruneBackups, Mode=OneWay}""", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "备份页 XAML: 配额输入与自动清理提示走 i18n",
+            backupXaml.Contains("L.SavesBackupQuotaLabel", StringComparison.Ordinal)
+                && backupXaml.Contains("L.SavesBackupQuotaHint", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "备份页 XAML: 恢复/覆盖/删除/清理/返回/打开目录的点击处理齐全",
+            backupXaml.Contains(@"Click=""OnRestoreBackupClick""", StringComparison.Ordinal)
+                && backupXaml.Contains(@"Click=""OnRestoreOverwriteClick""", StringComparison.Ordinal)
+                && backupXaml.Contains(@"Click=""OnDeleteBackupClick""", StringComparison.Ordinal)
+                && backupXaml.Contains(@"Click=""OnPruneBackupsClick""", StringComparison.Ordinal)
+                && backupXaml.Contains(@"Click=""OnBackClick""", StringComparison.Ordinal)
+                && backupXaml.Contains(@"Click=""OnOpenBackupFolderClick""", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "备份页 XAML: 备份行有读屏名（避免整列读类型名）",
+            backupXaml.Contains(@"AutomationProperties.Name=""{x:Bind AutomationName, Mode=OneWay}""", StringComparison.Ordinal));
     }
 
-    private static void CheckNoDirectDelete(string page, string viewModel)
+    /// <summary>
+    /// 子页导航四处接线：Tag 常量 → 类型映射 → 发起页事件 → MainWindow 订阅/执行。
+    /// 少了任何一处，点「管理备份」都会静默无反应。
+    /// </summary>
+    private static void CheckNavigationWiring(string workspace, string page, string backupPage)
+    {
+        Console.WriteLine("[SavesActionsChecks] 备份子页导航接线");
+
+        var navigation = ReadRequired(
+            workspace,
+            "导航服务",
+            "src",
+            "PdxLauncher.App",
+            "Services",
+            "NavigationService.cs");
+        var mainWindow = ReadRequired(
+            workspace,
+            "主窗口",
+            "src",
+            "PdxLauncher.App",
+            "MainWindow.xaml.cs");
+
+        ChecksContext.Check(
+            "导航: 存在 SaveBackupsTag 常量",
+            navigation is not null && navigation.Contains("SaveBackupsTag = \"savebackups\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "导航: Tag 映射到 SaveBackupsPage",
+            navigation is not null
+                && navigation.Contains(
+                    "[SaveBackupsTag] = \"PdxLauncher.App.Views.SaveBackupsPage\"",
+                    StringComparison.Ordinal));
+        ChecksContext.Check(
+            "存档页: 声明 BackupsRequested 事件",
+            page.Contains("event EventHandler<SaveBackupsNavigationRequest>? BackupsRequested", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "存档页: 管理备份入口构造请求并带上返回 Tag",
+            page.Contains("new SaveBackupsNavigationRequest(game, NavigationService.SavesTag)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "主窗口: 订阅存档页的备份请求",
+            mainWindow is not null
+                && mainWindow.Contains("savesPage.BackupsRequested += OnSaveBackupsRequested;", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "主窗口: 执行导航到 SaveBackupsTag",
+            mainWindow is not null
+                && mainWindow.Contains("_navigation.Navigate(NavigationService.SaveBackupsTag, request)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "主窗口: 离开页面时退订，避免持有已丢弃页面",
+            mainWindow is not null
+                && mainWindow.Contains("_savesPage.BackupsRequested -= OnSaveBackupsRequested;", StringComparison.Ordinal)
+                && mainWindow.Contains("_saveBackupsPage.NavigationRequested -= OnPageNavigationRequested;", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "备份页: 返回按钮回到请求里的 ReturnTag（默认存档页）",
+            backupPage.Contains(
+                "NavigationRequested?.Invoke(this, _request?.ReturnTag ?? NavigationService.SavesTag)",
+                StringComparison.Ordinal));
+    }
+
+    private static void CheckNoDirectDelete(string page, string viewModel, string backupPage, string backupViewModel)
     {
         Console.WriteLine("[SavesActionsChecks] 不直接删文件");
 
         ChecksContext.Check(
-            "存档页/视图模型: 没有 File.Delete（真实删除只经服务移入 trash）",
+            "存档页/备份页/视图模型: 没有 File.Delete（真实删除只经服务移入 trash）",
             !page.Contains("File.Delete", StringComparison.Ordinal)
-                && !viewModel.Contains("File.Delete", StringComparison.Ordinal));
+                && !viewModel.Contains("File.Delete", StringComparison.Ordinal)
+                && !backupPage.Contains("File.Delete", StringComparison.Ordinal)
+                && !backupViewModel.Contains("File.Delete", StringComparison.Ordinal));
         ChecksContext.Check(
-            "存档页/视图模型: 不写 sqlite 清单（磁盘为真源）",
+            "存档页/备份页/视图模型: 不写 sqlite 清单（磁盘为真源）",
             !page.Contains("sqlite", StringComparison.OrdinalIgnoreCase)
-                && !viewModel.Contains("sqlite", StringComparison.OrdinalIgnoreCase));
+                && !viewModel.Contains("sqlite", StringComparison.OrdinalIgnoreCase)
+                && !backupPage.Contains("sqlite", StringComparison.OrdinalIgnoreCase)
+                && !backupViewModel.Contains("sqlite", StringComparison.OrdinalIgnoreCase));
     }
 
     private static void CheckLocalizationKeys(string workspace)

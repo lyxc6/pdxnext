@@ -1,5 +1,7 @@
 namespace PdxLauncher.Core.Configuration;
 
+using PdxLauncher.Core.Saves;
+
 /// <summary>本启动器自己的设置（与 P 社启动器完全隔离，绝不写它的目录）。</summary>
 public sealed class AppSettings
 {
@@ -104,6 +106,22 @@ public sealed class AppSettings
     {
         get => _modThumbnailCacheDays;
         set => _modThumbnailCacheDays = value < 1 ? 1 : (value > 3650 ? 3650 : value);
+    }
+
+    private const long MinSaveBackupMaxTotalBytes = 256L * 1024 * 1024;
+    private const long MaxSaveBackupMaxTotalBytes = 100L * 1024 * 1024 * 1024;
+    private long _saveBackupMaxTotalBytes = SaveBackupPaths.DefaultMaxTotalBytes;
+
+    /// <summary>
+    /// 存档备份总量上限（字节，默认 2 GiB，钳到 256 MiB–100 GiB）。
+    /// 只在「备份」子页里以 GB 为单位调整；服务在每次备份时读取。
+    /// </summary>
+    public long SaveBackupMaxTotalBytes
+    {
+        get => _saveBackupMaxTotalBytes;
+        set => _saveBackupMaxTotalBytes = value < MinSaveBackupMaxTotalBytes
+            ? MinSaveBackupMaxTotalBytes
+            : (value > MaxSaveBackupMaxTotalBytes ? MaxSaveBackupMaxTotalBytes : value);
     }
 
     /// <summary>

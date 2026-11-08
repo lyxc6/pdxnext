@@ -2827,11 +2827,20 @@
   <data name="SavesActionDeleteBackup" xml:space="preserve">
     <value>删除备份</value>
   </data>
+  <data name="SavesActionManageBackups" xml:space="preserve">
+    <value>管理备份</value>
+  </data>
   <data name="SavesActionPruneBackups" xml:space="preserve">
     <value>清理旧备份</value>
   </data>
   <data name="SavesActionRestore" xml:space="preserve">
     <value>恢复</value>
+  </data>
+  <data name="SavesActionRestoreOverwrite" xml:space="preserve">
+    <value>覆盖恢复</value>
+  </data>
+  <data name="SavesBackupAutoPruned" xml:space="preserve">
+    <value>已备份：{0}（自动清理 {1} 份最旧备份）</value>
   </data>
   <data name="SavesBackupCreated" xml:space="preserve">
     <value>备份于 {0}</value>
@@ -2839,11 +2848,26 @@
   <data name="SavesBackupEmpty" xml:space="preserve">
     <value>还没有备份</value>
   </data>
+  <data name="SavesBackupOpenFolder" xml:space="preserve">
+    <value>打开备份目录</value>
+  </data>
+  <data name="SavesBackupOpenFolderFailed" xml:space="preserve">
+    <value>无法打开备份目录，请查看日志。</value>
+  </data>
   <data name="SavesBackupOrphan" xml:space="preserve">
     <value>缺少说明文件</value>
   </data>
+  <data name="SavesBackupPageBack" xml:space="preserve">
+    <value>返回</value>
+  </data>
   <data name="SavesBackupQuotaFull" xml:space="preserve">
-    <value>备份空间已满（可删除旧备份）</value>
+    <value>备份空间不足（单份存档可能超过上限）</value>
+  </data>
+  <data name="SavesBackupQuotaHint" xml:space="preserve">
+    <value>超出上限时会自动删除最旧的备份。</value>
+  </data>
+  <data name="SavesBackupQuotaLabel" xml:space="preserve">
+    <value>空间上限（GB）</value>
   </data>
   <data name="SavesBackupRowName" xml:space="preserve">
     <value>{0}，{1}</value>
@@ -2880,6 +2904,12 @@
   </data>
   <data name="SavesConfirmRestoreTitle" xml:space="preserve">
     <value>恢复备份</value>
+  </data>
+  <data name="SavesConfirmRestoreOverwriteContent" xml:space="preserve">
+    <value>将先把现有存档「{0}」移入回收站，再把备份写回原路径；此操作无法撤销。</value>
+  </data>
+  <data name="SavesConfirmRestoreOverwriteTitle" xml:space="preserve">
+    <value>覆盖恢复</value>
   </data>
   <data name="SavesCountry" xml:space="preserve">
     <value>国家：{0}</value>

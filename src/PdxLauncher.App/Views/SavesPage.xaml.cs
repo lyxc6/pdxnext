@@ -43,8 +43,11 @@ public sealed partial class SavesPage : Page
 
     public SavesViewModel ViewModel => _viewModel;
 
-    /// <summary>XAML 里 <c>{x:Bind L.Xxx, Mode=OneWay}</c> 的绑定入口。</summary>
+    /// <summary>XAML 的文案入口：<c>{x:Bind L.Xxx, Mode=OneWay}</c>。</summary>
     public Localizer L => Localizer.Instance;
+
+    /// <summary>用户点「管理备份」时触发；由 MainWindow 导航到备份子页。</summary>
+    public event EventHandler<SaveBackupsNavigationRequest>? BackupsRequested;
 
     // ------------------------------------------------------------ 生命周期
 
@@ -147,25 +150,7 @@ public sealed partial class SavesPage : Page
         _rowAutomation.Track(row, name => AutomationProperties.SetName(container, name));
     }
 
-    /// <summary>
-    /// 备份行容器（备份段的 ListItem）同样需要写 id/name：不写的话读屏只会读类型全名。
-    /// 备份行的名字不随后台补齐变化（创建时间一开始就有），所以只写一次即可。
-    /// </summary>
-    private void OnBackupContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
-    {
-        if (args.InRecycleQueue || args.ItemContainer is not ListViewItem container)
-        {
-            return;
-        }
-
-        if (args.Item is SaveBackupRowViewModel row)
-        {
-            AutomationProperties.SetAutomationId(container, row.AutomationId);
-            AutomationProperties.SetName(container, row.AutomationName);
-        }
-    }
-
-    // ------------------------------------------------------------ 备份 / 恢复 / 删除
+    // ------------------------------------------------------------ 备份 / 删除
 
     private async void OnBackupSaveClick(object sender, RoutedEventArgs e)
     {
@@ -197,76 +182,19 @@ public sealed partial class SavesPage : Page
         await InvokeAsync(() => _viewModel.DeleteSaveAsync(row, _lifetime.Token));
     }
 
-    /// <summary>恢复备份：非破坏性（默认 overwrite:false，新建副本），初始焦点保持「确认」。</summary>
-    private async void OnRestoreBackupClick(object sender, RoutedEventArgs e)
+    /// <summary>打开「备份」子页：页面自己不持导航职责，交由 MainWindow 执行。</summary>
+    private void OnManageBackupsClick(object sender, RoutedEventArgs e)
     {
-        if (BackupRowFrom(sender) is not { } row)
+        if (_viewModel.Game is { } game)
         {
-            return;
+            BackupsRequested?.Invoke(this, new SaveBackupsNavigationRequest(game, NavigationService.SavesTag));
         }
-
-        var confirmed = await ConfirmOverlay.ConfirmAsync(
-            L.SavesConfirmRestoreTitle,
-            L.T(Keys.SavesConfirmRestoreContent, row.FileName),
-            L.SavesActionRestore,
-            L.CommonCancel);
-        if (!confirmed)
-        {
-            return;
-        }
-
-        await InvokeAsync(() => _viewModel.RestoreAsync(row, _lifetime.Token));
-    }
-
-    /// <summary>删除备份：破坏性操作，初始焦点在「取消」。</summary>
-    private async void OnDeleteBackupClick(object sender, RoutedEventArgs e)
-    {
-        if (BackupRowFrom(sender) is not { } row)
-        {
-            return;
-        }
-
-        var confirmed = await ConfirmOverlay.ConfirmAsync(
-            L.SavesConfirmDeleteBackupTitle,
-            L.T(Keys.SavesConfirmDeleteBackupContent, row.FileName),
-            L.CommonDelete,
-            L.CommonCancel,
-            initialFocus: InitialFocus.Cancel);
-        if (!confirmed)
-        {
-            return;
-        }
-
-        await InvokeAsync(() => _viewModel.DeleteBackupAsync(row, _lifetime.Token));
-    }
-
-    /// <summary>
-    /// 清理旧备份：批量删除不可撤销，确认框默认焦点在「取消」；
-    /// 只保留最新 <see cref="SavesViewModel.PruneKeepNewest"/> 份，其余（含孤儿备份）由服务删除。
-    /// </summary>
-    private async void OnPruneBackupsClick(object sender, RoutedEventArgs e)
-    {
-        var confirmed = await ConfirmOverlay.ConfirmAsync(
-            L.SavesConfirmPruneBackupsTitle,
-            L.T(Keys.SavesConfirmPruneBackupsContent, SavesViewModel.PruneKeepNewest),
-            L.SavesActionPruneBackups,
-            L.CommonCancel,
-            initialFocus: InitialFocus.Cancel);
-        if (!confirmed)
-        {
-            return;
-        }
-
-        await InvokeAsync(() => _viewModel.PruneAsync(_lifetime.Token));
     }
 
     private void OnNoticeClose(InfoBar sender, object args) => _viewModel.DismissNotice();
 
     private static SaveGameRowViewModel? RowFrom(object sender) =>
         (sender as FrameworkElement)?.DataContext as SaveGameRowViewModel;
-
-    private static SaveBackupRowViewModel? BackupRowFrom(object sender) =>
-        (sender as FrameworkElement)?.DataContext as SaveBackupRowViewModel;
 
     /// <summary>点击事件里统一收尾：页面关闭导致的取消静默，其余异常记日志（页面已有 InfoBar 展示服务消息）。</summary>
     private async Task InvokeAsync(Func<Task> action)

@@ -12,22 +12,11 @@ using PdxLauncher.Core.Saves;
 /// <para>
 /// 本类不引用任何 Microsoft.UI.Xaml 类型（可见性由 XAML 侧的 XamlVisibility 决定）。
 /// 元数据缺失时不显示空白：日期回退到文件修改时间并明确标注来源，解析失败的档显示
-/// 「元数据不可读」，启发式格式另有可见的弱化标记，三者互不冒充精确数据。
+/// 「元数据不可读」。启发式解析的提示由存档页页头统一说明，不在每一行重复。
 /// </para>
 /// </summary>
 public sealed class SaveGameRowViewModel : LocalizedObservableObject
 {
-    /// <summary>
-    /// 元数据解析是启发式的游戏（V3 命名档、EU5 部分档、CS2 的 .cok JSON 元数据）。
-    /// 这些游戏的存档行必须带可见的弱化标记（文案来自 <c>saves.experimental</c>）；CK3 / Stellaris 不走这里。
-    /// </summary>
-    private static readonly HashSet<string> ExperimentalGameIds = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "victoria3",
-        "eu5",
-        "cities_skylines_2",
-    };
-
     private readonly int _index;
     private SaveRowState _state;
     private bool _isBusy;
@@ -72,17 +61,11 @@ public sealed class SaveGameRowViewModel : LocalizedObservableObject
         }
     }
 
-    public bool IsExperimental => ExperimentalGameIds.Contains(_state.File.GameId);
-
-    public string ExperimentalText => T(Keys.SavesExperimental);
-
-    public string ExperimentalTooltip => T(Keys.SavesExperimentalTooltip);
-
     public bool IsDegraded => Meta?.ParseState == SaveParseState.Degraded;
 
     public string DegradedText => T(Keys.SavesMetadataUnreadable);
 
-    public bool HasTags => IsExperimental || IsDegraded;
+    public bool HasTags => IsDegraded;
 
     public bool HasGameDate => !string.IsNullOrWhiteSpace(Meta?.GameDate);
 

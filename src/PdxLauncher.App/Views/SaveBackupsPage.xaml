@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="PdxLauncher.App.Views.SaveBackupsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:svc="using:PdxLauncher.App.Services"
+    xmlns:vm="using:PdxLauncher.App.ViewModels"
+    NavigationCacheMode="Disabled"
+    Background="{ThemeResource PdxPageVeilBrush}">
+
+    <!--
+        「备份」子页（存档页的子页）：只管理当前游戏的备份。
+        页头带返回按钮；左栏没有独立菜单项，所以选中态停在「存档」。
+        恢复 / 删除 / 清理都走 ISaveGameBackupService；「覆盖恢复」沿用服务已有的
+        overwrite:true（先把同名存档移入回收站），确认框默认焦点在「取消」。
+        空间上限以 GB 为单位调整，保存到 AppSettings；超限时服务会自动删除最旧备份。
+    -->
+    <Grid Padding="24" RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- 页头：返回 + 标题 + 游戏名 + 用量 + 打开目录 / 刷新 -->
+        <Grid Grid.Row="0" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button x:Name="btnSaveBackupsBack"
+                    Width="32"
+                    Height="32"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    Click="OnBackClick"
+                    ToolTipService.ToolTip="{x:Bind L.SavesBackupPageBack, Mode=OneWay}"
+                    AutomationProperties.AutomationId="btnSaveBackupsBack"
+                    AutomationProperties.Name="{x:Bind L.SavesBackupPageBack, Mode=OneWay}">
+                <FontIcon Glyph="&#xE72B;" FontSize="16" />
+            </Button>
+
+            <StackPanel Grid.Column="1" Spacing="4" VerticalAlignment="Center">
+                <TextBlock Text="{x:Bind L.SavesBackupTitle, Mode=OneWay}"
+                           Style="{StaticResource TitleTextBlockStyle}"
+                           AutomationProperties.AutomationId="txtSaveBackupsTitle" />
+                <TextBlock Text="{x:Bind ViewModel.GameTitle, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextTrimming="CharacterEllipsis"
+                           AutomationProperties.AutomationId="txtSaveBackupsGame" />
+            </StackPanel>
+
+            <TextBlock Grid.Column="2"
+                       Text="{x:Bind ViewModel.BackupUsageText, Mode=OneWay}"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       VerticalAlignment="Center"
+                       AutomationProperties.AutomationId="txtBackupUsage" />
+
+            <StackPanel Grid.Column="3"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        VerticalAlignment="Center">
+                <Button Content="{x:Bind L.SavesBackupOpenFolder, Mode=OneWay}"
+                        Click="OnOpenBackupFolderClick"
+                        AutomationProperties.AutomationId="btnOpenBackupFolder"
+                        AutomationProperties.Name="{x:Bind L.SavesBackupOpenFolder, Mode=OneWay}" />
+                <Button Content="{x:Bind L.SavesRefresh, Mode=OneWay}"
+                        IsEnabled="{x:Bind ViewModel.CanRefresh, Mode=OneWay}"
+                        Click="OnRefreshClick"
+                        AutomationProperties.AutomationId="btnBackupsRefresh"
+                        AutomationProperties.Name="{x:Bind L.SavesRefresh, Mode=OneWay}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- 备份列表：文件名 / 备份时间 / 大小 / 恢复 / 覆盖恢复 / 删除 -->
+        <Border Grid.Row="1"
+                Padding="12"
+                CornerRadius="8"
+                Background="{ThemeResource PdxCardGlassBrush}"
+                BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                BorderThickness="1"
+                AutomationProperties.AutomationId="panelSaveBackups">
+            <Grid>
+                <TextBlock Text="{x:Bind L.SavesBackupEmpty, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowEmptyState), Mode=OneWay}"
+                           AutomationProperties.AutomationId="txtBackupEmpty" />
+
+                <ListView x:Name="BackupList"
+                          ItemsSource="{x:Bind ViewModel.Backups, Mode=OneWay}"
+                          SelectionMode="None"
+                          IsItemClickEnabled="False"
+                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                          AutomationProperties.AutomationId="listSaveBackups"
+                          AutomationProperties.Name="{x:Bind L.SavesBackupTitle, Mode=OneWay}"
+                          ContainerContentChanging="OnBackupContainerContentChanging">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0,0,0,4" />
+                            <Setter Property="MinHeight" Value="0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SaveBackupRowViewModel">
+                            <Grid Padding="8,4"
+                                  ColumnSpacing="12"
+                                  AutomationProperties.Name="{x:Bind AutomationName, Mode=OneWay}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0"
+                                           Text="{x:Bind FileName, Mode=OneTime}"
+                                           Style="{StaticResource BodyTextBlockStyle}"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"
+                                           ToolTipService.ToolTip="{x:Bind FilePath, Mode=OneTime}" />
+                                <TextBlock Grid.Column="1"
+                                           Text="{x:Bind CreatedText, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2"
+                                           Text="{x:Bind SizeText, Mode=OneTime}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           VerticalAlignment="Center" />
+
+                                <StackPanel Grid.Column="3"
+                                            Orientation="Horizontal"
+                                            Spacing="8"
+                                            VerticalAlignment="Center">
+                                    <Button Content="{x:Bind RestoreText, Mode=OneWay}"
+                                            IsEnabled="{x:Bind CanRestore, Mode=OneWay}"
+                                            Click="OnRestoreBackupClick"
+                                            AutomationProperties.AutomationId="btnRestoreBackup" />
+                                    <Button Content="{x:Bind OverwriteText, Mode=OneWay}"
+                                            IsEnabled="{x:Bind CanRestore, Mode=OneWay}"
+                                            Click="OnRestoreOverwriteClick"
+                                            AutomationProperties.AutomationId="btnRestoreOverwriteBackup" />
+                                    <Button Content="{x:Bind DeleteText, Mode=OneWay}"
+                                            IsEnabled="{x:Bind CanDelete, Mode=OneWay}"
+                                            Click="OnDeleteBackupClick"
+                                            AutomationProperties.AutomationId="btnDeleteBackup" />
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+        </Border>
+
+        <!-- 配额与清理 -->
+        <Border Grid.Row="2"
+                Padding="12"
+                CornerRadius="8"
+                Background="{ThemeResource PdxCardGlassBrush}"
+                BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                BorderThickness="1"
+                AutomationProperties.AutomationId="panelBackupQuota">
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <NumberBox x:Name="QuotaBox"
+                           Width="200"
+                           Header="{x:Bind L.SavesBackupQuotaLabel, Mode=OneWay}"
+                           Minimum="1"
+                           Maximum="100"
+                           SmallChange="1"
+                           LargeChange="5"
+                           SpinButtonPlacementMode="Compact"
+                           ValueChanged="OnQuotaValueChanged"
+                           AutomationProperties.AutomationId="numBackupQuota" />
+
+                <TextBlock Grid.Column="1"
+                           Text="{x:Bind L.SavesBackupQuotaHint, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           VerticalAlignment="Bottom"
+                           Margin="0,0,0,8" />
+
+                <Button Grid.Column="2"
+                        Content="{x:Bind L.SavesActionPruneBackups, Mode=OneWay}"
+                        IsEnabled="{x:Bind ViewModel.CanPrune, Mode=OneWay}"
+                        Click="OnPruneBackupsClick"
+                        VerticalAlignment="Bottom"
+                        AutomationProperties.AutomationId="btnPruneBackups"
+                        AutomationProperties.Name="{x:Bind L.SavesActionPruneBackups, Mode=OneWay}" />
+            </Grid>
+        </Border>
+
+        <StackPanel Grid.Row="3" Spacing="8">
+            <InfoBar x:Name="InfoBackupsSuccess"
+                     Severity="Success"
+                     IsOpen="{x:Bind ViewModel.ShowSuccessNotice, Mode=OneWay}"
+                     Message="{x:Bind ViewModel.NoticeText, Mode=OneWay}"
+                     CloseButtonClick="OnNoticeClose"
+                     AutomationProperties.AutomationId="infoBackupsSuccess" />
+            <InfoBar x:Name="InfoBackupsError"
+                     Severity="Error"
+                     IsOpen="{x:Bind ViewModel.ShowErrorNotice, Mode=OneWay}"
+                     Message="{x:Bind ViewModel.NoticeText, Mode=OneWay}"
+                     CloseButtonClick="OnNoticeClose"
+                     AutomationProperties.AutomationId="infoBackupsError" />
+        </StackPanel>
+    </Grid>
+</Page>

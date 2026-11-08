@@ -221,6 +221,7 @@
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveRowState.cs" Link="Linked\SaveRowState.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveGameRowViewModel.cs" Link="Linked\SaveGameRowViewModel.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SavesViewModel.cs" Link="Linked\SavesViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveBackupsViewModel.cs" Link="Linked\SaveBackupsViewModel.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveBackupRowViewModel.cs" Link="Linked\SaveBackupRowViewModel.cs" />
     <!--
       DLC 行视图模型：本地缩略图 / Steam 宽幅头图的显示优先级与 Stretch 判据都在这里。

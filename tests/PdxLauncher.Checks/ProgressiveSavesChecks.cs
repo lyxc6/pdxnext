@@ -659,6 +659,10 @@ public static class ProgressiveSavesChecks
 
         public string BackupRootDirectory => Path.Combine(Path.GetTempPath(), "pdx-checks-saves-backups");
 
+        public SaveBackupPolicy Policy { get; private set; } = SaveBackupPolicy.Default;
+
+        public void ApplyPolicy(SaveBackupPolicy policy) => Policy = policy;
+
         public Task<SaveBackupResult> BackupAsync(
             string gameId,
             string sourcePath,

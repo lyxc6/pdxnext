@@ -41,6 +41,9 @@ public sealed class NavigationService
     /// <summary>存档页的导航 Tag。</summary>
     public const string SavesTag = "saves";
 
+    /// <summary>「备份」子页的导航 Tag（不是左栏菜单项）。</summary>
+    public const string SaveBackupsTag = "savebackups";
+
     /// <summary>成就页的导航 Tag。</summary>
     public const string AchievementsTag = "achievements";
 
@@ -68,6 +71,7 @@ public sealed class NavigationService
         [AddModsTag] = "PdxLauncher.App.Views.AddModsPage",
         [DlcTag] = "PdxLauncher.App.Views.DlcPage",
         [SavesTag] = "PdxLauncher.App.Views.SavesPage",
+        [SaveBackupsTag] = "PdxLauncher.App.Views.SaveBackupsPage",
         [AchievementsTag] = "PdxLauncher.App.Views.AchievementsPage",
         [AccountTag] = "PdxLauncher.App.Views.AccountPage",
         [SettingsTag] = "PdxLauncher.App.Views.SettingsPage",

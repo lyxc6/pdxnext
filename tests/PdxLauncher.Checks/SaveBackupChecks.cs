@@ -44,6 +44,7 @@ public static class SaveBackupChecks
             CheckSidecarWriteFailure(fs, logger, root);
             CheckDeleteSave(fs, logger, root);
             CheckQuota(fs, logger, root);
+            CheckPolicyAndAutoPrune(fs, logger, root);
             CheckLockedFile(fs, logger, root);
             CheckCancellation(fs, logger, root);
             CheckPrune(fs, logger, root);
@@ -484,6 +485,76 @@ public static class SaveBackupChecks
         ChecksContext.Equal("条目超限返回当前条目数", 1, e2.Usage?.EntryCount ?? -1);
         ChecksContext.Check("配额消息说明条目上限", e2.Message.Contains("条目", StringComparison.Ordinal), e2.Message);
         ChecksContext.Equal("配额超限不自动清理旧备份", 2, CountFiles(fs, SaveBackupPaths.GameDirectory(entriesFixture.DataRoot, Ck3), "*"));
+    }
+
+    // ------------------------------------------------------------------
+    // 策略与自动清理
+    // ------------------------------------------------------------------
+
+    private static void CheckPolicyAndAutoPrune(IFileSystem fs, IAppLogger logger, string root)
+    {
+        Console.WriteLine("[SaveBackupChecks] 策略与自动清理");
+
+        var fixture = CreateFixture(fs, logger, root, "autoprune");
+        var service = new SaveBackupService(
+            fs,
+            logger,
+            fixture.DataRoot,
+            fixture.Clock,
+            maxTotalBytes: 1000,
+            autoPruneOldestWhenFull: true);
+
+        ChecksContext.Equal("策略: 总量上限透出", 1000L, service.Policy.MaxTotalBytes);
+        ChecksContext.Equal("策略: 条目上限透出", SaveBackupPaths.DefaultMaxEntriesPerGame, service.Policy.MaxEntriesPerGame);
+        ChecksContext.Check("策略: 自动清理已开启", service.Policy.AutoPruneOldestWhenFull);
+
+        var r1 = Await(service.BackupAsync(Ck3, WriteSource(fixture, "p1.ck3", new byte[600]), null, CancellationToken.None));
+        fixture.Clock.UtcNow = fixture.Clock.UtcNow.AddMinutes(1);
+        var r2 = Await(service.BackupAsync(Ck3, WriteSource(fixture, "p2.ck3", new byte[300]), null, CancellationToken.None));
+        fixture.Clock.UtcNow = fixture.Clock.UtcNow.AddMinutes(1);
+        var r3 = Await(service.BackupAsync(Ck3, WriteSource(fixture, "p3.ck3", new byte[300]), null, CancellationToken.None));
+
+        ChecksContext.Equal("自动清理: 前两次备份成功", SaveBackupStatus.Ok, r1.Status);
+        ChecksContext.Equal("自动清理: 前两次备份成功（二）", SaveBackupStatus.Ok, r2.Status);
+        ChecksContext.Equal("自动清理: 超限时第三次仍成功", SaveBackupStatus.Ok, r3.Status);
+        ChecksContext.Equal("自动清理: 报告删除了 1 份最旧备份", 1, r3.AutoPrunedEntries);
+
+        var listed = Await(service.ListBackupsAsync(Ck3, CancellationToken.None));
+        ChecksContext.Equal("自动清理: 只剩最新的 2 份", 2, listed.Count);
+        ChecksContext.Check(
+            "自动清理: 删除的是最旧的 p1",
+            !listed.Any(entry => entry.OriginalFileName == "p1.ck3"),
+            string.Join(", ", listed.Select(entry => entry.OriginalFileName)));
+        var usage = Await(service.GetUsageAsync(CancellationToken.None));
+        ChecksContext.Equal("自动清理: 用量重新落到上限内", 600L, usage.TotalBytes);
+
+        // 条目数配额同样会触发自动清理（不需要总量超限）。
+        var entriesFixture = CreateFixture(fs, logger, root, "autoprune-entries");
+        var entryService = new SaveBackupService(
+            fs,
+            logger,
+            entriesFixture.DataRoot,
+            entriesFixture.Clock,
+            maxEntriesPerGame: 2,
+            autoPruneOldestWhenFull: true);
+        Await(entryService.BackupAsync(Ck3, WriteSource(entriesFixture, "e1.ck3", [1]), null, CancellationToken.None));
+        entriesFixture.Clock.UtcNow = entriesFixture.Clock.UtcNow.AddMinutes(1);
+        Await(entryService.BackupAsync(Ck3, WriteSource(entriesFixture, "e2.ck3", [2]), null, CancellationToken.None));
+        entriesFixture.Clock.UtcNow = entriesFixture.Clock.UtcNow.AddMinutes(1);
+        var e3 = Await(entryService.BackupAsync(Ck3, WriteSource(entriesFixture, "e3.ck3", [3]), null, CancellationToken.None));
+
+        ChecksContext.Equal("自动清理: 条目超限时备份成功", SaveBackupStatus.Ok, e3.Status);
+        ChecksContext.Equal("自动清理: 条目超限删除 1 份", 1, e3.AutoPrunedEntries);
+        ChecksContext.Equal(
+            "自动清理: 条目数回到上限",
+            2,
+            Await(entryService.ListBackupsAsync(Ck3, CancellationToken.None)).Count);
+
+        // ApplyPolicy 立即影响后续备份；关掉自动清理后超限仍返回 QuotaExceeded。
+        service.ApplyPolicy(new SaveBackupPolicy(500, SaveBackupPaths.DefaultMaxEntriesPerGame, AutoPruneOldestWhenFull: false));
+        ChecksContext.Equal("策略: ApplyPolicy 立即生效", 500L, service.Policy.MaxTotalBytes);
+        var r4 = Await(service.BackupAsync(Ck3, WriteSource(fixture, "p4.ck3", new byte[600]), null, CancellationToken.None));
+        ChecksContext.Equal("策略: 关闭自动清理后超限失败", SaveBackupStatus.QuotaExceeded, r4.Status);
     }
 
     // ------------------------------------------------------------------

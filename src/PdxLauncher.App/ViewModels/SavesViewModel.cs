@@ -70,11 +70,33 @@ public sealed class SavesViewModel : LocalizedObservableObject
                 OnPropertyChanged(nameof(CanRefresh));
                 OnPropertyChanged(nameof(HasGame));
                 OnPropertyChanged(nameof(ShowBackupEmptyState));
+                OnPropertyChanged(nameof(IsExperimentalGame));
             }
         }
     }
 
     public string GameTitle => Game?.DisplayName ?? T(Keys.SavesNoGame);
+
+    /// <summary>
+    /// 元数据解析是启发式的游戏（V3 命名档、EU5 部分档、CS2 的 .cok JSON 元数据）。
+    /// 这些游戏的日期/名称可能不准确，存档页在页头统一提示一次；CK3 / Stellaris 不提示。
+    /// </summary>
+    private static readonly HashSet<string> ExperimentalGameIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "victoria3",
+        "eu5",
+        "cities_skylines_2",
+    };
+
+    /// <summary>当前游戏是否属于「元数据启发式解析」的游戏；控制页头提示。</summary>
+    public bool IsExperimentalGame =>
+        Game is { } game && ExperimentalGameIds.Contains(game.GameId);
+
+    /// <summary>页头提示的标签（文案键 <c>SavesExperimental</c>）。</summary>
+    public string ExperimentalLabelText => T(Keys.SavesExperimental);
+
+    /// <summary>页头提示的说明（该游戏存档格式没有公开规范，日期与名称可能不准确）。</summary>
+    public string ExperimentalNoticeText => T(Keys.SavesExperimentalTooltip);
 
     /// <summary>
     /// 扫描或写操作（备份/恢复/删除）期间为 true。写操作也计入忙碌态，
@@ -96,35 +118,14 @@ public sealed class SavesViewModel : LocalizedObservableObject
     public bool ShowBackupEmptyState => HasGame && !HasBackups;
 
     /// <summary>
-    /// 备份用量：总量（跨游戏）/ 上限、当前游戏的条目数；配额满时同一行直接补原因。
-    /// 这是页面上唯一一处配额提示，不再额外挂一行警告文案。
+    /// 备份摘要：总量（跨游戏）/ 上限 · 当前游戏的条目数。
+    /// 详细列表、恢复、删除与配额调整都在「备份」子页。
     /// </summary>
-    public string BackupUsageText
-    {
-        get
-        {
-            var usage = T(
-                Keys.SavesBackupUsage,
-                SizeFormatter.Format(_usage.TotalBytes),
-                SizeFormatter.Format(SaveBackupPaths.DefaultMaxTotalBytes),
-                Backups.Count);
-            return IsQuotaFull ? usage + " · " + T(Keys.SavesBackupQuotaFull) : usage;
-        }
-    }
-
-    /// <summary>显式清理时保留的最新备份数；只有用户点「清理旧备份」才会删条目。</summary>
-    public const int PruneKeepNewest = 10;
-
-    /// <summary>有备份、页面空闲时才允许清理（清理期间同样计入忙碌态）。</summary>
-    public bool CanPrune => HasGame && !IsBusy && HasBackups;
-
-    /// <summary>
-    /// 配额是否已满：总量达到 2 GiB 或当前游戏条目达到 200 条。服务端还会按「将要写入的大小」
-    /// 再判一次（可能提前返回 <see cref="SaveBackupStatus.QuotaExceeded"/>），这里只负责把按钮关掉并提示。
-    /// </summary>
-    public bool IsQuotaFull =>
-        _usage.TotalBytes >= SaveBackupPaths.DefaultMaxTotalBytes
-        || Backups.Count >= SaveBackupPaths.DefaultMaxEntriesPerGame;
+    public string BackupUsageText => T(
+        Keys.SavesBackupUsage,
+        SizeFormatter.Format(_usage.TotalBytes),
+        SizeFormatter.Format(_backups.Policy.MaxTotalBytes),
+        Backups.Count);
 
     /// <summary>页内提示（成功还是失败由 <see cref="ShowErrorNotice"/> 决定）；InfoBar 关闭时清空。</summary>
     public string NoticeText => _noticeText;
@@ -277,8 +278,8 @@ public sealed class SavesViewModel : LocalizedObservableObject
     // ------------------------------------------------------------ 写操作（备份 / 恢复 / 删除）
 
     /// <summary>
-    /// 备份一条存档。文件复制与哈希都在服务端线程池上完成；本方法只负责忙碌态、提示与刷新备份段。
-    /// 配额已满时不发起调用，直接提示「可删除旧备份」——服务不会自动清理。
+    /// 备份一条存档。文件复制与哈希都在服务端线程池上完成；本方法只负责忙碌态、提示与刷新摘要。
+    /// 超出配额时由服务按当前策略自动清理最旧备份；清理份数随成功结果返回并写入提示。
     /// </summary>
     public async Task BackupAsync(SaveGameRowViewModel row, CancellationToken cancellationToken)
     {
@@ -286,12 +287,6 @@ public sealed class SavesViewModel : LocalizedObservableObject
 
         if (Game is not { } game || IsBusy || row.IsBusy)
         {
-            return;
-        }
-
-        if (IsQuotaFull)
-        {
-            SetNotice(T(Keys.SavesBackupQuotaFull), isError: true);
             return;
         }
 
@@ -306,11 +301,14 @@ public sealed class SavesViewModel : LocalizedObservableObject
 
             if (result.IsSuccess)
             {
+                var name = result.Entry?.OriginalFileName ?? row.FileName;
                 if (!TryCommitAction(
                         generation,
                         game,
                         () => SetNotice(
-                            T(Keys.SavesNoticeBackedUp, result.Entry?.OriginalFileName ?? row.FileName),
+                            result.AutoPrunedEntries > 0
+                                ? T(Keys.SavesBackupAutoPruned, name, result.AutoPrunedEntries)
+                                : T(Keys.SavesNoticeBackedUp, name),
                             isError: false)))
                 {
                     return;
@@ -429,210 +427,6 @@ public sealed class SavesViewModel : LocalizedObservableObject
         finally
         {
             row.SetBusy(false);
-            EndAction();
-        }
-    }
-
-    /// <summary>
-    /// 恢复备份。默认 <c>overwrite: false</c>：服务在存档目录里新建带「(恢复 日期-时间)」后缀的副本，
-    /// 现有存档不被覆盖；这条语义由页面文案明确告知用户。
-    /// </summary>
-    public async Task RestoreAsync(SaveBackupRowViewModel row, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(row);
-
-        if (Game is not { } game || IsBusy || row.IsBusy)
-        {
-            return;
-        }
-
-        var generation = _requests.Current;
-        BeginAction();
-        row.SetBusy(true);
-        try
-        {
-            var result = await _backups
-                .RestoreAsync(row.Entry, overwrite: false, cancellationToken)
-                .ConfigureAwait(true);
-
-            if (result.IsSuccess)
-            {
-                var restoredName = result.RestoredPath is { } restoredPath
-                    ? Path.GetFileName(restoredPath)
-                    : row.FileName;
-                if (!TryCommitAction(
-                        generation,
-                        game,
-                        () => SetNotice(T(Keys.SavesNoticeRestored, restoredName), isError: false)))
-                {
-                    return;
-                }
-
-                await LoadAsync(game, cancellationToken).ConfigureAwait(true);
-                return;
-            }
-
-            if (!TryCommitAction(
-                    generation,
-                    game,
-                    () => SetNotice(result.Message, isError: true)))
-            {
-                return;
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            TryCommitAction(
-                generation,
-                game,
-                () =>
-                {
-                    _logger.Warn("恢复备份失败：" + row.FilePath + "：" + ex.Message);
-                    SetNotice(ex.Message, isError: true);
-                });
-        }
-        finally
-        {
-            row.SetBusy(false);
-            EndAction();
-        }
-    }
-
-    /// <summary>删除备份（<c>.bak</c> + sidecar）；失败直接显示服务返回的 Message。</summary>
-    public async Task DeleteBackupAsync(SaveBackupRowViewModel row, CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(row);
-
-        if (Game is not { } game || IsBusy || row.IsBusy)
-        {
-            return;
-        }
-
-        var generation = _requests.Current;
-        BeginAction();
-        row.SetBusy(true);
-        try
-        {
-            var result = await _backups
-                .DeleteBackupAsync(row.Entry, cancellationToken)
-                .ConfigureAwait(true);
-
-            if (result.IsSuccess)
-            {
-                if (!TryCommitAction(
-                        generation,
-                        game,
-                        () =>
-                        {
-                            Backups.Remove(row);
-                            NotifyBackupStateChanged();
-                            SetNotice(T(Keys.SavesNoticeDeletedBackup, row.FileName), isError: false);
-                        }))
-                {
-                    return;
-                }
-
-                await LoadBackupsAsync(game, cancellationToken).ConfigureAwait(true);
-                return;
-            }
-
-            if (!TryCommitAction(
-                    generation,
-                    game,
-                    () => SetNotice(MapDeleteFailure(result), isError: true)))
-            {
-                return;
-            }
-
-            if (result.Status == SaveDeleteStatus.NotFound)
-            {
-                await LoadBackupsAsync(game, cancellationToken).ConfigureAwait(true);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            TryCommitAction(
-                generation,
-                game,
-                () =>
-                {
-                    _logger.Warn("删除备份失败：" + row.FilePath + "：" + ex.Message);
-                    SetNotice(ex.Message, isError: true);
-                });
-        }
-        finally
-        {
-            row.SetBusy(false);
-            EndAction();
-        }
-    }
-
-    /// <summary>
-    /// 清理旧备份：保留最新 <see cref="PruneKeepNewest"/> 份，其余（含孤儿备份）交给服务删除。
-    /// 这是页面唯一的批量删除入口；破坏性二次确认在页面上，默认焦点在「取消」。
-    /// 成功与部分失败都会重新读一遍备份段，让用户看到真实剩余条目与用量。
-    /// </summary>
-    public async Task PruneAsync(CancellationToken cancellationToken)
-    {
-        if (Game is not { } game || IsBusy)
-        {
-            return;
-        }
-
-        var generation = _requests.Current;
-        BeginAction();
-        try
-        {
-            var result = await _backups
-                .PruneAsync(game.GameId, PruneKeepNewest, cancellationToken)
-                .ConfigureAwait(true);
-
-            if (result.IsSuccess)
-            {
-                if (!TryCommitAction(
-                        generation,
-                        game,
-                        () => SetNotice(T(Keys.SavesNoticePruned, result.DeletedEntries), isError: false)))
-                {
-                    return;
-                }
-            }
-            else if (!TryCommitAction(
-                         generation,
-                         game,
-                         () => SetNotice(result.Message, isError: true)))
-            {
-                return;
-            }
-
-            // 部分删除失败时磁盘上已经少了一些条目，必须以服务返回的列表为准刷新。
-            await LoadBackupsAsync(game, cancellationToken).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            TryCommitAction(
-                generation,
-                game,
-                () =>
-                {
-                    _logger.Warn("清理旧备份失败 (" + game.GameId + ")：" + ex.Message);
-                    SetNotice(ex.Message, isError: true);
-                });
-        }
-        finally
-        {
             EndAction();
         }
     }
@@ -823,21 +617,18 @@ public sealed class SavesViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasBackups));
         OnPropertyChanged(nameof(ShowBackupEmptyState));
         OnPropertyChanged(nameof(BackupUsageText));
-        OnPropertyChanged(nameof(IsQuotaFull));
-        OnPropertyChanged(nameof(CanPrune));
 
-        // 配额状态变化决定「备份」按钮；页面忙碌状态同时决定删除/恢复按钮。
+        // 备份按钮只受忙碌态约束；配额由服务按策略自动清理。
         ApplyRowAvailability();
     }
 
-    /// <summary>把全局忙碌态与配额状态下发给所有行；行自身的 IsBusy 仍由各自操作维护。</summary>
+    /// <summary>把全局忙碌态下发给所有行；行自身的 IsBusy 仍由各自操作维护。</summary>
     private void ApplyRowAvailability()
     {
         var actionAllowed = !IsBusy;
-        var backupAllowed = actionAllowed && !IsQuotaFull;
         foreach (var row in Saves)
         {
-            row.SetBackupAllowed(backupAllowed);
+            row.SetBackupAllowed(actionAllowed);
             row.SetActionAllowed(actionAllowed);
         }
 
@@ -1049,10 +840,8 @@ public sealed class SavesViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasBackups));
         OnPropertyChanged(nameof(ShowBackupEmptyState));
         OnPropertyChanged(nameof(BackupUsageText));
-        OnPropertyChanged(nameof(IsQuotaFull));
-        OnPropertyChanged(nameof(CanPrune));
 
-        // 扫描/写操作期间整页忙碌：备份、删除、恢复按钮都随之下发禁用。
+        // 扫描/写操作期间整页忙碌：备份、删除按钮都随之下发禁用。
         ApplyRowAvailability();
     }
 
