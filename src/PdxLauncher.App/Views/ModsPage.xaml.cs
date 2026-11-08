@@ -354,6 +354,140 @@ public sealed partial class ModsPage : Page
         }
     }
 
+    // ------------------------------------------------------------ 导入 / 导出（官方分享格式）
+
+    /// <summary>
+    /// 「导入播放集」：选官方分享 .json → 本地已有同名播放集时询问合并还是新建副本 →
+    /// 导入 → 结果框（缺失的 Steam 模组可一键订阅）。
+    /// </summary>
+    private async void OnImportPlaySetClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var path = await FilePickers.PickOpenJsonAsync();
+            if (path is null)
+            {
+                return;
+            }
+
+            var peek = await _viewModel.PeekImportAsync(path, _lifetime.Token).ConfigureAwait(true);
+            if (!peek.IsSuccess)
+            {
+                await ShowMessageAsync(
+                    Localizer.Instance.ModsImportErrorTitle,
+                    PlaySetShareText.DescribeError(Localizer.Instance, peek.ErrorMessage)).ConfigureAwait(true);
+                return;
+            }
+
+            if (peek.Value is not { } peeked)
+            {
+                return;
+            }
+
+            Guid? mergeInto = null;
+            if (peeked.ExistingPlaySetId is { } existingId)
+            {
+                var merge = await ConfirmOverlay.ConfirmAsync(
+                    Localizer.Instance.ModsImportSameNameTitle,
+                    Localizer.Instance.T(
+                        Keys.ModsImportSameNameContent,
+                        peeked.ExistingPlaySetName ?? peeked.Name),
+                    Localizer.Instance.ModsImportMergeConfirm,
+                    Localizer.Instance.ModsImportMergeNewCopy).ConfigureAwait(true);
+                if (merge)
+                {
+                    mergeInto = existingId;
+                }
+            }
+
+            var imported = await _viewModel
+                .ImportPlaySetAsync(path, mergeInto, _lifetime.Token)
+                .ConfigureAwait(true);
+            if (!imported.IsSuccess)
+            {
+                await ShowMessageAsync(
+                    Localizer.Instance.ModsImportErrorTitle,
+                    PlaySetShareText.DescribeError(Localizer.Instance, imported.ErrorMessage)).ConfigureAwait(true);
+                return;
+            }
+
+            if (imported.Value is not { } importedValue)
+            {
+                return;
+            }
+
+            var canSubscribe = AppServices.Settings.SteamWorkshopSubscribeEnabled
+                && SteamWorkshopBackends.CreateForSubscribe(_viewModel.Game) is { IsAvailable: true };
+            var subscribe = await PlaySetImportDialog
+                .ShowAsync(XamlRoot, importedValue, canSubscribe)
+                .ConfigureAwait(true);
+            if (subscribe)
+            {
+                await _viewModel
+                    .SubscribeMissingSteamModsAsync(importedValue.Missing, _lifetime.Token)
+                    .ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 导入播放集失败", ex);
+            await ShowMessageAsync(Localizer.Instance.ModsImportErrorTitle, ex.Message).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>「导出播放集」：先落盘自动保存，再按官方分享格式写 .json；有排除项时弹说明框。</summary>
+    private async void OnExportPlaySetClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var playSet = _viewModel.SelectedPlaySet;
+            if (playSet is null)
+            {
+                return;
+            }
+
+            var path = await FilePickers.PickSaveJsonAsync(playSet.Name);
+            if (path is null)
+            {
+                return;
+            }
+
+            var exported = await _viewModel
+                .ExportSelectedAsync(path, _lifetime.Token)
+                .ConfigureAwait(true);
+            if (!exported.IsSuccess)
+            {
+                await ShowMessageAsync(
+                    Localizer.Instance.ModsExportErrorTitle,
+                    PlaySetShareText.DescribeError(Localizer.Instance, exported.ErrorMessage)).ConfigureAwait(true);
+                return;
+            }
+
+            if (exported.Value is not { } exportedValue)
+            {
+                return;
+            }
+
+            if (exportedValue.LocalExcluded > 0 || exportedValue.UnsupportedNames.Count > 0)
+            {
+                await PlaySetExportNoticeDialog.ShowAsync(XamlRoot, exportedValue).ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 导出播放集失败", ex);
+            await ShowMessageAsync(Localizer.Instance.ModsExportErrorTitle, ex.Message).ConfigureAwait(true);
+        }
+    }
+
     // ------------------------------------------------------------ mod 操作
 
     /// <summary>「添加模组」：打开子页，从 mod 库候选里多选，加入当前播放集（自动保存）。</summary>

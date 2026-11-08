@@ -9,6 +9,7 @@ using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Online.Translation.Local;
 using PdxLauncher.Core.Patch;
+using PdxLauncher.Core.Playsets.Share;
 using PdxLauncher.Core.Saves;
 using PdxLauncher.Core.Storage;
 using PdxLauncher.Core.Steam;
@@ -33,6 +34,12 @@ public static class AppServices
     public static IThemeResolver ThemeResolver { get; private set; } = null!;
 
     public static IPlaySetRepository PlaySets { get; private set; } = null!;
+
+    /// <summary>
+    /// 播放集分享（官方「分享 / 导入」JSON）。播放集页与导入结果对话框共用同一个实例。
+    /// 在 <see cref="Initialize"/> 里由 <see cref="PlaySets"/> + 文件系统装配，不单独加入参数列表。
+    /// </summary>
+    public static PlaySetShareService PlaySetShare { get; private set; } = null!;
 
     public static IModCatalog Mods { get; private set; } = null!;
 
@@ -298,6 +305,7 @@ public static class AppServices
         GameCatalog = gameCatalog;
         ThemeResolver = themeResolver;
         PlaySets = playSets;
+        PlaySetShare = new PlaySetShareService(playSets, fileSystem, logger);
         Mods = mods;
         Dlcs = dlcs;
         LoadFiles = loadFiles;

@@ -154,7 +154,8 @@ public sealed class PlaysetConfigRepository : IPlaySetRepository
                     RequiredVersion: string.Empty,
                     Status: "missing",
                     Enabled: PlaysetConfigDocument.GetModEnabled(mod),
-                    Position: position++));
+                    Position: position++,
+                    PdxId: PdxModIds.FromRegistryId(source + ":" + sourceId)));
                 continue;
             }
 
@@ -240,7 +241,8 @@ public sealed class PlaysetConfigRepository : IPlaySetRepository
                 references.TryGetValue(sourceId, out var list) ? list : [],
                 IsUnregistered: false,
                 SteamId: null,
-                ThumbnailUrl: mod.ThumbnailPath));
+                ThumbnailUrl: mod.ThumbnailPath,
+                PdxId: mod.PdxId));
         }
 
         return Task.FromResult<IReadOnlyList<ModLibraryEntry>>(result);

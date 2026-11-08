@@ -166,7 +166,9 @@ public sealed class PdxModsDirectory
             Status: version is null ? "missing" : item?.State ?? "ready_to_play",
             Enabled: enabled,
             Position: position,
-            SteamId: null);
+            SteamId: null,
+            // CS2 播放集条目里的 sourceId 就是 PDX Mods 的平台 id，分享 JSON 要用它。
+            PdxId: sourceId);
     }
 
     /// <summary>

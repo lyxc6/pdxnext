@@ -36,6 +36,10 @@ namespace PdxLauncher.Core.Contracts;
 /// 官方库的 <c>metadataVersion</c>），与 <paramref name="RequiredVersion"/>（支持的游戏版本）不是一回事；
 /// 作者没写时为空串。
 /// </param>
+/// <param name="PdxId">
+/// PDX Mods 平台的数字 id（官方库 <c>mods.pdxId</c>、CS2 的 <c>sourceId</c>）。
+/// 导入官方分享播放集时用它与 JSON 里的 <c>pdxId</c> 对齐；Steam 系 mod 为 null。
+/// </param>
 public sealed record ModLibraryEntry(
     Guid ModId,
     string Name,
@@ -53,7 +57,8 @@ public sealed record ModLibraryEntry(
     string? SteamId = null,
     string? ThumbnailUrl = null,
     PdxLauncher.Core.Steam.WorkshopInstallState? SteamState = null,
-    string? ModVersion = null)
+    string? ModVersion = null,
+    string? PdxId = null)
 {
     /// <summary>该 mod 是否已经被至少一个播放集引用（对应官方启动器的「在 N 个播放集中」）。</summary>
     public bool IsInPlaySet => PlaySetIds.Count > 0;
