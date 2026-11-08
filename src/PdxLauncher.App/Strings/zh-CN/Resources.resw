@@ -1660,6 +1660,9 @@
   <data name="ModlibSteamStateDownloadingNoPercent" xml:space="preserve">
     <value>Steam 下载中</value>
   </data>
+  <data name="ModlibSteamStateDownloadingWithBytes" xml:space="preserve">
+    <value>Steam 下载中 {0}% · {1}/{2}</value>
+  </data>
   <data name="ModlibSteamStateInstalled" xml:space="preserve">
     <value>已在 Steam 安装</value>
   </data>
@@ -4708,6 +4711,9 @@
   </data>
   <data name="WorkshopDetailSteamDownloadProgress" xml:space="preserve">
     <value>下载中 {0}%</value>
+  </data>
+  <data name="WorkshopDetailSteamDownloadProgressBytes" xml:space="preserve">
+    <value>下载中 {0}% · 已下载 {1} / {2}</value>
   </data>
   <data name="WorkshopDetailSteamNeedsUpdate" xml:space="preserve">
     <value>Steam 上有新版本，可在 Steam 客户端或库里更新。</value>

@@ -759,9 +759,11 @@ PdxLauncher.App.exe --steam-host workshop-state --api <dll> --appid <appId> --fi
 
 **`GetItemState` 返回 0 不能当成「确定没订阅」**：子进程刚 Init、Steam 还没把订阅集合同步过来时也会是 0。所以 `ReadStateDetail` 在 `raw == 0` 时返回 `WorkshopInstallState.Unknown`（null ≠ false），只有订阅动作确认（`ReadStateForConfirm`）才把 0 当「确实没订阅」。前端的未知态由 `WorkshopStateText.Resolve` 映射成不显示徽标。
 
-**缓存**：`src/PdxLauncher.Core/Online/WorkshopStateCache.cs`，内存、TTL 60 秒、按 appId 分桶，不落盘（状态变化太快，落盘没意义且要处理失效）。Mod 库页只在缓存过期时才起一次子进程，行内「下载 / 本地禁用」成功后立刻 `Invalidate` 重载。
+**缓存**：`src/PdxLauncher.Core/Online/WorkshopStateCache.cs`，内存、TTL 60 秒、按 appId 分桶，不落盘（状态变化太快，落盘没意义且要处理失效）。Mod 库页与创意工坊列表页共用 `src/PdxLauncher.App/Services/WorkshopStateReader.cs` 的「缓存 → 子进程 → 失败退旧快照」三段逻辑；列表页把状态填入 `WorkshopRowViewModel.SteamState`，界面只在缓存过期时才起一次子进程。行内「下载 / 本地禁用」成功、以及详情页改订阅后都会立刻 `Invalidate` 再重载，避免返回列表时看到最长 60 秒的旧徽标。
 
-**降级**：宿主不可用（没有 `steam_api64.dll`、Steam 没运行、设置里关掉了）时，详情页仍回退 `WorkshopSubscriptionReader` 读 `steamapps/workshop/appworkshop_<appid>.acf`（只有 subscribed / installed 两个布尔），Mod 库页则整列不显示 Steam 状态。
+**字节数怎么展示**：`GetItemDownloadInfo` 的 `BytesDownloaded` / `BytesTotal` 经 `WorkshopStateText.Resolve` 一并带回（`WorkshopStateBadgeInfo`），文案由 App 侧 `SteamStateBadgeFormatter` 用 `ModSizeText` 格式化——徽标显示「Steam 下载中 42% · 1.2GB/4.5GB」，详情页显示「下载中 42% · 已下载 1.2GB / 4.5GB」。总量为 0（Steam 还没给出）时退回只有百分比的短文案，排队中（`DownloadPending`）本身没有字节数，只显示「排队中」。
+
+**降级**：宿主不可用（没有 `steam_api64.dll`、Steam 没运行、设置里关掉了）时，详情页仍回退 `WorkshopSubscriptionReader` 读 `steamapps/workshop/appworkshop_<appid>.acf`（只有 subscribed / installed 两个布尔），Mod 库页与创意工坊列表页则整列不显示 Steam 状态。
 
 ### 18.6 发布请求的扩展字段（`workshop-publish`）
 
