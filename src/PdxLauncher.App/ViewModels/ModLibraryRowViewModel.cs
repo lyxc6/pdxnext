@@ -165,23 +165,10 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
     public WorkshopInstallState? SteamState => Entry.SteamState;
 
     /// <summary>是否要显示 Steam 状态徽标。</summary>
-    public bool ShowSteamStateBadge => SteamState is not null && WorkshopStateText.Resolve(SteamState).IsVisible;
+    public bool ShowSteamStateBadge => SteamStateBadgeFormatter.IsVisible(SteamState);
 
-    /// <summary>Steam 状态徽标文案（下载中会带上百分比）。没有可显示的状态时为空串。</summary>
-    public string SteamStateBadgeText
-    {
-        get
-        {
-            var info = WorkshopStateText.Resolve(SteamState);
-            return info.Badge switch
-            {
-                WorkshopStateBadge.None => string.Empty,
-                WorkshopStateBadge.Downloading when info.Percent is { } percent => T(info.Key, percent),
-                WorkshopStateBadge.Downloading => T(WorkshopStateText.KeyDownloadingNoPercent),
-                _ => T(info.Key),
-            };
-        }
-    }
+    /// <summary>Steam 状态徽标文案（下载中会带上百分比与字节数）。没有可显示的状态时为空串。</summary>
+    public string SteamStateBadgeText => SteamStateBadgeFormatter.Build(SteamState);
 
     /// <summary>是否可以在 Steam 里触发这条的下载（工坊 mod + 没在下载 + 已经订阅）。</summary>
     public bool CanTriggerSteamDownload =>

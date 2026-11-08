@@ -1666,6 +1666,9 @@
   <data name="ModlibSteamStateDownloadingNoPercent" xml:space="preserve">
     <value>Downloading</value>
   </data>
+  <data name="ModlibSteamStateDownloadingWithBytes" xml:space="preserve">
+    <value>Downloading {0}% · {1}/{2}</value>
+  </data>
   <data name="ModlibSteamStateInstalled" xml:space="preserve">
     <value>Installed via Steam</value>
   </data>
@@ -4723,6 +4726,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="WorkshopDetailSteamDownloadProgress" xml:space="preserve">
     <value>Downloading {0}%</value>
+  </data>
+  <data name="WorkshopDetailSteamDownloadProgressBytes" xml:space="preserve">
+    <value>Downloading {0}% · {1} / {2} downloaded</value>
   </data>
   <data name="WorkshopDetailSteamNeedsUpdate" xml:space="preserve">
     <value>A newer version is on Steam; update it in the Steam client or the mod library.</value>

@@ -42,7 +42,11 @@ public sealed partial class WorkshopPage : Page
             AppServices.WorkshopInfo,
             AppServices.WorkshopPages,
             new WorkshopFilterCatalogCache(AppServices.FileSystem, AppServices.WorkshopFilterRoot),
-            AppServices.Logger);
+            AppServices.Logger,
+            new WorkshopStateReader(
+                SteamWorkshopBackends.CreateForState,
+                AppServices.WorkshopStates,
+                AppServices.Logger));
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -111,6 +115,10 @@ public sealed partial class WorkshopPage : Page
             {
                 // 列表不重查，但筛选目录有 24h TTL / 本地版本判断；过期时后台补一次。
                 _ = _viewModel.RefreshCatalogIfStaleAsync(_lifetime.Token);
+
+                // 详情子页里可能改过订阅 / 触发过下载，那边已经失效了状态缓存；
+                // 这里补一次，回来就能看到新的徽标（命中缓存时不新起子进程）。
+                _viewModel.RefreshSteamStates();
                 return;
             }
 

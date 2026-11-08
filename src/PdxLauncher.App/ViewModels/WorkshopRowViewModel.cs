@@ -8,6 +8,7 @@ using PdxLauncher.App.Localization;
 using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Playsets;
+using PdxLauncher.Core.Steam;
 
 /// <summary>
 /// 创意工坊列表里的一行。两个平台共用同一套界面，
@@ -119,6 +120,22 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
 
     /// <summary>用于封面缓存的文件名（含来源前缀，两套 id 空间不会撞）。</summary>
     public string CoverCacheKey => (Source == WorkshopSource.Steam ? "steam/" : "pdx/") + Id;
+
+    /// <summary>
+    /// 这一条在本机的 Steam 状态（订阅 / 已安装 / 下载中 / 需要更新 / 本地禁用）。
+    /// 列表铺好后才由 <see cref="WorkshopViewModel"/> 用整库缓存补进来；PDX 行与读不到时保持 null。
+    /// </summary>
+    [ObservableProperty]
+    private WorkshopInstallState? _steamState;
+
+    /// <summary>是否要显示 Steam 状态徽标（与 Mod 库行同一套判定）。</summary>
+    public bool ShowSteamStateBadge => SteamStateBadgeFormatter.IsVisible(SteamState);
+
+    /// <summary>Steam 状态徽标文案；下载中带上百分比与字节数。</summary>
+    public string SteamStateBadgeText => SteamStateBadgeFormatter.Build(SteamState);
+
+    /// <summary>Steam 状态徽标的自动化 Id。</summary>
+    public string SteamStateAutomationId => "workshopRowSteamState_" + Id;
 
     /// <summary>行的自动化 Id（每行唯一，供 UI 测试定位）。</summary>
     public string RowAutomationId => "workshopRow_" + (Source == WorkshopSource.Steam ? "steam_" : "pdx_") + Id;
@@ -346,4 +363,10 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
     partial void OnCoverPathChanged(string? value) => OnPropertyChanged(nameof(HasCover));
 
     partial void OnTranslatedNameChanged(string? value) => OnPropertyChanged(nameof(HasTranslatedName));
+
+    partial void OnSteamStateChanged(WorkshopInstallState? value)
+    {
+        OnPropertyChanged(nameof(ShowSteamStateBadge));
+        OnPropertyChanged(nameof(SteamStateBadgeText));
+    }
 }

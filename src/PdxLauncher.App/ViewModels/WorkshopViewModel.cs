@@ -185,6 +185,12 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>最近一次后台查询（主查询或静默刷新）；内部已收口异常，这里只为卸载判断与诊断。</summary>
     private Task? _queryTask;
 
+    /// <summary>Steam 侧状态的整库读取（60 秒缓存 → 子进程 → 失败退旧值）。</summary>
+    private readonly WorkshopStateReader _steamStates;
+
+    /// <summary>状态填充代号：切页 / 换游戏后旧结果不许回写。</summary>
+    private int _steamStateFillVersion;
+
     /// <summary>当前游戏；null 表示还没在游戏库里选游戏。</summary>
     [ObservableProperty]
     private GameInstallation? _game;
@@ -248,7 +254,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         WorkshopInfoCache info,
         WorkshopPageCache pages,
         WorkshopFilterCatalogCache catalogCache,
-        IAppLogger logger)
+        IAppLogger logger,
+        WorkshopStateReader steamStates)
     {
         ArgumentNullException.ThrowIfNull(steam);
         ArgumentNullException.ThrowIfNull(pdx);
@@ -258,6 +265,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         ArgumentNullException.ThrowIfNull(pages);
         ArgumentNullException.ThrowIfNull(catalogCache);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(steamStates);
 
         _steam = steam;
         _pdx = pdx;
@@ -267,6 +275,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _pages = pages;
         _catalogCache = catalogCache;
         _logger = logger;
+        _steamStates = steamStates;
 
         SortModes = BuildSortModes(WorkshopSource.None);
         _selectedSortMode = SortModes[0];
@@ -1258,6 +1267,74 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         foreach (var row in rows)
         {
             Rows.Add(row);
+        }
+
+        // 列表先铺出来再补状态：整库状态可能要起一次子进程（约 1 秒），不能挡着这一屏。
+        StartSteamStateFill();
+    }
+
+    /// <summary>
+    /// 后台给当前这一页的 Steam 行补上安装 / 下载状态（走 60 秒缓存，通常不新起子进程）。
+    /// 从详情页返回时也用它：那边改完订阅会失效缓存，这里就能读到新值。
+    /// </summary>
+    public void RefreshSteamStates() => StartSteamStateFill();
+
+    /// <summary>起一轮状态填充；后起的覆盖先起的，切页 / 换游戏后的旧结果不回写。</summary>
+    private void StartSteamStateFill()
+    {
+        if (Source != WorkshopSource.Steam || Game is null || Rows.Count == 0)
+        {
+            return;
+        }
+
+        var version = ++_steamStateFillVersion;
+        _ = FillSteamStatesAsync(version, _pageToken);
+    }
+
+    /// <summary>读整库状态并写到各行；没有状态的行走「不显示徽标」。</summary>
+    /// <param name="version">发起时的填充代号。</param>
+    /// <param name="cancellationToken">页面生命周期令牌。</param>
+    private async Task FillSteamStatesAsync(int version, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var states = await _steamStates.ReadAllAsync(Game, cancellationToken).ConfigureAwait(true);
+            if (cancellationToken.IsCancellationRequested || version != _steamStateFillVersion)
+            {
+                return;
+            }
+
+            var applied = 0;
+            foreach (var row in Rows)
+            {
+                if (row.Source != WorkshopSource.Steam)
+                {
+                    continue;
+                }
+
+                if (ulong.TryParse(row.Id, out var fileId) && states.TryGetValue(fileId, out var state))
+                {
+                    row.SteamState = state;
+                    applied++;
+                }
+                else
+                {
+                    row.SteamState = null;
+                }
+            }
+
+            if (applied > 0)
+            {
+                _logger.Info("创意工坊：已补 " + applied + " 条 Steam 状态（本页 " + Rows.Count + " 行）");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面卸载 / 又翻了一页：放弃这一批。
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _logger.Warn("创意工坊：读取 Steam 状态失败：" + ex.Message);
         }
     }
 
