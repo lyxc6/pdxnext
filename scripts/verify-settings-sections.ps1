@@ -62,12 +62,12 @@ Start-Sleep -Seconds 3
 if ($p.HasExited) { "CRASHED code=$($p.ExitCode)"; exit 1 }
 
 # 每节应有的 AutomationId。
-# 说明：DLC 简介、公告、Mod 缩略图这几块已从「联网」迁到「缓存」，联网只剩代理三卡。
+# 说明：DLC 简介、公告、Mod 缩略图这几块已从「联网」迁到「缓存」，联网 = 代理三卡 + 连通性自检。
 $sections = @(
   @{ id='navSettingsAppearance'; name='appearance'; want='txtThemeSource,txtThemeLastCheck,txtThemeNextCheck,tglOnlineThemeRefresh,btnCheckThemeNow,cmbUiLanguage,cmbPlaySetPageDisplayMode,cmbBackgroundDisplayMode,cmbModThumbnailSize,tglAlwaysOnTop' },
   @{ id='navSettingsLaunch';     name='launch';     want='txtExePath,txtExeArgs,cmbAlternativeExecutable' },
   @{ id='navSettingsPaths';      name='paths';      want='txtGameDataPath,btnOpenDataDirectory,txtDlcPath,txtModDir,txtFormatVersion,txtLoadFilePath,txtAppDataDirectory,btnOpenAppDataDirectory,txtLegacyDataDirectory,btnClearLegacyData' },
-  @{ id='navSettingsOnline';     name='online';     want='cmbProxyMode,txtProxyUrl,txtProxyStatus' },
+  @{ id='navSettingsOnline';     name='online';     want='cmbProxyMode,txtProxyUrl,txtProxyStatus,btnNetworkProbe,txtProbeSummary' },
   @{ id='navSettingsCache';      name='cache';      want='btnRefreshCache,btnClearAllCaches,tglOnlineDlcDescription,cmbDlcDescriptionRetention,tglOnlineNewsFeed,tglOnlineModThumbnail,cmbModThumbnailRetention,txtModThumbnailCachePath' },
   @{ id='navSettingsAdvanced';   name='advanced';   want='tglWriteDlcSignature,btnRegenerateDlcSignature' },
   @{ id='navSettingsTranslation'; name='translation'; want='tglTranslateEnabled,cmbTranslateEngineMode,txtTranslateBaseUrl,pwdTranslateApiKey,txtTranslateModel,cmbTranslateTargetLanguage,tglTranslateNames,tglTranslateDescription,tglTranslateChangelog,tglTranslateComments,txtTranslateCacheDays,pwdTranslateMicrosoftKey,txtTranslateMicrosoftRegion,pwdTranslateGoogleKey,btnTranslateTest,txtTranslateTestResult' },

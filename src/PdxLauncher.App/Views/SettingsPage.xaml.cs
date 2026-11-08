@@ -430,6 +430,10 @@ public sealed partial class SettingsPage : Page
         }
     }
 
+    /// <summary>跑一次连通性自检：三台 Steam 主机，当前模式与直连各测一遍。</summary>
+    private async void OnNetworkProbeClick(object sender, RoutedEventArgs e) =>
+        await RunGuardedAsync("SettingsPage 连通性自检失败", _viewModel.RunNetworkProbeAsync);
+
     // ------------------------------------------------------------ 数据区
 
     private void OnOpenDataDirectoryClick(object sender, RoutedEventArgs e)

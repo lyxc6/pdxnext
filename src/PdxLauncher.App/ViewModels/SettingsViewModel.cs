@@ -51,6 +51,12 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     /// <summary>检测到的代理地址（null = 没检测到）。</summary>
     private string? _detectedProxyUrl;
+    private readonly ObservableCollection<NetworkProbeRowViewModel> _probeRows = new();
+
+    /// <summary>最近一次连通性自检的原始结果；null = 还没测过。切语言后按它重建行文案。</summary>
+    private NetworkProbeReport? _probeReport;
+    private bool _isProbeRunning;
+    private string _probeSummaryText = string.Empty;
     private string _steamApiStatusText = string.Empty;
     private long _cacheTotalBytes;
     private ProxyModeOption _selectedProxyMode =
@@ -474,6 +480,82 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(IsManualProxy));
 
         return ApplyProxySettings();
+    }
+
+    /// <summary>
+    /// 连通性自检的结果行（一台主机一行）。
+    /// <para>
+    /// 创意工坊的列表/详情是启动器自己发的 HTTP，不走 Steam 客户端；加速器默认只接管 Steam 进程。
+    /// 这张表让用户直接看到「本程序能不能连上」，而不是猜。
+    /// </para>
+    /// </summary>
+    public ObservableCollection<NetworkProbeRowViewModel> ProbeRows => _probeRows;
+
+    /// <summary>自检是否在跑（按钮禁用 + 转圈）。</summary>
+    public bool IsProbeRunning
+    {
+        get => _isProbeRunning;
+        private set
+        {
+            if (SetProperty(ref _isProbeRunning, value))
+            {
+                OnPropertyChanged(nameof(CanRunNetworkProbe));
+                OnPropertyChanged(nameof(ProbeRunText));
+            }
+        }
+    }
+
+    /// <summary>没在跑时才能再点。</summary>
+    public bool CanRunNetworkProbe => !_isProbeRunning;
+
+    /// <summary>按钮文案：测试 / 测试中…</summary>
+    public string ProbeRunText =>
+        T(_isProbeRunning ? Keys.SettingsProxyProbeRunning : Keys.SettingsProxyProbeRun);
+
+    /// <summary>测过至少一次才显示结果表。</summary>
+    public bool HasProbeRows => _probeRows.Count > 0;
+
+    /// <summary>当前不直连时才有「直连」对比列。</summary>
+    public bool HasDirectProbeColumn => _probeReport?.Direct is not null;
+
+    /// <summary>结果摘要：全通或几项失败。</summary>
+    public string ProbeSummaryText
+    {
+        get => _probeSummaryText;
+        private set => SetProperty(ref _probeSummaryText, value);
+    }
+
+    /// <summary>
+    /// 跑一次连通性自检：按当前代理模式测三台 Steam 主机，非直连时再直连测一遍做对比。
+    /// 失败只记日志并把摘要写成「失败」，不抛异常（按钮点击不该崩页面）。
+    /// </summary>
+    public async Task RunNetworkProbeAsync()
+    {
+        if (_isProbeRunning)
+        {
+            return;
+        }
+
+        IsProbeRunning = true;
+        try
+        {
+            var proxy = ProxyResolver.Resolve(AppServices.Settings, AppServices.Logger);
+            _probeReport = await NetworkProbe.RunAsync(AppServices.Logger, proxy).ConfigureAwait(true);
+            RebuildProbeRows();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppServices.Logger.Error("设置页连通性自检失败", ex);
+            _probeReport = null;
+            _probeRows.Clear();
+            ProbeSummaryText = T(Keys.SettingsProxyProbeError);
+            OnPropertyChanged(nameof(HasProbeRows));
+            OnPropertyChanged(nameof(HasDirectProbeColumn));
+        }
+        finally
+        {
+            IsProbeRunning = false;
+        }
     }
 
     /// <summary>把内存中的 AppSettings 落盘（页面失焦 / 卸载时调用）。</summary>
@@ -2609,6 +2691,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     protected override void Relocalize()
     {
         RefreshProxyStatus();
+
+        // 自检结果是拼好的句子，切语言后按新语言重建（原始结果留着，不重测）。
+        RebuildProbeRows();
         OnPropertyChanged(nameof(CacheTotalText));
         RefreshAlternativeLabels();
         RefreshPatchState();
@@ -2782,6 +2867,58 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         DetectedProxyText = detected ?? string.Empty;
         OnPropertyChanged(nameof(HasDetectedProxy));
     }
+
+    /// <summary>按 <see cref="_probeReport"/> 重建结果行与摘要；没测过就清空。</summary>
+    private void RebuildProbeRows()
+    {
+        _probeRows.Clear();
+
+        var report = _probeReport;
+        if (report is null)
+        {
+            ProbeSummaryText = string.Empty;
+            OnPropertyChanged(nameof(HasProbeRows));
+            OnPropertyChanged(nameof(HasDirectProbeColumn));
+            return;
+        }
+
+        for (var index = 0; index < report.Current.Count; index++)
+        {
+            var current = report.Current[index];
+            var target = NetworkProbe.SteamTargets.FirstOrDefault(
+                item => string.Equals(item.Key, current.Key, StringComparison.Ordinal));
+            var directText = report.Direct is { } direct && index < direct.Count
+                ? FormatProbeResult(direct[index])
+                : string.Empty;
+            _probeRows.Add(new NetworkProbeRowViewModel(
+                current.Key,
+                target?.Uri.Host ?? current.Key,
+                FormatProbeResult(current),
+                directText,
+                "probeRow" + current.Key));
+        }
+
+        // 摘要只看「当前模式」：直连失败但代理通是正常状态，不该被算成问题。
+        var failed = report.Current.Count(item => !item.IsOk);
+        ProbeSummaryText = failed == 0
+            ? T(Keys.SettingsProxyProbeAllOk, report.Current.Count)
+            : T(Keys.SettingsProxyProbeSomeFailed, failed);
+
+        OnPropertyChanged(nameof(HasProbeRows));
+        OnPropertyChanged(nameof(HasDirectProbeColumn));
+    }
+
+    /// <summary>把一次探测结果翻成一行文案（毫秒数取整，超时/状态码/拦截分别有专句）。</summary>
+    private string FormatProbeResult(NetworkProbeResult result) => result.Status switch
+    {
+        NetworkProbeStatus.Ok => T(
+            Keys.SettingsProxyProbeOk,
+            (int)Math.Round(result.Elapsed.TotalMilliseconds, MidpointRounding.AwayFromZero)),
+        NetworkProbeStatus.Timeout => T(Keys.SettingsProxyProbeTimeout),
+        NetworkProbeStatus.HttpStatus => T(Keys.SettingsProxyProbeHttp, result.HttpStatus ?? 0),
+        NetworkProbeStatus.HostNotAllowed => T(Keys.SettingsProxyProbeBlocked),
+        _ => T(Keys.SettingsProxyProbeFailed),
+    };
 
     /// <summary>重建「标准可执行文件（默认）」这一项，让它的文案跟上当前语言；选中项按路径复位。</summary>
     private void RefreshAlternativeLabels()

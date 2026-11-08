@@ -3833,6 +3833,54 @@
   <data name="SettingsProxyNoProxy" xml:space="preserve">
     <value>不使用代理</value>
   </data>
+  <data name="SettingsProxyProbeAcceleratorHint" xml:space="preserve">
+    <value>加速器的「进程 / 游戏加速」只接管 Steam 客户端本身；这里三台主机是启动器自己发的请求。若全部超时、但 Steam 客户端能打开工坊，请在加速器里改开全局 / 路由模式。</value>
+  </data>
+  <data name="SettingsProxyProbeAllOk" xml:space="preserve">
+    <value>{0} 项全部通过</value>
+  </data>
+  <data name="SettingsProxyProbeBlocked" xml:space="preserve">
+    <value>被白名单拦截</value>
+  </data>
+  <data name="SettingsProxyProbeColumnCurrent" xml:space="preserve">
+    <value>当前模式</value>
+  </data>
+  <data name="SettingsProxyProbeColumnDirect" xml:space="preserve">
+    <value>直连</value>
+  </data>
+  <data name="SettingsProxyProbeError" xml:space="preserve">
+    <value>自检没有完成，详见日志</value>
+  </data>
+  <data name="SettingsProxyProbeFailed" xml:space="preserve">
+    <value>失败</value>
+  </data>
+  <data name="SettingsProxyProbeHint" xml:space="preserve">
+    <value>对创意工坊依赖的三台 Steam 主机各发一次真实请求；当前不是直连时，再直连测一遍做对比。</value>
+  </data>
+  <data name="SettingsProxyProbeHttp" xml:space="preserve">
+    <value>HTTP {0}</value>
+  </data>
+  <data name="SettingsProxyProbeOk" xml:space="preserve">
+    <value>通过 {0} ms</value>
+  </data>
+  <data name="SettingsProxyProbeRun" xml:space="preserve">
+    <value>测试</value>
+  </data>
+  <data name="SettingsProxyProbeRunName" xml:space="preserve">
+    <value>测试 Steam 连通性</value>
+  </data>
+  <data name="SettingsProxyProbeRunning" xml:space="preserve">
+    <value>测试中…</value>
+  </data>
+  <data name="SettingsProxyProbeSomeFailed" xml:space="preserve">
+    <value>有 {0} 项失败</value>
+  </data>
+  <data name="SettingsProxyProbeTimeout" xml:space="preserve">
+    <value>超时</value>
+  </data>
+  <data name="SettingsProxyProbeTitle" xml:space="preserve">
+    <value>连通性自检</value>
+  </data>
   <data name="SettingsProxySourceDirect" xml:space="preserve">
     <value>直连</value>
   </data>

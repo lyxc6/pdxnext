@@ -3833,6 +3833,54 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="SettingsProxyNoProxy" xml:space="preserve">
     <value>No proxy</value>
   </data>
+  <data name="SettingsProxyProbeAcceleratorHint" xml:space="preserve">
+    <value>A game accelerator's process mode only reroutes the Steam client itself; these three hosts are requested by the launcher. If all of them time out while the Steam client can still open the Workshop, switch the accelerator to global / route mode.</value>
+  </data>
+  <data name="SettingsProxyProbeAllOk" xml:space="preserve">
+    <value>All {0} passed</value>
+  </data>
+  <data name="SettingsProxyProbeBlocked" xml:space="preserve">
+    <value>Blocked by host allow-list</value>
+  </data>
+  <data name="SettingsProxyProbeColumnCurrent" xml:space="preserve">
+    <value>Current mode</value>
+  </data>
+  <data name="SettingsProxyProbeColumnDirect" xml:space="preserve">
+    <value>Direct</value>
+  </data>
+  <data name="SettingsProxyProbeError" xml:space="preserve">
+    <value>The check did not finish; see the log</value>
+  </data>
+  <data name="SettingsProxyProbeFailed" xml:space="preserve">
+    <value>Failed</value>
+  </data>
+  <data name="SettingsProxyProbeHint" xml:space="preserve">
+    <value>Sends one real request to each of the three Steam hosts the Workshop depends on, then repeats the check through a direct connection when the current mode is not direct.</value>
+  </data>
+  <data name="SettingsProxyProbeHttp" xml:space="preserve">
+    <value>HTTP {0}</value>
+  </data>
+  <data name="SettingsProxyProbeOk" xml:space="preserve">
+    <value>OK {0} ms</value>
+  </data>
+  <data name="SettingsProxyProbeRun" xml:space="preserve">
+    <value>Test</value>
+  </data>
+  <data name="SettingsProxyProbeRunName" xml:space="preserve">
+    <value>Test Steam connectivity</value>
+  </data>
+  <data name="SettingsProxyProbeRunning" xml:space="preserve">
+    <value>Testing…</value>
+  </data>
+  <data name="SettingsProxyProbeSomeFailed" xml:space="preserve">
+    <value>{0} failed</value>
+  </data>
+  <data name="SettingsProxyProbeTimeout" xml:space="preserve">
+    <value>Timed out</value>
+  </data>
+  <data name="SettingsProxyProbeTitle" xml:space="preserve">
+    <value>Connectivity check</value>
+  </data>
   <data name="SettingsProxySourceDirect" xml:space="preserve">
     <value>Direct</value>
   </data>

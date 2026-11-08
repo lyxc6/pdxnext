@@ -512,6 +512,19 @@ BMP/PNG 帧策略、32px 帧的金色占比与圆角透明、8 张 PNG 的魔数
 而是在这一行和日志里说明「为什么现在直连」。地址框改完按回车或点别处即生效。
 旧配置只有 `proxyUrl` 没有 `proxyMode` 时按「手动配置」处理，行为与上一版一致。
 
+代理卡片下面还有一张「连通性自检」（`src/PdxLauncher.Core/Online/NetworkProbe.cs`）：
+点一次「测试」，对创意工坊真正依赖的三台主机各发一条真实请求 ——
+`steamcommunity.com`（列表/详情 HTML）、`api.steampowered.com`（keyless 详情接口，POST 表单）、
+`store.steampowered.com`（工坊能力探测 / DLC 简介）。当前不是直连时，会再用直连测一遍做对比列，
+所以「当前模式失败、直连通过」= 代理坏了，「两边都失败」= 本机网络或 DNS 有问题。
+
+这也能回答加速器的问题：UU / 雷神的「Steam 加速」默认是进程模式，只接管 `steam.exe`；
+本启动器是另一个进程，请求不会进隧道。所以进程模式下这张表会全超时，
+但 Steam 客户端自己仍能打开工坊。要覆盖本程序需要开加速器的全局 / 路由模式。
+
+自检**不接**共享的 `RequestThrottle`：不往限流统计里灌数据，也不会因为工坊刚被 429 冷却过就必然失败。
+单次探测整请求超时 10 秒（`NetworkProbe.DefaultTimeout`），三台并发，最慢约 10 秒出结果。
+
 设置页「联网」分类只剩代理本身；DLC 简介、官方公告、Mod 缩略图这几类联网缓存的
 「开关 / 保留天数 / 目录 / 占用 / 清除」统一收在「缓存」分类里，改哪类缓存都不必跳回联网页。
 
@@ -689,6 +702,8 @@ DLC 简介的 TTL / 负缓存 / 失败退避、官方公告的 JSON 解析（时
 以及网络代理：三模式归一化与旧配置迁移、手动地址补 scheme / 去引号 / 拒绝 SOCKS 与非 http、
 「跟随系统」的 ProxyEnable 关闭回落环境变量、`http=a;https=b` 分号写法、PAC 不执行且不回退、
 `ProxyOverride` → 正则 → `WebProxy.IsBypassed`、带账号密码时解析成 `NetworkCredential`；
+以及连通性自检：三台目标都在白名单内且只有 keyless 详情接口用 POST 表单、成功/超时/HTTP 状态码/
+白名单拦截/其它异常各自归类、用户取消原样抛；
 以及应用图标：ICO 容器（保留区 / 类型 / 9 帧 / 偏移不重叠且末帧正好收尾）、帧尺寸集合与 32 位色深、
 <128 走 BMP 且 ≥128 走 PNG、32px 帧的金色占比与圆角透明、8 张模板同名 PNG 的魔数与 IHDR 尺寸、
 csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cmd 的 `Assets\AppIcon.ico` 校验三处接入点；
