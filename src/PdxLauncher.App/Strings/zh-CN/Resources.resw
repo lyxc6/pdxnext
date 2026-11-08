@@ -1447,6 +1447,9 @@
   <data name="HomeSupportNoticeLaunchOnly" xml:space="preserve">
     <value>{0} 只能启动：模组与 DLC 由游戏本体管理（游戏内 MOD 菜单 / Steam 创意工坊），本启动器不读写它的数据。</value>
   </data>
+  <data name="HomeSupportNoticeLaunchOnlyWorkshop" xml:space="preserve">
+    <value>{0} 的模组与 DLC 仍由游戏本体管理，本启动器不读写它的数据；Steam 创意工坊可以在本启动器里浏览和订阅。</value>
+  </data>
   <data name="HomeSupportNoticeLimited" xml:space="preserve">
     <value>{0} 尚未适配：只能启动，模组与 DLC 相关功能不可用。</value>
   </data>
