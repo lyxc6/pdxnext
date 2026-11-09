@@ -1504,7 +1504,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             // 下载完成后由 ThemeUpdateService 回写 AppServices.Games 并广播，
             // 主窗口背景随之更新；这里只负责把结果反映到设置页文案。
             await ThemeUpdateService
-                .RefreshAsync(Game, forceRefresh: true, cancellationToken)
+                .RefreshAsync(Game, forceRefresh: true, cancellationToken, onlyThatGame: true)
                 .ConfigureAwait(true);
 
             _theme = AppServices.Games

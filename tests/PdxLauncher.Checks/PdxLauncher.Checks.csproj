@@ -116,6 +116,11 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\ImageDecodeSize.cs" Link="Linked\ImageDecodeSize.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\ImagePixelSize.cs" Link="Linked\ImagePixelSize.cs" />
+    <!--
+      主题刷新范围：决定「立即检查」只刷一款还是刷全部。纯函数，只依赖 Core 的
+      GameInstallation，可以原样链接；判错了不会崩，只会把两分钟的串行下载重新带回来。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\ThemeRefreshScope.cs" Link="Linked\ThemeRefreshScope.cs" />
 
     <!--
       页面状态快照：只有 record 与静态字段，不碰 UI 类型，可以直接链接。
