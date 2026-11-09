@@ -81,6 +81,11 @@ public static class SingleInstanceGuard
             {
                 // 管道刚断开或服务器正在重建，重试。
             }
+            catch (UnauthorizedAccessException)
+            {
+                // 另一个用户/完整性级别占着同名的管道；退化成 MessageBox。
+                break;
+            }
         }
 
         return false;
@@ -135,7 +140,17 @@ public static class SingleInstanceGuard
     /// <summary>通道连不上时的兜底提示；不崩、不递归。</summary>
     public static void ShowAlreadyRunning()
     {
-        var text = Localizer.Instance.T(Keys.SingleInstanceAlreadyRunning);
+        string text;
+        try
+        {
+            text = Localizer.Instance.T(Keys.SingleInstanceAlreadyRunning);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // 资源还没初始化（极早期失败）时也不能因为一句提示崩掉第二个进程。
+            text = "PdxNext is already running.";
+        }
+
         _ = MessageBoxW(IntPtr.Zero, text, "PdxNext", MbOk | MbIconInformation);
     }
 
