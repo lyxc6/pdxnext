@@ -313,7 +313,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     }
 
     /// <summary>当前可见的创意工坊行。</summary>
-    public ObservableCollection<WorkshopRowViewModel> Rows { get; } = new();
+    public BulkObservableCollection<WorkshopRowViewModel> Rows { get; } = new();
 
     /// <summary>左侧筛选栏的状态（分组、标签、DLC、不兼容、特别筛选）。</summary>
     public WorkshopFiltersViewModel Filters { get; }
@@ -1344,10 +1344,12 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     private void ReplaceRows(IEnumerable<WorkshopRowViewModel> rows)
     {
         CancelCoverFill();
-        Rows.Clear();
-        foreach (var row in rows)
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        Rows.ReplaceAll(rows);
+        watch.Stop();
+        if (watch.ElapsedMilliseconds >= 30)
         {
-            Rows.Add(row);
+            _logger.Info("创意工坊铺行耗时 " + watch.ElapsedMilliseconds + " ms（" + Rows.Count + " 行）");
         }
 
         // 列表先铺出来再补状态：整库状态可能要起一次子进程（约 1 秒），不能挡着这一屏。

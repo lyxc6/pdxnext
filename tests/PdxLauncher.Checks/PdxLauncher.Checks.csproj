@@ -121,6 +121,12 @@
       GameInstallation，可以原样链接；判错了不会崩，只会把两分钟的串行下载重新带回来。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\ThemeRefreshScope.cs" Link="Linked\ThemeRefreshScope.cs" />
+    <!--
+      工坊列表的批量替换集合：只依赖 System.Collections.ObjectModel，不碰 UI 类型。
+      逐条 Clear + Add 会让 30 行各发一次集合通知，真机上是几百毫秒的布局停顿；
+      ReplaceAll 必须只发一次 Reset，所以由 BulkObservableCollectionChecks 直接测。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\BulkObservableCollection.cs" Link="Linked\BulkObservableCollection.cs" />
 
     <!--
       页面状态快照：只有 record 与静态字段，不碰 UI 类型，可以直接链接。
