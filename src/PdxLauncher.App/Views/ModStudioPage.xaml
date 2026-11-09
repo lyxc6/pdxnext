@@ -439,6 +439,8 @@
                                 <RadioButton GroupName="ModStudioUploadTarget"
                                              Content="{x:Bind L.ModstudioUploadTargetPdx, Mode=OneWay}"
                                              IsChecked="{x:Bind ViewModel.IsParadoxTarget, Mode=TwoWay}"
+                                             IsEnabled="{x:Bind ViewModel.CanUploadToParadox, Mode=OneWay}"
+                                             ToolTipService.ToolTip="{x:Bind L.ModstudioUploadTargetPdxUnavailable, Mode=OneWay}"
                                              AutomationProperties.AutomationId="rdoModStudioTargetPdx" />
                             </StackPanel>
                             <TextBlock Text="{x:Bind ViewModel.UploadTargetHint, Mode=OneWay}"

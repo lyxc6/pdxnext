@@ -99,6 +99,7 @@ internal static class ThemeUpdateService
                         only: null,
                         waitForLock: false,
                         forceRefresh: false,
+                        onlyThatGame: false,
                         attemptStarted,
                         CancellationToken.None)
                     .ConfigureAwait(false);
@@ -129,21 +130,30 @@ internal static class ThemeUpdateService
     /// 每完成一款就立刻回写并广播，不等其它游戏下载完。
     /// </summary>
     public static Task<int> RefreshAsync(GameInstallation? only, CancellationToken cancellationToken) =>
-        RefreshAsync(only, forceRefresh: false, cancellationToken);
+        RefreshAsync(only, forceRefresh: false, cancellationToken, onlyThatGame: false);
 
     /// <summary>
     /// 设置页「立即检查」：<paramref name="forceRefresh"/> 绕过 24 小时 TTL 与 10 分钟退避，
     /// 但仍然拿 Gate，避免和后台刷新并发写索引。
     /// </summary>
+    /// <param name="only">指定的游戏。</param>
+    /// <param name="forceRefresh">是否绕过 TTL 与退避。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <param name="onlyThatGame">
+    /// true = 只刷新 <paramref name="only"/> 这一款；设置页「立即检查」必须传 true，
+    /// 否则会把全部已安装游戏串行刷一遍（16 款实测两分多钟）。
+    /// </param>
     public static async Task<int> RefreshAsync(
         GameInstallation? only,
         bool forceRefresh,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool onlyThatGame = false)
     {
         var outcome = await RefreshCoreAsync(
                 only,
                 waitForLock: true,
                 forceRefresh,
+                onlyThatGame,
                 DateTimeOffset.UtcNow,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -164,6 +174,7 @@ internal static class ThemeUpdateService
         GameInstallation? only,
         bool waitForLock,
         bool forceRefresh,
+        bool onlyThatGame,
         DateTimeOffset attemptStarted,
         CancellationToken cancellationToken)
     {
@@ -181,7 +192,12 @@ internal static class ThemeUpdateService
         {
             var changed = 0;
             var failed = false;
-            foreach (var game in OrderGames(only))
+            var games = ThemeRefreshScope.Order(
+                AppServices.Games,
+                only,
+                AppServices.CurrentGame,
+                onlyThatGame);
+            foreach (var game in games)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 try
@@ -279,37 +295,6 @@ internal static class ThemeUpdateService
         // 同时清掉调度标记：否则成功后再过 10 分钟，已排队的 Task.Delay 仍会触发一次
         // 空转刷新（decision=Fresh、无网络请求，但属于无效调度）。
         Interlocked.Exchange(ref _retryScheduled, 0);
-    }
-
-    /// <summary>刷新顺序：指定的那一款 / 当前游戏优先，其余按发现顺序。</summary>
-    private static List<GameInstallation> OrderGames(GameInstallation? only)
-    {
-        var all = AppServices.Games;
-        var ordered = new List<GameInstallation>(all.Count + 1);
-
-        void AddFirst(GameInstallation? candidate)
-        {
-            if (candidate is null)
-            {
-                return;
-            }
-
-            var match = all.FirstOrDefault(g => string.Equals(g.GameId, candidate.GameId, StringComparison.OrdinalIgnoreCase))
-                ?? candidate;
-            if (!ordered.Any(g => string.Equals(g.GameId, match.GameId, StringComparison.OrdinalIgnoreCase)))
-            {
-                ordered.Add(match);
-            }
-        }
-
-        AddFirst(only);
-        AddFirst(AppServices.CurrentGame);
-        foreach (var game in all)
-        {
-            AddFirst(game);
-        }
-
-        return ordered;
     }
 
     /// <summary>把列表回写与事件广播送回 UI 线程；已经在线程上就直接执行。</summary>

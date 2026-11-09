@@ -1,5 +1,6 @@
 namespace PdxLauncher.App.Services;
 
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Controls;
 using PdxLauncher.Core.Abstractions;
 
@@ -93,6 +94,18 @@ public sealed class NavigationService
     /// <summary>当前页的导航 Tag；未导航时为 null。</summary>
     public string? CurrentTag { get; private set; }
 
+    /// <summary>正在执行 Frame.Navigate；重入请求先排队，等这一次结束再跑。</summary>
+    private bool _navigating;
+
+    /// <summary>重入期间攒下的最新一次请求（旧的直接丢掉，只保留最后一次）。</summary>
+    private PendingNavigation? _pending;
+
+    /// <summary>已经排了一帧重试，避免同一次失败排出一串重复导航。</summary>
+    private bool _retryScheduled;
+
+    /// <summary>请求代号；下一帧重试时只认最新代号，用户中途改道就不补旧目标。</summary>
+    private int _requestVersion;
+
     /// <summary>Tag → 页面类型；未知 Tag 或类型未编译进来时返回 null。</summary>
     public Type? ResolvePageType(string? tag)
     {
@@ -105,9 +118,15 @@ public sealed class NavigationService
     }
 
     /// <summary>
-    /// 按 Tag 导航；成功返回 true。<paramref name="parameter"/> 为 null 时，重复导航到当前页会被跳过。
+    /// 按 Tag 导航；<c>true</c> 表示请求已受理（可能排在下一帧重试，最终失败会写日志）。
+    /// <paramref name="parameter"/> 为 null 时，重复导航到当前页会被跳过。
     /// <para>
     /// 带参数时不跳过：详情子页用同一个 Tag 打开不同的 mod，必须允许「同 Tag 再导航」。
+    /// </para>
+    /// <para>
+    /// 已知问题 D22：从游戏库点卡片后跳主页时偶发 <c>Frame.Navigate</c> 返回 false，
+    /// 原因是同一帧内还有一次导航没走完。这里用「重入排队 + 下一帧重试一次」兜住：
+    /// 重入期间只保留最新请求，避免旧目标在用户已经改道后又抢回页面。
     /// </para>
     /// </summary>
     /// <param name="tag">目标页的导航 Tag。</param>
@@ -132,26 +151,98 @@ public sealed class NavigationService
             return false;
         }
 
+        var version = unchecked(++_requestVersion);
+
+        // Frame.Navigate 内部会同步触发布局 / SelectionChanged，NavigationView 可能回手再调一次
+        // Navigate。重入时不硬闯，只记下最新目标，等外层这一趟结束再跑。
+        if (_navigating)
+        {
+            _pending = new PendingNavigation(tag, parameter, version);
+            return true;
+        }
+
+        _navigating = true;
         try
         {
             var navigated = Frame.Navigate(pageType, parameter);
             if (navigated)
             {
                 CurrentTag = tag;
-            }
-            else
-            {
-                _logger.Warn("导航失败：Frame.Navigate 返回 false (" + tag + ")");
+                return true;
             }
 
-            return navigated;
+            _logger.Warn("导航失败：Frame.Navigate 返回 false (" + tag + ")，安排下一帧重试");
+            return ScheduleRetry(tag, parameter, version);
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or TypeLoadException)
         {
             _logger.Error("导航异常 (" + tag + ")", ex);
             return false;
         }
+        finally
+        {
+            _navigating = false;
+            DrainPending();
+        }
     }
+
+    /// <summary>重试排队：只排一次；真正执行时如果用户又点了别的页面，就放弃这次旧目标。</summary>
+    private bool ScheduleRetry(string? tag, object? parameter, int version)
+    {
+        if (_retryScheduled)
+        {
+            _pending = new PendingNavigation(tag, parameter, version);
+            return true;
+        }
+
+        var dispatcher = Frame?.DispatcherQueue;
+        if (dispatcher is null)
+        {
+            return false;
+        }
+
+        _retryScheduled = true;
+        var queued = dispatcher.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            _retryScheduled = false;
+            if (version != _requestVersion)
+            {
+                return;
+            }
+
+            if (_pending is { } pending)
+            {
+                _pending = null;
+                Navigate(pending.Tag, pending.Parameter);
+                return;
+            }
+
+            Navigate(tag, parameter);
+        });
+
+        if (!queued)
+        {
+            _retryScheduled = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>外层导航结束后跑排队里的最新一次；重入产生的旧请求已经被覆盖。</summary>
+    private void DrainPending()
+    {
+        var pending = _pending;
+        _pending = null;
+        if (pending is not { } request || request.Version != _requestVersion)
+        {
+            return;
+        }
+
+        Navigate(request.Tag, request.Parameter);
+    }
+
+    private readonly record struct PendingNavigation(string? Tag, object? Parameter, int Version);
 
     /// <summary>回到游戏库页。</summary>
     public bool GoBackToLibrary() => Navigate(LibraryTag);

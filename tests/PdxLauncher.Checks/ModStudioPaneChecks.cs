@@ -49,7 +49,17 @@ public static class ModStudioPaneChecks
             "Mod 创建页: 上传中按「取消」给出「正在取消」提示",
             codeBehind.Contains("ModstudioUploadCanceling", StringComparison.Ordinal));
 
-        // ---- 4. 详情面板的 Steam 与描述符编辑入口 ----
+        // ---- 4. Paradox 目标：可见但不可选，避免「选了却永远提交不了」的死胡同 ----
+        ChecksContext.Check(
+            "Mod 创建页: Paradox 上传目标禁用并说明原因",
+            xaml.Contains("AutomationProperties.AutomationId=\"rdoModStudioTargetPdx\"", StringComparison.Ordinal)
+                && xaml.Contains("IsEnabled=\"{x:Bind ViewModel.CanUploadToParadox", StringComparison.Ordinal)
+                && xaml.Contains("L.ModstudioUploadTargetPdxUnavailable", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "Mod 创建页: Paradox 目标当前不可用",
+            viewModel.Contains("CanUploadToParadox => false", StringComparison.Ordinal));
+
+        // ---- 5. 详情面板的 Steam 与描述符编辑入口 ----
         var editDialog = Read(root, "src", "PdxLauncher.App", "Views", "EditModDescriptorDialog.cs");
         ChecksContext.Check(
             "Mod 创建页: 详情面板有「在 Steam 中打开」",

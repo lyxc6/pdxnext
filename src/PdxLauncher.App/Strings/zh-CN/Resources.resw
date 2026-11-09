@@ -3100,6 +3100,12 @@
   <data name="SavesEmptyNoGameTitle" xml:space="preserve">
     <value>未选择游戏</value>
   </data>
+  <data name="SavesEmptyUnsupportedMessage" xml:space="preserve">
+    <value>PdxNext 还没有登记这款游戏的存档位置，因此暂时无法列出或备份存档。</value>
+  </data>
+  <data name="SavesEmptyUnsupportedTitle" xml:space="preserve">
+    <value>暂不支持浏览该游戏的存档</value>
+  </data>
   <data name="SavesExperimental" xml:space="preserve">
     <value>实验性</value>
   </data>
@@ -3150,6 +3156,9 @@
   </data>
   <data name="SavesStatusNoGame" xml:space="preserve">
     <value>请先在游戏库中选择一款游戏</value>
+  </data>
+  <data name="SavesStatusUnsupported" xml:space="preserve">
+    <value>暂不支持浏览该游戏的存档</value>
   </data>
   <data name="SavesStatusReading" xml:space="preserve">
     <value>正在读取 {0} / {1}</value>
@@ -5755,5 +5764,23 @@
   </data>
   <data name="ModstudioMcpDocsFailed" xml:space="preserve">
     <value>打开 MCP 文档失败：{0}</value>
+  </data>
+  <data name="SingleInstanceAlreadyRunning" xml:space="preserve">
+    <value>PdxNext 已在运行。请切换到已经打开的窗口。</value>
+  </data>
+  <data name="WorkshopSectionsGallery" xml:space="preserve">
+    <value>图集</value>
+  </data>
+  <data name="WorkshopSectionsStatus" xml:space="preserve">
+    <value>状态</value>
+  </data>
+  <data name="WorkshopDependenciesGroupAttention" xml:space="preserve">
+    <value>需处理（{0}）</value>
+  </data>
+  <data name="WorkshopDependenciesGroupReady" xml:space="preserve">
+    <value>已就绪（{0}）</value>
+  </data>
+  <data name="WorkshopDependenciesGroupUnknown" xml:space="preserve">
+    <value>状态未知（{0}）</value>
   </data>
 </root>

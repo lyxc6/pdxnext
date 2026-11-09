@@ -37,6 +37,15 @@ public abstract class LocalizedObservableObject : INotifyPropertyChanged
     }
 }
 
+/// <summary>与 App 同名的 Localizer 替身：只把「键 + 参数」拼成可比较的字符串。</summary>
+internal sealed class Localizer
+{
+    public static Localizer Instance { get; } = new();
+
+    public string T(string key, params object?[] args) =>
+        args.Length == 0 ? key : key + ":" + string.Join("|", args.Select(static arg => arg?.ToString()));
+}
+
 /// <summary>成就相关文案键；取值与 Resources.resw 一致，避免自检与真实键名漂移。</summary>
 internal static class Keys
 {
@@ -103,6 +112,8 @@ internal static class Keys
     public const string SavesEmptyNoDirectoryTitle = "saves.empty.noDirectory.title";
     public const string SavesEmptyNoGameMessage = "saves.empty.noGame.message";
     public const string SavesEmptyNoGameTitle = "saves.empty.noGame.title";
+    public const string SavesEmptyUnsupportedMessage = "saves.empty.unsupported.message";
+    public const string SavesEmptyUnsupportedTitle = "saves.empty.unsupported.title";
     public const string SavesExperimental = "saves.experimental";
     public const string SavesExperimentalTooltip = "saves.experimentalTooltip";
     public const string SavesMetadataUnreadable = "saves.metadataUnreadable";
@@ -120,6 +131,15 @@ internal static class Keys
     public const string SavesStatusNoGame = "saves.status.noGame";
     public const string SavesStatusReading = "saves.status.reading";
     public const string SavesStatusScanning = "saves.status.scanning";
+    public const string SavesStatusUnsupported = "saves.status.unsupported";
+    public const string WorkshopDependenciesGroupAttention = "workshop.dependencies.groupAttention";
+    public const string WorkshopDependenciesGroupReady = "workshop.dependencies.groupReady";
+    public const string WorkshopDependenciesGroupUnknown = "workshop.dependencies.groupUnknown";
+    public const string WorkshopDependencyDisabled = "workshop.dependency.disabled";
+    public const string WorkshopDependencyEnabled = "workshop.dependency.enabled";
+    public const string WorkshopDependencyMissing = "workshop.dependency.missing";
+    public const string WorkshopDependencyUnknown = "workshop.dependency.unknown";
+    public const string WorkshopDependencyVersion = "workshop.dependency.version";
     public const string SavesVersion = "saves.version";
 
     // DLC 行视图模型（DlcImageChecks 链接 DlcRowViewModel.cs 用）。取值与 Resources.resw 一致。

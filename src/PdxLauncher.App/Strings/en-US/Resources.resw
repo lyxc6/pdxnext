@@ -3100,6 +3100,12 @@
   <data name="SavesEmptyNoGameTitle" xml:space="preserve">
     <value>No game selected</value>
   </data>
+  <data name="SavesEmptyUnsupportedMessage" xml:space="preserve">
+    <value>PdxNext has not registered this game's save folder yet, so saves cannot be listed or backed up.</value>
+  </data>
+  <data name="SavesEmptyUnsupportedTitle" xml:space="preserve">
+    <value>Save browsing is not supported for this game</value>
+  </data>
   <data name="SavesExperimental" xml:space="preserve">
     <value>Experimental</value>
   </data>
@@ -3150,6 +3156,9 @@
   </data>
   <data name="SavesStatusNoGame" xml:space="preserve">
     <value>Select a game in the library first</value>
+  </data>
+  <data name="SavesStatusUnsupported" xml:space="preserve">
+    <value>Save browsing is not supported for this game</value>
   </data>
   <data name="SavesStatusReading" xml:space="preserve">
     <value>Reading {0} of {1}</value>
@@ -5755,5 +5764,23 @@ then call list_games to verify.</value>
   </data>
   <data name="ModstudioMcpDocsFailed" xml:space="preserve">
     <value>Failed to open MCP documentation: {0}</value>
+  </data>
+  <data name="SingleInstanceAlreadyRunning" xml:space="preserve">
+    <value>PdxNext is already running. Please switch to the open window.</value>
+  </data>
+  <data name="WorkshopSectionsGallery" xml:space="preserve">
+    <value>Gallery</value>
+  </data>
+  <data name="WorkshopSectionsStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="WorkshopDependenciesGroupAttention" xml:space="preserve">
+    <value>Needs attention ({0})</value>
+  </data>
+  <data name="WorkshopDependenciesGroupReady" xml:space="preserve">
+    <value>Ready ({0})</value>
+  </data>
+  <data name="WorkshopDependenciesGroupUnknown" xml:space="preserve">
+    <value>Unknown ({0})</value>
   </data>
 </root>

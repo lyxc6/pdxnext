@@ -116,6 +116,17 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\ImageDecodeSize.cs" Link="Linked\ImageDecodeSize.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\ImagePixelSize.cs" Link="Linked\ImagePixelSize.cs" />
+    <!--
+      主题刷新范围：决定「立即检查」只刷一款还是刷全部。纯函数，只依赖 Core 的
+      GameInstallation，可以原样链接；判错了不会崩，只会把两分钟的串行下载重新带回来。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\ThemeRefreshScope.cs" Link="Linked\ThemeRefreshScope.cs" />
+    <!--
+      工坊列表的批量替换集合：只依赖 System.Collections.ObjectModel，不碰 UI 类型。
+      逐条 Clear + Add 会让 30 行各发一次集合通知，真机上是几百毫秒的布局停顿；
+      ReplaceAll 必须只发一次 Reset，所以由 BulkObservableCollectionChecks 直接测。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\BulkObservableCollection.cs" Link="Linked\BulkObservableCollection.cs" />
 
     <!--
       页面状态快照：只有 record 与静态字段，不碰 UI 类型，可以直接链接。
@@ -231,5 +242,12 @@
       编译器和人工点测都不容易发现，所以由 DlcImageChecks 直接钉住。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\DlcRowViewModel.cs" Link="Linked\DlcRowViewModel.cs" />
+    <!--
+      工坊依赖树节点：只依赖 Core 的 WorkshopDependency/State 与本地化基类（自检用替身），
+      不碰 WinUI。分组标题、展开态、叶子 id 映射错了只在真机上表现为「树是空的 / 没箭头」，
+      编译器和人工点测都不容易发现，所以由 WorkshopDependenciesTreeChecks 直接测。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\WorkshopDependencyViewModel.cs" Link="Linked\WorkshopDependencyViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\WorkshopDependencyNodeViewModel.cs" Link="Linked\WorkshopDependencyNodeViewModel.cs" />
   </ItemGroup>
 </Project>

@@ -153,6 +153,7 @@ public sealed class SavesViewModel : LocalizedObservableObject
         SavesState.Reading when _total > 0 => T(Keys.SavesStatusReading, _processed, _total),
         SavesState.Reading => T(Keys.SavesStatusScanning),
         SavesState.NoGame => T(Keys.SavesStatusNoGame),
+        SavesState.Unsupported => T(Keys.SavesStatusUnsupported),
         SavesState.Failed => T(Keys.SavesStatusFailed),
         _ => _lastScanAt is { } scannedAt
             ? T(
@@ -166,6 +167,7 @@ public sealed class SavesViewModel : LocalizedObservableObject
     {
         SavesState.NoGame => T(Keys.SavesEmptyNoGameTitle),
         SavesState.NoDirectory => T(Keys.SavesEmptyNoDirectoryTitle),
+        SavesState.Unsupported => T(Keys.SavesEmptyUnsupportedTitle),
         SavesState.Empty => T(Keys.SavesEmptyEmptyTitle),
         SavesState.Failed => T(Keys.SavesEmptyFailedTitle),
         _ => string.Empty,
@@ -175,6 +177,7 @@ public sealed class SavesViewModel : LocalizedObservableObject
     {
         SavesState.NoGame => T(Keys.SavesEmptyNoGameMessage),
         SavesState.NoDirectory => T(Keys.SavesEmptyNoDirectoryMessage),
+        SavesState.Unsupported => T(Keys.SavesEmptyUnsupportedMessage),
         SavesState.Empty => T(Keys.SavesEmptyEmptyMessage),
         SavesState.Failed => T(Keys.SavesEmptyFailedMessage),
         _ => string.Empty,
@@ -205,6 +208,19 @@ public sealed class SavesViewModel : LocalizedObservableObject
         }
 
         var gameId = game.GameId;
+
+        // 只登记了 6 款游戏的存档落点；其余完整适配游戏（EU4 / HOI4 / Imperator /
+        // Millennia / AoW4）的 Locations 是空集合。这里必须和「登记了但目录还没建」
+        // 分开：后者才是「在游戏里保存一次再回来刷新」，前者应直接说暂不支持。
+        if (_library.GetLocations(gameId).Count == 0)
+        {
+            SetScanBusy(false);
+            _lastScanAt = DateTimeOffset.Now;
+            _state = SavesState.Unsupported;
+            NotifyStateChanged();
+            return;
+        }
+
         SetScanBusy(true);
         _state = SavesState.Scanning;
         NotifyStateChanged();
@@ -848,6 +864,7 @@ public sealed class SavesViewModel : LocalizedObservableObject
     private enum SavesState
     {
         NoGame,
+        Unsupported,
         Scanning,
         Reading,
         NoDirectory,

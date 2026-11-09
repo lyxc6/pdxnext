@@ -369,6 +369,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>前置依赖。</summary>
     public ObservableCollection<WorkshopDependencyViewModel> Dependencies { get; } = [];
 
+    /// <summary>依赖树的一级分组（需处理 / 已就绪 / 未知）；叶子仍复用 <see cref="Dependencies"/> 的行。</summary>
+    public ObservableCollection<WorkshopDependencyNodeViewModel> DependencyTree { get; } = [];
+
     /// <summary>评论区。</summary>
     public ObservableCollection<WorkshopCommentViewModel> Comments { get; } = [];
 
@@ -1157,6 +1160,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         Screenshots.Clear();
         Links.Clear();
         Dependencies.Clear();
+        DependencyTree.Clear();
         Comments.Clear();
         CancelCollectionNameTranslation();
         CollectionItems.Clear();
@@ -2292,6 +2296,34 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             : disabled > 0
                 ? T(Keys.WorkshopDependencySummaryDisabled, matched.Count, disabled)
                 : T(Keys.WorkshopDependencySummaryOk, matched.Count);
+
+        BuildDependencyTree();
+    }
+
+    /// <summary>按本机状态把平铺依赖分成「需处理 / 已就绪 / 未知」三组；空组不显示。</summary>
+    private void BuildDependencyTree()
+    {
+        DependencyTree.Clear();
+
+        AddGroup(
+            WorkshopDependencyNodeViewModel.DependencyGroup.Attention,
+            Dependencies.Where(static item => item.NeedsAttention).ToList());
+        AddGroup(
+            WorkshopDependencyNodeViewModel.DependencyGroup.Ready,
+            Dependencies.Where(static item => item.State == WorkshopDependencyState.Enabled).ToList());
+        AddGroup(
+            WorkshopDependencyNodeViewModel.DependencyGroup.Unknown,
+            Dependencies.Where(static item => item.IsUnknown).ToList());
+
+        void AddGroup(
+            WorkshopDependencyNodeViewModel.DependencyGroup group,
+            IReadOnlyList<WorkshopDependencyViewModel> items)
+        {
+            if (items.Count > 0)
+            {
+                DependencyTree.Add(new WorkshopDependencyNodeViewModel(group, items));
+            }
+        }
     }
 
     /// <summary>评论区：首屏评论 + 总数提示。</summary>
