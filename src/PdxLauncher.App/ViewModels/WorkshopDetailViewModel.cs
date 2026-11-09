@@ -195,8 +195,14 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     [ObservableProperty]
     private string _translationNotice = string.Empty;
 
-    /// <summary>已经提示过失败的范围（简介 / 更新日志 / 评论），避免重复刷屏。</summary>
+    /// <summary>已经提示过失败的范围（简介 / 更新日志 / 评论 / 合集标题），避免重复刷屏。</summary>
     private readonly HashSet<string> _translateFailureScopes = new(StringComparer.Ordinal);
+
+    /// <summary>合集标题翻译的去抖：一次铺 49 行，等页面稳定后再整批翻。</summary>
+    private static readonly TimeSpan CollectionNameTranslationDebounce = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>在途 / 待跑的合集标题翻译批次；换合集或卸载页面时取消。</summary>
+    private CancellationTokenSource? _collectionNameTranslation;
 
     /// <summary>是否正在读取详情。</summary>
     [ObservableProperty]
@@ -350,7 +356,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             ? T(Keys.WorkshopDetailCollectionUnsubscribeAll)
             : T(Keys.WorkshopDetailCollectionSubscribeAll);
 
-    /// <summary>合集级订阅按钮是否可点。</summary>
+    /// <summary>合集级订阅按钮是否可点（只读时也可点，页面回退到在 Steam 客户端打开）。</summary>
+    public bool CanActivateCollectionSubscription => IsCollection && !IsSteamSubscribing;
+
+    /// <summary>合集级直连写入是否可用（写开关 + 直连后端）。</summary>
     public bool CanToggleCollectionSubscription =>
         IsCollection && IsSteamDirectAvailable && CanWriteSteam && !IsSteamSubscribing;
 
@@ -582,6 +591,11 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         ShowSteamSubscribeButton && IsSteamDirectAvailable && CanWriteSteam && !IsSteamSubscribing;
 
     /// <summary>
+    /// Steam 订阅按钮是否可激活：只读模式下也可点，页面会回退到「在 Steam 客户端打开」。
+    /// </summary>
+    public bool CanActivateSteamSubscription => ShowSteamSubscribeButton && !IsSteamSubscribing;
+
+    /// <summary>
     /// 是否允许写 Steam（订阅/退订）。只读状态查询默认开着，
     /// 真正改订阅要另一个开关，两个是分开的。
     /// </summary>
@@ -697,12 +711,12 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <param name="page">物品页（可能没拿到）。</param>
     private void ResolveCommentOwner(
         WorkshopRowViewModel row,
-        SteamWorkshopItemDetail detail,
+        SteamWorkshopItemDetail? detail,
         SteamWorkshopItemPage? page)
     {
         _steamCreatorId = null;
 
-        if (!string.IsNullOrWhiteSpace(detail.CreatorSteamId))
+        if (!string.IsNullOrWhiteSpace(detail?.CreatorSteamId))
         {
             _steamCreatorId = detail.CreatorSteamId;
             return;
@@ -1144,6 +1158,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         Links.Clear();
         Dependencies.Clear();
         Comments.Clear();
+        CancelCollectionNameTranslation();
         CollectionItems.Clear();
         // 列表页已经标过合集的，首帧就按合集布局，避免先闪一下 mod 页面；
         // 列表没标（例如以后从别的入口进来）时，等物品页解析出 collectionItem 再切。
@@ -1183,38 +1198,41 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             requireCollectionItems: row.IsCollection);
 
         var detailResult = await detailTask.ConfigureAwait(true);
-        if (detailResult is not { IsSuccess: true, Value: { } detail })
+        var pageResult = await pageTask.ConfigureAwait(true);
+
+        SteamWorkshopItemDetail? detail =
+            detailResult is { IsSuccess: true, Value: { } detailValue } ? detailValue : null;
+        SteamWorkshopItemPage? page =
+            pageResult is { IsSuccess: true, Value: { } pageValue } ? pageValue : null;
+
+        // 两路都失败才降级到缓存正文。详情失败但物品页成功时仍继续：
+        // 合集的子项在物品页里，不能因为详情接口超时就把整页判死。
+        if (detail is null && page is null)
         {
-            UseCachedDescription(row, detailResult.ErrorMessage);
+            UseCachedDescription(row, detailResult.ErrorMessage ?? pageResult.ErrorMessage);
             return;
         }
 
-        // 合集：详情接口对匿名调用不返回 file_type / children，真正的子项在物品页的
-        // collectionItem 块里；这里先记下详情侧的线索，等物品页回来再铺列表。
-        var detailIsCollection = detail.IsCollection;
+        if (detail is not null)
+        {
+            var item = row.SteamItem;
+            MetaText = BuildSteamMeta(item, detail);
+            AuthorProfileUrl = detail.CreatorProfileUrl;
+            _steamTagNames = GetSteamTagNames(detail, item);
+            TagsText = JoinSteamTags(_steamTagNames);
 
-        var item = row.SteamItem;
-        MetaText = BuildSteamMeta(item, detail);
-        AuthorProfileUrl = detail.CreatorProfileUrl;
-        _steamTagNames = GetSteamTagNames(detail, item);
-        TagsText = JoinSteamTags(_steamTagNames);
+            // 缓存命中的 CreatedUtc 是「抓取时间」，不是发布时间，所以只认列表条目里的真实值。
+            CreatedText = item is { } steamItem && steamItem.CreatedUtc > DateTimeOffset.UnixEpoch
+                ? T(Keys.WorkshopDetailCreated, WorkshopText.FormatDate(steamItem.CreatedUtc))
+                : string.Empty;
+        }
+
         CommentsStatusText = string.Empty;
 
-        // 缓存命中的 CreatedUtc 是「抓取时间」，不是发布时间，所以只认列表条目里的真实值。
-        CreatedText = item is { } steamItem && steamItem.CreatedUtc > DateTimeOffset.UnixEpoch
-            ? T(Keys.WorkshopDetailCreated, WorkshopText.FormatDate(steamItem.CreatedUtc))
-            : string.Empty;
-
-        var descriptionHtml = (string?)null;
-        var imageUrls = new List<string>();
-
-        var pageResult = await pageTask.ConfigureAwait(true);
-        SteamWorkshopItemPage? page = null;
-        if (pageResult is { IsSuccess: true, Value: { } itemPage })
+        var descriptionHtml = page?.DescriptionHtml;
+        var imageUrls = page is null ? new List<string>() : page.ImageUrls.ToList();
+        if (page is not null)
         {
-            page = itemPage;
-            descriptionHtml = page.DescriptionHtml;
-            imageUrls.AddRange(page.ImageUrls);
             if (!string.IsNullOrWhiteSpace(page.AuthorProfileUrl))
             {
                 AuthorProfileUrl = page.AuthorProfileUrl;
@@ -1234,7 +1252,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
         // 合集识别：列表区段提示 / 详情 file_type / 物品页 collectionItem 三路任一命中都算。
         IsCollection = row.IsCollection
-            || detailIsCollection
+            || (detail?.IsCollection ?? false)
             || page is { IsCollectionPage: true };
         if (IsCollection)
         {
@@ -1296,7 +1314,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         // 标题 / 列表 / 分隔线，所以走 SteamBbCodeParser 而不是先压成纯文本再按 Markdown 解析。
         var document = !string.IsNullOrWhiteSpace(descriptionHtml)
             ? HtmlDescriptionParser.Parse(descriptionHtml)
-            : SteamBbCodeParser.Parse(detail.Description);
+            : SteamBbCodeParser.Parse(detail?.Description ?? string.Empty);
         ApplyDescription(document, cancellationToken);
 
         // 顶部图片区用物品页官方画廊（#highlight_player_area）里的截图；抓不到时退回预览图。
@@ -1305,8 +1323,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         var galleryUrls = new List<string>();
         if (!IsCollection)
         {
-            var previewUrl = !string.IsNullOrWhiteSpace(detail.PreviewUrl)
-                ? detail.PreviewUrl
+            var previewUrl = !string.IsNullOrWhiteSpace(detail?.PreviewUrl)
+                ? detail!.PreviewUrl
                 : !string.IsNullOrWhiteSpace(row.CoverUrl) ? row.CoverUrl : null;
 
             if (page is { ScreenshotUrls.Count: > 0 })
@@ -1373,7 +1391,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// </list>
     /// </summary>
     private async Task LoadCollectionItemsAsync(
-        SteamWorkshopItemDetail detail,
+        SteamWorkshopItemDetail? detail,
         SteamWorkshopItemPage? page,
         CancellationToken cancellationToken)
     {
@@ -1403,7 +1421,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                 return;
             }
 
-            if (detail.ChildList.Count == 0)
+            if (detail is null || detail.ChildList.Count == 0)
             {
                 CollectionStatusText = T(Keys.WorkshopDetailCollectionEmpty);
                 return;
@@ -1450,7 +1468,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         }
         catch (Exception ex)
         {
-            _logger.Warn("合集内容加载失败（" + detail.PublishedFileId + "）：" + ex.Message);
+            _logger.Warn("合集内容加载失败（" + (detail?.PublishedFileId ?? Row?.Id) + "）：" + ex.Message);
             CollectionStatusText = T(Keys.WorkshopDetailCollectionFailed);
         }
         finally
@@ -1460,12 +1478,133 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>子项列表铺好后补两件事：缩略图逐张落地、整库订阅状态一次性映射到各行。</summary>
-    private async Task EnrichCollectionAsync(CancellationToken cancellationToken)
+    /// <summary>子项列表铺好后补三件事：缩略图逐张落地、整库订阅状态映射、标题翻译。</summary>
+    private Task EnrichCollectionAsync(CancellationToken cancellationToken)
     {
-        _ = DownloadCollectionCoversAsync(cancellationToken);
-        await ApplyCollectionStatesAsync(cancellationToken).ConfigureAwait(true);
+        // 子项已落地：先让「共 N 项」和「订阅全部」就位，不等 Steam 状态读取。
         NotifyCollectionState();
+
+        _ = DownloadCollectionCoversAsync(cancellationToken);
+        _ = ApplyCollectionStatesSafeAsync(cancellationToken);
+        StartCollectionNameTranslation(cancellationToken);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// 整库状态读取是可选增强：失败 / 取消都不该把页面卡在「正在读取详情…」，
+    /// 所以从 EnrichCollectionAsync 里 fire-and-forget，并在成功后就地刷新徽标与统计。
+    /// </summary>
+    private async Task ApplyCollectionStatesSafeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ApplyCollectionStatesAsync(cancellationToken).ConfigureAwait(true);
+            NotifyCollectionState();
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面卸载 / 换合集。
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("合集子项订阅状态读取失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 合集子项标题翻译：复用列表页同一个批量翻译接口，250ms 去抖后一次翻整批。
+    /// 只翻标题（与工坊列表一致），短描述保持原文。
+    /// </summary>
+    private void StartCollectionNameTranslation(CancellationToken cancellationToken)
+    {
+        if (!AppServices.Settings.TranslateNamesEnabled || !AppServices.Translation.IsEnabled)
+        {
+            return;
+        }
+
+        var pending = CollectionItems
+            .Where(static row => !string.IsNullOrWhiteSpace(row.Name) &&
+                                 string.IsNullOrWhiteSpace(row.TranslatedName))
+            .ToList();
+        if (pending.Count == 0)
+        {
+            return;
+        }
+
+        CancelCollectionNameTranslation();
+        var debounce = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _collectionNameTranslation = debounce;
+        _ = TranslateCollectionNamesAfterDebounceAsync(pending, debounce);
+    }
+
+    private async Task TranslateCollectionNamesAfterDebounceAsync(
+        IReadOnlyList<WorkshopRowViewModel> rows,
+        CancellationTokenSource debounce)
+    {
+        try
+        {
+            await Task.Delay(CollectionNameTranslationDebounce, debounce.Token).ConfigureAwait(true);
+
+            var names = rows.Select(static row => row.Name).ToList();
+            var translated = await AppServices.Translation
+                .TranslateBatchAsync(names, debounce.Token)
+                .ConfigureAwait(true);
+
+            var anyTranslated = false;
+            for (var i = 0; i < rows.Count && i < translated.Count; i++)
+            {
+                var translatedName = translated[i];
+                if (string.IsNullOrWhiteSpace(translatedName))
+                {
+                    continue;
+                }
+
+                rows[i].TranslatedName = translatedName;
+                anyTranslated = true;
+            }
+
+            if (!anyTranslated)
+            {
+                ReportTranslationFailure("collection-names");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 换合集 / 卸载页面 / 翻译设置变更：这一批作废。
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("合集标题翻译失败：" + ex.Message);
+        }
+        finally
+        {
+            if (ReferenceEquals(_collectionNameTranslation, debounce))
+            {
+                _collectionNameTranslation = null;
+            }
+
+            debounce.Dispose();
+        }
+    }
+
+    /// <summary>取消还没到点 / 没跑完的合集标题翻译批次。</summary>
+    private void CancelCollectionNameTranslation()
+    {
+        var previous = _collectionNameTranslation;
+        _collectionNameTranslation = null;
+        if (previous is null)
+        {
+            return;
+        }
+
+        try
+        {
+            previous.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 上一批刚好自己收尾释放了令牌。
+        }
     }
 
     /// <summary>
@@ -2568,6 +2707,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasStatusText));
         OnPropertyChanged(nameof(SteamSubscribeActionText));
         OnPropertyChanged(nameof(CanToggleSteamSubscription));
+        OnPropertyChanged(nameof(CanActivateSteamSubscription));
+        OnPropertyChanged(nameof(CanActivateCollectionSubscription));
         OnPropertyChanged(nameof(SteamSubscribeHint));
         OnPropertyChanged(nameof(HasSteamSubscribeHint));
         OnPropertyChanged(nameof(CollectionSubscribeHint));
@@ -2682,9 +2823,11 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     partial void OnIsSteamSubscribingChanged(bool value)
     {
         OnPropertyChanged(nameof(CanToggleSteamSubscription));
+        OnPropertyChanged(nameof(CanActivateSteamSubscription));
         OnPropertyChanged(nameof(SteamSubscribeActionText));
         OnPropertyChanged(nameof(CollectionSubscribeActionText));
         OnPropertyChanged(nameof(CanToggleCollectionSubscription));
+        OnPropertyChanged(nameof(CanActivateCollectionSubscription));
     }
 
     partial void OnIsSteamSubscribedChanged(bool value)
@@ -2733,6 +2876,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(IsCollectionFullySubscribed));
         OnPropertyChanged(nameof(CollectionSubscribeActionText));
         OnPropertyChanged(nameof(CanToggleCollectionSubscription));
+        OnPropertyChanged(nameof(CanActivateCollectionSubscription));
         OnPropertyChanged(nameof(CollectionSubscribeHint));
         OnPropertyChanged(nameof(HasCollectionSubscribeHint));
     }

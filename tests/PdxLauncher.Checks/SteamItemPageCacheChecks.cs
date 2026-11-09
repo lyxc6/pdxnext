@@ -25,6 +25,8 @@ public static class SteamItemPageCacheChecks
         try
         {
             CheckRoundTrip(fileSystem, root, clock);
+            CheckCollectionRoundTrip(fileSystem, root, clock);
+            CheckCollectionCacheGuards(fileSystem, root, clock);
             CheckTtl(fileSystem, root, clock);
             CheckEviction(fileSystem, root, clock);
             CheckOversizeRejected(fileSystem, root, clock);
@@ -90,7 +92,74 @@ public static class SteamItemPageCacheChecks
         ChecksContext.Equal("条目页缓存：还原后作者名", "Author", page.AuthorName);
     }
 
-    /// <summary>超过 12 小时算过期（调用方据此决定要不要重新抓）。</summary>
+    /// <summary>合集子项是条目页缓存里最贵也最关键的字段：49 项必须完整往返。</summary>
+    private static void CheckCollectionRoundTrip(IFileSystem fileSystem, string root, MutableClock clock)
+    {
+        var cache = CreateCache(fileSystem, clock, Path.Combine(root, "collection"));
+        cache.Set("collection-49", CollectionPage(49), requireCollectionItems: true);
+
+        var found = cache.TryGet("collection-49", out var entry);
+        ChecksContext.Check("条目页缓存：合集写入后能读到", found);
+        if (!found)
+        {
+            return;
+        }
+
+        var restored = SteamItemPageCache.Restore(entry);
+        ChecksContext.Check("条目页缓存：合集页识别", restored.IsCollectionPage);
+        ChecksContext.Equal("条目页缓存：合集子项数", 49, restored.CollectionItemList.Count);
+        ChecksContext.Equal("条目页缓存：首个子项 id", "child-0", restored.CollectionItemList[0].PublishedFileId);
+        ChecksContext.Equal("条目页缓存：首个子项标题", "Child 0", restored.CollectionItemList[0].Title);
+        ChecksContext.Check(
+            "条目页缓存：子项缩略图保留",
+            restored.CollectionItemList[0].PreviewUrl?.Contains("child-0.jpg", StringComparison.Ordinal) == true);
+    }
+
+    /// <summary>合集缓存的两条保护：解析不到子项不覆盖旧内容；超限删旧行而不是留旧内容。</summary>
+    private static void CheckCollectionCacheGuards(IFileSystem fileSystem, string root, MutableClock clock)
+    {
+        var cache = CreateCache(fileSystem, clock, Path.Combine(root, "collection-guards"));
+        cache.Set("collection-guarded", CollectionPage(3), requireCollectionItems: true);
+
+        // 瞬时解析失败（页面有作者/描述但没有 collectionItem）不能把已知合集写成 0 项。
+        cache.Set("collection-guarded", SamplePage(), requireCollectionItems: true);
+        var kept = cache.TryGet("collection-guarded", out var keptEntry);
+        ChecksContext.Check("条目页缓存：空子项不覆盖旧合集", kept);
+        if (kept)
+        {
+            ChecksContext.Equal("条目页缓存：旧合集子项仍在", 3, SteamItemPageCache.Restore(keptEntry).CollectionItemList.Count);
+        }
+
+        // 降级（去评论/截图/配图）后仍超限：旧行必须删除，不能再被命中。
+        cache.Set("collection-guarded", CollectionPage(500, hugeText: new string('x', 400)), requireCollectionItems: true);
+        ChecksContext.Check("条目页缓存：超大合集删除旧行", !cache.TryGet("collection-guarded", out _));
+    }
+
+    private static SteamWorkshopItemPage CollectionPage(int count, string? hugeText = null)
+    {
+        var items = new List<SteamWorkshopCollectionItemPage>(count);
+        for (var i = 0; i < count; i++)
+        {
+            items.Add(new SteamWorkshopCollectionItemPage(
+                "child-" + i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                hugeText ?? "Child " + i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                "https://images.steamusercontent.com/child-" + i.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".jpg",
+                "Author",
+                hugeText ?? "Short description " + i.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
+        return new SteamWorkshopItemPage(
+            "Author",
+            "https://steamcommunity.com/profiles/1",
+            hugeText ?? "<p>collection</p>",
+            [],
+            [],
+            0,
+            [],
+            items);
+    }
+
+
     private static void CheckTtl(IFileSystem fileSystem, string root, MutableClock clock)
     {
         var cache = CreateCache(fileSystem, clock, Path.Combine(root, "ttl"));

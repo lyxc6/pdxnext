@@ -28,6 +28,10 @@ public static class WorkshopCollectionPageChecks
         "OnCollectionItemSubscribeClick",
         "OnCollectionItemOpenBrowserClick",
         "OnCollectionItemOpenSteamClick",
+        "CanActivateSteamSubscription",
+        "CanActivateCollectionSubscription",
+        "TranslatedName",
+        "txtWorkshopCollectionSubscribedInline",
     ];
 
     /// <summary>两种语言都必须补齐的合集订阅文案键。</summary>
@@ -48,21 +52,34 @@ public static class WorkshopCollectionPageChecks
 
         var root = FindWorkspaceRoot();
         var xamlPath = Path.Combine(root, "src", "PdxLauncher.App", "Views", "WorkshopDetailPage.xaml");
+        var codeBehindPath = Path.Combine(root, "src", "PdxLauncher.App", "Views", "WorkshopDetailPage.xaml.cs");
         var vmPath = Path.Combine(root, "src", "PdxLauncher.App", "ViewModels", "WorkshopDetailViewModel.cs");
+        var detailSourcePath = Path.Combine(root, "src", "PdxLauncher.App", "Services", "WorkshopDetailSource.cs");
+        var itemPageCachePath = Path.Combine(root, "src", "PdxLauncher.Core", "Online", "SteamItemPageCache.cs");
+        var pageStorePath = Path.Combine(root, "src", "PdxLauncher.Core", "Online", "SqliteWorkshopPageStore.cs");
 
         if (!ChecksContext.Check("合集详情页: WorkshopDetailPage.xaml 存在", File.Exists(xamlPath), xamlPath)
-            || !ChecksContext.Check("合集详情页: WorkshopDetailViewModel.cs 存在", File.Exists(vmPath), vmPath))
+            || !ChecksContext.Check("合集详情页: WorkshopDetailPage.xaml.cs 存在", File.Exists(codeBehindPath), codeBehindPath)
+            || !ChecksContext.Check("合集详情页: WorkshopDetailViewModel.cs 存在", File.Exists(vmPath), vmPath)
+            || !ChecksContext.Check("合集详情页: WorkshopDetailSource.cs 存在", File.Exists(detailSourcePath), detailSourcePath)
+            || !ChecksContext.Check("合集详情页: SteamItemPageCache.cs 存在", File.Exists(itemPageCachePath), itemPageCachePath)
+            || !ChecksContext.Check("合集详情页: SqliteWorkshopPageStore.cs 存在", File.Exists(pageStorePath), pageStorePath))
         {
             return ChecksContext.Failures - before;
         }
 
         var xaml = File.ReadAllText(xamlPath);
+        var codeBehind = File.ReadAllText(codeBehindPath);
         var vm = File.ReadAllText(vmPath);
 
         CheckXamlTokens(xaml);
         CheckModSectionsGated(vm);
         CheckCommentsKept(vm);
         CheckCollectionActions(vm);
+        CheckSubscribeFallbacks(xaml, codeBehind, vm);
+        CheckCollectionButtonPlacement(xaml);
+        CheckCollectionTranslation(xaml, vm);
+        CheckCollectionCacheGuards(File.ReadAllText(detailSourcePath), File.ReadAllText(itemPageCachePath), File.ReadAllText(pageStorePath));
         CheckReswKeys(root);
 
         return ChecksContext.Failures - before;
@@ -142,6 +159,98 @@ public static class WorkshopCollectionPageChecks
             "合集详情页: 合集分支跳过画廊下载",
             vm.Contains("if (IsCollection)", StringComparison.Ordinal)
             && vm.Contains("DownloadInlineImagesAsync(row, inlineUrls, cancellationToken)", StringComparison.Ordinal));
+    }
+
+    /// <summary>只读模式下按钮可以点，页面负责回退到 Steam 客户端；主 mod 按钮同理。</summary>
+    private static void CheckSubscribeFallbacks(string xaml, string codeBehind, string vm)
+    {
+        ChecksContext.Check(
+            "合集详情页: 合集子项按钮按 CanActivate 启用（不要求写开关）",
+            xaml.Contains("CanActivateSteamSubscription", StringComparison.Ordinal)
+            && !xaml.Contains("IsEnabled=\"{x:Bind CanToggleSteamSubscription", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "合集详情页: 合集级按钮按 CanActivate 启用",
+            xaml.Contains("CanActivateCollectionSubscription", StringComparison.Ordinal)
+            && vm.Contains("public bool CanActivateCollectionSubscription => IsCollection && !IsSteamSubscribing", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "合集详情页: 主 mod 按钮按 CanActivate 启用",
+            xaml.Contains("ViewModel.CanActivateSteamSubscription", StringComparison.Ordinal)
+            && vm.Contains("public bool CanActivateSteamSubscription => ShowSteamSubscribeButton && !IsSteamSubscribing", StringComparison.Ordinal));
+
+        ChecksContext.Check(
+            "合集详情页: 子项只读时回退到 Steam 页面",
+            codeBehind.Contains("!_viewModel.CanWriteSteam || !_viewModel.IsSteamDirectAvailable", StringComparison.Ordinal)
+            && codeBehind.Contains("TryOpenSteam(row.SteamUrl", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "合集详情页: 合集级只读时回退到 Steam 页面",
+            codeBehind.Contains("!_viewModel.IsSteamDirectAvailable || !_viewModel.CanWriteSteam", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "合集详情页: 主 mod 按钮只读时也走兜底",
+            codeBehind.Contains("_viewModel.CanWriteSteam", StringComparison.Ordinal)
+            && codeBehind.Contains("TryOpenSteam(_viewModel.SteamUrl", StringComparison.Ordinal));
+    }
+
+    /// <summary>「订阅全部」必须在「合集内容」标题与子项列表之间，不在概览卡里。</summary>
+    private static void CheckCollectionButtonPlacement(string xaml)
+    {
+        var title = xaml.IndexOf("WorkshopDetailCollectionTitle", StringComparison.Ordinal);
+        var button = xaml.IndexOf("btnWorkshopCollectionSubscribe", StringComparison.Ordinal);
+        var list = xaml.IndexOf("lstWorkshopCollectionItems", StringComparison.Ordinal);
+        ChecksContext.Check(
+            "合集详情页: 订阅全部在合集内容标题与列表之间",
+            title >= 0 && button > title && list > button,
+            $"title={title} button={button} list={list}");
+
+        var heroStart = xaml.IndexOf("pnlWorkshopCollectionHero", StringComparison.Ordinal);
+        var statusStart = heroStart >= 0
+            ? xaml.IndexOf("<!-- 3. 状态", heroStart, StringComparison.Ordinal)
+            : -1;
+        if (ChecksContext.Check("合集详情页: 找到合集概览卡", heroStart >= 0 && statusStart > heroStart))
+        {
+            var hero = xaml[heroStart..statusStart];
+            ChecksContext.Check(
+                "合集详情页: 概览卡里不再放订阅全部",
+                !hero.Contains("btnWorkshopCollectionSubscribe", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>合集子项标题翻译：VM 有启动方法，模板有译文块。</summary>
+    private static void CheckCollectionTranslation(string xaml, string vm)
+    {
+        foreach (var token in new[]
+                 {
+                     "StartCollectionNameTranslation",
+                     "TranslateCollectionNamesAfterDebounceAsync",
+                     "collection-names",
+                 })
+        {
+            ChecksContext.Check(
+                "合集详情页: 翻译链路含 " + token,
+                vm.Contains(token, StringComparison.Ordinal),
+                token);
+        }
+
+        ChecksContext.Check(
+            "合集详情页: 合集模板绑定标题译文",
+            xaml.Contains("TranslatedName", StringComparison.Ordinal)
+            && xaml.Contains("txtWorkshopCollectionSubscribedInline", StringComparison.Ordinal));
+    }
+
+    /// <summary>缓存正确性：失败兜底不缺子项、合集详情不写普通缓存、超限清旧行、空列表归一。</summary>
+    private static void CheckCollectionCacheGuards(string detailSource, string itemPageCache, string pageStore)
+    {
+        ChecksContext.Check(
+            "合集详情页: 物品页失败兜底要求子项",
+            detailSource.Contains("(!requireCollectionItems || cacheHasCollection)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "合集详情页: 合集详情不写普通详情缓存",
+            detailSource.Contains("if (!detail.IsCollection)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "合集详情页: 超限页删除旧缓存",
+            itemPageCache.Contains("_store.Remove(publishedFileId)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "合集详情页: 页面缓存归一 CollectionItems",
+            pageStore.Contains("entry.CollectionItems ??= [];", StringComparison.Ordinal));
     }
 
     private static void CheckReswKeys(string root)
