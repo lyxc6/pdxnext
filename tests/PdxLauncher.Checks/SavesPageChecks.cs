@@ -24,7 +24,7 @@ public static class SavesPageChecks
     private const string SavesTag = "saves";
     private const string PageTypeName = "PdxLauncher.App.Views.SavesPage";
 
-    /// <summary>三种「没东西可显示」的原因必须各自有标题与说明，不能合并成一句「暂无数据」。</summary>
+    /// <summary>四种「没东西可显示」的原因必须各自有标题与说明，不能合并成一句「暂无数据」。</summary>
     private static readonly string[] EmptyStateKeys =
     [
         "saves.empty.noDirectory.title",
@@ -35,6 +35,8 @@ public static class SavesPageChecks
         "saves.empty.failed.message",
         "saves.empty.noGame.title",
         "saves.empty.noGame.message",
+        "saves.empty.unsupported.title",
+        "saves.empty.unsupported.message",
     ];
 
     /// <summary>页面/ViewModel 必须走生成键，而不是写死中文。</summary>
@@ -49,6 +51,7 @@ public static class SavesPageChecks
         "saves.status.lastScan",
         "saves.status.failed",
         "saves.status.noGame",
+        "saves.status.unsupported",
         "saves.dateFallback",
         "saves.metadataUnreadable",
         "saves.experimental",
@@ -223,10 +226,18 @@ public static class SavesPageChecks
                 && viewModel.Contains("SavesState.Failed", StringComparison.Ordinal));
 
         ChecksContext.Check(
-            "存档页: 三种空状态分别映射（无目录 / 目录空 / 失败）",
-            viewModel.Contains("SavesState.NoDirectory", StringComparison.Ordinal)
+            "存档页: 四种空状态分别映射（未登记 / 无目录 / 目录空 / 失败）",
+            viewModel.Contains("SavesState.Unsupported", StringComparison.Ordinal)
+                && viewModel.Contains("SavesState.NoDirectory", StringComparison.Ordinal)
                 && viewModel.Contains("SavesState.Empty", StringComparison.Ordinal)
                 && viewModel.Contains("SavesState.Failed", StringComparison.Ordinal));
+
+        ChecksContext.Check(
+            "存档页: 未登记落点在扫描前直接返回",
+            Regex.IsMatch(
+                viewModel,
+                @"GetLocations\(gameId\)[\s\S]{0,200}?SavesState\.Unsupported[\s\S]{0,200}?return;",
+                RegexOptions.CultureInvariant));
 
         ChecksContext.Check(
             "存档页: 有游戏内日期时优先用它",
@@ -466,8 +477,8 @@ public static class SavesPageChecks
     }
 
     /// <summary>
-    /// 「没有目录」「目录是空的」「扫描失败」三句说明不能同文：合并成一句「暂无存档」，
-    /// 用户就分不清是该进游戏存一次、还是该看日志排查。
+    /// 「未登记落点」「没有目录」「目录是空的」「扫描失败」四句说明不能同文：合并成一句「暂无存档」，
+    /// 用户就分不清是这款游戏没接入、该进游戏存一次、还是该看日志排查。
     /// </summary>
     private static void CheckEmptyStateMessagesAreDistinct(string root)
     {
@@ -480,6 +491,7 @@ public static class SavesPageChecks
         var values = new List<string>();
         foreach (var key in new[]
                  {
+                     "saves.empty.unsupported.message",
                      "saves.empty.noDirectory.message",
                      "saves.empty.empty.message",
                      "saves.empty.failed.message",
@@ -492,8 +504,8 @@ public static class SavesPageChecks
         }
 
         ChecksContext.Check(
-            "存档页: 三种空状态说明互不相同",
-            values.Count == 3 && values.Distinct(StringComparer.Ordinal).Count() == values.Count,
+            "存档页: 四种空状态说明互不相同",
+            values.Count == 4 && values.Distinct(StringComparer.Ordinal).Count() == values.Count,
             string.Join(" | ", values));
     }
 

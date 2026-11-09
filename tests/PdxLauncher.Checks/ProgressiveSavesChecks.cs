@@ -43,6 +43,7 @@ public static class ProgressiveSavesChecks
             CheckSecondPhaseReusesParser(fs, catalog, documents);
             CheckViewModelProgressiveFill();
             CheckCancellation();
+            CheckUnsupportedLocation();
             CheckAutomationWatcher();
             CheckCancellationDuringDetails();
             CheckConcurrencyLimit();
@@ -261,6 +262,30 @@ public static class ProgressiveSavesChecks
         ChecksContext.Check("第一段被取消时抛出 OperationCanceledException", cancelled);
         ChecksContext.Equal("取消后不留下半截行", 0, viewModel.Saves.Count);
         ChecksContext.Check("取消后不显示忙碌态", !viewModel.IsBusy);
+    }
+
+    /// <summary>未登记存档落点的游戏：直接进「暂不支持」，不能显示「还没创建存档目录」。</summary>
+    private static void CheckUnsupportedLocation()
+    {
+        Console.WriteLine("[ProgressiveSavesChecks] 未登记落点给「暂不支持」空态");
+        var viewModel = new SavesViewModel(new UnsupportedIndex(), NoBackupService.Instance, new NullLogger());
+        var load = viewModel.LoadAsync(Game("C:\\game"), CancellationToken.None);
+        load.GetAwaiter().GetResult();
+
+        ChecksContext.Equal("未登记落点不扫描文件", 0, viewModel.Saves.Count);
+        ChecksContext.Check(
+            "空态标题是暂不支持",
+            viewModel.EmptyStateTitle.StartsWith("saves.empty.unsupported.title", StringComparison.Ordinal),
+            viewModel.EmptyStateTitle);
+        ChecksContext.Check(
+            "空态正文是暂不支持",
+            viewModel.EmptyStateMessage.StartsWith("saves.empty.unsupported.message", StringComparison.Ordinal),
+            viewModel.EmptyStateMessage);
+        ChecksContext.Check(
+            "状态栏是暂不支持",
+            viewModel.StatusText.StartsWith("saves.status.unsupported", StringComparison.Ordinal),
+            viewModel.StatusText);
+        ChecksContext.Check("未登记落点不显示忙碌态", !viewModel.IsBusy);
     }
 
     /// <summary>读屏名监听：第二段补细节后 ListItem 必须被重写成新名字；退订后不再回调。</summary>
@@ -526,6 +551,17 @@ public static class ProgressiveSavesChecks
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
             return new SaveFileScanResult([], [], false);
         }
+
+        public SaveGameMeta ParseFile(SaveFileEntry entry) => throw new InvalidOperationException("不应解析");
+
+        public IReadOnlyList<SaveLocationInfo> GetLocations(string gameId) => [Location()];
+    }
+
+    /// <summary>没有登记任何存档落点；LoadAsync 应该在扫描前就返回。</summary>
+    private sealed class UnsupportedIndex : ISaveGameFileIndex
+    {
+        public Task<SaveFileScanResult> ScanFilesAsync(IEnumerable<string> gameIds, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("未登记落点不应扫描");
 
         public SaveGameMeta ParseFile(SaveFileEntry entry) => throw new InvalidOperationException("不应解析");
 

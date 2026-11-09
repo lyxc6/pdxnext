@@ -103,6 +103,8 @@ internal static class Keys
     public const string SavesEmptyNoDirectoryTitle = "saves.empty.noDirectory.title";
     public const string SavesEmptyNoGameMessage = "saves.empty.noGame.message";
     public const string SavesEmptyNoGameTitle = "saves.empty.noGame.title";
+    public const string SavesEmptyUnsupportedMessage = "saves.empty.unsupported.message";
+    public const string SavesEmptyUnsupportedTitle = "saves.empty.unsupported.title";
     public const string SavesExperimental = "saves.experimental";
     public const string SavesExperimentalTooltip = "saves.experimentalTooltip";
     public const string SavesMetadataUnreadable = "saves.metadataUnreadable";
@@ -120,6 +122,7 @@ internal static class Keys
     public const string SavesStatusNoGame = "saves.status.noGame";
     public const string SavesStatusReading = "saves.status.reading";
     public const string SavesStatusScanning = "saves.status.scanning";
+    public const string SavesStatusUnsupported = "saves.status.unsupported";
     public const string SavesVersion = "saves.version";
 
     // DLC 行视图模型（DlcImageChecks 链接 DlcRowViewModel.cs 用）。取值与 Resources.resw 一致。
