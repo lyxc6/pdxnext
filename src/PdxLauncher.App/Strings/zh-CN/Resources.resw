@@ -5207,6 +5207,9 @@
   <data name="WorkshopStatusParseFailed" xml:space="preserve">
     <value>Steam 页面结构解析失败，暂时无法显示列表</value>
   </data>
+  <data name="WorkshopStatusProxyActiveFailed" xml:space="preserve">
+    <value>当前代理 {0} 已生效，但仍无法连接 steamcommunity.com；请检查代理是否可用或换一个节点</value>
+  </data>
   <data name="WorkshopStatusProxyHint" xml:space="preserve">
     <value>检测到系统代理 {0}，可在「设置 → 代理」里切换过去再试</value>
   </data>

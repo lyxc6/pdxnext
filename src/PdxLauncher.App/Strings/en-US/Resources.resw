@@ -5207,6 +5207,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="WorkshopStatusParseFailed" xml:space="preserve">
     <value>Steam page structure could not be parsed; the list is unavailable</value>
   </data>
+  <data name="WorkshopStatusProxyActiveFailed" xml:space="preserve">
+    <value>Proxy {0} is already active, but steamcommunity.com is still unreachable; check the proxy or switch nodes</value>
+  </data>
   <data name="WorkshopStatusProxyHint" xml:space="preserve">
     <value>Detected system proxy {0}; switch to it under Settings → Proxy and retry</value>
   </data>
