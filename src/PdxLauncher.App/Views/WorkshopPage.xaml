@@ -467,6 +467,25 @@
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            AutomationProperties.AutomationId="txtWorkshopEmpty" />
             </StackPanel>
+
+            <!-- 访问失败：把原因（含代理提示）摆在列表区中间，并给一个明确的重试入口，
+                 不能再用「这个游戏还没有创意工坊内容」冒充网络失败。 -->
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="12"
+                        MaxWidth="720"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowLoadFailureState), Mode=OneWay}">
+                <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                           Style="{StaticResource BodyTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           AutomationProperties.AutomationId="txtWorkshopLoadFailure" />
+                <Button Content="{x:Bind L.CommonRetry, Mode=OneWay}"
+                        HorizontalAlignment="Center"
+                        Click="OnRefreshClick"
+                        AutomationProperties.AutomationId="btnWorkshopRetry" />
+            </StackPanel>
             </Grid>
         </Grid>
 

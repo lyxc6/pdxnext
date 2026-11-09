@@ -253,6 +253,14 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     [ObservableProperty]
     private bool _isFillingCovers;
 
+    /// <summary>
+    /// 最近一次查询是否以失败 / 断网兜底结束。
+    /// 用来把「加载失败」和「查询成功但确实没有内容」分开：空列表提示只在后者显示，
+    /// 否则网络断掉时页面会写着「这个游戏还没有创意工坊内容」，用户以为刷新坏了。
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasLoadFailure;
+
     /// <summary>当前选中的每页条数（分页器下拉框）。</summary>
     [ObservableProperty]
     private int _selectedPageSize = DefaultPageSize;
@@ -355,8 +363,13 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>页码文案：第 1 / 42 页；没有结果时为空串。</summary>
     public string PageText => _totalPages > 0 ? T(Keys.WorkshopPage, _page + 1, _totalPages) : string.Empty;
 
-    /// <summary>空结果时显示提示（已完成查询且没有任何行，且已选中游戏）。</summary>
-    public bool ShowEmptyState => IsLoaded && HasGame && Rows.Count == 0;
+    /// <summary>空结果时显示提示（查询成功、没有失败、没有在加载、且确实一行都没有）。</summary>
+    public bool ShowEmptyState =>
+        IsLoaded && !IsBusy && HasGame && Rows.Count == 0 && !HasLoadFailure;
+
+    /// <summary>加载失败且没有可显示的旧行时，在列表区中间显示失败原因 + 重试。</summary>
+    public bool ShowLoadFailureState =>
+        HasLoadFailure && !IsBusy && HasGame && Rows.Count == 0;
 
     /// <summary>PDX 来源且未登录时显示「去登录」提示条。</summary>
     public bool ShowSignInHint => Source == WorkshopSource.Pdx && !_account.IsSignedIn;
@@ -390,6 +403,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     {
         Game = game;
         _gameId = game?.GameId;
+        HasLoadFailure = false;
 
         // 换游戏 / 重新加载：上一轮查询作废；已提交的搜索词跟随输入框当前内容。
         CancelPendingQuery();
@@ -591,14 +605,21 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 连不上 Steam 时，看看系统里是不是有代理却没在用；有就把地址报出来，
-    /// 让用户知道「不是没网，而是没走代理」。
+    /// 连不上 Steam 时补一句代理说明：
+    /// 当前已经在走代理 → 说「代理已生效但仍连不上，检查代理本身」；
+    /// 当前是直连、系统里有代理 → 报出地址，提示去设置里切过去。
     /// </summary>
     private string DescribeDetectedProxyHint()
     {
         try
         {
             // 只读探测：不改任何设置，也不改当前生效的代理。
+            var current = ProxyResolver.Describe(AppServices.Settings);
+            if (current.Url is not null)
+            {
+                return T(Keys.WorkshopStatusProxyActiveFailed, current.Url);
+            }
+
             var detection = ProxyResolver.Describe(new AppSettings { ProxyMode = ProxyModes.System });
             if (detection.Url is null)
             {
@@ -870,6 +891,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             _logger.Error("创意工坊查询被中断（可能是连接超时，game=" + _gameId + "）", ex);
             IsLoaded = true;
             IsBusy = false;
+            HasLoadFailure = true;
             StatusMessage = T(Keys.WorkshopStatusNetworkFailed, SteamCommunityHost);
             RaiseDerived();
         }
@@ -976,6 +998,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             }
 
             ApplyCachedPage(cached, cancellationToken);
+            HasLoadFailure = false;
             StatusMessage = T(Keys.WorkshopStatusLoadedCached);
             RaiseDerived();
 
@@ -1025,6 +1048,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         }
 
         IsBusy = true;
+        HasLoadFailure = false;
         StatusMessage = _appliedSearch.Length > 0
             ? T(Keys.WorkshopStatusSearching)
             : T(Keys.WorkshopStatusLoadingPage, _page + 1);
@@ -1034,7 +1058,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         {
             if (Source == WorkshopSource.Steam)
             {
-                await QuerySteamAsync(version, cancellationToken, key).ConfigureAwait(true);
+                await QuerySteamAsync(version, cancellationToken, key, force).ConfigureAwait(true);
             }
             else
             {
@@ -1050,6 +1074,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             if (version == _queryVersion)
             {
                 IsLoaded = true;
+                HasLoadFailure = true;
                 ShowFailureOrCache(
                     Source,
                     ex.Message,
@@ -1434,7 +1459,12 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <param name="version">查询代号；结果回来时不是最新一代就丢弃。</param>
     /// <param name="cancellationToken">本轮查询的取消令牌。</param>
     /// <param name="pageKey">页缓存键（成功后把这一页写进去）。</param>
-    private async Task QuerySteamAsync(int version, CancellationToken cancellationToken, string pageKey)
+    /// <param name="force">true = 强制走网络（刷新 / 回车搜索 / 换筛选），不复用旧的在途请求。</param>
+    private async Task QuerySteamAsync(
+        int version,
+        CancellationToken cancellationToken,
+        string pageKey,
+        bool force = false)
     {
         if (_steamAppId is not { } appId)
         {
@@ -1457,7 +1487,9 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             Filters.SpecialFilter,
             ResolveSection());
 
-        var result = await _steam.BrowseAsync(appId, query, cancellationToken).ConfigureAwait(true);
+        var result = await _steam
+            .BrowseAsync(appId, query, cancellationToken, bypassCoalescing: force)
+            .ConfigureAwait(true);
 
         // 已经被新一代查询或页面卸载取代：这一次的结果直接丢掉，别覆盖新列表。
         if (version != _queryVersion || cancellationToken.IsCancellationRequested)
@@ -1469,6 +1501,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
         if (!result.IsSuccess || result.Value is null)
         {
+            HasLoadFailure = true;
             var errorCode = result.Kind == ErrorKind.Unsupported
                 ? "steam-workshop-parse"
                 : result.ErrorMessage ?? "steam-workshop";
@@ -1481,6 +1514,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             return;
         }
 
+        HasLoadFailure = false;
         var page = result.Value;
         _totalCount = page.TotalCount;
         _totalPages = page.TotalPages;
@@ -1598,6 +1632,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
         if (!result.IsSuccess || result.Value is null)
         {
+            HasLoadFailure = true;
             ShowFailureOrCache(
                 WorkshopSource.Pdx,
                 result.ErrorMessage ?? "pdx-mods",
@@ -1606,6 +1641,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             return;
         }
 
+        HasLoadFailure = false;
         var page = result.Value;
         _totalCount = page.TotalCount;
         _totalPages = page.TotalCount == 0 ? 0 : ((page.TotalCount - 1) / _pageSize) + 1;
@@ -1696,6 +1732,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         }
 
         StatusMessage = message;
+        HasLoadFailure = true;
     }
 
     /// <summary>
@@ -2018,6 +2055,12 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _queryTask = RunQueryAsync(resetPage: true, force: true);
     }
 
+    partial void OnHasLoadFailureChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowEmptyState));
+        OnPropertyChanged(nameof(ShowLoadFailureState));
+    }
+
     partial void OnSourceChanged(WorkshopSource value)
     {
         // 来源换了，排序档位跟着换（Steam 6 档 / PDX 3 档）；重置到第一档避免选中项越界。
@@ -2278,6 +2321,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasNextPage));
         OnPropertyChanged(nameof(PageText));
         OnPropertyChanged(nameof(ShowEmptyState));
+        OnPropertyChanged(nameof(ShowLoadFailureState));
         OnPropertyChanged(nameof(ShowSignInHint));
         OnPropertyChanged(nameof(ShowTimeRange));
         OnPropertyChanged(nameof(ShowFilters));
