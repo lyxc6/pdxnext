@@ -975,7 +975,12 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
                 return;
             }
 
-            ApplyCachedPage(cached, cancellationToken);
+            await ApplyCachedPageAsync(cached, cancellationToken).ConfigureAwait(true);
+            if (version != _queryVersion || cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
             StatusMessage = T(Keys.WorkshopStatusLoadedCached);
             RaiseDerived();
 
@@ -1007,7 +1012,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             if (Rows.Count == 0)
             {
                 // 一行都没有时才用离线缓存兜底，免得页面空着。
-                ShowFailureOrCache(Source, "throttled", cooldown, cancellationToken);
+                await ShowFailureOrCacheAsync(Source, "throttled", cooldown, cancellationToken).ConfigureAwait(true);
                 if (Rows.Count > 0)
                 {
                     // 兜底成功：冷却原因仍然要说，否则用户只看到「显示缓存中的 N 个结果」。
@@ -1050,11 +1055,11 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             if (version == _queryVersion)
             {
                 IsLoaded = true;
-                ShowFailureOrCache(
+                await ShowFailureOrCacheAsync(
                     Source,
                     ex.Message,
                     ex is SteamThrottleException ? DescribeFailure(ex) : null,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(true);
                 _logger.Error("创意工坊查询失败（game=" + _gameId + "）", ex);
                 RaiseDerived();
             }
@@ -1112,21 +1117,49 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             _pageSize);
     }
 
-    /// <summary>把缓存的一页直接铺到列表上（封面只认磁盘命中，不联网）。</summary>
+    /// <summary>
+    /// 把缓存的一页直接铺到列表上（封面只认磁盘命中，不联网）。
+    /// <para>
+    /// 建行原先每行都按 key 再查一次 SQLite（开连接 + 三条 pragma），30–50 行压在 UI 线程上会拖慢切页；
+    /// 页快照本身已经带封面文件名，这里只判文件是否存在，并把整段建行丢到线程池。
+    /// </para>
+    /// </summary>
     /// <param name="page">页快照。</param>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    private void ApplyCachedPage(WorkshopPageCache.Page page, CancellationToken cancellationToken)
+    private async Task ApplyCachedPageAsync(WorkshopPageCache.Page page, CancellationToken cancellationToken)
     {
         _totalCount = page.TotalCount;
         _totalPages = page.TotalPages;
 
         var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
         var collectionsSection = IsCollectionsSection;
-        var rows = new List<WorkshopRowViewModel>(page.Items.Count);
-        foreach (var entry in page.Items)
+        var rows = await Task
+            .Run(() => BuildCachedRows(page.Items, size, collectionsSection, cancellationToken), cancellationToken)
+            .ConfigureAwait(true);
+
+        ReplaceRows(rows);
+        StartNameTranslation(rows, cancellationToken);
+    }
+
+    /// <summary>线程池上把页快照建成行模型；封面只看条目里的文件名，不再回查 SQLite。</summary>
+    /// <param name="items">页快照条目。</param>
+    /// <param name="thumbnailSize">缩略图边长（像素）。</param>
+    /// <param name="collectionsSection">是否合集区段。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>行模型。</returns>
+    private List<WorkshopRowViewModel> BuildCachedRows(
+        IReadOnlyList<WorkshopInfoCacheEntry> items,
+        int thumbnailSize,
+        bool collectionsSection,
+        CancellationToken cancellationToken)
+    {
+        var rows = new List<WorkshopRowViewModel>(items.Count);
+        foreach (var entry in items)
         {
-            var row = WorkshopRowViewModel.FromCache(entry, size, collectionsSection);
-            if (_info.TryGetCachedCover(WorkshopInfoCache.Key(row.Source, row.Id), out var cover))
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var row = WorkshopRowViewModel.FromCache(entry, thumbnailSize, collectionsSection);
+            if (_info.TryGetCachedCover(entry, out var cover))
             {
                 row.CoverPath = cover;
             }
@@ -1134,8 +1167,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             rows.Add(row);
         }
 
-        ReplaceRows(rows);
-        StartNameTranslation(rows, cancellationToken);
+        return rows;
     }
 
     /// <summary>
@@ -1472,11 +1504,11 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             var errorCode = result.Kind == ErrorKind.Unsupported
                 ? "steam-workshop-parse"
                 : result.ErrorMessage ?? "steam-workshop";
-            ShowFailureOrCache(
+            await ShowFailureOrCacheAsync(
                 WorkshopSource.Steam,
                 errorCode,
                 DescribeWorkshopError(errorCode, result.Kind),
-                cancellationToken);
+                cancellationToken).ConfigureAwait(true);
             RaiseDerived();
             return;
         }
@@ -1495,8 +1527,11 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         // 30 条实测 5 秒多，全压在 UI 线程上就是切页面卡死。整段丢线程池，
         // 回 UI 线程只做 ReplaceRows 与绑定（行模型本身不是 UI 对象）。
         var collectionsSection = IsCollectionsSection;
+        var gameId = _gameId;
         var (rows, entries) = await Task
-            .Run(() => BuildSteamRows(page.Items, size, collectionsSection, cancellationToken), cancellationToken)
+            .Run(
+                () => BuildSteamRows(page.Items, size, collectionsSection, gameId, cancellationToken),
+                cancellationToken)
             .ConfigureAwait(true);
 
         AppServices.Breadcrumb("工坊 建行完成 " + rows.Count + " 行");
@@ -1530,37 +1565,55 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>
     /// 在线程池上建好 Steam 列表页的行模型：每条都要读写一次工坊信息缓存（同步 SQLite），
     /// 放在 UI 线程上 30 条就是几秒的停顿。
+    /// <para>
+    /// 元数据先攒成一批、一个事务写完（逐条 Upsert 每条都要开连接、<c>BEGIN IMMEDIATE</c>、提交，
+    /// 再执行一次 <c>COUNT(*)</c>）；随后整页只读一次库拿回封面文件名与页缓存条目。
+    /// </para>
     /// </summary>
     /// <param name="items">列表页条目。</param>
     /// <param name="thumbnailSize">缩略图边长（像素）。</param>
+    /// <param name="collectionsSection">是否合集区段。</param>
+    /// <param name="gameId">抓取时所属游戏（在 UI 线程上先取好，避免建行途中换游戏）。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>行模型与对应的缓存条目快照。</returns>
     private (List<WorkshopRowViewModel> Rows, List<WorkshopInfoCacheEntry> Entries) BuildSteamRows(
         IReadOnlyList<SteamWorkshopItem> items,
         int thumbnailSize,
         bool collectionsSection,
+        string? gameId,
         CancellationToken cancellationToken)
     {
+        var pending = new List<WorkshopInfoCacheEntry>(items.Count);
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            pending.Add(CreateSteamEntry(item, gameId));
+        }
+
+        if (pending.Count > 0)
+        {
+            _info.UpsertMany(pending);
+        }
+
         var rows = new List<WorkshopRowViewModel>(items.Count);
         var entries = new List<WorkshopInfoCacheEntry>(items.Count);
         foreach (var item in items)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            // 先把元数据并进缓存，再从缓存取封面文件名：同一个 id 第二次出现不必再下载图片。
-            RecordSteamItem(item);
             var cacheKey = WorkshopInfoCache.Key(WorkshopSource.Steam, item.PublishedFileId);
             var row = WorkshopRowViewModel.FromSteam(item, thumbnailSize, collectionsSection);
-            if (_info.TryGetCachedCover(cacheKey, out var cover))
+            if (_info.TryGet(cacheKey, out var entry))
             {
-                row.CoverPath = cover;
+                if (_info.TryGetCachedCover(entry, out var cover))
+                {
+                    row.CoverPath = cover;
+                }
+
+                entries.Add(entry);
             }
 
             rows.Add(row);
-            if (_info.TryGet(cacheKey, out var entry))
-            {
-                entries.Add(entry);
-            }
         }
 
         return (rows, entries);
@@ -1598,10 +1651,10 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
         if (!result.IsSuccess || result.Value is null)
         {
-            ShowFailureOrCache(
+            await ShowFailureOrCacheAsync(
                 WorkshopSource.Pdx,
                 result.ErrorMessage ?? "pdx-mods",
-                cancellationToken: cancellationToken);
+                cancellationToken: cancellationToken).ConfigureAwait(true);
             RaiseDerived();
             return;
         }
@@ -1609,28 +1662,25 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         var page = result.Value;
         _totalCount = page.TotalCount;
         _totalPages = page.TotalCount == 0 ? 0 : ((page.TotalCount - 1) / _pageSize) + 1;
+        AppServices.Breadcrumb("工坊 PDX 结果已回（" + page.Items.Count + " 条）");
 
         var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
-        var rows = new List<WorkshopRowViewModel>(page.Items.Count);
-        var entries = new List<WorkshopInfoCacheEntry>(page.Items.Count);
-        foreach (var item in page.Items)
-        {
-            RecordPdxItem(item);
-            var cacheKey = WorkshopInfoCache.Key(WorkshopSource.Pdx, item.ModId);
-            var row = WorkshopRowViewModel.FromPdx(item, size);
-            if (_info.TryGetCachedCover(cacheKey, out var cover))
-            {
-                row.CoverPath = cover;
-            }
 
-            rows.Add(row);
-            if (_info.TryGet(cacheKey, out var entry))
-            {
-                entries.Add(entry);
-            }
+        // 与 Steam 分支同一条规矩：建行要逐条读写工坊信息缓存（同步 SQLite），
+        // 30 条压在 UI 线程上就是切页面卡死。整段丢线程池，回 UI 线程只做铺行与绑定。
+        var (rows, entries) = await Task
+            .Run(() => BuildPdxRows(page.Items, size, gameId, cancellationToken), cancellationToken)
+            .ConfigureAwait(true);
+
+        // 建行期间可能又起了新查询（翻页 / 换筛选）：迟到的结果直接丢弃。
+        if (version != _queryVersion || cancellationToken.IsCancellationRequested)
+        {
+            return;
         }
 
+        AppServices.Breadcrumb("工坊 PDX 建行完成 " + rows.Count + " 行");
         ReplaceRows(rows);
+        AppServices.Breadcrumb("工坊 列表已铺 " + rows.Count + " 行");
         StartNameTranslation(rows, cancellationToken);
         _pages.Set(pageKey, entries, _totalCount, _totalPages);
         await FlushInfoCacheAsync().ConfigureAwait(true);
@@ -1643,31 +1693,83 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     }
 
     /// <summary>
+    /// 在线程池上建好 PDX 列表页的行模型：与 <see cref="BuildSteamRows"/> 同样的原因，
+    /// 逐条 SQLite 读写不能压在 UI 线程上；元数据同样一个事务批量写入。
+    /// </summary>
+    /// <param name="items">PDX 条目。</param>
+    /// <param name="thumbnailSize">缩略图边长（像素）。</param>
+    /// <param name="gameId">抓取时所属游戏（在 UI 线程上先取好，避免建行途中换游戏）。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>行模型与对应的缓存条目快照。</returns>
+    private (List<WorkshopRowViewModel> Rows, List<WorkshopInfoCacheEntry> Entries) BuildPdxRows(
+        IReadOnlyList<PdxModsSummary> items,
+        int thumbnailSize,
+        string? gameId,
+        CancellationToken cancellationToken)
+    {
+        var pending = new List<WorkshopInfoCacheEntry>(items.Count);
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            pending.Add(CreatePdxEntry(item, gameId));
+        }
+
+        if (pending.Count > 0)
+        {
+            _info.UpsertMany(pending);
+        }
+
+        var rows = new List<WorkshopRowViewModel>(items.Count);
+        var entries = new List<WorkshopInfoCacheEntry>(items.Count);
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var cacheKey = WorkshopInfoCache.Key(WorkshopSource.Pdx, item.ModId);
+            var row = WorkshopRowViewModel.FromPdx(item, thumbnailSize);
+            if (_info.TryGet(cacheKey, out var entry))
+            {
+                if (_info.TryGetCachedCover(entry, out var cover))
+                {
+                    row.CoverPath = cover;
+                }
+
+                entries.Add(entry);
+            }
+
+            rows.Add(row);
+        }
+
+        return (rows, entries);
+    }
+
+    /// <summary>
     /// 查询失败：先用这个游戏之前缓存过的条目把列表填上，
     /// 一条都没有才显示失败原因。断网时页面仍然是可用的。
+    /// <para>
+    /// 快照读取与建行都放线程池：缓存条目最多 2000 条，原先在 UI 线程上逐条按 key 回查 SQLite，
+    /// 连不上 PDX / Steam 时这一下能把界面按住好几秒。快照条目自带封面文件名，这里不再回查。
+    /// </para>
     /// </summary>
     /// <param name="source">当前来源。</param>
     /// <param name="reason">失败原因（用于日志/兜底文案）。</param>
     /// <param name="statusOverride">限流等特殊情况下的状态栏文案；null 表示用通用失败文案。</param>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    private void ShowFailureOrCache(
+    private async Task ShowFailureOrCacheAsync(
         WorkshopSource source,
         string reason,
         string? statusOverride = null,
         CancellationToken cancellationToken = default)
     {
         var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
-        var entries = _info.Snapshot(source, _gameId);
-        var rows = new List<WorkshopRowViewModel>(entries.Count);
-        foreach (var entry in entries)
-        {
-            var row = WorkshopRowViewModel.FromCache(entry, size);
-            if (_info.TryGetCachedCover(WorkshopInfoCache.Key(source, entry.Id), out var cover))
-            {
-                row.CoverPath = cover;
-            }
+        var gameId = _gameId;
+        var rows = await Task
+            .Run(() => BuildFallbackRows(source, size, gameId, cancellationToken), cancellationToken)
+            .ConfigureAwait(true);
 
-            rows.Add(row);
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return;
         }
 
         ReplaceRows(rows);
@@ -1696,6 +1798,36 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         }
 
         StatusMessage = message;
+    }
+
+    /// <summary>线程池上从离线快照建行；封面只判条目里的文件名，不回查 SQLite。</summary>
+    /// <param name="source">来源。</param>
+    /// <param name="thumbnailSize">缩略图边长（像素）。</param>
+    /// <param name="gameId">抓取时所属游戏（在 UI 线程上先取好，避免建行途中换游戏）。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <returns>行模型。</returns>
+    private List<WorkshopRowViewModel> BuildFallbackRows(
+        WorkshopSource source,
+        int thumbnailSize,
+        string? gameId,
+        CancellationToken cancellationToken)
+    {
+        var entries = _info.Snapshot(source, gameId);
+        var rows = new List<WorkshopRowViewModel>(entries.Count);
+        foreach (var entry in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var row = WorkshopRowViewModel.FromCache(entry, thumbnailSize);
+            if (_info.TryGetCachedCover(entry, out var cover))
+            {
+                row.CoverPath = cover;
+            }
+
+            rows.Add(row);
+        }
+
+        return rows;
     }
 
     /// <summary>
@@ -1852,44 +1984,40 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         RaiseCoverProgress();
     }
 
-    /// <summary>把 Steam 列表条目并进缓存（不覆盖已抓到的封面文件名与详情）。</summary>
+    /// <summary>把 Steam 列表条目转成待写入缓存的行（不覆盖已抓到的封面文件名与详情）。</summary>
     /// <param name="item">Steam 条目。</param>
-    private void RecordSteamItem(SteamWorkshopItem item)
+    /// <param name="gameId">所属游戏（建行前在 UI 线程取好的快照）。</param>
+    private static WorkshopInfoCacheEntry CreateSteamEntry(SteamWorkshopItem item, string? gameId) => new()
     {
-        _info.Upsert(new WorkshopInfoCacheEntry
-        {
-            Source = "steam",
-            Id = item.PublishedFileId,
-            GameId = _gameId,
-            Name = item.Title,
-            Author = item.AuthorSteamId,
-            Rating = item.StarRating,
-            RatingsTotal = item.TotalVotes,
-            Subscriptions = item.Subscriptions,
-            UpdatedUtc = item.UpdatedUtc,
-            SizeBytes = item.FileSizeBytes,
-            CoverUrl = item.PreviewUrl,
-        });
-    }
+        Source = "steam",
+        Id = item.PublishedFileId,
+        GameId = gameId,
+        Name = item.Title,
+        Author = item.AuthorSteamId,
+        Rating = item.StarRating,
+        RatingsTotal = item.TotalVotes,
+        Subscriptions = item.Subscriptions,
+        UpdatedUtc = item.UpdatedUtc,
+        SizeBytes = item.FileSizeBytes,
+        CoverUrl = item.PreviewUrl,
+    };
 
-    /// <summary>把 PDX 列表条目并进缓存。</summary>
+    /// <summary>把 PDX 列表条目转成待写入缓存的行。</summary>
     /// <param name="summary">PDX 条目。</param>
-    private void RecordPdxItem(PdxModsSummary summary)
+    /// <param name="gameId">所属游戏（建行前在 UI 线程取好的快照）。</param>
+    private static WorkshopInfoCacheEntry CreatePdxEntry(PdxModsSummary summary, string? gameId) => new()
     {
-        _info.Upsert(new WorkshopInfoCacheEntry
-        {
-            Source = "pdx",
-            Id = summary.ModId,
-            GameId = _gameId,
-            Name = summary.DisplayName,
-            Author = summary.Author,
-            Rating = summary.Rating,
-            RatingsTotal = summary.RatingsTotal,
-            Subscriptions = summary.Subscriptions,
-            UpdatedUtc = summary.UpdatedOn,
-            CoverUrl = summary.CoverUrl,
-        });
-    }
+        Source = "pdx",
+        Id = summary.ModId,
+        GameId = gameId,
+        Name = summary.DisplayName,
+        Author = summary.Author,
+        Rating = summary.Rating,
+        RatingsTotal = summary.RatingsTotal,
+        Subscriptions = summary.Subscriptions,
+        UpdatedUtc = summary.UpdatedOn,
+        CoverUrl = summary.CoverUrl,
+    };
 
     /// <summary>当前来源可用的排序文案键。</summary>
     private static string[] SortKeysFor(WorkshopSource source) =>

@@ -25,6 +25,7 @@ public static class WorkshopItemStoreChecks
 
         CheckMigration(fs, logger);
         CheckCrud(fs, logger);
+        CheckBatchUpsert(fs, logger);
         CheckTrim(fs, logger);
 
         return ChecksContext.Failures == before ? 0 : 1;
@@ -156,6 +157,81 @@ public static class WorkshopItemStoreChecks
 
             store.Clear();
             ChecksContext.Equal("清空后条目数", 0, store.Count);
+        }
+        finally
+        {
+            PlaysetChecks.TryDelete(fs, root);
+        }
+    }
+
+    /// <summary>
+    /// 批量写入：多条只开一个事务、只做一次容量淘汰；列表刷新仍不能抹掉已抓到的详情与封面。
+    /// <para>列表页一次并进 30–50 条，逐条 Upsert 在慢盘上就是秒级开销。</para>
+    /// </summary>
+    private static void CheckBatchUpsert(IFileSystem fs, NullLogger logger)
+    {
+        Console.WriteLine("[WorkshopItemStoreChecks] 批量写入");
+        var root = PlaysetChecks.CreateTempRoot(fs, "workshop-items-batch");
+        try
+        {
+            var database = new PdxDatabase(fs, logger, Path.Combine(root, PdxDatabase.FileName));
+            var store = new SqliteWorkshopItemStore(database, logger);
+            var now = DateTimeOffset.UtcNow;
+
+            store.Upsert(new WorkshopInfoCacheEntry
+            {
+                Source = "steam",
+                Id = "batch-1",
+                GameId = "ck3",
+                Name = "旧名",
+                FetchedUtc = now.AddHours(-1),
+            });
+            store.SetDetail("steam:batch-1", "旧详情", null, null, null, 0, 0, now.AddHours(-1));
+            store.SetCover("steam:batch-1", "steam/batch-1.png", "https://example.com/b.png", now.AddHours(-1));
+
+            store.UpsertMany(
+            [
+                new WorkshopInfoCacheEntry
+                {
+                    Source = "steam",
+                    Id = "batch-1",
+                    Name = "新名",
+                    Subscriptions = 10,
+                    FetchedUtc = now,
+                },
+                new WorkshopInfoCacheEntry
+                {
+                    Source = "steam",
+                    Id = "batch-2",
+                    GameId = "ck3",
+                    Name = "第二条",
+                    Subscriptions = 20,
+                    FetchedUtc = now,
+                },
+                new WorkshopInfoCacheEntry
+                {
+                    Source = "pdx",
+                    Id = "batch-3",
+                    GameId = "ck3",
+                    Name = "PDX 第三条",
+                    FetchedUtc = now,
+                },
+            ]);
+
+            ChecksContext.Equal("批量写入后条目数", 3, store.Count);
+            ChecksContext.Check(
+                "批量写入能按 key 找到",
+                store.Find("steam:batch-2") is not null && store.Find("pdx:batch-3") is not null);
+            ChecksContext.Equal("批量写入按来源分组（Steam）", 2, store.List(WorkshopSource.Steam, null, 10).Count);
+            ChecksContext.Equal("批量写入按来源分组（PDX）", 1, store.List(WorkshopSource.Pdx, null, 10).Count);
+
+            var merged = store.Find("steam:batch-1");
+            ChecksContext.Equal("批量刷新更新名称", "新名", merged?.Name ?? "<null>");
+            ChecksContext.Equal("批量刷新保留详情", "旧详情", merged?.DetailText ?? "<null>");
+            ChecksContext.Equal("批量刷新保留封面", "steam/batch-1.png", merged?.CoverFileName ?? "<null>");
+
+            store.UpsertMany([]);
+            ChecksContext.Equal("空批次不改变条目数", 3, store.Count);
         }
         finally
         {
