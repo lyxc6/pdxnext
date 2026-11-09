@@ -125,6 +125,12 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
     /// <summary>单项订阅按钮是否可点。</summary>
     public bool CanToggleSteamSubscription => IsSteamActionAvailable && !IsSteamSubscribing;
 
+    /// <summary>
+    /// 单项订阅按钮是否可激活（不论写开关）：
+    /// 直连可用走直连，只读模式由页面回退到「在 Steam 客户端打开」，所以按钮本身必须可点。
+    /// </summary>
+    public bool CanActivateSteamSubscription => CanOpenSteam && !IsSteamSubscribing;
+
     /// <summary>单项订阅按钮文案：订阅 / 取消订阅 / 正在订阅…。</summary>
     public string SteamSubscribeActionText => IsSteamSubscribing
         ? T(Keys.WorkshopDetailSubscribing)
@@ -512,6 +518,7 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
     partial void OnIsSteamSubscribingChanged(bool value)
     {
         OnPropertyChanged(nameof(CanToggleSteamSubscription));
+        OnPropertyChanged(nameof(CanActivateSteamSubscription));
         OnPropertyChanged(nameof(SteamSubscribeActionText));
     }
 }

@@ -98,6 +98,7 @@ public sealed class SqliteWorkshopPageStore : IWorkshopPageStore
             entry.ImageUrls ??= [];
             entry.ScreenshotUrls ??= [];
             entry.Comments ??= [];
+            entry.CollectionItems ??= [];
             return entry;
         }
         catch (Exception exception) when (IsExpected(exception))
@@ -127,6 +128,26 @@ public sealed class SqliteWorkshopPageStore : IWorkshopPageStore
         catch (Exception exception) when (IsExpected(exception))
         {
             _logger.Warn("写入创意工坊条目页缓存失败：" + exception.Message);
+        }
+    }
+
+    /// <inheritdoc />
+    public void Remove(string publishedFileId)
+    {
+        if (string.IsNullOrWhiteSpace(publishedFileId))
+        {
+            return;
+        }
+
+        try
+        {
+            _database.Write(connection => connection.Execute(
+                "DELETE FROM workshop_pages WHERE published_file_id = ?",
+                publishedFileId));
+        }
+        catch (Exception exception) when (IsExpected(exception))
+        {
+            _logger.Warn("删除创意工坊条目页缓存失败：" + exception.Message);
         }
     }
 

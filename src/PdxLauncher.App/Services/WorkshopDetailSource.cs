@@ -83,14 +83,19 @@ public sealed class WorkshopDetailSource
         var result = await _steam.GetDetailAsync(id, cancellationToken).ConfigureAwait(true);
         if (result is { IsSuccess: true, Value: { } detail })
         {
-            _info.SetDetail(
-                cacheKey,
-                detail.Description,
-                null,
-                detail.CreatorSteamId,
-                detail.TagList,
-                detail.Views,
-                detail.LifetimeSubscriptions);
+            // 详情缓存只存普通 mod：它没有 file_type/children，写入合集正文后，
+            // 后续一旦按普通条目命中就会被还原成「空合集」。合集正文只在本次页面使用。
+            if (!detail.IsCollection)
+            {
+                _info.SetDetail(
+                    cacheKey,
+                    detail.Description,
+                    null,
+                    detail.CreatorSteamId,
+                    detail.TagList,
+                    detail.Views,
+                    detail.LifetimeSubscriptions);
+            }
         }
 
         return result;
@@ -165,16 +170,18 @@ public sealed class WorkshopDetailSource
         var result = await _steam.GetItemPageAsync(id, cancellationToken).ConfigureAwait(true);
         if (result is { IsSuccess: true, Value: { } page })
         {
-            _itemPages.Set(id, page);
+            _itemPages.Set(id, page, requireCollectionItems);
             return result;
         }
 
-        if (cached is not null)
+        if (cached is not null && (!requireCollectionItems || cacheHasCollection))
         {
             _logger.Info("物品页使用缓存：" + id + "（请求失败，改用旧副本）");
             return AppResult<SteamWorkshopItemPage>.Ok(SteamItemPageCache.Restore(cached));
         }
 
+        // 合集明确要求子项时，缺子项的旧副本不能冒充成功：让上层走「加载失败」，
+        // 否则界面会显示一个 0 项合集，用户以为合集真的空了。
         return result;
     }
 

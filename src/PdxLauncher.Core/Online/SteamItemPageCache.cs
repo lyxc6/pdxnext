@@ -102,10 +102,17 @@ public sealed class SteamItemPageCache
         return _clock.UtcNow - entry.FetchedUtc <= DefaultPageTtl;
     }
 
-    /// <summary>写入一条条目页解析结果；单条过大只记日志、不落库。</summary>
+    /// <summary>写入一条条目页解析结果；单条过大先降级，仍过大则删掉旧行并记 Warn。</summary>
     /// <param name="publishedFileId">工坊条目 id。</param>
     /// <param name="page">条目页解析结果。</param>
-    public void Set(string publishedFileId, SteamWorkshopItemPage page)
+    /// <param name="requireCollectionItems">
+    /// 调用方明确要求合集子项时为 true：解析结果没有子项就不要覆盖已知的好缓存，
+    /// 避免一次瞬时解析失败把合集内容写成 0 项。
+    /// </param>
+    public void Set(
+        string publishedFileId,
+        SteamWorkshopItemPage page,
+        bool requireCollectionItems = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(publishedFileId);
         ArgumentNullException.ThrowIfNull(page);
@@ -123,9 +130,35 @@ public sealed class SteamItemPageCache
             CollectionItems = [.. page.CollectionItemList],
         };
 
+        if (requireCollectionItems && entry.CollectionItems.Count == 0)
+        {
+            var existing = _store.Find(publishedFileId);
+            if (existing?.CollectionItems is { Count: > 0 })
+            {
+                _logger.Warn("合集物品页本次没有解析出子项，保留旧缓存：" + publishedFileId);
+                return;
+            }
+        }
+
+        if (EstimateBytes(entry) > MaxEntryBytes && entry.CollectionItems.Count > 0)
+        {
+            // 合集子项是主内容，评论 / 画廊 / 正文配图可以先丢；先降级再判超限。
+            entry.Comments.Clear();
+            entry.ScreenshotUrls.Clear();
+            entry.ImageUrls.Clear();
+            if (entry.DescriptionHtml is { Length: > 16 * 1024 })
+            {
+                entry.DescriptionHtml = entry.DescriptionHtml[..(16 * 1024)];
+            }
+
+            _logger.Info("合集条目页过大，已降级（去评论/截图/配图）后重试缓存：" + publishedFileId);
+        }
+
         if (EstimateBytes(entry) > MaxEntryBytes)
         {
-            _logger.Info("创意工坊条目页过大（超过 " + (MaxEntryBytes / 1024) + " KB），不落库：" + publishedFileId);
+            // 旧行必须删掉：否则成功刷新后仍会命中旧合集内容，离线时也看不出是过期数据。
+            _store.Remove(publishedFileId);
+            _logger.Warn("创意工坊条目页过大（超过 " + (MaxEntryBytes / 1024) + " KB），已删除旧缓存：" + publishedFileId);
             return;
         }
 

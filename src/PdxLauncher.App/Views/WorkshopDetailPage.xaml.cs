@@ -391,8 +391,8 @@ public sealed partial class WorkshopDetailPage : Page
     /// <summary>Steam：订阅其实要在 Steam 客户端里完成，这里只负责把页面递过去。</summary>
     private async void OnSubscribeSteamClick(object sender, RoutedEventArgs e)
     {
-        // 直连可用：先让用户确认再动 Steam；不可用或失败：退回「在 Steam 客户端里打开」。
-        if (_viewModel.IsSteamDirectAvailable && _viewModel.ShowSteamSubscribeButton)
+        // 直连可用且允许写：先让用户确认再动 Steam；只读/后端不可用：退回「在 Steam 客户端里打开」。
+        if (_viewModel.IsSteamDirectAvailable && _viewModel.ShowSteamSubscribeButton && _viewModel.CanWriteSteam)
         {
             var subscribe = !_viewModel.IsSteamSubscribed;
             var actionText = subscribe
@@ -426,11 +426,17 @@ public sealed partial class WorkshopDetailPage : Page
         ShellLauncher.TryOpenSteam(_viewModel.SteamUrl, "创意工坊详情（订阅）");
     }
 
-    /// <summary>合集级「订阅全部 / 取消订阅全部」：确认后交给 ViewModel 调 Steam 宿主。</summary>
+    /// <summary>合集级「订阅全部 / 取消订阅全部」：直连可写时确认后调 Steam；只读时打开 Steam 合集页。</summary>
     private async void OnCollectionSubscribeClick(object sender, RoutedEventArgs e)
     {
-        if (!_viewModel.CanToggleCollectionSubscription)
+        if (!_viewModel.CanActivateCollectionSubscription)
         {
+            return;
+        }
+
+        if (!_viewModel.IsSteamDirectAvailable || !_viewModel.CanWriteSteam)
+        {
+            ShellLauncher.TryOpenSteam(_viewModel.SteamUrl, "创意工坊合集（订阅）");
             return;
         }
 
@@ -469,8 +475,16 @@ public sealed partial class WorkshopDetailPage : Page
     private async void OnCollectionItemSubscribeClick(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not WorkshopRowViewModel row ||
-            !row.CanToggleSteamSubscription)
+            !row.CanActivateSteamSubscription)
         {
+            return;
+        }
+
+        // 只读 / 后端不可写：不假装直连，直接打开该 mod 的 Steam 页面。
+        // 这里按实时设置判断，用户在当前页面打开设置开关后无需重新进页面。
+        if (!_viewModel.CanWriteSteam || !_viewModel.IsSteamDirectAvailable)
+        {
+            ShellLauncher.TryOpenSteam(row.SteamUrl, "创意工坊详情（订阅）");
             return;
         }
 
