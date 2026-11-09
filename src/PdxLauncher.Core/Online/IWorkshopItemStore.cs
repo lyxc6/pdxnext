@@ -20,6 +20,16 @@ public interface IWorkshopItemStore
     /// <param name="entry">要写入的条目。</param>
     void Upsert(WorkshopInfoCacheEntry entry);
 
+    /// <summary>
+    /// 批量写入/合并一组列表元数据：同一个事务、只做一次容量淘汰。
+    /// <para>
+    /// 列表页一次要并进 30–50 条；逐条 <see cref="Upsert"/> 每条都要开连接、<c>BEGIN IMMEDIATE</c>、
+    /// 提交并执行一次 <c>COUNT(*)</c>，慢盘上是秒级开销。
+    /// </para>
+    /// </summary>
+    /// <param name="entries">要写入的条目；空列表直接返回。</param>
+    void UpsertMany(IReadOnlyList<WorkshopInfoCacheEntry> entries);
+
     /// <summary>记录封面下载结果；条目不存在时新建一行。</summary>
     /// <param name="key">缓存键。</param>
     /// <param name="fileName">封面相对缓存根的文件名。</param>

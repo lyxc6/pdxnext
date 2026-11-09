@@ -70,6 +70,7 @@ public static class WorkshopPageChecks
         CheckViewModelGuardsStaleResults(viewModel);
         CheckCacheKeyUsesAppliedSearch(viewModel);
         CheckFlushIsOffUiThread(viewModel);
+        CheckRowBuildOffUiThread(viewModel);
         CheckNetworkFailureIsVisible(viewModel);
         CheckSteamSortsIncludeRelevance(viewModel);
         CheckFilterPanel(xaml, viewModel);
@@ -328,7 +329,7 @@ public static class WorkshopPageChecks
         if (!TryGetBlock(
                 viewModel,
                 "private string BuildPageKey()",
-                "/// <summary>把缓存的一页直接铺到列表上",
+                "把缓存的一页直接铺到列表上",
                 "创意工坊页: 找到 BuildPageKey",
                 out var block))
         {
@@ -344,6 +345,89 @@ public static class WorkshopPageChecks
     }
 
     /// <summary>缓存落盘移出 UI 线程：慢磁盘时页面不会短暂失去响应。</summary>
+    /// <summary>
+    /// 列表建行不能压在 UI 线程上：每条都要读写一次工坊信息缓存（同步 SQLite），
+    /// Steam 分支 30 条实测 5 秒多，PDX 分支原先没搬走，进页面 / 翻页时左栏导航点不动。
+    /// <para>
+    /// 缓存命中与断网回退还有 N+1 的按 key 回查：页快照与离线快照本来就带封面文件名，
+    /// 再按 key 查一次库既慢又没必要。这里把「整段丢线程池 + 按条目判封面」钉成源码断言。
+    /// </para>
+    /// </summary>
+    private static void CheckRowBuildOffUiThread(string viewModel)
+    {
+        if (TryGetBlock(
+                viewModel,
+                "private async Task QueryPdxAsync(",
+                "private (List<WorkshopRowViewModel> Rows, List<WorkshopInfoCacheEntry> Entries) BuildPdxRows(",
+                "创意工坊页: 找到 QueryPdxAsync",
+                out var queryPdx))
+        {
+            ChecksContext.Check(
+                "创意工坊页: PDX 建行丢到线程池",
+                queryPdx.Contains(".Run(() => BuildPdxRows(", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: PDX 建行后仍按查询代号丢弃迟到结果",
+                queryPdx.Contains("if (version != _queryVersion || cancellationToken.IsCancellationRequested)", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "private (List<WorkshopRowViewModel> Rows, List<WorkshopInfoCacheEntry> Entries) BuildPdxRows(",
+                "查询失败：先用这个游戏之前缓存过的条目",
+                "创意工坊页: 找到 BuildPdxRows",
+                out var buildPdx))
+        {
+            ChecksContext.Check(
+                "创意工坊页: PDX 元数据批量落库",
+                buildPdx.Contains("_info.UpsertMany(pending)", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: PDX 封面按条目判定（不按 key 回查）",
+                buildPdx.Contains("_info.TryGetCachedCover(entry, out var cover)", StringComparison.Ordinal)
+                && !buildPdx.Contains("_info.TryGetCachedCover(cacheKey", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "private (List<WorkshopRowViewModel> Rows, List<WorkshopInfoCacheEntry> Entries) BuildSteamRows(",
+                "PDX Mods 查询",
+                "创意工坊页: 找到 BuildSteamRows",
+                out var buildSteam))
+        {
+            ChecksContext.Check(
+                "创意工坊页: Steam 元数据批量落库",
+                buildSteam.Contains("_info.UpsertMany(pending)", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: Steam 封面按条目判定（不按 key 回查）",
+                buildSteam.Contains("_info.TryGetCachedCover(entry, out var cover)", StringComparison.Ordinal)
+                && !buildSteam.Contains("_info.TryGetCachedCover(cacheKey", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "private async Task ApplyCachedPageAsync(",
+                "/// <summary>线程池上把页快照建成行模型",
+                "创意工坊页: 找到 ApplyCachedPageAsync",
+                out var cachedPage))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 页缓存建行丢到线程池",
+                cachedPage.Contains(".Run(() => BuildCachedRows(", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "private async Task ShowFailureOrCacheAsync(",
+                "private List<WorkshopRowViewModel> BuildFallbackRows(",
+                "创意工坊页: 找到 ShowFailureOrCacheAsync",
+                out var fallback))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 断网回退建行丢到线程池",
+                fallback.Contains(".Run(() => BuildFallbackRows(", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>缓存落盘与建行都不许在 UI 线程同步执行。</summary>
     private static void CheckFlushIsOffUiThread(string viewModel)
     {
         ChecksContext.Check(
@@ -396,7 +480,7 @@ public static class WorkshopPageChecks
 
         if (TryGetBlock(
                 viewModel,
-                "private void ShowFailureOrCache(",
+                "private async Task ShowFailureOrCacheAsync(",
                 "并发补封面",
                 "创意工坊页: 找到 ShowFailureOrCache",
                 out var failure))
@@ -523,7 +607,7 @@ public static class WorkshopPageChecks
         if (TryGetBlock(
                 viewModel,
                 "private string BuildPageKey()",
-                "/// <summary>把缓存的一页直接铺到列表上",
+                "把缓存的一页直接铺到列表上",
                 "创意工坊页: 找到 BuildPageKey",
                 out var block))
         {

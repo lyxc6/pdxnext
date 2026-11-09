@@ -181,6 +181,16 @@ public static class WorkshopInfoCacheChecks
             cache.TryGet("steam:300", out var entry) &&
             string.Equals(entry.CoverFileName, relative, StringComparison.OrdinalIgnoreCase) &&
             entry.CoverFetchedUtc is not null);
+
+        // 列表页已经拿到条目快照时直接判文件是否存在，不再按 key 回查 SQLite。
+        ChecksContext.Check(
+            "缓存：按条目判定封面命中且不查库",
+            cache.TryGet("steam:300", out var snapshot) &&
+            cache.TryGetCachedCover(snapshot, out var byEntry) &&
+            string.Equals(byEntry, absolute, StringComparison.OrdinalIgnoreCase));
+        ChecksContext.Check(
+            "缓存：按条目判定只认已落盘的封面",
+            cache.TryGetCachedCover(new WorkshopInfoCacheEntry { Source = "steam", Id = "301" }, out _) == false);
     }
 
     private static void CheckDetailTtl(

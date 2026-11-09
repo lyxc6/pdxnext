@@ -82,26 +82,43 @@ public sealed class SqliteWorkshopItemStore : IWorkshopItemStore
     public void Upsert(WorkshopInfoCacheEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        if (string.IsNullOrWhiteSpace(entry.Id))
+        UpsertMany([entry]);
+    }
+
+    /// <inheritdoc />
+    public void UpsertMany(IReadOnlyList<WorkshopInfoCacheEntry> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        if (entries.Count == 0)
         {
             return;
         }
-
-        var source = string.Equals(entry.Source, "steam", StringComparison.OrdinalIgnoreCase)
-            ? WorkshopInfoCache.SourceTag(WorkshopSource.Steam)
-            : WorkshopInfoCache.SourceTag(WorkshopSource.Pdx);
 
         try
         {
             _database.Write(connection =>
             {
-                InsertEntry(connection, source, entry.Id, entry, DateTimeOffset.UtcNow);
+                var now = DateTimeOffset.UtcNow;
+                foreach (var entry in entries)
+                {
+                    if (string.IsNullOrWhiteSpace(entry.Id))
+                    {
+                        continue;
+                    }
+
+                    var source = string.Equals(entry.Source, "steam", StringComparison.OrdinalIgnoreCase)
+                        ? WorkshopInfoCache.SourceTag(WorkshopSource.Steam)
+                        : WorkshopInfoCache.SourceTag(WorkshopSource.Pdx);
+                    InsertEntry(connection, source, entry.Id, entry, now);
+                }
+
+                // 一批只裁剪一次：逐条 Upsert 时每条都要 COUNT(*) 一次。
                 TrimOn(connection, WorkshopInfoCache.MaxEntries);
             });
         }
         catch (Exception exception) when (IsExpected(exception))
         {
-            _logger.Warn("写入创意工坊缓存条目失败：" + exception.Message);
+            _logger.Warn("批量写入创意工坊缓存条目失败：" + exception.Message);
         }
     }
 
