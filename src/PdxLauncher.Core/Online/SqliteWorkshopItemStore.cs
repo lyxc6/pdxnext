@@ -69,7 +69,31 @@ public sealed class SqliteWorkshopItemStore : IWorkshopItemStore
                 "SELECT * FROM workshop_items WHERE source = ? AND id = ? LIMIT 1",
                 source,
                 id);
-            return rows.Count == 0 ? null : MapEntry(rows[0]);
+            if (rows.Count > 0)
+            {
+                return MapEntry(rows[0]);
+            }
+
+            // 合集子项没有列表元数据，只在 workshop_covers 里记封面；返回最小条目让封面查找能命中。
+            var coverRows = connection.Query(
+                "SELECT * FROM workshop_covers WHERE source = ? AND id = ? LIMIT 1",
+                source,
+                id);
+            if (coverRows.Count == 0)
+            {
+                return null;
+            }
+
+            var cover = coverRows[0];
+            return new WorkshopInfoCacheEntry
+            {
+                Source = source,
+                Id = id,
+                CoverFileName = GetString(cover, "cover_file"),
+                CoverUrl = GetString(cover, "cover_url"),
+                CoverFetchedUtc = GetStamp(cover, "cover_fetched_utc"),
+                FetchedUtc = GetStamp(cover, "fetched_utc"),
+            };
         }
         catch (Exception exception) when (IsExpected(exception))
         {
@@ -132,19 +156,44 @@ public sealed class SqliteWorkshopItemStore : IWorkshopItemStore
 
         try
         {
-            _database.Write(connection => connection.Execute(
-                "INSERT INTO workshop_items (source, id, cover_file, cover_url, cover_fetched_utc, fetched_utc) " +
-                "VALUES (?, ?, ?, ?, ?, ?) " +
-                "ON CONFLICT(source, id) DO UPDATE SET " +
-                "cover_file = excluded.cover_file, " +
-                "cover_url = COALESCE(excluded.cover_url, workshop_items.cover_url), " +
-                "cover_fetched_utc = excluded.cover_fetched_utc",
-                source,
-                id,
-                fileName,
-                url,
-                ToStamp(fetchedUtc),
-                ToStamp(fetchedUtc)));
+            _database.Write(connection =>
+            {
+                // 列表里已有的条目：只更新封面列，绝不新建「无名字/无游戏」的条目行。
+                var updated = connection.Execute(
+                    """
+                    UPDATE workshop_items
+                    SET cover_file = ?, cover_url = COALESCE(?, cover_url), cover_fetched_utc = ?
+                    WHERE source = ? AND id = ?
+                    """,
+                    fileName,
+                    url,
+                    ToStamp(fetchedUtc),
+                    source,
+                    id);
+                if (updated > 0)
+                {
+                    return 0;
+                }
+
+                // 合集子项这类没有列表元数据的封面，单独记账，不占 workshop_items 的 2000 条配额。
+                connection.Execute(
+                    """
+                    INSERT INTO workshop_covers
+                        (source, id, cover_file, cover_url, cover_fetched_utc, fetched_utc)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(source, id) DO UPDATE SET
+                        cover_file = excluded.cover_file,
+                        cover_url = COALESCE(excluded.cover_url, workshop_covers.cover_url),
+                        cover_fetched_utc = excluded.cover_fetched_utc
+                    """,
+                    source,
+                    id,
+                    fileName,
+                    url,
+                    ToStamp(fetchedUtc),
+                    ToStamp(fetchedUtc));
+                return 0;
+            });
         }
         catch (Exception exception) when (IsExpected(exception))
         {
@@ -357,6 +406,15 @@ public sealed class SqliteWorkshopItemStore : IWorkshopItemStore
             entry.CoverUrl,
             ToStamp(now));
 
+        // 合集标记只升不降：普通列表刷新不会把已知合集改回普通条目。
+        if (entry.IsCollection)
+        {
+            connection.Execute(
+                "UPDATE workshop_items SET is_collection = 1 WHERE source = ? AND id = ?",
+                source,
+                id);
+        }
+
         // 封面文件名与详情字段不在列表刷新里覆盖，避免把已抓到的正文抹掉。
         if (!string.IsNullOrWhiteSpace(entry.CoverFileName))
         {
@@ -453,6 +511,7 @@ public sealed class SqliteWorkshopItemStore : IWorkshopItemStore
         Tags = DeserializeList(GetString(row, "tags")),
         Views = GetInt64(row, "views"),
         LifetimeSubscriptions = GetInt64(row, "lifetime_subscriptions"),
+        IsCollection = GetInt32(row, "is_collection") is > 0,
     };
 
     private static long? ToStamp(DateTimeOffset? value) =>
