@@ -124,13 +124,19 @@
                 <SelectorBarItem Text="{x:Bind L.WorkshopDetailComments, Mode=OneWay}" Tag="comments" />
             </SelectorBar>
 
-            <!-- 正文：整页纵向滚动 -->
-            <ScrollViewer x:Name="DetailScroll"
-                          Grid.Row="2"
-                          VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollMode="Disabled"
-                          AutomationProperties.AutomationId="scrollWorkshopDetail">
-                <StackPanel x:Name="DetailContent" Spacing="12">
+            <!-- 正文：整页纵向滚动；右侧注释滚动条按分区打点，点标签可直接跳。 -->
+            <Grid Grid.Row="2" ColumnSpacing="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <ScrollView x:Name="DetailScroll"
+                            Grid.Column="0"
+                            VerticalScrollBarVisibility="Hidden"
+                            HorizontalScrollMode="Disabled"
+                            AutomationProperties.AutomationId="scrollWorkshopDetail">
+                    <StackPanel x:Name="DetailContent" Spacing="12">
 
                     <!-- 1. 图片区：内联 FlipView 翻页 + 缩略图条，点大图进全屏查看器 -->
                     <Border x:Name="sectionGallery"
@@ -1030,7 +1036,16 @@
                         </StackPanel>
                     </Border>
                 </StackPanel>
-            </ScrollViewer>
+                </ScrollView>
+
+                <AnnotatedScrollBar x:Name="DetailScrollBar"
+                                    Grid.Column="1"
+                                    Width="24"
+                                    Margin="4,0,0,0"
+                                    SmallChange="48"
+                                    VerticalAlignment="Stretch"
+                                    AutomationProperties.AutomationId="barWorkshopDetailScrollMarks" />
+            </Grid>
         </Grid>
 
         <!-- 图片查看器：整页浮层（FlipView 翻页 + 每页可缩放），点右上角或按 Esc 关闭 -->

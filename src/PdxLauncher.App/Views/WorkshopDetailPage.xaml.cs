@@ -98,7 +98,12 @@ public sealed partial class WorkshopDetailPage : Page
         _suppressSectionScroll = true;
         DetailSections.SelectedItem = DetailSections.Items[0];
         _suppressSectionScroll = false;
+
+        // 正文是异步长出来的（截图/依赖/评论）；高度一变就重算注释滚动条的标签位置。
+        DetailContent.SizeChanged += OnDetailContentSizeChanged;
     }
+
+    private void OnDetailContentSizeChanged(object sender, SizeChangedEventArgs e) => QueueScrollBarLabels();
 
     /// <summary>分区跳转的固定顺序；不可见分区顺延到下一段。</summary>
     private static readonly string[] SectionOrder =
@@ -114,6 +119,7 @@ public sealed partial class WorkshopDetailPage : Page
     ];
 
     private bool _suppressSectionScroll;
+    private bool _labelsQueued;
 
     /// <summary>SelectorBar 选中项变化：滚到对应卡片。手动滚动不回改选中项（一期只做点选）。</summary>
     private void OnSectionSelected(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
@@ -128,14 +134,14 @@ public sealed partial class WorkshopDetailPage : Page
         {
             // 选中的分区当前没有内容（例如没有依赖 / 评论）：滚到内容底部，
             // 用户至少能确认列表已经到头，而不是点了一下完全没反应。
-            DetailScroll.ChangeView(null, DetailScroll.ScrollableHeight, null, disableAnimation: true);
+            DetailScroll.ScrollTo(0, DetailScroll.ScrollableHeight);
             return;
         }
 
         var offset = target
             .TransformToVisual(DetailContent)
             .TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
-        DetailScroll.ChangeView(null, offset, null, disableAnimation: true);
+        DetailScroll.ScrollTo(0, offset);
     }
 
     /// <summary>按 Tag 找分区；目标不可见时顺延到后面第一个可见分区。</summary>
@@ -170,6 +176,68 @@ public sealed partial class WorkshopDetailPage : Page
         "links" => sectionLinks,
         "comments" => sectionComments,
         _ => null,
+    };
+
+    /// <summary>把注释滚动条的标签重建排到下一个 UI 帧；连续 SizeChanged 只排一次。</summary>
+    private void QueueScrollBarLabels()
+    {
+        if (_labelsQueued)
+        {
+            return;
+        }
+
+        _labelsQueued = true;
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            _labelsQueued = false;
+            RebuildScrollBarLabels();
+        });
+    }
+
+    /// <summary>
+    /// 按分区在内容里的 Y 坐标给 AnnotatedScrollBar 打标签。
+    /// <para>
+    /// 分区不可见（没有依赖 / 评论区关闭）时不加标签；内容高度变化后重算，
+    /// 否则标签会停在旧位置。
+    /// </para>
+    /// </summary>
+    private void RebuildScrollBarLabels()
+    {
+        if (DetailScroll.ScrollPresenter is null)
+        {
+            return;
+        }
+
+        // AnnotatedScrollBar 自己就是 IScrollController 的实现；把它挂到 ScrollPresenter 的竖直轴上。
+        DetailScroll.ScrollPresenter.VerticalScrollController = DetailScrollBar.ScrollController;
+        DetailScrollBar.Labels.Clear();
+
+        foreach (var tag in SectionOrder)
+        {
+            var section = SectionFor(tag);
+            if (section is not { Visibility: Visibility.Visible, ActualHeight: > 0 })
+            {
+                continue;
+            }
+
+            var offset = section
+                .TransformToVisual(DetailContent)
+                .TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
+            DetailScrollBar.Labels.Add(new AnnotatedScrollBarLabel(SectionLabel(tag), offset));
+        }
+    }
+
+    /// <summary>标签文案与 SelectorBar 使用同一组键，切语言后重建会一起更新。</summary>
+    private string SectionLabel(string tag) => tag switch
+    {
+        "gallery" => L.T(Keys.WorkshopSectionsGallery),
+        "info" => L.T(Keys.WorkshopDetailInfo),
+        "status" => L.T(Keys.WorkshopSectionsStatus),
+        "description" => L.T(Keys.WorkshopDetailDescription),
+        "dependencies" => L.T(Keys.WorkshopDetailDependencies),
+        "changelog" => L.T(Keys.WorkshopDetailChangelog),
+        "links" => L.T(Keys.WorkshopDetailLinks),
+        _ => L.T(Keys.WorkshopDetailComments),
     };
 
     private void OnGalleryImageReady(object? sender, EventArgs e)
@@ -287,6 +355,7 @@ public sealed partial class WorkshopDetailPage : Page
         }
 
         UpdateGalleryLayout(ActualWidth, ActualHeight);
+        QueueScrollBarLabels();
 
         // 截图是在加载过程中逐条落进集合的：集合一变就选首张、补计数，
         // 不再等整页加载结束（那时缩略图可能早就出完了，大图却还是黑的）。
@@ -300,6 +369,7 @@ public sealed partial class WorkshopDetailPage : Page
     {
         _viewModel.GalleryImageReady -= OnGalleryImageReady;
         _viewModel.Screenshots.CollectionChanged -= OnScreenshotsChanged;
+        DetailContent.SizeChanged -= OnDetailContentSizeChanged;
         _commentMarkdownViews.Clear();
         _lifetime?.Cancel();
 
@@ -827,8 +897,11 @@ public sealed partial class WorkshopDetailPage : Page
     }
 
     /// <summary>页面尺寸变化：内联图区高度随窗口走，浮层开着时同时重算图片可用区域。</summary>
-    private void OnPageSizeChanged(object sender, SizeChangedEventArgs e) =>
+    private void OnPageSizeChanged(object sender, SizeChangedEventArgs e)
+    {
         UpdateGalleryLayout(e.NewSize.Width, e.NewSize.Height);
+        QueueScrollBarLabels();
+    }
 
     private void OnViewerSizeChanged(object sender, SizeChangedEventArgs e) => ApplyViewerSize();
 

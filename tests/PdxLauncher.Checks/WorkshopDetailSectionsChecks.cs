@@ -50,7 +50,7 @@ public static class WorkshopDetailSectionsChecks
         ChecksContext.Check(
             "工坊详情分区: SelectorBar 在滚动容器之外（Row 1）",
             xaml.Contains("Grid.Row=\"1\"", StringComparison.Ordinal)
-                && RegexIndexOf(xaml, "<SelectorBar", "<ScrollViewer x:Name=\"DetailScroll\"") >= 0);
+                && RegexIndexOf(xaml, "<SelectorBar", "<ScrollView x:Name=\"DetailScroll\"") >= 0);
         ChecksContext.Check(
             "工坊详情分区: 滚动与内容容器有 x:Name",
             xaml.Contains("x:Name=\"DetailScroll\"", StringComparison.Ordinal)
@@ -84,7 +84,7 @@ public static class WorkshopDetailSectionsChecks
             "工坊详情分区: code-behind 接 SelectionChanged",
             code.Contains("OnSectionSelected(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)", StringComparison.Ordinal)
                 && code.Contains("ResolveVisibleSection", StringComparison.Ordinal)
-                && code.Contains("DetailScroll.ChangeView", StringComparison.Ordinal));
+                && code.Contains("DetailScroll.ScrollTo", StringComparison.Ordinal));
         ChecksContext.Check(
             "工坊详情分区: 不可见分区顺延到下一段",
             code.Contains("for (var index = start; index < SectionOrder.Length; index++)", StringComparison.Ordinal)
