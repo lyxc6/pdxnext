@@ -76,9 +76,67 @@ public static class WorkshopPageChecks
         CheckPagerAndPageSize(xaml, viewModel);
         CheckCatalogRefresh(viewModel, codeBehind);
         CheckCodeBehindHooks(codeBehind);
+        CheckFailureVsEmptyState(xaml, viewModel);
 
         return ChecksContext.Failures - before;
     }
+
+    /// <summary>
+    /// 网络失败不能显示成「这个游戏还没有创意工坊内容」：空提示只在「查询成功、没在加载、
+    /// 没有失败、确实 0 行」时出现；失败时列表区中间要有原因和重试入口。
+    /// 刷新还必须绕过在途请求合并，否则旧请求卡住时点刷新只会复用旧请求（0 个新请求）。
+    /// </summary>
+    private static void CheckFailureVsEmptyState(string xaml, string viewModel)
+    {
+        if (TryGetBlock(
+                viewModel,
+                "public bool ShowEmptyState",
+                "public bool ShowSignInHint",
+                "创意工坊页: 找到 ShowEmptyState",
+                out var emptyStateBlock))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 空提示排除加载中",
+                emptyStateBlock.Contains("!IsBusy", StringComparison.Ordinal),
+                emptyStateBlock);
+            ChecksContext.Check(
+                "创意工坊页: 空提示排除加载失败",
+                emptyStateBlock.Contains("!HasLoadFailure", StringComparison.Ordinal),
+                emptyStateBlock);
+        }
+
+        ChecksContext.Check(
+            "创意工坊页: 有失败态属性",
+            viewModel.Contains("ShowLoadFailureState", StringComparison.Ordinal)
+            && viewModel.Contains("HasLoadFailure", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: XAML 有失败提示与重试按钮",
+            xaml.Contains("ShowLoadFailureState", StringComparison.Ordinal)
+            && xaml.Contains("btnWorkshopRetry", StringComparison.Ordinal)
+            && xaml.Contains("txtWorkshopLoadFailure", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 刷新绕过在途请求合并",
+            viewModel.Contains("bypassCoalescing: force", StringComparison.Ordinal),
+            "QuerySteamAsync 应把 force 传给 BrowseAsync");
+
+        // 代理已生效但仍连不上时，不能再说「检测到系统代理，去设置里切过去」。
+        var root = FindWorkspaceRoot();
+        foreach (var lang in new[] { "zh-CN", "en-US" })
+        {
+            var path = Path.Combine(root, "src", "PdxLauncher.App", "Strings", lang, "Resources.resw");
+            if (!ChecksContext.Check("创意工坊页: " + lang + " Resources.resw 存在", File.Exists(path), path))
+            {
+                continue;
+            }
+
+            var resw = File.ReadAllText(path);
+            ChecksContext.Check(
+                "创意工坊页: " + lang + " 有代理已生效失败提示",
+                resw.Contains("name=\"WorkshopStatusProxyActiveFailed\"", StringComparison.Ordinal),
+                "WorkshopStatusProxyActiveFailed");
+        }
+    }
+
 
     /// <summary>
     /// 页头只剩一行工具条：搜索、排序、时间范围、忙碌环、刷新、来源徽标、打开网页都在同一块里，

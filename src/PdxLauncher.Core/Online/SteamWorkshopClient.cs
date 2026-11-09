@@ -198,12 +198,23 @@ public sealed class SteamWorkshopClient
     /// <param name="appId">Steam appid。</param>
     /// <param name="query">查询条件。</param>
     /// <param name="cancellationToken">取消令牌。</param>
+    /// <param name="bypassCoalescing">
+    /// true 表示这次请求不复用同 URI 的在途请求。刷新 / 回车搜索 / 换筛选都走这条：
+    /// 旧请求可能卡在旧代理或旧连接上，合并它等于「点刷新没有任何新请求」，界面会一直停在加载。
+    /// 强制请求会用当前连接池重新发一次，旧结果由查询代次丢弃。
+    /// </param>
     public Task<AppResult<SteamWorkshopPage>> BrowseAsync(
         int appId,
         SteamWorkshopQuery query,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool bypassCoalescing = false)
     {
         ArgumentNullException.ThrowIfNull(query);
+
+        if (bypassCoalescing)
+        {
+            return BrowseCoreAsync(appId, query, cancellationToken);
+        }
 
         // key 用完整的列表 URI：翻页、换排序、换关键词都是不同请求，绝不能并成一个。
         var key = "browse:" + appId.ToString(CultureInfo.InvariantCulture) + "|" + BuildBrowseUri(appId, query).AbsoluteUri;
