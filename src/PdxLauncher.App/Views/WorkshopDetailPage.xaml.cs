@@ -93,7 +93,84 @@ public sealed partial class WorkshopDetailPage : Page
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+
+        // 首屏默认停在图集；这里只同步选中态，不触发一次「跳到顶部」的滚动。
+        _suppressSectionScroll = true;
+        DetailSections.SelectedItem = DetailSections.Items[0];
+        _suppressSectionScroll = false;
     }
+
+    /// <summary>分区跳转的固定顺序；不可见分区顺延到下一段。</summary>
+    private static readonly string[] SectionOrder =
+    [
+        "gallery",
+        "info",
+        "status",
+        "description",
+        "dependencies",
+        "changelog",
+        "links",
+        "comments",
+    ];
+
+    private bool _suppressSectionScroll;
+
+    /// <summary>SelectorBar 选中项变化：滚到对应卡片。手动滚动不回改选中项（一期只做点选）。</summary>
+    private void OnSectionSelected(SelectorBar sender, SelectorBarSelectionChangedEventArgs args)
+    {
+        if (_suppressSectionScroll || sender.SelectedItem?.Tag is not string tag)
+        {
+            return;
+        }
+
+        var target = ResolveVisibleSection(tag);
+        if (target is null)
+        {
+            // 选中的分区当前没有内容（例如没有依赖 / 评论）：滚到内容底部，
+            // 用户至少能确认列表已经到头，而不是点了一下完全没反应。
+            DetailScroll.ChangeView(null, DetailScroll.ScrollableHeight, null, disableAnimation: true);
+            return;
+        }
+
+        var offset = target
+            .TransformToVisual(DetailContent)
+            .TransformPoint(new Windows.Foundation.Point(0, 0)).Y;
+        DetailScroll.ChangeView(null, offset, null, disableAnimation: true);
+    }
+
+    /// <summary>按 Tag 找分区；目标不可见时顺延到后面第一个可见分区。</summary>
+    private FrameworkElement? ResolveVisibleSection(string tag)
+    {
+        var start = Array.IndexOf(SectionOrder, tag);
+        if (start < 0)
+        {
+            return null;
+        }
+
+        for (var index = start; index < SectionOrder.Length; index++)
+        {
+            var candidate = SectionFor(SectionOrder[index]);
+            if (candidate is { Visibility: Visibility.Visible, ActualHeight: > 0 })
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private FrameworkElement? SectionFor(string tag) => tag switch
+    {
+        "gallery" => sectionGallery,
+        "info" => sectionInfo,
+        "status" => sectionStatus,
+        "description" => sectionDescription,
+        "dependencies" => sectionDependencies,
+        "changelog" => sectionChangelog,
+        "links" => sectionLinks,
+        "comments" => sectionComments,
+        _ => null,
+    };
 
     private void OnGalleryImageReady(object? sender, EventArgs e)
     {
@@ -757,9 +834,11 @@ public sealed partial class WorkshopDetailPage : Page
 
     private void UpdateGalleryLayout(double width, double height)
     {
-        if (height > 0)
+        // 页头 + SelectorBar 占掉一部分高度；用滚动区的实际视口算，图区不会把首屏撑出滚动条。
+        var viewportHeight = DetailScroll.ActualHeight > 0 ? DetailScroll.ActualHeight : height;
+        if (viewportHeight > 0)
         {
-            FlipWorkshopScreenshots.Height = WorkshopGalleryLayout.InlineGalleryHeight(height);
+            FlipWorkshopScreenshots.Height = WorkshopGalleryLayout.InlineGalleryHeight(viewportHeight);
         }
 
         if (ImageOverlay.Visibility == Visibility.Visible)

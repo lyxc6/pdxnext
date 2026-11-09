@@ -5768,4 +5768,10 @@ then call list_games to verify.</value>
   <data name="SingleInstanceAlreadyRunning" xml:space="preserve">
     <value>PdxNext is already running. Please switch to the open window.</value>
   </data>
+  <data name="WorkshopSectionsGallery" xml:space="preserve">
+    <value>Gallery</value>
+  </data>
+  <data name="WorkshopSectionsStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
 </root>

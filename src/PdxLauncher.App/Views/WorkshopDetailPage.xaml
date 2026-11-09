@@ -18,6 +18,7 @@
         <Grid Padding="16" RowSpacing="12">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -108,15 +109,32 @@
                 </Button>
             </Grid>
 
+            <!-- 分区跳转：8 个分区，点一下滚到对应卡片；手动滚动不回改选中项（一期）。 -->
+            <SelectorBar x:Name="DetailSections"
+                         Grid.Row="1"
+                         SelectionChanged="OnSectionSelected"
+                         AutomationProperties.AutomationId="barWorkshopDetailSections">
+                <SelectorBarItem Text="{x:Bind L.WorkshopSectionsGallery, Mode=OneWay}" Tag="gallery" />
+                <SelectorBarItem Text="{x:Bind L.WorkshopDetailInfo, Mode=OneWay}" Tag="info" />
+                <SelectorBarItem Text="{x:Bind L.WorkshopSectionsStatus, Mode=OneWay}" Tag="status" />
+                <SelectorBarItem Text="{x:Bind L.WorkshopDetailDescription, Mode=OneWay}" Tag="description" />
+                <SelectorBarItem Text="{x:Bind L.WorkshopDetailDependencies, Mode=OneWay}" Tag="dependencies" />
+                <SelectorBarItem Text="{x:Bind L.WorkshopDetailChangelog, Mode=OneWay}" Tag="changelog" />
+                <SelectorBarItem Text="{x:Bind L.WorkshopDetailLinks, Mode=OneWay}" Tag="links" />
+                <SelectorBarItem Text="{x:Bind L.WorkshopDetailComments, Mode=OneWay}" Tag="comments" />
+            </SelectorBar>
+
             <!-- 正文：整页纵向滚动 -->
-            <ScrollViewer Grid.Row="1"
+            <ScrollViewer x:Name="DetailScroll"
+                          Grid.Row="2"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollMode="Disabled"
                           AutomationProperties.AutomationId="scrollWorkshopDetail">
-                <StackPanel Spacing="12">
+                <StackPanel x:Name="DetailContent" Spacing="12">
 
                     <!-- 1. 图片区：内联 FlipView 翻页 + 缩略图条，点大图进全屏查看器 -->
-                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    <Border x:Name="sectionGallery"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
@@ -264,7 +282,7 @@
                     </Border>
 
                     <!-- 2. 左订阅 / 右信息 -->
-                    <Grid ColumnSpacing="12">
+                    <Grid x:Name="sectionInfo" ColumnSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="280" />
                             <ColumnDefinition Width="*" />
@@ -468,7 +486,8 @@
                         </Grid>
                     </Border>
 
-                    <!-- 3. 状态：读取中 / 失败 / 缓存兜底 -->
+                    <!-- 3. 状态：读取中 / 失败 / 缓存兜底 / 翻译提示 -->
+                    <StackPanel x:Name="sectionStatus" Spacing="12">
                     <Border Padding="16"
                             CornerRadius="8"
                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
@@ -521,9 +540,11 @@
                                    TextWrapping="Wrap"
                                    AutomationProperties.AutomationId="txtWorkshopDetailTranslationNotice" />
                     </Border>
+                    </StackPanel>
 
                     <!-- 4. 描述（Markdown / HTML 富文本）；宽窗口下按 Steam 物品页的阅读列宽收在 992（内容 960）。 -->
-                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    <Border x:Name="sectionDescription"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
@@ -714,7 +735,8 @@
                     </Border>
 
                     <!-- 5. 前置依赖（PDX 有） -->
-                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    <Border x:Name="sectionDependencies"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
@@ -772,7 +794,8 @@
                     </Border>
 
                     <!-- 6. 更新日志（PDX 有，Markdown）；与描述用同一阅读列宽 992（内容 960）。 -->
-                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    <Border x:Name="sectionChangelog"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
@@ -814,7 +837,8 @@
                     </Border>
 
                     <!-- 7. 外链 -->
-                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    <Border x:Name="sectionLinks"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="8"
@@ -851,7 +875,8 @@
                     </Border>
 
                     <!-- 8. 评论区（Steam 有；首屏 + 翻页看全部） -->
-                    <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    <Border x:Name="sectionComments"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             BorderThickness="1"
                             CornerRadius="8"

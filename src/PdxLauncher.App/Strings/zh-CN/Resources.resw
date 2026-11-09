@@ -5768,4 +5768,10 @@
   <data name="SingleInstanceAlreadyRunning" xml:space="preserve">
     <value>PdxNext 已在运行。请切换到已经打开的窗口。</value>
   </data>
+  <data name="WorkshopSectionsGallery" xml:space="preserve">
+    <value>图集</value>
+  </data>
+  <data name="WorkshopSectionsStatus" xml:space="preserve">
+    <value>状态</value>
+  </data>
 </root>
