@@ -5774,4 +5774,13 @@
   <data name="WorkshopSectionsStatus" xml:space="preserve">
     <value>状态</value>
   </data>
+  <data name="WorkshopDependenciesGroupAttention" xml:space="preserve">
+    <value>需处理（{0}）</value>
+  </data>
+  <data name="WorkshopDependenciesGroupReady" xml:space="preserve">
+    <value>已就绪（{0}）</value>
+  </data>
+  <data name="WorkshopDependenciesGroupUnknown" xml:space="preserve">
+    <value>状态未知（{0}）</value>
+  </data>
 </root>

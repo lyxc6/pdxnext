@@ -242,5 +242,12 @@
       编译器和人工点测都不容易发现，所以由 DlcImageChecks 直接钉住。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\DlcRowViewModel.cs" Link="Linked\DlcRowViewModel.cs" />
+    <!--
+      工坊依赖树节点：只依赖 Core 的 WorkshopDependency/State 与本地化基类（自检用替身），
+      不碰 WinUI。分组标题、展开态、叶子 id 映射错了只在真机上表现为「树是空的 / 没箭头」，
+      编译器和人工点测都不容易发现，所以由 WorkshopDependenciesTreeChecks 直接测。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\WorkshopDependencyViewModel.cs" Link="Linked\WorkshopDependencyViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\WorkshopDependencyNodeViewModel.cs" Link="Linked\WorkshopDependencyNodeViewModel.cs" />
   </ItemGroup>
 </Project>
