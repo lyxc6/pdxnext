@@ -1157,9 +1157,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         _totalPages = page.TotalPages;
 
         var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
-        var collectionsSection = IsCollectionsSection;
         var rows = await Task
-            .Run(() => BuildCachedRows(page.Items, size, collectionsSection, cancellationToken), cancellationToken)
+            .Run(() => BuildCachedRows(page.Items, size, cancellationToken), cancellationToken)
             .ConfigureAwait(true);
 
         ReplaceRows(rows);
@@ -1169,13 +1168,11 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>线程池上把页快照建成行模型；封面只看条目里的文件名，不再回查 SQLite。</summary>
     /// <param name="items">页快照条目。</param>
     /// <param name="thumbnailSize">缩略图边长（像素）。</param>
-    /// <param name="collectionsSection">是否合集区段。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>行模型。</returns>
     private List<WorkshopRowViewModel> BuildCachedRows(
         IReadOnlyList<WorkshopInfoCacheEntry> items,
         int thumbnailSize,
-        bool collectionsSection,
         CancellationToken cancellationToken)
     {
         var rows = new List<WorkshopRowViewModel>(items.Count);
@@ -1183,7 +1180,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var row = WorkshopRowViewModel.FromCache(entry, thumbnailSize, collectionsSection);
+            // 合集标记以缓存条目自身为准：页缓存键已经按区段隔离，但普通条目的旧缓存不能误标。
+            var row = WorkshopRowViewModel.FromCache(entry, thumbnailSize, entry.IsCollection);
             if (_info.TryGetCachedCover(entry, out var cover))
             {
                 row.CoverPath = cover;
@@ -1623,7 +1621,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         foreach (var item in items)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            pending.Add(CreateSteamEntry(item, gameId));
+            pending.Add(CreateSteamEntry(item, gameId, collectionsSection));
         }
 
         if (pending.Count > 0)
@@ -1801,8 +1799,9 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     {
         var size = ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize);
         var gameId = _gameId;
+        var collectionFilter = source == WorkshopSource.Steam ? IsCollectionsSection : (bool?)null;
         var rows = await Task
-            .Run(() => BuildFallbackRows(source, size, gameId, cancellationToken), cancellationToken)
+            .Run(() => BuildFallbackRows(source, size, gameId, collectionFilter, cancellationToken), cancellationToken)
             .ConfigureAwait(true);
 
         if (cancellationToken.IsCancellationRequested)
@@ -1843,21 +1842,28 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <param name="source">来源。</param>
     /// <param name="thumbnailSize">缩略图边长（像素）。</param>
     /// <param name="gameId">抓取时所属游戏（在 UI 线程上先取好，避免建行途中换游戏）。</param>
+    /// <param name="collectionFilter">Steam 区段过滤：true=只合集、false=只普通项、null=不过滤。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>行模型。</returns>
     private List<WorkshopRowViewModel> BuildFallbackRows(
         WorkshopSource source,
         int thumbnailSize,
         string? gameId,
+        bool? collectionFilter,
         CancellationToken cancellationToken)
     {
         var entries = _info.Snapshot(source, gameId);
+        if (collectionFilter is { } isCollection)
+        {
+            entries = entries.Where(entry => entry.IsCollection == isCollection).ToList();
+        }
+
         var rows = new List<WorkshopRowViewModel>(entries.Count);
         foreach (var entry in entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var row = WorkshopRowViewModel.FromCache(entry, thumbnailSize);
+            var row = WorkshopRowViewModel.FromCache(entry, thumbnailSize, entry.IsCollection);
             if (_info.TryGetCachedCover(entry, out var cover))
             {
                 row.CoverPath = cover;
@@ -2026,7 +2032,11 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>把 Steam 列表条目转成待写入缓存的行（不覆盖已抓到的封面文件名与详情）。</summary>
     /// <param name="item">Steam 条目。</param>
     /// <param name="gameId">所属游戏（建行前在 UI 线程取好的快照）。</param>
-    private static WorkshopInfoCacheEntry CreateSteamEntry(SteamWorkshopItem item, string? gameId) => new()
+    /// <param name="collectionsSection">当前是否合集区段（SSR 缺 file_type 时靠区段兜底）。</param>
+    private static WorkshopInfoCacheEntry CreateSteamEntry(
+        SteamWorkshopItem item,
+        string? gameId,
+        bool collectionsSection) => new()
     {
         Source = "steam",
         Id = item.PublishedFileId,
@@ -2039,6 +2049,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         UpdatedUtc = item.UpdatedUtc,
         SizeBytes = item.FileSizeBytes,
         CoverUrl = item.PreviewUrl,
+        IsCollection = item.IsCollection || collectionsSection,
     };
 
     /// <summary>把 PDX 列表条目转成待写入缓存的行。</summary>

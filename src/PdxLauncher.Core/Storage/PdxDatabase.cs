@@ -24,10 +24,43 @@ public sealed class PdxDatabase
     public const string FileName = "pdxnext.sqlite";
 
     /// <summary>当前 schema 版本；加表/加列时递增，并在 <see cref="Migrate"/> 里补一段迁移。</summary>
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
 
     /// <summary>schema 版本号所在的 meta 键。</summary>
     public const string SchemaVersionKey = "schema_version";
+
+    /// <summary>v3 迁移：给工坊条目表补合集标记。</summary>
+    private const string AddCollectionColumnSql =
+        "ALTER TABLE workshop_items ADD COLUMN is_collection INTEGER NOT NULL DEFAULT 0";
+
+    /// <summary>v3 迁移：子项封面独立表，避免无名字的封面行占用条目配额。</summary>
+    private const string CreateWorkshopCoversSql =
+        """
+        CREATE TABLE IF NOT EXISTS workshop_covers (
+            source TEXT NOT NULL, id TEXT NOT NULL, cover_file TEXT, cover_url TEXT,
+            cover_fetched_utc INTEGER, fetched_utc INTEGER NOT NULL,
+            PRIMARY KEY (source, id))
+        """;
+
+    /// <summary>v3 迁移：把旧的无名字封面行搬到独立表。</summary>
+    private const string MoveCoverOnlyRowsSql =
+        """
+        INSERT OR IGNORE INTO workshop_covers
+            (source, id, cover_file, cover_url, cover_fetched_utc, fetched_utc)
+        SELECT source, id, cover_file, cover_url, cover_fetched_utc, fetched_utc
+        FROM workshop_items
+        WHERE cover_file IS NOT NULL AND game_id IS NULL AND name IS NULL
+        """;
+
+    /// <summary>v3 迁移：搬完后从条目表删除无名字封面行。</summary>
+    private const string DeleteCoverOnlyRowsSql =
+        """
+        DELETE FROM workshop_items
+        WHERE cover_file IS NOT NULL AND game_id IS NULL AND name IS NULL
+        """;
+
+    /// <summary>读 workshop_items 表结构；表名固定，不拼接外部输入。</summary>
+    private const string WorkshopItemColumnsSql = "PRAGMA table_info(workshop_items)";
 
     private static readonly object GateLock = new();
     private static readonly Dictionary<string, SemaphoreSlim> WriteGates = new(StringComparer.OrdinalIgnoreCase);
@@ -349,8 +382,7 @@ public sealed class PdxDatabase
 
     private void Migrate(SqliteConnection connection, int fromVersion)
     {
-        // v1：初始结构。以后加表/加列时在这里按 fromVersion 逐段升级。
-        _ = fromVersion;
+        // v1：初始结构。
         connection.Execute(
             "CREATE TABLE IF NOT EXISTS settings (" +
             "id INTEGER PRIMARY KEY CHECK (id = 1), json TEXT NOT NULL, updatedAt INTEGER NOT NULL)");
@@ -393,7 +425,8 @@ public sealed class PdxDatabase
             "size_bytes INTEGER, cover_url TEXT, cover_file TEXT, cover_fetched_utc INTEGER, " +
             "detail_text TEXT, detail_screenshots TEXT, detail_fetched_utc INTEGER, " +
             "fetched_utc INTEGER NOT NULL, creator_steam_id TEXT, tags TEXT, " +
-            "views INTEGER, lifetime_subscriptions INTEGER, PRIMARY KEY (source, id))");
+            "views INTEGER, lifetime_subscriptions INTEGER, " +
+            "is_collection INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (source, id))");
         connection.Execute(
             "CREATE TABLE IF NOT EXISTS workshop_pages (" +
             "published_file_id TEXT PRIMARY KEY, fetched_utc INTEGER NOT NULL, payload TEXT NOT NULL)");
@@ -401,6 +434,35 @@ public sealed class PdxDatabase
             "CREATE INDEX IF NOT EXISTS ix_workshop_items_game ON workshop_items (game_id, fetched_utc)");
         connection.Execute(
             "CREATE INDEX IF NOT EXISTS ix_workshop_items_fetched ON workshop_items (fetched_utc)");
+
+        // v3：合集标记 + 子项封面独立表。
+        if (fromVersion < 3)
+        {
+            var columns = ReadWorkshopItemColumns(connection);
+            if (!columns.Contains("is_collection"))
+            {
+                connection.Execute(AddCollectionColumnSql);
+            }
+
+            connection.Execute(CreateWorkshopCoversSql);
+            connection.Execute(MoveCoverOnlyRowsSql);
+            connection.Execute(DeleteCoverOnlyRowsSql);
+        }
+    }
+
+    /// <summary>读 workshop_items 的实际列名（表名固定）。</summary>
+    private static HashSet<string> ReadWorkshopItemColumns(SqliteConnection connection)
+    {
+        var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in connection.Query(WorkshopItemColumnsSql))
+        {
+            if (row.TryGetValue("name", out var value) && value is string name && name.Length > 0)
+            {
+                columns.Add(name);
+            }
+        }
+
+        return columns;
     }
 
     private void RecoverCorrupt()

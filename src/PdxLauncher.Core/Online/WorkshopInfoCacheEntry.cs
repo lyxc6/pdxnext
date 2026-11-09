@@ -76,4 +76,10 @@ public sealed class WorkshopInfoCacheEntry
 
     /// <summary>详情里的累计订阅数 lifetime_subscriptions（Steam 详情才有）。</summary>
     public long? LifetimeSubscriptions { get; set; }
+
+    /// <summary>
+    /// 这一条是不是 Steam 合集。断网回退与详情缓存要靠它区分合集和普通 mod；
+    /// 旧库（1.2 / v2 schema）没有这个列时按 <c>false</c> 处理。
+    /// </summary>
+    public bool IsCollection { get; set; }
 }

@@ -39,6 +39,7 @@ public static class SteamWorkshopDetailCache
             string.IsNullOrWhiteSpace(creator) ? null : creator,
             entry.Tags ?? [],
             entry.Views ?? 0,
-            entry.LifetimeSubscriptions ?? 0);
+            entry.LifetimeSubscriptions ?? 0,
+            entry.IsCollection ? 2 : 0);
     }
 }
