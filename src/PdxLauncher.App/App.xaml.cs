@@ -65,6 +65,10 @@ public partial class App : Application
         MainWindowInstance = _window;
         _window.Activate();
 
+        // 单实例：第一个窗口起来后再开监听，第二个进程点开时能直接把这里叫到前台。
+        SingleInstanceGuard.StartActivationServer(_window.DispatcherQueue, _window);
+        _window.Closed += (_, _) => SingleInstanceGuard.StopActivationServer();
+
         // UI 线程看门狗：任何页面上的同步长活（大文件加载、同步 IO/解码）都会在这里留下
         // 「停顿 N ms + 最近位置」，比窗口卡死后什么都抓不到要强。
         AppServices.AttachWatchdog(UiThreadWatchdog.Start(AppServices.Logger, _window.DispatcherQueue));

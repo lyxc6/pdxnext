@@ -5765,4 +5765,7 @@ then call list_games to verify.</value>
   <data name="ModstudioMcpDocsFailed" xml:space="preserve">
     <value>Failed to open MCP documentation: {0}</value>
   </data>
+  <data name="SingleInstanceAlreadyRunning" xml:space="preserve">
+    <value>PdxNext is already running. Please switch to the open window.</value>
+  </data>
 </root>

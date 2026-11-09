@@ -2,7 +2,6 @@ namespace PdxLauncher.App;
 
 using System;
 using System.IO;
-using System.Threading;
 
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -23,20 +22,10 @@ using PdxLauncher.Core.Steam;
 public static class Program
 {
     /// <summary>
-    /// 安装器用这个 mutex 判断启动器是否仍在运行（`AppMutex`），升级/卸载前可以提示关闭。
-    /// 只由正常 UI 进程创建；Steam 宿主子进程是短命的，不能占用它。
-    /// </summary>
-    private static Mutex? _appMutex;
-
-    /// <summary>
     /// 更新流程在启动安装器前主动释放 mutex：安装器启动时若仍看到 mutex 会直接判定
     /// “程序正在运行”并退出，等不到 CloseApplications 去关窗口。
     /// </summary>
-    public static void ReleaseAppMutex()
-    {
-        var mutex = Interlocked.Exchange(ref _appMutex, null);
-        mutex?.Dispose();
-    }
+    public static void ReleaseAppMutex() => SingleInstanceGuard.ReleaseMutex();
 
     /// <summary>入口。</summary>
     [STAThread]
@@ -69,8 +58,18 @@ public static class Program
             }
         }
 
-        // 保持到进程结束；安装器/uninstaller 通过同名 mutex 判断主程序是否还在运行。
-        _appMutex = new Mutex(initiallyOwned: false, name: @"Local\PdxNext.App");
+        // 单实例：第二个 UI 进程只负责把第一个实例的窗口叫到前台，然后退出。
+        // 拿不到锁且确认已有实例时，优先走管道；管道连不上再弹一句「已在运行」。
+        if (!SingleInstanceGuard.TryAcquire(out var alreadyRunning))
+        {
+            if (alreadyRunning && SingleInstanceGuard.SignalExistingInstance())
+            {
+                return 0;
+            }
+
+            SingleInstanceGuard.ShowAlreadyRunning();
+            return 0;
+        }
 
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(p =>

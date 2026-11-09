@@ -5765,4 +5765,7 @@
   <data name="ModstudioMcpDocsFailed" xml:space="preserve">
     <value>打开 MCP 文档失败：{0}</value>
   </data>
+  <data name="SingleInstanceAlreadyRunning" xml:space="preserve">
+    <value>PdxNext 已在运行。请切换到已经打开的窗口。</value>
+  </data>
 </root>
