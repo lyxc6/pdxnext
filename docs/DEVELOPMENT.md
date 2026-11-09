@@ -91,8 +91,9 @@ pwsh -File scripts/session.ps1 close -Message "中文说明"  :: 构建 + 自检
 
 ```bat
 dev.cmd         :: 结束旧实例 → Release 构建 + 自检 → 启动，末尾输出 DEV_* 标记
+dev.cmd logs    :: 同上，启动后在本终端跟随日志（Ctrl+C 只停跟随，程序继续运行）
 dev.cmd build   :: 只构建 + 自检，不启动（验收用）
-dev.cmd nobuild :: 不构建，结束旧实例后直接启动已构建的程序
+dev.cmd nobuild :: 不构建，结束旧实例后直接启动已构建的程序；加 logs 也跟随日志
 ```
 
 查看当前改动（只读）：
@@ -107,7 +108,8 @@ status.cmd nopause  :: 同上，不停住（VS Code 任务用）
 它会**结束正在运行的 `PdxLauncher.App.exe`**（运行中的 exe 会锁 `PdxLauncher.Core.dll`），
 所以同一工作树同一时刻只允许一个 `dev.cmd`。更完整的约定见 `docs\AGENT-WORKFLOW.md` §10 与根 `AGENTS.md`。
 
-单独构建（脚本化、CI、或只想跑某一步时用；只启动已构建的 Release 用 `dev.cmd nobuild`）：
+单独构建（脚本化、CI、或只想跑某一步时用；只启动已构建的 Release 用 `dev.cmd nobuild`，
+要在终端看运行日志用 `dev.cmd nobuild logs`）：
 
 ```bat
 build.cmd        :: Release 构建 + 跑自检（首次约 1 分钟，之后增量约 15 秒）
@@ -607,9 +609,9 @@ Mod 库、播放集里的 mod 行、工坊详情页的简介与更新日志、�
 
 ```
 PdxLauncher.sln
-AGENTS.md                      :: 其他对话 / agent 的入口：三条命令 + 硬约束，见 §1
+AGENTS.md                      :: 其他对话 / agent 的入口：常用命令 + 硬约束，见 §1
 start.cmd                      :: 一键启动（增量构建 + 运行），双击即可，见 §1「日常命令」
-dev.cmd                        :: 自动化入口：构建 + 自检 + 重启，末尾输出 DEV_* 标记
+dev.cmd                        :: 自动化入口：构建 + 自检 + 重启，末尾输出 DEV_* 标记；加 logs 跟随终端日志
 status.cmd                     :: 只读查看分支、未提交改动、运行态与构建时间
 build.cmd / build-debug.cmd
 publish.cmd                    :: 构建 + 自检 + 发布到 dist\PdxNext\（可传目标目录）

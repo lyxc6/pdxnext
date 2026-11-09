@@ -151,7 +151,9 @@ dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 | --- | --- |
 | `dev.cmd build` | 结束旧实例 → `dotnet build "PdxLauncher.sln" -c Release -m:1` → 自检；不启动 |
 | `dev.cmd` | 同上，构建与自检通过后启动，并确认进程在 10 秒内没有退出 |
+| `dev.cmd logs` | 同 `dev.cmd`，启动后在本终端跟随 `data\logs\pdxnext.log`（Ctrl+C 只停跟随，程序继续跑） |
 | `dev.cmd nobuild` | 不构建，结束旧实例后直接启动已有产物 |
+| `dev.cmd nobuild logs` | 不构建，启动后跟随日志（快速看界面 + 日志，不做验收） |
 | `status.cmd` | 只读显示分支、HEAD、已暂存 / 未暂存 / 未跟踪计数、改动文件、diff 统计、最近 5 次提交、运行态与构建时间；默认等待按键 |
 | `status.cmd nopause` | 同上，不等待按键（VS Code 任务与自动化用） |
 

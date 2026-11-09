@@ -5,6 +5,7 @@ rem
 rem      dev.cmd            stop the old instance, build Release, self check, run
 rem      dev.cmd build      stop the old instance, build + self check, do not run
 rem      dev.cmd nobuild    skip build, stop the old instance and run the exe
+rem      dev.cmd logs       run, then follow data\logs\pdxnext.log in this console
 rem      dev.cmd /?         usage
 rem
 rem  ASCII only -- see build.cmd. Localized text lives in scripts\messages.txt.
@@ -20,6 +21,7 @@ set "CONFIG=Release"
 set "MODE=run"
 set "NOBUILD=0"
 set "NOLAUNCH=0"
+set "FOLLOW=0"
 set "RC=1"
 
 :parseargs
@@ -39,6 +41,9 @@ if /i "%~1"=="run" (
     set "NOBUILD=0"
     set "NOLAUNCH=0"
 )
+if /i "%~1"=="logs" (
+    set "FOLLOW=1"
+)
 if /i "%~1"=="/?"     goto usage
 if /i "%~1"=="-h"     goto usage
 if /i "%~1"=="--help" goto usage
@@ -50,9 +55,13 @@ call "%ROOT%scripts\msg.cmd" V_USAGE1
 call "%ROOT%scripts\msg.cmd" V_USAGE2
 call "%ROOT%scripts\msg.cmd" V_USAGE3
 call "%ROOT%scripts\msg.cmd" V_USAGE4
+call "%ROOT%scripts\msg.cmd" V_USAGE5
+call "%ROOT%scripts\msg.cmd" V_USAGE6
 exit /b 0
 
 :argsdone
+rem logs means "run and follow": it wins over build's "do not launch" flag.
+if "%FOLLOW%"=="1" set "NOLAUNCH=0"
 set "EXE=src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
 set "EXEDIR=%ROOT%src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64"
 set "DATA=%EXEDIR%\data"
@@ -155,6 +164,7 @@ goto fail
 call "%ROOT%scripts\msg.cmd" V_PID %PID%
 echo.
 call "%ROOT%scripts\msg.cmd" V_OKRUN
+if "%FOLLOW%"=="0" call "%ROOT%scripts\msg.cmd" V_LOGHINT
 echo.
 echo DEV_RESULT=PASS
 echo DEV_MODE=%MODE%
@@ -166,6 +176,19 @@ echo DEV_EXE=%ROOT%%EXE%
 echo DEV_DATA=%DATA%
 echo DEV_LOG=%LOG%
 echo DEV_PID=%PID%
+if "%FOLLOW%"=="1" call :followlog
+exit /b 0
+
+rem ---------------------------------------------------------------------------
+rem  Follow the log file in this console. The app keeps running when the user
+rem  stops the tail (Ctrl+C); only this console stops reading the file.
+rem ---------------------------------------------------------------------------
+:followlog
+echo.
+call "%ROOT%scripts\msg.cmd" V_FOLLOW
+powershell -NoProfile -Command "$p='%LOG%'; for ($i=0; $i -lt 20 -and -not (Test-Path -LiteralPath $p); $i++) { Start-Sleep -Milliseconds 500 }; if (Test-Path -LiteralPath $p) { Get-Content -LiteralPath $p -Wait -Tail 20 -Encoding UTF8 } else { Write-Host '[log] pdxnext.log not found: %LOG%' }"
+echo.
+call "%ROOT%scripts\msg.cmd" V_FOLLOWSTOP
 exit /b 0
 
 :report_build

@@ -75,10 +75,15 @@ V_FAILSTART:[失败] 程序启动后 10 秒内退出，可能崩溃。日志:
 V_PID:      已启动，PID:
 V_OKBUILD:完成：构建与自检通过（未启动）。
 V_OKRUN:完成：构建、自检、启动均成功。
-V_USAGE1:用法  dev.cmd [build|nobuild]
+V_LOGHINT:      要在这里看实时日志用 dev.cmd logs（不构建用 dev.cmd nobuild logs）。
+V_FOLLOW:跟随日志（Ctrl+C 停止跟随，程序继续运行）:
+V_FOLLOWSTOP:已停止跟随日志；程序仍在运行。
+V_USAGE1:用法  dev.cmd [build|nobuild|logs]
 V_USAGE2:  dev.cmd            构建 + 自检 + 结束旧实例 + 启动
 V_USAGE3:  dev.cmd build      只构建 + 自检，不启动（验收用）
 V_USAGE4:  dev.cmd nobuild    不构建，直接结束旧实例并启动已构建的程序
+V_USAGE5:  dev.cmd logs       同上，启动后在本终端跟随日志（Ctrl+C 只停跟随）
+V_USAGE6:  dev.cmd nobuild logs  不构建，启动后跟随日志（快速看界面）
 V_PRESSKEY:按任意键关闭窗口...
 
 # status.cmd -- working tree status view

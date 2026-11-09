@@ -54,7 +54,7 @@
   不要把版本分支名写死在其它文档或脚本里。
 - 发版前先 `pwsh -File scripts/session.ps1 list`，确认没有未收尾的 `sess/*` 分支。
 
-## 2. 三条命令
+## 2. 常用命令
 
 在仓库根用 `cmd /c` 执行：
 
@@ -62,15 +62,18 @@
 | --- | --- | --- |
 | 验收 | `dev.cmd build` | 结束旧实例 → Release 构建（`-m:1`）→ 自检，不启动 |
 | 跑起来 | `dev.cmd` | 结束旧实例 → 构建 + 自检 → 启动，并确认进程存活 |
+| 看实时日志 | `dev.cmd logs` | 同 `dev.cmd`，启动后在本终端跟随 `data\logs\pdxnext.log`；Ctrl+C 只停跟随，程序继续跑 |
+| 免编译跑 | `dev.cmd nobuild` | 不构建，直接结束旧实例并启动已有产物；加 `logs` 也跟随日志 |
 | 看状态 | `status.cmd nopause` | 分支、未提交改动、运行态、构建时间（只读） |
 
 - `dev.cmd` 末尾固定输出 `DEV_RESULT=` / `DEV_EXE=` / `DEV_DATA=` / `DEV_LOG=` / `DEV_PID=` 等行，直接 grep 判断。
 - 退出码：`0` 通过、`1` 构建失败、`2` 自检失败、`3` 没有可执行文件、`4` 启动后退出。
 - `dev.cmd` 会**结束正在运行的 `PdxLauncher.App.exe`**（运行中的 exe 会锁 `PdxLauncher.Core.dll`）。
   同一工作树同一时刻只允许一个 `dev.cmd` / `dotnet build`。
-- `dev.cmd nobuild`：不构建，直接结束旧实例并启动已有产物。
+- `dev.cmd logs` / `dev.cmd nobuild logs` 会一直阻塞到 Ctrl+C（或关掉终端）；自动化验收仍用
+  `dev.cmd build`，不要用 `logs`。
 - 如果 `dev.cmd build` 只挂在真机数据检查上（例如本机没装某个游戏 / 缺 `dlc_metadata`），
-  可以先用 `dev.cmd nobuild` 看界面；但这不算验收通过，汇报里要写明「自检未过」的原因。
+  可以先用 `dev.cmd nobuild` 或 `dev.cmd nobuild logs` 看界面；但这不算验收通过，汇报里要写明「自检未过」的原因。
 
 ## 3. 仓库事实
 
