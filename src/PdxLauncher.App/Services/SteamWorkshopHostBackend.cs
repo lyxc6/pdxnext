@@ -4,6 +4,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 
+using PdxLauncher.App.Localization;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Games;
@@ -20,6 +21,9 @@ using PdxLauncher.Core.Steam;
 /// </summary>
 public sealed class SteamWorkshopHostBackend : IWorkshopSubscribeBackend, IWorkshopStateSource
 {
+    /// <summary>Steam 重启窗口内首次 IPC 失败后的重试等待。</summary>
+    private static readonly TimeSpan SteamUnavailableRetryDelay = TimeSpan.FromSeconds(2);
+
     private readonly SteamHostClient _client;
     private readonly IAppLogger _logger;
     private readonly string _apiFilePath;
@@ -91,16 +95,35 @@ public sealed class SteamWorkshopHostBackend : IWorkshopSubscribeBackend, IWorks
     public async Task<WorkshopSubscribeResult> SetSubscribedAsync(ulong publishedFileId, bool subscribe, CancellationToken cancellationToken)
     {
         var verb = subscribe ? SteamHostProtocol.WorkshopSubscribeVerb : SteamHostProtocol.WorkshopUnsubscribeVerb;
+        var action = subscribe ? "订阅" : "取消订阅";
         var result = await _client.WorkshopAsync(verb, _apiFilePath, _appId, publishedFileId, cancellationToken)
             .ConfigureAwait(false);
+
+        // Steam 重启 / 切换账号的窗口里，进程还在但 IPC 管道会短暂失效。
+        // 订阅和退订都是幂等的，这时再拉起一次宿主通常就能成功；最多只重试一次。
+        if (!result.Ok && SteamHostFailureClassifier.ShouldRetry(result.Error, SteamClientProcess.IsRunning()))
+        {
+            _logger.Warn("Steam 工坊" + action + "首次失败（Steam 客户端可能正在重启）：" + result.Error);
+            await Task.Delay(SteamUnavailableRetryDelay, cancellationToken).ConfigureAwait(false);
+            result = await _client.WorkshopAsync(verb, _apiFilePath, _appId, publishedFileId, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         if (!result.Ok)
         {
-            _logger.Warn("Steam 工坊" + (subscribe ? "订阅" : "取消订阅") + "失败：" + result.Error);
-            return WorkshopSubscribeResult.Fail(result.Error ?? "Steam 没有确认这次操作");
+            // 原始错误进日志（可能带 tier0 断言），界面只给可读原因。
+            _logger.Warn("Steam 工坊" + action + "失败：" + result.Error);
+            return WorkshopSubscribeResult.Fail(DescribeForUser(result.Error));
         }
 
         return WorkshopSubscribeResult.Success;
     }
+
+    /// <summary>失败原因给用户看的版本：Steam 不可用统一换成资源文案，其余保持原样。</summary>
+    private static string DescribeForUser(string? error) =>
+        SteamHostFailureClassifier.IsSteamClientUnavailable(error)
+            ? Localizer.Instance.T(Keys.WorkshopDetailSteamUnavailable)
+            : (error ?? "Steam 没有确认这次操作");
 
     /// <summary>
     /// 读订阅状态。会同步拉起宿主进程（约 1 秒），调用方必须放到线程池上，别在 UI 线程直接调。

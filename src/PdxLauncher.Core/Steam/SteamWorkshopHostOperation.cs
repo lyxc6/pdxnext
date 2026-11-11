@@ -1139,6 +1139,14 @@ internal sealed class SteamWorkshopHostOperation : IDisposable
             return "找不到 steam_api64.dll：" + _apiFilePath;
         }
 
+        // Steam 明显没运行时不要加载原生库：IPC 握手失败会触发 tier0 fatal assert，
+        // 宿主在写出结果行之前就被终止，调用方只能拿到原始断言文本。
+        // null 表示进程枚举失败，此时不能武断拦截，照常让 Init 自己判断。
+        if (SteamClientProcess.IsRunning() == false)
+        {
+            return "Steam 客户端没有运行";
+        }
+
         try
         {
             _library = NativeLibrary.Load(_apiFilePath);

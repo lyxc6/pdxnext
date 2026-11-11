@@ -501,7 +501,7 @@ internal sealed class SteamAchievementsHostOperation : IDisposable
         if (!initialized)
         {
             var message = Encoding.UTF8.GetString(buffer).TrimEnd('\0', ' ');
-            if (ClassifyInitFailure(TryIsSteamRunning(), IsSteamClientProcessRunning()) == SteamAchievementCodes.SteamNotRunning)
+            if (ClassifyInitFailure(TryIsSteamRunning(), SteamClientProcess.IsRunning() == true) == SteamAchievementCodes.SteamNotRunning)
             {
                 return (SteamAchievementCodes.SteamNotRunning, "Steam 客户端没有运行", message.Length > 0 ? message : null);
             }
@@ -577,61 +577,6 @@ internal sealed class SteamAchievementsHostOperation : IDisposable
 
         // 导出缺失（null）时不要武断说「没运行」：Init 的错误信息里会写「未运行或未登录」。
         return isSteamRunning == false ? SteamAchievementCodes.SteamNotRunning : SteamAchievementCodes.InitFailed;
-    }
-
-    /// <summary>
-    /// 进程表里的 Steam 客户端旁证。<c>SteamAPI_IsSteamRunning</c> 在部分受限会话里
-    /// 即使客户端在跑也返回 false，所以再看一眼进程：<c>steam.exe</c> 可能因会话隔离不可见，
-    /// 但它的 <c>steamwebhelper</c> 子进程通常能看到。只排除常驻的 <c>SteamService</c>。
-    /// </summary>
-    private static bool IsSteamClientProcessRunning()
-    {
-        System.Diagnostics.Process[] processes;
-        try
-        {
-            processes = System.Diagnostics.Process.GetProcesses();
-        }
-        catch
-        {
-            return false;
-        }
-
-        try
-        {
-            foreach (var process in processes)
-            {
-                string name;
-                try
-                {
-                    name = process.ProcessName;
-                }
-                catch
-                {
-                    continue;
-                }
-
-                if (!name.StartsWith("steam", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                if (name.Equals("steamservice", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                return true;
-            }
-
-            return false;
-        }
-        finally
-        {
-            foreach (var process in processes)
-            {
-                process.Dispose();
-            }
-        }
     }
 
     private void PumpCallbacks()
