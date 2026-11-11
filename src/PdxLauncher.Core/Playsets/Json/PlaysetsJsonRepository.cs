@@ -331,7 +331,7 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
             game,
             () =>
             {
-                var document = LoadDocument(game);
+                var document = LoadDocumentForWrite(game);
                 var playSet = FindPlaySet(document, game, playSetId);
                 if (playSet is null)
                 {
@@ -378,7 +378,7 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
             game,
             () =>
             {
-                var document = LoadDocument(game);
+                var document = LoadDocumentForWrite(game);
                 var playSet = FindPlaySet(document, game, playSetId);
                 if (playSet is null)
                 {
@@ -479,7 +479,7 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
             game,
             () =>
             {
-                var document = LoadDocument(game);
+                var document = LoadDocumentForWrite(game);
                 if (document.FindPlaySet(playSetName) is not null)
                 {
                     return AppResult<Guid>.Fail(ErrorKind.Conflict, "playSet-name-exists:" + playSetName);
@@ -504,7 +504,7 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
             game,
             () =>
             {
-                var document = LoadDocument(game);
+                var document = LoadDocumentForWrite(game);
                 var target = FindPlaySet(document, game, playSetId);
                 if (target is null)
                 {
@@ -541,7 +541,7 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
             game,
             () =>
             {
-                var document = LoadDocument(game);
+                var document = LoadDocumentForWrite(game);
                 var playSet = FindPlaySet(document, game, playSetId);
                 if (playSet is null)
                 {
@@ -572,7 +572,7 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
             game,
             () =>
             {
-                var document = LoadDocument(game);
+                var document = LoadDocumentForWrite(game);
                 var playSet = FindPlaySet(document, game, playSetId);
                 if (playSet is null)
                 {
@@ -709,7 +709,17 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
                 : fallback);
     }
 
-    private PlaysetsJsonDocument LoadDocument(GameInstallation game)
+    private PlaysetsJsonDocument LoadDocument(GameInstallation game) =>
+        LoadDocumentCore(game, failOnParseError: false);
+
+    /// <summary>
+    /// 写路径专用：文件存在但解析失败时抛 IOException，让 <see cref="WriteAsync"/> 返回失败，
+    /// 绝不能在“空文档”上继续 SaveDocument —— 那会把用户真实的 playsets.json 整份覆盖掉。
+    /// </summary>
+    private PlaysetsJsonDocument LoadDocumentForWrite(GameInstallation game) =>
+        LoadDocumentCore(game, failOnParseError: true);
+
+    private PlaysetsJsonDocument LoadDocumentCore(GameInstallation game, bool failOnParseError)
     {
         var path = GetFilePath(game);
         if (!_fileSystem.FileExists(path))
@@ -727,7 +737,13 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
-            _logger.Warn("playsets.json 解析失败，按空播放集处理（不会再写坏它）: " + ex.Message);
+            if (failOnParseError)
+            {
+                _logger.Error("playsets.json 解析失败，拒绝写入（gameId=" + game.GameId + "）: " + ex.Message, ex);
+                throw new IOException("playsets-json-unreadable: " + ex.Message, ex);
+            }
+
+            _logger.Warn("playsets.json 解析失败，按空播放集处理（只读，不写回）: " + ex.Message);
             return PlaysetsJsonDocument.CreateNew();
         }
     }
