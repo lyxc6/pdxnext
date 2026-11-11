@@ -5003,6 +5003,9 @@
   <data name="WorkshopDetailSteamSubscribeHintOff" xml:space="preserve">
     <value>未开启直连订阅：按钮只会在 Steam 客户端里打开该 mod。可在设置页的「Steam 工坊直连订阅」里打开。</value>
   </data>
+  <data name="WorkshopDetailSteamUnavailable" xml:space="preserve">
+    <value>Steam 客户端未运行或无法连接，请先启动并登录 Steam 后重试；也可以点页面右上角的 Steam 图标，在 Steam 中打开该页面。</value>
+  </data>
   <data name="WorkshopDetailSteamUnsubscribeConfirm" xml:space="preserve">
     <value>将取消订阅这个工坊物品。Steam 会在游戏退出后移除已下载的内容。确定继续吗？</value>
   </data>

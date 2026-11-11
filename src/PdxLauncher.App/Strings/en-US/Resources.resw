@@ -5003,6 +5003,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="WorkshopDetailSteamSubscribeHintOff" xml:space="preserve">
     <value>Direct subscription is off: the button only opens this item in the Steam client. Turn it on in Settings.</value>
   </data>
+  <data name="WorkshopDetailSteamUnavailable" xml:space="preserve">
+    <value>The Steam client is not running or cannot be reached. Start Steam and sign in, then try again. You can also use the Steam icon at the top right to open this page in Steam.</value>
+  </data>
   <data name="WorkshopDetailSteamUnsubscribeConfirm" xml:space="preserve">
     <value>This unsubscribes from the Workshop item. Steam removes the downloaded content after the game quits. Continue?</value>
   </data>
