@@ -7415,9 +7415,9 @@ mod 名和行尾三个按钮完全看不见，右栏也不能滚动到这些内�
 - 工坊静默刷新失败只记日志，保留当前页与分页。
 
 **性能**
-- 设置页 `NavigationCacheMode=Required`：第二次进入停顿 1160 ms → 275 ms（首次约 502 ms 仍是 147 张卡构建成本）。
+- 设置页 `NavigationCacheMode=Required` + 8 个分节按需 `x:Load`：首次进入不再构建 147 张卡，重复进入停顿 1160 ms → 275 ms；逐节点击 Launch/Paths/Online/Cache/Advanced/Translation/About/Appearance 均能创建对应控件。
 - 工坊译文每 8 条、Steam 状态每 10 行 `Task.Yield`，拆开单帧长停顿。
-- 启动首帧约 469 ms 仍在（WinUI 首屏 + 主题背景首帧），单独 profile 后留 1.4；设置页首次构建也留 1.4 分节懒加载。
+- 启动 profile：游戏发现 234–340 ms 已移到 `Task.Run`（原先同步跑在 UI 线程），默认窗口首帧仍约 450–660 ms；瓶颈转向 HomePage 首帧布局 / 主题背景首帧，未在一轮内拆页，留 1.4。
 
 **验证**：`cmd //c dev.cmd build` 0 警告 0 错误，检查类 **164 / 失败 0**；真机确认工坊详情返回后刷新生效、DLC 加载中保存按钮禁用/加载后启用、20 次快速切页无导航失败、EU5 坏 JSON 写入被拒且原文件不变。
 
