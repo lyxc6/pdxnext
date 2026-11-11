@@ -1309,6 +1309,9 @@
   <data name="DlcStatusNoActivePlaySet" xml:space="preserve">
     <value>该游戏没有激活播放集：全部 DLC 视为启用（保存前请先激活一个播放集）</value>
   </data>
+  <data name="DlcStatusNotLoaded" xml:space="preserve">
+    <value>DLC 列表还没有加载完成，请稍后再保存。</value>
+  </data>
   <data name="DlcStatusRowDisabled" xml:space="preserve">
     <value>已禁用「{0}」（尚未保存）</value>
   </data>

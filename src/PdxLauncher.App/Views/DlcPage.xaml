@@ -166,15 +166,18 @@
                             Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.CanEditDlcToggles), Mode=OneWay}">
                     <Button Content="{x:Bind L.DlcEnableAll, Mode=OneWay}"
                             Click="OnEnableAllClick"
+                            IsEnabled="{x:Bind ViewModel.CanSave, Mode=OneWay}"
                             AutomationProperties.AutomationId="btnEnableAllDlcs"
                             AutomationProperties.Name="{x:Bind L.DlcEnableAllName, Mode=OneWay}" />
                     <Button Content="{x:Bind L.DlcDisableAll, Mode=OneWay}"
                             Click="OnDisableAllClick"
+                            IsEnabled="{x:Bind ViewModel.CanSave, Mode=OneWay}"
                             AutomationProperties.AutomationId="btnDisableAllDlcs"
                             AutomationProperties.Name="{x:Bind L.DlcDisableAllName, Mode=OneWay}" />
                     <Button Content="{x:Bind L.CommonSave, Mode=OneWay}"
                             Style="{StaticResource AccentButtonStyle}"
                             Click="OnSaveClick"
+                            IsEnabled="{x:Bind ViewModel.CanSave, Mode=OneWay}"
                             AutomationProperties.AutomationId="btnSaveDlcs"
                             AutomationProperties.Name="{x:Bind L.DlcSaveName, Mode=OneWay}" />
                 </StackPanel>
