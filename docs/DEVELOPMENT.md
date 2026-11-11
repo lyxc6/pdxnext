@@ -655,7 +655,7 @@ src/
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
   PdxLauncher.Localization.Generator/ :: Roslyn 增量源生成器：编译期读 Strings/*/Resources.resw，生成 Localizer 属性与 Keys（不落盘）
 tests/
-  PdxLauncher.Checks/          :: 108 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 164 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
@@ -679,7 +679,7 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**547 个 .cs + 18 个 .xaml**（不含 `obj/` 生成物；2026-11-04 实测，含工作区未提交文件：Core 272 / App 155+18 / Imaging 9 / Checks 111 —— Checks 的 111 个文件是 108 个检查类 + Program + ChecksContext + GlobalUsings；运行时打印的「检查类」就是 108，另 3 个是自检框架本身）。
+**743 个 .cs + 22 个 .xaml**（不含 `obj/` 生成物；2026-11-11 实测：Core 362 / App 198+22 / Imaging 10 / Checks 173；运行时打印的「检查类」是 **164**，其余文件是自检框架与替身）。
 
 ---
 
@@ -689,7 +689,7 @@ tools/
 dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 108，失败: 0，断言失败总数: 0` 即通过（2026-11-04 实测 108 类；真机段只锁结构——行数、启用态这类本机数据只打印 `info` 不作断言，Victoria 3 播放集那条写死的 `mod 行数 >= 22` 已按这个原则删掉，见 HANDOFF §0.85.5）。覆盖：Steam 探测与
+输出 `检查类: 164，失败: 0，断言失败总数: 0` 即通过（2026-11-11 实测 164 类；真机段只锁结构——行数、启用态这类本机数据只打印 `info` 不作断言，Victoria 3 播放集那条写死的 `mod 行数 >= 22` 已按这个原则删掉，见 HANDOFF §0.85.5）。覆盖：Steam 探测与
 launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取、
 Mod 创建（legacy `.mod`/`descriptor.mod` 与 V3 `.metadata/metadata.json` 生成、非法输入拒绝、本地清单合并、发布记录与发布协议参数、
 工坊发布面：可见性四档映射、1 MB 与张数上限、五种 YouTube 链接解析、30 种语言码与归一化、请求 JSON 全字段往返、旧 `public` 记录回显、内嵌默认封面的 PNG 签名与落盘一致、
