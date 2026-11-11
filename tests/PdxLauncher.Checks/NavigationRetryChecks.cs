@@ -39,9 +39,22 @@ public static class NavigationRetryChecks
             source.Contains("PendingNavigation", StringComparison.Ordinal)
                 && source.Contains("_pending = new PendingNavigation", StringComparison.Ordinal));
         ChecksContext.Check(
-            "导航重试: 失败后下一帧重试一次",
+            "导航重试: 失败后下一帧重试",
             source.Contains("DispatcherQueuePriority.Low", StringComparison.Ordinal)
                 && source.Contains("_retryScheduled", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "导航重试: 最多重试两次后放弃",
+            source.Contains("MaxRetryAttempts", StringComparison.Ordinal)
+                && source.Contains("attempt >= MaxRetryAttempts", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "导航重试: DrainPending 不再同步重入",
+            source.Contains("_retryScheduled || _pending is not", StringComparison.Ordinal)
+                && source.Contains("DispatcherQueuePriority.Low", StringComparison.Ordinal)
+                && source.Contains("NavigateCore(pending.Tag, pending.Parameter, pending.Attempt)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "导航重试: 同页短路也会让旧重试失效",
+            source.IndexOf("var version = unchecked(++_requestVersion);", StringComparison.Ordinal)
+                < source.IndexOf("string.Equals(CurrentTag, tag", StringComparison.Ordinal));
         ChecksContext.Check(
             "导航重试: 旧代号的重试会放弃",
             source.Contains("version != _requestVersion", StringComparison.Ordinal));
