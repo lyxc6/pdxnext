@@ -1571,7 +1571,11 @@ public sealed class ModsViewModel : LocalizedObservableObject
             }
 
             await LoadAsync(Game, cancellationToken).ConfigureAwait(true);
-            var renamed = PlaySets.FirstOrDefault(p => p.Id == playSetId);
+
+            // EU5 的播放集 Id 由 (gameId, name) 派生，改名即换 Id；不能再用旧 Id 查找，
+            // 否则会找不到并让 LoadAsync 自动选中活动/第一个播放集，看起来像“跳到别的集”。
+            var renamed = PlaySets.FirstOrDefault(
+                p => string.Equals(p.Name, newName.Trim(), StringComparison.OrdinalIgnoreCase));
             if (renamed is not null)
             {
                 await SelectPlaySetAsync(renamed, cancellationToken).ConfigureAwait(true);
