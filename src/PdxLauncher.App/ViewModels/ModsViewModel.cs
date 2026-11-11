@@ -1398,6 +1398,22 @@ public sealed class ModsViewModel : LocalizedObservableObject
             if (target is not null)
             {
                 await SelectPlaySetAsync(target, cancellationToken).ConfigureAwait(true);
+
+                // 合并进当前激活播放集时，库里的 mod 变了但游戏加载文件还是旧的；
+                // 不补写的话用户导入后直接启动游戏，看不到新增 mod。
+                if (imported.Merged && target.IsActive)
+                {
+                    var written = await ActivePlaySetLoadFileWriter
+                        .WriteAsync(game, cancellationToken)
+                        .ConfigureAwait(true);
+                    if (!written.IsSuccess)
+                    {
+                        _logger.Warn("导入合并后写加载文件失败（gameId=" + game.GameId + "）："
+                            + (written.ErrorMessage ?? "unknown"));
+                        StatusMessage = T(Keys.ModsStatusSaveFailed);
+                        return result;
+                    }
+                }
             }
 
             StatusMessage = imported.Merged
