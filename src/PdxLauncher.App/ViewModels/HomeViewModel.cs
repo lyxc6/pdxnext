@@ -219,13 +219,13 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
 
     /// <summary>启动当前游戏（普通启动，不带 --continuelastsave）。</summary>
     [RelayCommand]
-    private Task LaunchAsync() => LaunchCoreAsync(LaunchRequest.Default);
+    private Task LaunchAsync() => LaunchCoreAsync(continueLastSave: false);
 
     /// <summary>继续上次存档启动：追加 --continuelastsave。</summary>
     [RelayCommand]
-    private Task LaunchContinueAsync() => LaunchCoreAsync(new LaunchRequest(null, null, true));
+    private Task LaunchContinueAsync() => LaunchCoreAsync(continueLastSave: true);
 
-    private async Task LaunchCoreAsync(LaunchRequest request)
+    private async Task LaunchCoreAsync(bool continueLastSave)
     {
         var game = Game;
         if (game is null)
@@ -233,6 +233,8 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
             LaunchCompleted?.Invoke(this, ProcessStartResult.Failure(T(Keys.HomeStatusNoGameSelected)));
             return;
         }
+
+        var request = AppServices.CreateLaunchRequest(game, continueLastSave);
 
         // 启动结果只经 LaunchCompleted → HomeInfoBar 展示；底部状态行只承载非启动状态，
         // 这里先清掉上一段状态，避免旧文案与启动提示同时出现。

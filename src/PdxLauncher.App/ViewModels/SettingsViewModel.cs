@@ -38,6 +38,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     private bool _isBusy;
     private bool _isLoaded;
     private bool _isRelocalizing;
+    private bool _suppressAlternativeSave;
     /// <summary>安装形态判定结果；null 表示注册表还没读完（界面显示「正在检查」）。</summary>
     private InstallMode? _installMode;
     /// <summary>卸载记录里的目录；PathMismatch 时展示，便于用户判断是不是装了两份。</summary>
@@ -986,6 +987,29 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 return;
             }
 
+            if (_suppressAlternativeSave)
+            {
+                return;
+            }
+
+            if (Game is { } game)
+            {
+                if (value is null || string.Equals(value.ExePath, game.ExePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    AppServices.Settings.PreferredLaunchExePaths.Remove(game.GameId);
+                }
+                else
+                {
+                    AppServices.Settings.PreferredLaunchExePaths[game.GameId] = value.ExePath;
+                }
+
+                if (!SaveSettings())
+                {
+                    SetStatus(Keys.SettingsStatusSaveFailed, _lastSettingsSaveError ?? T(Keys.CommonUnknown));
+                    return;
+                }
+            }
+
             if (value is null)
             {
                 SetStatusText(string.Empty);
@@ -1020,6 +1044,8 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             LoadFileFormat.DlcLoadV0 => T(Keys.SettingsDataFormatV0),
             LoadFileFormat.ContentLoadV1 => T(Keys.SettingsDataFormatV1),
             LoadFileFormat.ContentLoadV1_1 => T(Keys.SettingsDataFormatV11),
+            LoadFileFormat.PlaysetsJsonV1 => T(Keys.SettingsDataFormatPlaysetsJson),
+            LoadFileFormat.PlaysetConfigV1 => T(Keys.SettingsDataFormatPlaysetConfig),
             _ => Game.Format.ToString(),
         };
 
@@ -1031,6 +1057,11 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             if (Game is null || !AppServices.IsInitialized)
             {
                 return string.Empty;
+            }
+
+            if (!Game.WritesLoadFile)
+            {
+                return T(Keys.SettingsDataNoLoadFile);
             }
 
             var fileName = Game.Format == LoadFileFormat.DlcLoadV0
@@ -1049,6 +1080,11 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             if (string.IsNullOrEmpty(path) || !AppServices.IsInitialized)
             {
                 return string.Empty;
+            }
+
+            if (Game is { WritesLoadFile: false })
+            {
+                return T(Keys.SettingsDataNoLoadFileState);
             }
 
             return AppServices.FileSystem.FileExists(path)
@@ -1971,12 +2007,20 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         get => AppServices.Settings.TranslateCacheDays.ToString(CultureInfo.InvariantCulture);
         set
         {
-            if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var days))
+            if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var days))
             {
-                AppServices.Settings.TranslateCacheDays = days;
-                SaveTranslationSettings();
-                SetStatus(Keys.SettingsTranslateStatusCacheDays, AppServices.Settings.TranslateCacheDays);
+                // 非数字不保存；把输入框恢复成当前生效值，并说明原因。
+                OnPropertyChanged(nameof(TranslateCacheDaysText));
+                SetStatus(Keys.SettingsTranslateStatusCacheDaysInvalid);
+                return;
             }
+
+            AppServices.Settings.TranslateCacheDays = days;
+            SaveTranslationSettings();
+
+            // AppSettings 会把 0/999 钳到 1/365；必须回写属性通知，否则输入框还显示用户原值。
+            OnPropertyChanged(nameof(TranslateCacheDaysText));
+            SetStatus(Keys.SettingsTranslateStatusCacheDays, AppServices.Settings.TranslateCacheDays);
         }
     }
 
@@ -2745,7 +2789,15 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
 
         assign(value);
-        SaveSettings();
+        if (!SaveSettings())
+        {
+            // 落盘失败就把内存值退回原值，否则界面显示“已开启”而重启后回退。
+            assign(current);
+            OnPropertyChanged(propertyName);
+            SetStatus(Keys.SettingsStatusSaveFailed, _lastSettingsSaveError ?? T(Keys.CommonUnknown));
+            return;
+        }
+
         OnPropertyChanged(propertyName);
         afterSave?.Invoke();
 
@@ -2779,7 +2831,14 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
 
         assign(value);
-        SaveSettings();
+        if (!SaveSettings())
+        {
+            assign(current!);
+            OnPropertyChanged(propertyName);
+            SetStatus(Keys.SettingsStatusSaveFailed, _lastSettingsSaveError ?? Localizer.Instance.T(Keys.CommonUnknown));
+            return false;
+        }
+
         OnPropertyChanged(propertyName);
         afterSave?.Invoke();
         SetStatus(statusKey, statusArgs?.Invoke(value) ?? Array.Empty<object?>());
@@ -2795,13 +2854,20 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// </para>
     /// 需要在输入框失焦 / 关闭串口一类的时机强制落盘时，仍然走 <see cref="PersistSettings"/>。
     /// </summary>
-    private void SaveSettings()
+    private string? _lastSettingsSaveError;
+
+    private bool SaveSettings()
     {
         var saved = AppServices.SaveSettings();
-        if (!saved.IsSuccess)
+        if (saved.IsSuccess)
         {
-            AppServices.Logger.Warn("保存设置失败: " + saved.ErrorMessage);
+            _lastSettingsSaveError = null;
+            return true;
         }
+
+        _lastSettingsSaveError = saved.ErrorMessage;
+        AppServices.Logger.Warn("保存设置失败: " + saved.ErrorMessage);
+        return false;
     }
 
     /// <summary>把「当前实际用了哪个代理」算出来显示；解析本身不联网。</summary>
@@ -2942,6 +3008,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     private void RebuildAlternatives(GameInstallation game)
     {
         var selectedPath = SelectedAlternative?.ExePath;
+        var preferredPath = AppServices.Settings.PreferredLaunchExePaths.GetValueOrDefault(game.GameId);
         Alternatives.Clear();
         Alternatives.Add(new AlternativeExecutable(game.ExePath, game.ExeArgs, T(Keys.SettingsLaunchStandard)));
         foreach (var alternative in game.Alternatives)
@@ -2949,11 +3016,20 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             Alternatives.Add(alternative);
         }
 
-        SelectedAlternative = selectedPath is null
-            ? Alternatives[0]
-            : Alternatives.FirstOrDefault(item =>
-                    string.Equals(item.ExePath, selectedPath, StringComparison.OrdinalIgnoreCase))
-                ?? Alternatives[0];
+        var target = selectedPath ?? preferredPath;
+        _suppressAlternativeSave = true;
+        try
+        {
+            SelectedAlternative = target is null
+                ? Alternatives[0]
+                : Alternatives.FirstOrDefault(item =>
+                        string.Equals(item.ExePath, target, StringComparison.OrdinalIgnoreCase))
+                    ?? Alternatives[0];
+        }
+        finally
+        {
+            _suppressAlternativeSave = false;
+        }
     }
 
     /// <summary>

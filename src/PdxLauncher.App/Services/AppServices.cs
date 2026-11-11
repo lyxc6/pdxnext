@@ -162,6 +162,35 @@ public static class AppServices
     /// <summary>用户设置的内存副本；改动后调用 <see cref="SaveSettings"/> 落盘。</summary>
     public static AppSettings Settings { get; private set; } = new();
 
+    /// <summary>
+    /// 按设置页里为该游戏选择的「其它可执行文件」构造启动请求；
+    /// 没选或选的是标准 exe 时返回默认请求（让 <see cref="IGameLauncher"/> 读 launcher-settings 的参数）。
+    /// </summary>
+    /// <param name="game">要启动的游戏。</param>
+    /// <param name="continueLastSave">是否追加 --continuelastsave。</param>
+    public static LaunchRequest CreateLaunchRequest(GameInstallation game, bool continueLastSave)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+
+        string? customPath = null;
+        if (Settings.PreferredLaunchExePaths.TryGetValue(game.GameId, out var preferred)
+            && !string.IsNullOrWhiteSpace(preferred)
+            && !string.Equals(preferred, game.ExePath, StringComparison.OrdinalIgnoreCase))
+        {
+            customPath = preferred;
+        }
+
+        IReadOnlyList<string>? customArgs = null;
+        if (customPath is not null)
+        {
+            var alternative = game.Alternatives.FirstOrDefault(
+                item => string.Equals(item.ExePath, customPath, StringComparison.OrdinalIgnoreCase));
+            customArgs = alternative?.Args;
+        }
+
+        return new LaunchRequest(customPath, customArgs, continueLastSave);
+    }
+
     /// <summary>当前选中的游戏；由游戏库页/外壳页设置，其它页面只读。</summary>
     public static GameInstallation? CurrentGame { get; private set; }
 
