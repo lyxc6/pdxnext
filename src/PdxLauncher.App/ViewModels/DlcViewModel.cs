@@ -83,6 +83,7 @@ public sealed class DlcViewModel : LocalizedObservableObject
             if (SetProperty(ref _game, value))
             {
                 OnPropertyChanged(nameof(GameTitle));
+                OnPropertyChanged(nameof(CanSave));
             }
         }
     }
@@ -92,13 +93,25 @@ public sealed class DlcViewModel : LocalizedObservableObject
     public bool IsBusy
     {
         get => _isBusy;
-        private set => SetProperty(ref _isBusy, value);
+        private set
+        {
+            if (SetProperty(ref _isBusy, value))
+            {
+                OnPropertyChanged(nameof(CanSave));
+            }
+        }
     }
 
     public bool IsLoaded
     {
         get => _isLoaded;
-        private set => SetProperty(ref _isLoaded, value);
+        private set
+        {
+            if (SetProperty(ref _isLoaded, value))
+            {
+                OnPropertyChanged(nameof(CanSave));
+            }
+        }
     }
 
     public string StatusMessage
@@ -123,6 +136,12 @@ public sealed class DlcViewModel : LocalizedObservableObject
     /// 在 CS2 上打开/禁用写不进任何文件，所以整组编辑能力（含全部启用/禁用、保存）都关掉。
     /// </summary>
     public bool CanEditDlcToggles => !_isSteamDlcList;
+
+    /// <summary>
+    /// 保存/全部启停是否可用：列表没加载完就保存会拿空的 Dlcs 快照走 DELETE + INSERT，
+    /// 把激活播放集里已有的 DLC 启用状态清空；忙时也不允许并发写。
+    /// </summary>
+    public bool CanSave => IsLoaded && !IsBusy && Game is not null;
 
     /// <summary>判定条是否可见：有磁盘清单时照旧；CS2 的清单也来自探测，所以探测过就要显示（失败时给重试）。</summary>
     public bool HasOwnershipStrip => CanRecheckOwnership && (Dlcs.Count > 0 || _ownership is not null);
@@ -1099,6 +1118,13 @@ public sealed class DlcViewModel : LocalizedObservableObject
         if (Game is null)
         {
             SetStatus(Keys.DlcNoGameHint);
+            return;
+        }
+
+        if (!IsLoaded)
+        {
+            // 列表还没铺完时 Dlcs 可能是空集合，直接保存会把整份 playsets_dlcs 清空。
+            SetStatus(Keys.DlcStatusNotLoaded);
             return;
         }
 

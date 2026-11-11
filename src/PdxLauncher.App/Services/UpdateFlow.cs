@@ -202,6 +202,7 @@ internal static class UpdateFlow
                 await ShowMessageAsync(
                     localizer.T(Keys.UpdateTitleAvailable, manifest.Version),
                     localizer.T(Keys.UpdateElevationCanceled)).ConfigureAwait(true);
+                ReacquireOrClose();
                 return;
             }
 
@@ -210,6 +211,7 @@ internal static class UpdateFlow
                 await ShowMessageAsync(
                     localizer.T(Keys.UpdateTitleAvailable, manifest.Version),
                     localizer.T(Keys.UpdateInstallFailed, launch.Error ?? string.Empty)).ConfigureAwait(true);
+                ReacquireOrClose();
                 return;
             }
 
@@ -253,6 +255,20 @@ internal static class UpdateFlow
         >= 1024L => (bytes / 1024d).ToString("0.0") + " KB",
         _ => bytes + " B",
     };
+
+    /// <summary>
+    /// 安装器没起来时把单实例锁拿回来；拿不到说明已经有另一个实例，关闭当前窗口避免双写。
+    /// </summary>
+    private static void ReacquireOrClose()
+    {
+        if (Program.ReacquireAppMutex())
+        {
+            return;
+        }
+
+        AppServices.Logger.Error("安装器未启动，且单实例锁已被另一实例占用；关闭当前启动器避免双实例写数据");
+        App.MainWindowInstance?.Close();
+    }
 
     private static Task ShowMessageAsync(string title, string message) =>
         ConfirmOverlay.ShowMessage(title, message, Localizer.Instance.T(Keys.UpdateLater));

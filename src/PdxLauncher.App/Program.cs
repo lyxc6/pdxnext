@@ -27,6 +27,9 @@ public static class Program
     /// </summary>
     public static void ReleaseAppMutex() => SingleInstanceGuard.ReleaseMutex();
 
+    /// <summary>更新安装器取消 / 启动失败后重新拿回单实例锁；false 表示已被其它实例占用。</summary>
+    public static bool ReacquireAppMutex() => SingleInstanceGuard.TryReacquire();
+
     /// <summary>入口。</summary>
     [STAThread]
     public static int Main(string[] args)

@@ -1309,6 +1309,9 @@
   <data name="DlcStatusNoActivePlaySet" xml:space="preserve">
     <value>This game has no active play set: all DLCs are treated as enabled (activate a play set before saving)</value>
   </data>
+  <data name="DlcStatusNotLoaded" xml:space="preserve">
+    <value>The DLC list has not finished loading yet. Please save again after it loads.</value>
+  </data>
   <data name="DlcStatusRowDisabled" xml:space="preserve">
     <value>Disabled "{0}" (not saved yet)</value>
   </data>

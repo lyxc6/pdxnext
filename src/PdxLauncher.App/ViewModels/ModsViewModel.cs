@@ -36,6 +36,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
     private string _statusMessage = string.Empty;
     private bool _translateFailureReported;
     private string _searchText = string.Empty;
+    private bool _bulkEnabledUpdate;
 
     /// <summary>双列布局左栏（可添加的 mod）专用搜索词。</summary>
     private string _candidateSearchText = string.Empty;
@@ -898,6 +899,11 @@ public sealed class ModsViewModel : LocalizedObservableObject
     /// <summary>行内开关变化：同步集合顺序（不重排），刷新计数与状态，并自动保存。</summary>
     private void OnRowEnabledChanged(ModRowViewModel row)
     {
+        if (_bulkEnabledUpdate)
+        {
+            return;
+        }
+
         RaiseCounts();
         StatusMessage = row.IsEnabled
             ? T(Keys.ModsStatusModEnabled, row.Name)
@@ -928,6 +934,33 @@ public sealed class ModsViewModel : LocalizedObservableObject
         merged.AddRange(visible);
         merged.AddRange(rest);
         _allMods = PlaySetEditor.Renumber(merged);
+    }
+
+    /// <summary>
+    /// 只同步「启用/禁用」状态，保持 <see cref="_allMods"/> 的原始顺序不变。
+    /// <para>
+    /// 搜索过滤时 <see cref="Mods"/> 只是子集，不能像 <see cref="FlushVisibleRows"/> 那样
+    /// 把可见行排到最前；否则开关一个 mod 就会悄悄改掉真实加载顺序并写进加载文件。
+    /// </para>
+    /// </summary>
+    private void SyncVisibleEnabledStateIntoAllMods()
+    {
+        if (Mods.Count == 0 || _allMods.Count == 0)
+        {
+            return;
+        }
+
+        var visibleStates = new Dictionary<Guid, bool>(Mods.Count);
+        foreach (var row in Mods)
+        {
+            visibleStates[row.ModId] = row.IsEnabled;
+        }
+
+        _allMods = _allMods
+            .Select(item => visibleStates.TryGetValue(item.ModId, out var enabled) && item.Enabled != enabled
+                ? item with { Enabled = enabled }
+                : item)
+            .ToList();
     }
 
     /// <summary>上移（offset=-1）/下移（offset=+1）。搜索过滤时不可用。</summary>
@@ -1050,15 +1083,27 @@ public sealed class ModsViewModel : LocalizedObservableObject
         StatusMessage = T(Keys.ModsStatusCopiedId, row.Name);
     }
 
-    /// <summary>启用全部 / 禁用全部（作用于可见行），随后自动保存。</summary>
+    /// <summary>启用全部 / 禁用全部（作用于整个播放集，搜索过滤也不例外），随后自动保存。</summary>
     public void SetAllEnabled(bool enabled)
     {
-        foreach (var row in Mods)
+        // 行模型回调会逐条触发自动保存；这里统一改完再保存一次。
+        _bulkEnabledUpdate = true;
+        try
         {
-            row.IsEnabled = enabled;
+            _allMods = _allMods
+                .Select(item => item.Enabled == enabled ? item : item with { Enabled = enabled })
+                .ToList();
+
+            foreach (var row in Mods)
+            {
+                row.IsEnabled = enabled;
+            }
+        }
+        finally
+        {
+            _bulkEnabledUpdate = false;
         }
 
-        FlushVisibleRows();
         RaiseCounts();
         StatusMessage = enabled
             ? T(Keys.ModsStatusAllEnabled)
@@ -1353,6 +1398,22 @@ public sealed class ModsViewModel : LocalizedObservableObject
             if (target is not null)
             {
                 await SelectPlaySetAsync(target, cancellationToken).ConfigureAwait(true);
+
+                // 合并进当前激活播放集时，库里的 mod 变了但游戏加载文件还是旧的；
+                // 不补写的话用户导入后直接启动游戏，看不到新增 mod。
+                if (imported.Merged && target.IsActive)
+                {
+                    var written = await ActivePlaySetLoadFileWriter
+                        .WriteAsync(game, cancellationToken)
+                        .ConfigureAwait(true);
+                    if (!written.IsSuccess)
+                    {
+                        _logger.Warn("导入合并后写加载文件失败（gameId=" + game.GameId + "）："
+                            + (written.ErrorMessage ?? "unknown"));
+                        StatusMessage = T(Keys.ModsStatusSaveFailed);
+                        return result;
+                    }
+                }
             }
 
             StatusMessage = imported.Merged
@@ -1899,7 +1960,8 @@ public sealed class ModsViewModel : LocalizedObservableObject
                 return true;
             }
 
-            FlushVisibleRows();
+            // 只同步开关状态，保持 _allMods 原始顺序；搜索过滤时不能把可见行排到最前。
+            SyncVisibleEnabledStateIntoAllMods();
 
             var shouldWriteLoadFile = writeLoadFile
                 ?? PlaySets.Any(p => p.Id == playSet.Id && p.IsActive);

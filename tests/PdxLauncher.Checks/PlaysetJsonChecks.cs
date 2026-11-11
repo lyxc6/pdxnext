@@ -312,6 +312,20 @@ public static class PlaysetJsonChecks
         ChecksContext.Equal("损坏文件: 读出空播放集", 0, playSets.Count);
         ChecksContext.Check("损坏文件: 记 warn", logger.Warnings.Any(static w => w.Contains("playsets.json", StringComparison.Ordinal)));
         ChecksContext.Equal("损坏文件: 不覆写原文件", "{ 这不是合法 json ", fs.ReadAllText(path));
+
+        var save = repository.SavePlaySetModsAsync(
+                game,
+                Guid.NewGuid(),
+                [],
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Check("损坏文件: 写入被拒绝", !save.IsSuccess, save.ErrorMessage ?? "<no error>");
+        ChecksContext.Equal("损坏文件: 写失败后原文件仍不变", "{ 这不是合法 json ", fs.ReadAllText(path));
+        ChecksContext.Check(
+            "损坏文件: 写入失败有明确错误码",
+            (save.ErrorMessage ?? string.Empty).Contains("playsets-json-unreadable", StringComparison.Ordinal),
+            save.ErrorMessage ?? "<null>");
     }
 
     private static void CheckIds(IFileSystem fs)

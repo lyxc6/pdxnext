@@ -264,29 +264,121 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>把选中的播放集设为激活项，并刷新 mod 计数。</summary>
+    /// <summary>播放集切换的取消源：快速连续选择时只让最后一次生效。</summary>
+    private CancellationTokenSource? _playSetSelectionCts;
+
+    /// <summary>最近一次确认成功的播放集；写入失败时用来把 UI 恢复回去。</summary>
+    private PlaySet? _confirmedPlaySet;
+
+    /// <summary>把选中的播放集设为激活项，写加载文件，并刷新 mod 计数。</summary>
     private async Task ApplyPlaySetSelectionAsync(GameInstallation game, PlaySet playSet)
     {
+        _playSetSelectionCts?.Cancel();
+        _playSetSelectionCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _playSetSelectionCts = cts;
+        var token = cts.Token;
+
+        var previous = _confirmedPlaySet ?? PlaySets.FirstOrDefault(static p => p.IsActive);
         try
         {
-            await AppServices.PlaySets
-                .SetActivePlaySetAsync(game, playSet.Id, CancellationToken.None)
+            var active = await AppServices.PlaySets
+                .SetActivePlaySetAsync(game, playSet.Id, token)
                 .ConfigureAwait(true);
+            if (!active.IsSuccess)
+            {
+                RevertSelection(previous);
+                SetStatus(Keys.HomeStatusPlaySetSwitchFailed, active.ErrorMessage ?? T(Keys.ModsStatusSaveFailed));
+                return;
+            }
+
+            // 只改数据库不够：游戏启动读的是加载文件。写失败就把激活项回滚，避免“界面已切换、
+            // 游戏仍按旧配置启动”。
+            var loadFile = await ActivePlaySetLoadFileWriter
+                .WriteAsync(game, token)
+                .ConfigureAwait(true);
+            if (!loadFile.IsSuccess)
+            {
+                await RollbackActiveAsync(game, previous, playSet).ConfigureAwait(true);
+                RevertSelection(previous);
+                SetStatus(Keys.HomeStatusPlaySetSwitchFailed, loadFile.ErrorMessage ?? T(Keys.ModsStatusSaveFailed));
+                return;
+            }
 
             PlaySetName = playSet.Name;
+            _confirmedPlaySet = playSet;
 
             var mods = await AppServices.PlaySets
-                .GetPlaySetModsAsync(game, playSet.Id, CancellationToken.None)
+                .GetPlaySetModsAsync(game, playSet.Id, token)
                 .ConfigureAwait(true);
             ModCount = mods.Count;
             EnabledModCount = mods.Count(static m => m.Enabled);
 
             AppServices.Logger.Info("已切换激活播放集: " + playSet.Name);
         }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // 又选了别的播放集：这一轮作废，不要覆盖新选择。
+        }
         catch (Exception ex)
         {
             AppServices.Logger.Error("切换激活播放集失败: " + playSet.Name, ex);
+            RevertSelection(previous);
             SetStatus(Keys.HomeStatusPlaySetSwitchFailed, ex.Message);
+        }
+        finally
+        {
+            if (ReferenceEquals(_playSetSelectionCts, cts))
+            {
+                _playSetSelectionCts = null;
+            }
+
+            cts.Dispose();
+        }
+    }
+
+    /// <summary>写加载文件失败时把数据库里的激活项改回旧值；失败只记日志。</summary>
+    private static async Task RollbackActiveAsync(GameInstallation game, PlaySet? previous, PlaySet attempted)
+    {
+        if (previous is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var rollback = await AppServices.PlaySets
+                .SetActivePlaySetAsync(game, previous.Id, CancellationToken.None)
+                .ConfigureAwait(false);
+            if (!rollback.IsSuccess)
+            {
+                AppServices.Logger.Error(
+                    "加载文件写入失败后回滚激活播放集失败（from=" + attempted.Name + " to=" + previous.Name + "）："
+                    + rollback.ErrorMessage);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppServices.Logger.Error("加载文件写入失败后回滚激活播放集异常（to=" + previous.Name + "）", ex);
+        }
+    }
+
+    /// <summary>把下拉选择恢复到上一个确认项，且不触发再次切换。</summary>
+    private void RevertSelection(PlaySet? previous)
+    {
+        if (ReferenceEquals(SelectedPlaySet, previous))
+        {
+            return;
+        }
+
+        _suppressPlaySetChange = true;
+        try
+        {
+            SelectedPlaySet = previous;
+        }
+        finally
+        {
+            _suppressPlaySetChange = false;
         }
     }
 

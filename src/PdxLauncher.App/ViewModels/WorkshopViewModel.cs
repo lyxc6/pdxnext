@@ -395,6 +395,23 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     public bool ShowFilterSidebar => ShowFilterPanel && ShowFilters && Filters.HasGroups;
 
     /// <summary>
+    /// 页面从导航缓存重新激活时，把查询令牌换成新的页面生命周期令牌。
+    /// <para>
+    /// 页面卸载会取消旧令牌，但工坊页 <c>NavigationCacheMode=Required</c>，从详情返回时
+    /// 走的是「沿用已加载列表」的早退分支，不会重新 LoadAsync；不换令牌的话刷新/搜索/
+    /// 筛选都从已取消的旧令牌派生，点了等于没点。
+    /// </para>
+    /// </summary>
+    /// <param name="cancellationToken">页面新的生命周期令牌。</param>
+    public void RebindPageToken(CancellationToken cancellationToken)
+    {
+        if (!cancellationToken.IsCancellationRequested)
+        {
+            _pageToken = cancellationToken;
+        }
+    }
+
+    /// <summary>
     /// 换游戏 / 首次进入：重置页码与列表，判定来源后查一次。
     /// </summary>
     /// <param name="game">当前游戏；null 表示还没选游戏。</param>
