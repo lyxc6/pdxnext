@@ -38,6 +38,12 @@ public static class WorkshopDependenciesTreeChecks
             "PdxLauncher.App",
             "ViewModels",
             "WorkshopDetailViewModel.cs"));
+        var dependency = File.ReadAllText(Path.Combine(
+            root,
+            "src",
+            "PdxLauncher.App",
+            "ViewModels",
+            "WorkshopDependencyViewModel.cs"));
 
         ChecksContext.Check(
             "依赖树: 详情页换成 TreeView",
@@ -47,6 +53,9 @@ public static class WorkshopDependenciesTreeChecks
             "依赖树: ItemTemplate 根是 TreeViewItem 并绑定 Children",
             xaml.Contains("<TreeViewItem ItemsSource=\"{x:Bind Children", StringComparison.Ordinal)
                 && xaml.Contains("AutomationProperties.Name=\"{x:Bind Name, Mode=OneWay}\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "依赖树: 展开态用 OneTime，切语言不重置用户操作",
+            xaml.Contains("IsExpanded=\"{x:Bind IsExpanded, Mode=OneTime}\"", StringComparison.Ordinal));
 
         foreach (var id in new[]
                  {
@@ -88,6 +97,23 @@ public static class WorkshopDependenciesTreeChecks
             ChecksContext.Check("依赖树: zh-CN 有 " + key, I18nResw.Get(zh, key) is { Length: > 0 });
             ChecksContext.Check("依赖树: en-US 有 " + key, I18nResw.Get(en, key) is { Length: > 0 });
         }
+
+        ChecksContext.Check(
+            "依赖树: 全 Unknown 不再报全部就绪",
+            viewModel.Contains("WorkshopDependencySummaryUnknown", StringComparison.Ordinal)
+                && viewModel.Contains("item.State == WorkshopDependencyState.Unknown", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "依赖树: 摘要切语言重算",
+            viewModel.Contains("_dependencyMatches", StringComparison.Ordinal)
+                && viewModel.Contains("UpdateDependencySummary(_dependencyMatches)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "依赖树: 叶子状态文案是计算属性",
+            dependency.Contains("public string StateText =>", StringComparison.Ordinal)
+                && dependency.Contains("public string DetailText =>", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "依赖树: 中英都有 Unknown 摘要",
+            I18nResw.Get(zh, "workshop.dependency.summary.unknown") is { Length: > 0 }
+                && I18nResw.Get(en, "workshop.dependency.summary.unknown") is { Length: > 0 });
 
         CheckNodeBehavior();
 

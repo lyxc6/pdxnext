@@ -796,7 +796,7 @@
                                 <TreeView.ItemTemplate>
                                     <DataTemplate x:DataType="vm:WorkshopDependencyNodeViewModel">
                                         <TreeViewItem ItemsSource="{x:Bind Children, Mode=OneWay}"
-                                                      IsExpanded="{x:Bind IsExpanded, Mode=OneWay}"
+                                                      IsExpanded="{x:Bind IsExpanded, Mode=OneTime}"
                                                       AutomationProperties.AutomationId="{x:Bind AutomationId}"
                                                       AutomationProperties.Name="{x:Bind Name, Mode=OneWay}"
                                                       AutomationProperties.HelpText="{x:Bind StateText, Mode=OneWay}">

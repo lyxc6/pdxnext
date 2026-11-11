@@ -175,6 +175,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     [ObservableProperty]
     private string _dependencySummary = string.Empty;
 
+    /// <summary>最近一次依赖匹配结果；切语言时用它重算摘要，而不是保留旧语言字符串。</summary>
+    private IReadOnlyList<WorkshopDependency> _dependencyMatches = [];
+
     /// <summary>评论摘要（「共 136 条讨论，显示最新 10 条」）。</summary>
     [ObservableProperty]
     private string _commentsSummary = string.Empty;
@@ -1125,6 +1128,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         TagsText = string.Empty;
         _steamTagNames = [];
         DependencySummary = string.Empty;
+        _dependencyMatches = [];
         CommentsSummary = string.Empty;
         ErrorText = string.Empty;
         CachedHint = string.Empty;
@@ -2288,16 +2292,26 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             Dependencies.Add(new WorkshopDependencyViewModel(index, matched[index]));
         }
 
+        UpdateDependencySummary(matched);
+        BuildDependencyTree();
+    }
+
+    /// <summary>按当前依赖状态与界面语言重算摘要。</summary>
+    private void UpdateDependencySummary(IReadOnlyList<WorkshopDependency> matched)
+    {
+        _dependencyMatches = matched;
+
         var missing = matched.Count(static item => item.State == WorkshopDependencyState.Missing);
         var disabled = matched.Count(static item => item.State == WorkshopDependencyState.InstalledDisabled);
+        var unknown = matched.Count(static item => item.State == WorkshopDependencyState.Unknown);
 
         DependencySummary = missing > 0
             ? T(Keys.WorkshopDependencySummaryMissing, matched.Count, missing)
             : disabled > 0
                 ? T(Keys.WorkshopDependencySummaryDisabled, matched.Count, disabled)
-                : T(Keys.WorkshopDependencySummaryOk, matched.Count);
-
-        BuildDependencyTree();
+                : unknown > 0
+                    ? T(Keys.WorkshopDependencySummaryUnknown, matched.Count, unknown)
+                    : T(Keys.WorkshopDependencySummaryOk, matched.Count);
     }
 
     /// <summary>按本机状态把平铺依赖分成「需处理 / 已就绪 / 未知」三组；空组不显示。</summary>
@@ -2503,6 +2517,11 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         if (_steamTagNames.Count > 0)
         {
             TagsText = JoinSteamTags(_steamTagNames);
+        }
+
+        if (_dependencyMatches.Count > 0)
+        {
+            UpdateDependencySummary(_dependencyMatches);
         }
     }
 

@@ -9,6 +9,14 @@ public sealed class AppSettings
     public bool OnlineThemeRefreshEnabled { get; set; } = true;
 
     /// <summary>
+    /// 用户在设置页为每款游戏选的「其它可执行文件」绝对路径（gameId → exe）。
+    /// 空 / 不包含该游戏表示使用 launcher-settings 的标准 exe。存路径而不是序号：
+    /// 游戏更新后 alternatives 顺序可能变化。
+    /// </summary>
+    public Dictionary<string, string> PreferredLaunchExePaths { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// 是否允许联网补全 DLC 简介（默认开；CK3/Stellaris 的 .dlc 里没有简介，需向 Steam 商店接口查询）。
     /// 关掉后只用本地磁盘缓存，离线时也不会卡在请求上。
     /// </summary>
