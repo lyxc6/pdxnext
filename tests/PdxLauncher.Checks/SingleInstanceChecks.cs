@@ -22,6 +22,7 @@ public static class SingleInstanceChecks
         var program = Read(root, "src", "PdxLauncher.App", "Program.cs");
         var app = Read(root, "src", "PdxLauncher.App", "App.xaml.cs");
         var guard = Read(root, "src", "PdxLauncher.App", "Services", "SingleInstanceGuard.cs");
+        var updateFlow = Read(root, "src", "PdxLauncher.App", "Services", "UpdateFlow.cs");
 
         ChecksContext.Check(
             "单实例: 启动入口检查 createdNew 并唤醒已有实例",
@@ -52,6 +53,12 @@ public static class SingleInstanceChecks
             "单实例: 管道连不上有兜底提示",
             guard.Contains("MessageBoxW", StringComparison.Ordinal)
                 && guard.Contains("Keys.SingleInstanceAlreadyRunning", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "单实例: 安装器取消/启动失败后重新拿锁",
+            guard.Contains("TryReacquire", StringComparison.Ordinal)
+                && program.Contains("ReacquireAppMutex", StringComparison.Ordinal)
+                && updateFlow.Contains("ReacquireOrClose", StringComparison.Ordinal)
+                && updateFlow.Contains("Program.ReacquireAppMutex", StringComparison.Ordinal));
 
         var zh = I18nResw.Read(root, "zh-CN");
         var en = I18nResw.Read(root, "en-US");

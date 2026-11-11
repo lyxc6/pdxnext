@@ -137,6 +137,41 @@ public static class SingleInstanceGuard
         mutex?.Dispose();
     }
 
+    /// <summary>
+    /// 安装器取消 / 启动失败后重新拿回单实例锁。
+    /// <para>
+    /// 更新流程会先释放 Mutex 让安装器的 CloseApplications 能关窗口；如果 UAC 被取消或
+    /// 安装器没起来，必须把锁拿回来，否则当前进程继续跑却没有锁，下一次双击会开出第二个实例。
+    /// </para>
+    /// </summary>
+    /// <returns>true = 重新拿到；false = 锁已被另一个实例占用（或无法创建）。</returns>
+    public static bool TryReacquire()
+    {
+        if (_mutex is not null)
+        {
+            return true;
+        }
+
+        Mutex? mutex = null;
+        try
+        {
+            mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
+            if (!createdNew)
+            {
+                mutex.Dispose();
+                return false;
+            }
+
+            _mutex = mutex;
+            return true;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            mutex?.Dispose();
+            return false;
+        }
+    }
+
     /// <summary>通道连不上时的兜底提示；不崩、不递归。</summary>
     public static void ShowAlreadyRunning()
     {
