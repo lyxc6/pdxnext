@@ -16,25 +16,17 @@ public sealed class WorkshopDependencyViewModel : LocalizedObservableObject
         ArgumentNullException.ThrowIfNull(dependency);
 
         var requirement = dependency.Requirement;
-        var localizer = Localizer.Instance;
 
         Name = string.IsNullOrWhiteSpace(requirement.Name) ? requirement.Id : requirement.Name.Trim();
         Index = index;
         State = dependency.State;
         AutomationId = "workshopDependency_" + index.ToString(CultureInfo.InvariantCulture);
-
-        StateText = dependency.State switch
-        {
-            WorkshopDependencyState.Enabled => localizer.T(Keys.WorkshopDependencyEnabled),
-            WorkshopDependencyState.InstalledDisabled => localizer.T(Keys.WorkshopDependencyDisabled),
-            WorkshopDependencyState.Missing => localizer.T(Keys.WorkshopDependencyMissing),
-            _ => localizer.T(Keys.WorkshopDependencyUnknown),
-        };
-
-        DetailText = requirement.Version is > 0
-            ? localizer.T(Keys.WorkshopDependencyVersion, requirement.Version.Value.ToString(CultureInfo.CurrentCulture))
-            : requirement.Id;
+        _requirementVersion = requirement.Version;
+        _requirementId = requirement.Id;
     }
+
+    private readonly int? _requirementVersion;
+    private readonly string _requirementId;
 
     /// <summary>行号。</summary>
     public int Index { get; }
@@ -42,11 +34,21 @@ public sealed class WorkshopDependencyViewModel : LocalizedObservableObject
     /// <summary>依赖名（服务端没给名字时退到 id）。</summary>
     public string Name { get; }
 
-    /// <summary>右侧状态文案。</summary>
-    public string StateText { get; }
+    /// <summary>右侧状态文案；切语言时由基类重发通知后重新求值。</summary>
+    public string StateText => State switch
+    {
+        WorkshopDependencyState.Enabled => Localizer.Instance.T(Keys.WorkshopDependencyEnabled),
+        WorkshopDependencyState.InstalledDisabled => Localizer.Instance.T(Keys.WorkshopDependencyDisabled),
+        WorkshopDependencyState.Missing => Localizer.Instance.T(Keys.WorkshopDependencyMissing),
+        _ => Localizer.Instance.T(Keys.WorkshopDependencyUnknown),
+    };
 
-    /// <summary>副标题：要求版本或依赖 id。</summary>
-    public string DetailText { get; }
+    /// <summary>副标题：要求版本或依赖 id；切语言时重新求值。</summary>
+    public string DetailText => _requirementVersion is > 0
+        ? Localizer.Instance.T(
+            Keys.WorkshopDependencyVersion,
+            _requirementVersion.Value.ToString(CultureInfo.CurrentCulture))
+        : _requirementId;
 
     /// <summary>本机状态。</summary>
     public WorkshopDependencyState State { get; }

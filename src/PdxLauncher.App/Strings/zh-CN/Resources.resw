@@ -3510,6 +3510,18 @@
   <data name="SettingsDataFormatV11" xml:space="preserve">
     <value>1.1（content_load.json）</value>
   </data>
+  <data name="SettingsDataFormatPlaysetsJson" xml:space="preserve">
+    <value>播放集 JSON（不使用加载文件）</value>
+  </data>
+  <data name="SettingsDataFormatPlaysetConfig" xml:space="preserve">
+    <value>播放集配置（不使用加载文件）</value>
+  </data>
+  <data name="SettingsDataNoLoadFile" xml:space="preserve">
+    <value>该游戏不使用 content_load.json / dlc_load.json，播放集与 DLC 状态由游戏自己的配置管理。</value>
+  </data>
+  <data name="SettingsDataNoLoadFileState" xml:space="preserve">
+    <value>不使用加载文件</value>
+  </data>
   <data name="SettingsDataFormatVersion" xml:space="preserve">
     <value>formatVersion</value>
   </data>
@@ -4583,6 +4595,9 @@
   <data name="SettingsTranslateStatusCacheDays" xml:space="preserve">
     <value>译文缓存天数已改为 {0} 天</value>
   </data>
+  <data name="SettingsTranslateStatusCacheDaysInvalid" xml:space="preserve">
+    <value>请输入 1–365 的整数天数</value>
+  </data>
   <data name="SettingsTranslateStatusDisabled" xml:space="preserve">
     <value>已关闭翻译：不再发起任何翻译请求</value>
   </data>
@@ -4843,6 +4858,9 @@
   </data>
   <data name="WorkshopDependencySummaryOk" xml:space="preserve">
     <value>共 {0} 个依赖，全部就绪</value>
+  </data>
+  <data name="WorkshopDependencySummaryUnknown" xml:space="preserve">
+    <value>共 {0} 个依赖，{1} 个状态未知（读不到本机 mod 库）</value>
   </data>
   <data name="WorkshopDependencyUnknown" xml:space="preserve">
     <value>未知</value>

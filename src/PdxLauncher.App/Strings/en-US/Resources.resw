@@ -3510,6 +3510,18 @@ Continue?</value>
   <data name="SettingsDataFormatV11" xml:space="preserve">
     <value>1.1 (content_load.json)</value>
   </data>
+  <data name="SettingsDataFormatPlaysetsJson" xml:space="preserve">
+    <value>Play set JSON (no load file)</value>
+  </data>
+  <data name="SettingsDataFormatPlaysetConfig" xml:space="preserve">
+    <value>Play set config (no load file)</value>
+  </data>
+  <data name="SettingsDataNoLoadFile" xml:space="preserve">
+    <value>This game does not use content_load.json / dlc_load.json; play sets and DLC state are managed by the game's own config.</value>
+  </data>
+  <data name="SettingsDataNoLoadFileState" xml:space="preserve">
+    <value>No load file</value>
+  </data>
   <data name="SettingsDataFormatVersion" xml:space="preserve">
     <value>formatVersion</value>
   </data>
@@ -4583,6 +4595,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="SettingsTranslateStatusCacheDays" xml:space="preserve">
     <value>Translation cache days changed to {0}</value>
   </data>
+  <data name="SettingsTranslateStatusCacheDaysInvalid" xml:space="preserve">
+    <value>Enter a whole number from 1 to 365</value>
+  </data>
   <data name="SettingsTranslateStatusDisabled" xml:space="preserve">
     <value>Translation disabled: no translation requests are sent</value>
   </data>
@@ -4843,6 +4858,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="WorkshopDependencySummaryOk" xml:space="preserve">
     <value>All {0} dependencies are ready</value>
+  </data>
+  <data name="WorkshopDependencySummaryUnknown" xml:space="preserve">
+    <value>{0} dependencies, {1} unknown (local mod library could not be read)</value>
   </data>
   <data name="WorkshopDependencyUnknown" xml:space="preserve">
     <value>Unknown</value>
