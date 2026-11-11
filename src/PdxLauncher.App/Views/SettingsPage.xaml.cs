@@ -1,5 +1,6 @@
 namespace PdxLauncher.App.Views;
 
+using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -17,8 +18,43 @@ using Windows.System;
 /// 页面只负责对话框、确认与 shell 动作（打开目录）；持久化、统计与解析全部在
 /// <see cref="SettingsViewModel"/> 里完成。所有文案经 <see cref="Localizer"/> 取，切语言即时生效。
 /// </summary>
-public sealed partial class SettingsPage : Page
+public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 {
+    private int _sectionIndex = -1;
+
+    /// <summary>供 x:Load / Visibility 绑定：同一时刻只有选中分节为 true。</summary>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public bool IsAppearanceSection => _sectionIndex == 0;
+    public bool IsLaunchSection => _sectionIndex == 1;
+    public bool IsPathsSection => _sectionIndex == 2;
+    public bool IsOnlineSection => _sectionIndex == 3;
+    public bool IsCacheSection => _sectionIndex == 4;
+    public bool IsAdvancedSection => _sectionIndex == 5;
+    public bool IsTranslationSection => _sectionIndex == 6;
+    public bool IsAboutSection => _sectionIndex == 7;
+
+    private void SetSectionIndex(int index)
+    {
+        if (_sectionIndex == index)
+        {
+            return;
+        }
+
+        _sectionIndex = index;
+        OnPropertyChanged(nameof(IsAppearanceSection));
+        OnPropertyChanged(nameof(IsLaunchSection));
+        OnPropertyChanged(nameof(IsPathsSection));
+        OnPropertyChanged(nameof(IsOnlineSection));
+        OnPropertyChanged(nameof(IsCacheSection));
+        OnPropertyChanged(nameof(IsAdvancedSection));
+        OnPropertyChanged(nameof(IsTranslationSection));
+        OnPropertyChanged(nameof(IsAboutSection));
+    }
+
+    private void OnPropertyChanged(string name) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
     private readonly SettingsViewModel _viewModel = new();
     /// <summary>页面生命周期令牌；页面不缓存（NavigationCacheMode=Disabled），每次进入都会重建。</summary>
     private CancellationTokenSource _lifetime = new();
@@ -187,18 +223,9 @@ public sealed partial class SettingsPage : Page
 
     private void ShowSection(int index, bool refreshCache = true)
     {
-        var sections = new FrameworkElement?[]
-        {
-            secAppearance, secLaunch, secPaths, secOnline, secCache, secAdvanced, secTranslation, secAbout,
-        };
-
-        for (var i = 0; i < sections.Length; i++)
-        {
-            if (sections[i] is { } section)
-            {
-                section.Visibility = i == index ? Visibility.Visible : Visibility.Collapsed;
-            }
-        }
+        // 只让选中的分节 x:Load 为 true；其余分节保持未实例化/已卸载，
+        // 首次进页不再一次性构建 147 张 SettingsCard。
+        SetSectionIndex(index);
 
         // 记住停在哪一节：下次进设置页（含冷启动）直接回到这里。
         if (AppServices.IsInitialized)
