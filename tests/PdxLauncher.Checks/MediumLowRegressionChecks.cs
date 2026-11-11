@@ -26,6 +26,7 @@ public static class MediumLowRegressionChecks
         var dependency = Read(root, "src", "PdxLauncher.App", "ViewModels", "WorkshopDependencyViewModel.cs");
         var detailXaml = Read(root, "src", "PdxLauncher.App", "Views", "WorkshopDetailPage.xaml");
         var settingsXaml = Read(root, "src", "PdxLauncher.App", "Views", "SettingsPage.xaml");
+        var settingsPage = Read(root, "src", "PdxLauncher.App", "Views", "SettingsPage.xaml.cs");
 
         ChecksContext.Check(
             "中低危: EU5 改名按新名字选中",
@@ -89,6 +90,11 @@ public static class MediumLowRegressionChecks
         ChecksContext.Check(
             "性能: 设置页启用导航缓存",
             settingsXaml.Contains("NavigationCacheMode=\"Required\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "性能: 设置页八节均按需 x:Load",
+            CountOccurrences(settingsXaml, "x:Load=\"{x:Bind") >= 8
+                && settingsPage.Contains("SetSectionIndex", StringComparison.Ordinal)
+                && settingsPage.Contains("INotifyPropertyChanged", StringComparison.Ordinal));
 
         var zh = I18nResw.Read(root, "zh-CN");
         var en = I18nResw.Read(root, "en-US");

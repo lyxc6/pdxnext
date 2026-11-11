@@ -223,14 +223,21 @@ public sealed partial class MainWindow : Window
             _navigation.Frame = ContentFrame;
             NavigateTo(NavigationService.HomeTag);
             UpdateTitleBar();
+            AppServices.Breadcrumb("启动 主窗导航完成");
+            var startupWatch = System.Diagnostics.Stopwatch.StartNew();
 
             // 窗口先显示出来，这里才开始扫描 Steam 库（纯本地 IO，不联网）。
+            AppServices.Breadcrumb("启动 游戏发现开始");
             await _viewModel.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
+            AppServices.Breadcrumb("启动 游戏发现完成（" + startupWatch.ElapsedMilliseconds + " ms）");
             UpdateTitleBar();
             UpdateContentNavState();
 
             // 先把整窗背景画出来，再落到主页，避免首页出现时底色闪一下。
+            AppServices.Breadcrumb("启动 背景开始");
             await UpdateBackdropAsync().ConfigureAwait(true);
+            AppServices.Breadcrumb("启动 背景完成（" + startupWatch.ElapsedMilliseconds + " ms）");
+            AppServices.Logger.Info("启动首帧阶段耗时: 游戏发现+背景 " + startupWatch.ElapsedMilliseconds + " ms");
 
             // 主页是当前游戏页：没发现任何游戏时它没内容可看，退回游戏库引导用户。
             if (AppServices.CurrentGame is null)

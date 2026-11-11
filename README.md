@@ -102,7 +102,7 @@ start.cmd
 - 需要 .NET SDK 10 与 Windows 10/11 SDK；Windows App SDK 以自包含方式随包，无需单独安装。
 - 仓库的 `NuGet.config` 清空了默认源、按全离线构建，依赖必须已在本机 NuGet 缓存中，细节见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 - 产物在 `bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\`，**分发时要整个目录一起拷**，只拷 exe 会起不来。
-- 自检程序 `tests/PdxLauncher.Checks` 覆盖 96 项检查；CI 见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
+- 自检程序 `tests/PdxLauncher.Checks` 覆盖 166 个检查类；CI 见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
 
 ## 兼容性
 

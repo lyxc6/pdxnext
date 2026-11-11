@@ -155,7 +155,9 @@
                                 AutomationProperties.AutomationId="settingsContentColumn"
                                 Spacing="24">
 
-                    <StackPanel x:Name="secAppearance" Spacing="8">
+                    <StackPanel x:Name="secAppearance" Spacing="8"
+                                x:Load="{x:Bind IsAppearanceSection, Mode=OneWay}"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(IsAppearanceSection), Mode=OneWay}">
                         <TextBlock Text="{x:Bind L.SettingsSectionTheme, Mode=OneWay}" Style="{StaticResource SettingsSectionTitleStyle}" />
 
                         <ct:SettingsCard Header="{x:Bind L.SettingsThemeSource, Mode=OneWay}"
@@ -359,7 +361,9 @@
                         <TextBlock Text="{x:Bind L.SettingsInterfaceHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
                     </StackPanel>
 
-                    <StackPanel x:Name="secLaunch" Spacing="8" Visibility="Collapsed">
+                    <StackPanel x:Name="secLaunch" Spacing="8"
+                                x:Load="{x:Bind IsLaunchSection, Mode=OneWay}"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(IsLaunchSection), Mode=OneWay}">
                         <TextBlock Text="{x:Bind L.SettingsSectionLaunch, Mode=OneWay}" Style="{StaticResource SettingsSectionTitleStyle}" />
 
                         <ct:SettingsCard Header="{x:Bind L.SettingsLaunchExe, Mode=OneWay}"
@@ -413,7 +417,9 @@
                         </ct:SettingsCard>
                     </StackPanel>
 
-                    <StackPanel x:Name="secPaths" Spacing="8" Visibility="Collapsed">
+                    <StackPanel x:Name="secPaths" Spacing="8"
+                                x:Load="{x:Bind IsPathsSection, Mode=OneWay}"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(IsPathsSection), Mode=OneWay}">
                         <TextBlock Text="{x:Bind L.SettingsSectionData, Mode=OneWay}" Style="{StaticResource SettingsSectionTitleStyle}" />
 
                         <ct:SettingsCard Header="{x:Bind L.SettingsDataGameData, Mode=OneWay}"
@@ -557,7 +563,9 @@
                         <TextBlock Text="{x:Bind L.SettingsAppDataHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
                     </StackPanel>
 
-                    <StackPanel x:Name="secOnline" Spacing="8" Visibility="Collapsed">
+                    <StackPanel x:Name="secOnline" Spacing="8"
+                                x:Load="{x:Bind IsOnlineSection, Mode=OneWay}"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(IsOnlineSection), Mode=OneWay}">
                         <TextBlock Text="{x:Bind L.SettingsSectionProxy, Mode=OneWay}" Style="{StaticResource SettingsSectionTitleStyle}" />
 
                         <ct:SettingsCard Header="{x:Bind L.SettingsProxyMode, Mode=OneWay}"
@@ -776,7 +784,9 @@
 
                     </StackPanel>
 
-                    <StackPanel x:Name="secCache" Spacing="8" Visibility="Collapsed">
+                    <StackPanel x:Name="secCache" Spacing="8"
+                                x:Load="{x:Bind IsCacheSection, Mode=OneWay}"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(IsCacheSection), Mode=OneWay}">
                         <TextBlock Text="{x:Bind L.SettingsSectionCache, Mode=OneWay}" Style="{StaticResource SettingsSectionTitleStyle}" />
 
                         <ct:SettingsCard Header="{x:Bind ViewModel.CacheTotalText, Mode=OneWay}"
@@ -935,7 +945,9 @@
                         <TextBlock Text="{x:Bind L.SettingsCacheHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
                     </StackPanel>
 
-                    <StackPanel x:Name="secAdvanced" Spacing="8" Visibility="Collapsed">
+                    <StackPanel x:Name="secAdvanced" Spacing="8"
+                                x:Load="{x:Bind IsAdvancedSection, Mode=OneWay}"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(IsAdvancedSection), Mode=OneWay}">
                         <!-- 补丁：只处理当前选中的游戏；素材与清单都在程序目录下，随时可整体移除。 -->
                         <TextBlock Text="{x:Bind L.SettingsPatchTitle, Mode=OneWay}"
                                    Style="{StaticResource SettingsSectionTitleStyle}" />
@@ -1055,7 +1067,9 @@
                         <TextBlock Text="{x:Bind L.SettingsDangerHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
                     </StackPanel>
 
-                    <StackPanel x:Name="secTranslation" Spacing="8" Visibility="Collapsed">
+                    <StackPanel x:Name="secTranslation" Spacing="8"
+                                x:Load="{x:Bind IsTranslationSection, Mode=OneWay}"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(IsTranslationSection), Mode=OneWay}">
                         <TextBlock Text="{x:Bind L.SettingsSectionTranslation, Mode=OneWay}" Style="{StaticResource SettingsSectionTitleStyle}" />
 
                         <ct:SettingsCard Header="{x:Bind L.SettingsTranslateEnabled, Mode=OneWay}"
@@ -1506,7 +1520,9 @@
                         <TextBlock Text="{x:Bind L.SettingsTranslateHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
                     </StackPanel>
 
-                    <StackPanel x:Name="secAbout" Spacing="8" Visibility="Collapsed">
+                    <StackPanel x:Name="secAbout" Spacing="8"
+                                x:Load="{x:Bind IsAboutSection, Mode=OneWay}"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(IsAboutSection), Mode=OneWay}">
                         <TextBlock Text="{x:Bind L.SettingsAboutTitle, Mode=OneWay}"
                                    Style="{StaticResource SettingsSectionTitleStyle}" />
 

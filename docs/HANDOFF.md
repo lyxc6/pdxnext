@@ -18,9 +18,10 @@
 
 ## 0. 一句话现状
 
-启动器外壳与主页已从「照官方 Paradox 启动器截图逐像素自绘」**改成 WinUI 3 标准控件 UI**（用户明确要求），
-Release **0 警告 0 错误**，自检 **111 个检查类 / 0 失败**（2026-11-05 实测；7 处搜索框已全部换成 `AutoSuggestBox`（本地名字联想 + 工坊最近搜索），见 §0.85；`PlaysetChecks` 原来按本机 Victoria 3 播放集写死的 `mod 行数 >= 22` 已改成结构断言，见 §0.85.5；
-最近一轮新增 `SearchSuggestionsChecks`、`SearchBoxChecks`、`SteamBbCodeParserChecks` 与 `ModPublishLimitsChecks`（钉住 BBCode 解析与字节上限），再往前是 `LocalizationBindingChecks` 与 `ModStudioPaneChecks`（钉住 `{0}` 裸绑与上传面板出口），再往前是 `ModPublishExtrasChecks`（含多语言语言池的 `PickUnused` / `IsDuplicate` 断言），再往前是 `WorkshopItemStateBitsChecks`、`WorkshopStateTextChecks`、`WorkshopStateCacheChecks`、`WorkshopSubscribedProtocolChecks`；此前还有 `ConfirmOverlayChecks`、`ModLibraryWarningChecks`、`PdxDatabaseChecks`、`JsonDocumentStoreChecks`、`OwnPlaysetRepositoryChecks`、`LauncherDbProjectionChecks`、`ModPathChecks`。历史上并发会话加过好几个类，实际以运行时打印的 `检查类: N` 为准），运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构。
+启动器是 WinUI 3 标准控件 UI，Release **0 警告 0 错误**，自检 **166 个检查类 / 0 失败**（2026-11-11 实测）。
+1.3 收尾已完成：创意工坊（筛选/合集/详情分区/依赖树/注释滚动条/DB v3）、设置页 SettingsCard、存档备份、成就、DLC、崩溃分析、播放集导入导出、单实例与导航重试均落地；
+最近两轮集中修高危缺陷（单实例/导航递归/工坊令牌/Mod 顺序/EU5 JSON/加载文件/DLC 保存）与中低危显示/本地化问题，见 **§0.98**。
+运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构；发版前只剩版本 bump、安装包实测、push/tag 与截图同步。
 **2026-10-26 已完成：窗口置顶开关（§0.2）+ 整窗背景「方案 B」（§0.3）**——游戏主题背景图现在连标题栏条和左侧
 NavigationView 一起铺满整窗，六个页面全部浮在图上（五页统一纱 + 卡片/列表玻璃底衬），主页那条 260 高、被裁掉一半的
 主题横幅已删除。剩下的活：Light / HighContrast 真机切主题跑一遍（§0.3 唯一视觉盲区）、真机复验 settings.json 与置顶持久化、
@@ -7386,6 +7387,41 @@ mod 名和行尾三个按钮完全看不见，右栏也不能滚动到这些内�
 **验证**：脚本语法检查；`open` 在非集成分支上被拒、`-Force` 放行；`close` 合回后 `integration-branch` 与当前分支一致；`list` 正确打印集成分支。
 
 **注意**：以后换版本只改 `integration-branch` 一行，不要在其他文档里写死版本分支名；`HANDOFF.md` 历史条目里的 `feat/1.3` 是当时快照，保留不改。
+
+---
+
+## 0.98 2026-11-11：1.3 收尾 —— 高危修复与中低危/性能
+
+两轮对话分支：`sess/20261110-fix-1-3-leftovers` → `feat/1.3`（`4a6e8bb`）、`sess/20261111-fix-high-risk-bugs` → `feat/1.3`（`b72647b`）、`sess/20261111-fix-1-3-medium-low-polish` → `feat/1.3`（`a9f7ed9`）。
+
+**高危修复（8）**
+- 自动更新取消 UAC / 安装器启动失败后重新持有 `Local\PdxNext.App`，避免双实例。
+- 导航重试上限 2 次 + `DrainPending` 异步排队，修掉两次 `Frame.Navigate` 返回 false 时的递归。
+- 工坊从详情返回后 `RebindPageToken`，刷新/搜索/筛选/翻页不再用已取消令牌。
+- Mod 搜索过滤下只原位同步 `Enabled`，不再把可见行排到 `_allMods` 最前；全部启停作用于整个播放集。
+- EU5 `playsets.json` 解析失败时写路径抛 `playsets-json-unreadable`，禁止用空文档覆盖原文件。
+- 主页切换播放集补写加载文件，失败回滚激活项；导入合并进激活集同样补写。
+- DLC 列表未加载完时禁止保存，避免空 `Dlcs` 触发 `DELETE + INSERT` 清空。
+- 工坊页列表铺行改 `BulkObservableCollection.ReplaceAll`（一次 Reset）。
+
+**中低危（8）**
+- EU5 改名后按新名字重新选中（Id 由 gameId+name 派生）。
+- 依赖摘要全 Unknown 不再报「全部就绪」；叶子状态/版本副标题与摘要随语言切换重算，`IsExpanded` 改 `OneTime` 不重置用户展开态。
+- 设置页「其它可执行文件」按 gameId 存 `PreferredLaunchExePaths`，主页/游戏库经 `CreateLaunchRequest` 真正用于启动。
+- `ApplyFlag` / `ApplyOption` 检查保存结果，失败回退并显示 `SettingsStatusSaveFailed`。
+- 存档未登记落点先读备份用量/列表，再进 `Unsupported`。
+- EU5/CS2 设置页显示播放集格式与「不使用加载文件」，不再拼 `content_log.json`。
+- 译文缓存天数钳位后回显；非数字恢复并提示 1–365。
+- 工坊静默刷新失败只记日志，保留当前页与分页。
+
+**性能**
+- 设置页 `NavigationCacheMode=Required` + 8 个分节按需 `x:Load`：首次进入不再构建 147 张卡，重复进入停顿 1160 ms → 275 ms；逐节点击 Launch/Paths/Online/Cache/Advanced/Translation/About/Appearance 均能创建对应控件。
+- 工坊译文每 8 条、Steam 状态每 10 行 `Task.Yield`，拆开单帧长停顿。
+- 启动 profile：游戏发现 234–340 ms 已移到 `Task.Run`（原先同步跑在 UI 线程），默认窗口首帧仍约 450–660 ms；瓶颈转向 HomePage 首帧布局 / 主题背景首帧，未在一轮内拆页，留 1.4。
+
+**验证**：`cmd //c dev.cmd build` 0 警告 0 错误，检查类 **166 / 失败 0**；真机确认工坊详情返回后刷新生效、DLC 加载中保存按钮禁用/加载后启用、20 次快速切页无导航失败、EU5 坏 JSON 写入被拒且原文件不变。
+
+**注意**：以上均已在 `feat/1.3`；发版前还需按 `docs/VERSIONING.md` §4 bump、安装包实测、`feat/1.3 → main` 与 tag。HANDOFF 历史条目里的旧检查计数不再代表现状，以运行时输出为准。
 
 ---
 
