@@ -209,18 +209,6 @@ public sealed class SavesViewModel : LocalizedObservableObject
 
         var gameId = game.GameId;
 
-        // 只登记了 6 款游戏的存档落点；其余完整适配游戏（EU4 / HOI4 / Imperator /
-        // Millennia / AoW4）的 Locations 是空集合。这里必须和「登记了但目录还没建」
-        // 分开：后者才是「在游戏里保存一次再回来刷新」，前者应直接说暂不支持。
-        if (_library.GetLocations(gameId).Count == 0)
-        {
-            SetScanBusy(false);
-            _lastScanAt = DateTimeOffset.Now;
-            _state = SavesState.Unsupported;
-            NotifyStateChanged();
-            return;
-        }
-
         SetScanBusy(true);
         _state = SavesState.Scanning;
         NotifyStateChanged();
@@ -230,6 +218,17 @@ public sealed class SavesViewModel : LocalizedObservableObject
             // 备份段与存档扫描互不依赖：先读 sidecar（只枚举几十个小文件），失败只记日志，
             // 不能让「备份目录不可读」把整页打成失败空态。
             await LoadBackupsAsync(game, cancellationToken).ConfigureAwait(true);
+
+            // 只登记了 6 款游戏的存档落点；其余完整适配游戏（EU4 / HOI4 / Imperator /
+            // Millennia / AoW4）的 Locations 是空集合。这里必须和「登记了但目录还没建」
+            // 分开：后者才是「在游戏里保存一次再回来刷新」，前者应直接说暂不支持。
+            // 备份段已经先读完，未登记落点也能显示跨游戏总用量与已有备份。
+            if (_library.GetLocations(gameId).Count == 0)
+            {
+                _lastScanAt = DateTimeOffset.Now;
+                _state = SavesState.Unsupported;
+                return;
+            }
 
             // 第一段：枚举文件（内部 Task.Run，UI 线程零 IO）。不解析任何内容。
             var index = await _library.ScanFilesAsync([gameId], cancellationToken).ConfigureAwait(true);
