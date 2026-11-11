@@ -1302,6 +1302,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
                 .ConfigureAwait(true);
 
             var anyTranslated = false;
+            var applied = 0;
             for (var i = 0; i < rows.Count && i < translated.Count; i++)
             {
                 var translatedName = translated[i];
@@ -1312,6 +1313,13 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
                 rows[i].TranslatedName = translatedName;
                 anyTranslated = true;
+
+                // 每 8 条让出一次 UI 线程：30 条译文一次性铺开会把标题块、边框和行高
+                // 在同一帧里全部重算，真机日志里是 300–500 ms 的停顿。
+                if (++applied % 8 == 0)
+                {
+                    await Task.Yield();
+                }
             }
 
             if (!anyTranslated)
@@ -1403,11 +1411,18 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             }
 
             var applied = 0;
+            var visited = 0;
             foreach (var row in Rows)
             {
                 if (row.Source != WorkshopSource.Steam)
                 {
                     continue;
+                }
+
+                // 状态徽标会改变行高/布局；每 10 行让出一帧，避免整页一次性重排。
+                if (++visited % 10 == 0)
+                {
+                    await Task.Yield();
                 }
 
                 if (ulong.TryParse(row.Id, out var fileId) && states.TryGetValue(fileId, out var state))
