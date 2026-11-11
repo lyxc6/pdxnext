@@ -113,6 +113,10 @@ public sealed partial class WorkshopPage : Page
             if (_isListLoaded &&
                 string.Equals(_loadedGameId, AppServices.CurrentGame?.GameId, StringComparison.Ordinal))
             {
+                // 页面从缓存重新激活：把查询令牌换成新的生命周期令牌，否则刷新/搜索/筛选
+                // 都从 Unloaded 时已取消的旧令牌派生，点了没反应。
+                _viewModel.RebindPageToken(_lifetime.Token);
+
                 // 列表不重查，但筛选目录有 24h TTL / 本地版本判断；过期时后台补一次。
                 _ = _viewModel.RefreshCatalogIfStaleAsync(_lifetime.Token);
 
