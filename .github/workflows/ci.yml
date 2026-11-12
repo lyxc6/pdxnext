@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - "ver/**"
   pull_request:
   workflow_dispatch:
 
@@ -22,6 +23,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Check version branch is active
+        if: github.ref_type == 'branch' && startsWith(github.ref_name, 'ver/')
+        shell: pwsh
+        run: |
+          git fetch origin main --depth=1
+          $registryText = (git show origin/main:integration-branch) -join "`n"
+          $active = $registryText -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ -and -not $_.StartsWith('#') }
+          if ($env:GITHUB_REF_NAME -notin $active) {
+            throw "Branch $env:GITHUB_REF_NAME is frozen or not registered in main's integration-branch"
+          }
 
       - name: Set up .NET 10
         uses: actions/setup-dotnet@v4

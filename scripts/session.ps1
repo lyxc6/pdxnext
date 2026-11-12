@@ -11,13 +11,16 @@
         pwsh -File scripts/session.ps1 close [-Message <文字>] [-Into <branch>] [-SkipVerify] [-AllowDirty]
         pwsh -File scripts/session.ps1 list
 
-    当前集成分支记在仓库根 `integration-branch`（一行，例如 `feat/1.3`）。open 默认要求当前
-    就站在它上面；发版 / 热修要从别的分支起时加 -Force，并在汇报里写明原因。
+    活跃版本分支记在仓库根 `integration-branch`（多行，每行一个 `ver/x.y.z`；空行与 # 注释忽略）。
+    权威副本取 `main` 上的 integration-branch，各分支工作区里的副本只是快照。open 默认要求当前
+    就站在清单里的某个活跃版本分支上；清单为空、或从 main / 已冻结分支起时加 -Force，并在汇报里
+    写明原因（只用于引导、发版或从 tag 起紧急修复）。
 
     open   ：建 sess/YYYYMMDD-<slug>。工作区已有未提交改动时，改动跟着带到新分支并提交成
              wip(session) 基线，起始分支立刻变干净。基线记在 git config branch.<name>.pdxBase。
-    close  ：校验工作区干净 -> 构建 + 自检（纯 .md 改动自动跳过，-SkipVerify 强制跳过）-> 切回
-             起始分支 -> git merge --no-ff -> 删除对话分支。冲突时中止合并并停在对话分支上。
+    close  ：校验基线仍在活跃清单 -> 构建 + 自检（纯 .md 改动自动跳过，-SkipVerify 强制跳过）-> 切回
+             目标版本分支 -> git merge --no-ff -> 删除对话分支。基线已冻结/未登记时直接拒绝；
+             冲突时中止合并并停在对话分支上。
     list   ：列出所有对话分支、基线、领先提交数。
 
     退出码：0 成功，1 用法/环境错误，2 合并冲突，3 工作区脏，4 构建或自检失败，5 分支仍被 worktree 占用。
@@ -25,7 +28,7 @@
 .NOTES
     ASCII 标识（SESSION_BRANCH= / SESSION_BASE= / SESSION_WIP= / SESSION_MERGED=）供 agent 解析。
     丢弃未完成的分支是破坏性操作，脚本不提供；按用户明确指令手工执行：
-        git switch <起始分支>; git branch -D sess/...
+        git switch <目标版本分支>; git branch -D sess/...
 #>
 [CmdletBinding()]
 param(
@@ -142,13 +145,24 @@ function Get-BranchBase([string]$BranchName) {
     return ("$base").Trim()
 }
 
-# 当前集成分支的唯一来源：仓库根 integration-branch（一行，例如 feat/1.3）。
-function Get-IntegrationBranch {
-    $file = Join-Path $root 'integration-branch'
-    if (-not (Test-Path $file)) { return $null }
-    $line = Get-Content -LiteralPath $file -TotalCount 1 -ErrorAction SilentlyContinue
-    if (-not $line) { return $null }
-    return ("$line").Trim()
+# 活跃版本分支的权威来源：main 上的 integration-branch（多行，每行一个分支）。各分支工作区里
+# 的副本只是继承快照，不参与校验。空行与 # 注释忽略。
+function Get-IntegrationBranches {
+    $raw = @(& git -C $root show 'main:integration-branch' 2>$null)
+    if ($LASTEXITCODE -eq 0) {
+        # main 上有这个文件就以它为准；空文件表示「没有活跃分支」，不回退到分支工作区的旧副本。
+        $content = (($raw | ForEach-Object { "$_" }) -join "`n")
+    } else {
+        $file = Join-Path $root 'integration-branch'
+        if (-not (Test-Path $file)) { return @() }
+        $content = Get-Content -LiteralPath $file -Raw -ErrorAction SilentlyContinue
+    }
+    if (-not $content) { return @() }
+    return @(
+        ($content -split "`n") |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { $_ -and -not $_.StartsWith('#') }
+    )
 }
 
 # 该分支是否还被「别的」worktree 检出；返回 worktree 路径数组。
@@ -197,11 +211,13 @@ function Show-Usage {
   pwsh -File scripts/session.ps1 list
 
 open  建 sess/YYYYMMDD-<slug>，基线是当前分支（或 -From 指定的分支）。
-      当前必须站在 integration-branch 记录的集成分支上；-Force 可跳过（发版 / 热修）。
+      当前必须站在 integration-branch 清单里的活跃版本分支上；清单为空、或从 main / 已冻结分支
+      起时会被拒绝。方案外的 -Force 只用于引导、发版或从 tag 起紧急修复。
       工作区已有改动会跟随到新分支并提交成 wip(session) 基线。
-close 构建 + 自检后 --no-ff 合回基线分支，删除对话分支并切回。
+close 校验基线仍在活跃清单 -> 构建 + 自检 -> --no-ff 合回目标版本分支，删除对话分支并切回。
+      基线已冻结/未登记时拒绝；可用 -Into <活跃分支> 重定向。
       纯 .md 改动自动跳过构建；-SkipVerify 强制跳过。
-list  列出当前集成分支、对话分支、基线与领先提交数。
+list  列出活跃版本分支、对话分支、基线与领先提交数；冻结基线会被标记。
 '@
 }
 
@@ -227,17 +243,24 @@ function Invoke-Open {
         exit 1
     }
 
-    $integration = Get-IntegrationBranch
-    if (-not $integration) {
-        Write-Warn '[提醒] 找不到仓库根 integration-branch，跳过「必须站在集成分支」校验。'
-    } elseif ($current -ne $integration) {
+    $integrationBranches = @(Get-IntegrationBranches)
+    if ($integrationBranches.Count -eq 0) {
         if (-not $Force) {
-            Write-Fail "[错误] 当前分支是 $current，不是当前集成分支 $integration。"
-            Write-Host "新对话只在集成分支上开：git switch $integration，然后重跑 open。"
-            Write-Host '发版 / 热修确实要从别的分支起的，加 -Force，并在汇报里写明原因。'
+            Write-Fail '[错误] integration-branch 里没有活跃版本分支。'
+            Write-Host '先按 docs/VERSIONING.md §5.1 在 main 上登记，再从 main 创建 ver/x.y.z。'
+            Write-Host '只有引导仓库时才使用 -Force。'
             exit 1
         }
-        Write-Warn "[提醒] -Force：从 $current 而不是集成分支 $integration 起对话分支。"
+        Write-Warn '[提醒] -Force：活跃版本分支清单为空，按引导状态继续。'
+    } elseif ($current -notin $integrationBranches) {
+        if (-not $Force) {
+            Write-Fail "[错误] 当前分支是 $current，不在活跃版本分支清单里。"
+            Write-Host ("活跃版本分支：{0}" -f ($integrationBranches -join ', '))
+            Write-Host '先 git switch <活跃分支>，然后重跑 open。'
+            Write-Host '已发布分支已冻结；-Force 只用于引导、发版或从 tag 起紧急修复，并在汇报里写明原因。'
+            exit 1
+        }
+        Write-Warn "[提醒] -Force：从 $current 而不是活跃版本分支起对话分支。"
     }
 
     $base = $current
@@ -308,7 +331,7 @@ function Invoke-Open {
     Write-Host ''
     Write-Host "SESSION_BRANCH=$branchName"
     Write-Host "SESSION_BASE=$base"
-    Write-Host "SESSION_INTEGRATION=$integration"
+    Write-Host ("SESSION_INTEGRATION=" + ($integrationBranches -join ','))
     Write-Host "SESSION_WIP=$($dirty.Count)"
 }
 
@@ -340,9 +363,14 @@ function Invoke-Close {
         exit 1
     }
 
-    $integration = Get-IntegrationBranch
-    if ($integration -and $base -ne $integration) {
-        Write-Warn "[提醒] 基线 $base 不是当前集成分支 $integration；本次只合回 $base（例如 1.3.x 维护）。"
+    $integrationBranches = @(Get-IntegrationBranches)
+    if ($integrationBranches.Count -eq 0) {
+        Write-Warn '[提醒] integration-branch 里没有活跃版本分支，按引导状态合回基线。'
+    } elseif ($base -notin $integrationBranches) {
+        Write-Fail "[错误] 基线 $base 已冻结或不在活跃版本分支清单里，不能合回。"
+        Write-Host ("活跃版本分支：{0}" -f ($integrationBranches -join ', '))
+        Write-Host '如果这次对话还有效，用 close -Into <活跃分支> 重定向；否则从活跃分支重开对话。'
+        exit 1
     }
 
     $worktrees = @(Get-WorktreesForBranch $branchName)
@@ -448,11 +476,11 @@ function Invoke-Close {
 function Invoke-List {
     Assert-Git
 
-    $integration = Get-IntegrationBranch
-    if ($integration) {
-        Write-Host "当前集成分支：$integration"
+    $integrationBranches = @(Get-IntegrationBranches)
+    if ($integrationBranches.Count -gt 0) {
+        Write-Host ("当前活跃版本分支：" + ($integrationBranches -join '  '))
     } else {
-        Write-Warn '[提醒] 找不到仓库根 integration-branch。'
+        Write-Warn '[提醒] integration-branch 里没有活跃版本分支。'
     }
 
     $refs = @(& git -C $root for-each-ref 'refs/heads/sess' --format='%(refname:short)' 2>$null)
@@ -470,6 +498,9 @@ function Invoke-List {
         $ahead = Get-GitText @('rev-list', '--count', "$base..$branchName")
         if ($null -eq $ahead) { $ahead = '?' }
         $notes = @()
+        if ($integrationBranches.Count -gt 0 -and $base -ne '?' -and $base -notin $integrationBranches) {
+            $notes += '[冻结/未登记]'
+        }
         $worktrees = @(Get-WorktreesForBranch $branchName)
         foreach ($path in $worktrees) { $notes += "worktree=$path" }
         if ($branchName -eq $current) { $notes += '当前' }
