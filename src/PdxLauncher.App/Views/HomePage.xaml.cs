@@ -80,6 +80,13 @@ public sealed partial class HomePage : Page
     /// <summary>两个主题按钮的皮肤对象：悬停提亮 / 按下缩放 / 禁用置灰都要记住主题色。</summary>
     private readonly Dictionary<Button, ThemedButtonSkin> _themedSkins = new();
 
+    /// <summary>
+    /// 当前走 WinUI 原生样式的按钮：原生样式只改模板里的 ContentPresenter 前景，
+    /// 内容层是 Grid + TextBlock（带本地前景），不手动跟随就会「底灰了字还亮」。
+    /// 记下按钮用的是 Default 还是 Accent，禁用时才能取到对应那组文字色。
+    /// </summary>
+    private readonly Dictionary<Button, NativeButtonLabel> _nativeButtonLabels = new();
+
     /// <summary>最近一次启动结果：切语言时按新语言重写启动结果 InfoBar。</summary>
     private ProcessStartResult? _lastLaunchResult;
 
@@ -97,6 +104,10 @@ public sealed partial class HomePage : Page
         // 标记成 handled，必须 handledEventsToo:true 才收得到。
         ContinueButton.IsEnabledChanged += OnThemedButtonIsEnabledChanged;
         StartButton.IsEnabledChanged += OnThemedButtonIsEnabledChanged;
+        // 原生按钮的禁用态文字色来自主题资源，系统主题切换后要重新取一次；
+        // 订阅放在构造里只建一次，避免每次 ApplyNativeButton 重复挂接。
+        ContinueButton.ActualThemeChanged += OnThemedButtonActualThemeChanged;
+        StartButton.ActualThemeChanged += OnThemedButtonActualThemeChanged;
         foreach (var button in new[] { ContinueButton, StartButton })
         {
             button.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnThemedButtonPointerPressed), true);
@@ -234,7 +245,12 @@ public sealed partial class HomePage : Page
         try
         {
             var spec = game?.Theme ?? ThemeApplier.CreatePlaceholderSpec();
-            var visuals = _themeApplier?.Create(spec);
+
+            // 素材解码交给 ThemeApplier 的异步版：整窗背景/字标动辄 1900px，
+            // 同步 new BitmapImage { UriSource } 会在 UI 线程上开文件读头，切游戏时就是一段卡顿。
+            var visuals = _themeApplier is null
+                ? null
+                : await _themeApplier.CreateAsync(spec, cancellationToken).ConfigureAwait(true);
             if (visuals is null)
             {
                 return;
@@ -242,8 +258,37 @@ public sealed partial class HomePage : Page
 
             // 「继续」「开始」两个按钮按官方语义渲染：button.backgroundImage 当底图、
             // button.color 当文字色（悬停取 buttonHover.color），不是「拿 color 当底色」。
-            ApplyThemedButton(ContinueButton, ContinueSurface, ContinueGlow, ContinueLabel, visuals);
-            ApplyThemedButton(StartButton, StartSurface, StartGlow, StartLabel, visuals);
+            // 只有真正带主题美术的来源才保留这套皮肤；内置占位、随包自带素材（EU5）与
+            // Steam 库页背景没有官方按钮素材，继续画幽灵皮肤反而与系统其它按钮不是一套，
+            // 改用 WinUI 原生样式。来源 → 外观的决策集中在 HomeButtonStylePolicy，页面只做接线。
+            var continueKind = HomeButtonStylePolicy.ResolveStyle(spec.Source, isPrimary: false);
+            var startKind = HomeButtonStylePolicy.ResolveStyle(spec.Source, isPrimary: true);
+            if (continueKind == HomeButtonStyleKind.Themed)
+            {
+                ShowThemedLayers(ContinueSurface, ContinueGlow, ContinueInnerRing, ContinueBottomLine);
+                ShowThemedLayers(StartSurface, StartGlow, StartInnerRing, StartBottomLine);
+                ApplyThemedButton(ContinueButton, ContinueSurface, ContinueGlow, ContinueLabel, visuals);
+                ApplyThemedButton(StartButton, StartSurface, StartGlow, StartLabel, visuals);
+            }
+            else
+            {
+                ApplyNativeButton(
+                    ContinueButton,
+                    ContinueSurface,
+                    ContinueGlow,
+                    ContinueInnerRing,
+                    ContinueBottomLine,
+                    ContinueLabel,
+                    continueKind);
+                ApplyNativeButton(
+                    StartButton,
+                    StartSurface,
+                    StartGlow,
+                    StartInnerRing,
+                    StartBottomLine,
+                    StartLabel,
+                    startKind);
+            }
 
             var loader = _bitmapLoader;
             if (loader is null)
@@ -354,6 +399,13 @@ public sealed partial class HomePage : Page
     /// </summary>
     private void ApplyThemedButton(Button button, Grid surface, Border glow, TextBlock label, ThemeVisuals visuals)
     {
+        // 上一次可能是原生外观，ApplyNativeButton 在这里挂过 Accent/Default 样式。
+        // 切回皮肤必须把样式摘掉：主题外观完全由本地属性和按钮资源表达，不依赖任何 Style；
+        // 用 ClearValue 而不是按来源显式重设，是因为无论之前挂的是哪支原生样式都能回到
+        // XAML 里的默认样式，不必在皮肤分支里再知道原生样式键。
+        button.ClearValue(FrameworkElement.StyleProperty);
+        _nativeButtonLabels.Remove(button);
+
         // 官方 .themedButton--pureCSS 的 border-radius 是 .25rem = 4，有底图时同样裁到 4。
         var corner = new CornerRadius(4);
         var fontSize = visuals.ButtonFontSize > 0 ? visuals.ButtonFontSize : 24;
@@ -387,6 +439,81 @@ public sealed partial class HomePage : Page
         var skin = new ThemedButtonSkin(button, surface, glow, label, visuals);
         _themedSkins[button] = skin;
         skin.SetEnabled(button.IsEnabled);
+    }
+
+    /// <summary>
+    /// 没有主题按钮美术时把按钮还原成 WinUI 原生样式：拆掉幽灵皮肤与资源覆盖、清掉主题写进去的
+    /// 本地属性、挂回 Accent/Default 样式，并折叠三层自绘内容（高光 / 内描边 / 底线）。
+    /// <para>
+    /// 同一页面切换游戏时会在「原生 ↔ 主题皮肤」之间来回切，所以这里必须幂等：
+    /// 先摘皮肤，再清本地值——本地值优先级高于 Style，不清掉会盖住原生背景 / 前景。
+    /// </para>
+    /// </summary>
+    private void ApplyNativeButton(
+        Button button,
+        Grid surface,
+        Border glow,
+        Border innerRing,
+        Border bottomLine,
+        TextBlock label,
+        HomeButtonStyleKind styleKind)
+    {
+        _themedSkins.Remove(button);
+
+        var styleKey = HomeButtonStylePolicy.StyleKey(styleKind);
+        foreach (var (keys, _) in ThemedBrushBindings)
+        {
+            foreach (var key in keys)
+            {
+                button.Resources.Remove(key);
+            }
+        }
+
+        button.Style = Application.Current.Resources.TryGetValue(styleKey, out var style)
+            ? style as Style
+            : null;
+
+        button.ClearValue(Control.BackgroundProperty);
+        button.ClearValue(Control.BorderBrushProperty);
+        button.ClearValue(Control.BorderThicknessProperty);
+        button.ClearValue(Control.ForegroundProperty);
+        button.ClearValue(Control.FontFamilyProperty);
+        button.ClearValue(Control.FontSizeProperty);
+        button.ClearValue(Control.FontWeightProperty);
+        button.ClearValue(Control.PaddingProperty);
+        button.ClearValue(Control.CornerRadiusProperty);
+
+        glow.Visibility = Visibility.Collapsed;
+        innerRing.Visibility = Visibility.Collapsed;
+        bottomLine.Visibility = Visibility.Collapsed;
+        surface.Opacity = 1.0;
+
+        label.ClearValue(TextBlock.FontFamilyProperty);
+        label.ClearValue(TextBlock.FontSizeProperty);
+        label.ClearValue(TextBlock.FontWeightProperty);
+
+        // 内容是 Grid + TextBlock，不经过 ContentPresenter 的文本着色：原生按钮的前景色
+        // （Accent 白字 / Default 随主题）要手动接到文字上，否则 ClearValue 会退回主题默认字色，
+        // 浅色主题下落在 Accent 蓝底上不可读。
+        // 这里只登记「该按钮现在是原生外观」，初始色与后续 IsEnabled / 主题变化都走
+        // RefreshNativeButtonForeground，避免只做一次性快照（禁用时底灰了字还亮）。
+        _nativeButtonLabels[button] = new NativeButtonLabel(label, styleKind == HomeButtonStyleKind.NativeAccent);
+        RefreshNativeButtonForeground(button);
+
+        if (button.RenderTransform is CompositeTransform transform)
+        {
+            transform.ScaleX = 1.0;
+            transform.ScaleY = 1.0;
+        }
+    }
+
+    /// <summary>切回主题皮肤时恢复三层自绘内容（原生分支里被折叠掉了）。</summary>
+    private static void ShowThemedLayers(Grid surface, Border glow, Border innerRing, Border bottomLine)
+    {
+        surface.Opacity = 1.0;
+        glow.Visibility = Visibility.Visible;
+        innerRing.Visibility = Visibility.Visible;
+        bottomLine.Visibility = Visibility.Visible;
     }
 
     private void OnNewsMainClick(object sender, RoutedEventArgs e) =>
@@ -509,11 +636,49 @@ public sealed partial class HomePage : Page
 
     private void OnThemedButtonIsEnabledChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if (sender is Button button && _themedSkins.TryGetValue(button, out var skin))
+        if (sender is not Button button)
+        {
+            return;
+        }
+
+        if (_themedSkins.TryGetValue(button, out var skin))
         {
             skin.SetEnabled(button.IsEnabled);
         }
+
+        RefreshNativeButtonForeground(button);
     }
+
+    private void OnThemedButtonActualThemeChanged(FrameworkElement sender, object args)
+    {
+        if (sender is Button button)
+        {
+            RefreshNativeButtonForeground(button);
+        }
+    }
+
+    /// <summary>
+    /// 原生按钮的文字色跟随启用态：启用时读 <see cref="Control.Foreground"/>（样式解析出的
+    /// Accent 白字 / Default 主题字色），禁用时读 XAML 里的两枚取色探针
+    /// （ButtonForegroundDisabled / TextOnAccentFillColorDisabledBrush）。探针本身是 ThemeResource，
+    /// 系统主题切换后会自动更新，这里重读即可，不需要自己缓存颜色。
+    /// </summary>
+    private void RefreshNativeButtonForeground(Button button)
+    {
+        if (!_nativeButtonLabels.TryGetValue(button, out var native))
+        {
+            return;
+        }
+
+        native.Label.Foreground = button.IsEnabled
+            ? button.Foreground
+            : native.Accent
+                ? AccentButtonDisabledForegroundProbe.BorderBrush
+                : DefaultButtonDisabledForegroundProbe.BorderBrush;
+    }
+
+    /// <summary>原生按钮的文字层，以及它用的是 Accent 还是 Default 那组禁用色。</summary>
+    private sealed record NativeButtonLabel(TextBlock Label, bool Accent);
 
     private void SetThemedButtonHovered(object sender, bool hovered)
     {

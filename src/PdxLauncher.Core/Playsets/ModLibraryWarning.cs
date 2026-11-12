@@ -124,34 +124,34 @@ public static class ModLibraryWarnings
     /// <summary>mods.status 判为正常时的取值。</summary>
     public const string ReadyStatus = "ready_to_play";
 
-    // 下面这些键必须与 tools/i18n/*/modlib.json 的键逐字一致（Core 不能引用 App 生成的 Keys 常量，
-    // 所以写成字符串常量，由自检 ModLibraryWarningChecks 保证键名没写错）。
+    // 下面这些键必须与 src/PdxLauncher.App/Strings/*/Resources.resw 的资源名逐字一致（Core 不引用 App 生成的
+    // Keys 常量，所以写成字符串常量，由自检 ModLibraryWarningChecks 保证键名没写错）。
     /// <summary>三角的无障碍名。</summary>
-    public const string NameKey = "modlib.warningName";
+    public const string NameKey = "ModlibWarningName";
 
     /// <summary>未声明支持版本。</summary>
-    public const string KeyVersionUndeclared = "modlib.versionSupport.undeclared";
+    public const string KeyVersionUndeclared = "ModlibVersionSupportUndeclared";
 
     /// <summary>声明了版本但当前游戏版本未知。</summary>
-    public const string KeyVersionDeclaredUnknownGame = "modlib.versionSupport.declaredUnknownGame";
+    public const string KeyVersionDeclaredUnknownGame = "ModlibVersionSupportDeclaredUnknownGame";
 
     /// <summary>声明了版本，当前游戏版本也已知。</summary>
-    public const string KeyVersionDeclared = "modlib.versionSupport.declared";
+    public const string KeyVersionDeclared = "ModlibVersionSupportDeclared";
 
     /// <summary>声明的版本不低于当前游戏版本。</summary>
-    public const string KeyVersionNotBelow = "modlib.versionSupport.notBelow";
+    public const string KeyVersionNotBelow = "ModlibVersionSupportNotBelow";
 
     /// <summary>声明的版本低于当前游戏版本。</summary>
-    public const string KeyVersionBelow = "modlib.versionSupport.below";
+    public const string KeyVersionBelow = "ModlibVersionSupportBelow";
 
     /// <summary>磁盘 mod 未在官方库登记。</summary>
-    public const string KeyUnregistered = "modlib.warningUnregistered";
+    public const string KeyUnregistered = "ModlibWarningUnregistered";
 
     /// <summary>订阅 mod 未在官方库登记。</summary>
-    public const string KeyUnregisteredWorkshop = "modlib.warningUnregisteredWorkshop";
+    public const string KeyUnregisteredWorkshop = "ModlibWarningUnregisteredWorkshop";
 
     /// <summary>mods.status 不是 ready_to_play（参数是原始 status 值）。</summary>
-    public const string KeyStatus = "modlib.warningStatus";
+    public const string KeyStatus = "ModlibWarningStatus";
 
     /// <summary>
     /// 判定一行要不要挂三角，以及三段文案各取哪个键。

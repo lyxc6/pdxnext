@@ -90,13 +90,6 @@ public sealed partial class AccountPage : Page
 
     // ------------------------------------------------------------ 控件事件
 
-    /// <summary>身份卡右侧的「登录」：展开表单并把焦点交给邮箱框。</summary>
-    private void OnAccountPrimaryClick(object sender, RoutedEventArgs e)
-    {
-        expAccountSignIn.IsExpanded = true;
-        EmailBox.Focus(FocusState.Programmatic);
-    }
-
     private async void OnAccountSignInClick(object sender, RoutedEventArgs e) => await SignInAsync();
 
     /// <summary>邮箱框 / 密码框里按回车等于点「登录」。</summary>

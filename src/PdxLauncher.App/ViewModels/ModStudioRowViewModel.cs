@@ -3,6 +3,7 @@ namespace PdxLauncher.App.ViewModels;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 using PdxLauncher.App.Localization;
+using PdxLauncher.App.Services;
 using PdxLauncher.Core.ModStudio;
 using PdxLauncher.Core.Playsets;
 
@@ -73,8 +74,10 @@ public sealed partial class ModStudioRowViewModel : LocalizedObservableObject
     /// <summary>mod 声明的支持版本。</summary>
     public string SupportedVersionText => Descriptor?.SupportedVersion ?? Entry.Mod.RequiredVersion;
 
-    /// <summary>标签文案。</summary>
-    public string TagsText => string.Join(", ", Descriptor?.Tags ?? Array.Empty<string>());
+    /// <summary>标签文案：展示名按当前语言取译文，机器名保持不变。</summary>
+    public string TagsText => string.Join(
+        ", ",
+        (Descriptor?.Tags ?? Array.Empty<string>()).Select(tag => WorkshopTagText.Localize(tag)));
 
     /// <summary>描述符家族文案。</summary>
     public string DescriptorText => Descriptor is { Family: not ModDescriptorFamily.None }

@@ -145,7 +145,7 @@ public sealed partial class LibraryViewModel : LocalizedObservableObject
         try
         {
             var result = await AppServices.Launcher
-                .LaunchAsync(game, LaunchRequest.Default, cancellationToken)
+                .LaunchAsync(game, AppServices.CreateLaunchRequest(game, continueLastSave: false), cancellationToken)
                 .ConfigureAwait(true);
 
             if (result.Started)

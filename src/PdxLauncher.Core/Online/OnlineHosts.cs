@@ -15,6 +15,15 @@ public static class OnlineHosts
     /// <summary>Steam 商店接口域名（未安装游戏封面用）。</summary>
     public const string SteamStoreHost = "store.steampowered.com";
 
+    /// <summary>
+    /// Steam 商店图片 CDN。appdetails 返回的 <c>header_image</c> 已迁到
+    /// <c>store_item_assets/steam/apps/&lt;appid&gt;/...</c>，库页大图 <c>library_hero.jpg</c> 也在同一主机。
+    /// </summary>
+    public const string SteamSharedCdnHost = "shared.akamai.steamstatic.com";
+
+    /// <summary>Steam 旧版图片 CDN（老游戏的 <c>header.jpg</c> 仍指向这里，同域可取库页大图）。</summary>
+    public const string SteamCloudflareCdnHost = "cdn.cloudflare.steamstatic.com";
+
     /// <summary>官方公告图 CDN（Braze content cards 的图片地址）。</summary>
     public const string BrazeImagesHost = "braze-images.com";
 
@@ -38,6 +47,14 @@ public static class OnlineHosts
 
     /// <summary>Steam 创意工坊网页端（列表页解析 SSR 数据）。</summary>
     public const string SteamCommunityHost = "steamcommunity.com";
+
+    /// <summary>
+    /// Steam 社区官方素材 CDN。评论表情（<c>/economy/emoticon/&lt;name&gt;</c>）在这里。
+    /// 本主机整体放行（Steam 头像/徽章/表情同域，按路径收窄会连带挡掉自检里
+    /// <c>/avatars</c> 可下载的约定）；「这段内容是不是表情」由
+    /// <see cref="SteamEmoticon"/> 负责识别，白名单不参与表情语义，也不做子域通配。
+    /// </summary>
+    public const string SteamCommunityAssetsHost = "community.fastly.steamstatic.com";
 
     /// <summary>Steam Web API（keyless 的 published file 详情接口）。</summary>
     public const string SteamApiHost = "api.steampowered.com";
@@ -150,6 +167,8 @@ public static class OnlineHosts
         string.Equals(host, MetadataAssetsHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, ApiHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamStoreHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, SteamSharedCdnHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, SteamCloudflareCdnHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, BrazeImagesHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamUserContentHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, ImgurHost, StringComparison.OrdinalIgnoreCase)
@@ -157,6 +176,7 @@ public static class OnlineHosts
         || string.Equals(host, ModsContentHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, ModsWebHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamCommunityHost, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(host, SteamCommunityAssetsHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamApiHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, TranslationHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, GoogleTranslateWebHost, StringComparison.OrdinalIgnoreCase)

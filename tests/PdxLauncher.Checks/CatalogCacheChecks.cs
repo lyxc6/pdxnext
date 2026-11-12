@@ -217,6 +217,8 @@ public static class CatalogCacheChecks
             return _inner.ReadAllBytes(path);
         }
 
+        public Stream OpenRead(string path) => _inner.OpenRead(path);
+
         public long GetFileSize(string path) => _inner.GetFileSize(path);
 
         public bool DirectoryExists(string path) => _inner.DirectoryExists(path);

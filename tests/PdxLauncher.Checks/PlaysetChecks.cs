@@ -1110,8 +1110,24 @@ public static class PlaysetChecks
 
         var catalog = new DlcCatalog(fs, logger);
         var dlcsAll = catalog.DiscoverAsync(game, CancellationToken.None).GetAwaiter().GetResult();
-        Console.WriteLine("  info V3 递归 *.dlc.json 数量 " + dlcsAll.Count.ToString(CultureInfo.InvariantCulture) + "（官方持续新增 DLC，只锁下限）");
-        ChecksContext.Check("V3 递归 *.dlc.json 数量 >= 17", dlcsAll.Count >= 17, dlcsAll.Count.ToString(CultureInfo.InvariantCulture));
+        var diskDlcs = dlcsAll.Where(IsDiskDescriptor).ToList();
+        var metadataDlcs = dlcsAll.Where(dlc => !IsDiskDescriptor(dlc)).ToList();
+        Console.WriteLine("  info V3 DLC 条目数 " + dlcsAll.Count.ToString(CultureInfo.InvariantCulture)
+            + "（磁盘描述文件 " + diskDlcs.Count.ToString(CultureInfo.InvariantCulture)
+            + " + dlc_metadata " + metadataDlcs.Count.ToString(CultureInfo.InvariantCulture) + "；官方持续新增 DLC，只锁下限）");
+        Console.WriteLine("  info V3 dlc_metadata 合成条目 "
+            + string.Join(" / ", metadataDlcs.Select(dlc => dlc.DisplayName + "（steam_id " + dlc.SteamId + "）")));
+        ChecksContext.Check("V3 磁盘描述文件条目 >= 17", diskDlcs.Count >= 17, diskDlcs.Count.ToString(CultureInfo.InvariantCulture));
+        // Victoria 3 1.15 起新 DLC 只写 game/dlc_metadata/00_dlc_metadata.txt（不再补 .dlc.json）；
+        // 1.16 的真机又回到逐个 .dlc.json，所以这里只锁「条目存在」，不锁它来自哪种存储形态。
+        ChecksContext.Check("V3 DLC 条目数 >= 18（含 dlc_metadata 增量）", dlcsAll.Count >= 18, dlcsAll.Count.ToString(CultureInfo.InvariantCulture));
+        ChecksContext.Check(
+            "V3 含 State and Revolution / 4314660",
+            dlcsAll.Any(dlc => dlc.SteamId == "4314660" && dlc.DisplayName == "State and Revolution"));
+        ChecksContext.Check(
+            "V3 dlc_metadata 合成条目相对路径形如 dlc_metadata/<块名>",
+            metadataDlcs.All(dlc => dlc.FilePathRelativeToDlcPath.StartsWith("dlc_metadata/", StringComparison.Ordinal)
+                && dlc.FilePathRelativeToDlcPath.Count(ch => ch == '/') == 1));
         CheckDlcShape("V3", dlcsAll);
         CheckDlcAnchor(
             "V3",
@@ -1316,7 +1332,14 @@ public static class PlaysetChecks
         ChecksContext.Check(label + "：DLC DisplayName 全部非空", dlcs.All(dlc => !string.IsNullOrWhiteSpace(dlc.DisplayName)));
         ChecksContext.Check(label + "：DLC SteamId 全部非空", dlcs.All(dlc => !string.IsNullOrWhiteSpace(dlc.SteamId)));
         ChecksContext.Check(label + "：DLC ThumbnailPath 全部非空（同目录 thumbnail.png 存在）", dlcs.All(dlc => !string.IsNullOrEmpty(dlc.ThumbnailPath)));
-        ChecksContext.Check(label + "：DLC RawBytes 全部非空", dlcs.All(dlc => dlc.RawBytes.Length > 0));
+        // dlc_metadata（Victoria 3 1.15 起）合成的条目没有磁盘描述文件，RawBytes 为空以保证
+        // dlc_signature 不变；只要求真正来自 .dlc/.dlc.json 的条目带原始字节。
+        ChecksContext.Check(
+            label + "：磁盘描述文件（.dlc/.dlc.json）的 DLC RawBytes 全部非空",
+            dlcs.Where(IsDiskDescriptor).All(dlc => dlc.RawBytes.Length > 0));
+        ChecksContext.Check(
+            label + "：dlc_metadata 合成条目没有 RawBytes（不污染 dlc_signature）",
+            dlcs.Where(dlc => !IsDiskDescriptor(dlc)).All(dlc => dlc.RawBytes.Length == 0));
         ChecksContext.Check(
             label + "：DLC FilePathRelativeToDlcPath 全部是 POSIX 相对路径",
             dlcs.All(dlc => dlc.FilePathRelativeToDlcPath.Length > 0
@@ -1335,6 +1358,14 @@ public static class PlaysetChecks
         {
             Console.WriteLine("  info " + label + "：DLC PopsId 允许重复（真机存在 3 个重复 pops_id，跳过唯一性断言）");
         }
+    }
+
+    /// <summary>条目是否来自磁盘上的 .dlc / .dlc.json 描述文件（而不是 dlc_metadata 合成）。</summary>
+    private static bool IsDiskDescriptor(DlcInfo dlc)
+    {
+        var path = dlc.FilePathRelativeToDlcPath;
+        return path.EndsWith(".dlc", StringComparison.OrdinalIgnoreCase)
+            || path.EndsWith(".dlc.json", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void CheckDlcAnchor(

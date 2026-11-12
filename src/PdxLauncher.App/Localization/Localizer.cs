@@ -4,25 +4,37 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 
+using Microsoft.Windows.ApplicationModel.Resources;
+
 using PdxLauncher.Core.Configuration;
 
 /// <summary>
-/// 界面文案入口。每个文案键对应一个只读属性（生成的属性在同名 partial 的 Strings.g.cs 里），
-/// XAML 用 <c>{x:Bind L.SomeKey, Mode=OneWay}</c> 绑定，切语言时靠 <see cref="PropertyChanged"/> 整体刷新。
-/// 文案表由 tools/gen-i18n.py 从 tools/i18n/*/*.json 生成，不要在代码里手写界面文字。
+/// 界面文案入口。文案源是 <c>Strings/&lt;lang&gt;/Resources.resw</c>，编译时由
+/// <c>PdxLauncher.Localization.Generator</c> 生成每键一个只读属性（partial 部分），
+/// 运行期用 Windows App SDK 的 <see cref="ResourceManager"/> 按当前语言限定符取值。
+/// <para>
+/// 每个属性都经过 <see cref="Format"/>，所以切换语言只需换 <see cref="ResourceContext"/> 并触发
+/// <see cref="PropertyChanged"/>；XAML 的 <c>{x:Bind L.SomeKey, Mode=OneWay}</c> 会立即刷新。
+/// </para>
 /// </summary>
 public sealed partial class Localizer : INotifyPropertyChanged
 {
+    private const string ResourcePrefix = "Resources/";
+
     private static readonly Lazy<Localizer> LazyInstance = new(() => new Localizer());
 
     /// <summary>需要跟随语言刷新的视图模型；只存弱引用，页面/模型回收后自动失效。</summary>
     private readonly List<WeakReference<LocalizedObservableObject>> _localizedViews = new();
 
-    private IReadOnlyDictionary<string, string> _table = TableZhCN;
-    private string _language = UiLanguages.Default;
+    private readonly ResourceManager _resources = new();
+
+    private ResourceContext _context;
+    private string _language;
 
     private Localizer()
     {
+        _language = UiLanguages.Default;
+        _context = CreateContext(_language);
     }
 
     /// <inheritdoc />
@@ -44,10 +56,9 @@ public sealed partial class Localizer : INotifyPropertyChanged
     public void Apply(string? languageKey)
     {
         var language = UiLanguages.Normalize(languageKey);
-        var table = string.Equals(language, UiLanguages.English, StringComparison.OrdinalIgnoreCase) ? TableEnUS : TableZhCN;
-        var changed = !string.Equals(_language, language, StringComparison.Ordinal) || !ReferenceEquals(_table, table);
+        var changed = !string.Equals(_language, language, StringComparison.Ordinal);
         _language = language;
-        _table = table;
+        _context = CreateContext(language);
 
         try
         {
@@ -110,18 +121,27 @@ public sealed partial class Localizer : INotifyPropertyChanged
         }
     }
 
-    /// <summary>按文案键取文本，支持 {0} 占位；缺键时依次回落 en-US、zh-CN，最后返回 ⟨key⟩。</summary>
+    /// <summary>按资源名取文本，支持 {0} 占位；缺键时回落到 .pri 的默认语言，最后返回 ⟨key⟩。</summary>
     public string T(string key, params object?[] args) => Format(key, args);
 
-    /// <summary>生成属性与内部调用的实现：查表 → 回落 → 格式化。</summary>
+    private ResourceContext CreateContext(string language)
+    {
+        var context = _resources.CreateResourceContext();
+        context.QualifierValues["Language"] = language;
+        return context;
+    }
+
+    /// <summary>生成属性与内部调用的实现：查 MRT 资源 → 格式化。</summary>
     private string Format(string key, object?[]? args = null)
     {
-        var template = Lookup(key);
-        if (template is null)
+        var candidate = _resources.MainResourceMap.TryGetValue(ResourcePrefix + key, _context);
+        if (candidate is null)
         {
-            Debug.Fail("缺少界面文案键: " + key);
+            Debug.Fail("缺少界面文案资源: " + key);
             return "⟨" + key + "⟩";
         }
+
+        var template = candidate.ValueAsString;
 
         if (args is null || args.Length == 0)
         {
@@ -137,20 +157,5 @@ public sealed partial class Localizer : INotifyPropertyChanged
             // 占位符写错不能崩界面：退回未格式化的模板。
             return template;
         }
-    }
-
-    private string? Lookup(string key)
-    {
-        if (_table.TryGetValue(key, out var text))
-        {
-            return text;
-        }
-
-        if (TableEnUS.TryGetValue(key, out var english))
-        {
-            return english;
-        }
-
-        return TableZhCN.TryGetValue(key, out var chinese) ? chinese : null;
     }
 }

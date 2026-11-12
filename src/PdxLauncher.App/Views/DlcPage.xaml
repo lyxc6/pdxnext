@@ -15,8 +15,130 @@
         清单来源有两种：一般游戏读磁盘上的 .dlc 描述文件，启用状态写 playsets_dlcs（sqlite）
         并同步重写加载文件（disabledDLC / disabled_dlcs）；CS2 没有描述文件，清单来自游戏目录里
         那份 steam_api64.dll 现场问 Steam 的结果，且没有可写的启用状态（工具条与开关整组隐藏）。
+        一般游戏还会把 Steam 清单里「磁盘没有、账号也没有」的 DLC 列在第二段（只读），
+        让用户看得到自己缺什么；没有可用报告或报告不可信时那一段换成一句说明。
         没有激活播放集时全部 DLC 视为启用（与官方启动器一致），此时保存会被拒绝并提示。
-    -->    <Grid Padding="24" RowSpacing="12">
+    -->
+
+    <Page.Resources>
+        <!-- 已拥有 / 未拥有两段共用同一套行布局；未拥有行的开关由 ShowsToggle 隐藏 -->
+        <DataTemplate x:Key="DlcRowTemplate" x:DataType="vm:DlcRowViewModel">
+            <Grid Padding="12,8" ColumnSpacing="16" Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="208" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!--
+                    缩略图：宽高写死在 Border 上，文字再长也只会被裁剪，不会把图压小。
+                    缩放方式按实际显示来源分（FillsImageBox，OneWay 跟随商店图回填）：
+                    本地横图（280×160 ≈ 16:9）填满；Steam 头图（460×215 = 2.14:1）和
+                    EU5 的 500×500 方形本地图用 Uniform 完整显示，否则上下/左右会被裁掉。
+                -->
+                <Border Grid.Column="0"
+                        Width="208"
+                        Height="117"
+                        Background="{ThemeResource PdxPlaceholderBackgroundBrush}"
+                        BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+                    <Grid>
+                        <FontIcon Glyph="&#xE8B9;"
+                                  FontSize="28"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                  AutomationProperties.AccessibilityView="Raw"
+                                  Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasImage), Mode=OneWay}" />
+                        <Image Source="{x:Bind svc:XamlImage.FromPath(ImagePath, 208), Mode=OneWay}"
+                               Stretch="{x:Bind svc:XamlStretch.ForDlcImage(FillsImageBox), Mode=OneWay}"
+                               AutomationProperties.Name="{x:Bind DisplayName, Mode=OneTime}" />
+                    </Grid>
+                </Border>
+
+                <!-- 标题 + 简介：简介来自描述文件（V3）或联网补全（CK3/Stellaris），没有时整行折叠 -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                    <TextBlock Text="{x:Bind DisplayName, Mode=OneTime}"
+                               Style="{StaticResource BodyStrongTextBlockStyle}"
+                               TextWrapping="Wrap"
+                               MaxLines="2"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{x:Bind Description, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               MaxWidth="880"
+                               HorizontalAlignment="Left"
+                               MaxLines="2"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTipService.ToolTip="{x:Bind DescriptionToolTip, Mode=OneWay}"
+                               AutomationProperties.AutomationId="{x:Bind DescriptionAutomationId, Mode=OneTime}"
+                               AutomationProperties.Name="{x:Bind L.DlcDescriptionName, Mode=OneWay}"
+                               Visibility="{x:Bind svc:XamlVisibility.FromBool(HasDescription), Mode=OneWay}" />
+                </StackPanel>
+
+                <!--
+                    Steam 授权徽标：验证补丁是否真的把这份 DLC 的授权给了游戏。
+                    颜色来自 App.xaml 的 PdxOwned/Unowned/UnknownForegroundBrush，
+                    换主题时跟着走；判不出来时显示"授权未知"，绝不像"未拥有"那样误导。
+                    下面那行是补丁覆盖徽标：只出现在未拥有的行上（已拥有本来就能玩，不必再标）。
+                    「清单里有 + 补丁生效」才显示已打补丁；被 Steam 更新冲掉时显示「补丁被覆盖」。
+                -->
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="4">
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
+                               Text="{x:Bind OwnershipText, Mode=OneWay}"
+                               Foreground="{x:Bind svc:XamlBrush.FromOwnership(OwnershipKind), Mode=OneWay}"
+                               ToolTipService.ToolTip="{x:Bind OwnershipToolTip, Mode=OneWay}"
+                               AutomationProperties.AutomationId="{x:Bind OwnershipAutomationId, Mode=OneTime}"
+                               AutomationProperties.HelpText="{x:Bind OwnershipToolTip, Mode=OneWay}" />
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
+                               Text="{x:Bind CoverageText, Mode=OneWay}"
+                               Foreground="{x:Bind svc:XamlBrush.FromCoverage(CoverageKind), Mode=OneWay}"
+                               ToolTipService.ToolTip="{x:Bind CoverageToolTip, Mode=OneWay}"
+                               AutomationProperties.AutomationId="{x:Bind CoverageAutomationId, Mode=OneTime}"
+                               AutomationProperties.Name="{x:Bind CoverageText, Mode=OneWay}"
+                               AutomationProperties.HelpText="{x:Bind CoverageToolTip, Mode=OneWay}"
+                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowsPatchBadge), Mode=OneWay}" />
+                    <!--
+                        内容徽标：授权归补丁管，资源文件归 Steam / 人工管，两者是两回事。
+                        「Steam 已装」= appmanifest 的 InstalledDepots 登了这个 depot，随游戏更新维护；
+                        「仅本地文件」= 磁盘上有描述文件但 Steam 没登记（人工拷的，Steam 不认）；
+                        「内容未安装」= 只有 dlc_metadata 里的元数据，进游戏看不到这份 DLC。
+                    -->
+                    <TextBlock Style="{StaticResource CaptionTextBlockStyle}"
+                               Text="{x:Bind ContentText, Mode=OneWay}"
+                               Foreground="{x:Bind svc:XamlBrush.FromContent(ContentKind), Mode=OneWay}"
+                               ToolTipService.ToolTip="{x:Bind ContentToolTip, Mode=OneWay}"
+                               AutomationProperties.AutomationId="{x:Bind ContentAutomationId, Mode=OneTime}"
+                               AutomationProperties.Name="{x:Bind ContentText, Mode=OneWay}"
+                               AutomationProperties.HelpText="{x:Bind ContentToolTip, Mode=OneWay}"
+                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowsContentBadge), Mode=OneWay}" />
+                </StackPanel>
+
+                <!--
+                    pops_id 为空的 DLC 无法写进 content_load.json 的 disabledDLC
+                    （官方 app.asar 的 X2.mapPopsId 会丢弃空 id），所以这里把开关置灰。
+                    CS2 的清单来自 Steam，没有 pops_id 也没有播放集条目可写，整列开关隐藏；
+                    「未拥有」段的行同样只读，整列开关隐藏。
+                -->
+                <ToggleSwitch Grid.Column="3"
+                              VerticalAlignment="Center"
+                              IsOn="{x:Bind IsEnabled, Mode=TwoWay}"
+                              IsEnabled="{x:Bind CanBeDisabled, Mode=OneWay}"
+                              Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowsToggle), Mode=OneWay}"
+                              OnContent="{x:Bind L.CommonEnable, Mode=OneWay}"
+                              OffContent="{x:Bind L.CommonDisable, Mode=OneWay}"
+                              ToolTipService.ToolTip="{x:Bind ToggleToolTip, Mode=OneWay}"
+                              AutomationProperties.AutomationId="{x:Bind ToggleAutomationId, Mode=OneTime}"
+                              AutomationProperties.Name="{x:Bind DisplayName, Mode=OneTime}"
+                              AutomationProperties.HelpText="{x:Bind ToggleToolTip, Mode=OneWay}" />
+            </Grid>
+        </DataTemplate>
+    </Page.Resources>
+
+    <Grid Padding="24" RowSpacing="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -33,14 +155,9 @@
 
             <StackPanel Grid.Column="0" VerticalAlignment="Center" Spacing="4">
                 <TextBlock Text="DLC" Style="{StaticResource TitleTextBlockStyle}" />
-                <StackPanel Orientation="Horizontal" Spacing="12">
-                    <TextBlock Text="{x:Bind ViewModel.GameTitle, Mode=OneWay}"
-                               Style="{StaticResource CaptionTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock Text="{x:Bind ViewModel.CountsText, Mode=OneWay}"
-                               Style="{StaticResource CaptionTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
+                <TextBlock Text="{x:Bind ViewModel.GameTitle, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -49,15 +166,18 @@
                             Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.CanEditDlcToggles), Mode=OneWay}">
                     <Button Content="{x:Bind L.DlcEnableAll, Mode=OneWay}"
                             Click="OnEnableAllClick"
+                            IsEnabled="{x:Bind ViewModel.CanSave, Mode=OneWay}"
                             AutomationProperties.AutomationId="btnEnableAllDlcs"
                             AutomationProperties.Name="{x:Bind L.DlcEnableAllName, Mode=OneWay}" />
                     <Button Content="{x:Bind L.DlcDisableAll, Mode=OneWay}"
                             Click="OnDisableAllClick"
+                            IsEnabled="{x:Bind ViewModel.CanSave, Mode=OneWay}"
                             AutomationProperties.AutomationId="btnDisableAllDlcs"
                             AutomationProperties.Name="{x:Bind L.DlcDisableAllName, Mode=OneWay}" />
                     <Button Content="{x:Bind L.CommonSave, Mode=OneWay}"
                             Style="{StaticResource AccentButtonStyle}"
                             Click="OnSaveClick"
+                            IsEnabled="{x:Bind ViewModel.CanSave, Mode=OneWay}"
                             AutomationProperties.AutomationId="btnSaveDlcs"
                             AutomationProperties.Name="{x:Bind L.DlcSaveName, Mode=OneWay}" />
                 </StackPanel>
@@ -132,125 +252,90 @@
             Background="{ThemeResource PdxCardGlassBrush}"
             CornerRadius="8" />
 
-        <!-- DLC 列表（保留 gvDlcs 这个 AutomationId：UI 测试按它定位列表） -->
-        <ListView Grid.Row="2"
-                  x:Name="DlcList"
-                  ItemsSource="{x:Bind ViewModel.Dlcs, Mode=OneWay}"
-                  SelectionMode="None"
-                  IsItemClickEnabled="False"
-                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                  ScrollViewer.HorizontalScrollMode="Disabled"
-                  AutomationProperties.AutomationId="gvDlcs"
-                  AutomationProperties.Name="{x:Bind L.DlcListName, Mode=OneWay}">
-            <ListView.ItemContainerStyle>
-                <Style TargetType="ListViewItem">
-                    <Setter Property="Padding" Value="0" />
-                    <Setter Property="Margin" Value="0,0,0,4" />
-                    <Setter Property="MinHeight" Value="0" />
-                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                </Style>
-            </ListView.ItemContainerStyle>
-            <ListView.ItemTemplate>
-                <DataTemplate x:DataType="vm:DlcRowViewModel">
-                    <Grid Padding="12,8" ColumnSpacing="16">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="208" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+        <!--
+            DLC 分区列表：上半「已拥有」保持原行为（开关、徽标），下半「未拥有」只读。
+            两段共用一个行模板；未拥有段为空时整段（含标题）不显示。
+            用 ItemsControl 而不是嵌套 ListView：外层已经有一个 ScrollViewer，再套一个会把滚轮吃掉。
+        -->
+        <ScrollViewer Grid.Row="2"
+                      VerticalScrollBarVisibility="Auto"
+                      VerticalScrollMode="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      HorizontalScrollMode="Disabled"
+                      AutomationProperties.AutomationId="svDlcSections">
+            <StackPanel>
+                <TextBlock Text="{x:Bind ViewModel.OwnedSectionTitle, Mode=OneWay}"
+                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           Margin="12,8,12,8"
+                           Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasOwnedSection), Mode=OneWay}"
+                           AutomationProperties.AutomationId="txtDlcOwnedSection" />
 
-                        <!-- 缩略图：宽高写死在 Border 上，文字再长也只会被裁剪，不会把图压小 -->
-                        <Border Grid.Column="0"
-                                Width="208"
-                                Height="117"
-                                Background="{ThemeResource PdxPlaceholderBackgroundBrush}"
-                                BorderBrush="{ThemeResource PdxCardStrokeBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8">
-                            <Grid>
-                                <FontIcon Glyph="&#xE8B9;"
-                                          FontSize="28"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                          AutomationProperties.AccessibilityView="Raw"
-                                          Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(HasThumbnail), Mode=OneWay}" />
-                                <Image Source="{x:Bind svc:XamlImage.FromPath(ThumbnailPath, 208), Mode=OneTime}"
-                                       Stretch="UniformToFill"
-                                       AutomationProperties.Name="{x:Bind DisplayName, Mode=OneTime}" />
-                            </Grid>
-                        </Border>
+                <!-- 已拥有（保留 gvDlcs 这个 AutomationId：UI 测试按它定位列表） -->
+                <ItemsControl ItemsSource="{x:Bind ViewModel.Dlcs, Mode=OneWay}"
+                              ItemTemplate="{StaticResource DlcRowTemplate}"
+                              AutomationProperties.AutomationId="gvDlcs"
+                              AutomationProperties.Name="{x:Bind L.DlcListName, Mode=OneWay}" />
 
-                        <!-- 标题 + 简介：简介来自描述文件（V3）或联网补全（CK3/Stellaris），没有时整行折叠 -->
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
-                            <TextBlock Text="{x:Bind DisplayName, Mode=OneTime}"
-                                       Style="{StaticResource BodyStrongTextBlockStyle}"
-                                       TextWrapping="Wrap"
-                                       MaxLines="2"
-                                       TextTrimming="CharacterEllipsis" />
-                            <TextBlock Text="{x:Bind Description, Mode=OneWay}"
-                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                       TextWrapping="Wrap"
-                                       MaxWidth="880"
-                                       HorizontalAlignment="Left"
-                                       MaxLines="2"
-                                       TextTrimming="CharacterEllipsis"
-                                       ToolTipService.ToolTip="{x:Bind DescriptionToolTip, Mode=OneWay}"
-                                       AutomationProperties.AutomationId="{x:Bind DescriptionAutomationId, Mode=OneTime}"
-                                       AutomationProperties.Name="{x:Bind L.DlcDescriptionName, Mode=OneWay}"
-                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(HasDescription), Mode=OneWay}" />
-                        </StackPanel>
-
-                        <!--
-                            Steam 授权徽标：验证补丁是否真的把这份 DLC 的授权给了游戏。
-                            颜色来自 App.xaml 的 PdxOwned/Unowned/UnknownForegroundBrush，
-                            换主题时跟着走；判不出来时显示"授权未知"，绝不像"未拥有"那样误导。
-                        -->
-                        <TextBlock Grid.Column="2"
+                <!-- 未拥有：只来自 Steam 清单，磁盘上没有，也不在账号的已拥有集合里 -->
+                <StackPanel Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasUnownedSection), Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,24,12,8">
+                        <TextBlock Text="{x:Bind ViewModel.UnownedSectionTitle, Mode=OneWay}"
+                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    VerticalAlignment="Center"
+                                   AutomationProperties.AutomationId="txtDlcUnownedSection" />
+                        <!-- 未拥有段里有多少条其实被补丁覆盖（清单里有 + 补丁生效） -->
+                        <TextBlock Text="{x:Bind ViewModel.UnownedPatchStatsText, Mode=OneWay}"
                                    Style="{StaticResource CaptionTextBlockStyle}"
-                                   Text="{x:Bind OwnershipText, Mode=OneWay}"
-                                   Foreground="{x:Bind svc:XamlBrush.FromOwnership(OwnershipKind), Mode=OneWay}"
-                                   ToolTipService.ToolTip="{x:Bind OwnershipToolTip, Mode=OneWay}"
-                                   AutomationProperties.AutomationId="{x:Bind OwnershipAutomationId, Mode=OneTime}"
-                                   AutomationProperties.HelpText="{x:Bind OwnershipToolTip, Mode=OneWay}" />
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   VerticalAlignment="Center"
+                                   Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasUnownedPatchStats), Mode=OneWay}"
+                                   AutomationProperties.AutomationId="txtDlcUnownedPatchStats" />
+                    </StackPanel>
+                    <ItemsControl ItemsSource="{x:Bind ViewModel.UnownedDlcs, Mode=OneWay}"
+                                  ItemTemplate="{StaticResource DlcRowTemplate}"
+                                  AutomationProperties.AutomationId="gvUnownedDlcs"
+                                  AutomationProperties.Name="{x:Bind ViewModel.UnownedListName, Mode=OneWay}" />
+                </StackPanel>
 
-                        <!--
-                            pops_id 为空的 DLC 无法写进 content_load.json 的 disabledDLC
-                            （官方 app.asar 的 X2.mapPopsId 会丢弃空 id），所以这里把开关置灰。
-                            CS2 的清单来自 Steam，没有 pops_id 也没有播放集条目可写，整列开关隐藏。
-                        -->
-                        <ToggleSwitch Grid.Column="3"
-                                      VerticalAlignment="Center"
-                                      IsOn="{x:Bind IsEnabled, Mode=TwoWay}"
-                                      IsEnabled="{x:Bind CanBeDisabled, Mode=OneWay}"
-                                      Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowsToggle), Mode=OneWay}"
-                                      OnContent="{x:Bind L.CommonEnable, Mode=OneWay}"
-                                      OffContent="{x:Bind L.CommonDisable, Mode=OneWay}"
-                                      ToolTipService.ToolTip="{x:Bind ToggleToolTip, Mode=OneWay}"
-                                      AutomationProperties.AutomationId="{x:Bind ToggleAutomationId, Mode=OneTime}"
-                                      AutomationProperties.Name="{x:Bind DisplayName, Mode=OneTime}"
-                                      AutomationProperties.HelpText="{x:Bind ToggleToolTip, Mode=OneWay}" />
-                    </Grid>
-                </DataTemplate>
-            </ListView.ItemTemplate>
-        </ListView>
+                <!-- 未拥有段不可用时的说明：Steam 未运行 / 报告不可用 / 清单像 loader 模板 -->
+                <TextBlock Text="{x:Bind ViewModel.UnownedNote, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           Margin="12,12,12,8"
+                           Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasUnownedNote), Mode=OneWay}"
+                           AutomationProperties.AutomationId="txtDlcUnownedNote" />
+            </StackPanel>
+        </ScrollViewer>
 
-        <!-- 状态栏 -->
+        <!-- 状态栏：左列计数（随开关实时变化），右列状态文案 -->
         <Border Grid.Row="3"
                 Padding="12,8"
                 CornerRadius="8"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1">
-            <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
-                       Style="{StaticResource CaptionTextBlockStyle}"
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                       TextWrapping="Wrap"
-                       AutomationProperties.AutomationId="txtDlcStatus"
-                       AutomationProperties.Name="{x:Bind L.DlcStatusName, Mode=OneWay}" />
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="{x:Bind ViewModel.CountsText, Mode=OneWay}"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock Grid.Column="1"
+                           Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                           VerticalAlignment="Center"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           AutomationProperties.AutomationId="txtDlcStatus"
+                           AutomationProperties.Name="{x:Bind L.DlcStatusName, Mode=OneWay}" />
+            </Grid>
         </Border>
     </Grid>
 </Page>

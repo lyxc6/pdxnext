@@ -16,6 +16,41 @@ using PdxLauncher.Core.Storage;
 /// </summary>
 public static class WorkshopItemStoreChecks
 {
+    /// <summary>1.2 / v2 的 workshop_items 结构（没有 is_collection）。</summary>
+    private const string V2WorkshopItemsSql =
+        """
+        CREATE TABLE workshop_items (
+            source TEXT NOT NULL, id TEXT NOT NULL, game_id TEXT, name TEXT, author TEXT,
+            rating REAL, ratings_total INTEGER, subscriptions INTEGER, updated_utc INTEGER,
+            size_bytes INTEGER, cover_url TEXT, cover_file TEXT, cover_fetched_utc INTEGER,
+            detail_text TEXT, detail_screenshots TEXT, detail_fetched_utc INTEGER,
+            fetched_utc INTEGER NOT NULL, creator_steam_id TEXT, tags TEXT,
+            views INTEGER, lifetime_subscriptions INTEGER, PRIMARY KEY (source, id))
+        """;
+
+    /// <summary>v2 建 meta 并写版本。</summary>
+    private const string V2MetaSql = "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)";
+
+    /// <summary>v2 写 schema 版本（参数化）。</summary>
+    private const string V2VersionSql = "INSERT INTO meta (key, value) VALUES (?, ?)";
+
+    /// <summary>v2 写一条普通条目（参数化）。</summary>
+    private const string V2ItemSql =
+        """
+        INSERT INTO workshop_items (source, id, game_id, name, author, detail_text, fetched_utc)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """;
+
+    /// <summary>v2 写一条无名字/无游戏的子项封面行（参数化）。</summary>
+    private const string V2CoverOnlySql =
+        """
+        INSERT INTO workshop_items (source, id, cover_file, cover_url, cover_fetched_utc, fetched_utc)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """;
+
+    /// <summary>读表结构（表名固定）。</summary>
+    private const string WorkshopItemColumnsSql = "PRAGMA table_info(workshop_items)";
+
     /// <summary>自检入口（由 Program.cs 反射发现）。</summary>
     public static int Run(IFileSystem fs)
     {
@@ -23,11 +58,109 @@ public static class WorkshopItemStoreChecks
         var before = ChecksContext.Failures;
         var logger = new NullLogger();
 
+        CheckSchemaV3Migration(fs, logger);
         CheckMigration(fs, logger);
         CheckCrud(fs, logger);
+        CheckBatchUpsert(fs, logger);
         CheckTrim(fs, logger);
 
         return ChecksContext.Failures == before ? 0 : 1;
+    }
+
+    /// <summary>
+    /// 模拟 1.2 / v2 数据库升级到 1.3 / v3：加 is_collection 列、建 workshop_covers、
+    /// 把旧的子项封面行搬到独立表，原有条目数据一条不丢。
+    /// </summary>
+    private static void CheckSchemaV3Migration(IFileSystem fs, NullLogger logger)
+    {
+        Console.WriteLine("[WorkshopItemStoreChecks] schema v3 迁移");
+        var root = PlaysetChecks.CreateTempRoot(fs, "workshop-v3-migrate");
+        try
+        {
+            var path = Path.Combine(root, PdxDatabase.FileName);
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+            using (var raw = SqliteConnection.OpenOrCreate(path))
+            {
+                raw.Execute(V2MetaSql);
+                raw.Execute(V2VersionSql, PdxDatabase.SchemaVersionKey, "2");
+                raw.Execute(V2WorkshopItemsSql);
+                raw.Execute(V2ItemSql, "steam", "111", "ck3", "Old Mod", "A", "old detail", now);
+                raw.Execute(
+                    V2CoverOnlySql,
+                    "steam",
+                    "child-999",
+                    "steam/child-999.jpg",
+                    "https://images.steamusercontent.com/child.jpg",
+                    now,
+                    now);
+            }
+
+            var database = new PdxDatabase(fs, logger, path);
+            using (database.Open())
+            {
+                // 打开即迁移。
+            }
+
+            var store = new SqliteWorkshopItemStore(database, logger);
+            ChecksContext.Equal("v3 迁移：普通条目数", 1, store.Count);
+
+            var old = store.Find("steam:111");
+            ChecksContext.Equal("v3 迁移：普通条目名称保留", "Old Mod", old?.Name ?? "<null>");
+            ChecksContext.Equal("v3 迁移：普通条目详情保留", "old detail", old?.DetailText ?? "<null>");
+            ChecksContext.Check("v3 迁移：普通条目不是合集", old?.IsCollection == false);
+
+            var child = store.Find("steam:child-999");
+            ChecksContext.Equal(
+                "v3 迁移：旧子项封面搬到独立表",
+                "steam/child-999.jpg",
+                child?.CoverFileName ?? "<null>");
+            ChecksContext.Check(
+                "v3 迁移：子项封面行不再进条目列表",
+                store.List(WorkshopSource.Steam, "ck3", 10).All(entry => entry.Id != "child-999"));
+
+            // 新子项封面也只进 workshop_covers，不增加条目数。
+            store.SetCover(
+                "steam:child-2",
+                "steam/child-2.jpg",
+                "https://images.steamusercontent.com/child-2.jpg",
+                DateTimeOffset.UtcNow);
+            ChecksContext.Equal("v3：新子项封面不占条目数", 1, store.Count);
+            ChecksContext.Equal(
+                "v3：新子项封面可找回",
+                "steam/child-2.jpg",
+                store.Find("steam:child-2")?.CoverFileName ?? "<null>");
+
+            store.Upsert(new WorkshopInfoCacheEntry
+            {
+                Source = "steam",
+                Id = "999",
+                GameId = "ck3",
+                Name = "Pack",
+                IsCollection = true,
+            });
+            ChecksContext.Check("v3：合集标记写回", store.Find("steam:999")?.IsCollection == true);
+
+            using var probe = SqliteConnection.OpenReadOnly(path);
+            var hasColumn = probe
+                .Query(WorkshopItemColumnsSql)
+                .Any(row => row.TryGetValue("name", out var value) && value is "is_collection");
+            ChecksContext.Check("v3：workshop_items 已有 is_collection 列", hasColumn);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // 临时目录删不掉不影响断言。
+            }
+        }
     }
 
     /// <summary>旧 documents 里的一段索引会被导进真表，导完删旧行并写闸门；再开一次不重复导。</summary>
@@ -156,6 +289,81 @@ public static class WorkshopItemStoreChecks
 
             store.Clear();
             ChecksContext.Equal("清空后条目数", 0, store.Count);
+        }
+        finally
+        {
+            PlaysetChecks.TryDelete(fs, root);
+        }
+    }
+
+    /// <summary>
+    /// 批量写入：多条只开一个事务、只做一次容量淘汰；列表刷新仍不能抹掉已抓到的详情与封面。
+    /// <para>列表页一次并进 30–50 条，逐条 Upsert 在慢盘上就是秒级开销。</para>
+    /// </summary>
+    private static void CheckBatchUpsert(IFileSystem fs, NullLogger logger)
+    {
+        Console.WriteLine("[WorkshopItemStoreChecks] 批量写入");
+        var root = PlaysetChecks.CreateTempRoot(fs, "workshop-items-batch");
+        try
+        {
+            var database = new PdxDatabase(fs, logger, Path.Combine(root, PdxDatabase.FileName));
+            var store = new SqliteWorkshopItemStore(database, logger);
+            var now = DateTimeOffset.UtcNow;
+
+            store.Upsert(new WorkshopInfoCacheEntry
+            {
+                Source = "steam",
+                Id = "batch-1",
+                GameId = "ck3",
+                Name = "旧名",
+                FetchedUtc = now.AddHours(-1),
+            });
+            store.SetDetail("steam:batch-1", "旧详情", null, null, null, 0, 0, now.AddHours(-1));
+            store.SetCover("steam:batch-1", "steam/batch-1.png", "https://example.com/b.png", now.AddHours(-1));
+
+            store.UpsertMany(
+            [
+                new WorkshopInfoCacheEntry
+                {
+                    Source = "steam",
+                    Id = "batch-1",
+                    Name = "新名",
+                    Subscriptions = 10,
+                    FetchedUtc = now,
+                },
+                new WorkshopInfoCacheEntry
+                {
+                    Source = "steam",
+                    Id = "batch-2",
+                    GameId = "ck3",
+                    Name = "第二条",
+                    Subscriptions = 20,
+                    FetchedUtc = now,
+                },
+                new WorkshopInfoCacheEntry
+                {
+                    Source = "pdx",
+                    Id = "batch-3",
+                    GameId = "ck3",
+                    Name = "PDX 第三条",
+                    FetchedUtc = now,
+                },
+            ]);
+
+            ChecksContext.Equal("批量写入后条目数", 3, store.Count);
+            ChecksContext.Check(
+                "批量写入能按 key 找到",
+                store.Find("steam:batch-2") is not null && store.Find("pdx:batch-3") is not null);
+            ChecksContext.Equal("批量写入按来源分组（Steam）", 2, store.List(WorkshopSource.Steam, null, 10).Count);
+            ChecksContext.Equal("批量写入按来源分组（PDX）", 1, store.List(WorkshopSource.Pdx, null, 10).Count);
+
+            var merged = store.Find("steam:batch-1");
+            ChecksContext.Equal("批量刷新更新名称", "新名", merged?.Name ?? "<null>");
+            ChecksContext.Equal("批量刷新保留详情", "旧详情", merged?.DetailText ?? "<null>");
+            ChecksContext.Equal("批量刷新保留封面", "steam/batch-1.png", merged?.CoverFileName ?? "<null>");
+
+            store.UpsertMany([]);
+            ChecksContext.Equal("空批次不改变条目数", 3, store.Count);
         }
         finally
         {

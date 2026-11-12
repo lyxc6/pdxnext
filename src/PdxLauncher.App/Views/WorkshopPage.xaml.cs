@@ -41,7 +41,12 @@ public sealed partial class WorkshopPage : Page
             AppServices.Assets,
             AppServices.WorkshopInfo,
             AppServices.WorkshopPages,
-            AppServices.Logger);
+            new WorkshopFilterCatalogCache(AppServices.FileSystem, AppServices.WorkshopFilterRoot),
+            AppServices.Logger,
+            new WorkshopStateReader(
+                SteamWorkshopBackends.CreateForState,
+                AppServices.WorkshopStates,
+                AppServices.Logger));
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -87,6 +92,16 @@ public sealed partial class WorkshopPage : Page
                 TimeRangeBox.SelectedItem = _viewModel.SelectedTimeRange;
             }
 
+            if (PageSizeBox.SelectedItem is null)
+            {
+                PageSizeBox.SelectedItem = _viewModel.SelectedPageSize;
+            }
+
+            if (SpecialFilterBox.SelectedItem is null)
+            {
+                SpecialFilterBox.SelectedItem = _viewModel.Filters.CurrentSpecialFilterLabel;
+            }
+
             if (!AppServices.IsInitialized)
             {
                 await _viewModel.LoadAsync(null, _lifetime.Token).ConfigureAwait(true);
@@ -98,6 +113,16 @@ public sealed partial class WorkshopPage : Page
             if (_isListLoaded &&
                 string.Equals(_loadedGameId, AppServices.CurrentGame?.GameId, StringComparison.Ordinal))
             {
+                // 页面从缓存重新激活：把查询令牌换成新的生命周期令牌，否则刷新/搜索/筛选
+                // 都从 Unloaded 时已取消的旧令牌派生，点了没反应。
+                _viewModel.RebindPageToken(_lifetime.Token);
+
+                // 列表不重查，但筛选目录有 24h TTL / 本地版本判断；过期时后台补一次。
+                _ = _viewModel.RefreshCatalogIfStaleAsync(_lifetime.Token);
+
+                // 详情子页里可能改过订阅 / 触发过下载，那边已经失效了状态缓存；
+                // 这里补一次，回来就能看到新的徽标（命中缓存时不新起子进程）。
+                _viewModel.RefreshSteamStates();
                 return;
             }
 
@@ -118,6 +143,8 @@ public sealed partial class WorkshopPage : Page
     {
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         _viewModel.CancelPendingQuery();
+        _viewModel.CancelPendingFilterQuery();
+        _viewModel.CancelCatalogRefresh();
         _lifetime.Cancel();
     }
 
@@ -284,6 +311,29 @@ public sealed partial class WorkshopPage : Page
         }
     }
 
+    /// <summary>浏览区段下拉框选择变化：项目 / 合集，写回 ViewModel 触发重查（仅 Steam）。</summary>
+    private void OnSectionSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
+    {
+        try
+        {
+            if (e.SelectedItem is not string section)
+            {
+                return;
+            }
+
+            if (string.Equals(section, _viewModel.SelectedSection, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _viewModel.SelectedSection = section;
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("WorkshopPage 切换浏览区段失败", ex);
+        }
+    }
+
     /// <summary>时间范围下拉框选择变化：写回 ViewModel 触发重查（仅 Steam）。</summary>
     private void OnTimeRangeSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
     {
@@ -336,6 +386,125 @@ public sealed partial class WorkshopPage : Page
         catch (Exception ex)
         {
             AppServices.Logger.Error("WorkshopPage 下一页失败", ex);
+        }
+    }
+
+    /// <summary>点页码：直接跳到那一页（0 基，来自按钮的 Tag）。</summary>
+    private async void OnPageNumberClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is not FrameworkElement element || element.Tag is not int pageIndex)
+            {
+                return;
+            }
+
+            await _viewModel.GoToPageAsync(pageIndex, _lifetime.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面已关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("WorkshopPage 跳页失败", ex);
+        }
+    }
+
+    /// <summary>每页条数变化：写回 ViewModel（会回到第 1 页并跳过缓存）。</summary>
+    private async void OnPageSizeSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
+    {
+        try
+        {
+            if (e.SelectedItem is not int pageSize)
+            {
+                return;
+            }
+
+            await _viewModel.ChangePageSizeAsync(pageSize).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面已关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("WorkshopPage 切换每页条数失败", ex);
+        }
+    }
+
+    /// <summary>特别筛选条件下拉变化：写回下标，由 ViewModel 去抖后重查。</summary>
+    private void OnSpecialFilterSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
+    {
+        try
+        {
+            if (e.SelectedItem is not string label)
+            {
+                return;
+            }
+
+            var modes = _viewModel.Filters.SpecialFilterModes;
+            var index = -1;
+            for (var i = 0; i < modes.Count; i++)
+            {
+                if (string.Equals(modes[i], label, StringComparison.Ordinal))
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            if (index < 0 || index == _viewModel.Filters.SpecialFilterIndex)
+            {
+                return;
+            }
+
+            _viewModel.Filters.SpecialFilterIndex = index;
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("WorkshopPage 切换特别筛选失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 点一个筛选胶囊：未选 → 必须包含 → 必须排除 → 未选。
+    /// 状态只改 ViewModel，胶囊本身只负责显示；去抖与重新查询由 Filters 统一负责。
+    /// </summary>
+    private void OnTagChipClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is FrameworkElement { DataContext: WorkshopTagOption option })
+            {
+                option.Cycle();
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("WorkshopPage 切换筛选胶囊失败", ex);
+        }
+    }
+
+    /// <summary>点分组标题：展开 / 收起这一组（标题按钮的 DataContext 就是分组视图模型）。</summary>
+    private void OnFilterGroupHeaderClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: WorkshopFilterGroupViewModel group })
+        {
+            group.IsExpanded = !group.IsExpanded;
+        }
+    }
+
+    /// <summary>清空全部筛选条件（标签、DLC、不兼容、特别筛选）。</summary>
+    private void OnClearFiltersClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _viewModel.Filters.Clear();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("WorkshopPage 清除筛选失败", ex);
         }
     }
 

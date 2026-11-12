@@ -19,9 +19,7 @@ public sealed class ModLibraryService
     private readonly IPlaySetRepository _playSets;
     private readonly IModCatalog _mods;
     private readonly IAppLogger _logger;
-    private readonly Func<GameInstallation, IWorkshopStateSource?>? _steamStatesFactory;
-    private readonly WorkshopStateCache? _steamCache;
-    private readonly Dictionary<int, IWorkshopStateSource?> _steamSourcesByApp = new();
+    private readonly WorkshopStateReader? _steamStates;
 
     /// <summary>构造（不带 Steam 状态：Mod 库不显示工坊徽标）。</summary>
     /// <param name="playSets">播放集仓储。</param>
@@ -51,14 +49,17 @@ public sealed class ModLibraryService
         _playSets = playSets ?? throw new ArgumentNullException(nameof(playSets));
         _mods = mods ?? throw new ArgumentNullException(nameof(mods));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _steamStatesFactory = steamStatesFactory;
-        _steamCache = steamCache;
+
+        // 没给工厂就是「这一页不看 Steam 状态」（纯本地模式的构造）。
+        _steamStates = steamStatesFactory is null
+            ? null
+            : new WorkshopStateReader(steamStatesFactory, steamCache, _logger);
     }
 
     /// <summary>当前游戏是否接上了 Steam 工坊状态来源（装载后有效）。</summary>
     /// <param name="game">当前游戏。</param>
     /// <returns>是否有可用的直连状态来源。</returns>
-    public bool HasSteamStates(GameInstallation? game) => ResolveStateSource(game)?.IsAvailable == true;
+    public bool HasSteamStates(GameInstallation? game) => _steamStates?.IsAvailable(game) == true;
 
     /// <summary>
     /// 取当前游戏的 Steam 工坊状态来源（供视图模型做下载 / 禁用这类写操作）；
@@ -66,37 +67,25 @@ public sealed class ModLibraryService
     /// </summary>
     /// <param name="game">当前游戏。</param>
     /// <returns>状态来源；不可用时为 null。</returns>
-    public IWorkshopStateSource? ResolveStateSource(GameInstallation? game)
-    {
-        if (game is null || _steamStatesFactory is null)
-        {
-            return null;
-        }
-
-        var appId = WorkshopSourceChooser.ResolveAppId(game.SteamAppId, game.GameId);
-        if (appId is not > 0)
-        {
-            return null;
-        }
-
-        if (!_steamSourcesByApp.TryGetValue(appId.Value, out var source))
-        {
-            source = _steamStatesFactory(game);
-            _steamSourcesByApp[appId.Value] = source;
-        }
-
-        return source is { IsAvailable: true } ? source : null;
-    }
+    public IWorkshopStateSource? ResolveStateSource(GameInstallation? game) => _steamStates?.ResolveSource(game);
 
     /// <summary>读取 Mod 库快照；未选中游戏时返回空快照。</summary>
     /// <param name="game">当前游戏。</param>
     /// <param name="cancellationToken">取消令牌。</param>
     /// <returns>快照。</returns>
-    public async Task<ModLibrarySnapshot> LoadAsync(GameInstallation? game, CancellationToken cancellationToken)
+    public async Task<ModLibrarySnapshot> LoadAsync(
+        GameInstallation? game,
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         if (game is null)
         {
             return ModLibrarySnapshot.Empty;
+        }
+
+        if (forceRefresh && _mods is IScanCacheInvalidator invalidatable)
+        {
+            invalidatable.InvalidateCache(game);
         }
 
         var entries = await _playSets.GetModLibraryAsync(game, cancellationToken).ConfigureAwait(false);
@@ -121,28 +110,44 @@ public sealed class ModLibraryService
             catalog = Array.Empty<PlaySetMod>();
         }
 
-        // 数据库里的 steamId 可能为空（老库、或官方启动器没写这一列），而磁盘上 mod 的
-        // .mod 描述文件 / metadata.json 一般带着创意工坊 id：用扫描结果给已登记的行补齐，
-        // 播放集页与 Mod 库页的「在 Steam / 浏览器中打开」才不会平白少一半。
-        var scannedSteamIds = new Dictionary<Guid, string>();
+        // 磁盘扫描是版本信息的「最新」来源：官方库里的 requiredVersion 是上次应用元数据时抄进去的，
+        // 作者后来改了 metadata.json、而用户没再跑过官方启动器时，库里会停在旧值（实测有 1.13.* 对 1.15.*）。
+        // metadata.json 的 version（作者版本）也一样：Vic3 有近一半 mod 没写 supported_game_version，
+        // 但这一项常常有值，官方库把它放在 metadataVersion。这里统一用磁盘值覆盖库里值；
+        // 磁盘没写的（比如 mod 已卸载、只剩库里的记录）保留库里值。
+        // steamId 沿用原逻辑：库里空才用扫描值补。
+        var scannedMods = new Dictionary<Guid, PlaySetMod>();
         foreach (var mod in catalog)
         {
-            if (!string.IsNullOrWhiteSpace(mod.SteamId))
-            {
-                scannedSteamIds[mod.ModId] = mod.SteamId;
-            }
+            scannedMods[mod.ModId] = mod;
         }
 
-        if (scannedSteamIds.Count > 0)
+        for (var index = 0; index < merged.Count; index++)
         {
-            for (var index = 0; index < merged.Count; index++)
+            var entry = merged[index];
+            if (!scannedMods.TryGetValue(entry.ModId, out var scanned))
             {
-                var entry = merged[index];
-                if (string.IsNullOrWhiteSpace(entry.SteamId)
-                    && scannedSteamIds.TryGetValue(entry.ModId, out var scannedSteamId))
+                continue;
+            }
+
+            var steamId = string.IsNullOrWhiteSpace(entry.SteamId) ? scanned.SteamId : entry.SteamId;
+            var requiredVersion = string.IsNullOrWhiteSpace(scanned.RequiredVersion)
+                ? entry.RequiredVersion
+                : scanned.RequiredVersion;
+            var modVersion = string.IsNullOrWhiteSpace(scanned.ModVersion)
+                ? entry.ModVersion
+                : scanned.ModVersion;
+
+            if (!string.Equals(entry.SteamId, steamId, StringComparison.Ordinal)
+                || !string.Equals(entry.RequiredVersion, requiredVersion, StringComparison.Ordinal)
+                || !string.Equals(entry.ModVersion, modVersion, StringComparison.Ordinal))
+            {
+                merged[index] = entry with
                 {
-                    merged[index] = entry with { SteamId = scannedSteamId };
-                }
+                    SteamId = steamId,
+                    RequiredVersion = requiredVersion,
+                    ModVersion = modVersion,
+                };
             }
         }
 
@@ -173,7 +178,9 @@ public sealed class ModLibraryService
                 SubscribedOn: null,
                 Array.Empty<Guid>(),
                 IsUnregistered: true,
-                SteamId: mod.SteamId));
+                SteamId: mod.SteamId,
+                ModVersion: mod.ModVersion,
+                PdxId: mod.PdxId));
         }
 
         await InjectSteamStatesAsync(game, merged, cancellationToken).ConfigureAwait(false);
@@ -195,66 +202,12 @@ public sealed class ModLibraryService
         List<ModLibraryEntry> merged,
         CancellationToken cancellationToken)
     {
-        if (_steamStatesFactory is null || merged.Count == 0)
+        if (_steamStates is null || merged.Count == 0)
         {
             return;
         }
 
-        var source = ResolveStateSource(game);
-        if (source is null)
-        {
-            return;
-        }
-
-        var appId = WorkshopSourceChooser.ResolveAppId(game.SteamAppId, game.GameId);
-        if (appId is not > 0)
-        {
-            return;
-        }
-
-        IReadOnlyDictionary<ulong, WorkshopInstallState> states;
-        try
-        {
-            if (_steamCache is not null && _steamCache.TryGet(appId.Value, out var cached))
-            {
-                states = cached;
-            }
-            else
-            {
-                var result = await source.ReadSubscribedAsync(cancellationToken).ConfigureAwait(false);
-                if (!result.Ok)
-                {
-                    _logger.Warn("Mod 库：读取 Steam 工坊订阅列表失败：" + result.Error);
-                    if (_steamCache is null || !_steamCache.TryGetStale(appId.Value, out var stale))
-                    {
-                        return;
-                    }
-
-                    states = stale;
-                }
-                else
-                {
-                    var map = new Dictionary<ulong, WorkshopInstallState>(result.Items.Count);
-                    foreach (var item in result.Items)
-                    {
-                        map[item.PublishedFileId] = item.State;
-                    }
-
-                    _steamCache?.Set(appId.Value, map);
-                    states = map;
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.Warn("Mod 库：注入 Steam 工坊状态失败：" + ex.Message);
-            return;
-        }
-
+        var states = await _steamStates.ReadAllAsync(game, cancellationToken).ConfigureAwait(false);
         if (states.Count == 0)
         {
             return;

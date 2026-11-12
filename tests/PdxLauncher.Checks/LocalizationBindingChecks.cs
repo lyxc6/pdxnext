@@ -68,33 +68,8 @@ public static class LocalizationBindingChecks
         return ChecksContext.Failures == before ? 0 : 1;
     }
 
-    /// <summary>标识符 → 模板原文（与 tools/gen-i18n.py 的 identifier_for 同一规则）。</summary>
-    private static Dictionary<string, string> LoadTemplates(string root)
-    {
-        var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        var directory = Path.Combine(root, "tools", "i18n", "zh-CN");
-        if (!Directory.Exists(directory))
-        {
-            return result;
-        }
-
-        foreach (var path in Directory.EnumerateFiles(directory, "*.json").OrderBy(p => p, StringComparer.Ordinal))
-        {
-            using var stream = File.OpenRead(path);
-            using var document = JsonDocument.Parse(stream);
-            foreach (var property in document.RootElement.EnumerateObject())
-            {
-                var identifier = string.Concat(property.Name
-                    .Split('.')
-                    .Select(segment => segment.Length == 0
-                        ? string.Empty
-                        : char.ToUpperInvariant(segment[0]) + segment[1..]));
-                result[identifier] = property.Value.GetString() ?? string.Empty;
-            }
-        }
-
-        return result;
-    }
+    /// <summary>标识符 → 模板原文（资源名本身就是标识符）。</summary>
+    private static Dictionary<string, string> LoadTemplates(string root) => I18nResw.Read(root, "zh-CN");
 
     private static IEnumerable<string> EnumerateXaml(string root)
     {
@@ -117,7 +92,7 @@ public static class LocalizationBindingChecks
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            if (Directory.Exists(Path.Combine(dir.FullName, "tools", "i18n")))
+            if (File.Exists(Path.Combine(dir.FullName, "PdxLauncher.sln")))
             {
                 return dir.FullName;
             }

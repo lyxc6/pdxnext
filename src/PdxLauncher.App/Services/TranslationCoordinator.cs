@@ -119,6 +119,37 @@ public sealed class TranslationCoordinator : IDisposable
     public void ClearCache() => _cache?.Clear();
 
     /// <summary>
+    /// 读出按「ModId + 目标语言」持久化的名称译名；与引擎模式、缓存天数无关。
+    /// 没有缓存时返回空表。
+    /// </summary>
+    /// <param name="targetLanguage">目标语言。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public Task<IReadOnlyDictionary<Guid, TranslationCache.NameTranslation>> LoadNameTranslationsAsync(
+        string targetLanguage,
+        CancellationToken cancellationToken)
+    {
+        if (_cache is null || string.IsNullOrEmpty(targetLanguage))
+        {
+            return Task.FromResult<IReadOnlyDictionary<Guid, TranslationCache.NameTranslation>>(
+                new Dictionary<Guid, TranslationCache.NameTranslation>());
+        }
+
+        return _cache.GetNameTranslationsAsync(targetLanguage, cancellationToken);
+    }
+
+    /// <summary>批量写入名称译名；批量翻译完成后调用一次，写盘失败由缓存层只记日志。</summary>
+    /// <param name="targetLanguage">目标语言。</param>
+    /// <param name="translations">名称译名列表。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public Task SaveNameTranslationsAsync(
+        string targetLanguage,
+        IReadOnlyList<TranslationCache.NameTranslation> translations,
+        CancellationToken cancellationToken)
+        => _cache is null
+            ? Task.CompletedTask
+            : _cache.SetNameTranslationsAsync(targetLanguage, translations, cancellationToken);
+
+    /// <summary>
     /// 翻译一段文本；失败或未开启返回 null。
     /// </summary>
     /// <param name="text">原文。</param>
@@ -139,9 +170,14 @@ public sealed class TranslationCoordinator : IDisposable
     /// </summary>
     /// <param name="texts">原文列表。</param>
     /// <param name="cancellationToken">取消令牌。</param>
+    /// <param name="onItemTranslated">
+    /// 每条译文就绪时的进度回调（索引与 <paramref name="texts"/> 对应）：缓存命中和引擎结果都会回调。
+    /// 服务在线程池上跑，回调可能不在 UI 线程，调用方写界面属性前要自行切回 UI 线程。
+    /// </param>
     public async Task<IReadOnlyList<string?>> TranslateBatchAsync(
         IReadOnlyList<string> texts,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<int, string?>? onItemTranslated = null)
     {
         ArgumentNullException.ThrowIfNull(texts);
 
@@ -182,7 +218,7 @@ public sealed class TranslationCoordinator : IDisposable
             // 与推理都是同步 CPU 活，调用方（工坊列表 / Mod 库）就在 UI 线程上，
             // 在这里 await 它会直接把整个窗口冻住几十秒。
             var translated = await Task.Run(
-                    () => service.TranslateAsync(texts, options, linked.Token),
+                    () => service.TranslateAsync(texts, options, linked.Token, onItemTranslated),
                     linked.Token)
                 .ConfigureAwait(false);
 

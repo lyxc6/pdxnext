@@ -26,10 +26,32 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!--
+      官方设置项控件（SettingsCard / SettingsExpander）。离线构建要求本机缓存里已有
+      这 5 个包：SettingsControls → Triggers → Helpers → Extensions → Common。
+      见 docs/SETTINGS-OFFICIAL-MIGRATION.md 与 docs/DEVELOPMENT.md 的「离线依赖」。
+    -->
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\PdxLauncher.Core\PdxLauncher.Core.csproj" />
     <ProjectReference Include="..\PdxLauncher.Imaging\PdxLauncher.Imaging.csproj" />
+    <!--
+      AI 用的独立 MCP 程序只负责构建顺序与把 exe 复制到输出目录；App 不引用它的任何类型，
+      所以 ReferenceOutputAssembly=false，避免把 MCP 的依赖再复制一遍。
+    -->
+    <ProjectReference Include="..\PdxLauncher.Mcp\PdxLauncher.Mcp.csproj"
+                      ReferenceOutputAssembly="false"
+                      Private="false"
+                      Condition="'$(ManualBuild)' != 'true'" />
+    <!-- 文案源 .resw → Localizer 属性/Keys 的编译期生成器（不落盘）。 -->
+    <ProjectReference Include="..\PdxLauncher.Localization.Generator\PdxLauncher.Localization.Generator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <!-- 生成器在编译期读取这些文件；makepri 也会把 .resw 编进 .pri。 -->
+  <ItemGroup>
+    <AdditionalFiles Include="Strings\**\Resources.resw" />
   </ItemGroup>
   <!--
     Steam 工坊直连订阅需要 steam_api64.dll。它属于 Valve 的可再发行组件：
@@ -51,6 +73,37 @@
       <Private>false</Private>
     </Reference>
   </ItemGroup>
+
+  <!--
+    把独立 MCP 程序复制到 App 输出目录：MCP 是自包含 exe，但运行时文件（hostfxr/coreclr）
+    App 目录里已经有一份，所以只带 4 个自己的文件即可；AI 客户端直接启动
+    <exe 目录>\PdxLauncher.Mcp.exe。
+  -->
+  <Target Name="CopyMcpHost" AfterTargets="Build" Condition="'$(ManualBuild)' != 'true'">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)..\PdxLauncher.Mcp\PdxLauncher.Mcp.csproj"
+             Targets="GetTargetPath"
+             Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" ItemName="_McpTargetPath" />
+    </MSBuild>
+
+    <PropertyGroup>
+      <_McpTargetDir>@(_McpTargetPath->'%(RootDir)%(Directory)')</_McpTargetDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <_McpHostFile Include="@(_McpTargetPath)" Condition="Exists('@(_McpTargetPath)')" />
+      <_McpHostFile Include="$(_McpTargetDir)PdxLauncher.Mcp.exe"
+                    Condition="Exists('$(_McpTargetDir)PdxLauncher.Mcp.exe')" />
+      <_McpHostFile Include="$(_McpTargetDir)PdxLauncher.Mcp.deps.json"
+                    Condition="Exists('$(_McpTargetDir)PdxLauncher.Mcp.deps.json')" />
+      <_McpHostFile Include="$(_McpTargetDir)PdxLauncher.Mcp.runtimeconfig.json"
+                    Condition="Exists('$(_McpTargetDir)PdxLauncher.Mcp.runtimeconfig.json')" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(_McpHostFile)"
+          DestinationFolder="$(OutDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
 
   <!--
     ============================ publish 修复 ============================
@@ -80,6 +133,15 @@
       <_WinUIPublishPri Include="$(OutDir)$(AssemblyName).pri" />
       <!-- Assets\（含多级子目录） -->
       <_WinUIPublishAsset Include="$(OutDir)Assets\**\*.*" />
+      <!-- 独立 MCP 程序（由 CopyMcpHost 在 Build 阶段放进 $(OutDir)） -->
+      <_WinUIPublishMcp Include="$(OutDir)PdxLauncher.Mcp.exe"
+                        Condition="Exists('$(OutDir)PdxLauncher.Mcp.exe')" />
+      <_WinUIPublishMcp Include="$(OutDir)PdxLauncher.Mcp.dll"
+                        Condition="Exists('$(OutDir)PdxLauncher.Mcp.dll')" />
+      <_WinUIPublishMcp Include="$(OutDir)PdxLauncher.Mcp.deps.json"
+                        Condition="Exists('$(OutDir)PdxLauncher.Mcp.deps.json')" />
+      <_WinUIPublishMcp Include="$(OutDir)PdxLauncher.Mcp.runtimeconfig.json"
+                        Condition="Exists('$(OutDir)PdxLauncher.Mcp.runtimeconfig.json')" />
     </ItemGroup>
 
     <ItemGroup>
@@ -97,6 +159,9 @@
       </_WinUIPublishXamlArtifact>
       <_WinUIPublishXamlArtifact Include="@(_WinUIPublishAsset)">
         <RelativePath>Assets\%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+      </_WinUIPublishXamlArtifact>
+      <_WinUIPublishXamlArtifact Include="@(_WinUIPublishMcp)">
+        <RelativePath>%(Filename)%(Extension)</RelativePath>
       </_WinUIPublishXamlArtifact>
     </ItemGroup>
 

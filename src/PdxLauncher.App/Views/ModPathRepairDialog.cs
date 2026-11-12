@@ -82,11 +82,13 @@ internal static class ModPathRepairDialog
             }
         }
 
+        // 修复会重命名目录并改写 .mod 的 path：默认焦点放取消键，Enter 不执行。
         var showTask = overlay.ShowAsync(
             localizer.ModsRepairDialogTitle,
             new ScrollViewer { Content = panel, MaxHeight = 420 },
             localizer.ModsRepairApply,
-            localizer.CommonCancel);
+            localizer.CommonCancel,
+            initialFocus: InitialFocus.Cancel);
 
         Refresh();
 

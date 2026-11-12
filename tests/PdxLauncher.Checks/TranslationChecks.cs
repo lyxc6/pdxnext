@@ -23,6 +23,8 @@ public static class TranslationChecks
         try
         {
             CheckMarkdownTranslator();
+            CheckMarkdownTranslatorImages();
+            CheckMarkdownTranslatorBareLinks();
             CheckTranslationOptions();
             CheckTranslationCache();
             CheckTranslationService();
@@ -124,6 +126,203 @@ public static class TranslationChecks
         var empty = translator.TranslateAsync(null, CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Check("空文档返回空文档", empty.IsEmpty);
     }
+
+    /// <summary>图片节点经翻译必须原样保留：Steam 描述里的 [img] 就落在这些节点上。</summary>
+    private static void CheckMarkdownTranslatorImages()
+    {
+        var translator = new MarkdownTranslator((text, _) => Task.FromResult<string?>("译:" + text));
+        var document = SteamBbCodeParser.Parse(
+            "[b]截图[/b]\n"
+            + "[img]https://images.steamusercontent.com/ugc/one.jpg[/img]\n"
+            + "[img]https://images.steamusercontent.com/ugc/two.png[/img]");
+
+        var translated = translator.TranslateAsync(document, CancellationToken.None).GetAwaiter().GetResult();
+        var before = FlattenInlines(document).OfType<MarkdownImageInline>().ToList();
+        var after = FlattenInlines(translated).OfType<MarkdownImageInline>().ToList();
+
+        ChecksContext.Check("原文里 [img] 解析出图片节点", before.Count >= 2);
+        ChecksContext.Equal("翻译后图片节点数不变", before.Count, after.Count);
+        ChecksContext.Equal("翻译后第一张图片 URL 不变", before[0].Url, after[0].Url);
+        ChecksContext.Equal("翻译后第二张图片 URL 不变", before[1].Url, after[1].Url);
+        ChecksContext.Equal("翻译后图片替代文本不变", before[1].Alt, after[1].Alt);
+        ChecksContext.Check(
+            "图片地址没有被当作文字翻译",
+            after.All(image => !image.Url.StartsWith("译:", StringComparison.Ordinal)));
+        ChecksContext.Check(
+            "图片之外的文字仍然翻译",
+            translated.ToPlainText().Contains("译:截图", StringComparison.Ordinal));
+    }
+
+    /// <summary>可见文本本身就是 URL 的链接必须原样保留，普通链接文字仍要翻译。</summary>
+    private static void CheckMarkdownTranslatorBareLinks()
+    {
+        var calls = new List<string>();
+        var translator = new MarkdownTranslator((text, _) =>
+        {
+            calls.Add(text);
+            return Task.FromResult<string?>("译:" + text);
+        });
+
+        var document = SteamBbCodeParser.Parse(
+            "地址 https://example.com/a?b=1 和 [url]https://example.com/b[/url] "
+            + "以及 [url=https://example.com/c]说明[/url]");
+
+        var translated = translator.TranslateAsync(document, CancellationToken.None).GetAwaiter().GetResult();
+        var links = CollectLinks(translated);
+
+        ChecksContext.Equal("两条裸链接加一条普通链接数量不变", 3, links.Count);
+        ChecksContext.Equal("裸 URL 可见文本原样保留", "https://example.com/a?b=1", LinkText(links[0]));
+        ChecksContext.Equal("裸 URL 目标地址原样保留", "https://example.com/a?b=1", links[0].Url);
+        ChecksContext.Equal("[url] 自动文字原样保留", "https://example.com/b", LinkText(links[1]));
+        ChecksContext.Equal("[url] 自动文字的目标地址不变", "https://example.com/b", links[1].Url);
+        ChecksContext.Equal("普通链接文字仍然翻译", "译:说明", LinkText(links[2]));
+        ChecksContext.Equal("普通链接目标地址不变", "https://example.com/c", links[2].Url);
+        ChecksContext.Check(
+            "裸 URL 没有送进翻译引擎",
+            calls.All(call => !call.Contains("https://", StringComparison.Ordinal)));
+
+        // 可见文本是 URL、但与目标地址不同：同样按「是 URL」跳过翻译。
+        var mismatch = new MarkdownDocument(
+            new MarkdownBlock[]
+            {
+                new MarkdownParagraph(new MarkdownInline[]
+                {
+                    new MarkdownLinkInline(
+                        new MarkdownInline[] { new MarkdownTextInline("https://example.com/x") },
+                        "https://example.com/y"),
+                }),
+            },
+            false);
+        var mismatchResult = translator.TranslateAsync(mismatch, CancellationToken.None).GetAwaiter().GetResult();
+        var mismatchLink = CollectLinks(mismatchResult).FirstOrDefault();
+        ChecksContext.Equal(
+            "可见文本是 URL 时不被翻译",
+            "https://example.com/x",
+            mismatchLink is null ? string.Empty : LinkText(mismatchLink));
+        ChecksContext.Equal(
+            "可见文本是 URL 时目标地址不变",
+            "https://example.com/y",
+            mismatchLink?.Url ?? string.Empty);
+    }
+
+    /// <summary>按块拍平行内节点（含引用、链接与强调样式里的嵌套节点），供测试逐项比对。</summary>
+    private static List<MarkdownInline> FlattenInlines(MarkdownDocument document)
+    {
+        var result = new List<MarkdownInline>();
+        foreach (var block in document.Blocks)
+        {
+            AddBlockInlines(block, result);
+        }
+
+        return result;
+    }
+
+    private static void AddBlockInlines(MarkdownBlock block, List<MarkdownInline> result)
+    {
+        switch (block)
+        {
+            case MarkdownHeading heading:
+                AddInlines(heading.Inlines, result);
+                break;
+            case MarkdownParagraph paragraph:
+                AddInlines(paragraph.Inlines, result);
+                break;
+            case MarkdownListItem item:
+                AddInlines(item.Inlines, result);
+                break;
+            case MarkdownQuote quote:
+                foreach (var child in quote.Blocks)
+                {
+                    AddBlockInlines(child, result);
+                }
+
+                break;
+        }
+    }
+
+    private static void AddInlines(IReadOnlyList<MarkdownInline> inlines, List<MarkdownInline> result)
+    {
+        foreach (var inline in inlines)
+        {
+            result.Add(inline);
+            switch (inline)
+            {
+                case MarkdownLinkInline link:
+                    AddInlines(link.Inlines, result);
+                    break;
+                case MarkdownStyledInline styled:
+                    AddInlines(styled.Inlines, result);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>按块拍平外层链接节点（不把链接里再嵌的链接当成第二个链接）。</summary>
+    private static List<MarkdownLinkInline> CollectLinks(MarkdownDocument document)
+    {
+        var result = new List<MarkdownLinkInline>();
+        foreach (var block in document.Blocks)
+        {
+            AddBlockLinks(block, result);
+        }
+
+        return result;
+    }
+
+    private static void AddBlockLinks(MarkdownBlock block, List<MarkdownLinkInline> result)
+    {
+        switch (block)
+        {
+            case MarkdownHeading heading:
+                AddInlineLinks(heading.Inlines, result);
+                break;
+            case MarkdownParagraph paragraph:
+                AddInlineLinks(paragraph.Inlines, result);
+                break;
+            case MarkdownListItem item:
+                AddInlineLinks(item.Inlines, result);
+                break;
+            case MarkdownQuote quote:
+                foreach (var child in quote.Blocks)
+                {
+                    AddBlockLinks(child, result);
+                }
+
+                break;
+        }
+    }
+
+    private static void AddInlineLinks(IReadOnlyList<MarkdownInline> inlines, List<MarkdownLinkInline> result)
+    {
+        foreach (var inline in inlines)
+        {
+            switch (inline)
+            {
+                case MarkdownLinkInline link:
+                    result.Add(link);
+                    break;
+                case MarkdownStyledInline styled:
+                    AddInlineLinks(styled.Inlines, result);
+                    break;
+            }
+        }
+    }
+
+    private static string LinkText(MarkdownLinkInline link) => FlattenText(link.Inlines);
+
+    private static string FlattenText(IReadOnlyList<MarkdownInline> inlines) =>
+        string.Concat(inlines.Select(InlineText));
+
+    private static string InlineText(MarkdownInline inline) => inline switch
+    {
+        MarkdownTextInline text => text.Text,
+        MarkdownCodeInline code => code.Text,
+        MarkdownBreakInline => "\n",
+        MarkdownImageInline image => image.Alt,
+        MarkdownLinkInline link => FlattenText(link.Inlines),
+        MarkdownStyledInline styled => FlattenText(styled.Inlines),
+        _ => string.Empty,
+    };
 
     // ---------------------------------------------------------------- 选项
 

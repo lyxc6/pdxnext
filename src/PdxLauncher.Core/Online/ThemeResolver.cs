@@ -1,6 +1,7 @@
 namespace PdxLauncher.Core.Online;
 
 using System.Globalization;
+using System.Linq;
 using System.Security.Cryptography;
 
 using PdxLauncher.Core.Abstractions;
@@ -17,13 +18,16 @@ using PdxLauncher.Core.Contracts;
 /// </summary>
 public sealed class ThemeResolver : IThemeResolver
 {
-    /// <summary>缓存 TTL：5 天（文档 §7 实测值）。</summary>
-    public const long CacheTtlMilliseconds = 432_000_000;
+    /// <summary>
+    /// 缓存 TTL：24 小时。条件请求（If-None-Match / If-Modified-Since）几乎零流量，
+    /// 缩短到一天才能及时接到服务端「同一 URL 原地换图」；退避窗口内仍然一个请求都不发。
+    /// </summary>
+    public const long CacheTtlMilliseconds = ThemeRefreshDecision.DefaultTtlMilliseconds;
 
     /// <summary>
     /// 刷新有失败时的短重试间隔：10 分钟。
     /// 实测到 metadata-assets 的 TLS 握手会阶段性超时（一次连不上 6 项素材全灭），
-    /// 若这种失败也推进 5 天 TTL，该游戏主题会被锁在「安装目录那张 20% 不透明底图」上整整 5 天。
+    /// 若这种失败也推进 24 小时 TTL，该游戏主题会被锁在「安装目录那张 20% 不透明底图」上整整一天。
     /// </summary>
     public const long RefreshRetryDelayMilliseconds = 600_000;
 
@@ -39,6 +43,15 @@ public sealed class ThemeResolver : IThemeResolver
     /// 这里卡死 12 秒，超时按一次失败处理并进入退避。
     /// </summary>
     public const int SteamCapsuleTimeoutMilliseconds = 12_000;
+
+    /// <summary>Steam 官方库页大图（library_hero.jpg）失败后的重试间隔：10 分钟。</summary>
+    public const long SteamHeroRetryMilliseconds = 600_000;
+
+    /// <summary>索引来源标识：metadata 下发的素材。</summary>
+    public const string MetadataSource = "metadata";
+
+    /// <summary>索引来源标识：Steam 官方库页大图。</summary>
+    public const string SteamHeroSource = "steam-hero";
 
     /// <summary>
     /// Steam 官方商店头图的旧式静态地址（460×215，无鉴权、无防盗链）。
@@ -104,28 +117,58 @@ public sealed class ThemeResolver : IThemeResolver
     public async Task<ThemeSpec> ResolveAsync(
         GameInstallation game,
         bool allowOnlineRefresh,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         ArgumentNullException.ThrowIfNull(game);
 
-        var layer2 = ResolveLayer2(game);
+        var layer2 = ResolveInstalledLayer(game);
         var cache = ReadCache(game.GameId);
+        var index = AssetIndex.Load(_indexDocument(game.GameId), _logger);
 
         // 关键：不联网时必须在此提前返回，绝不触碰 IMetadataClient / IAssetDownloader。
         if (!allowOnlineRefresh)
         {
-            return WithSteamCapsule(game, Merge(layer2, cache));
+            _logger.Info(
+                "主题决策: gameId=" + game.GameId + ", reason=离线, lastChecked="
+                + FormatTime(index.LastCheckedUtc));
+            var offline = ApplyBundled(
+                game,
+                TagSteamHeroSource(game, Merge(layer2, cache)),
+                hasOnlineCache: cache.Count > 0);
+            return WithSteamCapsule(game, offline);
         }
 
-        if (!IsCacheStale(game.GameId))
+        if (index.Assets.Count == 0)
         {
-            return await WithSteamCapsuleAsync(game, Merge(layer2, cache), cancellationToken)
+            // 保留旧日志口径：自检与排障都靠这句确认「索引形状异常、需要重新联网」。
+            _logger.Info("主题缓存索引没有素材条目，忽略上次检查时间重新联网: " + game.GameId);
+        }
+
+        var decision = EvaluateCacheDecision(index, forceRefresh);
+        _logger.Info(
+            "主题决策: gameId=" + game.GameId + ", reason=" + ReasonText(decision.Reason)
+            + ", lastChecked=" + FormatTime(index.LastCheckedUtc)
+            + ", retryAfter=" + FormatTime(index.RetryAfterUtc)
+            + ", force=" + forceRefresh + ", cache=" + cache.Count + ", index=" + index.Assets.Count);
+
+        if (!decision.ShouldRefresh)
+        {
+            LogSkip(game.GameId, index);
+            var skipped = await WithSteamHeroAsync(
+                    game,
+                    TagSteamHeroSource(game, Merge(layer2, cache)),
+                    forceRefresh,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            skipped = ApplyBundled(game, skipped, hasOnlineCache: cache.Count > 0);
+            return await WithSteamCapsuleAsync(game, skipped, cancellationToken)
                 .ConfigureAwait(false);
         }
 
         try
         {
-            await RefreshAsync(game.GameId, cache, cancellationToken).ConfigureAwait(false);
+            await RefreshAsync(game.GameId, index, cache, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -135,9 +178,18 @@ public sealed class ThemeResolver : IThemeResolver
         {
             // 刷新失败必须静默降级：保留旧图，主题照常返回。
             _logger.Warn("主题联网刷新失败，保留本地素材: " + ex.Message);
+            RecordFailure(game.GameId, "主题联网刷新异常: " + ex.Message);
         }
 
-        return await WithSteamCapsuleAsync(game, Merge(layer2, ReadCache(game.GameId)), cancellationToken)
+        var refreshedCache = ReadCache(game.GameId);
+        var resolved = await WithSteamHeroAsync(
+                game,
+                TagSteamHeroSource(game, Merge(layer2, refreshedCache)),
+                forceRefresh,
+                cancellationToken)
+            .ConfigureAwait(false);
+        resolved = ApplyBundled(game, resolved, hasOnlineCache: refreshedCache.Count > 0);
+        return await WithSteamCapsuleAsync(game, resolved, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -229,6 +281,124 @@ public sealed class ThemeResolver : IThemeResolver
     }
 
     /// <summary>
+    /// 「Steam 官方库页大图」兜底：只在 metadata / 安装目录 / 在线缓存都给不出背景、
+    /// 且该游戏有 Steam AppId 时尝试。EU5（3450310）在 metadata 里没有记录，靠这一层拿到 1920×620 官方图。
+    /// 下载成功写进同一个 theme-cache（索引来源标 steam-hero）；失败按 10 分钟退避并回落到内置图，绝不空白。
+    /// </summary>
+    private async Task<ThemeSpec> WithSteamHeroAsync(
+        GameInstallation game,
+        ThemeSpec spec,
+        bool forceRefresh,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(spec.Background))
+        {
+            return spec;
+        }
+
+        if (game.SteamAppId is not int appId || appId <= 0)
+        {
+            return spec;
+        }
+
+        if (_steamCovers is null)
+        {
+            return spec;
+        }
+
+        if (!forceRefresh && IsSteamHeroBackoff(appId))
+        {
+            _logger.Info("steam-hero 退避中，跳过: appid=" + appId + ", gameId=" + game.GameId);
+            return spec;
+        }
+
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(SteamCapsuleTimeoutMilliseconds);
+            var token = timeout.Token;
+
+            var headerUrl = await _steamCovers
+                .ResolveHeaderImageUrlAsync(appId, token)
+                .ConfigureAwait(false);
+            var heroUrl = SteamHeroUrl.ForLibraryHero(headerUrl);
+            if (heroUrl is null)
+            {
+                _logger.Warn(
+                    "steam-hero 不可用，回落内置图: appid=" + appId
+                    + ", gameId=" + game.GameId + ", 原因=头图地址缺失或无法推导");
+                MarkSteamHeroMiss(appId);
+                return spec;
+            }
+
+            var target = _fs.Combine(
+                _cacheRoot,
+                game.GameId + "-" + AssetKeys.Background + "-" + ShortHash(heroUrl));
+            var downloaded = await _assets
+                .DownloadConditionalAsync(heroUrl, target, etag: null, lastModified: null, token)
+                .ConfigureAwait(false);
+
+            if (downloaded.Status != AssetDownloadStatus.Downloaded || downloaded.LocalPath is null)
+            {
+                _logger.Warn(
+                    "steam-hero 不可用，回落内置图: appid=" + appId
+                    + ", gameId=" + game.GameId + ", 原因=下载失败(" + downloaded.Status + ")");
+                MarkSteamHeroMiss(appId);
+                return spec;
+            }
+
+            var index = AssetIndex.Load(_indexDocument(game.GameId), _logger);
+            var previousFileName = index.Find(AssetKeys.Background)?.FileName;
+            var newFileName = _fs.GetFileName(downloaded.LocalPath);
+            index.Set(
+                AssetKeys.Background,
+                heroUrl,
+                newFileName,
+                downloaded.ETag,
+                downloaded.LastModified,
+                SteamHeroSource);
+            index.Save(_indexDocument(game.GameId), _logger);
+
+            if (previousFileName is not null
+                && !string.Equals(previousFileName, newFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                TryDeleteCacheFile(_fs.Combine(_cacheRoot, previousFileName));
+            }
+
+            _logger.Info(
+                "steam-hero: appid=" + appId + " 分辨率=" + DescribeImageSize(downloaded.LocalPath)
+                + ", 字节=" + _fs.GetFileSize(downloaded.LocalPath)
+                + ", gameId=" + game.GameId + " → " + downloaded.LocalPath);
+
+            return spec with
+            {
+                Background = downloaded.LocalPath,
+                Source = ThemeAssetSource.SteamHero,
+            };
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.Warn(
+                "steam-hero 不可用，回落内置图: appid=" + appId
+                + ", gameId=" + game.GameId + ", 原因=超时(" + SteamCapsuleTimeoutMilliseconds + "ms)");
+            MarkSteamHeroMiss(appId);
+            return spec;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn(
+                "steam-hero 不可用，回落内置图: appid=" + appId
+                + ", gameId=" + game.GameId + ", 原因=" + ex.Message);
+            MarkSteamHeroMiss(appId);
+            return spec;
+        }
+    }
+
+    /// <summary>
     /// 先问商店接口要带 hash 的真实头图地址；没有解析器或解析失败时退回旧式静态地址
     /// （老游戏仍可用，新游戏会 404 → 由调用方记一次退避）。
     /// </summary>
@@ -248,9 +418,12 @@ public sealed class ThemeResolver : IThemeResolver
         return string.Format(CultureInfo.InvariantCulture, SteamCapsuleUrlTemplate, appId);
     }
 
-    /// <summary>背景与 logo 都空才算「没有官方主题素材」。</summary>
-    private static bool NeedsSteamCapsule(ThemeSpec spec) =>
-        string.IsNullOrWhiteSpace(spec.Background) && string.IsNullOrWhiteSpace(spec.Logo);
+    /// <summary>
+    /// 只看背景：有 logo 但缺背景仍然是「空白主页」，必须允许 Steam 封面兜底。
+    /// 旧实现要求背景与 logo 同时为空，导致「有 logo、缺背景」的游戏永远停在纯色底。
+    /// </summary>
+    public static bool NeedsSteamCapsule(ThemeSpec spec) =>
+        string.IsNullOrWhiteSpace(spec.Background);
 
     /// <summary>缓存目录里已有的胶囊图（扩展名由下载器按 magic bytes 决定）。</summary>
     private string? FindSteamCapsule(int? steamAppId)
@@ -274,9 +447,18 @@ public sealed class ThemeResolver : IThemeResolver
     private string SteamCapsuleMissPath(int appId) =>
         _fs.Combine(_cacheRoot, "steam-" + appId + ".miss");
 
-    private bool IsSteamCapsuleBackoff(int appId)
+    private string SteamHeroMissPath(int appId) =>
+        _fs.Combine(_cacheRoot, "steam-" + appId + "-hero.miss");
+
+    private bool IsSteamCapsuleBackoff(int appId) =>
+        IsBackoff(SteamCapsuleMissPath(appId), SteamCapsuleRetryMilliseconds);
+
+    private bool IsSteamHeroBackoff(int appId) =>
+        IsBackoff(SteamHeroMissPath(appId), SteamHeroRetryMilliseconds);
+
+    /// <summary>失败标记未过期即处于退避窗口，窗口内一个请求都不发。</summary>
+    private bool IsBackoff(string path, long retryMilliseconds)
     {
-        var path = SteamCapsuleMissPath(appId);
         if (!_fs.FileExists(path))
         {
             return false;
@@ -291,12 +473,82 @@ public sealed class ThemeResolver : IThemeResolver
             }
 
             var missedAt = new DateTimeOffset(ticks, TimeSpan.Zero);
-            return _clock.UtcNow - missedAt < TimeSpan.FromMilliseconds(SteamCapsuleRetryMilliseconds);
+            return _clock.UtcNow - missedAt < TimeSpan.FromMilliseconds(retryMilliseconds);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return false;
         }
+    }
+
+    private void MarkSteamHeroMiss(int appId)
+    {
+        try
+        {
+            _fs.EnsureDirectory(_cacheRoot);
+            _fs.WriteAllTextAtomic(
+                SteamHeroMissPath(appId),
+                _clock.UtcNow.UtcTicks.ToString(CultureInfo.InvariantCulture));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.Warn("Steam 库页大图退避标记写入失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 从下载到的字节里读图片像素尺寸，只用于诊断日志（读不出来就记「未知」，绝不影响解析）。
+    /// 支持 PNG（IHDR）与 JPEG（SOF 段）。
+    /// </summary>
+    private string DescribeImageSize(string path)
+    {
+        try
+        {
+            var bytes = _fs.ReadAllBytes(path);
+            if (bytes.Length >= 24
+                && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+            {
+                var width = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
+                var height = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
+                return width + "x" + height;
+            }
+
+            if (bytes.Length > 4 && bytes[0] == 0xFF && bytes[1] == 0xD8)
+            {
+                var i = 2;
+                while (i + 9 < bytes.Length)
+                {
+                    if (bytes[i] != 0xFF)
+                    {
+                        i++;
+                        continue;
+                    }
+
+                    var marker = bytes[i + 1];
+                    if (marker is >= 0xC0 and <= 0xCF && marker is not 0xC4 and not 0xC8 and not 0xCC)
+                    {
+                        var height = (bytes[i + 5] << 8) | bytes[i + 6];
+                        var width = (bytes[i + 7] << 8) | bytes[i + 8];
+                        return width + "x" + height;
+                    }
+
+                    if (marker is 0xD8 or 0x01 or >= 0xD0 and <= 0xD7)
+                    {
+                        i += 2;
+                        continue;
+                    }
+
+                    var length = (bytes[i + 2] << 8) | bytes[i + 3];
+                    i += length >= 2 ? length : 2;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return "未知";
+        }
+
+        return "未知";
     }
 
     private void MarkSteamCapsuleMiss(int appId)
@@ -365,22 +617,188 @@ public sealed class ThemeResolver : IThemeResolver
     }
 
     /// <summary>
-    /// 层 2：安装目录主题；安装目录没有主题素材时用自带美术（层 2.5）补上，最后才是内置占位图。
-    /// <para>
-    /// 只替换「没有主题」的情况：安装目录里有 theme-settings.json 素材的游戏（EU4/CK3/…）
-    /// 永远不会被自带美术覆盖。
-    /// </para>
+    /// 把索引事实翻译成纯判定输入。URL 是否变化要等 metadata 才知道，
+    /// 所以这里只判「索引/文件/时间」；单项 URL 变化在 RefreshOneAsync 里用同一套规则重判。
     /// </summary>
-    private ThemeSpec ResolveLayer2(GameInstallation game)
+    private ThemeRefreshResult EvaluateCacheDecision(AssetIndex index, bool force)
     {
-        var installed = game.Theme;
-        if (installed is not null && HasAnyPath(installed))
+        var fileMissing = false;
+        foreach (var entry in index.Assets.Values)
         {
-            return installed;
+            if (entry.FileName is null || !_fs.FileExists(_fs.Combine(_cacheRoot, entry.FileName)))
+            {
+                fileMissing = true;
+                break;
+            }
         }
 
+        return ThemeRefreshDecision.Evaluate(
+            new ThemeRefreshInput(
+                _clock.UtcNow,
+                index.LastCheckedUtc,
+                index.RetryAfterUtc,
+                IndexEmpty: index.Assets.Count == 0,
+                // 这里恒为 false 是刻意的：缓存判定阶段还没拿到 metadata，无从比较 URL。
+                // UrlChanged 分支保留给 RefreshOneAsync 的真实比较（sameUrl 路径），
+                // 不要在决策入口把它当已判定事实。
+                UrlChanged: false,
+                FileMissing: fileMissing,
+                Force: force));
+    }
+
+    /// <summary>跳过联网时的可 grep 证据：时间 + 每个素材的远端 URL。</summary>
+    private void LogSkip(string gameId, AssetIndex index)
+    {
+        var urls = string.Join(
+            " | ",
+            index.Assets.Select(pair => pair.Key + "=" + (pair.Value.Url ?? "(无)")));
+        _logger.Info(
+            "主题跳过: gameId=" + gameId + ", lastChecked=" + FormatTime(index.LastCheckedUtc)
+            + ", urls=" + urls);
+    }
+
+    private void RecordFailure(string gameId, string reason)
+    {
+        // 重新读取：异常可能发生在 RefreshAsync 已写入部分条目之后，
+        // 用调用方手里的旧快照会把这些条目覆盖掉。
+        var index = AssetIndex.Load(_indexDocument(gameId), _logger);
+        index.RetryAfterUtc = _clock.UtcNow.AddMilliseconds(RefreshRetryDelayMilliseconds);
+        index.LastError = reason;
+        index.LastErrorUtc = _clock.UtcNow;
+        index.Save(_indexDocument(gameId), _logger);
+    }
+
+    private static string ReasonText(ThemeRefreshReason reason) => reason switch
+    {
+        ThemeRefreshReason.Force => "force",
+        ThemeRefreshReason.Backoff => "退避中",
+        ThemeRefreshReason.IndexEmpty => "索引空",
+        ThemeRefreshReason.UrlChanged => "URL 变",
+        ThemeRefreshReason.FileMissing => "文件缺失",
+        ThemeRefreshReason.RetryDue => "退避到点",
+        ThemeRefreshReason.NeverChecked => "从未检查",
+        ThemeRefreshReason.TtlExpired => "TTL 已过",
+        _ => "TTL 未到",
+    };
+
+    private static string FormatTime(DateTimeOffset? value) =>
+        value?.ToString("u", CultureInfo.InvariantCulture) ?? "null";
+
+    /// <summary>索引里的失败/退避/元数据缺失；设置页的「上次失败原因」直接读这里。</summary>
+    public ThemeCacheDiagnostics GetDiagnostics(string gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return new ThemeCacheDiagnostics(null, null, null, null, MetadataMissing: false);
+        }
+
+        var index = AssetIndex.Load(_indexDocument(gameId), _logger);
+        return new ThemeCacheDiagnostics(
+            index.LastCheckedUtc,
+            index.RetryAfterUtc,
+            index.LastError,
+            index.LastErrorUtc,
+            index.MetadataMissing);
+    }
+
+    /// <summary>
+    /// 层2：安装目录主题（只取 game.Theme 本身）。
+    /// 内置素材不再在这里补背景——它要排在 Steam 官方库页大图之后，
+    /// 由 <see cref="ApplyBundled"/> 在最末兜底，否则 EU5 这类「有内置图、无 metadata」的游戏永远轮不到官方图。
+    /// 另外，离线阶段 <c>ThemeUpdateService</c> 会把内置图经 <see cref="Themes.ThemePatch.Apply"/>
+    /// 打进 <c>game.Theme</c>（来源 Bundled）。那不是真实安装层：若把它当背景返回，
+    /// 联网解析会误判「已有背景」而永久跳过官方图，所以这里剥掉它的背景，交给联网层重新判定；
+    /// 真失败时 <see cref="ApplyBundled"/> 会用同一张内置图补回来，离线显示不受影响。
+    /// </summary>
+    private static ThemeSpec ResolveInstalledLayer(GameInstallation game)
+    {
+        var installed = game.Theme;
+        if (installed is null)
+        {
+            return DefaultThemeSpec();
+        }
+
+        if (installed.Source == ThemeAssetSource.Bundled)
+        {
+            return installed with { Background = string.Empty };
+        }
+
+        return installed;
+    }
+
+    /// <summary>
+    /// 内置素材兜底：背景与字标分别补齐，互不牵连。
+    /// <para>
+    /// 背景只在前面所有来源都没给出时才补，绝不覆盖在线/官方图；
+    /// 字标只在 <see cref="ThemeSpec.Logo"/> 缺失时才补。EU5 联网拿到 Steam 库页大图后
+    /// 背景不再为空，但字标仍然必须来自内置素材，否则主页会退回纯文字标题
+    /// （旧实现「背景非空就提前返回」正是漏在这里）。
+    /// </para>
+    /// <para>
+    /// 来源语义：只有背景确实来自本次内置兜底时才按 <paramref name="hasOnlineCache"/> 决定——
+    /// 有在线缓存就保留 Merge 推导出的来源，否则标成 Bundled；背景来自其它层时原样保留
+    /// （hero 命中必须还是 <see cref="ThemeAssetSource.SteamHero"/>，设置页文案依赖它）。
+    /// 背景与字标都没变化时返回原实例，避免上层误判「主题变了」。
+    /// </para>
+    /// </summary>
+    private ThemeSpec ApplyBundled(GameInstallation game, ThemeSpec spec, bool hasOnlineCache)
+    {
         var bundled = _bundled?.TryResolve(game);
-        return bundled ?? installed ?? DefaultThemeSpec();
+        var bundledBackground = bundled?.Background;
+        var background = string.IsNullOrWhiteSpace(spec.Background)
+            && !string.IsNullOrWhiteSpace(bundledBackground)
+                ? bundledBackground
+                : spec.Background;
+        var logo = spec.Logo ?? bundled?.Logo;
+
+        var backgroundChanged = !string.Equals(background, spec.Background, StringComparison.Ordinal);
+        var logoChanged = !string.Equals(logo, spec.Logo, StringComparison.Ordinal);
+        if (!backgroundChanged && !logoChanged)
+        {
+            return spec;
+        }
+
+        var source = backgroundChanged && !hasOnlineCache
+            ? ThemeAssetSource.Bundled
+            : spec.Source;
+
+        return spec with
+        {
+            Background = background,
+            Logo = logo,
+            Source = source,
+        };
+    }
+
+    /// <summary>
+    /// 缓存里那张背景若来自 Steam 官方库页，把来源标成 <see cref="ThemeAssetSource.SteamHero"/>，
+    /// 让设置页能说清「这张图来自 Steam 官方库页」。
+    /// </summary>
+    private ThemeSpec TagSteamHeroSource(GameInstallation game, ThemeSpec spec)
+    {
+        if (string.IsNullOrWhiteSpace(spec.Background))
+        {
+            return spec;
+        }
+
+        var index = AssetIndex.Load(_indexDocument(game.GameId), _logger);
+        var entry = index.Find(AssetKeys.Background);
+        if (entry is null
+            || entry.FileName is not { } fileName
+            || !string.Equals(entry.Source, SteamHeroSource, StringComparison.OrdinalIgnoreCase))
+        {
+            return spec;
+        }
+
+        var cachedPath = _fs.Combine(_cacheRoot, fileName);
+        if (!string.Equals(spec.Background, cachedPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return spec;
+        }
+
+        return _fs.FileExists(cachedPath)
+            ? spec with { Source = ThemeAssetSource.SteamHero }
+            : spec;
     }
 
     private static ThemeSpec Merge(ThemeSpec layer2, Dictionary<string, string> cache)
@@ -450,55 +868,19 @@ public sealed class ThemeResolver : IThemeResolver
     /// <summary>层2 缺失时的字重兜底（官方实测 200）。</summary>
     public const int FontWeightFallback = 200;
 
-    /// <summary>
-    /// 新鲜度判定：只看索引里的 lastCheckedUtc（上一次联网检查时间），不看缓存文件 mtime。
-    /// 原因：URL 带内容 hash，URL 未变就跳过下载，文件 mtime 永不更新；若用 mtime 判新鲜度，
-    /// 每次启动都会判定过期 → 每次都发一次 GraphQL 请求却永远不下载，白白浪费网络。
-    /// 文件是否真实存在由 ReadCache 的 FileExists 过滤单独保证。
-    /// </summary>
-    private bool IsCacheStale(string gameId)
-    {
-        var index = AssetIndex.Load(_indexDocument(gameId), _logger);
-        var lastChecked = index.LastCheckedUtc;
-        if (lastChecked is null || lastChecked.Value == default(DateTimeOffset))
-        {
-            // 从未成功联网检查过（冷启动、索引缺失或索引损坏）：需要联网。
-            return true;
-        }
-
-        // 自愈：索引说「检查过了」，却一项素材都没落地。
-        // 只有旧版 RefreshAsync 会写出这种形状（下载全失败也推进 lastCheckedUtc），
-        // 新版在有失败时改写 RetryAfterUtc、成功时必然留下条目，所以命中即视为旧 bug 的产物。
-        if (index.Assets.Count == 0)
-        {
-            _logger.Info("主题缓存索引没有素材条目，忽略上次检查时间重新联网: " + gameId);
-            return true;
-        }
-
-        // 上次刷新有素材失败：到点就重试，不必再等满 5 天。
-        if (index.RetryAfterUtc is { } retryAfter && _clock.UtcNow >= retryAfter)
-        {
-            return true;
-        }
-
-        return _clock.UtcNow - lastChecked.Value > TimeSpan.FromMilliseconds(CacheTtlMilliseconds);
-    }
-
     private async Task RefreshAsync(
         string gameId,
+        AssetIndex index,
         Dictionary<string, string> cache,
         CancellationToken cancellationToken)
     {
         var metadataList = await _metadata
             .GetMetadataAsync(new[] { gameId }, cancellationToken)
             .ConfigureAwait(false);
-        var index = AssetIndex.Load(_indexDocument(gameId), _logger);
 
         if (metadataList.Count == 0)
         {
-            // 元数据为空多为网络失败（MetadataClient 容错后返回空列表），
-            // 此时**不**更新 lastCheckedUtc，下次启动仍会重试，避免被 5 天 TTL 锁住。
-            _logger.Info("元数据未返回该游戏，跳过主题刷新: " + gameId);
+            MarkMetadataMissing(gameId, index, "元数据无该游戏（metadata 未返回记录）");
             return;
         }
 
@@ -512,10 +894,19 @@ public sealed class ThemeResolver : IThemeResolver
             }
         }
 
-        if (dto?.ThemeSettings is not { } settings)
+        if (dto is null)
         {
-            // 同上：没有 themeSettings 视为未成功检查，不推进 lastCheckedUtc。
-            _logger.Info("元数据缺少 themeSettings，跳过主题刷新: " + gameId);
+            MarkMetadataMissing(gameId, index, "元数据无该游戏");
+            return;
+        }
+
+        if (dto.ThemeSettings is not { } settings)
+        {
+            // 没有 themeSettings 视为未成功检查，不推进 lastCheckedUtc。
+            index.LastError = "元数据缺少 themeSettings";
+            index.LastErrorUtc = _clock.UtcNow;
+            index.Save(_indexDocument(gameId), _logger);
+            _logger.Warn("元数据缺少 themeSettings，跳过主题刷新: " + gameId + "，使用内置素材");
             return;
         }
 
@@ -524,7 +915,10 @@ public sealed class ThemeResolver : IThemeResolver
         {
             // 远端给了 themeSettings 但一项可覆盖素材都没有：不推进 lastCheckedUtc，
             // 以免写出「检查过却零素材」的索引形状（那会被当成旧 bug 的产物而反复重查）。
-            _logger.Info("远端主题没有可用素材，跳过主题刷新: " + gameId);
+            index.LastError = "远端主题没有可用素材";
+            index.LastErrorUtc = _clock.UtcNow;
+            index.Save(_indexDocument(gameId), _logger);
+            _logger.Warn("远端主题没有可用素材，跳过主题刷新: " + gameId + "，使用内置素材");
             return;
         }
 
@@ -542,22 +936,46 @@ public sealed class ThemeResolver : IThemeResolver
         if (succeeded < remote.Count)
         {
             // 关键：有素材失败时**不**推进 lastCheckedUtc（它只代表「全部就绪」的那次检查），
-            // 改记 10 分钟后的短重试。否则一次网络抖动就能把该游戏主题锁死 5 天。
+            // 改记 10 分钟后的短重试。否则一次网络抖动就能把该游戏主题锁死一整天。
+            var failed = remote.Count - succeeded;
             index.RetryAfterUtc = _clock.UtcNow.AddMilliseconds(RefreshRetryDelayMilliseconds);
+            index.LastError = "主题刷新部分失败: 成功 " + succeeded + "/" + remote.Count + " 项";
+            index.LastErrorUtc = _clock.UtcNow;
             index.Save(_indexDocument(gameId), _logger);
             _logger.Warn(
                 "主题刷新部分失败: " + gameId + "，成功 " + succeeded + "/" + remote.Count
-                + " 项，" + (RefreshRetryDelayMilliseconds / 60_000) + " 分钟后重试");
+                + " 项（失败 " + failed + " 项），"
+                + (RefreshRetryDelayMilliseconds / 60_000) + " 分钟后重试");
             return;
         }
 
         index.LastCheckedUtc = _clock.UtcNow;
         index.RetryAfterUtc = null;
+        index.MetadataMissing = false;
+        index.LastError = null;
+        index.LastErrorUtc = null;
         index.Save(_indexDocument(gameId), _logger);
         _logger.Info("主题缓存已更新: " + gameId + "，素材 " + remote.Count + " 项");
     }
 
-    /// <summary>刷新单项素材；返回该项是否已就绪（URL 未变且文件在库 / 本次下载成功）。</summary>
+    /// <summary>
+    /// metadata 里没有该游戏（EU5 这类）：记录明确原因并保留内置素材，
+    /// 不静默、不推进 lastCheckedUtc；设置页据此显示「元数据无该游戏，使用内置素材」。
+    /// </summary>
+    private void MarkMetadataMissing(string gameId, AssetIndex index, string reason)
+    {
+        index.MetadataMissing = true;
+        index.RetryAfterUtc = null;
+        index.LastError = reason;
+        index.LastErrorUtc = _clock.UtcNow;
+        index.Save(_indexDocument(gameId), _logger);
+        _logger.Warn(reason + "，跳过主题刷新: " + gameId + "，使用内置素材");
+    }
+
+    /// <summary>
+    /// 刷新单项素材。返回该项是否已就绪：
+    /// URL 未变且文件在库 → 条件请求（304 只更新检查时间）；URL 变/文件缺失 → 无条件重下。
+    /// </summary>
     private async Task<bool> RefreshOneAsync(
         string gameId,
         AssetIndex index,
@@ -567,41 +985,88 @@ public sealed class ThemeResolver : IThemeResolver
         CancellationToken cancellationToken)
     {
         var entry = index.Find(key);
-
-        // URL 里的 hash 段即版本号：URL 未变且本地文件存在 → 跳过下载。
-        if (entry is not null
-            && string.Equals(entry.Url, url, StringComparison.Ordinal)
-            && entry.FileName is not null
-            && _fs.FileExists(_fs.Combine(_cacheRoot, entry.FileName)))
-        {
-            return true;
-        }
+        var previousFileName = entry?.FileName;
+        var previousPath = previousFileName is null
+            ? null
+            : _fs.Combine(_cacheRoot, previousFileName);
+        var fileExists = previousPath is not null && _fs.FileExists(previousPath);
+        var sameUrl = entry is not null
+            && string.Equals(entry.Url, url, StringComparison.Ordinal);
 
         // 文件名里带上 URL 的短 hash：URL（= 版本）一变文件名就变，
         // 于是 BitmapLoader 的 path 缓存键、WinUI 的图片 URI 缓存、FontLoader 的路径缓存
         // 全部自然失效，不需要在 UI 层再做一次 ClearCache。
         var targetWithoutExtension = _fs.Combine(_cacheRoot, gameId + "-" + key + "-" + ShortHash(url));
-        var downloaded = await _assets
-            .DownloadAsync(url, targetWithoutExtension, cancellationToken)
-            .ConfigureAwait(false);
-        if (downloaded is null)
+
+        // 只有「URL 未变 + 文件仍在」才带旧的校验头；文件缺失时发条件请求会拿到
+        // 304 却仍然没有文件，属于必须避开的死局。
+        var etag = sameUrl && fileExists ? entry!.ETag : null;
+        var lastModified = sameUrl && fileExists ? entry!.LastModified : null;
+
+        if (entry is not null && !sameUrl)
         {
-            // 失败静默保留旧图，由调用方汇总成「本次刷新有失败」。
+            _logger.Info(
+                "主题素材 URL 变，强制重新下载: gameId=" + gameId + ", key=" + key
+                + ", old=" + (entry.Url ?? "(无)") + ", new=" + url);
+        }
+        else if (entry is not null && !fileExists)
+        {
+            _logger.Info(
+                "主题素材文件缺失，重新下载: gameId=" + gameId + ", key=" + key
+                + ", old=" + (previousPath ?? "(无)"));
+        }
+
+        var result = await _assets
+            .DownloadConditionalAsync(url, targetWithoutExtension, etag, lastModified, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (result.Status == AssetDownloadStatus.NotModified)
+        {
+            // 304：绝不重写文件、不改条目；调用方只推进 lastCheckedUtc。
+            _logger.Info(
+                "主题素材未变化（304）: gameId=" + gameId + ", key=" + key
+                + ", file=" + (previousPath ?? "(无)"));
+            return true;
+        }
+
+        if (result.Status != AssetDownloadStatus.Downloaded || result.LocalPath is null)
+        {
+            _logger.Warn(
+                "主题素材下载失败，保留旧图: gameId=" + gameId + ", key=" + key
+                + ", old=" + (previousPath ?? "(无)") + ", oldModified="
+                + FormatFileTime(previousPath));
             return false;
         }
 
-        var newFileName = _fs.GetFileName(downloaded);
-        var previous = entry?.FileName;
-        index.Set(key, url, newFileName);
-        cache[key] = downloaded;
+        var newFileName = _fs.GetFileName(result.LocalPath);
+        index.Set(key, url, newFileName, result.ETag, result.LastModified, MetadataSource);
+        cache[key] = result.LocalPath;
 
         // 新旧文件名不同就清掉旧文件，避免缓存目录按版本堆积。
-        if (previous is not null && !string.Equals(previous, newFileName, StringComparison.OrdinalIgnoreCase))
+        if (previousFileName is not null
+            && !string.Equals(previousFileName, newFileName, StringComparison.OrdinalIgnoreCase))
         {
-            TryDeleteCacheFile(_fs.Combine(_cacheRoot, previous));
+            TryDeleteCacheFile(_fs.Combine(_cacheRoot, previousFileName));
         }
 
         return true;
+    }
+
+    private static string FormatFileTime(string? path)
+    {
+        if (path is null)
+        {
+            return "(无)";
+        }
+
+        try
+        {
+            return File.GetLastWriteTimeUtc(path).ToString("u", CultureInfo.InvariantCulture);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return "(读取失败: " + ex.Message + ")";
+        }
     }
 
     private void TryDeleteCacheFile(string path)

@@ -1,10 +1,20 @@
 namespace PdxLauncher.Core.Configuration;
 
+using PdxLauncher.Core.Saves;
+
 /// <summary>本启动器自己的设置（与 P 社启动器完全隔离，绝不写它的目录）。</summary>
 public sealed class AppSettings
 {
     /// <summary>是否允许联网刷新主题素材（默认开；关掉后只用安装目录素材）。</summary>
     public bool OnlineThemeRefreshEnabled { get; set; } = true;
+
+    /// <summary>
+    /// 用户在设置页为每款游戏选的「其它可执行文件」绝对路径（gameId → exe）。
+    /// 空 / 不包含该游戏表示使用 launcher-settings 的标准 exe。存路径而不是序号：
+    /// 游戏更新后 alternatives 顺序可能变化。
+    /// </summary>
+    public Dictionary<string, string> PreferredLaunchExePaths { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// 是否允许联网补全 DLC 简介（默认开；CK3/Stellaris 的 .dlc 里没有简介，需向 Steam 商店接口查询）。
@@ -106,6 +116,22 @@ public sealed class AppSettings
         set => _modThumbnailCacheDays = value < 1 ? 1 : (value > 3650 ? 3650 : value);
     }
 
+    private const long MinSaveBackupMaxTotalBytes = 256L * 1024 * 1024;
+    private const long MaxSaveBackupMaxTotalBytes = 100L * 1024 * 1024 * 1024;
+    private long _saveBackupMaxTotalBytes = SaveBackupPaths.DefaultMaxTotalBytes;
+
+    /// <summary>
+    /// 存档备份总量上限（字节，默认 2 GiB，钳到 256 MiB–100 GiB）。
+    /// 只在「备份」子页里以 GB 为单位调整；服务在每次备份时读取。
+    /// </summary>
+    public long SaveBackupMaxTotalBytes
+    {
+        get => _saveBackupMaxTotalBytes;
+        set => _saveBackupMaxTotalBytes = value < MinSaveBackupMaxTotalBytes
+            ? MinSaveBackupMaxTotalBytes
+            : (value > MaxSaveBackupMaxTotalBytes ? MaxSaveBackupMaxTotalBytes : value);
+    }
+
     /// <summary>
     /// 窗口置顶（默认关）：开启后启动器一直停在其窗口之上，点其它程序不会把它盖住。
     /// 只由应用内图钉 / 设置页开关 / Ctrl+Shift+T 修改，不要在外部用 SetWindowPos 钉窗口。
@@ -154,6 +180,12 @@ public sealed class AppSettings
     /// 与 <see cref="LastSettingsSection"/> 分开记，两个页面互不影响。
     /// </summary>
     public int? LastDiagnosticsSection { get; set; }
+
+    /// <summary>
+    /// 崩溃分析页上次停留的分节（0 起，对应左栏 4 项）；null 或越界时落到诊断结论。
+    /// 与性能与日志页分开记，互不影响。
+    /// </summary>
+    public int? LastCrashAnalysisSection { get; set; }
 
     /// <summary>
     /// 性能与日志页的日志尾部是否自动换行。默认关（长行用横向滚动条），
@@ -266,4 +298,10 @@ public sealed class AppSettings
     /// 但文档里若显式写了 null，调用点要按 <c>?? []</c> 兜底。
     /// </summary>
     public List<string> WorkshopSearchHistory { get; set; } = [];
+
+    /// <summary>
+    /// 创意工坊每页条数（10 / 15 / 30 / 50，默认 30，与 Steam 网页一致）。
+    /// 旧设置文件里没有这个键时读到 0，由视图模型归一化回默认值。
+    /// </summary>
+    public int WorkshopPageSize { get; set; } = 30;
 }

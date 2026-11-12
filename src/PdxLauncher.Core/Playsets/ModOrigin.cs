@@ -38,10 +38,10 @@ public static class ModOrigins
     public const string PdxModsSource = "pdx_mods";
 
     /// <summary>徽标文案的 i18n 键（Core 不能引用生成的 <c>Keys</c>，返回键串由展示层翻译）。</summary>
-    public const string LocalKey = "common.sourceLocal";
+    public const string LocalKey = "CommonSourceLocal";
 
     /// <summary>徽标文案的 i18n 键：订阅。</summary>
-    public const string SubscribedKey = "common.sourceSubscribed";
+    public const string SubscribedKey = "CommonSourceSubscribed";
 
     /// <summary>把存储里的 source / steamId 归一成一个来源。</summary>
     public static ModOrigin Normalize(string? source, string? steamId)

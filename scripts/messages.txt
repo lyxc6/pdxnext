@@ -15,12 +15,6 @@ D_NODOTNET:[错误] 找不到 dotnet。
 D_TITLE2:[2/2] 运行自检...
 D_EXE:可执行文件:
 
-R_NOEXE:[错误] 找不到 Release 可执行文件，先运行 build.cmd，或改用 run-debug.cmd。
-R_EXPECT:        期望路径:
-
-RD_NOEXE:[错误] 找不到 Debug 可执行文件，先运行 build-debug.cmd 或 build.cmd。
-RD_EXPECT:        期望路径:
-
 P_TITLE:  PdxNext 发布（Release + 自包含）
 P_NODOTNET:[错误] 找不到 dotnet。请安装 .NET SDK 10 或更高版本。
 P_STEP1:[1/4] 构建 Release...
@@ -56,3 +50,63 @@ S_STARTING:启动 PdxNext...
 S_EXE:  可执行文件  
 S_ALREADY:[提示] PdxNext 已在运行，本次不重复启动。加 new 参数可强制开新窗口。
 S_PRESSKEY:按任意键关闭窗口...
+
+# dev.cmd -- dev entry point for agents and other conversations
+V_TITLE:  PdxNext 开发启动（构建 + 自检 + 重启）
+V_BRANCH:  当前分支:
+V_HEAD:  最近提交:
+V_DIRTY:  改动文件:
+V_STOP:检查并结束正在运行的 PdxNext...
+V_KILL:      正在结束旧实例...
+V_KILLED:      已结束旧实例。
+V_NOSTOP:      当前没有运行中的实例。
+V_NODOTNET:[错误] 找不到 dotnet。请安装 .NET SDK 10 或更高版本。
+V_BUILDING:构建 Release 解决方案...
+V_FAILBUILD:[失败] 构建失败，未启动程序。
+V_STEPCHECK:运行自检...
+V_FAILCHECK:[失败] 自检未通过，未启动程序。
+V_CHECKOK:      自检通过。
+V_NOEXE:[错误] 找不到已构建的可执行文件，先运行 dev.cmd build。
+V_EXPECT:        期望路径:
+V_START:启动 PdxNext...
+V_EXE:  可执行文件:
+V_WAIT:      等待进程启动（最多 10 秒）...
+V_FAILSTART:[失败] 程序启动后 10 秒内退出，可能崩溃。日志:
+V_PID:      已启动，PID:
+V_OKBUILD:完成：构建与自检通过（未启动）。
+V_OKRUN:完成：构建、自检、启动均成功。
+V_LOGHINT:      要在这里看实时日志用 dev.cmd logs（不构建用 dev.cmd nobuild logs）。
+V_FOLLOW:跟随日志（Ctrl+C 停止跟随，程序继续运行）:
+V_FOLLOWSTOP:已停止跟随日志；程序仍在运行。
+V_USAGE1:用法  dev.cmd [build|nobuild|logs]
+V_USAGE2:  dev.cmd            构建 + 自检 + 结束旧实例 + 启动
+V_USAGE3:  dev.cmd build      只构建 + 自检，不启动（验收用）
+V_USAGE4:  dev.cmd nobuild    不构建，直接结束旧实例并启动已构建的程序
+V_USAGE5:  dev.cmd logs       同上，启动后在本终端跟随日志（Ctrl+C 只停跟随）
+V_USAGE6:  dev.cmd nobuild logs  不构建，启动后跟随日志（快速看界面）
+V_PRESSKEY:按任意键关闭窗口...
+
+# status.cmd -- working tree status view
+G_TITLE:  PdxNext 当前修改状态
+G_BRANCH:  当前分支:
+G_HEAD:  最近提交:
+G_TOTAL:  改动条目:
+G_STAGED:  已暂存:
+G_UNSTAGED:  未暂存:
+G_UNTRACKED:  未跟踪:
+G_FILES: 改动文件（git status --short）:
+G_MORE:      …… 未列出的项数:
+G_DIFF: 改动统计（已暂存 + 未暂存，不含未跟踪）:
+G_DIFF_NONE:      （无）
+G_COMMITS: 最近 5 次提交:
+G_RUNNING:  程序状态: 正在运行，PID:
+G_NOTRUNNING:  程序状态: 未运行
+G_EXETIME:  构建时间:
+G_EXE:  可执行文件:
+G_NOEXE:  构建时间: 尚未构建（先运行 build.cmd 或 dev.cmd build）
+G_NOGIT:[错误] 找不到 git，无法读取仓库状态。请确认 Git 已安装并在 PATH 中。
+G_DONE:---- 状态读取完毕 ----
+G_USAGE1:用法  status.cmd [nopause]
+G_USAGE2:  status.cmd           显示改动状态并等待按键
+G_USAGE3:  status.cmd nopause   显示后直接退出
+G_PRESSKEY:按任意键关闭窗口...

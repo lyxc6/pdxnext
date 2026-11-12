@@ -31,6 +31,12 @@ public sealed class PatchAssets : IPatchAssets
     /// <summary>内嵌资源逻辑名（ini 模板）。</summary>
     public const string EmbeddedIni = "PdxLauncher.Patch.cream_api.ini";
 
+    /// <summary>按游戏分节的 DLC 源清单文件名（运行时渲染成 ini 的单一 <c>[dlc]</c> 段）。</summary>
+    public const string DlcCatalogFileName = "dlc-catalog.json";
+
+    /// <summary>内嵌资源逻辑名（DLC 源清单）。</summary>
+    public const string EmbeddedDlcCatalog = "PdxLauncher.Patch.dlc-catalog.json";
+
     private readonly IFileSystem _fs;
     private readonly IAppLogger _logger;
     private readonly Assembly _assembly;
@@ -99,6 +105,56 @@ public sealed class PatchAssets : IPatchAssets
         }
 
         return !string.IsNullOrWhiteSpace(text);
+    }
+
+    /// <inheritdoc />
+    public bool TryGetDlcCatalog(out PatchDlcCatalog catalog)
+    {
+        var external = _fs.Combine(AssetsDirectory, DlcCatalogFileName);
+        if (_fs.FileExists(external))
+        {
+            try
+            {
+                var text = _fs.ReadAllText(external);
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    catalog = PatchDlcCatalog.Parse(text);
+                    _usedExternal = true;
+                    _logger.Info("补丁素材使用外部覆盖目录：" + external);
+                    return true;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+            {
+                _logger.Warn("读取外部 DLC 清单失败，改用内置：" + external + " / " + ex.Message);
+            }
+        }
+
+        catalog = PatchDlcCatalog.Empty;
+        var stream = _assembly.GetManifestResourceStream(EmbeddedDlcCatalog);
+        if (stream is null)
+        {
+            _logger.Error("内置补丁素材缺失：" + EmbeddedDlcCatalog);
+            return false;
+        }
+
+        string json;
+        using (stream)
+        using (var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true))
+        {
+            json = reader.ReadToEnd();
+        }
+
+        try
+        {
+            catalog = PatchDlcCatalog.Parse(json);
+            return true;
+        }
+        catch (InvalidDataException ex)
+        {
+            _logger.Error("内置 DLC 清单无法解析：" + EmbeddedDlcCatalog + " / " + ex.Message);
+            return false;
+        }
     }
 
     private bool TryReadExternal(string path, out byte[] data)

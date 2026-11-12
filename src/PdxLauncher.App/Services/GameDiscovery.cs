@@ -36,7 +36,15 @@ public static class GameDiscovery
             }
 
             // 刷新失败或被取消时不清 _completed：缓存里的旧列表仍然有效，下次 EnsureAsync 直接用它。
-            var games = await AppServices.GameCatalog.DiscoverAsync(cancellationToken).ConfigureAwait(true);
+            // 游戏发现是同步文件 IO（扫 9 个安装约 200 ms+），必须离开 UI 线程；
+            // 否则冷启动首帧会被它按住。
+            var games = await Task
+                .Run(
+                    async () => await AppServices.GameCatalog
+                        .DiscoverAsync(cancellationToken)
+                        .ConfigureAwait(false),
+                    cancellationToken)
+                .ConfigureAwait(true);
 
             // 先把「联网缓存层」合并进去（纯本地、零网络），这样第一帧就能显示上次下载的新背景。
             var themed = await ThemeUpdateService

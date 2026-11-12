@@ -59,7 +59,11 @@ public static class SteamWorkshopHtmlParser
                 return null;
             }
 
-            var payload = FindQueryPayload(queryData);
+            // 2026-11 起 queryData 里有多条 React Query 记录（workshop_browse / declared_tags_v6 /
+            // workshop_required_dlc_v5 / StoreItem…），列表只是其中一条。先按 queryKey 定位，
+            // 老页面没有 queryKey 时才退回原来的「找第一个带 results 的 payload」。
+            var queries = CollectQueries(queryData);
+            var payload = FindBrowsePayload(queries) ?? FindQueryPayload(queryData);
             if (payload is null)
             {
                 return null;
@@ -84,7 +88,13 @@ public static class SteamWorkshopHtmlParser
                 totalPages = totalCount <= 0 ? 0 : (int)Math.Ceiling(totalCount / (double)pageSize);
             }
 
-            return new SteamWorkshopPage(items, totalCount, page, pageSize, totalPages);
+            return new SteamWorkshopPage(
+                items,
+                totalCount,
+                page,
+                pageSize,
+                totalPages,
+                ParseFilterGroups(queries));
         }
         catch (JsonException)
         {
@@ -167,6 +177,297 @@ public static class SteamWorkshopHtmlParser
         return null;
     }
 
+    /// <summary>queryData 里的一条 React Query 记录：queryKey 与 data（data 可能是对象或数组）。</summary>
+    private sealed record QueryEntry(IReadOnlyList<string> Key, JsonNode? Data);
+
+    /// <summary>把 queryData.queries（数组或字典两种形态）摊平成统一列表。</summary>
+    private static List<QueryEntry> CollectQueries(JsonObject queryData)
+    {
+        var list = new List<QueryEntry>();
+        switch (queryData["queries"])
+        {
+            case JsonArray array:
+                foreach (var entry in array)
+                {
+                    Add(entry);
+                }
+
+                break;
+            case JsonObject map:
+                foreach (var pair in map)
+                {
+                    Add(pair.Value);
+                }
+
+                break;
+        }
+
+        return list;
+
+        void Add(JsonNode? node)
+        {
+            if (node is not JsonObject query)
+            {
+                return;
+            }
+
+            var key = ReadQueryKey(query["queryKey"]);
+            var data = query["state"]?["data"] ?? query["data"];
+            list.Add(new QueryEntry(key, data));
+        }
+    }
+
+    /// <summary>queryKey 可能是 JSON 数组，也可能是被字符串化的 JSON 数组。</summary>
+    private static IReadOnlyList<string> ReadQueryKey(JsonNode? node)
+    {
+        var array = node as JsonArray;
+        if (array is null && node is JsonValue value && value.TryGetValue<string>(out var text))
+        {
+            try
+            {
+                array = JsonNode.Parse(text) as JsonArray;
+            }
+            catch (JsonException)
+            {
+                array = null;
+            }
+        }
+
+        if (array is null)
+        {
+            return [];
+        }
+
+        return array
+            .Select(static entry => entry is JsonValue keyValue && keyValue.TryGetValue<string>(out var text)
+                ? text
+                : entry?.ToJsonString().Trim('"') ?? string.Empty)
+            .ToList();
+    }
+
+    /// <summary>找 <c>workshop_browse</c> 那条查询；找不到时退回任意带 results 的查询。</summary>
+    private static JsonObject? FindBrowsePayload(List<QueryEntry> queries)
+    {
+        foreach (var query in queries)
+        {
+            if (query.Key.Count > 0
+                && string.Equals(query.Key[0], "workshop_browse", StringComparison.OrdinalIgnoreCase)
+                && query.Data is JsonObject data
+                && HasResults(data))
+            {
+                return data;
+            }
+        }
+
+        foreach (var query in queries)
+        {
+            if (query.Data is JsonObject data && data.ContainsKey("results"))
+            {
+                return data;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 解析左侧筛选栏。数据来源（2026-11 实测）：
+    /// <list type="bullet">
+    /// <item><c>declared_tags_v6.readytouse_tags</c>：两组标签（类别、更新兼容性），值是标签名；</item>
+    /// <item><c>workshop_required_dlc_v5</c>：<c>{appid,count}</c> 列表，名称在 <c>StoreItem/app_&lt;appid&gt;</c> 查询里；</item>
+    /// <item>「显示不兼容的项目」不是筛选组，参数固定为 <c>requiredflags[]=incompatible</c>。</item>
+    /// </list>
+    /// 任何一步结构不符都只跳过该部分，绝不抛异常。
+    /// </summary>
+    private static IReadOnlyList<SteamWorkshopFilterGroup> ParseFilterGroups(List<QueryEntry> queries)
+    {
+        var groups = new List<SteamWorkshopFilterGroup>();
+
+        var tagQuery = queries.FirstOrDefault(static query =>
+            query.Key.Count > 0
+            && string.Equals(query.Key[0], "declared_tags_v6", StringComparison.OrdinalIgnoreCase));
+        if (tagQuery?.Data is JsonObject tagData && tagData["readytouse_tags"] is JsonArray tagGroups)
+        {
+            foreach (var node in tagGroups)
+            {
+                if (node is not JsonObject group || group["tags"] is not JsonArray tagArray)
+                {
+                    continue;
+                }
+
+                var title = GetString(group, "name")?.Trim() ?? string.Empty;
+                var tags = new List<SteamWorkshopTag>();
+                foreach (var tagNode in tagArray)
+                {
+                    if (tagNode is not JsonObject tag)
+                    {
+                        continue;
+                    }
+
+                    var value = GetString(tag, "name") ?? GetString(tag, "display_name");
+                    if (string.IsNullOrWhiteSpace(value))
+                    {
+                        continue;
+                    }
+
+                    var display = GetString(tag, "display_name");
+                    tags.Add(new SteamWorkshopTag(
+                        value!,
+                        string.IsNullOrWhiteSpace(display) ? value! : display));
+                }
+
+                if (tags.Count == 0)
+                {
+                    continue;
+                }
+
+                var key = title.Length switch
+                {
+                    0 => "category",
+
+                    // Steam 各游戏叫法不同：Update Compatibility / Compatible Version / Compatible …
+                    // 只要标题里带 compatib 就归到这个组，界面才能显示本地化标题。
+                    _ when title.Contains("compatib", StringComparison.OrdinalIgnoreCase) => "compatibility",
+                    _ => "other:" + title,
+                };
+                groups.Add(new SteamWorkshopFilterGroup(UniquifyKey(groups, key), title, tags));
+            }
+        }
+
+        if (TryParseDlcGroup(queries) is { } dlc)
+        {
+            groups.Add(dlc);
+        }
+
+        return groups;
+    }
+
+    /// <summary>解析「所需的 DLC」组：appid 列表 + StoreItem 里的名称。</summary>
+    private static SteamWorkshopFilterGroup? TryParseDlcGroup(List<QueryEntry> queries)
+    {
+        var dlcQuery = queries.FirstOrDefault(static query =>
+            query.Key.Count > 0
+            && string.Equals(query.Key[0], "workshop_required_dlc_v5", StringComparison.OrdinalIgnoreCase));
+        if (dlcQuery?.Data is not JsonArray dlcArray)
+        {
+            return null;
+        }
+
+        var names = new Dictionary<int, string>();
+        foreach (var query in queries)
+        {
+            if (query.Key.Count < 3
+                || !string.Equals(query.Key[0], "StoreItem", StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(query.Key[2], "default_info", StringComparison.OrdinalIgnoreCase)
+                || query.Data is not JsonObject store)
+            {
+                continue;
+            }
+
+            var appKey = query.Key[1];
+            if (!appKey.StartsWith("app_", StringComparison.Ordinal)
+                || !int.TryParse(appKey.AsSpan(4), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id))
+            {
+                continue;
+            }
+
+            var name = GetString(store, "name");
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                names[id] = name!;
+            }
+        }
+
+        var appName = FindAppName(queries);
+        var tags = new List<SteamWorkshopTag>();
+        foreach (var node in dlcArray)
+        {
+            if (node is not JsonObject entry)
+            {
+                continue;
+            }
+
+            var id = (int)GetLong(entry, "appid");
+            if (id <= 0)
+            {
+                continue;
+            }
+
+            var name = names.TryGetValue(id, out var found)
+                ? found
+                : id.ToString(CultureInfo.InvariantCulture);
+            tags.Add(new SteamWorkshopTag(
+                id.ToString(CultureInfo.InvariantCulture),
+                StripGamePrefix(name, appName)));
+        }
+
+        if (tags.Count == 0)
+        {
+            return null;
+        }
+
+        tags.Sort(static (left, right) =>
+            string.Compare(left.DisplayName, right.DisplayName, StringComparison.OrdinalIgnoreCase));
+        return new SteamWorkshopFilterGroup("dlc", "Required DLC", tags, IsDlc: true);
+    }
+
+    /// <summary>取游戏名，用来从 DLC 名称里去掉「Victoria 3: 」这类前缀（Steam 侧栏也是这么显示的）。</summary>
+    private static string? FindAppName(List<QueryEntry> queries)
+    {
+        foreach (var query in queries)
+        {
+            if (query.Key.Count > 0
+                && string.Equals(query.Key[0], "apphub", StringComparison.OrdinalIgnoreCase)
+                && query.Data is JsonObject hub)
+            {
+                var name = GetString(hub, "name");
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    return name;
+                }
+            }
+        }
+
+        foreach (var query in queries)
+        {
+            if (query.Key.Count > 0
+                && string.Equals(query.Key[0], "workshop_config_v8", StringComparison.OrdinalIgnoreCase)
+                && query.Data is JsonObject config)
+            {
+                var name = GetString(config, "workshop_title");
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    return name;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string StripGamePrefix(string name, string? appName)
+    {
+        if (string.IsNullOrWhiteSpace(appName))
+        {
+            return name;
+        }
+
+        var prefix = appName + ":";
+        return name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+            ? name[prefix.Length..].Trim()
+            : name;
+    }
+
+    private static string UniquifyKey(List<SteamWorkshopFilterGroup> groups, string key)
+    {
+        if (groups.All(group => !string.Equals(group.Key, key, StringComparison.Ordinal)))
+        {
+            return key;
+        }
+
+        return key + ":" + groups.Count.ToString(CultureInfo.InvariantCulture);
+    }
+
     private static JsonObject? PickFromQuery(JsonObject query)
     {
         if (query["state"]?["data"] is JsonObject stateData && HasResults(stateData))
@@ -216,7 +517,30 @@ public static class SteamWorkshopHtmlParser
             Tags: tags,
             StarRating: GetDouble(item, "star_rating"),
             TotalVotes: (int)GetLong(item, "total_votes"),
-            ConsumerAppId: (int)GetLong(item, "consumer_appid"));
+            ConsumerAppId: (int)GetLong(item, "consumer_appid"),
+            FileType: GetFileType(item),
+            ChildCount: GetChildCount(item));
+    }
+
+    /// <summary>
+    /// 读条目类型。SSR 的键名在不同页面版本里出现过 <c>file_type</c> / <c>filetype</c> 两种写法；
+    /// 两个都没有时返回 0（普通条目），合集列表页仍会按区段把整页标成合集，不会误判。
+    /// </summary>
+    private static int GetFileType(JsonObject item)
+    {
+        var direct = GetInt(item, "file_type");
+        return direct != 0 ? direct : GetInt(item, "filetype");
+    }
+
+    /// <summary>读合集子项数量：优先数 <c>children</c> 数组，其次读 <c>num_children</c>。</summary>
+    private static int GetChildCount(JsonObject item)
+    {
+        if (item["children"] is JsonArray children)
+        {
+            return children.Count;
+        }
+
+        return GetInt(item, "num_children");
     }
 
     private static DateTimeOffset FromUnixSeconds(long seconds)

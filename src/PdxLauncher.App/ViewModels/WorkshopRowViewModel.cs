@@ -8,6 +8,7 @@ using PdxLauncher.App.Localization;
 using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Playsets;
+using PdxLauncher.Core.Steam;
 
 /// <summary>
 /// 创意工坊列表里的一行。两个平台共用同一套界面，
@@ -28,6 +29,10 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
     [ObservableProperty]
     private string? _translatedName;
 
+    /// <summary>这一行的单项订阅请求是否在飞（合集内容列表用）。</summary>
+    [ObservableProperty]
+    private bool _isSteamSubscribing;
+
     private WorkshopRowViewModel(
         WorkshopSource source,
         string id,
@@ -42,7 +47,10 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
         string webUrl,
         string? steamUrl,
         SteamWorkshopItem? steamItem,
-        PdxModsSummary? pdxSummary)
+        PdxModsSummary? pdxSummary,
+        bool isCollection = false,
+        string? shortDescription = null,
+        bool steamActionAvailable = false)
     {
         Source = source;
         Id = id;
@@ -58,7 +66,19 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
         SteamUrl = steamUrl;
         SteamItem = steamItem;
         PdxSummary = pdxSummary;
+        IsCollection = isCollection;
+        ShortDescription = shortDescription ?? string.Empty;
+        IsSteamActionAvailable = steamActionAvailable;
     }
+
+    /// <summary>这行是不是 Steam 合集（列表页按区段判断，详情按 <c>file_type=2</c>）。</summary>
+    public bool IsCollection { get; }
+
+    /// <summary>是否显示「合集」徽标。</summary>
+    public bool ShowCollectionBadge => IsCollection;
+
+    /// <summary>「合集」徽标文案。</summary>
+    public string CollectionBadgeText => T(Keys.WorkshopCollectionBadge);
 
     /// <summary>这行来自哪个平台。</summary>
     public WorkshopSource Source { get; }
@@ -90,6 +110,37 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
     /// <summary>体积文案；未知时为空串（PDX 列表没有体积）。</summary>
     public string SizeText { get; }
 
+    /// <summary>列表短描述；合集内容列表用来显示子项简介，普通行也可用。空串表示没有。</summary>
+    public string ShortDescription { get; }
+
+    /// <summary>是否有短描述。</summary>
+    public bool HasShortDescription => !string.IsNullOrWhiteSpace(ShortDescription);
+
+    /// <summary>合集子项是否允许本页直接改 Steam 订阅（后端可用且设置里开了写开关）。</summary>
+    public bool IsSteamActionAvailable { get; }
+
+    /// <summary>这一项在 Steam 侧是否已订阅（含已安装，安装通常意味着订阅过）。</summary>
+    public bool IsSubscribed => SteamState?.IsSubscribed == true || SteamState?.IsInstalled == true;
+
+    /// <summary>单项订阅按钮是否可点。</summary>
+    public bool CanToggleSteamSubscription => IsSteamActionAvailable && !IsSteamSubscribing;
+
+    /// <summary>
+    /// 单项订阅按钮是否可激活（不论写开关）：
+    /// 直连可用走直连，只读模式由页面回退到「在 Steam 客户端打开」，所以按钮本身必须可点。
+    /// </summary>
+    public bool CanActivateSteamSubscription => CanOpenSteam && !IsSteamSubscribing;
+
+    /// <summary>单项订阅按钮文案：订阅 / 取消订阅 / 正在订阅…。</summary>
+    public string SteamSubscribeActionText => IsSteamSubscribing
+        ? T(Keys.WorkshopDetailSubscribing)
+        : IsSubscribed
+            ? T(Keys.WorkshopDetailUnsubscribe)
+            : T(Keys.WorkshopDetailSubscribe);
+
+    /// <summary>单项订阅按钮的自动化 Id。</summary>
+    public string SteamSubscribeAutomationId => "workshopCollectionSubscribe_" + Id;
+
     /// <summary>副标题：作者 · 评分 · 订阅数 · 更新时间，空段自动省略，不留孤立分隔符。</summary>
     public string SubtitleText => string.Join(
         " · ",
@@ -120,6 +171,22 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
     /// <summary>用于封面缓存的文件名（含来源前缀，两套 id 空间不会撞）。</summary>
     public string CoverCacheKey => (Source == WorkshopSource.Steam ? "steam/" : "pdx/") + Id;
 
+    /// <summary>
+    /// 这一条在本机的 Steam 状态（订阅 / 已安装 / 下载中 / 需要更新 / 本地禁用）。
+    /// 列表铺好后才由 <see cref="WorkshopViewModel"/> 用整库缓存补进来；PDX 行与读不到时保持 null。
+    /// </summary>
+    [ObservableProperty]
+    private WorkshopInstallState? _steamState;
+
+    /// <summary>是否要显示 Steam 状态徽标（与 Mod 库行同一套判定）。</summary>
+    public bool ShowSteamStateBadge => SteamStateBadgeFormatter.IsVisible(SteamState);
+
+    /// <summary>Steam 状态徽标文案；下载中带上百分比与字节数。</summary>
+    public string SteamStateBadgeText => SteamStateBadgeFormatter.Build(SteamState);
+
+    /// <summary>Steam 状态徽标的自动化 Id。</summary>
+    public string SteamStateAutomationId => "workshopRowSteamState_" + Id;
+
     /// <summary>行的自动化 Id（每行唯一，供 UI 测试定位）。</summary>
     public string RowAutomationId => "workshopRow_" + (Source == WorkshopSource.Steam ? "steam_" : "pdx_") + Id;
 
@@ -132,7 +199,11 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
     /// <summary>从 Steam 列表条目建一行。</summary>
     /// <param name="item">Steam 条目。</param>
     /// <param name="thumbnailSize">封面边长（像素）。</param>
-    public static WorkshopRowViewModel FromSteam(SteamWorkshopItem item, int thumbnailSize)
+    /// <param name="isCollection">是否是合集列表里的行（SSR 不一定给 <c>file_type</c>，按浏览区段兜底）。</param>
+    public static WorkshopRowViewModel FromSteam(
+        SteamWorkshopItem item,
+        int thumbnailSize,
+        bool isCollection = false)
     {
         ArgumentNullException.ThrowIfNull(item);
 
@@ -170,7 +241,91 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
             SteamWorkshop.GetBrowserAddress(item.PublishedFileId) ?? string.Empty,
             SteamWorkshop.GetSteamAddress(item.PublishedFileId),
             item,
-            null);
+            null,
+            isCollection || item.IsCollection,
+            item.ShortDescription);
+    }
+
+    /// <summary>
+    /// 从 <c>GetPublishedFileDetails</c> 的详情建一行（合集子项列表用）。
+    /// 详情没有评分/当前订阅数，副标题就只显示作者与体积；这些行只用于展示与跳转。
+    /// </summary>
+    /// <param name="detail">子项详情。</param>
+    /// <param name="thumbnailSize">封面边长（像素）。</param>
+    /// <param name="steamActionAvailable">是否允许本页直接改这一项的 Steam 订阅。</param>
+    public static WorkshopRowViewModel FromSteamDetail(
+        SteamWorkshopItemDetail detail,
+        int thumbnailSize,
+        bool steamActionAvailable = false)
+    {
+        ArgumentNullException.ThrowIfNull(detail);
+
+        var author = string.IsNullOrWhiteSpace(detail.CreatorSteamId)
+            ? string.Empty
+            : T(Keys.WorkshopAuthor, detail.CreatorSteamId);
+        var updated = detail.UpdatedUtc > DateTimeOffset.UnixEpoch
+            ? T(Keys.WorkshopUpdated, detail.UpdatedUtc.ToLocalTime().ToString("yyyy/MM/dd", CultureInfo.InvariantCulture))
+            : null;
+        var size = detail.FileSizeBytes > 0
+            ? T(Keys.WorkshopSize, ModSizeText.Format(detail.FileSizeBytes))
+            : null;
+
+        return new WorkshopRowViewModel(
+            WorkshopSource.Steam,
+            detail.PublishedFileId,
+            detail.Title,
+            author,
+            null,
+            null,
+            updated,
+            size,
+            detail.PreviewUrl,
+            thumbnailSize,
+            SteamWorkshop.GetBrowserAddress(detail.PublishedFileId) ?? string.Empty,
+            SteamWorkshop.GetSteamAddress(detail.PublishedFileId),
+            null,
+            null,
+            detail.IsCollection,
+            null,
+            steamActionAvailable);
+    }
+
+    /// <summary>
+    /// 从合集物品页解析出的子项建一行。作者只有显示名（页面不给 SteamID），也没有评分/体积，
+    /// 所以副标题只显示作者；这些行用于合集内容列表与跳转子项详情。
+    /// </summary>
+    /// <param name="item">物品页上的子项。</param>
+    /// <param name="thumbnailSize">封面边长（像素）。</param>
+    /// <param name="steamActionAvailable">是否允许本页直接改这一项的 Steam 订阅。</param>
+    public static WorkshopRowViewModel FromSteamCollectionItem(
+        SteamWorkshopCollectionItemPage item,
+        int thumbnailSize,
+        bool steamActionAvailable = false)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        var author = string.IsNullOrWhiteSpace(item.AuthorName)
+            ? string.Empty
+            : T(Keys.WorkshopAuthor, item.AuthorName!);
+
+        return new WorkshopRowViewModel(
+            WorkshopSource.Steam,
+            item.PublishedFileId,
+            item.Title,
+            author,
+            null,
+            null,
+            null,
+            null,
+            item.PreviewUrl,
+            thumbnailSize,
+            SteamWorkshop.GetBrowserAddress(item.PublishedFileId) ?? string.Empty,
+            SteamWorkshop.GetSteamAddress(item.PublishedFileId),
+            null,
+            null,
+            false,
+            item.ShortDescription,
+            steamActionAvailable);
     }
 
     /// <summary>从 PDX Mods 列表条目建一行。</summary>
@@ -220,7 +375,11 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
     /// </summary>
     /// <param name="entry">缓存条目。</param>
     /// <param name="thumbnailSize">封面边长（像素）。</param>
-    public static WorkshopRowViewModel FromCache(WorkshopInfoCacheEntry entry, int thumbnailSize)
+    /// <param name="isCollection">是否是合集列表里的行（页缓存按区段隔离，可直接沿用）。</param>
+    public static WorkshopRowViewModel FromCache(
+        WorkshopInfoCacheEntry entry,
+        int thumbnailSize,
+        bool isCollection = false)
     {
         ArgumentNullException.ThrowIfNull(entry);
 
@@ -261,7 +420,8 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
                 : PdxWebPrefix + entry.Id,
             isSteam ? SteamWorkshop.GetSteamAddress(entry.Id) : null,
             null,
-            null);
+            null,
+            isSteam && isCollection);
     }
 
     /// <summary>
@@ -346,4 +506,19 @@ public sealed partial class WorkshopRowViewModel : LocalizedObservableObject
     partial void OnCoverPathChanged(string? value) => OnPropertyChanged(nameof(HasCover));
 
     partial void OnTranslatedNameChanged(string? value) => OnPropertyChanged(nameof(HasTranslatedName));
+
+    partial void OnSteamStateChanged(WorkshopInstallState? value)
+    {
+        OnPropertyChanged(nameof(ShowSteamStateBadge));
+        OnPropertyChanged(nameof(SteamStateBadgeText));
+        OnPropertyChanged(nameof(IsSubscribed));
+        OnPropertyChanged(nameof(SteamSubscribeActionText));
+    }
+
+    partial void OnIsSteamSubscribingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanToggleSteamSubscription));
+        OnPropertyChanged(nameof(CanActivateSteamSubscription));
+        OnPropertyChanged(nameof(SteamSubscribeActionText));
+    }
 }

@@ -257,11 +257,12 @@
             </Grid>
 
             <!--
-                官方公告卡：三块固定尺寸纯图卡，整行最大 986 DIP 居中
-                （451 + 246 + 246 + 2x21 间距 = 985，对应官方 28.1875rem 内容宽）。
+                官方公告卡：三块固定尺寸纯图卡，整行居中
+                （451 + 246 + 246 + 2x24 间距 = 991；Viewbox 的 MaxWidth 是 986，比内容窄 5 DIP，
+                整行按约 99.5% 等比缩，视觉上仍是官方比例）。
                 官方是 flex 行（.news__container），缺哪块就少一块、整行仍居中，所以这里用
                 「Viewbox + 水平 StackPanel」而不是三列 Grid —— Grid 会给隐藏的卡留空列。
-                Viewbox 只向下缩放：窗口窄于 985 时整行等比缩小，不裁切、不横向滚动。
+                Viewbox 只向下缩放：窗口窄于 991 时整行等比缩小，不裁切、不横向滚动。
                 卡片用透明 Button 承载点击与无障碍，系统按钮底色在 Button.Resources 里全部压成透明；
                 视觉全部由 Content 里的 Border/Image 提供：无内边距、图铺满整卡、只有标题叠加层。
                 悬停反馈是叠一层 50% 深色遮罩（官方 .news:hover:after），不改 Button.Background。
@@ -502,7 +503,7 @@
                 Severity="Informational"
                 Title="{x:Bind L.HomeNewsTitle, Mode=OneWay}" />
 
-            <!-- 状态文案 -->
+            <!-- 非启动状态文案（启动结果由上方 HomeInfoBar 展示） -->
             <TextBlock
                 AutomationProperties.AutomationId="txtHomeStatus"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -510,6 +511,23 @@
                 Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
                 TextWrapping="Wrap"
                 Visibility="{x:Bind svc:XamlVisibility.FromString(ViewModel.StatusMessage), Mode=OneWay}" />
+
+            <!--
+                原生按钮禁用态的取色探针。两个按钮的内容是 Grid + TextBlock，文字带本地前景，
+                不会跟随模板里 ContentPresenter 的 Disabled 状态；代码又查不到 ThemeDictionaries
+                里的 ThemeResource（TryGetValue 不走主题字典），所以让 XAML 解析一次，
+                禁用时由代码读取探针的画刷。Collapsed 不影响布局，主题切换时 ThemeResource 会自动重取。
+                Default 用 ButtonForegroundDisabled，Accent 用 TextOnAccentFillColorDisabledBrush
+                （前者是 TextFillColorDisabledBrush 的别名，后者是 Accent 禁用态的白字）。
+            -->
+            <Border
+                x:Name="DefaultButtonDisabledForegroundProbe"
+                BorderBrush="{ThemeResource ButtonForegroundDisabled}"
+                Visibility="Collapsed" />
+            <Border
+                x:Name="AccentButtonDisabledForegroundProbe"
+                BorderBrush="{ThemeResource TextOnAccentFillColorDisabledBrush}"
+                Visibility="Collapsed" />
         </StackPanel>
     </ScrollViewer>
 </Page>

@@ -68,10 +68,14 @@ public static class ModsPageLayoutChecks
 
         var xaml = File.ReadAllText(xamlPath);
         var code = File.ReadAllText(codePath);
+        var rowViewModel = File.ReadAllText(
+            Path.Combine(root, "src", "PdxLauncher.App", "ViewModels", "ModRowViewModel.cs"));
 
         CheckAutomationIds(xaml);
         CheckLayoutBranches(xaml);
         CheckSharedRowTemplate(xaml);
+        CheckNumberBoxPositionEditor(xaml, rowViewModel);
+        CheckRowContextMenu(xaml, rowViewModel);
         CheckCandidateIsCheckToAdd(xaml);
         CheckHeaderSearchFillsColumn(xaml);
         CheckSplitterKept(xaml);
@@ -152,6 +156,129 @@ public static class ModsPageLayoutChecks
             "播放集页: 候选行模板只用于左栏",
             1,
             CountOccurrences(xaml, "ItemTemplate=\"{StaticResource PlaysetCandidateRowTemplate}\""));
+    }
+
+    /// <summary>
+    /// 行内序号编辑从 TextBox 换成 NumberBox：属性、事件与按行 AutomationId 一个都不能丢。
+    /// <c>modPositionEdit_</c> 是行 VM 拼出来的前缀，XAML 里只绑属性名，所以两边都查。
+    /// </summary>
+    private static void CheckNumberBoxPositionEditor(string xaml, string rowViewModel)
+    {
+        var template = SliceTemplate(xaml, "PlaysetModRowTemplate");
+        ChecksContext.Check("播放集页: 找到行模板（序号编辑）", template.Length > 0);
+        if (template.Length == 0)
+        {
+            return;
+        }
+
+        ChecksContext.Check(
+            "播放集页: 行模板序号编辑是 NumberBox",
+            template.Contains("<NumberBox", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 行模板同时出现 NumberBox 与 PositionEditAutomationId 绑定",
+            template.Contains("{x:Bind PositionEditAutomationId, Mode=OneTime}", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 行 VM 仍生成 modPositionEdit_ 前缀的 AutomationId",
+            rowViewModel.Contains("\"modPositionEdit_\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: NumberBox Minimum=1",
+            template.Contains("Minimum=\"1\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: NumberBox Maximum 绑 TotalCount",
+            template.Contains("Maximum=\"{x:Bind TotalCount, Mode=OneWay}\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: NumberBox SmallChange=1",
+            template.Contains("SmallChange=\"1\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: NumberBox LargeChange=10",
+            template.Contains("LargeChange=\"10\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: NumberBox 步进按钮紧凑",
+            template.Contains("SpinButtonPlacementMode=\"Compact\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: NumberBox 非法输入自动覆盖",
+            template.Contains("ValidationMode=\"InvalidInputOverwritten\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: NumberBox 宽 64",
+            template.Contains("Width=\"64\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: NumberBox Padding=8,0",
+            template.Contains("Padding=\"8,0\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: NumberBox 保留 KeyDown/LostFocus",
+            template.Contains("KeyDown=\"OnPositionEditKeyDown\"", StringComparison.Ordinal)
+                && template.Contains("LostFocus=\"OnPositionEditLostFocus\"", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 行右键菜单：只放「打开本地文件夹 / 在 Steam 中打开 / 复制注册 ID」三项。
+    /// 「移除」是即时自动保存、没有二次确认，误触即删，所以绝不允许出现在菜单里。
+    /// </summary>
+    private static void CheckRowContextMenu(string xaml, string rowViewModel)
+    {
+        var template = SliceTemplate(xaml, "PlaysetModRowTemplate");
+        ChecksContext.Check("播放集页: 找到行模板（右键菜单）", template.Length > 0);
+        if (template.Length == 0)
+        {
+            return;
+        }
+
+        ChecksContext.Check(
+            "播放集页: 行模板根 Grid 有 ContextFlyout",
+            template.Contains("<Grid.ContextFlyout>", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: ContextFlyout 是 MenuFlyout",
+            template.Contains("<MenuFlyout>", StringComparison.Ordinal));
+
+        var start = template.IndexOf("<MenuFlyout>", StringComparison.Ordinal);
+        var end = start >= 0 ? template.IndexOf("</MenuFlyout>", start, StringComparison.Ordinal) : -1;
+        var menu = start >= 0 && end > start ? template[start..end] : string.Empty;
+        ChecksContext.Equal("播放集页: 右键菜单恰好三项", 3, CountOccurrences(menu, "<MenuFlyoutItem"));
+
+        ChecksContext.Check(
+            "播放集页: 菜单项一是打开本地文件夹（文案随目录/压缩包切换）",
+            menu.Contains("{x:Bind RowMenuOpenFolderText, Mode=OneWay}", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 菜单项二是在 Steam 中打开",
+            menu.Contains("{x:Bind RowMenuOpenSteamText, Mode=OneWay}", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 菜单项三是复制注册 ID",
+            menu.Contains("{x:Bind RowMenuCopyIdText, Mode=OneWay}", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 菜单 Click 处理器齐全",
+            menu.Contains("Click=\"OnRowOpenFolderClick\"", StringComparison.Ordinal)
+                && menu.Contains("Click=\"OnRowOpenSteamClick\"", StringComparison.Ordinal)
+                && menu.Contains("Click=\"OnRowCopyIdClick\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 菜单项 IsEnabled 绑 HasLocalFiles / CanMove",
+            menu.Contains("{x:Bind HasLocalFiles, Mode=OneWay}", StringComparison.Ordinal)
+                && menu.Contains("{x:Bind CanMove, Mode=OneWay}", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 右键菜单里没有「移除」",
+            !menu.Contains("RemoveCommand", StringComparison.Ordinal)
+                && !menu.Contains("ModsRowRemove", StringComparison.Ordinal));
+
+        ChecksContext.Check(
+            "播放集页: 行 VM 暴露 HasLocalFiles",
+            rowViewModel.Contains("public bool HasLocalFiles", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 行 VM 菜单 AutomationId 前缀",
+            rowViewModel.Contains("\"modOpenFolder_\"", StringComparison.Ordinal)
+                && rowViewModel.Contains("\"modOpenSteam_\"", StringComparison.Ordinal)
+                && rowViewModel.Contains("\"modCopyId_\"", StringComparison.Ordinal));
+    }
+
+    /// <summary>切出某个 DataTemplate 的正文；找不到返回空串。</summary>
+    private static string SliceTemplate(string xaml, string key)
+    {
+        var start = xaml.IndexOf("x:Key=\"" + key + "\"", StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return string.Empty;
+        }
+
+        var end = xaml.IndexOf("</DataTemplate>", start, StringComparison.Ordinal);
+        return end > start ? xaml[start..end] : xaml[start..];
     }
 
     /// <summary>左栏是「勾选即加入」：勾选框直接带 Click 处理器，没有确认按钮。</summary>

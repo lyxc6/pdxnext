@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="PdxLauncher.App.Controls.McpDocsContent"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctl="using:PdxLauncher.App.Controls">
+
+    <StackPanel MinWidth="600" MaxWidth="720" Spacing="12">
+        <TextBlock Text="{x:Bind L.ModstudioMcpDocsIntro, Mode=OneWay}"
+                   TextWrapping="Wrap"
+                   Style="{StaticResource BodyTextBlockStyle}"
+                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+        <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <FontIcon Grid.Column="0" Glyph="&#xE72E;" FontSize="14" Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+            <TextBlock Grid.Column="1"
+                       MaxWidth="680"
+                       Text="{x:Bind L.ModstudioMcpDocsSafety, Mode=OneWay}"
+                       TextWrapping="Wrap"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        </Grid>
+
+        <!-- 一句话安装：优先给用户可复制的自然语言提示词 -->
+        <Border Padding="12"
+                CornerRadius="8"
+                BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <FontIcon Glyph="&#xE945;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                    <TextBlock Text="{x:Bind L.ModstudioMcpQuickInstallTitle, Mode=OneWay}"
+                               Style="{StaticResource BodyStrongTextBlockStyle}" />
+                </StackPanel>
+                <TextBlock Text="{x:Bind L.ModstudioMcpQuickInstallHint, Mode=OneWay}"
+                           TextWrapping="Wrap"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Border Padding="8"
+                        CornerRadius="4"
+                        Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                    <TextBlock x:Name="PromptTextBlock"
+                               TextWrapping="Wrap"
+                               IsTextSelectionEnabled="True"
+                               AutomationProperties.AutomationId="txtModStudioMcpPrompt" />
+                </Border>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="CopyPromptButton"
+                            Click="OnCopyPromptClick"
+                            Content="{x:Bind L.CommonCopy, Mode=OneWay}"
+                            AutomationProperties.AutomationId="btnModStudioMcpCopyPrompt" />
+                    <Button Content="{x:Bind L.ModstudioMcpManualConfigTitle, Mode=OneWay}"
+                            Click="OnShowManualConfigClick"
+                            AutomationProperties.AutomationId="btnModStudioMcpShowManualConfig" />
+                    <TextBlock x:Name="PromptCopiedText"
+                               VerticalAlignment="Center"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- 使用流程：压成一行，避免三行文字把对话框撑满 -->
+        <Border Padding="12"
+                CornerRadius="8"
+                BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="8">
+                <TextBlock Text="{x:Bind L.ModstudioMcpFlowTitle, Mode=OneWay}"
+                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <TextBlock Text="{x:Bind L.ModstudioMcpFlowBody, Mode=OneWay}" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+
+        <!-- 工具：用标签块，不再挤成一行长句 -->
+        <Border Padding="12"
+                CornerRadius="8"
+                BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="8">
+                <TextBlock Text="{x:Bind L.ModstudioMcpDocsToolsLabel, Mode=OneWay}"
+                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <Grid>
+                    <ctl:PdxWrapPanel Spacing="8">
+                        <Border Padding="8,4" CornerRadius="4" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                            <TextBlock Text="list_games" FontFamily="Consolas" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </Border>
+                        <Border Padding="8,4" CornerRadius="4" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                            <TextBlock Text="list_mods" FontFamily="Consolas" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </Border>
+                        <Border Padding="8,4" CornerRadius="4" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                            <TextBlock Text="list_tags" FontFamily="Consolas" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </Border>
+                        <Border Padding="8,4" CornerRadius="4" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                            <TextBlock Text="get_upload_draft" FontFamily="Consolas" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </Border>
+                        <Border Padding="8,4" CornerRadius="4" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                            <TextBlock Text="save_upload_draft" FontFamily="Consolas" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </Border>
+                        <Border Padding="8,4" CornerRadius="4" Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                            <TextBlock Text="clear_upload_draft" FontFamily="Consolas" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </Border>
+                    </ctl:PdxWrapPanel>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- 手动配置默认收起，想看 JSON 再展开 -->
+        <Expander x:Name="ManualConfigExpander"
+                  HorizontalAlignment="Stretch"
+                  IsExpanded="False"
+                  AutomationProperties.AutomationId="expModStudioMcpManualConfig">
+            <Expander.Header>
+                <TextBlock Text="{x:Bind L.ModstudioMcpManualConfigTitle, Mode=OneWay}"
+                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+            </Expander.Header>
+            <StackPanel Padding="0,8,0,0" Spacing="8">
+                <TextBlock Text="{x:Bind L.ModstudioMcpDevPathNote, Mode=OneWay}"
+                           TextWrapping="Wrap"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="ExePathText"
+                           TextWrapping="Wrap"
+                           IsTextSelectionEnabled="True"
+                           FontFamily="Consolas"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           AutomationProperties.AutomationId="txtModStudioMcpExePath" />
+                <TextBox x:Name="ConfigBox"
+                         IsReadOnly="True"
+                         AcceptsReturn="True"
+                         TextWrapping="Wrap"
+                         FontFamily="Consolas"
+                         MinHeight="160"
+                         AutomationProperties.AutomationId="txtModStudioMcpConfig" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button x:Name="CopyConfigButton"
+                            Click="OnCopyConfigClick"
+                            Content="{x:Bind L.CommonCopy, Mode=OneWay}"
+                            AutomationProperties.AutomationId="btnModStudioMcpCopyConfig" />
+                    <TextBlock x:Name="ConfigCopiedText"
+                               VerticalAlignment="Center"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
+                </StackPanel>
+                <TextBlock x:Name="ExeMissingText"
+                           Visibility="Collapsed"
+                           TextWrapping="Wrap"
+                           Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           AutomationProperties.AutomationId="txtModStudioMcpExeMissing" />
+            </StackPanel>
+        </Expander>
+    </StackPanel>
+</UserControl>

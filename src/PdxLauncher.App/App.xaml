@@ -7,6 +7,8 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <!-- 创意工坊筛选栏的三态胶囊（DefaultStyleKey = PdxTagChip）。 -->
+                <ResourceDictionary Source="Controls/PdxTagChip.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <!--

@@ -20,6 +20,10 @@ public interface IWorkshopPageStore
     /// <param name="entry">解析结果。</param>
     void Set(string publishedFileId, CachedSteamItemPage entry);
 
+    /// <summary>删除一条；不存在时静默。</summary>
+    /// <param name="publishedFileId">工坊条目 id。</param>
+    void Remove(string publishedFileId);
+
     /// <summary>清空全部条目。</summary>
     void Clear();
 

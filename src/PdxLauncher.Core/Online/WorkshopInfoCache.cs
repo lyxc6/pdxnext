@@ -104,6 +104,17 @@ public sealed class WorkshopInfoCache
         _store.Upsert(entry);
     }
 
+    /// <summary>
+    /// 批量写入或合并一组列表元数据；一个事务落库，只做一次容量淘汰。
+    /// 列表页一次并进 30–50 条，逐条写会把「开连接 + 事务 + COUNT(*)」重复一遍。
+    /// </summary>
+    /// <param name="entries">要写入的条目。</param>
+    public void UpsertMany(IReadOnlyList<WorkshopInfoCacheEntry> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        _store.UpsertMany(entries);
+    }
+
     /// <summary>取一条快照；没有返回 false。返回的是副本，调用方改动不会影响缓存。</summary>
     /// <param name="key">缓存键。</param>
     /// <param name="entry">命中的条目副本。</param>
@@ -131,7 +142,23 @@ public sealed class WorkshopInfoCache
     public bool TryGetCachedCover(string key, out string fullPath)
     {
         fullPath = string.Empty;
-        if (!TryGet(key, out var entry) || string.IsNullOrWhiteSpace(entry.CoverFileName))
+        return TryGet(key, out var entry) && TryGetCachedCover(entry, out fullPath);
+    }
+
+    /// <summary>
+    /// 已经拿到条目时直接判定封面文件是否存在（不查 SQLite）。
+    /// <para>
+    /// 页快照与离线快照里的条目本来就带 <see cref="WorkshopInfoCacheEntry.CoverFileName"/>：
+    /// 列表页逐行再按 key 回查一次库是 N+1，30–2000 条时会把界面按住。
+    /// </para>
+    /// </summary>
+    /// <param name="entry">条目快照。</param>
+    /// <param name="fullPath">封面文件的绝对路径。</param>
+    public bool TryGetCachedCover(WorkshopInfoCacheEntry entry, out string fullPath)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        fullPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(entry.CoverFileName))
         {
             return false;
         }

@@ -65,6 +65,8 @@ public sealed class UpdateService
     private readonly string _installDirectory;
     private readonly string _currentVersion;
     private readonly Func<DateTimeOffset> _utcNow;
+    private readonly IUninstallEntrySource? _uninstallEntries;
+    private InstallMode? _installMode;
 
     public UpdateService(
         HttpFetcher http,
@@ -74,7 +76,8 @@ public sealed class UpdateService
         string installDirectory,
         string currentVersion,
         AppSettingsStore? settingsStore = null,
-        Func<DateTimeOffset>? utcNow = null)
+        Func<DateTimeOffset>? utcNow = null,
+        IUninstallEntrySource? uninstallEntries = null)
     {
         ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(logger);
@@ -91,6 +94,7 @@ public sealed class UpdateService
         _currentVersion = UpdateVersion.Parse(currentVersion).ToString();
         _settingsStore = settingsStore;
         _utcNow = utcNow ?? (() => DateTimeOffset.UtcNow);
+        _uninstallEntries = uninstallEntries;
     }
 
     public string CurrentVersion => _currentVersion;
@@ -98,7 +102,47 @@ public sealed class UpdateService
     /// <summary>构造时传入的设置实例；必须与 AppServices.Settings 是同一个对象。</summary>
     public AppSettings Settings => _settings;
 
-    public bool IsPerMachineInstall => PdxDataRoot.IsPerMachineInstall(_installDirectory);
+    /// <summary>
+    /// 本次更新会传 <c>/ALLUSERS</c>（需要提权）还是 <c>/CURRENTUSER</c>。
+    /// 判据与设置页「安装模式」完全一致：同一份 marker、同一份卸载项、同一个程序目录。
+    /// </summary>
+    public bool WillUseAllUsers => ShouldUseAllUsers(CurrentInstallMode);
+
+    /// <summary>当前目录的安装形态；首次访问时读一次 marker 与卸载项，之后复用。</summary>
+    public InstallMode CurrentInstallMode => _installMode ??= ResolveInstallMode();
+
+    /// <summary>
+    /// 只有「Inno 正式安装 + 每机器 + App Path 命中当前目录」才用 <c>/ALLUSERS</c>。
+    /// <para>
+    /// 刻意不参考 <c>PdxDataRoot</c> 的旧「每机器安装」判据：它把「marker=perMachine」
+    /// 和「Program Files 下不可写」都当成每机器证据，绿色拷贝进 Program Files、或卸载残留
+    /// 都会被它判成已安装，于是更新时对便携副本传 <c>/ALLUSERS</c>，装到别处甚至覆盖别人的安装。
+    /// 判据的唯一来源是 <see cref="InstallModeResolver"/>（与设置页同一结论）。
+    /// </para>
+    /// </summary>
+    public static bool ShouldUseAllUsers(InstallMode mode)
+    {
+        ArgumentNullException.ThrowIfNull(mode);
+        return mode.Kind == InstallModeKind.InstalledInno &&
+               mode.Reason == InstallModeReason.MatchedInstallDir &&
+               mode.Scope == InstallScope.PerMachine;
+    }
+
+    private InstallMode ResolveInstallMode()
+    {
+        try
+        {
+            var marker = PdxDataRoot.ReadInstallMode(_installDirectory);
+            var entries = _uninstallEntries?.ReadEntries() ?? [];
+            return InstallModeResolver.Resolve(_installDirectory, marker, entries);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            // 读注册表/磁盘失败只等于「没有证据」：绝不能因此把便携副本按每机器去装。
+            _logger.Warn("判定更新安装模式失败，按便携处理: " + ex.Message);
+            return InstallMode.PortableRun(InstallModeReason.NoEntry);
+        }
+    }
 
     /// <summary>从程序集信息版本读取当前版本；失败时退回 1.0.0。</summary>
     public static string ReadCurrentVersion()
@@ -275,9 +319,9 @@ public sealed class UpdateService
             return new UpdateLaunchResult(false, false, "安装包不存在");
         }
 
-        var perMachine = IsPerMachineInstall;
+        var useAllUsers = WillUseAllUsers;
         var arguments = "/SILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS /NORESTART " +
-                        (perMachine ? "/ALLUSERS" : "/CURRENTUSER");
+                        (useAllUsers ? "/ALLUSERS" : "/CURRENTUSER");
 
         try
         {
@@ -286,8 +330,8 @@ public sealed class UpdateService
                 FileName = setupPath,
                 Arguments = arguments,
                 WorkingDirectory = Path.GetDirectoryName(setupPath) ?? _cacheDirectory,
-                UseShellExecute = perMachine,
-                Verb = perMachine ? "runas" : string.Empty,
+                UseShellExecute = useAllUsers,
+                Verb = useAllUsers ? "runas" : string.Empty,
                 CreateNoWindow = false,
             };
 
@@ -297,7 +341,7 @@ public sealed class UpdateService
                 return new UpdateLaunchResult(false, false, "无法启动安装器");
             }
 
-            _logger.Info("已启动更新安装器（" + (perMachine ? "每机器/UAC" : "每用户") + "）：" + setupPath);
+            _logger.Info("已启动更新安装器（" + (useAllUsers ? "每机器/UAC" : "每用户") + "）：" + setupPath);
             return new UpdateLaunchResult(true, false, null);
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)

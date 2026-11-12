@@ -1,0 +1,63 @@
+{
+  "schema": 1,
+  "updated": "2026-11-06",
+  "note": "已知 Steam 原版 steam_api 登记表。打补丁前用它确认目标文件是不是官方原版：命中 = 已知版本，未命中 = 未验证版本（UI 提示后允许继续）。sha256/size 为 2026-11-06 本机实测（Steam 库 D:/app/Steam、E:/SteamLibrary、F:/SteamLibrary），version/buildId 取自各游戏 launcher-settings.json 与 appmanifest 的 buildid。新增游戏版本时按同一结构追加一条即可，不要改动已有条目的哈希。",
+  "entries": [
+    {
+      "gameId": "victoria3",
+      "version": "1.15.0 (Ivan-Chai)",
+      "buildId": "26453692",
+      "fileName": "steam_api64.dll",
+      "sha256": "1db3fd414039d3e5815a5721925dd2e0a3a9f2549603c6cab7c49b84966a1af3",
+      "size": 298384
+    },
+    {
+      "gameId": "ck3",
+      "version": "1.20.1.2 (Crozier)",
+      "buildId": "26046173",
+      "fileName": "steam_api64.dll",
+      "sha256": "1db3fd414039d3e5815a5721925dd2e0a3a9f2549603c6cab7c49b84966a1af3",
+      "size": 298384
+    },
+    {
+      "gameId": "stellaris",
+      "version": "Cygnus v4.5.3 (4e91)",
+      "buildId": "26325427",
+      "fileName": "steam_api64.dll",
+      "sha256": "1db3fd414039d3e5815a5721925dd2e0a3a9f2549603c6cab7c49b84966a1af3",
+      "size": 298384
+    },
+    {
+      "gameId": "hoi4",
+      "version": "Operation Postern v1.19.4.2.2da5 (0bdb)",
+      "buildId": "26409260",
+      "fileName": "steam_api64.dll",
+      "sha256": "f1eb582e607a1e43cdb1654bfb7cb29ad46f6728b3fb89a14f7727e0e8daab69",
+      "size": 289568
+    },
+    {
+      "gameId": "eu4",
+      "version": "EU4 v1.37.5.0 Inca (491d)",
+      "buildId": "15918133",
+      "fileName": "steam_api64.dll",
+      "sha256": "4df999c0c8cb12589f0864d52be5d4c775577aeb27fee28b49b188f9ba083eea",
+      "size": 295336
+    },
+    {
+      "gameId": "cities_skylines",
+      "version": "1.21.1-f9",
+      "buildId": "22724702",
+      "fileName": "steam_api64.dll",
+      "sha256": "5c6dabbd723a284d6b9a70303678c60421485bceb51def107f273f0f3730ed28",
+      "size": 239184
+    },
+    {
+      "gameId": "cities_skylines_2",
+      "version": "1.6.2f1",
+      "buildId": "25127643",
+      "fileName": "steam_api64.dll",
+      "sha256": "a44e5537939ae4eebc69000589aa9b2437a667813a1657cc779198bae9b815a9",
+      "size": 298856
+    }
+  ]
+}

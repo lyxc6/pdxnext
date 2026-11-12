@@ -127,16 +127,55 @@ isOwned = isSubscribedApp(id) || 可信DisabledDLC.contains(id) || isDLCInstalle
 
 本项目 `SteamOwnershipService` 的做法：**用游戏目录里那份 `steam_api64.dll` 去问 Steam**。补丁生效时那份 DLL 就是 CreamAPI loader，所以它报出来的授权 == 游戏实际看到的授权 —— 这样「DLC 页全绿」就等于「补丁真的用上了」，而不是仅仅「账号里有这些 DLC」。
 
-**但 loader 在岗时，这个数字不是 Steam 目录。** CreamAPI 的 `GetDLCCount` / `BGetDLCDataByIndex` 读的是同目录 `cream_api.ini` 的 `[dlc]` 表，而且不按当前 appid 过滤；仓库素材那份表是 11 款 Paradox 游戏共用的 490 条模板（CS1 94 / EU4 93 / CK2 74 / HoI4 59 / Stellaris 56 / CK3 37 / CS2 29 / V3 23 / V2 11 / Imperator 9 / EU5 5）。所以 V3 真机看到「磁盘 17 个 DLC / 游戏读到 490 个」——490 是模板行数，不是账号拥有数，也不是 V3 的 DLC 数。判定条在 loader 在岗时必须写「游戏读到 N 个」，不能写「Steam 报告 N 个」。
+**但 loader 在岗时，这个数字不是 Steam 目录。** CreamAPI 的 `GetDLCCount` / `BGetDLCDataByIndex` 读的是同目录 `cream_api.ini` 的 `[dlc]` 表，而且不按当前 appid 过滤；打补丁时这张表由 `Patch\Assets\dlc-catalog.json` 生成——11 款 Paradox 游戏共用 497 条（CS1 94 / EU4 93 / CK2 74 / HoI4 59 / Stellaris 56 / CK3 37 / CS2 35 / V3 23 / V2 11 / Imperator 9 / EU5 6），每款游戏一节，运行时摊平成唯一一段 `[dlc]`（条数与分节来源：`dlc-catalog.json` 的 `sources[].dlc`）。所以 V3 真机看到「磁盘 18 个 DLC / 游戏读到 497 个」——497 是清单行数，不是账号拥有数，也不是 V3 的 DLC 数。判定条在 loader 在岗时必须写「游戏读到 N 个」，不能写「Steam 报告 N 个」。
 
 - 主探测（游戏可用）：`NativeLibrary.Load(<ApiDirectory>\steam_api64.dll)` → `SteamAPI_Init` → `SteamAPI_SteamApps_v008` / `SteamAPI_SteamUser_v021` → `GetDLCCount` / `BGetDLCDataByIndex` / `BIsSubscribedApp` / `BIsDlcInstalled` → `SteamAPI_Shutdown` + `Free`。刻意不用 `DllImport` 解析器：全进程只能绑一个 DLL 路径。
 - **账号视图（账号真实拥有）**：当 `GamePatchReport.IsLoaderActive`（`Patched` 或 `PatchedOther`）且同目录存在 `steam_api64_o.dll` 时，**再探一次原版备份**，把「账号里到底有哪些」与「游戏实际能用哪些」分开。两份报告都套同一个 `TrustedDisabledDlc` 采信闸门。降级：备份缺失 → 无账号视图（UI 写「缺少原版备份」）；备份与当前文件字节相同、或返回与 loader 完全相同的 id 集合 → 「备份看起来也是加载器」（`backupNotOriginal`）；备份探测失败 → 账号视图不可用并带上失败键。
-- 判定口径：`Patched` / `PatchedOther` 都算已打补丁（`GamePatchReport.IsLoaderActive`），只有 `SteamOverwrote`（当前 API 已是原版、备份是 loader）不算在岗；`Vanilla*` 分支保留「Steam 目录」措辞，`Patched*` 分支写「游戏读到」。
+- 判定口径：`Patched` / `PatchedOther` 都算已打补丁（`GamePatchReport.IsLoaderActive`），只有 `SteamOverwrote`（`_o` 还在、当前 API 已被换回原版）不算在岗；`Vanilla*` 分支保留「Steam 目录」措辞，`Patched*` 分支写「游戏读到」。
 - 32 位游戏的 `steam_api.dll` 在 x64 进程里会 `BadImageFormat` → 直接报「无法判定（32 位游戏不支持）」。
 - 同一个 DLL 的 Steamworks 只能有一个持有者：`SteamNativeSession` 做进程内闸门（DLC 授权探测 ↔ 创意工坊订阅）；主探测与账号探测**顺序执行**，不并发（同一 appid 两个 `SteamAPI_Init` 会互相打架）。
 - 结果缓存 30 秒（key = DLL 路径 + 字节数 + appid + 补丁状态 + 备份路径 + 备份字节数），DLC 页的「重新检测」与设置页打/撤补丁成功后会 `Invalidate()`。
-- 真机 Stellaris（appid 281990，SteamID64 76561198370719182）：打完补丁 → loader 表 490、拥有 490；用原版 `steam_api64_o.dll` → 53 个、拥有 26。V3 真机（appid 529340）：loader 表 490、账号视图 23、磁盘 17 个 `.dlc.json` → 判定「补丁已生效：游戏读到 490 个、490 个已拥有；账号真实拥有 17/23（加载器表里 467 条不属于本游戏）」。
+- 真机 Stellaris（appid 281990，SteamID64 76561198370719182）：打完补丁 → loader 表 497、拥有 497；用原版 `steam_api64_o.dll` → 53 个、拥有 26。V3 真机（appid 529340）：loader 表 497、账号视图 23、磁盘 17 个 `.dlc.json` → 判定「补丁已生效：游戏读到 497 个、497 个已拥有；账号真实拥有 17/23（加载器表里 467 条不属于本游戏）」。上面这些计数是 2026-11 的实测样本，账号增减 DLC 后会变（本机后续复测账号视图仍是 23 条，但 `BIsSubscribedApp` 返回已拥有 10 条），文档里的「拥有 x/y」不要当常量断言。
 - 失败键（UI 侧 `dlc.ownershipError*`）：`noAppId` / `noDll` / `x86` / `notWindows` / `busy` / `steamNotRunning` / `initFailed` / `native` / `backupNotOriginal`。
+
+### 3.2 DLC 内容状态判定（内容归 Steam，不归补丁）
+
+补丁（`cream_api.ini` + loader）只打通**授权**，它不会、也无法把 DLC 的资源文件放到磁盘上。
+「授权通了但游戏里看不到这份 DLC」的真实原因是内容没落盘，不是补丁没生效。所以 DLC 页除了
+「拥有 / 未拥有」（3.1）与「补丁覆盖」，还要单独显示**内容来源**，两者是正交维度。
+
+判定依据是 `appmanifest_<appid>.acf` 的 `InstalledDepots`：
+
+```
+"AppState" {
+    "appid" "529340"
+    "buildid" "26453692"
+    "InstalledDepots" {
+        "529341" { "manifest" "…" "size" "12562973323" }                          // 本体 depot，无 dlcappid
+        "2071470" { "manifest" "…" "size" "630473793" "dlcappid" "2071471" }      // DLC depot
+    }
+}
+```
+
+- 只有**带 `dlcappid`** 的 depot 才算「这个 DLC 的内容由 Steam 装过」；本体 depot 与 DLC 判定无关。
+- `InstalledDepots` **段缺失 = 不知道**，不等于「一个都没装」。两者在 UI 上必须区分：
+  `AppManifest.KnowsDlcDepots` 为 false 时，界面不许出现「Steam 已装」。
+- 真机证据（2026-11-08，V3 1.15 / appid 529340）：`InstalledDepots` 里 9 个带 `dlcappid` 的 depot，
+  其 `size` 与 `game\dlc\dlc001…dlc010` 的目录字节数**逐字节相等**；`dlc011…dlc019` 有内容但无 depot 登记
+  ⇒ 前者是 Steam 装的，后者是从整合包人工拷进去的（例如 `dlc019_ip5`，State and Revolution / 4314660）。
+
+`DlcContentInspector` 的判定优先级（顺序有意义）：
+
+| 顺序 | 条件 | 结果 |
+| --- | --- | --- |
+| 1 | `steam_id` 命中 `InstalledDepots` 的 `dlcappid` | `SteamInstalled`（Steam 已装，随游戏更新维护） |
+| 2 | `FilePathRelativeToDlcPath` 以 `steam:` 开头（CS2 这类借 Steam 清单构建的行）且未命中 | `Unknown`（没有磁盘描述文件可依据，不能报缺内容） |
+| 3 | 有磁盘描述文件（路径不以 `dlc_metadata/` 开头） | `FilesPresent`（仅本地文件：人工拷贝，Steam 校验/更新不管它） |
+| 4 | 只有 `game\dlc_metadata\*.txt` 合成的条目 | `Missing`（内容未安装） |
+| 5 | `steam_id` 为空或非数字 | `Unknown`（不显示徽标） |
+
+刻意**不统计目录字节数**：V3 全部 DLC 约 6.5 GB，递归统计会让切页卡顿，而且字节数也判断不出
+「谁装的」（人工拷贝的目录同样可以字节相等）。启动器只如实显示，不下载、不修补内容。
 
 ## 4. launcher-v2.sqlite
 
@@ -170,6 +209,13 @@ CK3 的 playsets_dlcs 为空 ⇒ disabled_dlcs: []，与真机文件一致。
 - 支持版本 = `mods.requiredVersion`（CK3 实测形如 `1.19.*` / `1.20.*` / `1.*.*`），来源是 .mod 的
   `supported_version` 或 metadata.json 的 `supported_game_version`。界面原样显示为「支持版本 1.19.*」，
   不做换算、不补全通配符。
+- mod 版本（作者版本）= `mods.metadataVersion`（官方启动器从 metadata.json 的 `version` 抄入；更老的库回退 `mods.version`），
+  磁盘扫描时取 .mod 的 `version` 或 metadata.json 的 `version`。**它与支持的游戏版本是两回事**：
+  V3 实测 69 个工坊 mod 里 45 个 `supported_game_version` 为空，但其中 7 个仍有 `version`，31 个有 `metadataVersion`；
+  官方启动器在详情弹窗里显示的「Mod version」就是这一项。Mod 库行显示为「mod 版本 8.0」，
+  添加模组页版本列第一行显示作者版本、第二行显示「支持 1.15.*」。
+  两者都没有时，Mod 库显示「未声明版本」（与「读取失败」区分），添加模组页保留短横占位。
+  已登记行的版本以磁盘扫描值优先（作者更新 metadata.json 后官方库可能还是旧值），磁盘没写的才用库里的值。
 - 三角提示的三种来源（判定优先级）：未登记的磁盘 mod、status ≠ ready_to_play、requiredVersion 的 major.minor 低于当前游戏版本（只比较 major.minor，例如 V3 的 [1.11] mod 对 1.13 游戏）。
   **提示文案只讲版本支持**：先说「这个 mod 声明支持哪个版本」，再说对照结论（未声明 / 当前游戏版本未知 / 不低于当前版本 / 低于当前版本），
   登记情况与库里的原始 status 只作为补充说明，不再表述成「mod 装不了 / 状态异常」。
@@ -184,9 +230,9 @@ CK3 的 playsets_dlcs 为空 ⇒ disabled_dlcs: []，与真机文件一致。
 ## 5. mod
 
 - .mod 描述符目录：<gameDataDir>\mod。CK3 **382** 个 .mod（2026-10-27 实测，此前 387）；Stellaris **313**；V3 **0**（V3 mod 全在 workshop）。
-- .mod 键：name→displayName、version、tags、picture、supported_version→requiredVersion、path→dirPath、archive→archivePath、remote_file_id→steamId。
+- .mod 键：name→displayName、version→modVersion、tags、picture、supported_version→requiredVersion、path→dirPath、archive→archivePath、remote_file_id→steamId。
 - 命名：ugc_<steamId>.mod / pdx_<pdxId>.mod / <dirname>.mod；本地目录 mod 目录内有 descriptor.mod。
-- V3 workshop mod 无 .mod：元数据在 <modDir>\.metadata\metadata.json，键 name, id, version, supported_game_version, short_description, **picture**（封面的相对路径，相对 `.metadata` 目录；历史写法 `thumbnail` 本项目仍兼容读取）, tags, relationships, game_custom_data。EU5 实测 22 个 mod 里 13 个带 `picture`，值多为 `thumbnail.png`，`thumbnail` 键一次都没出现。
+- V3 workshop mod 无 .mod：元数据在 <modDir>\.metadata\metadata.json，键 name, id, **version→modVersion**, supported_game_version→requiredVersion, short_description, **picture**（封面的相对路径，相对 `.metadata` 目录；历史写法 `thumbnail` 本项目仍兼容读取）, tags, relationships, game_custom_data。EU5 实测 22 个 mod 里 13 个带 `picture`，值多为 `thumbnail.png`，`thumbnail` 键一次都没出现。
 - **启动器新建 mod 的写法**（`ModCreator`，2026-10-31）：legacy 游戏写 `<modDir>/<folder>.mod`（带绝对 `path`，正斜杠）+ `<folder>/descriptor.mod`（同字段但**不带** `path`）+ `<folder>/thumbnail.png`；V3/EU5 写 `<folder>/.metadata/metadata.json`（`id` 为空串、`tags` 数组、`relationships: []`、`game_custom_data.multiplayer_synchronized = true`）+ `.metadata/thumbnail.png`，`picture` 固定 `thumbnail.png`。名称/文件夹名限制 ASCII `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`；V3 目标路径含非 ASCII 直接拒绝。
 - **启动器编辑 mod 的写法**（`ModDescriptorEditor`，2026-11-04）：只改 name / version / supported_version / tags（V3 另加 short_description），其余原样保留。
   - legacy：`.mod` 是行级替换 —— `LegacyDescriptorText` 解析出顶层 `key=value` 的**值区间**单独替换，注释、未知键、`path` 与缩进都不动；缺的键补在 `name` 所在行之后（没有 name 就补在文件头）。外层 `<folder>.mod` 与 `<folder>/descriptor.mod` 两份一起写（顺序：先内层后外层），内容没变的文件不重写；
@@ -241,7 +287,7 @@ headers：Content-Type: application/json、User-Agent: ParadoxLauncher/<ver>、x
 缓存：<程序目录>\data\theme-cache\<gameId>-<assetKey>-<urlHash8>.<ext>（**绝不写 P社的 cache 目录**）。
 `<urlHash8>` = 素材 URL 的 SHA-256 前 4 字节小写十六进制（8 个字符）。文件名带 URL hash 是有意为之：新版本换了图 → URL 变 → 文件名变 → BitmapLoader / WinUI / FontLoader 里以路径为键的图片与字体缓存自动失效，不需要额外的失效通知。
 索引：同目录 `<gameId>.assets.json`，记录每个键的 url / fileName 与 `lastCheckedUtc`（**主题的「上次检查时间」只写这里，不写 settings.json**）。
-TTL **5 天**（432,000,000 ms，与官方 `pve=1e3*60*60*24*5` 一致）；URL 未变且文件存在则跳过下载。扩展名/文件名变化时删除同一键的旧文件。
+TTL **24 小时**（86,400,000 ms）；URL 未变且文件存在时发 `If-None-Match` / `If-Modified-Since` 条件请求，304 只推进检查时间、不重写文件。扩展名/文件名变化时删除同一键的旧文件。
 下载：流式写 <target>.part → 原子改名；失败/取消删 .part 并保留旧图；并发 2；可取消。
 白名单域名：metadata-assets.paradox-interactive.com、store.steampowered.com、api.paradox-interactive.com、braze-images.com（官方公告图，见 7.3；**只放行主域，子域一律拒绝**）。
 magic：PNG 89 50 4E 47、JPEG FF D8 FF、GIF "GIF8"、SVG 含 "<svg"、字体 00 01 00 00 / "OTTO"（CFF OpenType）/ "true"、WOFF wOFF、WOFF2 wOF2。拒绝 <256 B 或 >40 MB（阈值一路下调：4 KB → 1 KB → 256 B。官方 cache 实测 ck3-buttonBackgroundImage 3,818 B、stellaris 4,495 B、**cities_skylines-buttonBackgroundImage 仅 361 B**（IHDR 8×50 + 单个 IDAT + IEND，结构完整），都是合法 PNG；阈值必须低于 361 B，否则 CS1 的主题刷新永远停在「部分失败」并每 10 分钟重试）。
@@ -441,7 +487,7 @@ Mod 缩略图：`ModThumbnailSizes.Pixels()` 返回 DIP（32 / 48 / 72），XAML
 
 ## 14. 界面语言与多语言文案（i18n）
 
-界面文案全部来自 `tools/i18n/<language>/<area>.json`，**代码里不再手写界面文字**（日志与注释仍用中文，不进文案表）。
+界面文案全部来自 `src/PdxLauncher.App/Strings/<language>/<area>.json`，**代码里不再手写界面文字**（日志与注释仍用中文，不进文案表）。
 
 - 语言只有两档：`zh-CN`（简体中文，默认）与 `en-US`（English）。`data\settings.json` 的 `uiLanguage` 缺失或为 `null` 表示**跟随系统**（系统 UI 语言是 `zh*` 就用中文，其余用英文）；写了不支持的值按 `zh-CN` 处理。
 - 启动时在 `App.OnLaunched` 里 `ComposeServices()` 之后、任何页面 XAML 加载之前 `Localizer.Instance.Apply(...)`；设置页改语言**立即生效，不需要重启**。
@@ -460,11 +506,11 @@ Mod 缩略图：`ModThumbnailSizes.Pixels()` 返回 DIP（32 / 48 / 72），XAML
 
 生成流程：
 
-    python tools/gen-i18n.py            # 合并两种语言的各 area → 生成 Strings.g.cs
-    python tools/gen-i18n.py --check    # 只校验：键集一致 + 值合法 + 生成结果最新（不过期）
+    dotnet build PdxLauncher.sln -c Release -m:1              # 源生成器读取 resw 并生成 Localizer 属性
+    python src/PdxLauncher.Localization.Generator --check    # 只校验：键集一致 + 值合法 + 生成结果最新（不过期）
     bash tools/build-app.sh             # 先跑生成器再 dotnet build（Windows 控制台需 PYTHONIOENCODING=utf-8 否则中文输出乱码）
 
-- 生成物 `src/PdxLauncher.App/Localization/Strings.g.cs` 是机器产物**不要手改**：每个键映射成一个 `Localizer` 只读属性（`app.name` → `AppName`）与一个 `Keys.Xxx` 常量（ViewModel 里 `T(Keys.Xxx, args)` 用），切换语言时对每个键发一次 `PropertyChanged`，XAML 全部用 `{x:Bind L.Xxx, Mode=OneWay}` 绑定。
+- 生成物**不落盘**：`src/PdxLauncher.Localization.Generator` 在编译期把每个 resw 资源映射成一个 `Localizer` 只读属性（`AppName`）与一个 `Keys.Xxx` 常量（ViewModel 里 `T(Keys.Xxx, args)` 用）；切换语言时换 `ResourceContext` 并对每个键发一次 `PropertyChanged`，XAML 全部用 `{x:Bind L.Xxx, Mode=OneWay}` 绑定。
 - 值里允许 `{0}`/`{1}` 占位（两种语言的占位序号必须一致）；不允许首尾空格、不允许空值；段名只能是小写字母开头的标识符片段。
 - ViewModel 继承 `LocalizedObservableObject` 即可在切语言时自动给自身公开属性补发通知（`Localizer` 只存**弱引用**，不会钉住已关闭页面的 ViewModel）；需要重算缓存文本的覆盖 `Relocalize()`。
 - 代码里拼出来的文案（InfoBar、对话框、状态栏）不要存成品字符串：存 `(key, args)` 再 `T(...)`，否则切语言后残留旧语言。
@@ -497,7 +543,7 @@ WinUI 的 `BitmapImage` **解不了 DDS**，而 EU5 的 DLC 缩略图全是 `thu
 
 | 位置 | 真机实测 |
 | --- | --- |
-| `<install>\game\dlc\<pack>\thumbnail.dds` | 3 个已装 DLC，均为 **500×500、未压缩 BGRA8**（`pfFlags=0x41`，掩码 `R=0x00FF0000 G=0x0000FF00 B=0x000000FF A=0xFF000000`），`D000_shared` 为 128×128，数据从偏移 **128** 开始 |
+| `<install>\game\dlc\<pack>\thumbnail.dds` | 4 个已装 DLC：D008/D015/D017 为 **500×500、未压缩 BGRA8**（`pfFlags=0x41`，掩码 `R=0x00FF0000 G=0x0000FF00 B=0x000000FF A=0xFF000000`，pitch=2000，9 级 mip）；D009 为 **128×128、DXT5(BC3)**（`pfFlags=0x4`，8 级 mip）。`D000_shared`（hidden）为 128×128；数据均从偏移 **128** 开始，mip 链紧密排列、无行填充 |
 | `<install>` 抽样 400 个 `.dds` | DXT5(BC3) 327、DXT1(BC1) 51、`DX10/dxgiFormat=98`(BC7) 2、未压缩 20 |
 | mod | 22 个 EU5 工坊 mod **22/22 都有 `.metadata\thumbnail.png`**（7.6 KB–920 KB，512×512 或 100×100；个别文件扩展名是 `.png` 但内容实为 JPEG，WinUI 按内容嗅探仍能显示），只有 **6 个**在 mod 根目录另有 `thumbnail.png` 副本；`.metadata/metadata.json` 的可选键是 `picture`（13/22 带，值多为 `thumbnail.png`，相对 `.metadata` 目录）。解析规则见 §5 |
 
@@ -522,6 +568,7 @@ byte[] png = DdsImage.EncodePng(r.Pixels);                          // PixelBuff
 2. `src/PdxLauncher.App/Services/ImageArtCache.cs`：把 DDS 用上文的库解成 RGBA，再编码 PNG 落到 `data\image-cache\<hash>.png`（`hash = SHA-256(路径小写 + 长度 + mtime + PolicyVersion)`），内存里记住「源路径 → PNG 路径」。解码上限 1024 边长、源文件上限 64 MB、并发 2。
 3. 列表页在**建行之前** `PrewarmAsync(...)`：`DlcViewModel` / `ModLibraryViewModel` / `ModsViewModel`。因为缩略图列是 `x:Bind ... Mode=OneTime`，行创建后再转 PNG 不会刷新。
 4. `XamlImage.FromPath` 遇到 `.dds` 就换成缓存 PNG；还没转好时返回 `null`，`FallbackImage` 显示占位图标（不会闪错图）。
+5. DLC 卡片的图片框固定 208×117（16:9）。本地缩略图是横图（280×160）时用 `UniformToFill` 填满；Steam 头图（460×215）和 EU5 的 500×500 方图用 `Uniform` 完整显示——方图若填满会被上下各裁约 22%，盾徽/建筑只剩中间一条。EU5 行优先联网取 Steam `header_image`，本地方图只作离线兜底（`DlcRowViewModel.FillsImageBox` / `NeedsSteamArtwork`，`DlcViewModel.FillArtworkAsync`）。
 
 ### 16.3 自检与清理
 
@@ -719,9 +766,11 @@ PdxLauncher.App.exe --steam-host workshop-state --api <dll> --appid <appId> --fi
 
 **`GetItemState` 返回 0 不能当成「确定没订阅」**：子进程刚 Init、Steam 还没把订阅集合同步过来时也会是 0。所以 `ReadStateDetail` 在 `raw == 0` 时返回 `WorkshopInstallState.Unknown`（null ≠ false），只有订阅动作确认（`ReadStateForConfirm`）才把 0 当「确实没订阅」。前端的未知态由 `WorkshopStateText.Resolve` 映射成不显示徽标。
 
-**缓存**：`src/PdxLauncher.Core/Online/WorkshopStateCache.cs`，内存、TTL 60 秒、按 appId 分桶，不落盘（状态变化太快，落盘没意义且要处理失效）。Mod 库页只在缓存过期时才起一次子进程，行内「下载 / 本地禁用」成功后立刻 `Invalidate` 重载。
+**缓存**：`src/PdxLauncher.Core/Online/WorkshopStateCache.cs`，内存、TTL 60 秒、按 appId 分桶，不落盘（状态变化太快，落盘没意义且要处理失效）。Mod 库页与创意工坊列表页共用 `src/PdxLauncher.App/Services/WorkshopStateReader.cs` 的「缓存 → 子进程 → 失败退旧快照」三段逻辑；列表页把状态填入 `WorkshopRowViewModel.SteamState`，界面只在缓存过期时才起一次子进程。行内「下载 / 本地禁用」成功、以及详情页改订阅后都会立刻 `Invalidate` 再重载，避免返回列表时看到最长 60 秒的旧徽标。
 
-**降级**：宿主不可用（没有 `steam_api64.dll`、Steam 没运行、设置里关掉了）时，详情页仍回退 `WorkshopSubscriptionReader` 读 `steamapps/workshop/appworkshop_<appid>.acf`（只有 subscribed / installed 两个布尔），Mod 库页则整列不显示 Steam 状态。
+**字节数怎么展示**：`GetItemDownloadInfo` 的 `BytesDownloaded` / `BytesTotal` 经 `WorkshopStateText.Resolve` 一并带回（`WorkshopStateBadgeInfo`），文案由 App 侧 `SteamStateBadgeFormatter` 用 `ModSizeText` 格式化——徽标显示「Steam 下载中 42% · 1.2GB/4.5GB」，详情页显示「下载中 42% · 已下载 1.2GB / 4.5GB」。总量为 0（Steam 还没给出）时退回只有百分比的短文案，排队中（`DownloadPending`）本身没有字节数，只显示「排队中」。
+
+**降级**：宿主不可用（没有 `steam_api64.dll`、Steam 没运行、设置里关掉了）时，详情页仍回退 `WorkshopSubscriptionReader` 读 `steamapps/workshop/appworkshop_<appid>.acf`（只有 subscribed / installed 两个布尔），Mod 库页与创意工坊列表页则整列不显示 Steam 状态。
 
 ### 18.6 发布请求的扩展字段（`workshop-publish`）
 
@@ -777,6 +826,11 @@ PdxLauncher.App.exe --steam-host workshop-publish --api <steam_api64.dll> --appi
   （`modstudio.rowPublished`）只用于副标题 `SubtitleText` 与详情面板的「发布状态」行。
   原因：`Localizer.Format(key)` 在 `args` 为空时**原样返回模板**，把带占位符的键直接绑到 XAML 会在界面上
   打出字面的 `{0}`；`LocalizationBindingChecks` 现在扫描所有 `{x:Bind L.Xxx}` 并断言模板里没有 `{n}`。
+- **按钮说了就不再挂同义徽章**：同一个原则也适用于工坊详情页的订阅卡 —— 已订阅时按钮文案就是「取消订阅」，
+  所以「已订阅」徽章与成功反馈行都删掉了（`WorkshopDetailInstalled` / `WorkshopDetailSubscribeOk` /
+  `WorkshopDetailUnsubscribeOk` / `WorkshopDetailSteamSubscribeHintOn` 四个键一并移除）；订阅只报失败，
+  而且失败文案属于当前 mod，`ResetForLoad` 必须清空 `StatusText`，否则切 mod 会串到下一个详情页。
+  `WorkshopDetailSubscribeCardChecks` 守这两条。
 - **上传面板的出口**：`Pane` 的三个值（Detail / Create / Upload）互斥，发布**成功**、**取消**、以及
   **在上传页切换选中的 mod** 都会回到 `Detail`；只有发布**失败**留在 `Upload`，以保留表单与错误信息供重试。
   页面是 `NavigationCacheMode="Required"`，实例常驻，所以复位必须写在视图模型里（`PublishAsync` 的取消分支、
@@ -1159,3 +1213,43 @@ Victoria 3 **无法加载任何路径里含非 ASCII 字符的 mod**（Vic3 wiki
   这台机器上的其它程序如果能读这个库文件，就能读到这些凭据；共享电脑或备份时请留意。
 - 译文本身不落单独文件，缓存在库键 `cache:translations` 里（键 = SHA256(引擎 + 目标语言 + 原文)），
   见 §15 的「译文缓存」行与 §20.2 的文档键表。
+
+## 22. 游戏崩溃与启动日志（崩溃分析页）
+
+崩溃分析页只读当前游戏 `<GameDataDir>` 下的崩溃包与日志，不启动游戏、不联网、不写游戏目录。
+
+### 22.1 崩溃包
+
+```
+<GameDataDir>\crashes\<exe>_<MMDDHHmmss>\
+  exception.txt      # Application / Version / Date/Time / Unhandled Exception C0000005 (...)
+  meta.yml           # AppName / AppVersion / SCM* / GPUName / SystemMemory / DLC_N / Mod_N
+  minidump.dmp       # 只统计大小，页面不解析
+  logs\              # 崩溃瞬间的 error.log / game.log / debug.log / system.log 快照
+```
+
+- `exception.txt` 的 `Date/Time` 是崩溃时间；`system.log` 的第一条时间是游戏进程启动时间。
+- 没有崩溃包时页面仍会读实时 `logs\`，并明确提示「没有找到崩溃转储」。
+- 崩溃时间优先用 `exception.txt`，而不是目录名：Paradox 的目录/`meta.yml` 年份字段并不可靠。
+
+### 22.2 日志格式
+
+```
+[HH:mm:ss][file.cpp:line]: message
+  continuation line
+  Script location: common/scripted_effects/xxx.txt:123
+```
+
+- 时间只有时分秒；分析器用崩溃日期补齐，跨午夜时自动减一天。
+- 同一错误可能同时出现在 `error.log`、`game.log`、`debug.log`；计数按「时间 + 来源 + 正文」分文件取最大次数，避免复制三份算三倍。
+
+### 22.3 Mod 归属
+
+- 启用列表来自 `content_load.json` / `dlc_load.json`（通过 `ILoadFileWriter.ReadAsync`）；没有加载文件的 EU5/CS2 退回枚举 `ModDir`，启用状态标为未知。
+- Mod 名称来自 `<mod>\.metadata\metadata.json` 的 `name`；版本与支持游戏版本取 `version` / `supported_game_version`。
+- 日志里的 `common/...` 路径会在每个启用 Mod 目录下做同名文件存在性检查，命中即归到该 Mod；压缩包 Mod 无法逐文件检查。
+- Victoria 3 另按 `GamePathRules.RequiresAsciiPaths` 检查非 ASCII 路径。
+
+### 22.4 规则边界
+
+页面只给「可能的原因」：时间相邻写成高度相关，不写成因果；未解析 minidump、不做栈符号化；不提供一键禁用 Mod / 删缓存 / 改 `pdx_settings.json`。

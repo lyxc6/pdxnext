@@ -1,6 +1,7 @@
 namespace PdxLauncher.Core.Text;
 
 using System.Text;
+using PdxLauncher.Core.Online;
 
 /// <summary>行内强调样式。</summary>
 public enum MarkdownInlineStyle
@@ -139,6 +140,17 @@ public sealed class MarkdownDocument
         return builder.ToString().Trim();
     }
 
+    /// <summary>
+    /// 把单个块压成纯文本。界面按块把原文与译文配对时，用它判断这一段是否真的翻出了不同内容
+    /// （代码块、分隔线、翻译失败保留原文的段落都相等，不该再重复显示一遍）。
+    /// </summary>
+    public static string ToPlainText(MarkdownBlock block)
+    {
+        var builder = new StringBuilder();
+        AppendBlock(block, builder);
+        return builder.ToString().Trim();
+    }
+
     private static void AppendBlock(MarkdownBlock block, StringBuilder builder)
     {
         switch (block)
@@ -241,12 +253,17 @@ public sealed class MarkdownDocument
             switch (inline)
             {
                 case MarkdownImageInline image:
-                    if (!string.IsNullOrWhiteSpace(image.Url) && seen.Add(image.Url))
+                {
+                    // 表情可能是 akamai 轮换地址：归一到 fastly 再去重，否则同一张图会被
+                    // 当成两个地址下载（其中一个还过不了白名单），预览里也查不到缓存。
+                    var url = SteamEmoticon.NormalizeUrl(image.Url);
+                    if (!string.IsNullOrWhiteSpace(url) && seen.Add(url))
                     {
-                        urls.Add(image.Url);
+                        urls.Add(url);
                     }
 
                     break;
+                }
                 case MarkdownLinkInline link:
                     CollectImages(link.Inlines, seen, urls);
                     break;

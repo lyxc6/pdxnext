@@ -105,6 +105,23 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
         ? string.Empty
         : T(Keys.ModlibSupportedVersion, Entry.RequiredVersion);
 
+    /// <summary>
+    /// mod 作者自己写的版本（metadata.json 的 version / .mod 的 version），与支持的游戏版本不是一回事。
+    /// 作者没写时为空串；Vic3 有相当一部分 mod 有这一项但没有 supported_game_version。
+    /// </summary>
+    public string ModVersionText => string.IsNullOrWhiteSpace(Entry.ModVersion)
+        ? string.Empty
+        : T(Keys.ModlibModVersion, Entry.ModVersion);
+
+    /// <summary>两个版本都没声明时显示一句「未声明版本」，让「没数据」和「读取失败」可以区分。</summary>
+    public string VersionUndeclaredText => string.IsNullOrWhiteSpace(Entry.ModVersion)
+        && string.IsNullOrWhiteSpace(Entry.RequiredVersion)
+            ? T(Keys.ModlibVersionUndeclared)
+            : string.Empty;
+
+    /// <summary>「未声明版本」的提示文案（同时作为 ToolTip）。</summary>
+    public string VersionUndeclaredHint => T(Keys.ModlibVersionUndeclaredHint);
+
     /// <summary>Steam 创意工坊物品 id；本地 mod 拿不到时为 null。</summary>
     public string? WorkshopId { get; }
 
@@ -148,23 +165,10 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
     public WorkshopInstallState? SteamState => Entry.SteamState;
 
     /// <summary>是否要显示 Steam 状态徽标。</summary>
-    public bool ShowSteamStateBadge => SteamState is not null && WorkshopStateText.Resolve(SteamState).IsVisible;
+    public bool ShowSteamStateBadge => SteamStateBadgeFormatter.IsVisible(SteamState);
 
-    /// <summary>Steam 状态徽标文案（下载中会带上百分比）。没有可显示的状态时为空串。</summary>
-    public string SteamStateBadgeText
-    {
-        get
-        {
-            var info = WorkshopStateText.Resolve(SteamState);
-            return info.Badge switch
-            {
-                WorkshopStateBadge.None => string.Empty,
-                WorkshopStateBadge.Downloading when info.Percent is { } percent => T(info.Key, percent),
-                WorkshopStateBadge.Downloading => T(WorkshopStateText.KeyDownloadingNoPercent),
-                _ => T(info.Key),
-            };
-        }
-    }
+    /// <summary>Steam 状态徽标文案（下载中会带上百分比与字节数）。没有可显示的状态时为空串。</summary>
+    public string SteamStateBadgeText => SteamStateBadgeFormatter.Build(SteamState);
 
     /// <summary>是否可以在 Steam 里触发这条的下载（工坊 mod + 没在下载 + 已经订阅）。</summary>
     public bool CanTriggerSteamDownload =>
@@ -179,6 +183,9 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
 
     /// <summary>支持版本文本的自动化 Id。</summary>
     public string VersionAutomationId => "modLibraryVersion_" + ModId.ToString("N");
+
+    /// <summary>mod 版本（作者版本）文本的自动化 Id。</summary>
+    public string ModVersionAutomationId => "modLibraryModVersion_" + ModId.ToString("N");
 
     /// <summary>行尾「打开本地文件夹」按钮的自动化 Id。</summary>
     public string OpenFolderAutomationId => "modLibraryOpenFolder_" + ModId.ToString("N");

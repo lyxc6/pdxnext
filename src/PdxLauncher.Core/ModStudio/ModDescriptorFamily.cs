@@ -42,8 +42,8 @@ public static class ModDescriptorRules
     /// <summary>描述符家族对应的本地化说明键。</summary>
     public static string DescribeKey(ModDescriptorFamily family) => family switch
     {
-        ModDescriptorFamily.Legacy => "modstudio.descriptorLegacy",
-        ModDescriptorFamily.Metadata => "modstudio.descriptorMetadata",
-        _ => "modstudio.descriptorUnsupported",
+        ModDescriptorFamily.Legacy => "ModstudioDescriptorLegacy",
+        ModDescriptorFamily.Metadata => "ModstudioDescriptorMetadata",
+        _ => "ModstudioDescriptorUnsupported",
     };
 }

@@ -58,9 +58,8 @@ public static class DiagnosticsPageChecks
         var program = Read(root, Path.Combine("src", "PdxLauncher.App", "Program.cs"));
         var settingsViewModel = Read(root, Path.Combine("src", "PdxLauncher.App", "ViewModels", "SettingsViewModel.cs"));
         var settings = Read(root, Path.Combine("src", "PdxLauncher.Core", "Configuration", "AppSettings.cs"));
-        var strings = Read(root, Path.Combine("src", "PdxLauncher.App", "Localization", "Strings.g.cs"));
-        var zhKeys = Read(root, Path.Combine("tools", "i18n", "zh-CN", "diagnostics.json"));
-        var enKeys = Read(root, Path.Combine("tools", "i18n", "en-US", "diagnostics.json"));
+        var zhTable = I18nResw.Read(root, "zh-CN");
+        var enTable = I18nResw.Read(root, "en-US");
 
         ChecksContext.Check("页面 XAML 存在", xaml.Length > 0);
         ChecksContext.Check("页面代码后置存在", codeBehind.Length > 0);
@@ -179,24 +178,21 @@ public static class DiagnosticsPageChecks
             viewModel.Contains("DiagnosticsLogWrap = value", StringComparison.Ordinal) &&
             viewModel.Contains("SaveSettings()", StringComparison.Ordinal));
 
-        // i18n：两侧键集合由生成器保证一致，这里只确认区域文件与生成结果都到位。
-        ChecksContext.Check("zh-CN 有 diagnostics 区域", zhKeys.Length > 0);
-        ChecksContext.Check("en-US 有 diagnostics 区域", enKeys.Length > 0);
-        ChecksContext.Equal("两侧 diagnostics 键数一致", CountKeys(zhKeys), CountKeys(enKeys));
-        ChecksContext.Check("生成表含页面标题键",
-            strings.Contains("DiagnosticsPageTitle", StringComparison.Ordinal));
-        ChecksContext.Check("生成表含页脚导航键",
-            strings.Contains("ShellNavDiagnostics", StringComparison.Ordinal));
-        ChecksContext.Check("zh-CN 有折行开关文案", zhKeys.Contains("diagnostics.log.wrap", StringComparison.Ordinal));
-        ChecksContext.Check("en-US 有折行开关文案", enKeys.Contains("diagnostics.log.wrap", StringComparison.Ordinal));
-        ChecksContext.Check("生成表含折行开关键",
-            strings.Contains("DiagnosticsLogWrap", StringComparison.Ordinal));
+        // i18n：两种语言的资源都来自同一份 resw 契约，这里确认区域、生成结果与关键键都在。
+        ChecksContext.Check("zh-CN 有 diagnostics 区域", CountKeys(zhTable) > 0);
+        ChecksContext.Check("en-US 有 diagnostics 区域", CountKeys(enTable) > 0);
+        ChecksContext.Equal("两侧 diagnostics 键数一致", CountKeys(zhTable), CountKeys(enTable));
+        ChecksContext.Check("生成表含页面标题键", zhTable.ContainsKey("DiagnosticsPageTitle"));
+        ChecksContext.Check("生成表含页脚导航键", zhTable.ContainsKey("ShellNavDiagnostics"));
+        ChecksContext.Check("zh-CN 有折行开关文案", zhTable.ContainsKey("DiagnosticsLogWrap"));
+        ChecksContext.Check("en-US 有折行开关文案", enTable.ContainsKey("DiagnosticsLogWrap"));
+        ChecksContext.Check("生成表含折行开关键", zhTable.ContainsKey("DiagnosticsLogWrap"));
 
         return ChecksContext.Failures == before ? 0 : 1;
     }
 
-    private static int CountKeys(string json) =>
-        Regex.Matches(json, "\"diagnostics\\.").Count;
+    private static int CountKeys(Dictionary<string, string> table) =>
+        table.Keys.Count(key => key.StartsWith("Diagnostics", StringComparison.Ordinal));
 
     private static string SliceBetween(string text, string start, string end)
     {

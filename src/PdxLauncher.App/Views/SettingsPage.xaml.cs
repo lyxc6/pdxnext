@@ -1,5 +1,6 @@
 namespace PdxLauncher.App.Views;
 
+using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -17,8 +18,43 @@ using Windows.System;
 /// 页面只负责对话框、确认与 shell 动作（打开目录）；持久化、统计与解析全部在
 /// <see cref="SettingsViewModel"/> 里完成。所有文案经 <see cref="Localizer"/> 取，切语言即时生效。
 /// </summary>
-public sealed partial class SettingsPage : Page
+public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 {
+    private int _sectionIndex = -1;
+
+    /// <summary>供 x:Load / Visibility 绑定：同一时刻只有选中分节为 true。</summary>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public bool IsAppearanceSection => _sectionIndex == 0;
+    public bool IsLaunchSection => _sectionIndex == 1;
+    public bool IsPathsSection => _sectionIndex == 2;
+    public bool IsOnlineSection => _sectionIndex == 3;
+    public bool IsCacheSection => _sectionIndex == 4;
+    public bool IsAdvancedSection => _sectionIndex == 5;
+    public bool IsTranslationSection => _sectionIndex == 6;
+    public bool IsAboutSection => _sectionIndex == 7;
+
+    private void SetSectionIndex(int index)
+    {
+        if (_sectionIndex == index)
+        {
+            return;
+        }
+
+        _sectionIndex = index;
+        OnPropertyChanged(nameof(IsAppearanceSection));
+        OnPropertyChanged(nameof(IsLaunchSection));
+        OnPropertyChanged(nameof(IsPathsSection));
+        OnPropertyChanged(nameof(IsOnlineSection));
+        OnPropertyChanged(nameof(IsCacheSection));
+        OnPropertyChanged(nameof(IsAdvancedSection));
+        OnPropertyChanged(nameof(IsTranslationSection));
+        OnPropertyChanged(nameof(IsAboutSection));
+    }
+
+    private void OnPropertyChanged(string name) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
     private readonly SettingsViewModel _viewModel = new();
     /// <summary>页面生命周期令牌；页面不缓存（NavigationCacheMode=Disabled），每次进入都会重建。</summary>
     private CancellationTokenSource _lifetime = new();
@@ -56,6 +92,7 @@ public sealed partial class SettingsPage : Page
             AlwaysOnTopService.Changed -= OnAlwaysOnTopChanged;
             AlwaysOnTopService.Changed += OnAlwaysOnTopChanged;
             _viewModel.RefreshAlwaysOnTop();
+            UpdateContentColumnWidth();
 
             if (!AppServices.IsInitialized)
             {
@@ -136,7 +173,29 @@ public sealed partial class SettingsPage : Page
 
     // ------------------------------------------------------------ 分节导航
 
-    /// <summary>「缓存」在左侧六分类里的序号，与 XAML 里 secCache 的顺序一致。</summary>
+    // 内容列上限 1040 DIP（官方建议 1000–1100）；左右各留 16 DIP，右侧给浮层滚动条。
+    private const double ContentColumnMaxWidth = 1040;
+    private const double ContentColumnGutter = 16;
+
+    /// <summary>
+    /// 视口变化时重算内容列宽度。ScrollViewer 水平滚动被禁用，窗口变窄时必须跟着收缩，
+    /// 否则右侧会被裁掉；窗口够宽时锁在 1040 并靠 Grid 的 Center 对齐。
+    /// </summary>
+    private void OnSettingsScrollerSizeChanged(object sender, SizeChangedEventArgs e) =>
+        UpdateContentColumnWidth();
+
+    private void UpdateContentColumnWidth()
+    {
+        var available = settingsScroller.ViewportWidth - (ContentColumnGutter * 2);
+        if (double.IsNaN(available) || available <= 0)
+        {
+            return;
+        }
+
+        settingsContentGrid.Width = Math.Min(ContentColumnMaxWidth, available);
+    }
+
+    /// <summary>「缓存」在左侧八个分节里的序号，与 XAML 里 secCache 的顺序一致。</summary>
     private const int CacheSectionIndex = 4;
 
     /// <summary>切换左侧分类：只显示选中的那一节，其余折叠（同一时刻只排版一类设置）。</summary>
@@ -164,18 +223,9 @@ public sealed partial class SettingsPage : Page
 
     private void ShowSection(int index, bool refreshCache = true)
     {
-        var sections = new FrameworkElement?[]
-        {
-            secAppearance, secLaunch, secPaths, secOnline, secCache, secAdvanced, secTranslation, secAbout,
-        };
-
-        for (var i = 0; i < sections.Length; i++)
-        {
-            if (sections[i] is { } section)
-            {
-                section.Visibility = i == index ? Visibility.Visible : Visibility.Collapsed;
-            }
-        }
+        // 只让选中的分节 x:Load 为 true；其余分节保持未实例化/已卸载，
+        // 首次进页不再一次性构建 147 张 SettingsCard。
+        SetSectionIndex(index);
 
         // 记住停在哪一节：下次进设置页（含冷启动）直接回到这里。
         if (AppServices.IsInitialized)
@@ -282,13 +332,44 @@ public sealed partial class SettingsPage : Page
                 ? _viewModel.DownloadLocalModelAsync(row, _lifetime.Token)
                 : Task.CompletedTask);
 
-    /// <summary>删除某个已安装的本地离线模型。</summary>
-    private void OnRemoveLocalModelClick(object sender, RoutedEventArgs e)
+    /// <summary>深度校验某个本地模型的完整性（后台算 SHA-256）。</summary>
+    private async void OnVerifyLocalModelClick(object sender, RoutedEventArgs e) =>
+        await RunGuardedAsync(
+            "SettingsPage 校验本地模型失败",
+            () => sender is FrameworkElement { DataContext: LocalModelRowViewModel row }
+                ? _viewModel.VerifyLocalModelAsync(row, _lifetime.Token)
+                : Task.CompletedTask);
+
+    /// <summary>用资源管理器打开模型所在目录，让用户自己确认文件在不在。</summary>
+    private void OnOpenLocalModelFolderClick(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: LocalModelRowViewModel row })
         {
-            _viewModel.RemoveLocalModel(row);
+            OpenPath(row.Directory, row.Title);
         }
+    }
+
+    /// <summary>确认后删除某个本地离线模型（删除在后台线程执行）。</summary>
+    private async void OnRemoveLocalModelClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: LocalModelRowViewModel row })
+        {
+            return;
+        }
+
+        var confirmed = await ConfirmAsync(
+            T(Keys.SettingsTranslateLocalModelDialogRemoveTitle),
+            T(Keys.SettingsTranslateLocalModelDialogRemoveContent, row.Title),
+            T(Keys.CommonDelete),
+            InitialFocus.Cancel);
+        if (!confirmed)
+        {
+            return;
+        }
+
+        await RunGuardedAsync(
+            "SettingsPage 删除本地模型失败",
+            () => _viewModel.RemoveLocalModelAsync(row, _lifetime.Token));
     }
 
     /// <summary>把输入框里的词条追加到词典列表（写盘由「保存词典」负责）。</summary>
@@ -376,6 +457,10 @@ public sealed partial class SettingsPage : Page
         }
     }
 
+    /// <summary>跑一次连通性自检：三台 Steam 主机，当前模式与直连各测一遍。</summary>
+    private async void OnNetworkProbeClick(object sender, RoutedEventArgs e) =>
+        await RunGuardedAsync("SettingsPage 连通性自检失败", _viewModel.RunNetworkProbeAsync);
+
     // ------------------------------------------------------------ 数据区
 
     private void OnOpenDataDirectoryClick(object sender, RoutedEventArgs e)
@@ -395,6 +480,15 @@ public sealed partial class SettingsPage : Page
     private void OnOpenAppDataDirectoryClick(object sender, RoutedEventArgs e) =>
         OpenPath(AppServices.DataRoot, T(Keys.SettingsAppDataCurrent));
 
+    /// <summary>
+    /// 打开「安装目录」：已安装时是本程序目录，路径不一致时是卸载记录里的目录
+    /// （便于用户判断是不是装了两份）。目录不存在时按钮已禁用，这里再兜一次。
+    /// </summary>
+    private void OnOpenInstallModeDirectoryClick(object sender, RoutedEventArgs e) =>
+        OpenPath(
+            _viewModel.InstallModeDirectory,
+            T(Keys.SettingsAboutInstallModeDirectory));
+
     private async void OnClearLegacyDataClick(object sender, RoutedEventArgs e) =>
         await RunGuardedAsync(
             "SettingsPage 清理旧 C 盘数据失败",
@@ -410,7 +504,8 @@ public sealed partial class SettingsPage : Page
                 if (!await ConfirmAsync(
                         T(Keys.SettingsAppDataDialogClearTitle),
                         T(Keys.SettingsAppDataDialogClearContent, legacyPath),
-                        T(Keys.CommonDelete)).ConfigureAwait(true))
+                        T(Keys.CommonDelete),
+                        InitialFocus.Cancel).ConfigureAwait(true))
                 {
                     return;
                 }
@@ -500,7 +595,8 @@ public sealed partial class SettingsPage : Page
                 if (!await ConfirmAsync(
                         T(Keys.SettingsCacheDialogClearAllTitle),
                         T(Keys.SettingsCacheDialogClearAllContent),
-                        T(Keys.CommonClear)).ConfigureAwait(true))
+                        T(Keys.CommonClear),
+                        InitialFocus.Cancel).ConfigureAwait(true))
                 {
                     return;
                 }
@@ -524,13 +620,34 @@ public sealed partial class SettingsPage : Page
                 T(Keys.SettingsPatchApplyDialogTitle),
                 T(Keys.SettingsPatchApplyDialogContent),
                 T(Keys.SettingsPatchApplyConfirm),
-                T(Keys.CommonCancel));
+                T(Keys.CommonCancel),
+                initialFocus: InitialFocus.Cancel);
             if (!confirmed)
             {
                 return;
             }
 
             await _viewModel.ApplyPatchAsync(_lifetime.Token).ConfigureAwait(true);
+
+            // Core 不弹窗：版本不在已知登记表里时它只返回「未验证版本」并暂停写盘，
+            // 这里提示用户，确认后才带 allowUnverifiedVersion 重试。
+            if (!_viewModel.PatchNeedsVersionConfirm)
+            {
+                return;
+            }
+
+            var proceed = await ConfirmOverlay.ConfirmAsync(
+                T(Keys.SettingsPatchUnverifiedDialogTitle),
+                T(Keys.SettingsPatchUnverifiedDialogContent),
+                T(Keys.SettingsPatchUnverifiedConfirm),
+                T(Keys.CommonCancel),
+                initialFocus: InitialFocus.Cancel);
+            if (!proceed)
+            {
+                return;
+            }
+
+            await _viewModel.ApplyPatchAsync(_lifetime.Token, allowUnverifiedVersion: true).ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -557,7 +674,8 @@ public sealed partial class SettingsPage : Page
                 T(Keys.SettingsPatchRemoveDialogTitle),
                 T(Keys.SettingsPatchRemoveDialogContent),
                 T(Keys.SettingsPatchRemoveConfirm),
-                T(Keys.CommonCancel));
+                T(Keys.CommonCancel),
+                initialFocus: InitialFocus.Cancel);
             if (!confirmed)
             {
                 return;
@@ -609,7 +727,8 @@ public sealed partial class SettingsPage : Page
                 if (!await ConfirmAsync(
                         T(Keys.SettingsDangerDialogTitle),
                         T(Keys.SettingsDangerDialogContent),
-                        T(Keys.SettingsDangerDialogConfirm)).ConfigureAwait(true))
+                        T(Keys.SettingsDangerDialogConfirm),
+                        InitialFocus.Cancel).ConfigureAwait(true))
                 {
                     return;
                 }
@@ -620,14 +739,22 @@ public sealed partial class SettingsPage : Page
 
     // ------------------------------------------------------------ 对话框 / 护栏
 
-    /// <summary>统一的两键确认框：左边取消、右边确认，默认焦点落在确认上。</summary>
-    private async Task<bool> ConfirmAsync(string title, string content, string primaryText)
+    /// <summary>
+    /// 统一的两键确认框：左边取消、右边确认。默认焦点落在确认上；
+    /// 删除、清空等破坏性操作传 <see cref="InitialFocus.Cancel"/>。
+    /// </summary>
+    private async Task<bool> ConfirmAsync(
+        string title,
+        string content,
+        string primaryText,
+        InitialFocus initialFocus = InitialFocus.Confirm)
     {
         return await ConfirmOverlay.ConfirmAsync(
             title,
             content,
             primaryText,
-            T(Keys.CommonCancel));
+            T(Keys.CommonCancel),
+            initialFocus: initialFocus);
     }
 
     /// <summary>

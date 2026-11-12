@@ -29,7 +29,7 @@ public sealed class NewsFeedService : INewsFeedService
     private const string ImagesFolderName = "images";
     private const string ContentCardsEndpointFormat = "https://api.paradox-interactive.com/communication/braze/contentcards/{0}";
 
-    /// <summary>公告时效性强于主题（5 天）与 DLC 简介（7 天），只缓 6 小时。</summary>
+    /// <summary>公告时效性强于主题（24 小时）与 DLC 简介（7 天），只缓 6 小时。</summary>
     private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(6);
 
     private static readonly TimeSpan FailureBackoff = TimeSpan.FromMinutes(30);

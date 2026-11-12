@@ -10,6 +10,7 @@ using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.LoadFiles;
 using PdxLauncher.Core.Mods.Sorting;
 using PdxLauncher.Core.Playsets;
+using PdxLauncher.Core.Playsets.Share;
 
 /// <summary>
 /// 「播放集」页的视图模型：播放集列表 + 当前播放集已保存的 mod 行 + 搜索 + 启用/禁用/排序/增删。
@@ -35,6 +36,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
     private string _statusMessage = string.Empty;
     private bool _translateFailureReported;
     private string _searchText = string.Empty;
+    private bool _bulkEnabledUpdate;
 
     /// <summary>双列布局左栏（可添加的 mod）专用搜索词。</summary>
     private string _candidateSearchText = string.Empty;
@@ -897,6 +899,11 @@ public sealed class ModsViewModel : LocalizedObservableObject
     /// <summary>行内开关变化：同步集合顺序（不重排），刷新计数与状态，并自动保存。</summary>
     private void OnRowEnabledChanged(ModRowViewModel row)
     {
+        if (_bulkEnabledUpdate)
+        {
+            return;
+        }
+
         RaiseCounts();
         StatusMessage = row.IsEnabled
             ? T(Keys.ModsStatusModEnabled, row.Name)
@@ -927,6 +934,33 @@ public sealed class ModsViewModel : LocalizedObservableObject
         merged.AddRange(visible);
         merged.AddRange(rest);
         _allMods = PlaySetEditor.Renumber(merged);
+    }
+
+    /// <summary>
+    /// 只同步「启用/禁用」状态，保持 <see cref="_allMods"/> 的原始顺序不变。
+    /// <para>
+    /// 搜索过滤时 <see cref="Mods"/> 只是子集，不能像 <see cref="FlushVisibleRows"/> 那样
+    /// 把可见行排到最前；否则开关一个 mod 就会悄悄改掉真实加载顺序并写进加载文件。
+    /// </para>
+    /// </summary>
+    private void SyncVisibleEnabledStateIntoAllMods()
+    {
+        if (Mods.Count == 0 || _allMods.Count == 0)
+        {
+            return;
+        }
+
+        var visibleStates = new Dictionary<Guid, bool>(Mods.Count);
+        foreach (var row in Mods)
+        {
+            visibleStates[row.ModId] = row.IsEnabled;
+        }
+
+        _allMods = _allMods
+            .Select(item => visibleStates.TryGetValue(item.ModId, out var enabled) && item.Enabled != enabled
+                ? item with { Enabled = enabled }
+                : item)
+            .ToList();
     }
 
     /// <summary>上移（offset=-1）/下移（offset=+1）。搜索过滤时不可用。</summary>
@@ -1027,15 +1061,49 @@ public sealed class ModsViewModel : LocalizedObservableObject
         return PositionEditResult.Applied;
     }
 
-    /// <summary>启用全部 / 禁用全部（作用于可见行），随后自动保存。</summary>
+    // ------------------------------------------------------------ 行右键菜单的状态栏反馈
+
+    /// <summary>右键菜单「打开本地文件夹」成功后写状态栏。</summary>
+    public void ReportOpenedFolder(ModRowViewModel row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        StatusMessage = T(Keys.ModsStatusOpenedFolder, row.Name);
+    }
+
+    /// <summary>行既没有目录也没有压缩包时写状态栏；菜单项通常已被 HasLocalFiles 禁用，这里兜底。</summary>
+    public void ReportNoLocalFiles() => StatusMessage = T(Keys.ModsStatusNoLocalFiles);
+
+    /// <summary>行没有可用的创意工坊 id 时写状态栏（复用 Mod 库页的现成文案）。</summary>
+    public void ReportNoWorkshopAddress() => StatusMessage = T(Keys.ModlibStatusNoWorkshopAddress);
+
+    /// <summary>右键菜单「复制注册 ID」成功后写状态栏。</summary>
+    public void ReportClipboardCopied(ModRowViewModel row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        StatusMessage = T(Keys.ModsStatusCopiedId, row.Name);
+    }
+
+    /// <summary>启用全部 / 禁用全部（作用于整个播放集，搜索过滤也不例外），随后自动保存。</summary>
     public void SetAllEnabled(bool enabled)
     {
-        foreach (var row in Mods)
+        // 行模型回调会逐条触发自动保存；这里统一改完再保存一次。
+        _bulkEnabledUpdate = true;
+        try
         {
-            row.IsEnabled = enabled;
+            _allMods = _allMods
+                .Select(item => item.Enabled == enabled ? item : item with { Enabled = enabled })
+                .ToList();
+
+            foreach (var row in Mods)
+            {
+                row.IsEnabled = enabled;
+            }
+        }
+        finally
+        {
+            _bulkEnabledUpdate = false;
         }
 
-        FlushVisibleRows();
         RaiseCounts();
         StatusMessage = enabled
             ? T(Keys.ModsStatusAllEnabled)
@@ -1273,6 +1341,213 @@ public sealed class ModsViewModel : LocalizedObservableObject
         }
     }
 
+    // ------------------------------------------------------------ 导入 / 导出（官方分享格式）
+
+    /// <summary>
+    /// 只解析分享文件，不写库：先让页面判断本地是否已有同名播放集，再决定合并还是新建副本。
+    /// </summary>
+    public async Task<AppResult<PlaySetSharePeek>> PeekImportAsync(
+        string sourcePath,
+        CancellationToken cancellationToken)
+    {
+        var game = Game;
+        if (game is null)
+        {
+            return AppResult<PlaySetSharePeek>.Fail(ErrorKind.Invalid, "share-no-game");
+        }
+
+        return await AppServices.PlaySetShare
+            .PeekAsync(game, sourcePath, cancellationToken)
+            .ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// 导入官方分享文件。成功后重新加载播放集列表并选中目标播放集；
+    /// <paramref name="mergeIntoPlaySetId"/> 非空时合并进已有播放集（补齐缺失条目）。
+    /// </summary>
+    public async Task<AppResult<PlaySetShareImportResult>> ImportPlaySetAsync(
+        string sourcePath,
+        Guid? mergeIntoPlaySetId,
+        CancellationToken cancellationToken)
+    {
+        var game = Game;
+        if (game is null)
+        {
+            return AppResult<PlaySetShareImportResult>.Fail(ErrorKind.Invalid, "share-no-game");
+        }
+
+        try
+        {
+            var result = await AppServices.PlaySetShare
+                .ImportAsync(game, sourcePath, mergeIntoPlaySetId, cancellationToken)
+                .ConfigureAwait(true);
+            if (!result.IsSuccess)
+            {
+                _logger.Warn("导入播放集失败（gameId=" + game.GameId + "）："
+                    + (result.ErrorMessage ?? result.Kind.ToString()));
+                return result;
+            }
+
+            if (result.Value is not { } imported)
+            {
+                return result;
+            }
+
+            await LoadAsync(game, cancellationToken).ConfigureAwait(true);
+            var target = PlaySets.FirstOrDefault(candidate => candidate.Id == imported.PlaySetId);
+            if (target is not null)
+            {
+                await SelectPlaySetAsync(target, cancellationToken).ConfigureAwait(true);
+
+                // 合并进当前激活播放集时，库里的 mod 变了但游戏加载文件还是旧的；
+                // 不补写的话用户导入后直接启动游戏，看不到新增 mod。
+                if (imported.Merged && target.IsActive)
+                {
+                    var written = await ActivePlaySetLoadFileWriter
+                        .WriteAsync(game, cancellationToken)
+                        .ConfigureAwait(true);
+                    if (!written.IsSuccess)
+                    {
+                        _logger.Warn("导入合并后写加载文件失败（gameId=" + game.GameId + "）："
+                            + (written.ErrorMessage ?? "unknown"));
+                        StatusMessage = T(Keys.ModsStatusSaveFailed);
+                        return result;
+                    }
+                }
+            }
+
+            StatusMessage = imported.Merged
+                ? T(Keys.ModsStatusImportMerged, imported.PlaySetName, imported.AddedMods)
+                : T(Keys.ModsStatusImportDone, imported.PlaySetName, imported.ImportedMods);
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("导入播放集失败（gameId=" + game.GameId + "）", ex);
+            StatusMessage = T(Keys.ModsStatusImportFailed, ex.Message);
+            return AppResult<PlaySetShareImportResult>.Fail(ErrorKind.Io, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 导出当前选中的播放集。先等未完成的自动保存落盘，避免导出到旧的加载顺序。
+    /// </summary>
+    public async Task<AppResult<PlaySetShareExportResult>> ExportSelectedAsync(
+        string destinationPath,
+        CancellationToken cancellationToken)
+    {
+        var game = Game;
+        var playSet = SelectedPlaySet;
+        if (game is null || playSet is null)
+        {
+            return AppResult<PlaySetShareExportResult>.Fail(ErrorKind.Invalid, "share-no-selection");
+        }
+
+        try
+        {
+            await FlushPendingAutoSaveAsync(cancellationToken).ConfigureAwait(true);
+
+            var result = await AppServices.PlaySetShare
+                .ExportAsync(game, playSet.Id, destinationPath, cancellationToken)
+                .ConfigureAwait(true);
+            if (!result.IsSuccess)
+            {
+                _logger.Warn("导出播放集失败（gameId=" + game.GameId + "）："
+                    + (result.ErrorMessage ?? result.Kind.ToString()));
+                return result;
+            }
+
+            if (result.Value is not { } exported)
+            {
+                return result;
+            }
+
+            StatusMessage = T(Keys.ModsStatusExportDone, playSet.Name, exported.ExportedMods);
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error("导出播放集失败（gameId=" + game.GameId + "）", ex);
+            StatusMessage = T(Keys.ModsStatusExportFailed, ex.Message);
+            return AppResult<PlaySetShareExportResult>.Fail(ErrorKind.Io, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 一键订阅导入结果里缺失的 Steam 模组。订阅只是让 Steam 开始下载，
+    /// 下载完成后用户需要再导入同一份文件，条目才会补齐。
+    /// <para>Steam 写操作受设置开关控制；未开启或后端不可用时只更新状态栏，不抛异常。</para>
+    /// </summary>
+    /// <returns>成功提交订阅的条数。</returns>
+    public async Task<int> SubscribeMissingSteamModsAsync(
+        IReadOnlyList<PlaySetShareMissingMod> missing,
+        CancellationToken cancellationToken)
+    {
+        var game = Game;
+        if (game is null)
+        {
+            return 0;
+        }
+
+        if (!AppServices.Settings.SteamWorkshopSubscribeEnabled)
+        {
+            StatusMessage = T(Keys.ModsImportSubscribeNeedsSetting);
+            return 0;
+        }
+
+        var backend = SteamWorkshopBackends.CreateForSubscribe(game);
+        if (backend is null || !backend.IsAvailable)
+        {
+            StatusMessage = T(Keys.ModsImportSubscribeUnavailable, backend?.UnavailableReason ?? string.Empty);
+            return 0;
+        }
+
+        var ids = missing
+            .Where(static mod => PdxModIds.LooksNumeric(mod.SteamId))
+            .Select(static mod => ulong.Parse(mod.SteamId!, CultureInfo.InvariantCulture))
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+        {
+            StatusMessage = T(Keys.ModsImportNoSteamMods);
+            return 0;
+        }
+
+        var succeeded = 0;
+        var failed = 0;
+        for (var index = 0; index < ids.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            StatusMessage = T(Keys.ModsImportSubscribing, index + 1, ids.Count);
+
+            var outcome = await backend
+                .SetSubscribedAsync(ids[index], subscribe: true, cancellationToken)
+                .ConfigureAwait(true);
+            if (outcome.Ok)
+            {
+                succeeded++;
+            }
+            else
+            {
+                failed++;
+                _logger.Warn("订阅缺失的工坊 mod 失败（id=" + ids[index] + "）：" + outcome.ErrorText);
+            }
+        }
+
+        StatusMessage = failed == 0
+            ? T(Keys.ModsImportSubscribeDone, succeeded)
+            : T(Keys.ModsImportSubscribePartial, succeeded, failed);
+        return succeeded;
+    }
+
     public async Task RenameSelectedAsync(string newName, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(newName);
@@ -1296,7 +1571,11 @@ public sealed class ModsViewModel : LocalizedObservableObject
             }
 
             await LoadAsync(Game, cancellationToken).ConfigureAwait(true);
-            var renamed = PlaySets.FirstOrDefault(p => p.Id == playSetId);
+
+            // EU5 的播放集 Id 由 (gameId, name) 派生，改名即换 Id；不能再用旧 Id 查找，
+            // 否则会找不到并让 LoadAsync 自动选中活动/第一个播放集，看起来像“跳到别的集”。
+            var renamed = PlaySets.FirstOrDefault(
+                p => string.Equals(p.Name, newName.Trim(), StringComparison.OrdinalIgnoreCase));
             if (renamed is not null)
             {
                 await SelectPlaySetAsync(renamed, cancellationToken).ConfigureAwait(true);
@@ -1685,7 +1964,8 @@ public sealed class ModsViewModel : LocalizedObservableObject
                 return true;
             }
 
-            FlushVisibleRows();
+            // 只同步开关状态，保持 _allMods 原始顺序；搜索过滤时不能把可见行排到最前。
+            SyncVisibleEnabledStateIntoAllMods();
 
             var shouldWriteLoadFile = writeLoadFile
                 ?? PlaySets.Any(p => p.Id == playSet.Id && p.IsActive);

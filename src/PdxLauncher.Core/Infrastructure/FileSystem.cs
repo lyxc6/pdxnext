@@ -37,6 +37,14 @@ public sealed class FileSystem : Abstractions.IFileSystem
 
     public byte[] ReadAllBytes(string path) => File.ReadAllBytes(path);
 
+    public Stream OpenRead(string path) => new FileStream(
+        path,
+        FileMode.Open,
+        FileAccess.Read,
+        FileShare.ReadWrite | FileShare.Delete,
+        bufferSize: 4096,
+        FileOptions.None);
+
     public void WriteAllBytesAtomic(string path, ReadOnlySpan<byte> data)
     {
         ArgumentNullException.ThrowIfNull(path);
@@ -47,13 +55,38 @@ public sealed class FileSystem : Abstractions.IFileSystem
         }
 
         var temp = path + ".pdxnext.tmp";
-        using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+        try
         {
-            stream.Write(data);
-            stream.Flush(flushToDisk: true);
-        }
+            using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(data);
+                stream.Flush(flushToDisk: true);
+            }
 
-        File.Move(temp, path, overwrite: true);
+            File.Move(temp, path, overwrite: true);
+        }
+        finally
+        {
+            // 失败时不能把半截临时文件留在目录里：上层只看「有没有 .pdxnext.tmp」判断写没写成功。
+            TryDeleteTemp(temp);
+        }
+    }
+
+    private static void TryDeleteTemp(string temp)
+    {
+        try
+        {
+            if (File.Exists(temp))
+            {
+                File.Delete(temp);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
     }
 
     public void WriteAllTextAtomic(string path, string text) =>

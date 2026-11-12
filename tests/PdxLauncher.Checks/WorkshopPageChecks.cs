@@ -30,6 +30,14 @@ public static class WorkshopPageChecks
         "txtWorkshopPage",
         "btnWorkshopPrevPage",
         "btnWorkshopNextPage",
+        "btnWorkshopFilter",
+        "btnWorkshopFilterClear",
+        "cmbWorkshopSpecialFilter",
+        "cmbWorkshopPageSize",
+        "txtWorkshopDlcFilter",
+        "chkWorkshopShowIncompatible",
+        "pnlWorkshopFilters",
+        "lstWorkshopPageNumbers",
     ];
 
     public static int Run(IFileSystem fs)
@@ -62,12 +70,74 @@ public static class WorkshopPageChecks
         CheckViewModelGuardsStaleResults(viewModel);
         CheckCacheKeyUsesAppliedSearch(viewModel);
         CheckFlushIsOffUiThread(viewModel);
+        CheckRowBuildOffUiThread(viewModel);
         CheckNetworkFailureIsVisible(viewModel);
         CheckSteamSortsIncludeRelevance(viewModel);
+        CheckFilterPanel(xaml, viewModel);
+        CheckPagerAndPageSize(xaml, viewModel);
+        CheckCatalogRefresh(viewModel, codeBehind);
         CheckCodeBehindHooks(codeBehind);
+        CheckFailureVsEmptyState(xaml, viewModel);
 
         return ChecksContext.Failures - before;
     }
+
+    /// <summary>
+    /// 网络失败不能显示成「这个游戏还没有创意工坊内容」：空提示只在「查询成功、没在加载、
+    /// 没有失败、确实 0 行」时出现；失败时列表区中间要有原因和重试入口。
+    /// 刷新还必须绕过在途请求合并，否则旧请求卡住时点刷新只会复用旧请求（0 个新请求）。
+    /// </summary>
+    private static void CheckFailureVsEmptyState(string xaml, string viewModel)
+    {
+        if (TryGetBlock(
+                viewModel,
+                "public bool ShowEmptyState",
+                "public bool ShowSignInHint",
+                "创意工坊页: 找到 ShowEmptyState",
+                out var emptyStateBlock))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 空提示排除加载中",
+                emptyStateBlock.Contains("!IsBusy", StringComparison.Ordinal),
+                emptyStateBlock);
+            ChecksContext.Check(
+                "创意工坊页: 空提示排除加载失败",
+                emptyStateBlock.Contains("!HasLoadFailure", StringComparison.Ordinal),
+                emptyStateBlock);
+        }
+
+        ChecksContext.Check(
+            "创意工坊页: 有失败态属性",
+            viewModel.Contains("ShowLoadFailureState", StringComparison.Ordinal)
+            && viewModel.Contains("HasLoadFailure", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: XAML 有失败提示与重试按钮",
+            xaml.Contains("ShowLoadFailureState", StringComparison.Ordinal)
+            && xaml.Contains("btnWorkshopRetry", StringComparison.Ordinal)
+            && xaml.Contains("txtWorkshopLoadFailure", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 刷新绕过在途请求合并",
+            viewModel.Contains("bypassCoalescing: force", StringComparison.Ordinal),
+            "QuerySteamAsync 应把 force 传给 BrowseAsync");
+
+        // 代理已生效但仍连不上时，不能再说「检测到系统代理，去设置里切过去」。
+        var root = FindWorkspaceRoot();
+        foreach (var lang in new[] { "zh-CN", "en-US" })
+        {
+            var path = Path.Combine(root, "src", "PdxLauncher.App", "Strings", lang, "Resources.resw");
+            if (!ChecksContext.Check("创意工坊页: " + lang + " Resources.resw 存在", File.Exists(path), path))
+            {
+                continue;
+            }
+
+            var resw = File.ReadAllText(path);
+            ChecksContext.Check(
+                "创意工坊页: " + lang + " 有代理已生效失败提示",
+                resw.Contains("name=\"WorkshopStatusProxyActiveFailed\"", StringComparison.Ordinal),
+                "WorkshopStatusProxyActiveFailed");
+        }
+    }
+
 
     /// <summary>
     /// 页头只剩一行工具条：搜索、排序、时间范围、忙碌环、刷新、来源徽标、打开网页都在同一块里，
@@ -259,7 +329,7 @@ public static class WorkshopPageChecks
         if (!TryGetBlock(
                 viewModel,
                 "private string BuildPageKey()",
-                "/// <summary>把缓存的一页直接铺到列表上",
+                "把缓存的一页直接铺到列表上",
                 "创意工坊页: 找到 BuildPageKey",
                 out var block))
         {
@@ -275,6 +345,89 @@ public static class WorkshopPageChecks
     }
 
     /// <summary>缓存落盘移出 UI 线程：慢磁盘时页面不会短暂失去响应。</summary>
+    /// <summary>
+    /// 列表建行不能压在 UI 线程上：每条都要读写一次工坊信息缓存（同步 SQLite），
+    /// Steam 分支 30 条实测 5 秒多，PDX 分支原先没搬走，进页面 / 翻页时左栏导航点不动。
+    /// <para>
+    /// 缓存命中与断网回退还有 N+1 的按 key 回查：页快照与离线快照本来就带封面文件名，
+    /// 再按 key 查一次库既慢又没必要。这里把「整段丢线程池 + 按条目判封面」钉成源码断言。
+    /// </para>
+    /// </summary>
+    private static void CheckRowBuildOffUiThread(string viewModel)
+    {
+        if (TryGetBlock(
+                viewModel,
+                "private async Task QueryPdxAsync(",
+                "private (List<WorkshopRowViewModel> Rows, List<WorkshopInfoCacheEntry> Entries) BuildPdxRows(",
+                "创意工坊页: 找到 QueryPdxAsync",
+                out var queryPdx))
+        {
+            ChecksContext.Check(
+                "创意工坊页: PDX 建行丢到线程池",
+                queryPdx.Contains(".Run(() => BuildPdxRows(", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: PDX 建行后仍按查询代号丢弃迟到结果",
+                queryPdx.Contains("if (version != _queryVersion || cancellationToken.IsCancellationRequested)", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "private (List<WorkshopRowViewModel> Rows, List<WorkshopInfoCacheEntry> Entries) BuildPdxRows(",
+                "查询失败：先用这个游戏之前缓存过的条目",
+                "创意工坊页: 找到 BuildPdxRows",
+                out var buildPdx))
+        {
+            ChecksContext.Check(
+                "创意工坊页: PDX 元数据批量落库",
+                buildPdx.Contains("_info.UpsertMany(pending)", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: PDX 封面按条目判定（不按 key 回查）",
+                buildPdx.Contains("_info.TryGetCachedCover(entry, out var cover)", StringComparison.Ordinal)
+                && !buildPdx.Contains("_info.TryGetCachedCover(cacheKey", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "private (List<WorkshopRowViewModel> Rows, List<WorkshopInfoCacheEntry> Entries) BuildSteamRows(",
+                "PDX Mods 查询",
+                "创意工坊页: 找到 BuildSteamRows",
+                out var buildSteam))
+        {
+            ChecksContext.Check(
+                "创意工坊页: Steam 元数据批量落库",
+                buildSteam.Contains("_info.UpsertMany(pending)", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: Steam 封面按条目判定（不按 key 回查）",
+                buildSteam.Contains("_info.TryGetCachedCover(entry, out var cover)", StringComparison.Ordinal)
+                && !buildSteam.Contains("_info.TryGetCachedCover(cacheKey", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "private async Task ApplyCachedPageAsync(",
+                "/// <summary>线程池上把页快照建成行模型",
+                "创意工坊页: 找到 ApplyCachedPageAsync",
+                out var cachedPage))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 页缓存建行丢到线程池",
+                cachedPage.Contains(".Run(() => BuildCachedRows(", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "private async Task ShowFailureOrCacheAsync(",
+                "private List<WorkshopRowViewModel> BuildFallbackRows(",
+                "创意工坊页: 找到 ShowFailureOrCacheAsync",
+                out var fallback))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 断网回退建行丢到线程池",
+                fallback.Contains(".Run(() => BuildFallbackRows(", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>缓存落盘与建行都不许在 UI 线程同步执行。</summary>
     private static void CheckFlushIsOffUiThread(string viewModel)
     {
         ChecksContext.Check(
@@ -327,7 +480,7 @@ public static class WorkshopPageChecks
 
         if (TryGetBlock(
                 viewModel,
-                "private void ShowFailureOrCache(",
+                "private async Task ShowFailureOrCacheAsync(",
                 "并发补封面",
                 "创意工坊页: 找到 ShowFailureOrCache",
                 out var failure))
@@ -390,6 +543,214 @@ public static class WorkshopPageChecks
                 "创意工坊页: 无关键词的相关度要说明清楚",
                 querySteam.Contains("WorkshopSortRelevanceNeedsKeyword", StringComparison.Ordinal));
         }
+    }
+
+    /// <summary>
+    /// 筛选栏：左侧独立一列、分组可折叠、每个标签是三态胶囊（包含 / 排除 / 未选）、
+    /// DLC 有名称过滤，且筛选变化走 700 ms 去抖后才发请求。
+    /// </summary>
+    private static void CheckFilterPanel(string xaml, string viewModel)
+    {
+        if (TryGetBlock(
+                xaml,
+                "<!-- 行2：筛选栏 + 列表 / 空状态 -->",
+                "<!-- 行3：分页 / 状态栏 -->",
+                "创意工坊页: 找到行2 筛选栏区域",
+                out var row2))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 行2 是两列（筛选栏 + 列表）",
+                row2.Contains("ColumnDefinition Width=\"Auto\"", StringComparison.Ordinal)
+                && row2.Contains("ColumnDefinition Width=\"*\"", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 筛选分组可折叠",
+                row2.Contains("Click=\"OnFilterGroupHeaderClick\"", StringComparison.Ordinal)
+                && row2.Contains("svc:XamlVisibility.FromBool(IsExpanded)", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 标签是三态胶囊（包含/排除由同一控件显示）",
+                row2.Contains("<controls:PdxTagChip", StringComparison.Ordinal)
+                && row2.Contains("IsRequired=\"{x:Bind IsRequired, Mode=OneWay}\"", StringComparison.Ordinal)
+                && row2.Contains("IsExcluded=\"{x:Bind IsExcluded, Mode=OneWay}\"", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 胶囊单列整行排布",
+                row2.Contains("<ItemsPanelTemplate>", StringComparison.Ordinal)
+                && row2.Contains("<StackPanel Spacing=\"4\" />", StringComparison.Ordinal)
+                && !row2.Contains("<controls:PdxWrapPanel", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: DLC 组有名称过滤框",
+                row2.Contains("txtWorkshopDlcFilter", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 不兼容开关绑到 Filters",
+                row2.Contains("ViewModel.Filters.ShowIncompatible, Mode=TwoWay", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 特别筛选下拉绑到 Filters",
+                row2.Contains("ViewModel.Filters.SpecialFilterModes", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 标签列表不再被内层滚动条压缩",
+                !row2.Contains("MaxHeight=\"240\"", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 标签名绑定随语言切换",
+                row2.Contains("Text=\"{x:Bind DisplayName, Mode=OneWay}\"", StringComparison.Ordinal));
+        }
+
+        ChecksContext.Check(
+            "创意工坊页: 筛选变化走去抖",
+            viewModel.Contains("FilterDebounce", StringComparison.Ordinal)
+            && viewModel.Contains("ApplyFiltersAfterDebounceAsync", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 筛选变化回到第一页并跳过缓存",
+            viewModel.Contains("RunQueryAsync(resetPage: true, force: true)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 页面卸载取消筛选去抖",
+            viewModel.Contains("CancelPendingFilterQuery()", StringComparison.Ordinal));
+
+        if (TryGetBlock(
+                viewModel,
+                "private string BuildPageKey()",
+                "把缓存的一页直接铺到列表上",
+                "创意工坊页: 找到 BuildPageKey",
+                out var block))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 页缓存键含每页条数",
+                block.Contains("_pageSize", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 页缓存键含标签与不兼容开关",
+                block.Contains("Filters.RequiredTags", StringComparison.Ordinal)
+                && block.Contains("Filters.ShowIncompatible", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// 分页器：每页下拉（10/15/30/50）+ 页码序列（1 2 3 … N）+ 前后箭头；
+    /// 换每页条数要回到第 1 页并跳过缓存。
+    /// </summary>
+    private static void CheckPagerAndPageSize(string xaml, string viewModel)
+    {
+        if (TryGetBlock(
+                xaml,
+                "<!-- 行3：分页 / 状态栏 -->",
+                "<Border Grid.Column=\"1\"",
+                "创意工坊页: 找到分页工具条",
+                out var pager))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 分页器有每页下拉",
+                pager.Contains("cmbWorkshopPageSize", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 分页器有页码序列",
+                pager.Contains("ViewModel.PageButtons", StringComparison.Ordinal)
+                && pager.Contains("OnPageNumberClick", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 当前页用强调色",
+                pager.Contains("AccentButtonStyle", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 省略号占位",
+                pager.Contains("ShowAsEllipsis", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "public Task ChangePageSizeAsync(int pageSize)",
+                "/// <summary>筛选变化：去抖后回到第 1 页重查。</summary>",
+                "创意工坊页: 找到 ChangePageSizeAsync",
+                out var change))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 换每页条数回到第 1 页",
+                change.Contains("resetPage: true, force: true)", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 每页条数写进设置",
+                change.Contains("WorkshopPageSize", StringComparison.Ordinal));
+        }
+
+        ChecksContext.Check(
+            "创意工坊页: 页码从首页/末页/当前页生成",
+            viewModel.Contains("BuildPageButtons", StringComparison.Ordinal)
+            && viewModel.Contains("totalPages - 1", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 筛选目录随游戏更新：读/写磁盘快照、24h TTL + 本地版本判断、单飞 + 冷却 + 失败退避，
+    /// 页缓存命中时也要检查目录是否过期。
+    /// </summary>
+    private static void CheckCatalogRefresh(string viewModel, string codeBehind)
+    {
+        ChecksContext.Check(
+            "创意工坊页: ViewModel 注入目录缓存",
+            viewModel.Contains("WorkshopFilterCatalogCache", StringComparison.Ordinal));
+
+        if (TryGetBlock(
+                viewModel,
+                "public async Task LoadAsync(GameInstallation? game",
+                "public async Task RefreshAsync()",
+                "创意工坊页: 找到 LoadAsync",
+                out var load))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 加载时读目录快照",
+                load.Contains("_catalogCache.TryLoad", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 加载后检查目录是否过期",
+                load.Contains("RefreshCatalogIfStaleAsync", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "public async Task RefreshCatalogIfStaleAsync",
+                "/// <summary>取消在途的目录刷新",
+                "创意工坊页: 找到 RefreshCatalogIfStaleAsync",
+                out var refresh))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 目录按 TTL/版本判断",
+                refresh.Contains("WorkshopFilterCatalogPolicy.NeedsRefresh", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 目录刷新遵守限流冷却",
+                refresh.Contains("TryGetCooldown", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 目录刷新单飞",
+                refresh.Contains("_catalogRefreshing", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 目录失败后退避",
+                refresh.Contains("FailureBackoff", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "private async Task QuerySteamAsync(",
+                "private async Task QueryPdxAsync(",
+                "创意工坊页: 找到 QuerySteamAsync 目录钩子",
+                out var querySteam))
+        {
+            ChecksContext.Check(
+                "创意工坊页: SSR 结果套到筛选栏",
+                querySteam.Contains("ApplyFilterGroups(page.Groups)", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: SSR 结果更新目录快照",
+                viewModel.Contains("UpdateCatalogSnapshot", StringComparison.Ordinal));
+        }
+
+        if (TryGetBlock(
+                viewModel,
+                "private async Task QueryAsync(int version",
+                "/// <summary>生成页缓存的键",
+                "创意工坊页: 找到 QueryAsync 缓存命中路径",
+                out var query))
+        {
+            ChecksContext.Check(
+                "创意工坊页: 页缓存命中也检查目录",
+                query.Contains("RefreshCatalogIfStaleAsync", StringComparison.Ordinal));
+        }
+
+        ChecksContext.Check(
+            "创意工坊页: 已选标签消失后重查",
+            viewModel.Contains("RemovedActiveTags", StringComparison.Ordinal)
+            && viewModel.Contains("_pendingFilterRequery", StringComparison.Ordinal));
+
+        ChecksContext.Check(
+            "创意工坊页: 页面卸载取消目录刷新",
+            codeBehind.Contains("CancelCatalogRefresh", StringComparison.Ordinal));
     }
 
     private static void CheckCodeBehindHooks(string codeBehind)

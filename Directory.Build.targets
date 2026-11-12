@@ -1,0 +1,30 @@
+<Project>
+  <!--
+    ==================== 让 WinUI 的 XAML 代码生成在 IDE 的 design-time build 里也运行 ====================
+
+    现象：VS Code 里打开任意 .cs，满屏 CS0103（InitializeComponent 不存在），连带 CS1061/CS0117。
+    命令行 `dotnet build` 0 警告 0 错误。
+
+    根因（见 WindowsAppSDK 自带的 Microsoft.UI.Xaml.Markup.Compiler.interop.targets）：
+      <PropertyGroup>
+        <CoreCompileDependsOn Condition="'$(BuildingInsideVisualStudio)' == 'true' ">
+          DesignTimeMarkupCompilation;
+          $(CoreCompileDependsOn)
+        </CoreCompileDependsOn>
+      </PropertyGroup>
+    也就是说，只有「在 Visual Studio 里」才会把 DesignTimeMarkupCompilation 挂到 CoreCompile 之前，
+    由它调用 XamlCompiler 生成 obj\...\Views\XxxPage.g.i.cs 并把生成的 .cs 加进 @(Compile)。
+    VS Code 的 C# 扩展（OmniSharp / Roslyn LSP）与 C# Dev Kit 走的是 design-time build
+    （DesignTimeBuild=true、BuildingProject=false、SkipCompilerExecution=true，且
+    BuildingInsideVisualStudio 为空），于是 XAML 编译器根本不跑，@(Compile) 里没有 *.g.i.cs，
+    语言服务自然看不到 InitializeComponent 与 x:Name 字段。
+
+    修法：在非 VS 的 design-time build 里，把官方的 DesignTimeMarkupCompilation 目标补挂回去。
+      1) 只在 DesignTimeBuild=true 生效，普通 dotnet build 完全不受影响（不改变产物、不增加耗时）；
+      2) 复用的是 WindowsAppSDK 自带的目标，不是自己手写生成逻辑；
+      3) 前提是还原（obj\project.assets.json）已经完成——IDE 打开项目时本来就会做。
+    -->
+  <PropertyGroup Condition="'$(UseWinUI)' == 'true' and '$(BuildingInsideVisualStudio)' != 'true' and ('$(DesignTimeBuild)' == 'true' or '$(BuildingProject)' == 'false')">
+    <CoreCompileDependsOn>DesignTimeMarkupCompilation;$(CoreCompileDependsOn)</CoreCompileDependsOn>
+  </PropertyGroup>
+</Project>

@@ -23,12 +23,19 @@ public enum WorkshopStateBadge
 }
 
 /// <summary>
-/// 一个徽标的判定结果：档位 + 文案键 + 可选的百分比参数。
+/// 一个徽标的判定结果：档位 + 文案键 + 可选的百分比参数（下载中还带上字节数）。
 /// </summary>
 /// <param name="Badge">档位；<see cref="WorkshopStateBadge.None"/> 表示不显示。</param>
-/// <param name="Key">文案键（与 <c>tools/i18n/*/modlib.json</c> 逐字一致）。</param>
+/// <param name="Key">文案资源名（与 <c>src/PdxLauncher.App/Strings/*/Resources.resw</c> 逐字一致）。</param>
 /// <param name="Percent">下载完成度 0-100；非下载状态或无进度时为 null。</param>
-public sealed record WorkshopStateBadgeInfo(WorkshopStateBadge Badge, string Key, int? Percent)
+/// <param name="BytesDownloaded">当前下载已完成的字节数；非下载状态或未知时为 null。</param>
+/// <param name="BytesTotal">当前下载的总字节数；非下载状态或未知时为 null。</param>
+public sealed record WorkshopStateBadgeInfo(
+    WorkshopStateBadge Badge,
+    string Key,
+    int? Percent,
+    ulong? BytesDownloaded = null,
+    ulong? BytesTotal = null)
 {
     /// <summary>是否需要显示徽标。</summary>
     public bool IsVisible => Badge != WorkshopStateBadge.None;
@@ -50,25 +57,28 @@ public sealed record WorkshopStateBadgeInfo(WorkshopStateBadge Badge, string Key
 public static class WorkshopStateText
 {
     /// <summary>已安装。</summary>
-    public const string KeyInstalled = "modlib.steamStateInstalled";
+    public const string KeyInstalled = "ModlibSteamStateInstalled";
 
     /// <summary>需要更新。</summary>
-    public const string KeyUpdateNeeded = "modlib.steamStateUpdateNeeded";
+    public const string KeyUpdateNeeded = "ModlibSteamStateUpdateNeeded";
 
     /// <summary>下载中（带百分比参数）。</summary>
-    public const string KeyDownloading = "modlib.steamStateDownloading";
+    public const string KeyDownloading = "ModlibSteamStateDownloading";
+
+    /// <summary>下载中且拿得到字节数（百分比 + 已下载 / 总量三个参数）。</summary>
+    public const string KeyDownloadingWithBytes = "ModlibSteamStateDownloadingWithBytes";
 
     /// <summary>下载中但拿不到百分比（Steam 还没给出总量）。</summary>
-    public const string KeyDownloadingNoPercent = "modlib.steamStateDownloadingNoPercent";
+    public const string KeyDownloadingNoPercent = "ModlibSteamStateDownloadingNoPercent";
 
     /// <summary>排队等待下载。</summary>
-    public const string KeyPending = "modlib.steamStatePending";
+    public const string KeyPending = "ModlibSteamStatePending";
 
     /// <summary>本地已禁用。</summary>
-    public const string KeyDisabled = "modlib.steamStateDisabled";
+    public const string KeyDisabled = "ModlibSteamStateDisabled";
 
     /// <summary>徽标的无障碍名。</summary>
-    public const string KeyName = "modlib.steamStateName";
+    public const string KeyName = "ModlibSteamStateName";
 
     /// <summary>
     /// 判定一行该显示哪个徽标。
@@ -100,7 +110,9 @@ public static class WorkshopStateText
             return new WorkshopStateBadgeInfo(
                 WorkshopStateBadge.Downloading,
                 KeyDownloading,
-                percent is null ? null : (int)Math.Round(percent.Value));
+                percent is null ? null : (int)Math.Round(percent.Value),
+                state.BytesDownloaded,
+                state.BytesTotal);
         }
 
         if (state.NeedsUpdate == true)

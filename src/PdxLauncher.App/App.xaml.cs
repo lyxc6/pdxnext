@@ -65,6 +65,10 @@ public partial class App : Application
         MainWindowInstance = _window;
         _window.Activate();
 
+        // 单实例：第一个窗口起来后再开监听，第二个进程点开时能直接把这里叫到前台。
+        SingleInstanceGuard.StartActivationServer(_window.DispatcherQueue, _window);
+        _window.Closed += (_, _) => SingleInstanceGuard.StopActivationServer();
+
         // UI 线程看门狗：任何页面上的同步长活（大文件加载、同步 IO/解码）都会在这里留下
         // 「停顿 N ms + 最近位置」，比窗口卡死后什么都抓不到要强。
         AppServices.AttachWatchdog(UiThreadWatchdog.Start(AppServices.Logger, _window.DispatcherQueue));
@@ -85,6 +89,9 @@ public partial class App : Application
 
         // 数据根目录固定在程序目录下（见 PdxDataRoot）：首次启动把旧的 %LOCALAPPDATA%\PdxNext
         // 只读复制过来。迁移失败只记日志，绝不阻塞启动，也绝不删除源目录。
+        // 注意：下面的 IsPerMachineInstall 只决定「数据目录选址与迁移来源」，属于数据语义，
+        // 不是安装形态判定；更新时是否传 /ALLUSERS 统一走 InstallModeResolver
+        // （见 UpdateService.ShouldUseAllUsers），两处口径不得互相借用。
         var migration = PdxDataRoot.IsPerMachineInstall(AppContext.BaseDirectory)
             ? DataRootMigrator.MigrateFirstAvailable(
                 fileSystem,
@@ -215,7 +222,8 @@ public partial class App : Application
             Path.Combine(AppServices.DataRoot, "update-cache"),
             AppContext.BaseDirectory,
             UpdateService.ReadCurrentVersion(),
-            settingsStore);
+            settingsStore,
+            uninstallEntries: new RegistryUninstallEntrySource(logger));
 
         // 最后一个参数先给空列表：窗口先出来，游戏发现由 GameDiscovery 在 UI 就绪后补。
         AppServices.Initialize(
@@ -232,6 +240,7 @@ public partial class App : Application
             continueGame,
             dlcSignatures,
             network.Descriptions,
+            network.Artwork,
             network.NewsFeed,
             network.Metadata,
             network.Assets,

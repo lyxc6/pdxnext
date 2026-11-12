@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Online;
 
 /// <summary>
 /// 当前游戏主页视图模型：主题素材路径、继续游戏信息、播放集/mod/DLC 计数、启动命令。
@@ -104,9 +105,16 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
                 return string.Empty;
             }
 
-            return game.Support == GameSupport.LaunchOnly
-                ? T(Keys.HomeSupportNoticeLaunchOnly, game.DisplayName)
-                : T(Keys.HomeSupportNoticeLimited, game.DisplayName);
+            if (game.Support != GameSupport.LaunchOnly)
+            {
+                return T(Keys.HomeSupportNoticeLimited, game.DisplayName);
+            }
+
+            // 仅启动的游戏也分两种：有 Steam 工坊的（CS1 / PA）可以在这里浏览与订阅，
+            // 文案要不提工坊，否则和左栏出现的「创意工坊」页自相矛盾。
+            return SteamWorkshopGames.HasWorkshop(game.GameId)
+                ? T(Keys.HomeSupportNoticeLaunchOnlyWorkshop, game.DisplayName)
+                : T(Keys.HomeSupportNoticeLaunchOnly, game.DisplayName);
         }
     }
 
@@ -211,13 +219,13 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
 
     /// <summary>启动当前游戏（普通启动，不带 --continuelastsave）。</summary>
     [RelayCommand]
-    private Task LaunchAsync() => LaunchCoreAsync(LaunchRequest.Default);
+    private Task LaunchAsync() => LaunchCoreAsync(continueLastSave: false);
 
     /// <summary>继续上次存档启动：追加 --continuelastsave。</summary>
     [RelayCommand]
-    private Task LaunchContinueAsync() => LaunchCoreAsync(new LaunchRequest(null, null, true));
+    private Task LaunchContinueAsync() => LaunchCoreAsync(continueLastSave: true);
 
-    private async Task LaunchCoreAsync(LaunchRequest request)
+    private async Task LaunchCoreAsync(bool continueLastSave)
     {
         var game = Game;
         if (game is null)
@@ -225,6 +233,12 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
             LaunchCompleted?.Invoke(this, ProcessStartResult.Failure(T(Keys.HomeStatusNoGameSelected)));
             return;
         }
+
+        var request = AppServices.CreateLaunchRequest(game, continueLastSave);
+
+        // 启动结果只经 LaunchCompleted → HomeInfoBar 展示；底部状态行只承载非启动状态，
+        // 这里先清掉上一段状态，避免旧文案与启动提示同时出现。
+        ClearStatus();
 
         IsBusy = true;
         try
@@ -237,18 +251,6 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
             {
                 AppServices.Logger.Info(
                     "已启动 " + game.DisplayName + "（pid=" + (result.ProcessId?.ToString() ?? "未知") + "）");
-                SetStatus(Keys.HomeStatusLaunched, game.DisplayName);
-            }
-            else
-            {
-                if (result.ErrorMessage is { } errorMessage)
-                {
-                    SetStatus(Keys.HomeStatusLaunchFailed, errorMessage);
-                }
-                else
-                {
-                    SetStatus(Keys.HomeStatusLaunchFailedUnknown);
-                }
             }
 
             LaunchCompleted?.Invoke(this, result);
@@ -256,7 +258,6 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
         catch (Exception ex)
         {
             AppServices.Logger.Error("启动游戏异常（gameId=" + game.GameId + "）", ex);
-            SetStatus(Keys.HomeStatusLaunchFailed, ex.Message);
             LaunchCompleted?.Invoke(this, ProcessStartResult.Failure(ex.Message));
         }
         finally
@@ -265,29 +266,121 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>把选中的播放集设为激活项，并刷新 mod 计数。</summary>
+    /// <summary>播放集切换的取消源：快速连续选择时只让最后一次生效。</summary>
+    private CancellationTokenSource? _playSetSelectionCts;
+
+    /// <summary>最近一次确认成功的播放集；写入失败时用来把 UI 恢复回去。</summary>
+    private PlaySet? _confirmedPlaySet;
+
+    /// <summary>把选中的播放集设为激活项，写加载文件，并刷新 mod 计数。</summary>
     private async Task ApplyPlaySetSelectionAsync(GameInstallation game, PlaySet playSet)
     {
+        _playSetSelectionCts?.Cancel();
+        _playSetSelectionCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _playSetSelectionCts = cts;
+        var token = cts.Token;
+
+        var previous = _confirmedPlaySet ?? PlaySets.FirstOrDefault(static p => p.IsActive);
         try
         {
-            await AppServices.PlaySets
-                .SetActivePlaySetAsync(game, playSet.Id, CancellationToken.None)
+            var active = await AppServices.PlaySets
+                .SetActivePlaySetAsync(game, playSet.Id, token)
                 .ConfigureAwait(true);
+            if (!active.IsSuccess)
+            {
+                RevertSelection(previous);
+                SetStatus(Keys.HomeStatusPlaySetSwitchFailed, active.ErrorMessage ?? T(Keys.ModsStatusSaveFailed));
+                return;
+            }
+
+            // 只改数据库不够：游戏启动读的是加载文件。写失败就把激活项回滚，避免“界面已切换、
+            // 游戏仍按旧配置启动”。
+            var loadFile = await ActivePlaySetLoadFileWriter
+                .WriteAsync(game, token)
+                .ConfigureAwait(true);
+            if (!loadFile.IsSuccess)
+            {
+                await RollbackActiveAsync(game, previous, playSet).ConfigureAwait(true);
+                RevertSelection(previous);
+                SetStatus(Keys.HomeStatusPlaySetSwitchFailed, loadFile.ErrorMessage ?? T(Keys.ModsStatusSaveFailed));
+                return;
+            }
 
             PlaySetName = playSet.Name;
+            _confirmedPlaySet = playSet;
 
             var mods = await AppServices.PlaySets
-                .GetPlaySetModsAsync(game, playSet.Id, CancellationToken.None)
+                .GetPlaySetModsAsync(game, playSet.Id, token)
                 .ConfigureAwait(true);
             ModCount = mods.Count;
             EnabledModCount = mods.Count(static m => m.Enabled);
 
             AppServices.Logger.Info("已切换激活播放集: " + playSet.Name);
         }
+        catch (OperationCanceledException) when (token.IsCancellationRequested)
+        {
+            // 又选了别的播放集：这一轮作废，不要覆盖新选择。
+        }
         catch (Exception ex)
         {
             AppServices.Logger.Error("切换激活播放集失败: " + playSet.Name, ex);
+            RevertSelection(previous);
             SetStatus(Keys.HomeStatusPlaySetSwitchFailed, ex.Message);
+        }
+        finally
+        {
+            if (ReferenceEquals(_playSetSelectionCts, cts))
+            {
+                _playSetSelectionCts = null;
+            }
+
+            cts.Dispose();
+        }
+    }
+
+    /// <summary>写加载文件失败时把数据库里的激活项改回旧值；失败只记日志。</summary>
+    private static async Task RollbackActiveAsync(GameInstallation game, PlaySet? previous, PlaySet attempted)
+    {
+        if (previous is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var rollback = await AppServices.PlaySets
+                .SetActivePlaySetAsync(game, previous.Id, CancellationToken.None)
+                .ConfigureAwait(false);
+            if (!rollback.IsSuccess)
+            {
+                AppServices.Logger.Error(
+                    "加载文件写入失败后回滚激活播放集失败（from=" + attempted.Name + " to=" + previous.Name + "）："
+                    + rollback.ErrorMessage);
+            }
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppServices.Logger.Error("加载文件写入失败后回滚激活播放集异常（to=" + previous.Name + "）", ex);
+        }
+    }
+
+    /// <summary>把下拉选择恢复到上一个确认项，且不触发再次切换。</summary>
+    private void RevertSelection(PlaySet? previous)
+    {
+        if (ReferenceEquals(SelectedPlaySet, previous))
+        {
+            return;
+        }
+
+        _suppressPlaySetChange = true;
+        try
+        {
+            SelectedPlaySet = previous;
+        }
+        finally
+        {
+            _suppressPlaySetChange = false;
         }
     }
 

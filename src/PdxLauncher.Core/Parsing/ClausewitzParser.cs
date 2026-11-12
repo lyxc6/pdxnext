@@ -91,6 +91,150 @@ public static class ClausewitzParser
     }
 
     /// <summary>
+    /// 解析顶层块（<c>dlc019 = { name = "..." steam_id = "..." }</c>）：返回每个块的块名与块内标量键值对。
+    /// <para>
+    /// <see cref="Parse"/> 会把 <c>{ }</c> 整块忽略，读不到 <c>game/dlc_metadata/*.txt</c>
+    /// 这种「一条 DLC 一个顶层块」的文件；本方法专门补这一层。
+    /// 块内只取标量（键小写，值去引号），更内层的块整块忽略；块名原样保留（大小写敏感）。
+    /// </para>
+    /// <para>容错与 <see cref="Parse"/> 一致：BOM、行尾注释、未闭合块、畸形输入都不抛异常 —— 坏块跳过。</para>
+    /// </summary>
+    /// <param name="text">Clausewitz 文本。</param>
+    /// <returns>按出现顺序排列的顶层块；没有可解析的块时为空列表。</returns>
+    public static IReadOnlyList<ClausewitzBlock> ParseBlocks(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        var result = new List<ClausewitzBlock>();
+
+        var index = 0;
+        var length = text.Length;
+        if (length > 0 && text[0] == '\uFEFF')
+        {
+            index = 1;
+        }
+
+        while (index < length)
+        {
+            SkipWhitespaceAndComments(text, ref index);
+            if (index >= length)
+            {
+                break;
+            }
+
+            var ch = text[index];
+            if (ch == '{' || ch == '}' || ch == '=')
+            {
+                // 顶层出现结构符号：跳过，保持容错
+                index++;
+                continue;
+            }
+
+            if (!TryReadBareToken(text, ref index, out var key))
+            {
+                index++;
+                continue;
+            }
+
+            SkipWhitespaceAndComments(text, ref index);
+            if (index >= length || text[index] != '=')
+            {
+                SkipToEndOfLine(text, ref index);
+                continue;
+            }
+
+            index++; // 跳过 '='
+            SkipWhitespaceAndComments(text, ref index);
+
+            if (index < length && text[index] == '{')
+            {
+                var body = ReadBlockBody(text, ref index);
+                if (body is null)
+                {
+                    // 未闭合的块：读到文件尾也没有配对的 '}'，放弃剩余内容但不抛异常。
+                    break;
+                }
+
+                if (key.Length > 0)
+                {
+                    result.Add(new ClausewitzBlock(key, Parse(body)));
+                }
+
+                continue;
+            }
+
+            // 顶层标量：与 Parse 一样忽略，只把值吃掉，避免值被当成下一个块名。
+            if (index < length && text[index] == '"')
+            {
+                index++;
+                ReadQuotedValue(text, ref index);
+            }
+            else
+            {
+                ReadBareValue(text, ref index);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 吃掉一个 <c>{ ... }</c> 块并返回花括号之间的原文。
+    /// 引号内的花括号与注释里的花括号不算结构，支持嵌套块。
+    /// </summary>
+    /// <returns>块内原文；到文件尾仍未闭合时返回 null（<paramref name="index"/> 停在文件尾）。</returns>
+    private static string? ReadBlockBody(string text, ref int index)
+    {
+        var length = text.Length;
+        if (index >= length || text[index] != '{')
+        {
+            return null;
+        }
+
+        index++; // 跳过 '{'
+        var start = index;
+        var depth = 1;
+        while (index < length)
+        {
+            var ch = text[index];
+            if (ch == '"')
+            {
+                index++;
+                ReadQuotedValue(text, ref index);
+                continue;
+            }
+
+            if (ch == '#')
+            {
+                SkipToEndOfLine(text, ref index);
+                continue;
+            }
+
+            if (ch == '{')
+            {
+                depth++;
+                index++;
+                continue;
+            }
+
+            if (ch == '}')
+            {
+                depth--;
+                index++;
+                if (depth == 0)
+                {
+                    return text.Substring(start, index - start - 1);
+                }
+
+                continue;
+            }
+
+            index++;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// 解析文件；文件不存在或读取失败返回空字典（并记一条 Warn）。
     /// </summary>
     public static IReadOnlyDictionary<string, string> ParseFile(

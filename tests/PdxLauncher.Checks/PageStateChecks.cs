@@ -22,9 +22,11 @@ public static class PageStateChecks
 
         PageStateStore.ModLibrary = null;
         PageStateStore.ModStudio = null;
+        PageStateStore.AddMods = null;
 
         ChecksContext.Check("页面状态：初始没有 Mod 库快照", PageStateStore.ModLibrary is null);
         ChecksContext.Check("页面状态：初始没有 Mod 创建页快照", PageStateStore.ModStudio is null);
+        ChecksContext.Check("页面状态：初始没有添加模组页快照", PageStateStore.AddMods is null);
 
         var library = new ModLibraryState(
             GameId: "ck3",
@@ -43,6 +45,13 @@ public static class PageStateChecks
                 && readBack.SortMode == "名称"
                 && readBack.SourceFilter == "全部"
                 && Math.Abs(readBack.VerticalOffset - 512.5) < 0.001);
+
+        var addMods = new AddModsState(SortMode: "大小（大到小）");
+        PageStateStore.AddMods = addMods;
+        ChecksContext.Check(
+            "页面状态：添加模组页快照字段原样存取",
+            PageStateStore.AddMods is not null
+                && PageStateStore.AddMods.SortMode == "大小（大到小）");
 
         var draft = new ModStudioDraft(
             CreateName: "我的模组",
@@ -95,13 +104,17 @@ public static class PageStateChecks
             studioBack is not null && studioBack.Draft.UploadPreviewPath is null);
 
         // 落盘形态：快照能整份序列化再读回来，坏 JSON 当没有。
-        var snapshotJson = PageStateSnapshot.Serialize(new PageStateSnapshot(library, studio));
+        var snapshotJson = PageStateSnapshot.Serialize(new PageStateSnapshot(library, studio, addMods));
         var restored = PageStateSnapshot.Deserialize(snapshotJson);
         ChecksContext.Check(
             "页面状态：快照序列化往返不丢字段",
             restored is not null
                 && restored.ModLibrary == library
-                && restored.ModStudio == studio);
+                && restored.ModStudio == studio
+                && restored.AddMods == addMods);
+        ChecksContext.Check(
+            "页面状态：旧快照没有添加模组页字段时按 null 处理",
+            PageStateSnapshot.Deserialize("{\"ModLibrary\":null,\"ModStudio\":null}") is { AddMods: null });
         ChecksContext.Check(
             "页面状态：坏 JSON 当没有",
             PageStateSnapshot.Deserialize("not json") is null
@@ -123,17 +136,23 @@ public static class PageStateChecks
 
         PageStateStore.ModLibrary = null;
         PageStateStore.ModStudio = null;
+        PageStateStore.AddMods = null;
         PageStateStore.Attach(documents, new SilentLogger());
         ChecksContext.Check(
-            "页面状态：重启后 Attach 能恢复两份快照",
-            PageStateStore.ModLibrary == library && PageStateStore.ModStudio == studio);
+            "页面状态：重启后 Attach 能恢复三份快照",
+            PageStateStore.ModLibrary == library
+                && PageStateStore.ModStudio == studio
+                && PageStateStore.AddMods == addMods);
 
         // 清掉，避免污染其它检查或同进程内的后续运行。
         PageStateStore.ModLibrary = null;
         PageStateStore.ModStudio = null;
+        PageStateStore.AddMods = null;
         ChecksContext.Check(
             "页面状态：可以清空",
-            PageStateStore.ModLibrary is null && PageStateStore.ModStudio is null);
+            PageStateStore.ModLibrary is null
+                && PageStateStore.ModStudio is null
+                && PageStateStore.AddMods is null);
 
         return ChecksContext.Failures == before ? 0 : 1;
     }

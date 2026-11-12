@@ -7,8 +7,8 @@ using Microsoft.UI.Xaml.Media.Imaging;
 
 /// <summary>
 /// 图片路径（string?）→ ImageSource 的 XAML 辅助函数。
-/// 返回的 BitmapImage 由框架在后台线程解码，不会阻塞 UI 线程；
-/// 需要"先占位再替换"的场景请改用 <see cref="BitmapLoader"/>。
+/// 返回的 BitmapImage 先是个空壳，内容由线程池读文件 + <c>SetSourceAsync</c> 异步填进去，
+/// 所以 UI 线程只做一次轻量构造；需要"先占位再整体替换"的整幅图请改用 <see cref="BitmapLoader"/>。
 /// <para>
 /// 若该路径已被 <see cref="ThemeImageFlattener"/> 摊平（EU4 的纱层背景），这里返回摊平副本；
 /// 摊平是异步且只做一次的，卡片应在重建前先调 <c>AppServices.PrepareCardCoversAsync</c>。
@@ -116,13 +116,56 @@ public static class XamlImage
 
     private static BitmapImage Create(string path, int decodeWidth)
     {
-        var image = new BitmapImage { UriSource = new Uri(path) };
+        // 空图 + 异步填内容：调用方（x:Bind 函数）拿到的实例立刻可用，
+        // 文件读与解码都不再占用 UI 线程；就绪后同一个实例通知界面重绘。
+        var image = new BitmapImage();
         if (decodeWidth > 0)
         {
             image.DecodePixelWidth = decodeWidth;
         }
 
+        FillAsync(image, path, decodeWidth);
         return image;
+    }
+
+    /// <summary>
+    /// 把图片字节读进这个空 <see cref="BitmapImage"/>：读文件在线程池，解码用
+    /// <c>SetSourceAsync</c>（它自身异步，UI 线程只发起请求）。
+    /// </summary>
+    private static async void FillAsync(BitmapImage image, string path, int decodeWidth)
+    {
+        try
+        {
+            var bytes = await Task
+                .Run(() => AppServices.FileSystem.ReadAllBytes(path))
+                .ConfigureAwait(true);
+            if (bytes.Length == 0)
+            {
+                LogWarn("图片是空文件: " + path);
+                return;
+            }
+
+            using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+            using (var writer = new Windows.Storage.Streams.DataWriter(stream.GetOutputStreamAt(0)))
+            {
+                writer.WriteBytes(bytes);
+                await writer.StoreAsync();
+                await writer.FlushAsync();
+                writer.DetachStream();
+            }
+
+            stream.Seek(0);
+            await image.SetSourceAsync(stream);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            LogWarn("图片解码失败: " + path + " (" + ex.Message + ")");
+        }
+        catch (Exception ex)
+        {
+            // async void：这里不接住就会把进程带崩（文件被占用、格式不对都会走到这）。
+            LogWarn("图片加载异常: " + path + " (" + ex.Message + ")");
+        }
     }
 
     private static void LogWarn(string message)

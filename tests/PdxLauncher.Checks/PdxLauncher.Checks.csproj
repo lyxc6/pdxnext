@@ -116,11 +116,23 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\ImageDecodeSize.cs" Link="Linked\ImageDecodeSize.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\ImagePixelSize.cs" Link="Linked\ImagePixelSize.cs" />
+    <!--
+      主题刷新范围：决定「立即检查」只刷一款还是刷全部。纯函数，只依赖 Core 的
+      GameInstallation，可以原样链接；判错了不会崩，只会把两分钟的串行下载重新带回来。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\ThemeRefreshScope.cs" Link="Linked\ThemeRefreshScope.cs" />
+    <!--
+      工坊列表的批量替换集合：只依赖 System.Collections.ObjectModel，不碰 UI 类型。
+      逐条 Clear + Add 会让 30 行各发一次集合通知，真机上是几百毫秒的布局停顿；
+      ReplaceAll 必须只发一次 Reset，所以由 BulkObservableCollectionChecks 直接测。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\BulkObservableCollection.cs" Link="Linked\BulkObservableCollection.cs" />
 
     <!--
       页面状态快照：只有 record 与静态字段，不碰 UI 类型，可以直接链接。
       它错了的表现是「回到页面筛选/滚动丢了」，编译器和真机都不容易发现，所以由 PageStateChecks 钉住字段与默认值。
     -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\AddModsState.cs" Link="Linked\AddModsState.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\ModLibraryState.cs" Link="Linked\ModLibraryState.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\ModStudioDraft.cs" Link="Linked\ModStudioDraft.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\ModStudioState.cs" Link="Linked\ModStudioState.cs" />
@@ -171,5 +183,71 @@
       「前缀匹配排到后面」或「工坊历史记住了一个空词」，所以由 SearchSuggestionsChecks 钉住。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\SearchSuggestions.cs" Link="Linked\SearchSuggestions.cs" />
+    <!--
+      成就取数的请求代次（纯 Interlocked 计数）。只依赖 System.Threading，可以原样链接；
+      口径错了表现为「连点切游戏后新请求的进度环被旧请求提前关掉」，由 SteamAchievementsChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\AchievementRequestTracker.cs" Link="Linked\AchievementRequestTracker.cs" />
+    <!--
+      成就页 ViewModel 只依赖 Core 契约、IconResolver、Cache 与一个「本地化」基类。
+      这里链接真实 VM，并用同名 stub 提供 LocalizedObservableObject/Keys（不引用 WinUI），
+      这样「缓存先渲染 + 后台失败不回滚」可以用 fake IAchievementSource 直接断言。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementsViewModel.cs" Link="Linked\AchievementsViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementRowViewModel.cs" Link="Linked\AchievementRowViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementIconPresentation.cs" Link="Linked\AchievementIconPresentation.cs" />
+    <!--
+      拉起 Steam 宿主子进程的客户端与成就数据源。两者都只依赖 Core + System.*，
+      可以原样链接；取消传播口径错了会把「切游戏」写成「Steam 不可用」，由
+      SteamAchievementsChecks 用「自检 exe 充当假宿主」的取消用例钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\SteamHostClient.cs" Link="Linked\SteamHostClient.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\SteamAchievementSource.cs" Link="Linked\SteamAchievementSource.cs" />
+    <!--
+      主页「继续 / 开始游戏」按钮的样式判据。它只认 ThemeAssetSource，不碰 UI 类型，
+      所以能原样链接进来。判据错了不会崩，只在真机上表现为「有官方美术的游戏被剥掉了皮肤」
+      或「没美术的游戏还画着幽灵按钮」，编译器看不见，因此必须由 HomeButtonStyleChecks 直接测。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\HomeButtonStylePolicy.cs" Link="Linked\HomeButtonStylePolicy.cs" />
+    <!--
+      随包自带素材的解析（Assets/themes/<gameId>/background.jpg + logo.png）。
+      只依赖 Core 的 IBundledThemeSource / GameInstallation / ThemeSpec，可以原样链接进来；
+      它错了的表现是「EU5 主页没有字标」或「其它游戏误吃了 EU5 的图」，由 HomeButtonStyleChecks 用临时目录钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\BundledThemes.cs" Link="Linked\BundledThemes.cs" />
+    <!--
+      存档页的两个纯逻辑部件：代次判定（旧扫描的结果必须整批丢弃）与行文案规则
+      （城市 / 国家该不该显示）。两者都不碰 UI 类型，可以原样链接；代次判定的极性
+      翻转会让「旧请求写回新列表」，由 SavesPageChecks 的行为级用例钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\SaveScanRequestTracker.cs" Link="Linked\SaveScanRequestTracker.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\SaveRowText.cs" Link="Linked\SaveRowText.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\SaveRowAutomationWatcher.cs" Link="Linked\SaveRowAutomationWatcher.cs" />
+    <!--
+      两段式存档加载的纯 C# 部件：粗略行状态（首填后拒绝覆盖）、按批分组、行视图模型与
+      视图模型本身。它们不引用 Microsoft.UI.Xaml，可在控制台自检里原样链接：
+      第一段先铺行、第二段原位补细节、旧代次不写回，都由 ProgressiveSavesChecks 钉住。
+      SizeFormatter 是行「大小」列的格式化器，随行视图模型一起链接。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Localization\SizeFormatter.cs" Link="Linked\SizeFormatter.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveRowState.cs" Link="Linked\SaveRowState.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveGameRowViewModel.cs" Link="Linked\SaveGameRowViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SavesViewModel.cs" Link="Linked\SavesViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveBackupsViewModel.cs" Link="Linked\SaveBackupsViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\SaveBackupRowViewModel.cs" Link="Linked\SaveBackupRowViewModel.cs" />
+    <!--
+      DLC 行视图模型：本地缩略图 / Steam 宽幅头图的显示优先级与 Stretch 判据都在这里。
+      它只依赖 Core 的 DlcInfo / DlcCatalog 与本地化基类（自检用 AchievementViewModelStubs 的替身），
+      不碰 WinUI，因此可以原样链接。判据错了不会崩，只会在真机上表现为「EU5 方图被上下裁掉」，
+      编译器和人工点测都不容易发现，所以由 DlcImageChecks 直接钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\DlcRowViewModel.cs" Link="Linked\DlcRowViewModel.cs" />
+    <!--
+      工坊依赖树节点：只依赖 Core 的 WorkshopDependency/State 与本地化基类（自检用替身），
+      不碰 WinUI。分组标题、展开态、叶子 id 映射错了只在真机上表现为「树是空的 / 没箭头」，
+      编译器和人工点测都不容易发现，所以由 WorkshopDependenciesTreeChecks 直接测。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\WorkshopDependencyViewModel.cs" Link="Linked\WorkshopDependencyViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\WorkshopDependencyNodeViewModel.cs" Link="Linked\WorkshopDependencyNodeViewModel.cs" />
   </ItemGroup>
 </Project>

@@ -34,6 +34,28 @@ public static class XamlBrush
         _ => Lookup(UnknownKey),
     };
 
+    /// <summary>
+    /// 补丁覆盖徽标的配色：applied（绿）/ overwritten（提醒色，补丁被 Steam 冲掉了）/ covered（中性）。
+    /// <para>「可覆盖」只是说明，不等于已生效，所以不用绿色。</para>
+    /// </summary>
+    public static Brush FromCoverage(string? kind) => kind switch
+    {
+        "applied" => Lookup(OwnedKey),
+        "overwritten" => Lookup(UnownedKey),
+        _ => Lookup(UnknownKey),
+    };
+
+    /// <summary>
+    /// 内容来源徽标的配色：steam（绿，Steam 自己装的）/ missing（提醒色，授权通了但内容没落盘）/
+    /// 其它（中性：仅本地文件、或判不了）。
+    /// </summary>
+    public static Brush FromContent(string? kind) => kind switch
+    {
+        "steam" => Lookup(OwnedKey),
+        "missing" => Lookup(UnownedKey),
+        _ => Lookup(UnknownKey),
+    };
+
     private static Brush Lookup(string key)
     {
         if (Application.Current is { } app

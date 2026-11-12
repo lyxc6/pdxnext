@@ -53,13 +53,66 @@ public sealed class ThemeApplier
     public ThemeVisuals Create(ThemeSpec spec)
     {
         ArgumentNullException.ThrowIfNull(spec);
+        return Build(
+            spec,
+            TryLoadImage(spec.Background),
+            TryLoadImage(spec.Logo),
+            TryLoadImage(spec.AppIcon),
+            TryCreateImageBrush(spec.ButtonBackground),
+            _fontLoader.Load(spec.ButtonFont) ?? new FontFamily(FallbackFontFamily));
+    }
 
-        var backgroundImage = TryLoadImage(spec.Background);
-        var logoImage = TryLoadImage(spec.Logo);
-        var appIcon = TryLoadImage(spec.AppIcon);
+    /// <summary>
+    /// 异步版：素材字节在线程池读，UI 线程只发起 <c>SetSourceAsync</c> 并构造主题对象。
+    /// 主题图是整窗背景与字标，动辄 1900px；同步 <c>new BitmapImage { UriSource }</c> 会在调用线程上
+    /// 开文件读头并开始解码，切游戏时会实打实压住 UI 线程。失败与同步版一样退回占位。
+    /// </summary>
+    /// <param name="spec">主题规格。</param>
+    /// <param name="cancellationToken">取消（切页面/切游戏时放弃旧主题）。</param>
+    public async Task<ThemeVisuals> CreateAsync(ThemeSpec spec, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(spec);
 
+        // 四张图一次读完：纯文件 IO，放线程池，别让 UI 线程逐张等盘。
+        var assets = await Task
+            .Run(
+                () => new[]
+                {
+                    ReadAssetBytes(spec.Background),
+                    ReadAssetBytes(spec.Logo),
+                    ReadAssetBytes(spec.AppIcon),
+                    ReadAssetBytes(spec.ButtonBackground),
+                },
+                cancellationToken)
+            .ConfigureAwait(true);
+
+        var backgroundImage = await CreateImageAsync(assets[0], spec.Background, cancellationToken).ConfigureAwait(true);
+        var logoImage = await CreateImageAsync(assets[1], spec.Logo, cancellationToken).ConfigureAwait(true);
+        var appIcon = await CreateImageAsync(assets[2], spec.AppIcon, cancellationToken).ConfigureAwait(true);
+        var buttonImage = await CreateImageAsync(assets[3], spec.ButtonBackground, cancellationToken).ConfigureAwait(true);
+        var buttonArt = buttonImage is null
+            ? null
+            : new ImageBrush { ImageSource = buttonImage, Stretch = Stretch.Fill };
+
+        return Build(
+            spec,
+            backgroundImage,
+            logoImage,
+            appIcon,
+            buttonArt,
+            _fontLoader.Load(spec.ButtonFont) ?? new FontFamily(FallbackFontFamily));
+    }
+
+    /// <summary>视觉对象的唯一组装点：同步版与异步版共用，配色/字重规则只写一遍。</summary>
+    private ThemeVisuals Build(
+        ThemeSpec spec,
+        ImageSource? backgroundImage,
+        ImageSource? logoImage,
+        ImageSource? appIcon,
+        ImageBrush? buttonArt,
+        FontFamily fontFamily)
+    {
         // 官方语义：button.backgroundImage 是底图，button.color 是「文字色」。
-        var buttonArt = TryCreateImageBrush(spec.ButtonBackground);
         var usesArt = buttonArt is not null;
 
         var buttonTextColor = ParseColor(spec.ButtonTextColor, PlaceholderButtonTextColor);
@@ -90,8 +143,6 @@ public sealed class ThemeApplier
             buttonBorderThickness = 0;
         }
 
-        var fontFamily = _fontLoader.Load(spec.ButtonFont) ?? new FontFamily(FallbackFontFamily);
-
         return new ThemeVisuals(
             backgroundImage,
             new SolidColorBrush(PlaceholderBackground),
@@ -111,6 +162,53 @@ public sealed class ThemeApplier
             spec.TextShadow,
             spec.Source);
     }
+
+    /// <summary>读一张主题素材的字节；路径为空/文件缺失/读失败都返回 null（调用方退回占位）。</summary>
+    private byte[]? ReadAssetBytes(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            if (!_fileSystem.FileExists(path))
+            {
+                _logger.Warn("主题素材不存在: " + path);
+                return null;
+            }
+
+            return _fileSystem.ReadAllBytes(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            _logger.Warn("主题素材加载失败: " + path + " (" + ex.Message + ")");
+            return null;
+        }
+    }
+
+    /// <summary>字节 → ImageSource；解码走 <c>SetSourceAsync</c>，UI 线程只发起请求。</summary>
+    private async Task<ImageSource?> CreateImageAsync(byte[]? bytes, string? path, CancellationToken cancellationToken)
+    {
+        if (bytes is null || bytes.Length == 0 || string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            return await BitmapLoader
+                .CreateImageAsync(bytes, path, 0, cancellationToken)
+                .ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or UriFormatException)
+        {
+            _logger.Warn("主题素材加载失败: " + path + " (" + ex.Message + ")");
+            return null;
+        }
+    }
+
 
     /// <summary>内置占位主题（无任何素材时使用）。</summary>
     public static ThemeSpec CreatePlaceholderSpec() => new(

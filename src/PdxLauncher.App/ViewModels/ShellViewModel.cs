@@ -56,6 +56,12 @@ public sealed partial class ShellViewModel : LocalizedObservableObject
 
     public bool HasCurrentGame => CurrentGame is not null;
 
+    /// <summary>已发现游戏数量；绑定到左栏「游戏库」的 InfoBadge。</summary>
+    public int GamesCount => Games.Count;
+
+    /// <summary>「游戏库」徽标的读屏文案（InfoBadge 本身读不出数值，只能靠这个名字）。</summary>
+    public string LibraryBadgeName => T(Keys.ShellBadgeLibraryName, GamesCount);
+
     public bool HasNoGames => Games.Count == 0;
 
     /// <summary>是否停靠在游戏库页（决定"当前游戏"导航项是否可用）。</summary>
@@ -122,6 +128,8 @@ public sealed partial class ShellViewModel : LocalizedObservableObject
         }
 
         OnPropertyChanged(nameof(HasNoGames));
+        OnPropertyChanged(nameof(GamesCount));
+        OnPropertyChanged(nameof(LibraryBadgeName));
         OnPropertyChanged(nameof(SubtitleText));
         OnPropertyChanged(nameof(CanOpenCurrentGame));
     }

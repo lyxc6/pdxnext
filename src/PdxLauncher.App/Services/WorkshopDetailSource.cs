@@ -55,16 +55,22 @@ public sealed class WorkshopDetailSource
     /// <param name="id">工坊条目 id。</param>
     /// <param name="fallbackName">缓存里没有名字时的兜底标题。</param>
     /// <param name="cancellationToken">取消令牌。</param>
+    /// <param name="bypassCache">
+    /// 是否跳过详情缓存。合集必须走真实请求：缓存只存正文，不存 <c>file_type</c> / <c>children</c>，
+    /// 命中缓存会把合集当成普通条目、合集内容永远不出现。
+    /// </param>
     public async Task<AppResult<SteamWorkshopItemDetail>> GetSteamDetailAsync(
         string id,
         string fallbackName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool bypassCache = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
 
         // 命中缓存（TTL 内）就不再请求 remote storage：详情正文一次几十 KB，重复打开同一 mod 很常见。
         var cacheKey = WorkshopInfoCache.Key(WorkshopSource.Steam, id);
-        if (_info.TryGet(cacheKey, out var cached) &&
+        if (!bypassCache &&
+            _info.TryGet(cacheKey, out var cached) &&
             _info.IsDetailFresh(cached) &&
             !string.IsNullOrWhiteSpace(cached.DetailText))
         {
@@ -77,18 +83,31 @@ public sealed class WorkshopDetailSource
         var result = await _steam.GetDetailAsync(id, cancellationToken).ConfigureAwait(true);
         if (result is { IsSuccess: true, Value: { } detail })
         {
-            _info.SetDetail(
-                cacheKey,
-                detail.Description,
-                null,
-                detail.CreatorSteamId,
-                detail.TagList,
-                detail.Views,
-                detail.LifetimeSubscriptions);
+            // 详情缓存只存普通 mod：它没有 file_type/children，写入合集正文后，
+            // 后续一旦按普通条目命中就会被还原成「空合集」。合集正文只在本次页面使用。
+            if (!detail.IsCollection)
+            {
+                _info.SetDetail(
+                    cacheKey,
+                    detail.Description,
+                    null,
+                    detail.CreatorSteamId,
+                    detail.TagList,
+                    detail.Views,
+                    detail.LifetimeSubscriptions);
+            }
         }
 
         return result;
     }
+
+    /// <summary>批量取 Steam 工坊条目详情（合集子项用）。</summary>
+    /// <param name="ids">条目 id 列表。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public Task<AppResult<IReadOnlyList<SteamWorkshopItemDetail>>> GetSteamDetailsAsync(
+        IReadOnlyList<string> ids,
+        CancellationToken cancellationToken) =>
+        _steam.GetDetailsAsync(ids, cancellationToken);
 
     /// <summary>取 PDX Mods 条目详情；成功时把正文写回缓存，供下次断网兜底。</summary>
     /// <param name="id">工坊条目 id。</param>
@@ -123,9 +142,14 @@ public sealed class WorkshopDetailSource
     /// </summary>
     /// <param name="id">工坊条目 id。</param>
     /// <param name="cancellationToken">取消令牌。</param>
+    /// <param name="requireCollectionItems">
+    /// 是否要求缓存里带合集子项。合集必须确保子项列表可用：旧缓存（本功能上线前写入）
+    /// 只有作者/描述/评论，命中它会让合集内容一直空着，所以这种缓存要当作未命中重抓一次。
+    /// </param>
     public async Task<AppResult<SteamWorkshopItemPage>> GetSteamItemPageAsync(
         string id,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool requireCollectionItems = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
 
@@ -135,7 +159,10 @@ public sealed class WorkshopDetailSource
             cached = hit;
         }
 
-        if (cached is not null && _itemPages.IsFresh(cached))
+        var cacheHasCollection = cached?.CollectionItems is { Count: > 0 };
+        if (cached is not null &&
+            _itemPages.IsFresh(cached) &&
+            (!requireCollectionItems || cacheHasCollection))
         {
             return AppResult<SteamWorkshopItemPage>.Ok(SteamItemPageCache.Restore(cached));
         }
@@ -143,16 +170,18 @@ public sealed class WorkshopDetailSource
         var result = await _steam.GetItemPageAsync(id, cancellationToken).ConfigureAwait(true);
         if (result is { IsSuccess: true, Value: { } page })
         {
-            _itemPages.Set(id, page);
+            _itemPages.Set(id, page, requireCollectionItems);
             return result;
         }
 
-        if (cached is not null)
+        if (cached is not null && (!requireCollectionItems || cacheHasCollection))
         {
             _logger.Info("物品页使用缓存：" + id + "（请求失败，改用旧副本）");
             return AppResult<SteamWorkshopItemPage>.Ok(SteamItemPageCache.Restore(cached));
         }
 
+        // 合集明确要求子项时，缺子项的旧副本不能冒充成功：让上层走「加载失败」，
+        // 否则界面会显示一个 0 项合集，用户以为合集真的空了。
         return result;
     }
 

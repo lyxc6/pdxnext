@@ -14,6 +14,10 @@ using PdxLauncher.Core.Storage;
 /// 条目上限 <see cref="MaxEntries"/>，超出后按写入时间淘汰最旧的。
 /// 写盘失败只记日志，绝不把异常抛给 UI——翻译是弱依赖，缓存坏了顶多多花一次请求。
 /// </para>
+/// <para>
+/// 另有一份名称译文（<see cref="NameTranslation"/>）按「mod 主键 + 目标语言」单独存放：
+/// 名称跟引擎与缓存天数无关，换引擎/模型或重进 Mod 库时仍能直接显示旧译名。
+/// </para>
 /// </summary>
 public sealed class TranslationCache
 {
@@ -24,7 +28,13 @@ public sealed class TranslationCache
     /// </summary>
     public const int MaxEntries = 2000;
 
-    /// <summary>缓存文档结构版本；结构变了就整份作废（老结构解析不出来自然回落）。</summary>
+    /// <summary>名称译文条目上限；名称与引擎/TTL 解耦，独立计数并按更新时间淘汰最旧的。</summary>
+    public const int MaxNameEntries = 4000;
+
+    /// <summary>
+    /// 缓存文档结构版本；破坏性结构变化才整份作废（老结构解析不出来自然回落）。
+    /// 新增可选字段（例如名称译名 Names）保持版本不变，老文档照常可读。
+    /// </summary>
     public const int CacheVersion = 1;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -148,6 +158,114 @@ public sealed class TranslationCache
         }
     }
 
+    /// <summary>
+    /// 读出指定目标语言的全部名称译文（按 mod 主键索引）。
+    /// 文档读不出来时返回空表，调用方按「没有旧译名」继续正常翻译。
+    /// </summary>
+    /// <param name="targetLanguage">目标语言。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<IReadOnlyDictionary<Guid, NameTranslation>> GetNameTranslationsAsync(
+        string targetLanguage,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<Guid, NameTranslation>();
+        if (string.IsNullOrEmpty(targetLanguage))
+        {
+            return result;
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var document = EnsureLoaded();
+            var names = document.Names!;
+            foreach (var pair in names)
+            {
+                var entry = pair.Value;
+                if (entry is null
+                    || string.IsNullOrWhiteSpace(entry.SourceName)
+                    || string.IsNullOrWhiteSpace(entry.Translation)
+                    || !string.Equals(entry.TargetLanguage, targetLanguage, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                result[entry.ModId] = new NameTranslation(
+                    entry.ModId,
+                    entry.SourceName,
+                    entry.TargetLanguage,
+                    entry.Translation);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 批量写入名称译文；与普通译文缓存共用同一份文档，写盘失败只记日志。
+    /// 原文名称或译文为空、以及目标语言为空时跳过，不影响其它条目。
+    /// </summary>
+    /// <param name="targetLanguage">目标语言。</param>
+    /// <param name="translations">名称译文列表。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task SetNameTranslationsAsync(
+        string targetLanguage,
+        IReadOnlyList<NameTranslation> translations,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(translations);
+        if (string.IsNullOrEmpty(targetLanguage) || translations.Count == 0)
+        {
+            return;
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var document = EnsureLoaded();
+            var names = document.Names!;
+            var changed = false;
+            foreach (var translation in translations)
+            {
+                if (string.IsNullOrWhiteSpace(translation.SourceName)
+                    || string.IsNullOrWhiteSpace(translation.Translation))
+                {
+                    continue;
+                }
+
+                names[BuildNameKey(translation.ModId, targetLanguage)] = new NameCacheEntry
+                {
+                    ModId = translation.ModId,
+                    TargetLanguage = targetLanguage,
+                    SourceName = translation.SourceName,
+                    Translation = translation.Translation,
+                    UpdatedUtc = _clock.UtcNow,
+                };
+                changed = true;
+            }
+
+            if (!changed)
+            {
+                return;
+            }
+
+            if (names.Count > MaxNameEntries)
+            {
+                EvictOldestNames(document);
+            }
+
+            Persist(document);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     /// <summary>清空缓存（设置页的「清理缓存」用）。</summary>
     /// <param name="cancellationToken">取消令牌。</param>
     public async Task ClearAsync(CancellationToken cancellationToken)
@@ -194,6 +312,13 @@ public sealed class TranslationCache
         return Convert.ToHexString(bytes);
     }
 
+    /// <summary>
+    /// 名称译文的键：mod 主键 + 目标语言。
+    /// 不含引擎与原文，名称变化由条目里的 <see cref="NameCacheEntry.SourceName"/> 校验。
+    /// </summary>
+    private static string BuildNameKey(Guid modId, string targetLanguage)
+        => modId.ToString("N") + "\n" + targetLanguage;
+
     /// <summary>读出内存里的缓存文档；没读过就读盘，读坏了就当空。</summary>
     private CacheDocument EnsureLoaded()
     {
@@ -211,6 +336,7 @@ public sealed class TranslationCache
                 if (parsed is not null && parsed.Version == CacheVersion)
                 {
                     parsed.Entries ??= new Dictionary<string, CacheEntry>(StringComparer.Ordinal);
+                    parsed.Names ??= new Dictionary<string, NameCacheEntry>(StringComparer.Ordinal);
                     _document = parsed;
                     return parsed;
                 }
@@ -245,6 +371,27 @@ public sealed class TranslationCache
         }
     }
 
+    /// <summary>名称条目超上限时按更新时间淘汰最旧的一批。</summary>
+    private static void EvictOldestNames(CacheDocument document)
+    {
+        var names = document.Names!;
+        var excess = names.Count - MaxNameEntries;
+        if (excess <= 0)
+        {
+            return;
+        }
+
+        var oldest = names
+            .OrderBy(pair => pair.Value.UpdatedUtc)
+            .Take(excess)
+            .Select(pair => pair.Key)
+            .ToList();
+        foreach (var key in oldest)
+        {
+            names.Remove(key);
+        }
+    }
+
     /// <summary>落盘；失败只记日志。</summary>
     private void Persist(CacheDocument document)
     {
@@ -262,12 +409,30 @@ public sealed class TranslationCache
         }
     }
 
+    /// <summary>
+    /// 一条名称译文：按 mod 主键 + 目标语言存放，与引擎和缓存天数无关。
+    /// 名称换了（<see cref="SourceName"/> 对不上）就不再复用，避免把旧名字的译文贴到新名字上。
+    /// </summary>
+    /// <param name="ModId">mod 主键。</param>
+    /// <param name="SourceName">翻出这条译文时的原文名称。</param>
+    /// <param name="TargetLanguage">目标语言。</param>
+    /// <param name="Translation">译文。</param>
+    public sealed record NameTranslation(
+        Guid ModId,
+        string SourceName,
+        string TargetLanguage,
+        string Translation);
+
     /// <summary>缓存文档结构。</summary>
     private sealed class CacheDocument
     {
         public int Version { get; set; } = CacheVersion;
 
         public Dictionary<string, CacheEntry> Entries { get; set; } = new(StringComparer.Ordinal);
+
+        /// <summary>名称译文（mod 主键 + 目标语言）；与 Entries 的引擎/TTL 语义互不影响。</summary>
+        public Dictionary<string, NameCacheEntry>? Names { get; set; } =
+            new(StringComparer.Ordinal);
     }
 
     /// <summary>一条缓存。</summary>
@@ -276,5 +441,24 @@ public sealed class TranslationCache
         public string Text { get; set; } = string.Empty;
 
         public DateTimeOffset FetchedUtc { get; set; }
+    }
+
+    /// <summary>一条持久化的名称译文。</summary>
+    private sealed class NameCacheEntry
+    {
+        /// <summary>反序列化用；显式 public 让 System.Text.Json 能构造私有嵌套类型。</summary>
+        public NameCacheEntry()
+        {
+        }
+
+        public Guid ModId { get; set; }
+
+        public string TargetLanguage { get; set; } = string.Empty;
+
+        public string SourceName { get; set; } = string.Empty;
+
+        public string Translation { get; set; } = string.Empty;
+
+        public DateTimeOffset UpdatedUtc { get; set; }
     }
 }

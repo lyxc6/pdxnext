@@ -1,5 +1,7 @@
 namespace PdxLauncher.Core.Text;
 
+using System.Text;
+
 /// <summary>
 /// 把一份 Markdown 文档翻译成另一种语言，结构保持不变：
 /// 标题层级、列表层级与序号、链接地址、强调样式都原样保留，
@@ -108,6 +110,10 @@ public sealed class MarkdownTranslator
 
             switch (inline)
             {
+                // 裸链接和 [url]自动文字[/url] 的可见文本就是地址：不翻译，免得模型把 URL 改写。
+                case MarkdownLinkInline link when IsBareUrlLink(link):
+                    result.Add(link);
+                    break;
                 case MarkdownLinkInline link:
                     result.Add(link with
                     {
@@ -128,6 +134,58 @@ public sealed class MarkdownTranslator
 
         await FlushBufferAsync(buffer, result, cancellationToken).ConfigureAwait(false);
         return result;
+    }
+
+    /// <summary>
+    /// 链接可见文本是否本身就是 URL（裸链接、<c>[url]https://…[/url]</c> 这类自动文字）。
+    /// 这类文字交给模型只会被改写成「中文说明」，所以整段跳过、URL 与原样文字都保留。
+    /// </summary>
+    private static bool IsBareUrlLink(MarkdownLinkInline link)
+    {
+        var text = FlattenText(link.Inlines).Trim();
+        if (text.Length == 0)
+        {
+            return false;
+        }
+
+        return string.Equals(text, link.Url, StringComparison.Ordinal)
+            || Uri.IsWellFormedUriString(text, UriKind.Absolute);
+    }
+
+    /// <summary>把行内节点展平成可见文本，供 <see cref="IsBareUrlLink"/> 判定。</summary>
+    private static string FlattenText(IReadOnlyList<MarkdownInline> inlines)
+    {
+        var builder = new StringBuilder();
+        AppendText(inlines, builder);
+        return builder.ToString();
+    }
+
+    private static void AppendText(IReadOnlyList<MarkdownInline> inlines, StringBuilder builder)
+    {
+        foreach (var inline in inlines)
+        {
+            switch (inline)
+            {
+                case MarkdownTextInline text:
+                    builder.Append(text.Text);
+                    break;
+                case MarkdownCodeInline code:
+                    builder.Append(code.Text);
+                    break;
+                case MarkdownBreakInline:
+                    builder.Append('\n');
+                    break;
+                case MarkdownImageInline image:
+                    builder.Append(string.IsNullOrEmpty(image.Alt) ? image.Url : image.Alt);
+                    break;
+                case MarkdownLinkInline link:
+                    AppendText(link.Inlines, builder);
+                    break;
+                case MarkdownStyledInline styled:
+                    AppendText(styled.Inlines, builder);
+                    break;
+            }
+        }
     }
 
     /// <summary>把攒下的连续纯文本一次性翻译后写进结果。</summary>

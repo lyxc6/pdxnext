@@ -13,7 +13,10 @@ using PdxLauncher.Core.Abstractions;
 public static partial class DlcLocalization
 {
     private const string LocalizationFolder = "localization";
-    private const string LocalizationPattern = "*_l_english.yml";
+    private const string EnglishLanguage = "english";
+
+    /// <summary>某语言的本地化文件通配符（如 <c>*_l_simp_chinese.yml</c>）；语言名由调用方归一化。</summary>
+    internal static string PatternForLanguage(string language) => "*_l_" + language + ".yml";
 
     /// <summary>读 <paramref name="dlcPath"/> 下所有英文 yml，返回 key → 去掉富文本标记的显示名。</summary>
     /// <param name="fileSystem">文件系统。</param>
@@ -38,7 +41,7 @@ public static partial class DlcLocalization
         try
         {
             files = fileSystem
-                .EnumerateFiles(dlcPath, LocalizationPattern, recursive: true)
+                .EnumerateFiles(dlcPath, PatternForLanguage(EnglishLanguage), recursive: true)
                 .Order(StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
@@ -78,7 +81,44 @@ public static partial class DlcLocalization
     }
 
     /// <summary>把一段 yml 文本里的 <c>key: "value"</c> 灌进字典（已存在的 key 保留先读到的值）。</summary>
-    private static void ParseInto(string text, Dictionary<string, string> result)
+    /// <remarks>成就本地化（<see cref="Steam.SteamAchievementLocalization"/>）复用同一套解析。</remarks>
+    internal static void ParseInto(string text, Dictionary<string, string> result)
+    {
+        foreach (var (key, raw) in EnumerateEntries(text))
+        {
+            var value = CleanMarkup(raw);
+            if (value.Length == 0)
+            {
+                continue;
+            }
+
+            result.TryAdd(key, value);
+        }
+    }
+
+    /// <summary>
+    /// 只解析出 <c>key → 原始值</c>，不剥标记。
+    /// <para>
+    /// 给「先还原引用、再剥标记」的调用方用：CK3 的
+    /// <c>ACHIEVEMENT_ep1_01_achievement: "$ACHIEVEMENT_patronage_achievement$"</c>
+    /// 是别名，先剥标记就什么都不剩了。去重规则与 <see cref="ParseInto"/> 一致（先读到的赢）。
+    /// </para>
+    /// </summary>
+    internal static void ParseRawInto(string text, Dictionary<string, string> result)
+    {
+        foreach (var (key, raw) in EnumerateEntries(text))
+        {
+            if (raw.Length == 0)
+            {
+                continue;
+            }
+
+            result.TryAdd(key, raw);
+        }
+    }
+
+    /// <summary>按行吐出 <c>(key, 原始值)</c>；key 或值为空的跳过。</summary>
+    private static IEnumerable<(string Key, string Raw)> EnumerateEntries(string text)
     {
         foreach (var line in text.Split('\n'))
         {
@@ -89,22 +129,28 @@ public static partial class DlcLocalization
             }
 
             var key = match.Groups["key"].Value;
-            var value = CleanMarkup(match.Groups["value"].Value);
-            if (key.Length == 0 || value.Length == 0)
+            if (key.Length > 0)
             {
-                continue;
+                yield return (key, match.Groups["value"].Value);
             }
-
-            result.TryAdd(key, value);
         }
     }
 
-    /// <summary>去掉 Clausewitz 的富文本标记（<c>#italic</c>、<c>#!</c>、<c>#bold</c> 等），压缩空白。</summary>
+    /// <summary>
+    /// 去掉 Clausewitz 的富文本标记（<c>#italic</c>、<c>#!</c>、<c>#bold</c>、<c>[link]</c>、<c>§Y</c>、<c>£icon£</c> 等），压缩空白。
+    /// <para>
+    /// <c>$var$</c> 故意保留：DLC 名里的 <c>$PRICE$</c> 是原文的一部分，剥不剥由调用方决定
+    /// （成就名在 <c>SteamAchievementLocalization</c> 里单独剥，避免误伤 DLC 名）。
+    /// </para>
+    /// </summary>
     internal static string CleanMarkup(string raw)
     {
         ArgumentNullException.ThrowIfNull(raw);
 
-        var withoutMarkup = MarkupToken().Replace(raw, string.Empty).Replace("#!", string.Empty, StringComparison.Ordinal);
+        var withoutIcons = IconToken().Replace(raw, string.Empty);
+        var withoutLinks = ConceptLink().Replace(withoutIcons, string.Empty);
+        var withoutColors = ColorCode().Replace(withoutLinks, string.Empty);
+        var withoutMarkup = MarkupToken().Replace(withoutColors, string.Empty).Replace("#!", string.Empty, StringComparison.Ordinal);
         var unescaped = withoutMarkup.Replace("\\\"", "\"", StringComparison.Ordinal).Replace("\\n", " ", StringComparison.Ordinal);
 
         // 其它收尾标记（"#bold ...#!" 之外还有零散的 #）不是单词语义的一部分，直接去掉。
@@ -126,9 +172,18 @@ public static partial class DlcLocalization
         return builder.ToString().Trim();
     }
 
-    [GeneratedRegex("""^\s*(?<key>[A-Za-z0-9_.\-]+?):\d*\s*"(?<value>.*)"\s*$""")]
+    [GeneratedRegex("""^\s*(?<key>[A-Za-z0-9_.-]+?):\d*\s*"(?<value>(?:[^"\\]|\\.)*)"\s*(?:#.*)?$""")]
     private static partial Regex EntryLine();
 
     [GeneratedRegex("""#[A-Za-z_]\S*""")]
     private static partial Regex MarkupToken();
+
+    [GeneratedRegex("""£[^£\r\n]*£""")]
+    private static partial Regex IconToken();
+
+    [GeneratedRegex("""\[[^\]\r\n]*\]""")]
+    private static partial Regex ConceptLink();
+
+    [GeneratedRegex("""§[^\r\n]""")]
+    private static partial Regex ColorCode();
 }

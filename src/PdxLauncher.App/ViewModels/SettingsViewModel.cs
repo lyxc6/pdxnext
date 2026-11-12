@@ -3,6 +3,7 @@ namespace PdxLauncher.App.ViewModels;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
@@ -25,14 +26,23 @@ using PdxLauncher.Core.Updates;
 /// </summary>
 public sealed class SettingsViewModel : LocalizedObservableObject
 {
-    /// <summary>主题缓存 TTL：5 天 = 432,000,000 ms（docs/DATA-FORMATS.md 冻结值）。</summary>
-    public static readonly TimeSpan ThemeCacheTtl = TimeSpan.FromMilliseconds(432_000_000);
+    /// <summary>
+    /// 主题缓存 TTL：24 小时。索引最后检查时间 + TTL 只用来展示「下次检查」；
+    /// 真正的刷新判定在 ThemeResolver/ThemeRefreshDecision，退避与 force 都优先于 TTL。
+    /// </summary>
+    public static readonly TimeSpan ThemeCacheTtl =
+        TimeSpan.FromMilliseconds(ThemeRefreshDecision.DefaultTtlMilliseconds);
 
     private GameInstallation? _game;
     private ThemeSpec? _theme;
     private bool _isBusy;
     private bool _isLoaded;
     private bool _isRelocalizing;
+    private bool _suppressAlternativeSave;
+    /// <summary>安装形态判定结果；null 表示注册表还没读完（界面显示「正在检查」）。</summary>
+    private InstallMode? _installMode;
+    /// <summary>卸载记录里的目录；PathMismatch 时展示，便于用户判断是不是装了两份。</summary>
+    private string? _recordedInstallDirectory;
     private string _statusMessage = string.Empty;
     private string? _statusKey;
     private object?[] _statusArgs = Array.Empty<object?>();
@@ -42,6 +52,12 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     /// <summary>检测到的代理地址（null = 没检测到）。</summary>
     private string? _detectedProxyUrl;
+    private readonly ObservableCollection<NetworkProbeRowViewModel> _probeRows = new();
+
+    /// <summary>最近一次连通性自检的原始结果；null = 还没测过。切语言后按它重建行文案。</summary>
+    private NetworkProbeReport? _probeReport;
+    private bool _isProbeRunning;
+    private string _probeSummaryText = string.Empty;
     private string _steamApiStatusText = string.Empty;
     private long _cacheTotalBytes;
     private ProxyModeOption _selectedProxyMode =
@@ -226,20 +242,40 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     // ------------------------------------------------------------ 主题区
 
-    /// <summary>当前主题来源：联网缓存 / 安装目录 / 内置占位。</summary>
-    public string ThemeSourceText => T(ThemeSourceKey);
+    /// <summary>当前主题来源：联网缓存 / 安装目录 / 内置素材 / Steam 封面 / 内置占位。</summary>
+    public string ThemeSourceText
+    {
+        get
+        {
+            var text = T(ThemeSourceKey);
+            if (!GetThemeDiagnostics().MetadataMissing)
+            {
+                return text;
+            }
+
+            // 用 Steam 官方库页图时，「元数据缺失」只是补充说明，不能再说成「用内置素材」。
+            return CurrentThemeSource == ThemeAssetSource.SteamHero
+                ? text + " · " + T(Keys.SettingsThemeMetadataMissingNoMetadata)
+                : text + " · " + T(Keys.SettingsThemeMetadataMissing);
+        }
+    }
+
+    /// <summary>当前主题来源（展示文案与状态栏共用）。</summary>
+    private ThemeAssetSource CurrentThemeSource =>
+        _theme?.Source ?? Game?.Theme.Source ?? ThemeAssetSource.BuiltInPlaceholder;
 
     /// <summary>当前主题来源对应的本地化键（展示文案与状态栏共用，避免两处 switch 漂移）。</summary>
     private string ThemeSourceKey
     {
         get
         {
-            var source = _theme?.Source ?? Game?.Theme.Source ?? ThemeAssetSource.BuiltInPlaceholder;
-            return source switch
+            return CurrentThemeSource switch
             {
                 ThemeAssetSource.OnlineCache => Keys.SettingsThemeSourceOnline,
                 ThemeAssetSource.InstallDir => Keys.SettingsThemeSourceInstallDir,
                 ThemeAssetSource.SteamCapsule => Keys.SettingsThemeSourceSteam,
+                ThemeAssetSource.SteamHero => Keys.SettingsThemeSourceSteamHero,
+                ThemeAssetSource.Bundled => Keys.SettingsThemeSourceBundled,
                 _ => Keys.SettingsThemeSourceBuiltIn,
             };
         }
@@ -255,15 +291,66 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>下次检查时间 = 上次检查 + 5 天；从未检查时显示"下次启动时"。</summary>
+    /// <summary>
+    /// 下次检查时间：有失败退避时优先显示退避到点时间，否则 = 上次检查 + 24 小时；
+    /// 从未检查时显示「下次启动时」。
+    /// </summary>
     public string NextCheckText
     {
         get
         {
-            var last = GetLastCheckUtc();
+            var diagnostics = GetThemeDiagnostics();
+            if (diagnostics.RetryAfterUtc is { } retryAfter)
+            {
+                return FormatLocal(retryAfter);
+            }
+
+            var last = diagnostics.LastCheckedUtc;
             return last is null
                 ? T(Keys.SettingsThemeNextOnStartup)
                 : FormatLocal(last.Value + ThemeCacheTtl);
+        }
+    }
+
+    /// <summary>当前背景文件路径 + 本地修改时间；没有背景时显示「无」。</summary>
+    public string BackgroundFileText
+    {
+        get
+        {
+            var path = _theme?.Background ?? Game?.Theme.Background;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return T(Keys.SettingsThemeFileNone);
+            }
+
+            try
+            {
+                var modified = File.GetLastWriteTimeUtc(path)
+                    .ToLocalTime()
+                    .ToString("g", CultureInfo.CurrentCulture);
+                return path + " · " + modified;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return path;
+            }
+        }
+    }
+
+    /// <summary>上次失败原因 + 时间；没有失败时显示「无」。</summary>
+    public string LastFailureText
+    {
+        get
+        {
+            var diagnostics = GetThemeDiagnostics();
+            if (string.IsNullOrWhiteSpace(diagnostics.LastError))
+            {
+                return T(Keys.SettingsThemeFailureNone);
+            }
+
+            return diagnostics.LastErrorUtc is { } at
+                ? diagnostics.LastError + " · " + FormatLocal(at)
+                : diagnostics.LastError;
         }
     }
 
@@ -396,6 +483,82 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         return ApplyProxySettings();
     }
 
+    /// <summary>
+    /// 连通性自检的结果行（一台主机一行）。
+    /// <para>
+    /// 创意工坊的列表/详情是启动器自己发的 HTTP，不走 Steam 客户端；加速器默认只接管 Steam 进程。
+    /// 这张表让用户直接看到「本程序能不能连上」，而不是猜。
+    /// </para>
+    /// </summary>
+    public ObservableCollection<NetworkProbeRowViewModel> ProbeRows => _probeRows;
+
+    /// <summary>自检是否在跑（按钮禁用 + 转圈）。</summary>
+    public bool IsProbeRunning
+    {
+        get => _isProbeRunning;
+        private set
+        {
+            if (SetProperty(ref _isProbeRunning, value))
+            {
+                OnPropertyChanged(nameof(CanRunNetworkProbe));
+                OnPropertyChanged(nameof(ProbeRunText));
+            }
+        }
+    }
+
+    /// <summary>没在跑时才能再点。</summary>
+    public bool CanRunNetworkProbe => !_isProbeRunning;
+
+    /// <summary>按钮文案：测试 / 测试中…</summary>
+    public string ProbeRunText =>
+        T(_isProbeRunning ? Keys.SettingsProxyProbeRunning : Keys.SettingsProxyProbeRun);
+
+    /// <summary>测过至少一次才显示结果表。</summary>
+    public bool HasProbeRows => _probeRows.Count > 0;
+
+    /// <summary>当前不直连时才有「直连」对比列。</summary>
+    public bool HasDirectProbeColumn => _probeReport?.Direct is not null;
+
+    /// <summary>结果摘要：全通或几项失败。</summary>
+    public string ProbeSummaryText
+    {
+        get => _probeSummaryText;
+        private set => SetProperty(ref _probeSummaryText, value);
+    }
+
+    /// <summary>
+    /// 跑一次连通性自检：按当前代理模式测三台 Steam 主机，非直连时再直连测一遍做对比。
+    /// 失败只记日志并把摘要写成「失败」，不抛异常（按钮点击不该崩页面）。
+    /// </summary>
+    public async Task RunNetworkProbeAsync()
+    {
+        if (_isProbeRunning)
+        {
+            return;
+        }
+
+        IsProbeRunning = true;
+        try
+        {
+            var proxy = ProxyResolver.Resolve(AppServices.Settings, AppServices.Logger);
+            _probeReport = await NetworkProbe.RunAsync(AppServices.Logger, proxy).ConfigureAwait(true);
+            RebuildProbeRows();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppServices.Logger.Error("设置页连通性自检失败", ex);
+            _probeReport = null;
+            _probeRows.Clear();
+            ProbeSummaryText = T(Keys.SettingsProxyProbeError);
+            OnPropertyChanged(nameof(HasProbeRows));
+            OnPropertyChanged(nameof(HasDirectProbeColumn));
+        }
+        finally
+        {
+            IsProbeRunning = false;
+        }
+    }
+
     /// <summary>把内存中的 AppSettings 落盘（页面失焦 / 卸载时调用）。</summary>
     public void PersistSettings()
     {
@@ -441,24 +604,172 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     public string LauncherVersionText => AppServices.Updates?.CurrentVersion ?? "1.0.0";
 
-    /// <summary>安装模式：每机器 / 每用户 / 便携。每机器由 marker 或 Program Files 路径判定。</summary>
+    /// <summary>
+    /// 安装形态文案。判定只认 Core 的 <see cref="InstallModeResolver"/>：已安装时按 Scope 区分
+    /// 当前用户 / 所有用户；便携运行时按 <see cref="InstallModeReason"/> 说明差在哪条证据。
+    /// 旧实现只比较 <c>%LOCALAPPDATA%\Programs</c> 前缀，装在 D 盘就必然显示「便携」。
+    /// </summary>
     public string InstallModeText
     {
         get
         {
-            if (AppServices.Updates?.IsPerMachineInstall == true)
+            var mode = _installMode;
+            if (mode is null)
             {
-                return T(Keys.SettingsAboutInstallModePerMachine);
+                return T(Keys.SettingsAboutInstallModeChecking);
             }
 
-            var localPrograms = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Programs");
-            var baseDirectory = AppContext.BaseDirectory;
-            return baseDirectory.StartsWith(localPrograms + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                ? T(Keys.SettingsAboutInstallModePerUser)
-                : T(Keys.SettingsAboutInstallModePortable);
+            if (mode.IsInstalled)
+            {
+                return mode.Scope == InstallScope.PerMachine
+                    ? T(Keys.SettingsAboutInstallModeInstalledPerMachine)
+                    : T(Keys.SettingsAboutInstallModeInstalledPerUser);
+            }
+
+            return mode.Reason switch
+            {
+                InstallModeReason.PathMismatch => T(Keys.SettingsAboutInstallModePathMismatch),
+                InstallModeReason.ExeMissing => T(Keys.SettingsAboutInstallModeExeMissing),
+                InstallModeReason.MarkerOnly => T(Keys.SettingsAboutInstallModeMarkerOnly),
+                _ => T(Keys.SettingsAboutInstallModeNoEntry),
+            };
         }
+    }
+
+    /// <summary>卸载项里的 DisplayVersion；没有就整行不显示。</summary>
+    public string InstallModeVersionText =>
+        string.IsNullOrWhiteSpace(_installMode?.DisplayVersion)
+            ? string.Empty
+            : T(Keys.SettingsAboutInstallModeVersion, _installMode!.DisplayVersion);
+
+    public bool HasInstallModeVersion => !string.IsNullOrEmpty(InstallModeVersionText);
+
+    /// <summary>
+    /// 要展示的目录：已安装 / 主程序缺失时是本程序目录；目录不一致时是卸载记录里的目录，
+    /// 让用户能自己判断是不是装了两份。
+    /// </summary>
+    public string InstallModeDirectory
+    {
+        get
+        {
+            var mode = _installMode;
+            if (mode is null)
+            {
+                return string.Empty;
+            }
+
+            return mode.Reason == InstallModeReason.PathMismatch
+                ? _recordedInstallDirectory ?? string.Empty
+                : mode.InstallDirectory ?? string.Empty;
+        }
+    }
+
+    public bool HasInstallModeDirectory => InstallModeDirectory.Length > 0;
+
+    /// <summary>「打开安装目录」按钮：目录不存在或为空时禁用。</summary>
+    public bool CanOpenInstallModeDirectory =>
+        HasInstallModeDirectory && AppServices.FileSystem.DirectoryExists(InstallModeDirectory);
+
+    /// <summary>目录一行的标题：路径不一致时写「记录中的目录」，避免误导成当前程序目录。</summary>
+    public string InstallModeDirectoryLabel => _installMode?.Reason == InstallModeReason.PathMismatch
+        ? T(Keys.SettingsAboutInstallModeRecordedDirectory)
+        : T(Keys.SettingsAboutInstallModeDirectory);
+
+    /// <summary>主程序缺失 / 只有 marker 时补一句解释，其余情况不占位。</summary>
+    public bool HasInstallModeHint =>
+        _installMode?.Reason is InstallModeReason.ExeMissing or InstallModeReason.MarkerOnly;
+
+    public string InstallModeHintText => _installMode?.Reason switch
+    {
+        InstallModeReason.ExeMissing => T(Keys.SettingsAboutInstallModeExeMissingHint),
+        InstallModeReason.MarkerOnly => T(Keys.SettingsAboutInstallModeMarkerOnlyHint),
+        _ => string.Empty,
+    };
+
+    /// <summary>当前数据目录（与「程序数据目录」区同一来源，只读展示）。</summary>
+    public string InstallModeDataDirectory => AppServices.DataRoot;
+
+    /// <summary>
+    /// Program Files 里的绿色拷贝会出现「设置页说便携、数据却落在每机器安装的位置」。
+    /// 这时把数据目录也摆出来并解释一句，别让两处说法打架。
+    /// </summary>
+    public bool ShowInstallModeDataNote
+    {
+        get
+        {
+            var mode = _installMode;
+            if (mode is null || mode.IsInstalled)
+            {
+                return false;
+            }
+
+            var perMachineDataRoot = Path.Combine(
+                PdxDataRoot.LocalAppDataDirectory,
+                PdxDataRoot.PerMachineDataFolderName);
+            return string.Equals(
+                Path.TrimEndingDirectorySeparator(AppServices.DataRoot),
+                Path.TrimEndingDirectorySeparator(perMachineDataRoot),
+                StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    public string InstallModeDataNoteText =>
+        T(Keys.SettingsAboutInstallModeDataNote, AppServices.DataRoot);
+
+    /// <summary>
+    /// 后台读注册表并判定安装形态。注册表可能读得慢，判定整体放在线程池上；
+    /// 任何失败都退化成「便携运行（未找到安装记录）」，绝不把异常抛给页面。
+    /// </summary>
+    public async Task RefreshInstallModeAsync(CancellationToken cancellationToken)
+    {
+        if (_installMode is not null)
+        {
+            return;
+        }
+
+        var baseDirectory = AppContext.BaseDirectory;
+        InstallMode mode;
+        string? recordedDirectory;
+        try
+        {
+            var result = await Task.Run(
+                () =>
+                {
+                    var marker = PdxDataRoot.ReadInstallMode(baseDirectory);
+                    var source = new RegistryUninstallEntrySource(
+                        AppServices.IsInitialized ? AppServices.Logger : null);
+                    var entries = source.ReadEntries();
+                    return (Mode: InstallModeResolver.Resolve(baseDirectory, marker, entries), Entries: entries);
+                },
+                cancellationToken).ConfigureAwait(true);
+
+            mode = result.Mode;
+            recordedDirectory = result.Entries
+                .Select(entry => entry.AppPath)
+                .FirstOrDefault(path => !string.IsNullOrWhiteSpace(path));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            (AppServices.IsInitialized ? AppServices.Logger : null)?.Warn(
+                "读取安装记录失败，安装模式按便携处理: " + ex.Message);
+            mode = InstallMode.PortableRun(InstallModeReason.NoEntry);
+            recordedDirectory = null;
+        }
+
+        _installMode = mode;
+        _recordedInstallDirectory = recordedDirectory;
+        OnPropertyChanged(nameof(InstallModeText));
+        OnPropertyChanged(nameof(InstallModeVersionText));
+        OnPropertyChanged(nameof(HasInstallModeVersion));
+        OnPropertyChanged(nameof(InstallModeDirectory));
+        OnPropertyChanged(nameof(HasInstallModeDirectory));
+        OnPropertyChanged(nameof(CanOpenInstallModeDirectory));
+        OnPropertyChanged(nameof(InstallModeDirectoryLabel));
+        OnPropertyChanged(nameof(HasInstallModeHint));
+        OnPropertyChanged(nameof(InstallModeHintText));
+        OnPropertyChanged(nameof(InstallModeDataDirectory));
+        OnPropertyChanged(nameof(ShowInstallModeDataNote));
+        OnPropertyChanged(nameof(InstallModeDataNoteText));
     }
 
     public string LastUpdateCheckText
@@ -676,6 +987,29 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 return;
             }
 
+            if (_suppressAlternativeSave)
+            {
+                return;
+            }
+
+            if (Game is { } game)
+            {
+                if (value is null || string.Equals(value.ExePath, game.ExePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    AppServices.Settings.PreferredLaunchExePaths.Remove(game.GameId);
+                }
+                else
+                {
+                    AppServices.Settings.PreferredLaunchExePaths[game.GameId] = value.ExePath;
+                }
+
+                if (!SaveSettings())
+                {
+                    SetStatus(Keys.SettingsStatusSaveFailed, _lastSettingsSaveError ?? T(Keys.CommonUnknown));
+                    return;
+                }
+            }
+
             if (value is null)
             {
                 SetStatusText(string.Empty);
@@ -710,6 +1044,8 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             LoadFileFormat.DlcLoadV0 => T(Keys.SettingsDataFormatV0),
             LoadFileFormat.ContentLoadV1 => T(Keys.SettingsDataFormatV1),
             LoadFileFormat.ContentLoadV1_1 => T(Keys.SettingsDataFormatV11),
+            LoadFileFormat.PlaysetsJsonV1 => T(Keys.SettingsDataFormatPlaysetsJson),
+            LoadFileFormat.PlaysetConfigV1 => T(Keys.SettingsDataFormatPlaysetConfig),
             _ => Game.Format.ToString(),
         };
 
@@ -721,6 +1057,11 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             if (Game is null || !AppServices.IsInitialized)
             {
                 return string.Empty;
+            }
+
+            if (!Game.WritesLoadFile)
+            {
+                return T(Keys.SettingsDataNoLoadFile);
             }
 
             var fileName = Game.Format == LoadFileFormat.DlcLoadV0
@@ -739,6 +1080,11 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             if (string.IsNullOrEmpty(path) || !AppServices.IsInitialized)
             {
                 return string.Empty;
+            }
+
+            if (Game is { WritesLoadFile: false })
+            {
+                return T(Keys.SettingsDataNoLoadFileState);
             }
 
             return AppServices.FileSystem.FileExists(path)
@@ -791,6 +1137,12 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     public bool HasPatchDetail => !string.IsNullOrEmpty(PatchDetailText);
 
+    /// <summary>
+    /// 上一次「打补丁」因为版本未验证被暂停，等待用户确认后继续。
+    /// 页面据此弹二次确认，再以 <c>allowUnverifiedVersion</c> 重试；Core 不弹窗。
+    /// </summary>
+    public bool PatchNeedsVersionConfirm { get; private set; }
+
     /// <summary>没选游戏时整个补丁区只显示提示，按钮都不可用。</summary>
     public bool HasPatchInfo => Game is not null;
 
@@ -836,8 +1188,13 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// <summary>
     /// 一键打补丁（页面必须先弹 ContentDialog 确认）。
     /// 先备份当前 steam_api 再覆盖 loader，失败只在状态栏说明原因，不动已备份的原文件。
+    /// <para>
+    /// 目标文件不在已知原版登记表里时，Core 返回 <see cref="GamePatchStatus.UnverifiedVersion"/> 且不写盘：
+    /// 这里只记下 <see cref="PatchNeedsVersionConfirm"/>，由页面提示用户确认后再带
+    /// <paramref name="allowUnverifiedVersion"/> 调一次。
+    /// </para>
     /// </summary>
-    public async Task ApplyPatchAsync(CancellationToken cancellationToken)
+    public async Task ApplyPatchAsync(CancellationToken cancellationToken, bool allowUnverifiedVersion = false)
     {
         if (Game is null)
         {
@@ -846,10 +1203,13 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
 
         IsBusy = true;
+        PatchNeedsVersionConfirm = false;
         try
         {
             var game = Game;
-            var report = await Task.Run(() => AppServices.GamePatch.Apply(game), cancellationToken)
+            var report = await Task.Run(
+                    () => AppServices.GamePatch.Apply(game, allowUnverifiedVersion),
+                    cancellationToken)
                 .ConfigureAwait(true);
 
             _patchReport = report;
@@ -867,6 +1227,12 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                     report.ApiFileName ?? string.Empty,
                     report.SteamAppId?.ToString(CultureInfo.InvariantCulture) ?? "-");
                 AppServices.Logger.Info("已打补丁（gameId=" + game.GameId + "，dir=" + report.ApiDirectory + "）");
+            }
+            else if (report.Status == GamePatchStatus.UnverifiedVersion)
+            {
+                PatchNeedsVersionConfirm = true;
+                SetStatus(Keys.SettingsPatchStatusNeedsConfirm);
+                AppServices.Logger.Info("补丁暂停：版本未验证，等待用户确认（gameId=" + game.GameId + "）");
             }
             else
             {
@@ -947,10 +1313,11 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         GamePatchStatus.Patched => Keys.SettingsPatchStatePatched,
         GamePatchStatus.PatchedOther => Keys.SettingsPatchStatePatchedOther,
         GamePatchStatus.SteamOverwrote => Keys.SettingsPatchStateSteamOverwrote,
+        GamePatchStatus.UnverifiedVersion => Keys.SettingsPatchStateUnverifiedVersion,
         _ => Keys.SettingsPatchStateUnsupported,
     };
 
-    /// <summary>细节行：实际目录 + appId，失败/特殊情况再加一行原因。</summary>
+    /// <summary>细节行：实际目录 + appId + 版本，失败/特殊情况再加一行原因。</summary>
     private string BuildPatchDetail(GamePatchReport report)
     {
         var parts = new List<string>();
@@ -964,11 +1331,26 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             parts.Add(T(Keys.SettingsPatchDetailAppId, appId.ToString(CultureInfo.InvariantCulture)));
         }
 
+        if (report.VersionState == PatchVersionState.Known && !string.IsNullOrEmpty(report.MatchedVersion))
+        {
+            parts.Add(T(Keys.SettingsPatchDetailVersion, report.MatchedVersion, report.MatchedBuildId ?? "-"));
+        }
+        else if (report.VersionState == PatchVersionState.Unknown)
+        {
+            parts.Add(T(Keys.SettingsPatchDetailVersionUnknown));
+        }
+
         parts.Add(T(AppServices.GamePatch.UsesExternalAssets
             ? Keys.SettingsPatchAssetsExternal
             : Keys.SettingsPatchAssetsBuiltIn));
 
-        if (!string.IsNullOrEmpty(report.Detail))
+        if (report.BackupSuspect)
+        {
+            parts.Add(T(Keys.SettingsPatchDetailBackupSuspect, report.BackupArchivePath ?? "-"));
+        }
+
+        // 「未验证版本」的 Detail 是给日志看的技术串，界面已经用本地化文案说明，不再重复。
+        if (!string.IsNullOrEmpty(report.Detail) && report.Status != GamePatchStatus.UnverifiedVersion)
         {
             parts.Add(report.Detail);
         }
@@ -1023,8 +1405,12 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// 这时只重读展示值，不重置 dlc_signature、不覆盖用户选的「其它可执行文件」，
     /// 也不把正在输入的代理地址回滚成 settings.json 里的旧值。
     /// </summary>
-    public Task LoadAsync(GameInstallation? game, CancellationToken cancellationToken)
+    public async Task LoadAsync(GameInstallation? game, CancellationToken cancellationToken)
     {
+        // 安装形态与游戏无关，每进程读一次（首次成功后 RefreshInstallModeAsync 直接复用判定结果）；
+        // 注册表读取在线程池上，不压 UI 线程。
+        await RefreshInstallModeAsync(cancellationToken).ConfigureAwait(true);
+
         var sameGame = IsSameGame(_game, game);
 
         RefreshOptionSelections();
@@ -1043,7 +1429,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             SetStatus(Keys.SettingsStatusSelectGameFirst);
             RaiseThemeProps();
             RefreshPatchState();
-            return Task.CompletedTask;
+            return;
         }
 
         _isRelocalizing = true;
@@ -1080,7 +1466,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         _theme = game.Theme;
         RaiseThemeProps();
         RefreshPatchState();
-        return Task.CompletedTask;
+        return;
     }
 
     /// <summary>
@@ -1147,12 +1533,14 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
 
         IsBusy = true;
+        var startedAt = DateTimeOffset.UtcNow;
         try
         {
-            // 走同一条刷新管线：下载完成后由 ThemeUpdateService 回写 AppServices.Games 并广播，
+            // 真正的 force：绕过 24 小时 TTL 与 10 分钟退避，仍拿同一把 Gate。
+            // 下载完成后由 ThemeUpdateService 回写 AppServices.Games 并广播，
             // 主窗口背景随之更新；这里只负责把结果反映到设置页文案。
             await ThemeUpdateService
-                .RefreshAsync(Game, cancellationToken)
+                .RefreshAsync(Game, forceRefresh: true, cancellationToken, onlyThatGame: true)
                 .ConfigureAwait(true);
 
             _theme = AppServices.Games
@@ -1162,8 +1550,24 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             RaiseThemeProps();
 
             var sourceKey = ThemeSourceKey;
-            SetStatus(Keys.SettingsThemeStatusDone, T(sourceKey), NextCheckText);
-            AppServices.Logger.Info("主题检查完成（gameId=" + Game.GameId + "，source=" + T(sourceKey) + "）");
+            var diagnostics = GetThemeDiagnostics();
+            if (!diagnostics.MetadataMissing
+                && diagnostics.LastErrorUtc is { } failedAt
+                && failedAt >= startedAt
+                && !string.IsNullOrWhiteSpace(diagnostics.LastError))
+            {
+                // ResolveAsync 会吞掉刷新异常并写入索引：这里必须把本轮失败如实反馈，
+                // 不能让用户看到「检查完成」却还是旧图。
+                SetStatus(Keys.SettingsThemeStatusFailed, diagnostics.LastError);
+                AppServices.Logger.Warn(
+                    "主题检查失败（gameId=" + Game.GameId + "）: " + diagnostics.LastError);
+            }
+            else
+            {
+                SetStatus(Keys.SettingsThemeStatusDone, T(sourceKey), NextCheckText);
+                AppServices.Logger.Info(
+                    "主题检查完成（gameId=" + Game.GameId + "，source=" + T(sourceKey) + "）");
+            }
         }
         catch (OperationCanceledException)
         {
@@ -1603,12 +2007,20 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         get => AppServices.Settings.TranslateCacheDays.ToString(CultureInfo.InvariantCulture);
         set
         {
-            if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var days))
+            if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var days))
             {
-                AppServices.Settings.TranslateCacheDays = days;
-                SaveTranslationSettings();
-                SetStatus(Keys.SettingsTranslateStatusCacheDays, AppServices.Settings.TranslateCacheDays);
+                // 非数字不保存；把输入框恢复成当前生效值，并说明原因。
+                OnPropertyChanged(nameof(TranslateCacheDaysText));
+                SetStatus(Keys.SettingsTranslateStatusCacheDaysInvalid);
+                return;
             }
+
+            AppServices.Settings.TranslateCacheDays = days;
+            SaveTranslationSettings();
+
+            // AppSettings 会把 0/999 钳到 1/365；必须回写属性通知，否则输入框还显示用户原值。
+            OnPropertyChanged(nameof(TranslateCacheDaysText));
+            SetStatus(Keys.SettingsTranslateStatusCacheDays, AppServices.Settings.TranslateCacheDays);
         }
     }
 
@@ -1758,46 +2170,75 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 下载某个本地模型；下载中该行会显示进度。
+    /// 操作结果文案在行内停留的时长；到点自动清空。
+    /// <para>
+    /// 用户停在这一页不动时，旧的「已删除」/「校验通过」不该一直挂着——
+    /// 它只说明刚才那一下发生了什么，不代表当前状态。
+    /// </para>
+    /// </summary>
+    private static readonly TimeSpan LocalModelOperationLifetime = TimeSpan.FromSeconds(8);
+
+    /// <summary>从 Core 的错误文本里挑出绝对路径，上屏前换成相对路径或文件名。</summary>
+    private static readonly Regex AbsolutePathPattern = new(
+        @"(?:[A-Za-z]:\\|\\\\)[^\s""'“”\r\n；;，,]*",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// 下载某个本地模型；下载中该行显示进度，完成后重新读 Core 的安装状态。
     /// </summary>
     /// <param name="row">模型行。</param>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
     public async Task DownloadLocalModelAsync(LocalModelRowViewModel row, CancellationToken cancellationToken)
     {
         var runtime = AppServices.LocalTranslation;
-        if (runtime is null || row is null)
+        if (runtime is null || row is null || row.IsBusy)
         {
             return;
         }
 
         row.IsBusy = true;
-        row.StatusText = T(Keys.SettingsTranslateLocalModelDownloading, 0);
+        row.SetOperation(T(Keys.SettingsTranslateLocalModelDownloading, 0));
         try
         {
-            var progress = new Progress<double>(value =>
-                row.StatusText = T(Keys.SettingsTranslateLocalModelDownloading, (int)Math.Round(value * 100)));
+            var progress = new Progress<double>(value => row.SetOperation(
+                T(Keys.SettingsTranslateLocalModelDownloading, (int)Math.Round(value * 100))));
             var result = await runtime.DownloadAsync(row.Kind, progress, cancellationToken).ConfigureAwait(true);
+
+            // 不再手写本行的安装布尔：以 Core 的重新探测为准，
+            // 这样「下完了但 config.txt 没写成」也会如实显示为 ConfigMissing。
+            ApplyLocalModelState(row, runtime);
             if (result.Success)
             {
-                row.IsInstalled = true;
-                row.StatusText = T(Keys.SettingsTranslateLocalModelStatusDownloaded, row.Title);
-                SetStatus(Keys.SettingsTranslateLocalModelStatusDownloaded, row.Title);
+                ShowLocalModelOperation(
+                    row,
+                    T(Keys.SettingsTranslateLocalModelStatusDownloaded, row.Title),
+                    cancellationToken);
             }
             else
             {
-                row.StatusText = T(Keys.SettingsTranslateLocalModelStatusFailed, result.Message);
-                SetStatus(Keys.SettingsTranslateLocalModelStatusFailed, result.Message);
+                ShowLocalModelOperation(
+                    row,
+                    T(
+                        Keys.SettingsTranslateLocalModelStatusFailed,
+                        ToDisplayText(result.Message, row.Directory)),
+                    cancellationToken);
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            row.StatusText = T(Keys.SettingsTranslateLocalModelNotInstalled);
+            row.ClearOperation();
+            ApplyLocalModelState(row, runtime);
         }
         catch (Exception ex)
         {
             AppServices.Logger.Error("下载本地翻译模型失败", ex);
-            row.StatusText = T(Keys.SettingsTranslateLocalModelStatusFailed, ex.Message);
-            SetStatus(Keys.SettingsTranslateLocalModelStatusFailed, ex.Message);
+            ApplyLocalModelState(row, runtime);
+            ShowLocalModelOperation(
+                row,
+                T(
+                    Keys.SettingsTranslateLocalModelStatusFailed,
+                    ToDisplayText(ex.Message, row.Directory)),
+                cancellationToken);
         }
         finally
         {
@@ -1806,36 +2247,278 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>删除某个已安装的本地模型。</summary>
+    /// <summary>
+    /// 删除某个本地模型：先确认没有在途翻译（Core 的 <c>Remove</c> 契约要求调用方保证），
+    /// 再在后台线程删除；期间该行按钮禁用，删完按 <c>Remove</c> 的结果三态给出可自证的文案，
+    /// 并重新读安装状态。
+    /// </summary>
     /// <param name="row">模型行。</param>
-    public void RemoveLocalModel(LocalModelRowViewModel row)
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public async Task RemoveLocalModelAsync(LocalModelRowViewModel row, CancellationToken cancellationToken)
     {
         var runtime = AppServices.LocalTranslation;
-        if (runtime is null || row is null)
+        if (runtime is null || row is null || row.IsBusy)
         {
             return;
         }
 
+        // Core 的 Remove 契约要求调用方保证此刻没有在途翻译：本地引擎可能还在翻译线程里
+        // 握着模型句柄，这时 ReleaseEngines 会拆掉正在使用的引擎。协调器的活动计数是现成的
+        // 「此刻有没有翻译在跑」，在途就不删，等这一批结束再让用户重试。
+        if (AppServices.IsInitialized && AppServices.Translation.Activity.IsActive)
+        {
+            ShowLocalModelOperation(
+                row,
+                T(Keys.SettingsTranslateLocalModelRemoveTranslationBusy),
+                cancellationToken);
+            return;
+        }
+
+        row.IsBusy = true;
+        row.ClearOperation();
         try
         {
-            runtime.Store.Remove(row.Kind);
-            row.IsInstalled = runtime.Store.IsInstalled(row.Kind);
-            row.StatusText = T(
-                row.IsInstalled ? Keys.SettingsTranslateLocalModelStatusRemoveFailed : Keys.SettingsTranslateLocalModelStatusRemoved,
-                row.Title);
-            SetStatus(
-                row.IsInstalled ? Keys.SettingsTranslateLocalModelStatusRemoveFailed : Keys.SettingsTranslateLocalModelStatusRemoved,
-                row.Title);
+            // 删除会逐个删文件并复核目录；1.3 GB 的模型不该卡在 UI 线程上。
+            // ReleaseEngines 放在后台线程里调，删除前先释放模型文件句柄。
+            var result = await Task.Run(
+                    () => runtime.Store.Remove(row.Kind, () => runtime.ReleaseEngines()),
+                    cancellationToken)
+                .ConfigureAwait(true);
+
+            ApplyLocalModelState(row, runtime);
+            ShowLocalModelOperation(row, DescribeRemoveResult(result), cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            ApplyLocalModelState(row, runtime);
         }
         catch (Exception ex)
         {
             AppServices.Logger.Error("删除本地翻译模型失败", ex);
-            SetStatus(Keys.SettingsTranslateLocalModelStatusRemoveFailed, ex.Message);
+            ApplyLocalModelState(row, runtime);
+            ShowLocalModelOperation(
+                row,
+                T(Keys.SettingsTranslateLocalModelRemoveFailed, ToDisplayText(ex.Message, row.Directory)),
+                cancellationToken);
         }
         finally
         {
+            row.IsBusy = false;
             OnPropertyChanged(nameof(LocalModelSizeText));
         }
+    }
+
+    /// <summary>
+    /// 深度校验某个本地模型（SHA-256），后台执行；结果说明通过或哪些文件不符。
+    /// </summary>
+    /// <param name="row">模型行。</param>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public async Task VerifyLocalModelAsync(LocalModelRowViewModel row, CancellationToken cancellationToken)
+    {
+        var runtime = AppServices.LocalTranslation;
+        if (runtime is null || row is null || row.IsBusy || !row.CanVerify)
+        {
+            return;
+        }
+
+        row.IsBusy = true;
+        row.SetOperation(T(Keys.SettingsTranslateLocalModelStatusVerifying));
+        try
+        {
+            // Index-Translate 的 gguf 有 1.3 GB，哈希必须离开 UI 线程慢慢算。
+            var result = await Task.Run(
+                    () => runtime.Store.VerifyInstalled(row.Kind, deep: true),
+                    cancellationToken)
+                .ConfigureAwait(true);
+
+            ApplyLocalModelState(row, runtime);
+            if (result.IsValid)
+            {
+                var hashedFiles = runtime.Catalog.Get(row.Kind)?.Files
+                    .Count(file => !string.IsNullOrEmpty(file.Sha256)) ?? 0;
+                ShowLocalModelOperation(
+                    row,
+                    T(Keys.SettingsTranslateLocalModelStatusVerifyPassed, hashedFiles),
+                    cancellationToken);
+            }
+            else
+            {
+                ShowLocalModelOperation(
+                    row,
+                    T(
+                        Keys.SettingsTranslateLocalModelStatusVerifyFailed,
+                        DescribeVerifyFailure(result)),
+                    cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            row.ClearOperation();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("校验本地翻译模型失败", ex);
+            ShowLocalModelOperation(
+                row,
+                T(
+                    Keys.SettingsTranslateLocalModelStatusVerifyFailed,
+                    ToDisplayText(ex.Message, row.Directory)),
+                cancellationToken);
+        }
+        finally
+        {
+            row.IsBusy = false;
+        }
+    }
+
+    /// <summary>把 Core 的删除结果翻译成能自证的行内文案。</summary>
+    private static string DescribeRemoveResult(LocalTranslationModelRemoveResult result)
+    {
+        switch (result.Status)
+        {
+            case LocalTranslationModelRemoveStatus.Removed:
+                // 只有 Core 复核过「目录确实不存在」才会报 Removed，文案要把这一点说出来。
+                return T(Keys.SettingsTranslateLocalModelStatusRemovedVerified);
+
+            case LocalTranslationModelRemoveStatus.NotFound:
+                return T(Keys.SettingsTranslateLocalModelStatusRemoveNotFound);
+
+            case LocalTranslationModelRemoveStatus.RemovedWithResidue:
+                if (result.Residue.Count == 1 && result.Residue[0] == ".")
+                {
+                    return T(Keys.SettingsTranslateLocalModelStatusResidueDirectoryOnly);
+                }
+
+                // 残留清单只说明「还剩什么」，不说明「为什么删不掉」：把 Core 记下的原因
+                // 也同样脱敏后接在清单后面，用户才知道该去关哪个进程。
+                var residueText = FormatResidue(result.Residue);
+                var reason = ToDisplayText(result.Error, result.Directory);
+                return reason.Length == 0
+                    ? T(Keys.SettingsTranslateLocalModelStatusRemovedWithResidue, residueText)
+                    : T(
+                        Keys.SettingsTranslateLocalModelStatusResidueReason,
+                        residueText,
+                        reason);
+
+            default:
+                return T(
+                    Keys.SettingsTranslateLocalModelRemoveFailed,
+                    ToDisplayText(result.Error, result.Directory));
+        }
+    }
+
+    private static string DescribeVerifyFailure(LocalTranslationModelVerifyResult result)
+    {
+        var parts = new List<string>(4);
+        var state = result.State;
+        if (state.MissingFiles.Count > 0)
+        {
+            parts.Add(T(Keys.SettingsTranslateLocalModelStatusVerifyMissing, state.MissingFiles.Count));
+        }
+
+        if (state.SizeMismatches.Count > 0)
+        {
+            parts.Add(T(Keys.SettingsTranslateLocalModelStatusVerifySize, state.SizeMismatches.Count));
+        }
+
+        if (state.Status == LocalTranslationModelInstallStatus.ConfigMissing)
+        {
+            parts.Add(T(Keys.SettingsTranslateLocalModelStatusVerifyConfigMissing));
+        }
+
+        if (result.HashMismatches.Count > 0)
+        {
+            parts.Add(T(
+                Keys.SettingsTranslateLocalModelStatusVerifyHashMismatch,
+                string.Join(", ", result.HashMismatches.Select(mismatch => mismatch.FileName))));
+        }
+
+        return parts.Count == 0
+            ? T(Keys.SettingsTranslateLocalModelNotInstalled)
+            : string.Join("; ", parts);
+    }
+
+    /// <summary>
+    /// 残留清单最多列 6 项，其余用「总数」收尾（不是「另有 N 项」），避免用户把 6 项当成全部。
+    /// </summary>
+    private static string FormatResidue(IReadOnlyList<string> residue)
+    {
+        const int MaxItems = 6;
+        var shown = string.Join(", ", residue.Take(MaxItems));
+        return residue.Count > MaxItems
+            ? shown + T(Keys.SettingsTranslateLocalModelResidueMore, residue.Count)
+            : shown;
+    }
+
+    /// <summary>把 Core 的安装状态应用到行上（状态、目录是否存在、按钮可用性）。</summary>
+    private static void ApplyLocalModelState(LocalModelRowViewModel row, LocalTranslationRuntime runtime)
+    {
+        var state = runtime.Store.GetInstallState(row.Kind);
+        var directoryExists = AppServices.IsInitialized
+            && AppServices.FileSystem.DirectoryExists(state.Directory);
+        row.ApplyState(state, directoryExists);
+    }
+
+    /// <summary>写一条会过期的操作文案，并安排到点清除。</summary>
+    private void ShowLocalModelOperation(
+        LocalModelRowViewModel row,
+        string text,
+        CancellationToken cancellationToken)
+    {
+        var expiresAt = DateTimeOffset.Now + LocalModelOperationLifetime;
+        row.SetOperation(text, expiresAt);
+        _ = ClearLocalModelOperationLaterAsync(row, expiresAt, cancellationToken);
+    }
+
+    private static async Task ClearLocalModelOperationLaterAsync(
+        LocalModelRowViewModel row,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken)
+    {
+        var delay = expiresAt - DateTimeOffset.Now;
+        try
+        {
+            if (delay > TimeSpan.Zero)
+            {
+                // 页面关闭时令牌取消，不留下后台任务。
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        row.ExpireOperation(DateTimeOffset.Now);
+    }
+
+    /// <summary>
+    /// 把 Core 错误文本里的绝对路径换成相对路径或文件名；日志里仍保留完整原文。
+    /// </summary>
+    private static string ToDisplayText(string? text, string? directory)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        var value = text;
+        if (!string.IsNullOrEmpty(directory))
+        {
+            // 先替换已知的模型目录，保留其下的相对层级（如 index\model.bin）。
+            var replacement = Path.GetFileName(directory.TrimEnd('\\', '/'));
+            value = value.Replace(
+                directory,
+                string.IsNullOrEmpty(replacement) ? "." : replacement,
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        return AbsolutePathPattern.Replace(value, match =>
+        {
+            var raw = match.Value.TrimEnd('.', '。', ' ', ':', '：', '\\', '/', '"', '\'');
+            var name = Path.GetFileName(raw);
+            return string.IsNullOrWhiteSpace(name) ? "." : name;
+        });
     }
 
     /// <summary>把新增词条追加到列表（不写盘，等用户点「保存词典」）。</summary>
@@ -1943,14 +2626,11 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 _ => Keys.SettingsTranslateLocalModelIndexTranslate,
             };
 
-            var installed = runtime.Store.IsInstalled(model.Kind);
-            _localModelRows.Add(new LocalModelRowViewModel(model.Kind, titleKey, model.DisplayName)
-            {
-                IsInstalled = installed,
-                StatusText = T(installed
-                    ? Keys.SettingsTranslateLocalModelInstalled
-                    : Keys.SettingsTranslateLocalModelNotInstalled),
-            });
+            // 状态全部来自 Core 的 GetInstallState：Installed / ConfigMissing / 缺文件 /
+            // 尺寸不符 / 未安装五态各有各的文案，不再用单个 IsInstalled 布尔糊过去。
+            var row = new LocalModelRowViewModel(model.Kind, titleKey, model.DisplayName);
+            ApplyLocalModelState(row, runtime);
+            _localModelRows.Add(row);
         }
 
         OnPropertyChanged(nameof(LocalModelRows));
@@ -2055,13 +2735,17 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     protected override void Relocalize()
     {
         RefreshProxyStatus();
+
+        // 自检结果是拼好的句子，切语言后按新语言重建（原始结果留着，不重测）。
+        RebuildProbeRows();
         OnPropertyChanged(nameof(CacheTotalText));
         RefreshAlternativeLabels();
         RefreshPatchState();
         RaiseTranslationProps();
 
-        // 本地模型行的文案要按新语言重建；术语词典是用户数据，不动它。
-        RefreshLocalModelRows();
+        // 本地模型行自己会在语言切换时重发文案（基类按弱登记逐个通知），
+        // 这里不再重建行——重建会把在途的下载/校验状态和刚弹的操作结果一起丢掉。
+        // 术语词典是用户数据，同样不动。
 
         // 探测结果是拼好的句子，语言切换后要按新语言重建。
         if (_translateTestResults is { Count: > 0 })
@@ -2075,8 +2759,12 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
-    private DateTimeOffset? GetLastCheckUtc() =>
-        Game is null ? null : AppServices.ThemeResolver.GetLastCheckedUtc(Game.GameId);
+    private DateTimeOffset? GetLastCheckUtc() => GetThemeDiagnostics().LastCheckedUtc;
+
+    private ThemeCacheDiagnostics GetThemeDiagnostics() =>
+        Game is null
+            ? new ThemeCacheDiagnostics(null, null, null, null, MetadataMissing: false)
+            : AppServices.ThemeResolver.GetDiagnostics(Game.GameId);
 
     private static string FormatLocal(DateTimeOffset utc) =>
         utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
@@ -2101,7 +2789,15 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
 
         assign(value);
-        SaveSettings();
+        if (!SaveSettings())
+        {
+            // 落盘失败就把内存值退回原值，否则界面显示“已开启”而重启后回退。
+            assign(current);
+            OnPropertyChanged(propertyName);
+            SetStatus(Keys.SettingsStatusSaveFailed, _lastSettingsSaveError ?? T(Keys.CommonUnknown));
+            return;
+        }
+
         OnPropertyChanged(propertyName);
         afterSave?.Invoke();
 
@@ -2135,7 +2831,14 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
 
         assign(value);
-        SaveSettings();
+        if (!SaveSettings())
+        {
+            assign(current!);
+            OnPropertyChanged(propertyName);
+            SetStatus(Keys.SettingsStatusSaveFailed, _lastSettingsSaveError ?? Localizer.Instance.T(Keys.CommonUnknown));
+            return false;
+        }
+
         OnPropertyChanged(propertyName);
         afterSave?.Invoke();
         SetStatus(statusKey, statusArgs?.Invoke(value) ?? Array.Empty<object?>());
@@ -2151,13 +2854,20 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// </para>
     /// 需要在输入框失焦 / 关闭串口一类的时机强制落盘时，仍然走 <see cref="PersistSettings"/>。
     /// </summary>
-    private void SaveSettings()
+    private string? _lastSettingsSaveError;
+
+    private bool SaveSettings()
     {
         var saved = AppServices.SaveSettings();
-        if (!saved.IsSuccess)
+        if (saved.IsSuccess)
         {
-            AppServices.Logger.Warn("保存设置失败: " + saved.ErrorMessage);
+            _lastSettingsSaveError = null;
+            return true;
         }
+
+        _lastSettingsSaveError = saved.ErrorMessage;
+        AppServices.Logger.Warn("保存设置失败: " + saved.ErrorMessage);
+        return false;
     }
 
     /// <summary>把「当前实际用了哪个代理」算出来显示；解析本身不联网。</summary>
@@ -2224,6 +2934,58 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasDetectedProxy));
     }
 
+    /// <summary>按 <see cref="_probeReport"/> 重建结果行与摘要；没测过就清空。</summary>
+    private void RebuildProbeRows()
+    {
+        _probeRows.Clear();
+
+        var report = _probeReport;
+        if (report is null)
+        {
+            ProbeSummaryText = string.Empty;
+            OnPropertyChanged(nameof(HasProbeRows));
+            OnPropertyChanged(nameof(HasDirectProbeColumn));
+            return;
+        }
+
+        for (var index = 0; index < report.Current.Count; index++)
+        {
+            var current = report.Current[index];
+            var target = NetworkProbe.SteamTargets.FirstOrDefault(
+                item => string.Equals(item.Key, current.Key, StringComparison.Ordinal));
+            var directText = report.Direct is { } direct && index < direct.Count
+                ? FormatProbeResult(direct[index])
+                : string.Empty;
+            _probeRows.Add(new NetworkProbeRowViewModel(
+                current.Key,
+                target?.Uri.Host ?? current.Key,
+                FormatProbeResult(current),
+                directText,
+                "probeRow" + current.Key));
+        }
+
+        // 摘要只看「当前模式」：直连失败但代理通是正常状态，不该被算成问题。
+        var failed = report.Current.Count(item => !item.IsOk);
+        ProbeSummaryText = failed == 0
+            ? T(Keys.SettingsProxyProbeAllOk, report.Current.Count)
+            : T(Keys.SettingsProxyProbeSomeFailed, failed);
+
+        OnPropertyChanged(nameof(HasProbeRows));
+        OnPropertyChanged(nameof(HasDirectProbeColumn));
+    }
+
+    /// <summary>把一次探测结果翻成一行文案（毫秒数取整，超时/状态码/拦截分别有专句）。</summary>
+    private string FormatProbeResult(NetworkProbeResult result) => result.Status switch
+    {
+        NetworkProbeStatus.Ok => T(
+            Keys.SettingsProxyProbeOk,
+            (int)Math.Round(result.Elapsed.TotalMilliseconds, MidpointRounding.AwayFromZero)),
+        NetworkProbeStatus.Timeout => T(Keys.SettingsProxyProbeTimeout),
+        NetworkProbeStatus.HttpStatus => T(Keys.SettingsProxyProbeHttp, result.HttpStatus ?? 0),
+        NetworkProbeStatus.HostNotAllowed => T(Keys.SettingsProxyProbeBlocked),
+        _ => T(Keys.SettingsProxyProbeFailed),
+    };
+
     /// <summary>重建「标准可执行文件（默认）」这一项，让它的文案跟上当前语言；选中项按路径复位。</summary>
     private void RefreshAlternativeLabels()
     {
@@ -2246,6 +3008,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     private void RebuildAlternatives(GameInstallation game)
     {
         var selectedPath = SelectedAlternative?.ExePath;
+        var preferredPath = AppServices.Settings.PreferredLaunchExePaths.GetValueOrDefault(game.GameId);
         Alternatives.Clear();
         Alternatives.Add(new AlternativeExecutable(game.ExePath, game.ExeArgs, T(Keys.SettingsLaunchStandard)));
         foreach (var alternative in game.Alternatives)
@@ -2253,11 +3016,20 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             Alternatives.Add(alternative);
         }
 
-        SelectedAlternative = selectedPath is null
-            ? Alternatives[0]
-            : Alternatives.FirstOrDefault(item =>
-                    string.Equals(item.ExePath, selectedPath, StringComparison.OrdinalIgnoreCase))
-                ?? Alternatives[0];
+        var target = selectedPath ?? preferredPath;
+        _suppressAlternativeSave = true;
+        try
+        {
+            SelectedAlternative = target is null
+                ? Alternatives[0]
+                : Alternatives.FirstOrDefault(item =>
+                        string.Equals(item.ExePath, target, StringComparison.OrdinalIgnoreCase))
+                    ?? Alternatives[0];
+        }
+        finally
+        {
+            _suppressAlternativeSave = false;
+        }
     }
 
     /// <summary>
@@ -2307,6 +3079,8 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(ThemeSourceText));
         OnPropertyChanged(nameof(LastCheckText));
         OnPropertyChanged(nameof(NextCheckText));
+        OnPropertyChanged(nameof(BackgroundFileText));
+        OnPropertyChanged(nameof(LastFailureText));
         OnPropertyChanged(nameof(OnlineRefreshEnabled));
         OnPropertyChanged(nameof(DlcDescriptionOnlineEnabled));
         OnPropertyChanged(nameof(NewsFeedOnlineEnabled));

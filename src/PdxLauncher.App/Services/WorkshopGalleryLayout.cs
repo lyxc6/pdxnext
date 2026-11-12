@@ -1,7 +1,8 @@
 namespace PdxLauncher.App.Services;
 
 /// <summary>
-/// 工坊详情页图片区的尺寸计算：内联大图高度、全屏查看器里单张图片可用的宽高。
+/// 工坊详情页图片区的尺寸计算：内联大图高度、全屏查看器里单张图片可用的宽高，
+/// 以及正文（描述 / 更新日志）配图的列宽。
 /// <para>
 /// 只做纯数学，不碰任何 XAML 类型 —— 这样检查工程能把它链接进去直接断言，
 /// 界面那边每次 <c>SizeChanged</c> 只是把算好的数字塞给控件。
@@ -26,6 +27,44 @@ public static class WorkshopGalleryLayout
 
     /// <summary>查看器四周留白（DIP）。</summary>
     public const double ViewerPadding = 16.0;
+
+    /// <summary>正文（描述 / 更新日志）内容列的最大宽度（DIP），对齐 Steam 物品页约 950 px 的阅读宽度。</summary>
+    public const double DescriptionContentMaxWidth = 960.0;
+
+    /// <summary>正文卡片的宽度上限：内容 960 + 左右各 16 内边距。</summary>
+    public const double DescriptionCardMaxWidth = DescriptionContentMaxWidth + 32.0;
+
+    /// <summary>正文配图框的左右内边距合计（DIP）。</summary>
+    public const double InlineImageInset = 16.0;
+
+    /// <summary>正文配图的最小宽度（DIP）；窗口极窄时也不把图压成 0。</summary>
+    public const double InlineImageMinWidth = 120.0;
+
+    /// <summary>配图占位框的默认最小宽度（DIP）。</summary>
+    public const double InlineImagePlaceholderWidth = 240.0;
+
+    /// <summary>
+    /// 按正文视图的实际宽度算单张配图的 MaxWidth：小图保持原尺寸不放大，大图缩到列宽
+    /// （与 Steam 物品页的 <c>max-width: 100%</c> 一致）。
+    /// </summary>
+    /// <param name="viewWidth">正文视图的实际宽度（DIP）；0 / NaN 表示还没量到。</param>
+    public static double DescriptionImageMaxWidth(double viewWidth)
+    {
+        var limit = DescriptionContentMaxWidth - InlineImageInset;
+        if (!double.IsFinite(viewWidth) || viewWidth <= 0)
+        {
+            return limit;
+        }
+
+        return Math.Clamp(Math.Min(viewWidth, DescriptionContentMaxWidth) - InlineImageInset, InlineImageMinWidth, limit);
+    }
+
+    /// <summary>配图占位框的最小宽度：默认 240，但不大于图片实际可用宽度。</summary>
+    /// <param name="imageWidth">图片的 MaxWidth（见 <see cref="DescriptionImageMaxWidth"/>）。</param>
+    public static double PlaceholderMinWidth(double imageWidth) =>
+        double.IsFinite(imageWidth) && imageWidth > 0
+            ? Math.Min(InlineImagePlaceholderWidth, imageWidth)
+            : InlineImagePlaceholderWidth;
 
     /// <summary>按页面高度算内联大图高度。</summary>
     /// <param name="pageHeight">页面可用高度（DIP）。</param>

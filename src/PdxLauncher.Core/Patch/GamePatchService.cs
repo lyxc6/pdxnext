@@ -33,6 +33,7 @@ public sealed class GamePatchService : IGamePatchService
     private readonly IFileSystem _fs;
     private readonly IAppLogger _logger;
     private readonly IPatchAssets _assets;
+    private readonly PatchVersionRegistry _versions;
     private readonly string _statePath;
     private readonly Func<string, bool>? _isProcessRunning;
 
@@ -41,13 +42,15 @@ public sealed class GamePatchService : IGamePatchService
         IAppLogger logger,
         IPatchAssets assets,
         string statePath,
-        Func<string, bool>? isProcessRunning = null)
+        Func<string, bool>? isProcessRunning = null,
+        PatchVersionRegistry? versions = null)
     {
         _fs = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _assets = assets ?? throw new ArgumentNullException(nameof(assets));
         _statePath = statePath ?? throw new ArgumentNullException(nameof(statePath));
         _isProcessRunning = isProcessRunning;
+        _versions = versions ?? PatchVersionRegistry.Default;
     }
 
     /// <inheritdoc />
@@ -124,6 +127,16 @@ public sealed class GamePatchService : IGamePatchService
         var iniMarked = ReadIni(primary.ApiDirectory) is string ini
             && ini.Contains(Marker, StringComparison.Ordinal);
 
+        // 版本识别：loader 在岗时 _o 才是原版，否则当前文件就是原版。
+        var original = isLoader ? backup : current;
+        KnownApiVersion? known = null;
+        var versionState = PatchVersionState.NotChecked;
+        if (original is not null)
+        {
+            known = _versions.Match(game.GameId, primary.ApiFileName, original);
+            versionState = known is null ? PatchVersionState.Unknown : PatchVersionState.Known;
+        }
+
         GamePatchStatus status;
         bool canApply;
         bool canRevert;
@@ -139,7 +152,14 @@ public sealed class GamePatchService : IGamePatchService
         {
             canApply = true;
             canRevert = true;
-            status = isBackup ? GamePatchStatus.SteamOverwrote : GamePatchStatus.PatchedOther;
+
+            // 以前只有 current == backup 才算被 Steam 覆盖，但真更新写回的是另一份原版，
+            // 该条件几乎不可达。现在的判据：有 _o、当前文件不是自家 loader，且看起来是
+            // 「可识别的原版」——与备份同字节、命中已知登记表、或与备份等长（更新不改变 api 大小）。
+            var overwritten = isBackup
+                || known is not null
+                || (backup is not null && current.Length == backup.Length);
+            status = overwritten ? GamePatchStatus.SteamOverwrote : GamePatchStatus.PatchedOther;
         }
         else
         {
@@ -156,13 +176,18 @@ public sealed class GamePatchService : IGamePatchService
             null,
             canApply,
             canRevert,
-            CollectPatchedFiles(targets));
+            CollectPatchedFiles(targets))
+        {
+            VersionState = versionState,
+            MatchedVersion = known?.Version,
+            MatchedBuildId = known?.BuildId,
+        };
     }
 
     // ------------------------------------------------------------ 打补丁
 
     /// <inheritdoc />
-    public GamePatchReport Apply(GameInstallation game)
+    public GamePatchReport Apply(GameInstallation game, bool allowUnverifiedVersion = false)
     {
         ArgumentNullException.ThrowIfNull(game);
 
@@ -177,9 +202,24 @@ public sealed class GamePatchService : IGamePatchService
             return before with { Detail = "游戏正在运行，请先关闭游戏再打补丁。" };
         }
 
+        // 版本闸门：目标不是已知原版就停在「未验证版本」，把决定权交回界面（用户确认后带
+        // allowUnverifiedVersion 再打）。已经打过补丁的重复应用不拦，否则再点一次会莫名要求确认。
+        if (!allowUnverifiedVersion
+            && before.VersionState == PatchVersionState.Unknown
+            && !before.IsPatched)
+        {
+            return before with
+            {
+                Status = GamePatchStatus.UnverifiedVersion,
+                Detail = "unverified version: " + before.ApiFileName + " is not in the known-version table",
+            };
+        }
+
         var appId = before.SteamAppId!.Value;
         var targets = GamePatchProfiles.Resolve(_fs, game);
         var patched = new List<PatchAppliedFile>(targets.Count);
+        var backupSuspect = false;
+        string? archivePath = null;
 
         try
         {
@@ -188,7 +228,18 @@ public sealed class GamePatchService : IGamePatchService
                 throw new InvalidOperationException("缺少 cream_api.ini 模板素材");
             }
 
-            var iniText = BuildIni(template, appId);
+            if (!_assets.TryGetDlcCatalog(out var catalog))
+            {
+                throw new InvalidOperationException("missing dlc-catalog.json asset");
+            }
+
+            var problems = catalog.Validate();
+            if (problems.Count > 0)
+            {
+                throw new InvalidOperationException("dlc-catalog.json validation failed: " + string.Join("; ", problems));
+            }
+
+            var iniText = BuildIni(template, appId, catalog);
 
             foreach (var target in targets)
             {
@@ -201,9 +252,28 @@ public sealed class GamePatchService : IGamePatchService
                 var current = _fs.ReadAllBytes(target.ApiPath);
                 if (!current.AsSpan().SequenceEqual(loader))
                 {
-                    // 只在「当前文件不是 loader」时备份：重复打补丁不会把 loader 自己备份成 _o，
+                    // 只在「当前文件不是 loader」时处理备份：重复打补丁不会把 loader 自己备份成 _o，
                     // 从而保证移除补丁永远能回到打补丁之前的那份原文件。
-                    _fs.WriteAllBytesAtomic(BackupPath(target.ApiPath), current);
+                    var backupPath = BackupPath(target.ApiPath);
+                    var existing = _fs.FileExists(backupPath) ? _fs.ReadAllBytes(backupPath) : null;
+                    if (existing is not null && !existing.AsSpan().SequenceEqual(current))
+                    {
+                        // 已有一份不同的 _o：它可能是别的 loader 留下的唯一原版，覆盖就再也还原不回去。
+                        // 因此保留 _o 不动，把要替换掉的当前文件另存归档，并标注「备份来源存疑」。
+                        archivePath ??= ArchivePath(target.ApiPath);
+                        _fs.WriteAllBytesAtomic(archivePath, current);
+                        if (!_versions.IsKnownOriginal(target.ApiFileName, existing))
+                        {
+                            backupSuspect = true;
+                        }
+
+                        _logger.Warn(
+                            "已有备份与当前文件不一致，未覆盖备份：" + backupPath + " → 归档 " + archivePath);
+                    }
+                    else if (existing is null)
+                    {
+                        _fs.WriteAllBytesAtomic(backupPath, current);
+                    }
                 }
 
                 _fs.WriteAllBytesAtomic(target.ApiPath, loader);
@@ -227,7 +297,11 @@ public sealed class GamePatchService : IGamePatchService
             };
         }
 
-        return Inspect(game);
+        return Inspect(game) with
+        {
+            BackupSuspect = backupSuspect,
+            BackupArchivePath = archivePath,
+        };
     }
 
     // ------------------------------------------------------------ 移除补丁
@@ -290,6 +364,19 @@ public sealed class GamePatchService : IGamePatchService
         return Inspect(game);
     }
 
+    /// <inheritdoc />
+    public IReadOnlyList<DlcEntry>? DlcCatalogFor(string? gameId)
+    {
+        // 素材读不到时返回 null（而不是空表）：空表会让页面把每条 DLC 都切成「补丁管不了」，
+        // 而实际是「不知道」，两者对用户的含义完全不同。
+        if (!_assets.TryGetDlcCatalog(out var catalog))
+        {
+            return null;
+        }
+
+        return catalog.ForGame(gameId);
+    }
+
     // ------------------------------------------------------------ 内部
 
     private static int? ResolveAppId(GameInstallation game)
@@ -332,6 +419,27 @@ public sealed class GamePatchService : IGamePatchService
         var name = Path.GetFileNameWithoutExtension(apiPath);
         var extension = Path.GetExtension(apiPath);
         return Path.Combine(directory, name + BackupSuffix + extension);
+    }
+
+    /// <summary>
+    /// 备份来源存疑时的归档路径：<c>steam_api64_o.bak-20261106-221530</c>（同秒冲突再补序号）。
+    /// </summary>
+    private string ArchivePath(string apiPath)
+    {
+        var directory = Path.GetDirectoryName(apiPath) ?? string.Empty;
+        var name = Path.GetFileNameWithoutExtension(apiPath);
+        var stamp = DateTime.UtcNow.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        var candidate = Path.Combine(directory, name + BackupSuffix + ".bak-" + stamp);
+        var serial = 1;
+        while (_fs.FileExists(candidate))
+        {
+            candidate = Path.Combine(
+                directory,
+                name + BackupSuffix + ".bak-" + stamp + "-" + serial.ToString(CultureInfo.InvariantCulture));
+            serial++;
+        }
+
+        return candidate;
     }
 
     private string? ReadIni(string directory)
@@ -380,21 +488,26 @@ public sealed class GamePatchService : IGamePatchService
     }
 
     /// <summary>
-    /// 用模板生成 ini：首行插标记，只改 <c>[steam]</c> 段的 <c>appid</c>，
-    /// 其余（orgapi / orgapi64 / language / unlockall / 490 条 [dlc]）原样保留。
+    /// 用模板生成 ini：首行插标记，只改 <c>[steam]</c> 段的 <c>appid</c>，<c>[dlc]</c> 段的内容
+    /// 由按游戏分节的清单（<see cref="PatchDlcCatalog"/>）重新生成，其余（orgapi / orgapi64 /
+    /// language / unlockall / steam_misc）原样保留。
+    /// <para>
+    /// 模板里 <c>[dlc]</c> 之后的旧条目会被跳过：外部覆盖的 ini 若自带大表也不会与新清单重复。
+    /// </para>
     /// </summary>
-    private static string BuildIni(string template, int appId)
+    private static string BuildIni(string template, int appId, PatchDlcCatalog catalog)
     {
         var text = template.Replace("\r\n", "\n", StringComparison.Ordinal);
         var lines = text.Split('\n');
-        var builder = new StringBuilder(text.Length + 128);
+        var builder = new StringBuilder(text.Length + 4096);
         builder.Append(Marker).Append("\r\n");
 
         var section = string.Empty;
         var replaced = false;
-        foreach (var line in lines)
+        var dlcWritten = false;
+        for (var i = 0; i < lines.Length; i++)
         {
-            var current = line;
+            var current = lines[i];
             if (!replaced
                 && string.Equals(section, "steam", StringComparison.OrdinalIgnoreCase)
                 && IsAppIdLine(current))
@@ -405,10 +518,26 @@ public sealed class GamePatchService : IGamePatchService
 
             builder.Append(current).Append("\r\n");
 
-            var trimmed = current.Trim();
-            if (trimmed.Length >= 2 && trimmed[0] == '[' && trimmed[^1] == ']')
+            if (!TrySectionName(current, out var name))
             {
-                section = trimmed[1..^1].Trim();
+                continue;
+            }
+
+            section = name;
+            if (!dlcWritten && string.Equals(name, "dlc", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var dlcLine in catalog.DlcLines())
+                {
+                    builder.Append(dlcLine).Append("\r\n");
+                }
+
+                dlcWritten = true;
+
+                // 模板 [dlc] 段里的旧条目以清单为准，整段跳过到下一个段头（或文件末尾）。
+                while (i + 1 < lines.Length && !TrySectionName(lines[i + 1], out _))
+                {
+                    i++;
+                }
             }
         }
 
@@ -417,7 +546,25 @@ public sealed class GamePatchService : IGamePatchService
             throw new InvalidOperationException("cream_api.ini 模板里没有 appid 行");
         }
 
+        if (!dlcWritten)
+        {
+            throw new InvalidOperationException("cream_api.ini 模板里没有 [dlc] 段");
+        }
+
         return builder.ToString();
+    }
+
+    private static bool TrySectionName(string line, out string name)
+    {
+        var trimmed = line.Trim();
+        if (trimmed.Length >= 2 && trimmed[0] == '[' && trimmed[^1] == ']')
+        {
+            name = trimmed[1..^1].Trim();
+            return true;
+        }
+
+        name = string.Empty;
+        return false;
     }
 
     private static bool IsAppIdLine(string line)

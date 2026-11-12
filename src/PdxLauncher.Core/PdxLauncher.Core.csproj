@@ -42,6 +42,14 @@
     <EmbeddedResource Include="Patch\Assets\cream_api.ini">
       <LogicalName>PdxLauncher.Patch.cream_api.ini</LogicalName>
     </EmbeddedResource>
+    <!-- 按游戏分节的 DLC 源清单：运行时渲染成 ini 的单一 [dlc] 段。 -->
+    <EmbeddedResource Include="Patch\Assets\dlc-catalog.json">
+      <LogicalName>PdxLauncher.Patch.dlc-catalog.json</LogicalName>
+    </EmbeddedResource>
+    <!-- 已知原版 steam_api 的哈希 + buildid 登记表：打补丁前做版本校验。 -->
+    <EmbeddedResource Include="Patch\Assets\known-versions.json">
+      <LogicalName>PdxLauncher.Patch.known-versions.json</LogicalName>
+    </EmbeddedResource>
     <!-- 新建 mod 的默认封面；LogicalName 必须与 ModStudio/ModCoverAssets.cs 里的常量一致。 -->
     <EmbeddedResource Include="ModStudio\Assets\default-cover.png">
       <LogicalName>PdxLauncher.ModStudio.default-cover.png</LogicalName>

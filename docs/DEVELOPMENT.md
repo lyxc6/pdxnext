@@ -24,8 +24,9 @@
 
 - **.NET SDK 10**（实测 10.0.402，`dotnet --version` 可查）。不需要 Visual Studio，不需要装
   Windows App SDK Runtime，也不需要联网——`NuGet.config` 里用 `<packageSources><clear /></packageSources>`，
-  全部包走本机缓存 `%USERPROFILE%\.nuget\packages`（23 个包，含 `Microsoft.WindowsAppSDK 2.5.1` /
-  `Microsoft.WindowsAppSDK.WinUI 2.3.9` / `CommunityToolkit.Mvvm 8.4.2`）。缓存里缺包时构建直接失败。
+  全部包走本机缓存 `%USERPROFILE%\.nuget\packages`（含 `Microsoft.WindowsAppSDK 2.5.1` /
+  `Microsoft.WindowsAppSDK.WinUI 2.3.9` / `CommunityToolkit.Mvvm 8.4.2` /
+  `CommunityToolkit.WinUI.Controls.SettingsControls 8.2.251219` 及其 4 个传递依赖）。缓存里缺包时构建直接失败。
 - **运行端什么都不用装**，见下面「自包含」。
 
 #### 从仓库克隆后第一次构建
@@ -36,8 +37,19 @@
 dir "%USERPROFILE%\.nuget\packages\microsoft.windowsappsdk"      :: 应有 2.5.1
 dir "%USERPROFILE%\.nuget\packages\microsoft.windowsappsdk.winui" :: 应有 2.3.9
 dir "%USERPROFILE%\.nuget\packages\communitytoolkit.mvvm"         :: 应有 8.4.2
+:: 官方设置项控件（设置页 SettingsCard）：
+dir "%USERPROFILE%\.nuget\packages\communitytoolkit.winui.controls.settingscontrols" :: 应有 8.2.251219
+dir "%USERPROFILE%\.nuget\packages\communitytoolkit.winui.triggers"                  :: 应有 8.2.251219
+dir "%USERPROFILE%\.nuget\packages\communitytoolkit.winui.helpers"                   :: 8.2.251219
+dir "%USERPROFILE%\.nuget\packages\communitytoolkit.winui.extensions"                :: 8.2.251219
+dir "%USERPROFILE%\.nuget\packages\communitytoolkit.common"                          :: 8.2.1
 build.cmd
 ```
+
+这 5 个包是 `PdxLauncher.App.csproj` 里 `CommunityToolkit.WinUI.Controls.SettingsControls` 的依赖链
+（SettingsControls → Triggers → Helpers → Extensions → Common）。换机器时把这 5 个目录一起复制过去即可，
+之后仍然完全离线。首次引入时联网 warm-up 一次：
+`dotnet restore src\PdxLauncher.App\PdxLauncher.App.csproj -s https://api.nuget.org/v3/index.json -p:Platform=x64`。
 
 缺包时构建会直接失败（没有联网还原的退路）。临时要联网还原的话，把 `NuGet.config` 里的
 `<clear />` 换成 `<add key="nuget.org" value="https://api.nuget.org/v3/index.json" />`，
@@ -53,7 +65,7 @@ build.cmd
 ```bat
 start.cmd        :: 一键启动：Release 增量构建后直接运行（已有实例在跑就跳过启动）
 start.cmd debug  :: 同上，但用 Debug 配置
-start.cmd check  :: 构建 + 跑一遍自检，再启动（相当于原来的 build.cmd + run.cmd）
+start.cmd check  :: 构建 + 跑一遍自检，再启动
 start.cmd new    :: 忽略「已在运行」判断，强制再开一个窗口
 start.cmd /?     :: 打印用法
 ```
@@ -62,18 +74,51 @@ start.cmd /?     :: 打印用法
 它自己会 `cd` 到仓库根、自动找 `dotnet`、只在构建或自检失败时停住窗口，成功就悄悄把窗口关掉。
 **它和 `scripts\messages.txt` 之外不写任何中文**（顶层 `.cmd` 必须纯 ASCII，见 §7 最后一条）。
 
-单独构建 / 单独启动（脚本化、CI、或只想跑某一步时用）：
+### 给其他对话 / 自动化的入口
+
+开工先按根 `AGENTS.md` 开一个对话分支 —— **一个对话一个分支**，从当前分支拉出：
+
+```bat
+pwsh -File scripts/session.ps1 open <slug>              :: 建 sess/YYYYMMDD-<slug>（脏改动跟随并 wip 提交）
+pwsh -File scripts/session.ps1 list                     :: 看进行中的对话分支与基线
+pwsh -File scripts/session.ps1 close -Message "中文说明"  :: 构建 + 自检 → --no-ff 合回 → 删分支
+```
+
+`open` 要求当前站在仓库根 `integration-branch` 记录的集成分支上（1.3 期间是 `feat/1.3`）；
+不在就先切过去。发版 / 热修要从别的分支起时才加 `-Force`。
+
+其他对话或自动化脚本统一用 `dev.cmd`，不要用 `start.cmd`（它遇到已运行实例会直接退出，也不负责验收）：
+
+```bat
+dev.cmd         :: 结束旧实例 → Release 构建 + 自检 → 启动，末尾输出 DEV_* 标记
+dev.cmd logs    :: 同上，启动后在本终端跟随日志（Ctrl+C 只停跟随，程序继续运行）
+dev.cmd build   :: 只构建 + 自检，不启动（验收用）
+dev.cmd nobuild :: 不构建，结束旧实例后直接启动已构建的程序；加 logs 也跟随日志
+```
+
+查看当前改动（只读）：
+
+```bat
+status.cmd          :: 分支、未提交改动、运行态、构建时间；看完停住
+status.cmd nopause  :: 同上，不停住（VS Code 任务用）
+```
+
+`dev.cmd` 退出码：`0` 通过、`1` 构建失败、`2` 自检失败、`3` 没有可执行文件、`4` 启动后退出；
+末尾固定输出 `DEV_RESULT=` / `DEV_EXE=` / `DEV_DATA=` / `DEV_LOG=` / `DEV_PID=` 等行。
+它会**结束正在运行的 `PdxLauncher.App.exe`**（运行中的 exe 会锁 `PdxLauncher.Core.dll`），
+所以同一工作树同一时刻只允许一个 `dev.cmd`。更完整的约定见 `docs\AGENT-WORKFLOW.md` §10 与根 `AGENTS.md`。
+
+单独构建（脚本化、CI、或只想跑某一步时用；只启动已构建的 Release 用 `dev.cmd nobuild`，
+要在终端看运行日志用 `dev.cmd nobuild logs`）：
 
 ```bat
 build.cmd        :: Release 构建 + 跑自检（首次约 1 分钟，之后增量约 15 秒）
-run.cmd          :: 只启动 Release 版，不构建
 ```
 
-调试用：
+调试用（构建 Debug + 自检；要启动用 `start.cmd debug`）：
 
 ```bat
 build-debug.cmd
-run-debug.cmd
 ```
 
 ### 用 VS Code 打开工程
@@ -81,7 +126,7 @@ run-debug.cmd
 仓库自带 `.vscode\`，用 VS Code 打开这个目录（`code .`）即可，不用装 Visual Studio：
 
 - `Ctrl+Shift+B` 直接跑默认任务 **「PdxNext: 一键启动（增量构建 + 运行）」**，等价于 `start.cmd`；
-- `Ctrl+Shift+P` → `Tasks: Run Task` 还能选「构建 + 自检 (Release)」「构建 (Debug)」「启动 Debug」「自检」「发布到 dist」；
+- `Ctrl+Shift+P` → `Tasks: Run Task` 还能选「构建 + 自检 (Release)」「构建 (Debug)」「Dev 启动」「查看当前修改状态」「自检」「发布到 dist」；
 - 构建错误进「问题」面板（`$msbuild` matcher）；
 - 仓库里的 `bin` / `obj` / `dist` / 各种临时目录默认在资源管理器与搜索里隐藏（`.vscode\settings.json`），
   文件树只剩源码。
@@ -279,15 +324,16 @@ Cities: Skylines 则是**本体根本不读任何加载文件**——它的 mod 
   metadata.json 的 `supported_game_version`，原样显示不做换算）、以及「在 N 个播放集中」（不在任何播放集时不占位）；
   本地 mod、官方库里状态不是 `ready_to_play` 的 mod、以及**声明的支持版本低于当前游戏版本**的 mod
   带三角提示标记，提示只讲「这个 mod 声明支持哪个版本、和当前游戏版本对不对得上」（登记情况与库里的状态作为补充说明）；
-  订阅来源的行还会显示**真实 Steam 状态徽标**（已在 Steam 安装 / Steam 有更新 / Steam 下载中 N% / Steam 排队中 /
-  Steam 本地已禁用，取自 Steamworks `GetItemState` 等接口，见 `docs/DATA-FORMATS.md` §18.5），
+  订阅来源的行还会显示**真实 Steam 状态徽标**（已在 Steam 安装 / Steam 有更新 / Steam 下载中 N% · 已下载 x/y /
+  Steam 排队中 / Steam 本地已禁用，取自 Steamworks `GetItemState` + `GetItemDownloadInfo`，见 `docs/DATA-FORMATS.md` §18.5），
   状态未知（子进程刚 Init 还没同步、或本来就查不到）时不显示，绝不当成「没订阅」；
   行尾**四个图标按钮**分别是打开工坊详情页（复用创意工坊那个详情子页）、
   打开本地文件夹、在 Steam 中打开、在浏览器中打开（拿不到目录或工坊编号时对应按钮置灰），
   后面还有两个按需出现的按钮：**让 Steam 下载**（`DownloadItem`，没装或需要更新时可用）与
   **在 Steam 中禁用 / 启用**（`SetItemsDisabledLocally`，工坊层的「订阅但本地禁用」，和退订是两件事，
   要先用设置里打开「Steam 工坊直连订阅」）；支持搜索（名称 / 注册 ID / 目录）、
-  **按来源筛选（全部 / 本地 / 订阅）**、按名称 / 大小 / 订阅时间排序、刷新；数量徽标 = 当前筛选下的行数。
+  **按来源筛选（全部 / 本地 / 订阅）**、按名称 / 大小 / 订阅时间排序、刷新；数量只显示在底部状态栏：
+  未筛选时是全库总数，筛选后是「显示 X / N 个 mod」，页头不再重复计数。
   行操作的地址由 `SteamWorkshop` 拼装：创意工坊 id 优先取 `mods.steamId`，为空时回退从
   `mod/ugc_<id>.mod` 解析；打开动作是 `Process.Start` + `UseShellExecute`（资源管理器 / `steam://` / https），
   不经 `IFileSystem`，也不受 `OnlineHosts` 白名单约束（那是本进程 HTTP 的白名单）。
@@ -362,16 +408,32 @@ Cities: Skylines 则是**本体根本不读任何加载文件**——它的 mod 
   再写入 loader；「移除补丁」= 把 `_o` 移回原名 + 删掉带 `; PdxNext 自动生成` 标记的 `cream_api.ini`。
   整合包里自带的 `steam_api64_o.dll` **不会**被拷给别的游戏（各游戏原版 dll 版本不同，直接拷会把游戏弄坏）。
 - **状态判定**（设置页实时显示，`Inspect` 只读）：原版 / 已打补丁 / 被别的工具打过 / **被 Steam 更新覆盖**
-  （文件回到原版但 `_o` 还在，可一键重打）/ 未找到 api 文件 / 缺少 appId 无法打补丁。
+  （`_o` 还在、当前文件既不是自家 loader 也不等于备份，可一键重打）/ **未验证版本**（见下）/
+  未找到 api 文件 / 缺少 appId 无法打补丁。
+  「被 Steam 更新覆盖」的判据是「有 `_o` + 当前不是自家 loader +（与备份同字节 / 命中已知原版登记表 / 与备份等长）」，
+  旧的 `current == backup` 写法在真更新下几乎不可达（更新写回的是另一份原版）。
+- **版本意识**：`Patch\Assets\known-versions.json` 登记「游戏 / 版本号 / buildid / 原版文件名 / sha256 / 大小」，
+  打补丁前先比对目标 `steam_api*.dll`。命中 → 正常打；未命中 → Core **不写盘**，返回
+  `GamePatchStatus.UnverifiedVersion`，设置页弹确认框，用户点「仍然打补丁」后才带 `allowUnverifiedVersion: true` 重试。
+  登记表只收本机能采到的真条目（版本号来自各游戏 `launcher-settings.json`，buildid 来自 `appmanifest_*.acf`）。
+- **备份来源存疑**：再点打补丁时若已存在 `_o` 且其内容既不是当前文件、也不在登记表里，**不覆盖** `_o`，
+  把要替换掉的当前文件另存为 `steam_api64_o.bak-yyyyMMdd-HHmmss`，返回 `BackupSuspect` + 归档路径，界面提示来源存疑。
+  这样「别人的 loader」不会再毁掉唯一那份原版备份（移除补丁时还原的是 `_o`，可能仍是别人的备份）。
 - **目标目录**：CS2 在 `Cities2_Data\Plugins\x86_64\`；其余游戏按「exe 所在目录 → 安装根目录 →
   `binaries\`」找第一个含 `steam_api64.dll` / `steam_api.dll` 的目录（两个都在就都处理）；
   CK3 / EU5 / Imperator / Victoria 3 实际落在 `binaries\`，CS1 / CK2 / EU4 / HOI4 / Stellaris 落在根目录。
 - **appId** 取自 `launcher-settings.json` / `appmanifest` 的 Steam appId，独立安装时回退到
   `src\PdxLauncher.Core\Online\GameSteamAppIds.cs` 的内置表（名单见该文件）。
-- **补丁素材**：`steam_api.dll`、`steam_api64.dll`、`cream_api.ini` 内嵌在 `PdxLauncher.Core.dll` 里
+- **补丁素材**：`steam_api.dll`、`steam_api64.dll`、`cream_api.ini`（模板）、`dlc-catalog.json`（DLC 源清单）、
+  `known-versions.json`（已知原版登记表）内嵌在 `PdxLauncher.Core.dll` 里
   （`src\PdxLauncher.Core\Patch\Assets\`，来源见该目录 README，仅个人离线研究用）；
   程序目录下的 `data\patch\assets\` 可整体覆盖同名文件，整合包更新只要丢文件进去、不用重编译。
   打过的游戏记在 `data\patch\state.json`，素材目录用「打开素材目录」按钮直达。
+- **DLC 清单**：`dlc-catalog.json` 按游戏分节（`gameId` / `comment` / `steamAppId` / `dlc[]`），
+  打补丁时摊平成唯一一段 `[dlc]` 写进 `cream_api.ini`；模板里 `[dlc]` 之后的旧条目会被整段替换，
+  所以外部覆盖的旧大表也不会出现两段 `[dlc]`。生成结果与重构前的 490 条大表逐字节一致
+  （`DlcPatchChecks` 的 `ExpectedVictoria3IniSha256` 就是这条回归线）。`Validate()` 拒绝跨游戏重复 id、
+  非正整数 id、空节与重复条目；每节 `steamAppId` 必须与 `GameSteamAppIds` 一致（自检里逐节断言）。
 - **边界**：只改 `steam_api*` 与 `cream_api.ini`；游戏运行中 / 目录只读时操作失败并给原因，不动已备份的原文件；
   不改官方 Paradox 启动器目录；不联网；不做「全部游戏一起打」的批量按钮。
 
@@ -382,7 +444,7 @@ Cities: Skylines 则是**本体根本不读任何加载文件**——它的 mod 
 
 **背景图是按版本走的，不是安装目录里那张**。和官方 Paradox Launcher v2 一样，主题素材由 Paradox 元数据服务
 按 `gameId` 下发一组 URL（路径末尾带内容 hash），下载到
-`data\theme-cache\<gameId>-<assetKey>-<urlHash8>.<ext>`（程序目录下），TTL 5 天、过期先返回旧图再后台刷新；
+`data\theme-cache\<gameId>-<assetKey>-<urlHash8>.<ext>`（程序目录下），TTL 24 小时、过期先返回旧图再后台刷新；
 游戏发新版本 ⇒ 服务端换图 ⇒ URL 变 ⇒ 本地文件名跟着变（顺带让 WinUI 的图片缓存自动失效）。
 实测 CK3 拿到的背景图与官方启动器 `cache\ck3-background` **sha256 完全一致**，
 而它与安装目录 `launcher\assets\app-background.png` 是两张完全不同的图。
@@ -452,6 +514,19 @@ BMP/PNG 帧策略、32px 帧的金色占比与圆角透明、8 张 PNG 的魔数
 而是在这一行和日志里说明「为什么现在直连」。地址框改完按回车或点别处即生效。
 旧配置只有 `proxyUrl` 没有 `proxyMode` 时按「手动配置」处理，行为与上一版一致。
 
+代理卡片下面还有一张「连通性自检」（`src/PdxLauncher.Core/Online/NetworkProbe.cs`）：
+点一次「测试」，对创意工坊真正依赖的三台主机各发一条真实请求 ——
+`steamcommunity.com`（列表/详情 HTML）、`api.steampowered.com`（keyless 详情接口，POST 表单）、
+`store.steampowered.com`（工坊能力探测 / DLC 简介）。当前不是直连时，会再用直连测一遍做对比列，
+所以「当前模式失败、直连通过」= 代理坏了，「两边都失败」= 本机网络或 DNS 有问题。
+
+这也能回答加速器的问题：UU / 雷神的「Steam 加速」默认是进程模式，只接管 `steam.exe`；
+本启动器是另一个进程，请求不会进隧道。所以进程模式下这张表会全超时，
+但 Steam 客户端自己仍能打开工坊。要覆盖本程序需要开加速器的全局 / 路由模式。
+
+自检**不接**共享的 `RequestThrottle`：不往限流统计里灌数据，也不会因为工坊刚被 429 冷却过就必然失败。
+单次探测整请求超时 10 秒（`NetworkProbe.DefaultTimeout`），三台并发，最慢约 10 秒出结果。
+
 设置页「联网」分类只剩代理本身；DLC 简介、官方公告、Mod 缩略图这几类联网缓存的
 「开关 / 保留天数 / 目录 / 占用 / 清除」统一收在「缓存」分类里，改哪类缓存都不必跳回联网页。
 
@@ -474,6 +549,9 @@ BMP/PNG 帧策略、32px 帧的金色占比与圆角透明、8 张 PNG 的魔数
   12 小时内重开同一个 mod 详情是 0 请求；联网失败时退回旧副本，画廊/作者/首屏评论仍然可见。
 - 评论首屏直接用物品页内嵌的前 10 条，不再单独请求第 1 页；要继续翻页才走评论接口。
 - 列表页缓存 15 分钟内算新鲜、2 小时内过期仍先显示；同一页 2 分钟内不重复静默刷新；换游戏不再清空其它游戏的页。
+- 列表行也会挂 Steam 状态徽标（与 Mod 库同一套：已安装 / 有更新 / 下载中 N% · 已下载 x/y / 排队中 / 本地禁用）：
+  列表先铺出来，再后台读一次整库状态补上去（走 60 秒缓存，通常不新起 `steam-host` 子进程）；
+  详情页改订阅后会失效缓存，返回列表即可看到新徽标。
 - 搜索只在**回车**或点刷新时发起：打字过程中不发请求（旧实现每敲一个字符就排一次 1–3 MB 的列表页请求，
   限流下页面看起来像卡死）；新查询会取消上一轮在途请求，迟到的结果按查询代号丢掉。
 - 搜索框是 `AutoSuggestBox`（7 处搜索框统一，见 HANDOFF §0.85）：工坊页下拉给**最近提交词**
@@ -531,14 +609,17 @@ Mod 库、播放集里的 mod 行、工坊详情页的简介与更新日志、�
 
 ```
 PdxLauncher.sln
+AGENTS.md                      :: 其他对话 / agent 的入口：常用命令 + 硬约束，见 §1
 start.cmd                      :: 一键启动（增量构建 + 运行），双击即可，见 §1「日常命令」
-build.cmd / build-debug.cmd / run.cmd / run-debug.cmd
+dev.cmd                        :: 自动化入口：构建 + 自检 + 重启，末尾输出 DEV_* 标记；加 logs 跟随终端日志
+status.cmd                     :: 只读查看分支、未提交改动、运行态与构建时间
+build.cmd / build-debug.cmd
 publish.cmd                    :: 构建 + 自检 + 发布到 dist\PdxNext\（可传目标目录）
 scripts/
   msg.cmd                      :: 顶层 .cmd 取中文提示用的小助手（纯 ASCII）
   messages.txt                 :: 全部中文提示，UTF-8 无 BOM，KEY:文本 格式
 .vscode/                       :: 只提交 tasks.json / settings.json / extensions.json
-  tasks.json                   :: 默认任务＝一键启动 start.cmd，另有构建 / 自检 / 发布
+  tasks.json                   :: 默认任务＝一键启动 start.cmd，另有构建 / Dev 启动 / 状态 / 自检 / 发布
   settings.json                :: 隐藏 bin/obj/dist 等产物目录，编码与换行约定
   extensions.json              :: 推荐 ms-dotnettools.csdevkit / .csharp
 Directory.Build.props          :: 统一可空/语言版本/告警策略
@@ -566,15 +647,19 @@ src/
     ModStudio/                 :: Mod 创建：描述符规则/读取/编辑、legacy 与 V3 metadata 生成、本地清单、发布记录、内嵌默认封面（Assets/）
   PdxLauncher.App/             :: 155 个 .cs + 18 个 .xaml，WinUI 3 层
     Assets/                    :: AppIcon.ico（9 帧 16→256）+ 8 张模板同名 PNG，全部由 tools/gen-app-icon.py 生成
+    Strings/                   :: zh-CN/en-US 的 Resources.resw（文案唯一真源，见 README.md）
+    Localization/              :: Localizer（ResourceManager + 可切换 ResourceContext）、LocalizedObservableObject、SizeFormatter
     Views/                     :: GameLibraryPage / HomePage / ModsPage（播放集） / ModLibraryPage（Mod库） / ModStudioPage（Mod创建/上传） / DlcPage / SettingsPage / WorkshopDetailPage（工坊详情子页） / AddModsPage（添加模组子页）
     ViewModels/                :: VM（全部不含 Microsoft.UI.Xaml 类型）
     Controls/                  :: 自绘控件：ConfirmOverlay（全局「确认 / 取消」浮层，取消在左、确认在右）、SettingsCard、SettingsValueCard、MarkdownView、PdxWrapPanel（排不下就自动换行，WinUI 没有 WrapPanel）
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
+  PdxLauncher.Localization.Generator/ :: Roslyn 增量源生成器：编译期读 Strings/*/Resources.resw，生成 Localizer 属性与 Keys（不落盘）
 tests/
-  PdxLauncher.Checks/          :: 108 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 166 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
+  AGENT-WORKFLOW.md            :: 1.3 起的分工约定：派活模板 / 并发隔离 / 验收清单 / 文档归属
   DATA-FORMATS.md              :: 所有数据格式的真机实测记录（含自有库表字典，见第 20 节）
   INSTALLER.md                 :: 安装包、双安装模式、自动更新与发版流程
   app-icon.png                 :: 应用图标接触表（深/浅底，16→256，由生成器写出）
@@ -594,7 +679,7 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**547 个 .cs + 18 个 .xaml**（不含 `obj/` 生成物；2026-11-04 实测，含工作区未提交文件：Core 272 / App 155+18 / Imaging 9 / Checks 111 —— Checks 的 111 个文件是 108 个检查类 + Program + ChecksContext + GlobalUsings；运行时打印的「检查类」就是 108，另 3 个是自检框架本身）。
+**743 个 .cs + 22 个 .xaml**（不含 `obj/` 生成物；2026-11-11 实测：Core 362 / App 198+22 / Imaging 10 / Checks 173；运行时打印的「检查类」是 **166**，其余文件是自检框架与替身）。
 
 ---
 
@@ -604,7 +689,7 @@ tools/
 dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 108，失败: 0，断言失败总数: 0` 即通过（2026-11-04 实测 108 类；真机段只锁结构——行数、启用态这类本机数据只打印 `info` 不作断言，Victoria 3 播放集那条写死的 `mod 行数 >= 22` 已按这个原则删掉，见 HANDOFF §0.85.5）。覆盖：Steam 探测与
+输出 `检查类: 166，失败: 0，断言失败总数: 0` 即通过（2026-11-11 实测 166 类；真机段只锁结构——行数、启用态这类本机数据只打印 `info` 不作断言，Victoria 3 播放集那条写死的 `mod 行数 >= 22` 已按这个原则删掉，见 HANDOFF §0.85.5）。覆盖：Steam 探测与
 launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取、
 Mod 创建（legacy `.mod`/`descriptor.mod` 与 V3 `.metadata/metadata.json` 生成、非法输入拒绝、本地清单合并、发布记录与发布协议参数、
 工坊发布面：可见性四档映射、1 MB 与张数上限、五种 YouTube 链接解析、30 种语言码与归一化、请求 JSON 全字段往返、旧 `public` 记录回显、内嵌默认封面的 PNG 签名与落盘一致、
@@ -619,6 +704,8 @@ DLC 简介的 TTL / 负缓存 / 失败退避、官方公告的 JSON 解析（时
 以及网络代理：三模式归一化与旧配置迁移、手动地址补 scheme / 去引号 / 拒绝 SOCKS 与非 http、
 「跟随系统」的 ProxyEnable 关闭回落环境变量、`http=a;https=b` 分号写法、PAC 不执行且不回退、
 `ProxyOverride` → 正则 → `WebProxy.IsBypassed`、带账号密码时解析成 `NetworkCredential`；
+以及连通性自检：三台目标都在白名单内且只有 keyless 详情接口用 POST 表单、成功/超时/HTTP 状态码/
+白名单拦截/其它异常各自归类、用户取消原样抛；
 以及应用图标：ICO 容器（保留区 / 类型 / 9 帧 / 偏移不重叠且末帧正好收尾）、帧尺寸集合与 32 位色深、
 <128 走 BMP 且 ≥128 走 PNG、32px 帧的金色占比与圆角透明、8 张模板同名 PNG 的魔数与 IHDR 尺寸、
 csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cmd 的 `Assets\AppIcon.ico` 校验三处接入点；
@@ -659,7 +746,7 @@ csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cm
 | 自有数据库 | `data\pdxnext.sqlite`（播放集 / mod / settings / session / 六份缓存索引） | 同上 |
 | 启动器设置 | 库内 `settings` 键（原 `data\settings.json`，已入库） | 同上 |
 | DLC 简介缓存 | 库内 `cache:dlc-descriptions` 键 | 同上（TTL 7 天） |
-| 主题素材缓存 | 库内 `cache:theme-assets:<gameId>` + 图片 `data\theme-cache\` | 同上（TTL 5 天） |
+| 主题素材缓存 | 库内 `cache:theme-assets:<gameId>` + 图片 `data\theme-cache\` | 同上（TTL 24 小时） |
 | 官方公告缓存 | 库内 `cache:news-cards` + 图片 `data\news-cache\` | 同上（TTL 6 小时） |
 | Mod 缩略图缓存 | 库内 `cache:mod-thumbnails` + 图片 `data\mod-cache\` | 同上（保留天数可配，默认 30 天） |
 | 译文缓存 | 库内 `cache:translations` 键 | 同上（保留天数可配，默认 30 天） |
@@ -703,13 +790,16 @@ settings.json / dlc-descriptions.json / theme-cache / news-cache / mod-cache，�
    `content_load.json` 里写得再对也不生效，且游戏日志不报任何错。启动器会在播放集页给出警告，
    并可用「修复 mod 路径」把本地 mod 目录改成 `mod_<id 前 8 位>`。父目录含非 ASCII（如 `C:\Users\张三\…`）时
    不自动改名，只提示——那种情况得改 `launcher-settings.json` 的 `gameDataPath`。CK3 / Stellaris / EU4 无此限制。
-9. **所有原生 Steamworks 调用都在子进程里跑**：DLC 授权探测、创意工坊直连订阅都需要以游戏 appId 调
+9. **所有原生 Steamworks 调用都在一次性子进程里跑**：DLC 授权探测、创意工坊直连订阅、成就读取都需要以游戏 appId 调
    `SteamAPI_Init`，而 Steam 会把「调过它的进程」登记成该游戏的 game process（`SteamAPI_Shutdown` 不撤销）。
    2026-10-31 之前启动器自己调，导致游戏退出后 Steam 仍显示「运行中」，点 Steam 的「退出游戏」还会把启动器杀掉；
-   现在改成同一个 exe 的隐藏宿主模式（`PdxLauncher.App.exe --steam-host probe|workshop-…`），探测约 1 s、订阅最多 25 s、
+   现在改成同一个 exe 的隐藏宿主模式（`PdxLauncher.App.exe --steam-host probe|achievements|workshop-…`），探测约 1 s、订阅最多 25 s、
    订阅集合（`workshop-subscribed`）最多 60 s、批量写（`workshop-batch`：下载 / 本地禁用 / 启用）最多 45 s，
    子进程一退 Steam 立刻除名。上传工坊条目最多 20 分钟，开了多语言时按语言数放大到 `20 分钟 ×（1 + 语言数）`。
+   **启动器不在启动 / 切游戏时预读成就，也不保留常驻 `serve` worker**：常驻进程会让 Steam 在两次读取之间一直把游戏显示成
+   「运行中」（2026-11-07 修复，见 HANDOFF §0.95）。成就只在用户打开成就页时按需读取，每次一个一次性 `achievements` 子进程。
    所以偶尔在 Steam 库里闪一下「运行中」是子进程，属预期；主窗口不会被登记，也不会被连坐。
+   要完全零登记只能放弃这些 Steamworks 功能（成就页 / DLC 授权 / 工坊直连），启动器不做这个取舍。
    设置页把「读状态」和「改订阅」拆成两个开关：读状态（默认开）每次只起一个只读子进程；
    写动作（默认关）才允许订阅 / 退订 / 触发下载 / 本地禁用。
 
@@ -742,7 +832,7 @@ settings.json / dlc-descriptions.json / theme-cache / news-cache / mod-cache，�
 **写完加载文件游戏没生效** → 游戏启动时会重写这个文件；确认启动前 launcher 已完全退出
 （本启动器是保存即写、写完只回读，不会在游戏启动后继续持有）。
 
-**双击 `run.cmd` / `build.cmd` 弹出「打开文件 - 安全警告」（发布者：未知发布者）** →
+**双击 `start.cmd` / `build.cmd` 弹出「打开文件 - 安全警告」（发布者：未知发布者）** →
 这是 Windows 对「低完整性级别（Low IL）目录里的脚本」做的发布者校验，不是病毒，也和
 「文件从网上下载被锁定」（`Zone.Identifier` 数据流）无关 —— 本项目的脚本上并没有这个数据流。
 
@@ -764,7 +854,7 @@ icacls . /remove:g "%USERNAME%:(WO)" /T /C /Q
 ```
 
 改完 `icacls .` 应显示 `Mandatory Label\Medium Mandatory Level`，弹窗消失。
-临时绕过：用 `cmd /c run.cmd` 或 `Start-Process run.cmd` 启动（走 CreateProcess，不经 Explorer 的 ShellExecute 校验），
+临时绕过：用 `cmd /c start.cmd` 或 `Start-Process start.cmd` 启动（走 CreateProcess，不经 Explorer 的 ShellExecute 校验），
 或直接双击 `PdxLauncher.App.exe`。
 
 **跑 `.cmd` 时冒出 `'行文件:' is not recognized as an internal or external command` 一类假报错**
@@ -779,8 +869,8 @@ icacls . /remove:g "%USERNAME%:(WO)" /T /C /Q
 > 200/200 全对。GBK 存盘也能做到 200/200，但文件编码会被编辑器 / git 改回 UTF-8，
 > 不稳定，因此不采用。
 
-**本项目的做法**：所有顶层 `.cmd`（`build.cmd` / `build-debug.cmd` / `run.cmd` /
-`run-debug.cmd` / `publish.cmd`）**保持纯 ASCII**，中文提示全部集中在
+**本项目的做法**：所有顶层 `.cmd`（`start.cmd` / `build.cmd` / `build-debug.cmd` /
+`publish.cmd` / `dev.cmd` / `status.cmd`）**保持纯 ASCII**，中文提示全部集中在
 `scripts\messages.txt`（UTF-8 无 BOM，格式 `KEY:文本`），由 `scripts\msg.cmd` 查表打印：
 
 ```bat

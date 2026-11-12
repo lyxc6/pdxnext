@@ -1,5 +1,7 @@
 namespace PdxLauncher.App.Views;
 
+using System.Globalization;
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -332,7 +334,8 @@ public sealed partial class ModsPage : Page
                 Localizer.Instance.ModsToolbarDeleteName,
                 content,
                 Localizer.Instance.CommonDelete,
-                Localizer.Instance.CommonCancel);
+                Localizer.Instance.CommonCancel,
+                initialFocus: InitialFocus.Cancel);
             if (!confirmed)
             {
                 return;
@@ -348,6 +351,140 @@ public sealed partial class ModsPage : Page
         {
             AppServices.Logger.Error("ModsPage 删除播放集失败", ex);
             await ShowMessageAsync(Localizer.Instance.ModsStatusDeleteFailedTitle, ex.Message).ConfigureAwait(true);
+        }
+    }
+
+    // ------------------------------------------------------------ 导入 / 导出（官方分享格式）
+
+    /// <summary>
+    /// 「导入播放集」：选官方分享 .json → 本地已有同名播放集时询问合并还是新建副本 →
+    /// 导入 → 结果框（缺失的 Steam 模组可一键订阅）。
+    /// </summary>
+    private async void OnImportPlaySetClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var path = await FilePickers.PickOpenJsonAsync();
+            if (path is null)
+            {
+                return;
+            }
+
+            var peek = await _viewModel.PeekImportAsync(path, _lifetime.Token).ConfigureAwait(true);
+            if (!peek.IsSuccess)
+            {
+                await ShowMessageAsync(
+                    Localizer.Instance.ModsImportErrorTitle,
+                    PlaySetShareText.DescribeError(Localizer.Instance, peek.ErrorMessage)).ConfigureAwait(true);
+                return;
+            }
+
+            if (peek.Value is not { } peeked)
+            {
+                return;
+            }
+
+            Guid? mergeInto = null;
+            if (peeked.ExistingPlaySetId is { } existingId)
+            {
+                var merge = await ConfirmOverlay.ConfirmAsync(
+                    Localizer.Instance.ModsImportSameNameTitle,
+                    Localizer.Instance.T(
+                        Keys.ModsImportSameNameContent,
+                        peeked.ExistingPlaySetName ?? peeked.Name),
+                    Localizer.Instance.ModsImportMergeConfirm,
+                    Localizer.Instance.ModsImportMergeNewCopy).ConfigureAwait(true);
+                if (merge)
+                {
+                    mergeInto = existingId;
+                }
+            }
+
+            var imported = await _viewModel
+                .ImportPlaySetAsync(path, mergeInto, _lifetime.Token)
+                .ConfigureAwait(true);
+            if (!imported.IsSuccess)
+            {
+                await ShowMessageAsync(
+                    Localizer.Instance.ModsImportErrorTitle,
+                    PlaySetShareText.DescribeError(Localizer.Instance, imported.ErrorMessage)).ConfigureAwait(true);
+                return;
+            }
+
+            if (imported.Value is not { } importedValue)
+            {
+                return;
+            }
+
+            var canSubscribe = AppServices.Settings.SteamWorkshopSubscribeEnabled
+                && SteamWorkshopBackends.CreateForSubscribe(_viewModel.Game) is { IsAvailable: true };
+            var subscribe = await PlaySetImportDialog
+                .ShowAsync(XamlRoot, importedValue, canSubscribe)
+                .ConfigureAwait(true);
+            if (subscribe)
+            {
+                await _viewModel
+                    .SubscribeMissingSteamModsAsync(importedValue.Missing, _lifetime.Token)
+                    .ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 导入播放集失败", ex);
+            await ShowMessageAsync(Localizer.Instance.ModsImportErrorTitle, ex.Message).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>「导出播放集」：先落盘自动保存，再按官方分享格式写 .json；有排除项时弹说明框。</summary>
+    private async void OnExportPlaySetClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var playSet = _viewModel.SelectedPlaySet;
+            if (playSet is null)
+            {
+                return;
+            }
+
+            var path = await FilePickers.PickSaveJsonAsync(playSet.Name);
+            if (path is null)
+            {
+                return;
+            }
+
+            var exported = await _viewModel
+                .ExportSelectedAsync(path, _lifetime.Token)
+                .ConfigureAwait(true);
+            if (!exported.IsSuccess)
+            {
+                await ShowMessageAsync(
+                    Localizer.Instance.ModsExportErrorTitle,
+                    PlaySetShareText.DescribeError(Localizer.Instance, exported.ErrorMessage)).ConfigureAwait(true);
+                return;
+            }
+
+            if (exported.Value is not { } exportedValue)
+            {
+                return;
+            }
+
+            if (exportedValue.LocalExcluded > 0 || exportedValue.UnsupportedNames.Count > 0)
+            {
+                await PlaySetExportNoticeDialog.ShowAsync(XamlRoot, exportedValue).ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 导出播放集失败", ex);
+            await ShowMessageAsync(Localizer.Instance.ModsExportErrorTitle, ex.Message).ConfigureAwait(true);
         }
     }
 
@@ -682,7 +819,7 @@ public sealed partial class ModsPage : Page
 
     /// <summary>
     /// 输入框的显隐由 IsEditingPosition 绑定，翻转后要等布局跑完才真正可见，
-    /// 所以排到 DispatcherQueue 里再取文字、抢焦点、全选。
+    /// 所以排到 DispatcherQueue 里再写值、抢焦点。
     /// 这是本仓库第一处程序化聚焦（改动前 grep <c>Focus(FocusState</c> 为零命中），
     /// 用在不可见控件上会静默失败，因此必须延后。
     /// </summary>
@@ -698,9 +835,10 @@ public sealed partial class ModsPage : Page
                     return;
                 }
 
-                box.Text = text ?? row.PositionText;
+                // NumberBox 的真源是 Value；用户刚敲的非法原文解析不出数字时回退到当前位次，
+                // 保持编辑态等着重新输入（ValidationMode 也会把非法文本覆盖成上一个有效值）。
+                box.Value = ParseEditorValue(text) ?? row.Position + 1;
                 box.Focus(FocusState.Programmatic);
-                box.SelectAll();
             }
             catch (Exception ex)
             {
@@ -712,13 +850,28 @@ public sealed partial class ModsPage : Page
         }
     }
 
+    /// <summary>把输入框原文解析成 NumberBox 能接收的 double；空串 / 非法 / NaN 返回 null。</summary>
+    private static double? ParseEditorValue(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+            && !double.IsNaN(value)
+            && !double.IsInfinity(value)
+                ? value
+                : null;
+    }
+
     /// <summary>
     /// 按 ModId 找到该行的序号输入框。条目容器会被回收复用，不能靠 x:Name 取控件；
-    /// 行模板里只有这一个 TextBox（序号输入框），所以按类型找是唯一且稳定的。
+    /// 行模板里只有这一个 NumberBox（序号输入框），所以按类型找是唯一且稳定的。
     /// </summary>
-    private TextBox? FindPositionEditor(ModRowViewModel row) =>
+    private NumberBox? FindPositionEditor(ModRowViewModel row) =>
         ActiveModList.ContainerFromItem(row) is ListViewItem { ContentTemplateRoot: { } root }
-            ? FindDescendant<TextBox>(root)
+            ? FindDescendant<NumberBox>(root)
             : null;
 
     private static T? FindDescendant<T>(DependencyObject root) where T : DependencyObject
@@ -746,7 +899,7 @@ public sealed partial class ModsPage : Page
     {
         try
         {
-            if (e.Key is not (VirtualKey.Enter or VirtualKey.Escape) || sender is not TextBox box)
+            if (e.Key is not (VirtualKey.Enter or VirtualKey.Escape) || sender is not NumberBox box)
             {
                 return;
             }
@@ -768,12 +921,21 @@ public sealed partial class ModsPage : Page
                 return;
             }
 
-            // 回车才把原文交出去。注意顺序：非法输入时不能先退出再重进编辑态——
+            // 回车才把值交出去。注意顺序：非法输入时不能先退出再重进编辑态——
             // 那样输入框会「隐藏又显示」，其自身失焦事件随即把刚恢复的编辑态又关掉。
             // 所以先判定，只有不该继续编辑时才退出。
-            if (_viewModel.TryMoveModToPosition(row, box.Text) == PositionEditResult.Invalid)
+            // NumberBox 空着或输入被覆盖成 NaN 时无从提交，回退到当前位次、保持编辑态。
+            if (double.IsNaN(box.Value) || double.IsInfinity(box.Value))
             {
-                FocusPositionEditor(row, box.Text);
+                FocusPositionEditor(row);
+                return;
+            }
+
+            // 文本层仍是最终判据：小数、0、负数等照样交给 PositionInput 拒绝。
+            var text = box.Value.ToString(CultureInfo.InvariantCulture);
+            if (_viewModel.TryMoveModToPosition(row, text) == PositionEditResult.Invalid)
+            {
+                FocusPositionEditor(row, text);
                 return;
             }
 
@@ -806,6 +968,93 @@ public sealed partial class ModsPage : Page
         catch (Exception ex)
         {
             AppServices.Logger.Error("ModsPage 退出位次编辑失败", ex);
+        }
+    }
+
+    // ------------------------------------------------------------ 行右键菜单
+
+    /// <summary>在资源管理器里打开 mod 的本地位置：目录型打开目录，压缩包型定位到压缩包。</summary>
+    private void OnRowOpenFolderClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is not FrameworkElement { DataContext: ModRowViewModel row })
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(row.DirPath))
+            {
+                if (ShellLauncher.TryStart("explorer.exe", "\"" + row.DirPath + "\"", "ModsPage 打开 mod 文件夹"))
+                {
+                    _viewModel.ReportOpenedFolder(row);
+                }
+
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(row.ArchivePath))
+            {
+                if (ShellLauncher.TryStart("explorer.exe", "/select,\"" + row.ArchivePath + "\"", "ModsPage 定位 mod 压缩包"))
+                {
+                    _viewModel.ReportOpenedFolder(row);
+                }
+
+                return;
+            }
+
+            _viewModel.ReportNoLocalFiles();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 打开 mod 本地位置失败", ex);
+        }
+    }
+
+    /// <summary>用 steam:// 协议在 Steam 客户端里打开该 mod 的创意工坊页面。</summary>
+    private void OnRowOpenSteamClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is not FrameworkElement { DataContext: ModRowViewModel row })
+            {
+                return;
+            }
+
+            var address = SteamWorkshop.GetSteamAddress(
+                SteamWorkshop.GetWorkshopId(row.SteamId, row.GameRegistryId));
+            if (address is null)
+            {
+                _viewModel.ReportNoWorkshopAddress();
+                return;
+            }
+
+            ShellLauncher.TryOpenSteam(address, "ModsPage 打开 mod 创意工坊");
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 打开 mod 创意工坊失败", ex);
+        }
+    }
+
+    /// <summary>把注册 ID 写进剪贴板，并在状态栏确认（状态栏才有 mod 名，菜单里不放名字）。</summary>
+    private void OnRowCopyIdClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is not FrameworkElement { DataContext: ModRowViewModel row })
+            {
+                return;
+            }
+
+            var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(row.GameRegistryId);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+            _viewModel.ReportClipboardCopied(row);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 复制 mod 注册 ID 失败", ex);
         }
     }
 

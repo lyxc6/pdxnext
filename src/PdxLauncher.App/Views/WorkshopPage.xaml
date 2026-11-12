@@ -35,6 +35,9 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <!-- 搜索框只在回车（或放大镜/右侧刷新按钮）时提交：打字过程中不发请求。
@@ -63,6 +66,18 @@
                                  AutomationProperties.Name="{x:Bind L.WorkshopSortName, Mode=OneWay}" />
 
             <controls:PdxDropDown Grid.Column="2"
+                                 x:Name="SectionBox"
+                                 MinWidth="100"
+                                 MaxWidth="140"
+                                 VerticalAlignment="Center"
+                                 Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowSectionPicker), Mode=OneWay}"
+                                 ItemsSource="{x:Bind ViewModel.SectionModes, Mode=OneWay}"
+                                 SelectedItem="{x:Bind ViewModel.SelectedSection, Mode=OneWay}"
+                                 SelectionChanged="OnSectionSelectionChanged"
+                                 AutomationProperties.AutomationId="cmbWorkshopSection"
+                                 AutomationProperties.Name="{x:Bind L.WorkshopSectionName, Mode=OneWay}" />
+
+            <controls:PdxDropDown Grid.Column="3"
                                  x:Name="TimeRangeBox"
                                  MinWidth="130"
                                  MaxWidth="170"
@@ -74,14 +89,14 @@
                                  AutomationProperties.AutomationId="cmbWorkshopTimeRange"
                                  AutomationProperties.Name="{x:Bind L.WorkshopTimeRangeName, Mode=OneWay}" />
 
-            <ProgressRing Grid.Column="3"
+            <ProgressRing Grid.Column="4"
                           Width="20"
                           Height="20"
                           VerticalAlignment="Center"
                           IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                           AutomationProperties.AutomationId="ringWorkshopBusy" />
 
-            <Button Grid.Column="4"
+            <Button Grid.Column="5"
                     VerticalAlignment="Center"
                     Click="OnRefreshClick"
                     AutomationProperties.AutomationId="btnWorkshopRefresh"
@@ -89,14 +104,14 @@
                 <FontIcon Glyph="&#xE72C;" FontSize="16" />
             </Button>
 
-            <Border Grid.Column="5"
+            <Border Grid.Column="6"
                     Width="1"
                     Height="20"
                     Margin="0"
                     VerticalAlignment="Center"
                     Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-            <Border Grid.Column="6"
+            <Border Grid.Column="7"
                     Padding="8,4"
                     VerticalAlignment="Center"
                     CornerRadius="4"
@@ -109,7 +124,7 @@
                            AutomationProperties.AutomationId="txtWorkshopSource" />
             </Border>
 
-            <Button Grid.Column="7"
+            <Button Grid.Column="8"
                     VerticalAlignment="Center"
                     Click="OnOpenWebClick"
                     AutomationProperties.AutomationId="btnWorkshopOpenWeb"
@@ -117,6 +132,17 @@
                     ToolTipService.ToolTip="{x:Bind L.WorkshopOpenBrowserName, Mode=OneWay}">
                 <FontIcon Glyph="&#xE8A7;" FontSize="16" />
             </Button>
+
+            <!-- 筛选栏开关：只有 Steam 来源有筛选维度。 -->
+            <ToggleButton Grid.Column="9"
+                          VerticalAlignment="Center"
+                          IsChecked="{x:Bind ViewModel.ShowFilterPanel, Mode=TwoWay}"
+                          Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.CanShowFilters), Mode=OneWay}"
+                          AutomationProperties.AutomationId="btnWorkshopFilter"
+                          AutomationProperties.Name="{x:Bind L.WorkshopFilterToggle, Mode=OneWay}"
+                          ToolTipService.ToolTip="{x:Bind L.WorkshopFilterToggle, Mode=OneWay}">
+                <FontIcon Glyph="&#xE71C;" FontSize="16" />
+            </ToggleButton>
         </Grid>
 
         <!-- 行1：PDX 来源未登录时的提示条 -->
@@ -145,9 +171,145 @@
             </Grid>
         </Border>
 
-        <!-- 行2：列表 / 空状态 -->
-        <Grid Grid.Row="2">
-            <Border Background="{ThemeResource PdxCardGlassBrush}" CornerRadius="8" />
+        <!-- 行2：筛选栏 + 列表 / 空状态 -->
+        <Grid Grid.Row="2" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Steam 风格的左侧筛选栏：分组来自列表页 SSR，解析不到时用内置目录兜底。
+                 每个标签是一个三态胶囊（未选 → 包含 → 排除 → 未选），点击后由视图模型去抖再查。 -->
+            <Border Grid.Column="0"
+                    Width="264"
+                    CornerRadius="8"
+                    Background="{ThemeResource PdxCardGlassBrush}"
+                    Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowFilterSidebar), Mode=OneWay}"
+                    AutomationProperties.AutomationId="pnlWorkshopFilters">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              HorizontalScrollMode="Disabled">
+                    <StackPanel Padding="12" Spacing="12">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{x:Bind L.WorkshopFilterTitle, Mode=OneWay}"
+                                       Style="{StaticResource BodyStrongTextBlockStyle}"
+                                       VerticalAlignment="Center" />
+                            <Button Grid.Column="1"
+                                    Content="{x:Bind L.WorkshopFilterClear, Mode=OneWay}"
+                                    Click="OnClearFiltersClick"
+                                    AutomationProperties.AutomationId="btnWorkshopFilterClear" />
+                        </Grid>
+
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="{x:Bind L.WorkshopFilterSpecialTitle, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            <controls:PdxDropDown x:Name="SpecialFilterBox"
+                                                  HorizontalAlignment="Stretch"
+                                                  ItemsSource="{x:Bind ViewModel.Filters.SpecialFilterModes, Mode=OneWay}"
+                                                  SelectedItem="{x:Bind ViewModel.Filters.CurrentSpecialFilterLabel, Mode=OneWay}"
+                                                  SelectionChanged="OnSpecialFilterSelectionChanged"
+                                                  AutomationProperties.AutomationId="cmbWorkshopSpecialFilter" />
+                        </StackPanel>
+
+                        <!-- 分组可折叠：类别默认展开，其余默认收起，避免几十项一次铺满整栏。
+                             标题用普通 Button（和胶囊同一类控件），点击由页面切换 IsExpanded；
+                             每一项是一个三态胶囊（未选 / 包含 / 排除），点击按顺序轮换。 -->
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.Filters.Groups, Mode=OneWay}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:WorkshopFilterGroupViewModel">
+                                    <StackPanel Margin="0,4,0,0">
+                                        <Button HorizontalAlignment="Stretch"
+                                                Padding="8,4"
+                                                CornerRadius="8"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                HorizontalContentAlignment="Stretch"
+                                                Click="OnFilterGroupHeaderClick"
+                                                AutomationProperties.Name="{x:Bind HeaderText, Mode=OneWay}">
+                                            <Grid ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{x:Bind Title, Mode=OneWay}"
+                                                           Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center" />
+                                                <!-- 折叠时也能看出这组选了几项。 -->
+                                                <Border Grid.Column="1"
+                                                        MinWidth="20"
+                                                        Padding="8,0"
+                                                        CornerRadius="8"
+                                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(HasActive), Mode=OneWay}">
+                                                    <TextBlock Text="{x:Bind ActiveCountText, Mode=OneWay}"
+                                                               FontSize="12"
+                                                               HorizontalAlignment="Center"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                </Border>
+                                                <FontIcon Grid.Column="2"
+                                                          Glyph="{x:Bind HeaderGlyph, Mode=OneWay}"
+                                                          FontSize="12"
+                                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                          VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+
+                                        <StackPanel Spacing="8"
+                                                    Padding="0,4,0,0"
+                                                    Visibility="{x:Bind svc:XamlVisibility.FromBool(IsExpanded), Mode=OneWay}">
+                                            <!-- 只有 DLC 组显示名称过滤：它通常有 20 项以上。 -->
+                                            <TextBox Text="{x:Bind NameFilterText, Mode=TwoWay}"
+                                                     PlaceholderText="{x:Bind L.WorkshopFilterDlcSearch, Mode=OneWay}"
+                                                     Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowNameFilter), Mode=OneWay}"
+                                                     AutomationProperties.AutomationId="txtWorkshopDlcFilter" />
+                                            <TextBlock Text="{x:Bind L.WorkshopFilterDlcEmpty, Mode=OneWay}"
+                                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                       Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowDlcEmptyHint), Mode=OneWay}" />
+
+                                            <ItemsControl ItemsSource="{x:Bind VisibleOptions, Mode=OneWay}"
+                                                          AutomationProperties.AutomationId="lstWorkshopFilterOptions">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <!-- 单列整行：一个标签一行，铺满侧栏宽度，行距 4。 -->
+                                                        <StackPanel Spacing="4" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="vm:WorkshopTagOption">
+                                                        <controls:PdxTagChip Text="{x:Bind DisplayName, Mode=OneWay}"
+                                                                             IsRequired="{x:Bind IsRequired, Mode=OneWay}"
+                                                                             IsExcluded="{x:Bind IsExcluded, Mode=OneWay}"
+                                                                             AutomationProperties.Name="{x:Bind DisplayName, Mode=OneWay}"
+                                                                             AutomationProperties.HelpText="{x:Bind L.WorkshopFilterCycleHint, Mode=OneWay}"
+                                                                             ToolTipService.ToolTip="{x:Bind L.WorkshopFilterCycleHint, Mode=OneWay}"
+                                                                             Click="OnTagChipClick"
+                                                                             ToggleRequested="OnTagChipClick" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <CheckBox Content="{x:Bind L.WorkshopFilterShowIncompatible, Mode=OneWay}"
+                                  IsChecked="{x:Bind ViewModel.Filters.ShowIncompatible, Mode=TwoWay}"
+                                  AutomationProperties.AutomationId="chkWorkshopShowIncompatible" />
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+
+            <Grid Grid.Column="1">
+                <Border Background="{ThemeResource PdxCardGlassBrush}" CornerRadius="8" />
 
             <!-- 翻页/查询中的细进度条：不遮挡列表，只在忙碌时出现 -->
             <ProgressBar x:Name="barWorkshopLoading"
@@ -197,6 +359,18 @@
                                 <TextBlock Text="{x:Bind Name, Mode=OneTime}"
                                            Style="{StaticResource BodyStrongTextBlockStyle}"
                                            TextTrimming="CharacterEllipsis" />
+                                <!-- 合集徽标：合集列表页的每一行都是合集，详情页的子项也可能嵌套合集。 -->
+                                <Border Padding="8,4"
+                                        CornerRadius="4"
+                                        HorizontalAlignment="Left"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowCollectionBadge), Mode=OneWay}">
+                                    <TextBlock Text="{x:Bind CollectionBadgeText, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </Border>
                                 <!-- 译文：与原文并存，只显示译文正文（不加「译文」标题），翻译没开或失败时整块隐藏。 -->
                                 <Border Margin="0,8,0,0"
                                         Padding="8,4"
@@ -215,11 +389,29 @@
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            TextTrimming="CharacterEllipsis"
                                            Visibility="{x:Bind svc:XamlVisibility.FromString(SubtitleText), Mode=OneWay}" />
-                                <TextBlock Text="{x:Bind SizeText, Mode=OneWay}"
-                                           Style="{StaticResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                           TextTrimming="CharacterEllipsis"
-                                           Visibility="{x:Bind svc:XamlVisibility.FromString(SizeText), Mode=OneWay}" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="{x:Bind SizeText, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               Visibility="{x:Bind svc:XamlVisibility.FromString(SizeText), Mode=OneWay}" />
+                                    <!-- Steam 侧真实状态：下载中（带百分比与字节数）/ 排队中 / 需要更新 / 已安装 / 本地禁用。
+                                         数据来自列表铺好后的一次整库查询，读不到就整块不显示，绝不当成「没订阅」。 -->
+                                    <Border Padding="8,4"
+                                            CornerRadius="4"
+                                            VerticalAlignment="Center"
+                                            Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
+                                            AutomationProperties.AutomationId="{x:Bind SteamStateAutomationId, Mode=OneTime}"
+                                            AutomationProperties.Name="{x:Bind L.ModlibSteamStateName, Mode=OneWay}"
+                                            AutomationProperties.HelpText="{x:Bind SteamStateBadgeText, Mode=OneWay}"
+                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowSteamStateBadge), Mode=OneWay}">
+                                        <TextBlock Text="{x:Bind SteamStateBadgeText, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </Border>
+                                </StackPanel>
                             </StackPanel>
 
                             <StackPanel Grid.Column="2"
@@ -275,42 +467,106 @@
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            AutomationProperties.AutomationId="txtWorkshopEmpty" />
             </StackPanel>
+
+            <!-- 访问失败：把原因（含代理提示）摆在列表区中间，并给一个明确的重试入口，
+                 不能再用「这个游戏还没有创意工坊内容」冒充网络失败。 -->
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Spacing="12"
+                        MaxWidth="720"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowLoadFailureState), Mode=OneWay}">
+                <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                           Style="{StaticResource BodyTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           AutomationProperties.AutomationId="txtWorkshopLoadFailure" />
+                <Button Content="{x:Bind L.CommonRetry, Mode=OneWay}"
+                        HorizontalAlignment="Center"
+                        Click="OnRefreshClick"
+                        AutomationProperties.AutomationId="btnWorkshopRetry" />
+            </StackPanel>
+            </Grid>
         </Grid>
 
         <!-- 行3：分页 / 状态栏 -->
         <Grid Grid.Row="3" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <Button Grid.Column="0"
-                    Click="OnPrevClick"
-                    IsEnabled="{x:Bind ViewModel.HasPrevPage, Mode=OneWay}"
-                    AutomationProperties.AutomationId="btnWorkshopPrevPage"
-                    AutomationProperties.Name="{x:Bind L.WorkshopPrev, Mode=OneWay}">
-                <FontIcon Glyph="&#xE76B;" FontSize="16" />
-            </Button>
+            <StackPanel Grid.Column="0"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        VerticalAlignment="Center">
+                <TextBlock Text="{x:Bind L.WorkshopPageSize, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           VerticalAlignment="Center" />
+                <controls:PdxDropDown x:Name="PageSizeBox"
+                                      MinWidth="72"
+                                      ItemsSource="{x:Bind ViewModel.PageSizeOptions, Mode=OneWay}"
+                                      SelectedItem="{x:Bind ViewModel.SelectedPageSize, Mode=OneWay}"
+                                      SelectionChanged="OnPageSizeSelectionChanged"
+                                      AutomationProperties.AutomationId="cmbWorkshopPageSize"
+                                      AutomationProperties.Name="{x:Bind L.WorkshopPageSize, Mode=OneWay}" />
 
-            <TextBlock Grid.Column="1"
-                       x:Name="txtWorkshopPage"
-                       Text="{x:Bind ViewModel.PageText, Mode=OneWay}"
-                       Style="{StaticResource CaptionTextBlockStyle}"
-                       VerticalAlignment="Center"
-                       Visibility="{x:Bind svc:XamlVisibility.FromString(ViewModel.PageText), Mode=OneWay}"
-                       AutomationProperties.AutomationId="txtWorkshopPage" />
+                <Button Click="OnPrevClick"
+                        IsEnabled="{x:Bind ViewModel.HasPrevPage, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnWorkshopPrevPage"
+                        AutomationProperties.Name="{x:Bind L.WorkshopPrev, Mode=OneWay}">
+                    <FontIcon Glyph="&#xE76B;" FontSize="16" />
+                </Button>
 
-            <Button Grid.Column="2"
-                    Click="OnNextClick"
-                    IsEnabled="{x:Bind ViewModel.HasNextPage, Mode=OneWay}"
-                    AutomationProperties.AutomationId="btnWorkshopNextPage"
-                    AutomationProperties.Name="{x:Bind L.WorkshopNext, Mode=OneWay}">
-                <FontIcon Glyph="&#xE76C;" FontSize="16" />
-            </Button>
+                <ItemsRepeater ItemsSource="{x:Bind ViewModel.PageButtons, Mode=OneWay}"
+                               VerticalAlignment="Center"
+                               AutomationProperties.AutomationId="lstWorkshopPageNumbers">
+                    <ItemsRepeater.Layout>
+                        <StackLayout Orientation="Horizontal" Spacing="4" />
+                    </ItemsRepeater.Layout>
+                    <ItemsRepeater.ItemTemplate>
+                        <DataTemplate x:DataType="vm:WorkshopPageButton">
+                            <Grid>
+                                <Button MinWidth="32"
+                                        Height="32"
+                                        Padding="0"
+                                        Content="{x:Bind Label}"
+                                        Tag="{x:Bind PageIndex}"
+                                        Click="OnPageNumberClick"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowAsButton), Mode=OneTime}"
+                                        AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneTime}"
+                                        AutomationProperties.Name="{x:Bind Label, Mode=OneTime}" />
+                                <Button MinWidth="32"
+                                        Height="32"
+                                        Padding="0"
+                                        Content="{x:Bind Label}"
+                                        Tag="{x:Bind PageIndex}"
+                                        Click="OnPageNumberClick"
+                                        Style="{StaticResource AccentButtonStyle}"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowAsCurrentButton), Mode=OneTime}"
+                                        AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneTime}"
+                                        AutomationProperties.Name="{x:Bind Label, Mode=OneTime}" />
+                                <TextBlock Text="{x:Bind Label}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           VerticalAlignment="Center"
+                                           Margin="4,0"
+                                           Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowAsEllipsis), Mode=OneTime}"
+                                           AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneTime}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsRepeater.ItemTemplate>
+                </ItemsRepeater>
 
-            <Border Grid.Column="3"
+                <Button Click="OnNextClick"
+                        IsEnabled="{x:Bind ViewModel.HasNextPage, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnWorkshopNextPage"
+                        AutomationProperties.Name="{x:Bind L.WorkshopNext, Mode=OneWay}">
+                    <FontIcon Glyph="&#xE76C;" FontSize="16" />
+                </Button>
+            </StackPanel>
+
+            <Border Grid.Column="1"
                     Padding="12,8"
                     CornerRadius="8"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -340,6 +596,12 @@
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    Visibility="{x:Bind svc:XamlVisibility.FromString(ViewModel.CountText), Mode=OneWay}"
                                    AutomationProperties.AutomationId="txtWorkshopCount" />
+                        <TextBlock x:Name="txtWorkshopPage"
+                                   Text="{x:Bind ViewModel.PageText, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   Visibility="{x:Bind svc:XamlVisibility.FromString(ViewModel.PageText), Mode=OneWay}"
+                                   AutomationProperties.AutomationId="txtWorkshopPage" />
                     </StackPanel>
 
                     <TextBlock Grid.Column="1"

@@ -37,6 +37,7 @@ internal sealed record NetworkServices(
     AssetDownloader Assets,
     ThemeResolver Themes,
     DlcDescriptionService Descriptions,
+    DlcArtworkService Artwork,
     NewsFeedService NewsFeed,
     IModThumbnailService ModThumbnails,
     TranslationHttpTransport TranslationTransport,
@@ -127,6 +128,14 @@ internal static class NetworkComposition
             logger,
             AppServices.DataRoot,
             CachedDocument(JsonDocumentKeys.DlcDescriptions));
+
+        // DLC 头图：磁盘 .dlc 不带图，未拥有的 DLC 更没有本地素材，按 Steam appid 补商店头图。
+        var artwork = new DlcArtworkService(
+            fileSystem,
+            http,
+            clock,
+            logger,
+            Path.Combine(AppServices.DataRoot, "dlc-artwork"));
         var newsFeed = new NewsFeedService(
             fileSystem,
             http,
@@ -167,6 +176,7 @@ internal static class NetworkComposition
             assets,
             themes,
             descriptions,
+            artwork,
             newsFeed,
             modThumbnails,
             translationTransport,

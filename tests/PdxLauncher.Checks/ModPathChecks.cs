@@ -73,9 +73,9 @@ public static class ModPathChecks
         ChecksContext.Equal("source 缺失 + 空串工坊 id ⇒ 本地", ModOrigin.Local, ModOrigins.Normalize("", "   "));
         ChecksContext.Equal("不认识的 source 退回工坊 id", ModOrigin.Local, ModOrigins.Normalize("mystery", null));
 
-        ChecksContext.Equal("徽标键：本地", "common.sourceLocal", ModOrigins.DescribeKey(ModOrigin.Local));
-        ChecksContext.Equal("徽标键：订阅", "common.sourceSubscribed", ModOrigins.DescribeKey(ModOrigin.Subscribed));
-        ChecksContext.Equal("徽标键：由字段直取", "common.sourceSubscribed", ModOrigins.DescribeKey("steam", null));
+        ChecksContext.Equal("徽标键：本地", "CommonSourceLocal", ModOrigins.DescribeKey(ModOrigin.Local));
+        ChecksContext.Equal("徽标键：订阅", "CommonSourceSubscribed", ModOrigins.DescribeKey(ModOrigin.Subscribed));
+        ChecksContext.Equal("徽标键：由字段直取", "CommonSourceSubscribed", ModOrigins.DescribeKey("steam", null));
         ChecksContext.Check("IsSubscribed 与 Normalize 一致", ModOrigins.IsSubscribed("pdx_mods", null));
         ChecksContext.Check("IsSubscribed 对本地为假", !ModOrigins.IsSubscribed("local", "1"));
     }
@@ -90,7 +90,7 @@ public static class ModPathChecks
         ChecksContext.Check("Stellaris 不限制", !GamePathRules.RequiresAsciiPaths("stellaris"));
         ChecksContext.Check("EU4 不限制", !GamePathRules.RequiresAsciiPaths("eu4"));
         ChecksContext.Check("gameId 为 null 不限制", !GamePathRules.RequiresAsciiPaths(null));
-        ChecksContext.Equal("提示键：Victoria 3", "mods.warnNonAsciiPath", GamePathRules.DescribeAsciiRuleKey(Victoria3));
+        ChecksContext.Equal("提示键：Victoria 3", "ModsWarnNonAsciiPath", GamePathRules.DescribeAsciiRuleKey(Victoria3));
         ChecksContext.Equal("提示键：CK3 没有", null, GamePathRules.DescribeAsciiRuleKey(Ck3));
     }
 
@@ -377,23 +377,23 @@ public static class ModPathChecks
             ("mods.json", "mods.addPage.target"),
             ("mods.json", "mods.addPage.targetMissing"),
             ("mods.json", "mods.addPage.title"),
+            ("mods.json", "mods.addPage.version"),
         ];
 
         string[] languages = ["zh-CN", "en-US"];
         foreach (var language in languages)
         {
-            foreach (var (file, key) in entries)
+            var path = I18nResw.ResourcesPath(I18nResw.RepoRoot(), language);
+            if (!File.Exists(path))
             {
-                var path = RepoPath(Path.Combine("tools", "i18n", language, file));
-                if (!File.Exists(path))
-                {
-                    ChecksContext.Check("文案表存在：" + language + "/" + file, false, path);
-                    continue;
-                }
+                ChecksContext.Check("文案表存在：" + language, false, path);
+                continue;
+            }
 
-                var needle = "\"" + key + "\":";
-                var found = File.ReadAllLines(path)
-                    .Any(line => line.TrimStart().StartsWith(needle, StringComparison.Ordinal));
+            var table = I18nResw.Read(I18nResw.RepoRoot(), language);
+            foreach (var (_, key) in entries)
+            {
+                var found = I18nResw.Get(table, key) is not null;
                 ChecksContext.Check(language + " 有键 " + key, found, path);
             }
         }

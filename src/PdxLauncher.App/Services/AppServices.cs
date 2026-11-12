@@ -4,10 +4,13 @@ using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Accounts;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.CrashAnalysis;
 using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Online.Translation.Local;
 using PdxLauncher.Core.Patch;
+using PdxLauncher.Core.Playsets.Share;
+using PdxLauncher.Core.Saves;
 using PdxLauncher.Core.Storage;
 using PdxLauncher.Core.Steam;
 using PdxLauncher.Core.Updates;
@@ -32,6 +35,12 @@ public static class AppServices
 
     public static IPlaySetRepository PlaySets { get; private set; } = null!;
 
+    /// <summary>
+    /// 播放集分享（官方「分享 / 导入」JSON）。播放集页与导入结果对话框共用同一个实例。
+    /// 在 <see cref="Initialize"/> 里由 <see cref="PlaySets"/> + 文件系统装配，不单独加入参数列表。
+    /// </summary>
+    public static PlaySetShareService PlaySetShare { get; private set; } = null!;
+
     public static IModCatalog Mods { get; private set; } = null!;
 
     public static IDlcCatalog Dlcs { get; private set; } = null!;
@@ -42,10 +51,31 @@ public static class AppServices
 
     public static IContinueGameReader ContinueGame { get; private set; } = null!;
 
+    /// <summary>
+    /// 存档库：只读磁盘，按需扫描。启动路径<b>不</b>调用它——存档页打开或点刷新时才扫描，
+    /// 避免把「用户 Documents 下有多少文件」变成冷启动耗时。
+    /// </summary>
+    public static ISaveGameLibrary SaveGames { get; private set; } = null!;
+
+    /// <summary>
+    /// 存档页的两段式数据源（先枚举文件、再逐条解析）；与 <see cref="SaveGames"/> 是同一个实例，
+    /// 只是暴露更窄的接口，避免页面绕过「先粗略后细节」的顺序。
+    /// </summary>
+    public static ISaveGameFileIndex SaveGameFiles { get; private set; } = null!;
+
+    /// <summary>
+    /// 存档备份：备份 / 恢复 / 删除（含真实存档移入回收站）。写文件全部在这层完成，
+    /// 页面只负责确认与刷新；配额由服务判定（2 GiB / 每款游戏 200 条），服务不会自动清理。
+    /// </summary>
+    public static ISaveGameBackupService SaveBackups { get; private set; } = null!;
+
     public static IDlcSignatureService DlcSignatures { get; private set; } = null!;
 
     /// <summary>DLC 简介（磁盘缓存 + 可选的 Steam 商店补全）。</summary>
     public static IDlcDescriptionService DlcDescriptions { get; private set; } = null!;
+
+    /// <summary>DLC 头图（Steam 商店 header_image；磁盘 .dlc 没有图片）。</summary>
+    public static IDlcArtworkService DlcArtwork { get; private set; } = null!;
 
     /// <summary>官方启动器公告卡（Braze content cards；磁盘缓存 + 可选联网）。</summary>
     public static INewsFeedService NewsFeed { get; private set; } = null!;
@@ -115,10 +145,51 @@ public static class AppServices
     /// </summary>
     public static ISteamOwnershipService DlcOwnership { get; private set; } = null!;
 
+    /// <summary>
+    /// 成就数据源：走「Steam 宿主子进程」读真实成就（appid 未知 / Steam 不可用 / 没有成就
+    /// 分别对应不同的空状态）。原生调用只在子进程里发生，主进程不碰 Steamworks。
+    /// <para>
+    /// 每次读取都是一次性的 <c>--steam-host achievements</c> 进程：读完即退，Steam 侧的
+    /// 「游戏正在运行」登记随进程退出消失。这里刻意不保留常驻 worker、也不做启动 / 切游戏
+    /// 预热 —— Steam 会把调过 <c>SteamAPI_Init</c> 的进程登记成该游戏的 game process，
+    /// 常驻会话会让 Steam 在两次读取之间一直把游戏显示成「运行中」。
+    /// </para>
+    /// </summary>
+    public static IAchievementSource Achievements { get; private set; } = new NullAchievementSource();
+
     public static AppSettingsStore SettingsStore { get; private set; } = null!;
 
     /// <summary>用户设置的内存副本；改动后调用 <see cref="SaveSettings"/> 落盘。</summary>
     public static AppSettings Settings { get; private set; } = new();
+
+    /// <summary>
+    /// 按设置页里为该游戏选择的「其它可执行文件」构造启动请求；
+    /// 没选或选的是标准 exe 时返回默认请求（让 <see cref="IGameLauncher"/> 读 launcher-settings 的参数）。
+    /// </summary>
+    /// <param name="game">要启动的游戏。</param>
+    /// <param name="continueLastSave">是否追加 --continuelastsave。</param>
+    public static LaunchRequest CreateLaunchRequest(GameInstallation game, bool continueLastSave)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+
+        string? customPath = null;
+        if (Settings.PreferredLaunchExePaths.TryGetValue(game.GameId, out var preferred)
+            && !string.IsNullOrWhiteSpace(preferred)
+            && !string.Equals(preferred, game.ExePath, StringComparison.OrdinalIgnoreCase))
+        {
+            customPath = preferred;
+        }
+
+        IReadOnlyList<string>? customArgs = null;
+        if (customPath is not null)
+        {
+            var alternative = game.Alternatives.FirstOrDefault(
+                item => string.Equals(item.ExePath, customPath, StringComparison.OrdinalIgnoreCase));
+            customArgs = alternative?.Args;
+        }
+
+        return new LaunchRequest(customPath, customArgs, continueLastSave);
+    }
 
     /// <summary>当前选中的游戏；由游戏库页/外壳页设置，其它页面只读。</summary>
     public static GameInstallation? CurrentGame { get; private set; }
@@ -198,6 +269,7 @@ public static class AppServices
         IContinueGameReader continueGame,
         IDlcSignatureService dlcSignatures,
         IDlcDescriptionService dlcDescriptions,
+        IDlcArtworkService dlcArtwork,
         INewsFeedService newsFeed,
         IMetadataClient metadata,
         IAssetDownloader assets,
@@ -234,6 +306,7 @@ public static class AppServices
         ArgumentNullException.ThrowIfNull(continueGame);
         ArgumentNullException.ThrowIfNull(dlcSignatures);
         ArgumentNullException.ThrowIfNull(dlcDescriptions);
+        ArgumentNullException.ThrowIfNull(dlcArtwork);
         ArgumentNullException.ThrowIfNull(newsFeed);
         ArgumentNullException.ThrowIfNull(metadata);
         ArgumentNullException.ThrowIfNull(assets);
@@ -261,13 +334,23 @@ public static class AppServices
         GameCatalog = gameCatalog;
         ThemeResolver = themeResolver;
         PlaySets = playSets;
+        PlaySetShare = new PlaySetShareService(playSets, fileSystem, logger);
         Mods = mods;
         Dlcs = dlcs;
         LoadFiles = loadFiles;
         Launcher = launcher;
         ContinueGame = continueGame;
+        var saveGames = new SaveGameScanner(fileSystem, logger);
+        SaveGames = saveGames;
+        SaveGameFiles = saveGames;
+        SaveBackups = new SaveBackupService(
+            fileSystem,
+            logger,
+            maxTotalBytes: settings.SaveBackupMaxTotalBytes,
+            autoPruneOldestWhenFull: true);
         DlcSignatures = dlcSignatures;
         DlcDescriptions = dlcDescriptions;
+        DlcArtwork = dlcArtwork;
         NewsFeed = newsFeed;
         Metadata = metadata;
         Assets = assets;
@@ -284,6 +367,18 @@ public static class AppServices
         LocalTranslation = localTranslation;
         GamePatch = gamePatch;
         DlcOwnership = dlcOwnership;
+        // 成就读取一律走一次性宿主：拉起 `--steam-host achievements`、读一次、进程退出，
+        // Steam 侧的「游戏正在运行」登记随进程退出消失。这里刻意不保留常驻 worker、
+        // 也不做启动 / 切游戏预热 —— 两者都会让 Steam 在用户没启动游戏时显示「运行中」。
+        var steamHostClient = new SteamHostClient(logger);
+        Achievements = new SteamAchievementSource(
+            steamHostClient,
+            new SteamApiLocator(fileSystem, logger),
+            fileSystem,
+            logger,
+            () => Settings.SteamApiDllPath,
+            () => CurrentGame,
+            () => PdxLauncher.App.Localization.Localizer.Instance.Language);
         SettingsStore = settingsStore;
         Database = database;
         Documents = documents;
@@ -376,6 +471,10 @@ public static class AppServices
         }
 
         CurrentGameChanged?.Invoke(null, game);
+
+        // 刻意不在这里预热成就：预热会立刻拉起 Steam 宿主并调 SteamAPI_Init，
+        // Steam 会把当前游戏登记成「正在运行」，而用户并没有启动游戏。
+        // 成就只在用户打开成就页时按需读取，且每次都是一次性宿主，读完即退。
     }
 
     /// <summary>立即把设置写盘；失败返回 <see cref="AppResult{T}"/>，调用方据此提示，不再静默当成功。</summary>
@@ -467,8 +566,26 @@ public static class AppServices
     /// </summary>
     public static string WorkshopCacheRoot => Path.Combine(DataRoot, "workshop-info");
 
+    /// <summary>
+    /// 工坊筛选目录的落盘位置（<c>workshop-filters\{appid}.json</c>）。
+    /// 目录随 Steam 列表页 SSR 更新，按 appid 存最近一次快照，重启/离线时先显示已知最新版本。
+    /// </summary>
+    public static string WorkshopFilterRoot => Path.Combine(DataRoot, "workshop-filters");
+
     /// <summary>本启动器自己的日志路径。</summary>
     public static string LogPath => Path.Combine(DataRoot, "logs", "pdxnext.log");
+
+    private static GameCrashAnalyzer? _crashAnalysis;
+
+    /// <summary>
+    /// 游戏崩溃分析器：只读扫描游戏崩溃包/日志，不联网、不写游戏目录。
+    /// 首次访问时创建；依赖 FileSystem / LoadFiles / Logger / Clock 都是已装配好的只读服务。
+    /// </summary>
+    public static GameCrashAnalyzer CrashAnalysis => _crashAnalysis ??= new GameCrashAnalyzer(
+        FileSystem,
+        LoadFiles,
+        Logger,
+        Clock);
 
     private static ThemeImageFlattener? _themeImages;
 

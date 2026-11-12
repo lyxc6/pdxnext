@@ -15,22 +15,22 @@ namespace PdxLauncher.Core.LoadFiles;
 public static class ModLoadRules
 {
     /// <summary>行里既没有目录路径也没有压缩包路径：任何格式都写不出这一行。</summary>
-    public const string WarnNoPath = "mods.warnNoPath";
+    public const string WarnNoPath = "ModsWarnNoPath";
 
     /// <summary>V0（<c>dlc_load.json</c>）只能写 gameRegistryId，空值无法表达。</summary>
-    public const string WarnNoRegistryId = "mods.warnNoRegistryId";
+    public const string WarnNoRegistryId = "ModsWarnNoRegistryId";
 
     /// <summary>V1（<c>content_load.json</c>）只能写 archivePath，目录型 mod 无法表达。</summary>
-    public const string WarnNoArchive = "mods.warnNoArchive";
+    public const string WarnNoArchive = "ModsWarnNoArchive";
 
     /// <summary>路径写进加载文件了，但磁盘上找不到（游戏会静默忽略）。</summary>
-    public const string WarnMissingPath = "mods.warnMissingPath";
+    public const string WarnMissingPath = "ModsWarnMissingPath";
 
     /// <summary>游戏只吃 ASCII 路径，而这个 mod 的目录名／文件名带非 ASCII 字符。</summary>
-    public const string WarnNonAsciiPath = "mods.warnNonAsciiPath";
+    public const string WarnNonAsciiPath = "ModsWarnNonAsciiPath";
 
     /// <summary>游戏只吃 ASCII 路径，mod 自身名字没问题，但上层目录（如用户名）带非 ASCII。</summary>
-    public const string WarnNonAsciiParent = "mods.warnNonAsciiParent";
+    public const string WarnNonAsciiParent = "ModsWarnNonAsciiParent";
 
     /// <summary>字符串里有没有非 ASCII 字符（> 0x7F 就算）。</summary>
     public static bool ContainsNonAscii(string? value)

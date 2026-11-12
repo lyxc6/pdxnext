@@ -3,6 +3,7 @@
     x:Class="PdxLauncher.App.Views.AddModsPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:PdxLauncher.App.Controls"
     xmlns:svc="using:PdxLauncher.App.Services"
     xmlns:vm="using:PdxLauncher.App.ViewModels"
     Background="{ThemeResource PdxPageVeilBrush}">
@@ -13,84 +14,129 @@
         由它在自己的上下文里追加并自动保存。
         左栏没有这个页面的菜单项，所以选中态停在「播放集」。
         所有交互控件都带 AutomationProperties.AutomationId，便于 UI 自动化与无障碍。
+
+        版式（4 DIP 网格）：页头 48（返回 32 + 标题 + 「→ 播放集名」同一行 + 计数固定 96）、
+        搜索行 32（搜索框定宽 320 + 排序下拉）、列表 *、底栏 Auto。
+        页头原来把标题和播放集名各占一行，看起来像 5 行；合并后整个页面只有 4 段。
     -->
     <Grid Padding="16" RowSpacing="12">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="48" />
+            <RowDefinition Height="32" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- 页头：返回 + 标题 + 目标播放集 -->
-        <Grid Grid.Row="0" ColumnSpacing="12">
+        <!-- 页头：返回 + 标题 + 目标播放集（同一行的小字），右侧计数固定列宽。 -->
+        <Grid Grid.Row="0" ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="96" />
             </Grid.ColumnDefinitions>
 
             <Button x:Name="btnAddModsBack"
-                    Width="36"
-                    Height="36"
+                    Width="32"
+                    Height="32"
                     Padding="0"
                     VerticalAlignment="Center"
                     Click="OnBackClick"
                     ToolTipService.ToolTip="{x:Bind ViewModel.BackText, Mode=OneWay}"
                     AutomationProperties.AutomationId="btnAddModsBack"
                     AutomationProperties.Name="{x:Bind ViewModel.BackText, Mode=OneWay}">
-                <FontIcon Glyph="&#xE72B;" FontSize="14" />
+                <FontIcon Glyph="&#xE72B;" FontSize="16" />
             </Button>
 
-            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
-                <TextBlock Text="{x:Bind ViewModel.Title, Mode=OneWay}"
+            <!--
+                标题与目标播放集同一行：播放集名用 caption 级小字紧跟在标题后面，
+                不再单独占一行（原来那行让页头看起来像 5 行）。
+                两列都用 Auto + MaxWidth：星号列会把这行小字推到计数旁边，
+                看起来像另一个独立元素，和标题脱节。
+            -->
+            <Grid Grid.Column="1"
+                  VerticalAlignment="Center"
+                  ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock MaxWidth="520"
+                           Text="{x:Bind ViewModel.Title, Mode=OneWay}"
                            Style="{StaticResource SubtitleTextBlockStyle}"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"
                            AutomationProperties.AutomationId="txtAddModsTitle"
                            AutomationProperties.Name="{x:Bind ViewModel.Title, Mode=OneWay}" />
-                <TextBlock Text="{x:Bind ViewModel.TargetText, Mode=OneWay}"
+
+                <TextBlock Grid.Column="1"
+                           MaxWidth="320"
+                           VerticalAlignment="Center"
+                           Text="{x:Bind ViewModel.TargetText, Mode=OneWay}"
                            Style="{StaticResource CaptionTextBlockStyle}"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                           TextWrapping="Wrap"
+                           TextTrimming="CharacterEllipsis"
                            AutomationProperties.AutomationId="txtAddModsTarget"
                            AutomationProperties.Name="{x:Bind ViewModel.TargetText, Mode=OneWay}" />
-            </StackPanel>
+            </Grid>
 
             <ProgressRing Grid.Column="2"
-                          Width="20"
-                          Height="20"
+                          Width="16"
+                          Height="16"
                           VerticalAlignment="Center"
                           IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                           AutomationProperties.AutomationId="ringAddModsBusy"
                           AutomationProperties.Name="{x:Bind L.CommonLoading, Mode=OneWay}" />
+
+            <!--
+                计数列固定 96：数字位数变化（9 → 60 → 387）时不再把标题挤动，
+                文案也收短到「共 N 个可添加」，保证在 96 里不被裁成半截。
+            -->
+            <TextBlock Grid.Column="3"
+                       HorizontalAlignment="Right"
+                       VerticalAlignment="Center"
+                       TextAlignment="Right"
+                       Text="{x:Bind ViewModel.CandidateCountText, Mode=OneWay}"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       TextTrimming="CharacterEllipsis"
+                       AutomationProperties.AutomationId="txtAddModsCandidateCount"
+                       AutomationProperties.Name="{x:Bind ViewModel.CandidateCountText, Mode=OneWay}" />
         </Grid>
 
-        <!-- 工具条：搜索 + 候选计数 -->
-        <Grid Grid.Row="1" ColumnSpacing="12">
+        <!--
+            搜索行：搜索框定宽 320，右侧跟排序下拉。
+            排序框与搜索框同高（PdxDropDown 的 DropDownButton 是 32），不额外占行。
+        -->
+        <Grid Grid.Row="1" ColumnSpacing="8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
             <AutoSuggestBox x:Name="SearchBox"
-                            MinWidth="160"
-                            MaxWidth="320"
+                            Width="320"
                             HorizontalAlignment="Left"
                             VerticalAlignment="Center"
                             QueryIcon="Find"
                             PlaceholderText="{x:Bind ViewModel.SearchPlaceholder, Mode=OneWay}"
-                            Text="{x:Bind ViewModel.SearchText, Mode=OneWay}"
+                            Text="{x:Bind ViewModel.SearchText, Mode=OneTime}"
                             TextChanged="OnSearchTextChanged"
                             QuerySubmitted="OnSearchQuerySubmitted"
                             AutomationProperties.AutomationId="txtAddModsSearch"
                             AutomationProperties.Name="{x:Bind ViewModel.SearchName, Mode=OneWay}" />
 
-            <TextBlock Grid.Column="1"
-                       VerticalAlignment="Center"
-                       Text="{x:Bind ViewModel.CandidateCountText, Mode=OneWay}"
-                       Style="{StaticResource CaptionTextBlockStyle}"
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                       AutomationProperties.AutomationId="txtAddModsCandidateCount"
-                       AutomationProperties.Name="{x:Bind ViewModel.CandidateCountText, Mode=OneWay}" />
+            <controls:PdxDropDown Grid.Column="1"
+                                  x:Name="SortBox"
+                                  MinWidth="150"
+                                  VerticalAlignment="Center"
+                                  ItemsSource="{x:Bind ViewModel.SortModes, Mode=OneWay}"
+                                  SelectedItem="{x:Bind ViewModel.SelectedSortMode, Mode=OneWay}"
+                                  SelectionChanged="OnSortSelectionChanged"
+                                  AutomationProperties.AutomationId="cmbAddModsSort"
+                                  AutomationProperties.Name="{x:Bind ViewModel.SortName, Mode=OneWay}" />
         </Grid>
 
         <!-- 主体：候选列表 + 空状态 -->
@@ -105,28 +151,36 @@
                       AutomationProperties.Name="{x:Bind ViewModel.ListName, Mode=OneWay}">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="vm:AddModRowViewModel">
+                        <!--
+                            列：勾选 24 / 缩略图 40 / 名称 + 徽标 * / 版本 96。
+                            勾选框必须 MinWidth=0：WinUI 的 CheckBox 默认最小宽度 120 DIP，
+                            不压下去会在行首留出 100 多 DIP 的空白（播放集页同一个坑已经踩过）。
+                        -->
                         <Grid ColumnSpacing="8"
-                              Padding="4,8"
+                              Padding="8,4"
+                              MinHeight="56"
                               AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
                               AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="24" />
+                                <ColumnDefinition Width="40" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="96" />
                             </Grid.ColumnDefinitions>
 
                             <!-- 勾选框：勾中的 mod 会被加入播放集 -->
                             <CheckBox Grid.Column="0"
+                                      MinWidth="0"
+                                      Padding="0,0,8,0"
                                       VerticalAlignment="Center"
                                       IsChecked="{x:Bind IsSelected, Mode=TwoWay}"
                                       AutomationProperties.AutomationId="{x:Bind CheckAutomationId, Mode=OneTime}"
                                       AutomationProperties.Name="{x:Bind Name, Mode=OneTime}" />
 
-                            <!-- 缩略图 -->
+                            <!-- 缩略图：固定 40，行高 56 里居中 -->
                             <Border Grid.Column="1"
-                                    Width="{x:Bind ThumbnailSize, Mode=OneTime}"
-                                    Height="{x:Bind ThumbnailSize, Mode=OneTime}"
+                                    Width="40"
+                                    Height="40"
                                     CornerRadius="8"
                                     Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -135,14 +189,35 @@
                                        Stretch="Uniform" />
                             </Border>
 
-                            <!-- 名称 + 副标题（大小 / 注册 id） -->
-                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="4">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="{x:Bind Name, Mode=OneTime}"
+                            <!-- 名称 + 徽标 + 副标题（大小 / 注册 id） -->
+                            <Grid Grid.Column="2" VerticalAlignment="Center" RowSpacing="4">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <!--
+                                    名称与徽标用 Grid 而不是横向 StackPanel：名字过长时按 MaxWidth 截断，
+                                    「订阅 / 本地」徽标始终紧跟其后、不会被顶出可视区。
+                                    名字列取 Auto + MaxWidth（不用星号列）：这一行有 1300 多 DIP 宽，
+                                    星号列会把徽标推到行尾，名字和徽标相隔近千像素，看起来像两个不相干的元素。
+                                -->
+                                <Grid Grid.Row="0" ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <TextBlock MaxWidth="520"
+                                               Text="{x:Bind Name, Mode=OneTime}"
                                                Style="{StaticResource BodyStrongTextBlockStyle}"
-                                               TextTrimming="CharacterEllipsis" />
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{x:Bind Name, Mode=OneTime}" />
+
                                     <!-- 来源徽标：本地 / 订阅，与 Mod 库页同一套画刷。 -->
-                                    <Border VerticalAlignment="Center"
+                                    <Border Grid.Column="1"
+                                            VerticalAlignment="Center"
                                             Padding="8,4"
                                             CornerRadius="4"
                                             Background="{ThemeResource PdxOriginLocalBackgroundBrush}"
@@ -151,7 +226,8 @@
                                                    Style="{StaticResource CaptionTextBlockStyle}"
                                                    Foreground="{ThemeResource PdxOriginLocalForegroundBrush}" />
                                     </Border>
-                                    <Border VerticalAlignment="Center"
+                                    <Border Grid.Column="1"
+                                            VerticalAlignment="Center"
                                             Padding="8,4"
                                             CornerRadius="4"
                                             Background="{ThemeResource PdxOriginSubscribedBackgroundBrush}"
@@ -160,11 +236,55 @@
                                                    Style="{StaticResource CaptionTextBlockStyle}"
                                                    Foreground="{ThemeResource PdxOriginSubscribedForegroundBrush}" />
                                     </Border>
-                                </StackPanel>
-                                <TextBlock Text="{x:Bind SubtitleText, Mode=OneWay}"
+                                </Grid>
+
+                                <TextBlock Grid.Row="1"
+                                           Text="{x:Bind SubtitleText, Mode=OneWay}"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                            TextTrimming="CharacterEllipsis" />
+                            </Grid>
+
+                            <!--
+                                版本列：第一行是 mod 作者版本，第二行是声明支持的游戏版本；
+                                缺失给短横（支持版本）或不显示（mod 版本），偏低于当前游戏版本时加警告图标。
+                            -->
+                            <StackPanel Grid.Column="3"
+                                        Orientation="Horizontal"
+                                        Spacing="4"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center">
+                                <!-- 警告图标只在版本偏低时出现；Id 挂在始终存在的文字上，自动化不受可见性影响。 -->
+                                <FontIcon Glyph="&#xE7BA;"
+                                          FontSize="16"
+                                          VerticalAlignment="Center"
+                                          Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                          Visibility="{x:Bind svc:XamlVisibility.FromBool(HasVersionWarning), Mode=OneWay}"
+                                          ToolTipService.ToolTip="{x:Bind VersionWarningText, Mode=OneWay}"
+                                          AutomationProperties.Name="{x:Bind VersionWarningText, Mode=OneWay}" />
+                                <StackPanel Orientation="Vertical"
+                                            HorizontalAlignment="Right"
+                                            VerticalAlignment="Center">
+                                    <TextBlock Text="{x:Bind ModVersionText, Mode=OneWay}"
+                                               HorizontalAlignment="Right"
+                                               TextAlignment="Right"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{x:Bind ModVersionName, Mode=OneWay}"
+                                               AutomationProperties.AutomationId="{x:Bind ModVersionAutomationId, Mode=OneTime}"
+                                               AutomationProperties.Name="{x:Bind ModVersionName, Mode=OneWay}"
+                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(HasModVersion), Mode=OneWay}" />
+                                    <TextBlock Text="{x:Bind RequiredVersionText, Mode=OneWay}"
+                                               HorizontalAlignment="Right"
+                                               TextAlignment="Right"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                               TextTrimming="CharacterEllipsis"
+                                               ToolTipService.ToolTip="{x:Bind RequiredVersionText, Mode=OneWay}"
+                                               AutomationProperties.AutomationId="{x:Bind VersionAutomationId, Mode=OneTime}"
+                                               AutomationProperties.Name="{x:Bind RequiredVersionText, Mode=OneWay}" />
+                                </StackPanel>
                             </StackPanel>
                         </Grid>
                     </DataTemplate>

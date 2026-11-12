@@ -29,8 +29,17 @@ public sealed class SteamWorkshopClient
     /// <summary>默认每页条数（服务端 <c>num_per_page</c> 上限 50，超过会回落到 30）。</summary>
     public const int DefaultPageSize = 30;
 
+    /// <summary>只抓筛选目录时用的每页条数：目录与页大小无关，10 条的 HTML 更小。</summary>
+    public const int FilterCatalogPageSize = 10;
+
     /// <summary><c>num_per_page</c> 的安全上限。</summary>
     public const int MaxPageSize = 50;
+
+    /// <summary>批量详情单次请求的 id 数（保守值；服务端对 <c>itemcount</c> 没有公开上限）。</summary>
+    public const int DetailBatchSize = 100;
+
+    /// <summary>一次批量详情最多取多少条，避免异常合集把请求数放大到不可控。</summary>
+    public const int MaxDetailBatch = 1000;
 
     /// <summary>appdetails 里代表创意工坊的分类名。</summary>
     public const string WorkshopCategory = "Steam Workshop";
@@ -79,9 +88,17 @@ public sealed class SteamWorkshopClient
             sort = SortValue(SteamWorkshopSort.Trend);
         }
 
+        // 「特别筛选条件」不是普通排序：Steam 网页选中后会把 browsesort 换成
+        // num_parent_items / num_parent_collections（实测 2026-11），这里保持一致。
+        if (query.SpecialFilter != SteamWorkshopSpecialFilter.None)
+        {
+            sort = SpecialFilterSortValue(query.SpecialFilter);
+        }
+
         var builder = new StringBuilder(OnlineHosts.SteamWorkshopBrowseEndpoint.AbsoluteUri);
         builder.Append("?appid=").Append(appId.ToString(CultureInfo.InvariantCulture));
-        builder.Append("&section=readytouseitems&browsesort=").Append(sort);
+        builder.Append("&section=").Append(SectionValue(query.Section));
+        builder.Append("&browsesort=").Append(sort);
         builder.Append("&num_per_page=").Append(pageSize.ToString(CultureInfo.InvariantCulture));
         builder.Append("&p=").Append(page.ToString(CultureInfo.InvariantCulture));
         if (hasKeyword)
@@ -98,23 +115,156 @@ public sealed class SteamWorkshopClient
             builder.Append("&days=").Append(days.ToString(CultureInfo.InvariantCulture));
         }
 
+        AppendFilterParams(builder, query);
+
         return new Uri(builder.ToString());
     }
+
+    /// <summary>
+    /// 追加左侧筛选栏对应的参数。参数名全部来自 2026-11 对 Steam 工坊页的实测：
+    /// 标签是 <c>requiredtags[]</c> / <c>excludedtags[]</c>（值是标签名）；
+    /// DLC 是 <c>appids_required_for_use[]</c> / <c>excluded_appids_required_for_use[]</c>（值是 DLC appid）；
+    /// 「显示不兼容的项目」是 <c>requiredflags[]=incompatible</c>。
+    /// <para>
+    /// 标签与 DLC 都先排序去重再拼：同一个筛选条件不能因为点选顺序不同而生成两个 URL，
+    /// 否则在途请求合并和页缓存都会各存一份。所有值都转义，端点本身仍是固定常量。
+    /// </para>
+    /// </summary>
+    private static void AppendFilterParams(StringBuilder builder, SteamWorkshopQuery query)
+    {
+        AppendRepeated(builder, "requiredtags[]", query.RequiredTags);
+        AppendRepeated(builder, "excludedtags[]", query.ExcludedTags);
+
+        if (query.ShowIncompatible)
+        {
+            builder.Append("&requiredflags%5B%5D=incompatible");
+        }
+
+        if (query.SpecialFilter != SteamWorkshopSpecialFilter.None)
+        {
+            builder.Append("&special_filter=")
+                .Append(((int)query.SpecialFilter).ToString(CultureInfo.InvariantCulture));
+        }
+
+        AppendRepeatedInt(builder, "appids_required_for_use[]", query.RequiredAppIds);
+        AppendRepeatedInt(builder, "excluded_appids_required_for_use[]", query.ExcludedAppIds);
+    }
+
+    private static void AppendRepeated(StringBuilder builder, string name, IReadOnlyList<string>? values)
+    {
+        if (values is null || values.Count == 0)
+        {
+            return;
+        }
+
+        var encodedName = Uri.EscapeDataString(name);
+        foreach (var value in values
+                     .Where(static value => !string.IsNullOrWhiteSpace(value))
+                     .Select(static value => value.Trim())
+                     .Distinct(StringComparer.Ordinal)
+                     .OrderBy(static value => value, StringComparer.Ordinal))
+        {
+            builder.Append('&').Append(encodedName).Append('=').Append(Uri.EscapeDataString(value));
+        }
+    }
+
+    private static void AppendRepeatedInt(StringBuilder builder, string name, IReadOnlyList<int>? values)
+    {
+        if (values is null || values.Count == 0)
+        {
+            return;
+        }
+
+        var encodedName = Uri.EscapeDataString(name);
+        foreach (var value in values
+                     .Where(static value => value > 0)
+                     .Distinct()
+                     .OrderBy(static value => value))
+        {
+            builder.Append('&').Append(encodedName).Append('=')
+                .Append(value.ToString(CultureInfo.InvariantCulture));
+        }
+    }
+
+    /// <summary>「特别筛选条件」对应的 browsesort（实测值）。</summary>
+    private static string SpecialFilterSortValue(SteamWorkshopSpecialFilter filter) => filter switch
+    {
+        SteamWorkshopSpecialFilter.RequiredByOtherItems => "num_parent_items",
+        SteamWorkshopSpecialFilter.InCollections => "num_parent_collections",
+        _ => "trend",
+    };
 
     /// <summary>浏览一页创意工坊。</summary>
     /// <param name="appId">Steam appid。</param>
     /// <param name="query">查询条件。</param>
     /// <param name="cancellationToken">取消令牌。</param>
+    /// <param name="bypassCoalescing">
+    /// true 表示这次请求不复用同 URI 的在途请求。刷新 / 回车搜索 / 换筛选都走这条：
+    /// 旧请求可能卡在旧代理或旧连接上，合并它等于「点刷新没有任何新请求」，界面会一直停在加载。
+    /// 强制请求会用当前连接池重新发一次，旧结果由查询代次丢弃。
+    /// </param>
     public Task<AppResult<SteamWorkshopPage>> BrowseAsync(
         int appId,
         SteamWorkshopQuery query,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool bypassCoalescing = false)
     {
         ArgumentNullException.ThrowIfNull(query);
+
+        if (bypassCoalescing)
+        {
+            return BrowseCoreAsync(appId, query, cancellationToken);
+        }
 
         // key 用完整的列表 URI：翻页、换排序、换关键词都是不同请求，绝不能并成一个。
         var key = "browse:" + appId.ToString(CultureInfo.InvariantCulture) + "|" + BuildBrowseUri(appId, query).AbsoluteUri;
         return _coalesce.RunAsync(key, ct => BrowseCoreAsync(appId, query, ct), cancellationToken);
+    }
+
+    /// <summary>
+    /// 只取筛选目录（类别 / 更新兼容性 / 所需 DLC）。
+    /// <para>
+    /// Steam 没有单独的标签目录接口：改标签时页面自身也是重新抓整页
+    /// <c>/workshop/browse/</c>（2026-11 实测）。这里用最小页（<c>num_per_page=10</c>）
+    /// 把 HTML 从约 555 KB 降到约 388 KB，并且和列表请求共用同一个在途合并器。
+    /// </para>
+    /// </summary>
+    /// <param name="appId">Steam appid。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public Task<AppResult<IReadOnlyList<SteamWorkshopFilterGroup>>> GetFilterGroupsAsync(
+        int appId,
+        CancellationToken cancellationToken)
+    {
+        var key = "filter-groups:" + appId.ToString(CultureInfo.InvariantCulture);
+        return _coalesce.RunAsync(key, ct => GetFilterGroupsCoreAsync(appId, ct), cancellationToken);
+    }
+
+    private async Task<AppResult<IReadOnlyList<SteamWorkshopFilterGroup>>> GetFilterGroupsCoreAsync(
+        int appId,
+        CancellationToken cancellationToken)
+    {
+        var query = new SteamWorkshopQuery(
+            null,
+            SteamWorkshopSort.Trend,
+            Page: 0,
+            PageSize: FilterCatalogPageSize);
+        var browse = await BrowseAsync(appId, query, cancellationToken).ConfigureAwait(false);
+        if (!browse.IsSuccess || browse.Value is null)
+        {
+            return AppResult<IReadOnlyList<SteamWorkshopFilterGroup>>.Fail(
+                browse.Kind,
+                browse.ErrorMessage ?? "steam-workshop-groups");
+        }
+
+        var groups = browse.Value.Groups;
+        if (groups.Count == 0)
+        {
+            return AppResult<IReadOnlyList<SteamWorkshopFilterGroup>>.Fail(
+                ErrorKind.Unsupported,
+                "steam-workshop-groups-empty");
+        }
+
+        return AppResult<IReadOnlyList<SteamWorkshopFilterGroup>>.Ok(groups);
     }
 
     private async Task<AppResult<SteamWorkshopPage>> BrowseCoreAsync(
@@ -219,6 +369,87 @@ public sealed class SteamWorkshopClient
         {
             _logger.Warn("Steam 创意工坊详情解析失败: " + ex.Message);
             return AppResult<SteamWorkshopItemDetail>.Fail(ErrorKind.Io, "steam-workshop-detail-bad-json");
+        }
+    }
+
+    /// <summary>
+    /// 批量取多个条目的详情（合集子项用）。
+    /// <para>
+    /// <c>GetPublishedFileDetails</c> 支持一次请求多个 id（<c>itemcount</c> +
+    /// <c>publishedfileids[i]</c>），合集有几十项时比逐条请求省掉 N-1 次往返。
+    /// 单批上限取 100（保守值），超过就分多批串行取；主机限流层本来也按 250ms 间隔排。
+    /// </para>
+    /// </summary>
+    /// <param name="publishedFileIds">要取的条目 id 列表（会自动去空白、去重、截断到 <see cref="MaxDetailBatch"/>）。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public Task<AppResult<IReadOnlyList<SteamWorkshopItemDetail>>> GetDetailsAsync(
+        IReadOnlyList<string> publishedFileIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(publishedFileIds);
+
+        var ids = publishedFileIds
+            .Where(static id => !string.IsNullOrWhiteSpace(id))
+            .Select(static id => id.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .Take(MaxDetailBatch)
+            .ToArray();
+
+        if (ids.Length == 0)
+        {
+            return Task.FromResult(AppResult<IReadOnlyList<SteamWorkshopItemDetail>>.Ok([]));
+        }
+
+        var key = "details:" + string.Join('|', ids);
+        return _coalesce.RunAsync(key, ct => GetDetailsCoreAsync(ids, ct), cancellationToken);
+    }
+
+    private async Task<AppResult<IReadOnlyList<SteamWorkshopItemDetail>>> GetDetailsCoreAsync(
+        string[] ids,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var details = new List<SteamWorkshopItemDetail>(ids.Length);
+            for (var offset = 0; offset < ids.Length; offset += DetailBatchSize)
+            {
+                var count = Math.Min(DetailBatchSize, ids.Length - offset);
+                var body = new StringBuilder("itemcount=").Append(count.ToString(CultureInfo.InvariantCulture));
+                for (var index = 0; index < count; index++)
+                {
+                    body.Append("&publishedfileids[")
+                        .Append(index.ToString(CultureInfo.InvariantCulture))
+                        .Append("]=")
+                        .Append(Uri.EscapeDataString(ids[offset + index]));
+                }
+
+                var text = await _http
+                    .PostFormAsync(OnlineHosts.SteamPublishedFileDetailsEndpoint, body.ToString(), cancellationToken)
+                    .ConfigureAwait(false);
+                details.AddRange(ParseDetails(text));
+            }
+
+            return AppResult<IReadOnlyList<SteamWorkshopItemDetail>>.Ok(details);
+        }
+        catch (NetworkTimeoutException ex)
+        {
+            _logger.Warn("Steam 创意工坊批量详情连接失败: " + ex.Message);
+            return AppResult<IReadOnlyList<SteamWorkshopItemDetail>>.Fail(ErrorKind.Unknown, "steam-workshop-network");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.Warn("Steam 创意工坊批量详情连接超时");
+            return AppResult<IReadOnlyList<SteamWorkshopItemDetail>>.Fail(ErrorKind.Unknown, "steam-workshop-network");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.Warn("Steam 创意工坊批量详情请求失败: " + ex.Message);
+            return AppResult<IReadOnlyList<SteamWorkshopItemDetail>>.Fail(ErrorKind.Unknown, "steam-workshop-detail-http");
+        }
+        catch (JsonException ex)
+        {
+            _logger.Warn("Steam 创意工坊批量详情解析失败: " + ex.Message);
+            return AppResult<IReadOnlyList<SteamWorkshopItemDetail>>.Fail(ErrorKind.Io, "steam-workshop-detail-bad-json");
         }
     }
 
@@ -560,26 +791,104 @@ public sealed class SteamWorkshopClient
                 return (null, result);
             }
 
-            var detail = new SteamWorkshopItemDetail(
-                PublishedFileId: StringOf(item, "publishedfileid") ?? string.Empty,
-                Title: StringOf(item, "title") ?? string.Empty,
-                Description: StringOf(item, "description") ?? StringOf(item, "file_description") ?? string.Empty,
-                PreviewUrl: StringOf(item, "preview_url"),
-                FileSizeBytes: LongOf(item, "file_size"),
-                CreatedUtc: FromUnixSeconds(LongOf(item, "time_created")),
-                UpdatedUtc: FromUnixSeconds(LongOf(item, "time_updated")),
-                Filename: StringOf(item, "filename"),
-                CreatorSteamId: StringOf(item, "creator"),
-                Tags: TagsOf(item),
-                Views: LongOf(item, "views"),
-                LifetimeSubscriptions: LongOf(item, "lifetime_subscriptions"));
-
-            return (detail, result);
+            return (ParseDetailNode(item), result);
         }
         catch (JsonException)
         {
             return (null, ResultUnknown);
         }
+    }
+
+    /// <summary>
+    /// 批量解析 <c>GetPublishedFileDetails</c> 响应（合集子项用）。
+    /// 只返回 <c>result=1</c> 的条目，顺序与响应一致；解析失败返回空列表，绝不抛异常。
+    /// </summary>
+    /// <param name="json">响应正文。</param>
+    public static IReadOnlyList<SteamWorkshopItemDetail> ParseDetails(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return [];
+        }
+
+        try
+        {
+            if (JsonNode.Parse(json)?["response"]?["publishedfiledetails"] is not JsonArray array
+                || array.Count == 0)
+            {
+                return [];
+            }
+
+            var details = new List<SteamWorkshopItemDetail>(array.Count);
+            foreach (var node in array)
+            {
+                if (node is not JsonObject item)
+                {
+                    continue;
+                }
+
+                var raw = LongOf(item, "result");
+                var result = raw > 0 ? (int)Math.Min(raw, int.MaxValue) : 1;
+                if (result == 1)
+                {
+                    details.Add(ParseDetailNode(item));
+                }
+            }
+
+            return details;
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>把响应里的一个条目节点映射成详情模型。</summary>
+    private static SteamWorkshopItemDetail ParseDetailNode(JsonObject item) => new(
+        PublishedFileId: StringOf(item, "publishedfileid") ?? string.Empty,
+        Title: StringOf(item, "title") ?? string.Empty,
+        Description: StringOf(item, "description") ?? StringOf(item, "file_description") ?? string.Empty,
+        PreviewUrl: StringOf(item, "preview_url"),
+        FileSizeBytes: LongOf(item, "file_size"),
+        CreatedUtc: FromUnixSeconds(LongOf(item, "time_created")),
+        UpdatedUtc: FromUnixSeconds(LongOf(item, "time_updated")),
+        Filename: StringOf(item, "filename"),
+        CreatorSteamId: StringOf(item, "creator"),
+        Tags: TagsOf(item),
+        Views: LongOf(item, "views"),
+        LifetimeSubscriptions: LongOf(item, "lifetime_subscriptions"),
+        FileType: (int)LongOf(item, "file_type"),
+        Children: ChildrenOf(item),
+        ConsumerAppId: (int)LongOf(item, "consumer_app_id"));
+
+    /// <summary>取合集的子项列表（<c>children[].publishedfileid</c> + <c>sortorder</c>）。</summary>
+    private static IReadOnlyList<SteamWorkshopCollectionChild> ChildrenOf(JsonObject item)
+    {
+        if (item["children"] is not JsonArray children)
+        {
+            return [];
+        }
+
+        var list = new List<SteamWorkshopCollectionChild>(children.Count);
+        foreach (var entry in children)
+        {
+            if (entry is not JsonObject child)
+            {
+                continue;
+            }
+
+            var id = StringOf(child, "publishedfileid");
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                continue;
+            }
+
+            list.Add(new SteamWorkshopCollectionChild(id, (int)LongOf(child, "sortorder")));
+        }
+
+        // 服务端偶尔不按 sortorder 返回；合集展示顺序以它为准，所以这里排一次。
+        list.Sort(static (left, right) => left.SortOrder.CompareTo(right.SortOrder));
+        return list;
     }
 
     /// <summary>响应里既没有 result 字段、也解析不出条目时用的哨兵值。</summary>
@@ -617,6 +926,10 @@ public sealed class SteamWorkshopClient
 
     private static bool SupportsDays(SteamWorkshopSort sort) =>
         sort is SteamWorkshopSort.Trend or SteamWorkshopSort.TopRated;
+
+    /// <summary>浏览区段对应的 <c>section</c> 值（Steam 网页实测值）。</summary>
+    private static string SectionValue(SteamWorkshopSection section) =>
+        section == SteamWorkshopSection.Collections ? "collections" : "readytouseitems";
 
     private static string SortValue(SteamWorkshopSort sort) => sort switch
     {

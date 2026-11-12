@@ -94,6 +94,17 @@ public static class SteamWorkshopGames
         return Known.TryGetValue(canonical, out var hasWorkshop) ? hasWorkshop : null;
     }
 
+    /// <summary>
+    /// 这个游戏能不能在启动器里打开 Steam 创意工坊（按内置表）。
+    /// <para>
+    /// 与「能不能管理游戏内容」是两件事：仅启动的游戏（Cities: Skylines 1 / Prison Architect）
+    /// 也有工坊，浏览与订阅只碰 Steam、不碰游戏目录，所以照样放行；
+    /// 未登记的游戏返回 false，由页面自己去探测。
+    /// </para>
+    /// </summary>
+    /// <param name="gameId">启动器内部的游戏 id。</param>
+    public static bool HasWorkshop(string? gameId) => TryGet(gameId) == true;
+
     /// <summary>全部已登记的 gameId（便于日志与自检，不含顺序语义）。</summary>
     public static IReadOnlyCollection<string> All => Known.Keys;
 

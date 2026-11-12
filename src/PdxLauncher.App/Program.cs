@@ -2,7 +2,6 @@ namespace PdxLauncher.App;
 
 using System;
 using System.IO;
-using System.Threading;
 
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -23,20 +22,13 @@ using PdxLauncher.Core.Steam;
 public static class Program
 {
     /// <summary>
-    /// 安装器用这个 mutex 判断启动器是否仍在运行（`AppMutex`），升级/卸载前可以提示关闭。
-    /// 只由正常 UI 进程创建；Steam 宿主子进程是短命的，不能占用它。
-    /// </summary>
-    private static Mutex? _appMutex;
-
-    /// <summary>
     /// 更新流程在启动安装器前主动释放 mutex：安装器启动时若仍看到 mutex 会直接判定
     /// “程序正在运行”并退出，等不到 CloseApplications 去关窗口。
     /// </summary>
-    public static void ReleaseAppMutex()
-    {
-        var mutex = Interlocked.Exchange(ref _appMutex, null);
-        mutex?.Dispose();
-    }
+    public static void ReleaseAppMutex() => SingleInstanceGuard.ReleaseMutex();
+
+    /// <summary>更新安装器取消 / 启动失败后重新拿回单实例锁；false 表示已被其它实例占用。</summary>
+    public static bool ReacquireAppMutex() => SingleInstanceGuard.TryReacquire();
 
     /// <summary>入口。</summary>
     [STAThread]
@@ -49,7 +41,10 @@ public static class Program
         {
             try
             {
-                return SteamHostRunner.Run(args, Console.Out, Console.Error);
+                // 宿主与客户端之间是「一行 JSON」的管道协议，两边都按 UTF-8 读写。
+                // 子进程的管道默认可能跟随系统代码页（GBK），中文错误串会乱码，所以先钉死编码。
+                ConfigureHostConsole();
+                return SteamHostRunner.Run(args, Console.In, Console.Out, Console.Error);
             }
             catch (Exception ex)
             {
@@ -66,8 +61,18 @@ public static class Program
             }
         }
 
-        // 保持到进程结束；安装器/uninstaller 通过同名 mutex 判断主程序是否还在运行。
-        _appMutex = new Mutex(initiallyOwned: false, name: @"Local\PdxNext.App");
+        // 单实例：第二个 UI 进程只负责把第一个实例的窗口叫到前台，然后退出。
+        // 拿不到锁且确认已有实例时，优先走管道；管道连不上再弹一句「已在运行」。
+        if (!SingleInstanceGuard.TryAcquire(out var alreadyRunning))
+        {
+            if (alreadyRunning && SingleInstanceGuard.SignalExistingInstance())
+            {
+                return 0;
+            }
+
+            SingleInstanceGuard.ShowAlreadyRunning();
+            return 0;
+        }
 
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(p =>
@@ -78,5 +83,23 @@ public static class Program
         });
 
         return 0;
+    }
+
+    /// <summary>
+    /// 宿主子进程的 stdin/stdout 固定 UTF-8（无 BOM）。没控制台可写（管道异常）时保持默认，
+    /// 结果码仍然不变 —— 编码问题最多让错误文案乱码，不该让宿主直接失败。
+    /// </summary>
+    private static void ConfigureHostConsole()
+    {
+        try
+        {
+            var encoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+            Console.InputEncoding = encoding;
+            Console.OutputEncoding = encoding;
+        }
+        catch (Exception ex) when (ex is IOException or PlatformNotSupportedException or ArgumentException)
+        {
+            // 保持默认编码；调用方只看结果行的前缀与 JSON。
+        }
     }
 }

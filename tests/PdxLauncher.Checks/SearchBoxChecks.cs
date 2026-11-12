@@ -25,6 +25,12 @@ public static class SearchBoxChecks
         ("ModStudioPage.xaml", ["modStudioSearch"]),
     ];
 
+    /// <summary>
+    /// Text 允许用 OneTime 的页面：这些页面的输入由代码后置单向写回 ViewModel，绑定只给初始值，
+    /// 不再反写控件。断言仍要求「有 Text 绑定」，只是模式不同——其余页面保持 OneWay。
+    /// </summary>
+    private static readonly string[] OneTimeTextPages = ["AddModsPage.xaml"];
+
     /// <summary>带搜索框的页面及其代码后置处理器；处理器必须带 args.Reason 守卫。</summary>
     private static readonly (string CodeBehind, string[] Handlers)[] Handlers =
     [
@@ -57,9 +63,10 @@ public static class SearchBoxChecks
             }
 
             var xaml = File.ReadAllText(path);
+            var oneTime = OneTimeTextPages.Contains(xamlFile, StringComparer.Ordinal);
             foreach (var automationId in automationIds)
             {
-                CheckSearchBox(xamlFile, xaml, automationId);
+                CheckSearchBox(xamlFile, xaml, automationId, oneTime);
             }
         }
 
@@ -84,8 +91,11 @@ public static class SearchBoxChecks
         return ChecksContext.Failures - before;
     }
 
-    /// <summary>一个搜索框：是 AutoSuggestBox、带放大镜、Text 走 OneWay、挂了两个处理器。</summary>
-    private static void CheckSearchBox(string xamlFile, string xaml, string automationId)
+    /// <summary>一个搜索框：是 AutoSuggestBox、带放大镜、Text 走 OneWay/OneTime、挂了两个处理器。</summary>
+    /// <param name="oneTime">
+    /// true 表示该页的 Text 绑定允许是 OneTime：输入由代码后置单向写回，绑定不再反写控件。
+    /// </param>
+    private static void CheckSearchBox(string xamlFile, string xaml, string automationId, bool oneTime)
     {
         var label = "搜索框: " + xamlFile + " " + automationId;
         var element = FindElement(xaml, automationId);
@@ -103,9 +113,11 @@ public static class SearchBoxChecks
             element.Contains("QueryIcon=\"Find\"", StringComparison.Ordinal),
             element);
         ChecksContext.Check(
-            label + " 文本绑定是 OneWay（输入由代码后置写回）",
+            label + (oneTime
+                ? " 文本绑定是 OneTime（输入由代码后置单向写回，绑定不反写控件）"
+                : " 文本绑定是 OneWay（输入由代码后置写回）"),
             element.Contains("Text=\"{x:Bind ViewModel.", StringComparison.Ordinal)
-                && element.Contains("Mode=OneWay", StringComparison.Ordinal),
+                && element.Contains(oneTime ? "Mode=OneTime" : "Mode=OneWay", StringComparison.Ordinal),
             element);
         ChecksContext.Check(
             label + " 挂 TextChanged",

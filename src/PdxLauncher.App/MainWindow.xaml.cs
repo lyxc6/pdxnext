@@ -15,6 +15,7 @@ using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
 using PdxLauncher.App.Views;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Online;
 
 /// <summary>
 /// 主窗口：系统标题栏（TitleBar 控件）+ 左侧 NavigationView + 右侧 Frame。
@@ -63,6 +64,12 @@ public sealed partial class MainWindow : Window
     /// <summary>「添加模组」子页；离开它就 detach 事件，避免持有已丢弃页面的引用。</summary>
     private AddModsPage? _addModsPage;
 
+    /// <summary>存档页；它会请求打开「备份」子页。</summary>
+    private SavesPage? _savesPage;
+
+    /// <summary>「备份」子页；离开它就 detach 事件，避免持有已丢弃页面的引用。</summary>
+    private SaveBackupsPage? _saveBackupsPage;
+
     private BitmapLoader? _bitmapLoader;
     private CancellationTokenSource? _backdropLifetime;
 
@@ -99,6 +106,12 @@ public sealed partial class MainWindow : Window
     public Localizer L => Localizer.Instance;
 
     /// <summary>
+    /// XAML 里取外壳数据的入口：左栏「游戏库」徽标直接绑 <see cref="ShellViewModel.GamesCount"/>
+    /// 与 <see cref="ShellViewModel.LibraryBadgeName"/>。
+    /// </summary>
+    public ShellViewModel ViewModel { get; }
+
+    /// <summary>
     /// 全局确认浮层：所有「确认 / 取消」对话框都走它，
     /// 这样「取消」在左、「确认（主色）」在右在所有页面保持一致。
     /// </summary>
@@ -115,6 +128,7 @@ public sealed partial class MainWindow : Window
 
         _navigation = new NavigationService(AppServices.Logger);
         _viewModel = new ShellViewModel(_navigation);
+        ViewModel = _viewModel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         _viewModel.NavigationRequested += OnNavigationRequested;
 
@@ -209,14 +223,21 @@ public sealed partial class MainWindow : Window
             _navigation.Frame = ContentFrame;
             NavigateTo(NavigationService.HomeTag);
             UpdateTitleBar();
+            AppServices.Breadcrumb("启动 主窗导航完成");
+            var startupWatch = System.Diagnostics.Stopwatch.StartNew();
 
             // 窗口先显示出来，这里才开始扫描 Steam 库（纯本地 IO，不联网）。
+            AppServices.Breadcrumb("启动 游戏发现开始");
             await _viewModel.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
+            AppServices.Breadcrumb("启动 游戏发现完成（" + startupWatch.ElapsedMilliseconds + " ms）");
             UpdateTitleBar();
             UpdateContentNavState();
 
             // 先把整窗背景画出来，再落到主页，避免首页出现时底色闪一下。
+            AppServices.Breadcrumb("启动 背景开始");
             await UpdateBackdropAsync().ConfigureAwait(true);
+            AppServices.Breadcrumb("启动 背景完成（" + startupWatch.ElapsedMilliseconds + " ms）");
+            AppServices.Logger.Info("启动首帧阶段耗时: 游戏发现+背景 " + startupWatch.ElapsedMilliseconds + " ms");
 
             // 主页是当前游戏页：没发现任何游戏时它没内容可看，退回游戏库引导用户。
             if (AppServices.CurrentGame is null)
@@ -304,6 +325,7 @@ public sealed partial class MainWindow : Window
         if (_workshopDetailPage is not null)
         {
             _workshopDetailPage.NavigationRequested -= OnPageNavigationRequested;
+            _workshopDetailPage.DetailRequested -= OnWorkshopDetailRequested;
             _workshopDetailPage = null;
         }
 
@@ -318,6 +340,18 @@ public sealed partial class MainWindow : Window
             _addModsPage.NavigationRequested -= OnPageNavigationRequested;
             _addModsPage.ModsSelected -= OnAddModsSelected;
             _addModsPage = null;
+        }
+
+        if (_savesPage is not null)
+        {
+            _savesPage.BackupsRequested -= OnSaveBackupsRequested;
+            _savesPage = null;
+        }
+
+        if (_saveBackupsPage is not null)
+        {
+            _saveBackupsPage.NavigationRequested -= OnPageNavigationRequested;
+            _saveBackupsPage = null;
         }
 
         if (content is GameLibraryPage libraryPage)
@@ -343,6 +377,7 @@ public sealed partial class MainWindow : Window
         {
             _workshopDetailPage = workshopDetailPage;
             workshopDetailPage.NavigationRequested += OnPageNavigationRequested;
+            workshopDetailPage.DetailRequested += OnWorkshopDetailRequested;
         }
 
         if (content is ModsPage modsPage)
@@ -356,6 +391,43 @@ public sealed partial class MainWindow : Window
             _addModsPage = addModsPage;
             addModsPage.NavigationRequested += OnPageNavigationRequested;
             addModsPage.ModsSelected += OnAddModsSelected;
+        }
+
+        if (content is SavesPage savesPage)
+        {
+            _savesPage = savesPage;
+            savesPage.BackupsRequested += OnSaveBackupsRequested;
+        }
+
+        if (content is SaveBackupsPage saveBackupsPage)
+        {
+            _saveBackupsPage = saveBackupsPage;
+            saveBackupsPage.NavigationRequested += OnPageNavigationRequested;
+        }
+    }
+
+    /// <summary>
+    /// 存档页要求打开「备份」子页（页面自己不持导航职责）。
+    /// 故意不同步左栏选中项：子页没有菜单项，选中态应停在「存档」。
+    /// </summary>
+    private void OnSaveBackupsRequested(object? sender, SaveBackupsNavigationRequest request)
+    {
+        try
+        {
+            if (!_navigation.Navigate(NavigationService.SaveBackupsTag, request))
+            {
+                if (AppServices.IsInitialized)
+                {
+                    AppServices.Logger.Warn("导航到备份子页失败: " + request.Game.GameId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Error("导航到备份子页异常: " + request.Game.GameId, ex);
+            }
         }
     }
 
@@ -526,6 +598,7 @@ public sealed partial class MainWindow : Window
             if (_workshopDetailPage is not null)
             {
                 _workshopDetailPage.NavigationRequested -= OnPageNavigationRequested;
+                _workshopDetailPage.DetailRequested -= OnWorkshopDetailRequested;
                 _workshopDetailPage = null;
             }
 
@@ -540,6 +613,18 @@ public sealed partial class MainWindow : Window
                 _addModsPage.NavigationRequested -= OnPageNavigationRequested;
                 _addModsPage.ModsSelected -= OnAddModsSelected;
                 _addModsPage = null;
+            }
+
+            if (_savesPage is not null)
+            {
+                _savesPage.BackupsRequested -= OnSaveBackupsRequested;
+                _savesPage = null;
+            }
+
+            if (_saveBackupsPage is not null)
+            {
+                _saveBackupsPage.NavigationRequested -= OnPageNavigationRequested;
+                _saveBackupsPage = null;
             }
 
             if (!AppServices.IsInitialized)
@@ -705,8 +790,10 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 内容管理导航项（播放集 / Mod 库 / DLC）只在当前游戏能管理内容时才出现；
-    /// 仅启动的游戏（如 Prison Architect）下直接隐藏，并把停在这些页上的用户送回主页。
+    /// 内容管理导航项：播放集 / Mod 库 / Mod 创建 / DLC 只在当前游戏能管理内容时才出现；
+    /// 创意工坊另算——仅启动的游戏（Cities: Skylines 1 / Prison Architect）也能浏览与订阅 Steam 工坊，
+    /// 那里只碰 Steam、不碰游戏目录，所以按内置表单独放行。
+    /// 落在被隐藏页面上的用户会被送回主页。
     /// </summary>
     private void UpdateContentNavState()
     {
@@ -714,15 +801,17 @@ public sealed partial class MainWindow : Window
         {
             var game = AppServices.IsInitialized ? AppServices.CurrentGame : null;
             var manageable = game is null || game.SupportsContentManagement;
+            var workshopAvailable = manageable
+                || (game is not null && SteamWorkshopGames.HasWorkshop(game.GameId));
 
-            // 隐藏而不是置灰：置灰的三项看起来像坏了，而且禁用的 NavigationViewItem 不弹 ToolTip，
+            // 隐藏而不是置灰：置灰的项看起来像坏了，而且禁用的 NavigationViewItem 不弹 ToolTip，
             // 只能在左栏底部塞一段解释文字（窄列折行更难看）。干脆不显示。
             var contentVisibility = manageable ? Visibility.Visible : Visibility.Collapsed;
             NavPlaySets.Visibility = contentVisibility;
             NavModLibrary.Visibility = contentVisibility;
             NavModStudio.Visibility = contentVisibility;
-            NavWorkshop.Visibility = contentVisibility;
             NavDlc.Visibility = contentVisibility;
+            NavWorkshop.Visibility = workshopAvailable ? Visibility.Visible : Visibility.Collapsed;
 
             if (manageable)
             {
@@ -733,8 +822,9 @@ public sealed partial class MainWindow : Window
                 && (string.Equals(tag, NavigationService.PlaySetsTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.ModLibraryTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.ModStudioTag, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(tag, NavigationService.WorkshopTag, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(tag, NavigationService.WorkshopDetailTag, StringComparison.OrdinalIgnoreCase)
+                    || (!workshopAvailable
+                        && (string.Equals(tag, NavigationService.WorkshopTag, StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(tag, NavigationService.WorkshopDetailTag, StringComparison.OrdinalIgnoreCase)))
                     || string.Equals(tag, NavigationService.AddModsTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.DlcTag, StringComparison.OrdinalIgnoreCase)))
             {
@@ -757,15 +847,29 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        // 排队而不是就地切页：用户点导航时，上一个页面可能正处在秒级的加载里
+        // （工坊首屏、mod 扫描）。High 优先级让这次点击在加载的下一个空隙就插进去，
+        // 而不是等整段加载跑完才「补」一次跳转。
+        if (!DispatcherQueue.TryEnqueue(DispatcherQueuePriority.High, () => NavigateCore(tag)))
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Warn("无法派发导航: " + tag);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 真正切页。失败或异常除了写日志，还要给用户一条可见提示：
+    /// 只写日志的话，界面表现就是「点了没反应」，和线程卡死没法区分。
+    /// </summary>
+    private void NavigateCore(string tag)
+    {
         try
         {
             if (!_navigation.Navigate(tag))
             {
-                if (AppServices.IsInitialized)
-                {
-                    AppServices.Logger.Warn("导航失败: " + tag);
-                }
-
+                ReportNavigationFailure(tag);
                 return;
             }
 
@@ -777,7 +881,30 @@ public sealed partial class MainWindow : Window
             {
                 AppServices.Logger.Error("导航异常: " + tag, ex);
             }
+
+            ReportNavigationFailure(tag);
         }
+    }
+
+    /// <summary>导航失败提示：复用窗口上已有的 <see cref="ConfirmOverlay"/>，不另造弹窗机制。</summary>
+    private void ReportNavigationFailure(string tag)
+    {
+        if (AppServices.IsInitialized)
+        {
+            AppServices.Logger.Warn("导航失败: " + tag);
+        }
+
+        if (ConfirmOverlay.Host is null)
+        {
+            // 窗口还没建好（启动早期的导航）：没有宿主就只剩日志，此时用户也还没在点。
+            return;
+        }
+
+        // 浮层只有一层：连点失败时后到的会按「取消」立刻返回，不会叠出多个框。
+        _ = ConfirmOverlay.ShowMessage(
+            Localizer.Instance.T(Keys.ShellNavFailedTitle),
+            Localizer.Instance.T(Keys.ShellNavFailedBody),
+            Localizer.Instance.T(Keys.CommonClose));
     }
 
     private void SyncSelectedNavItem(string tag)

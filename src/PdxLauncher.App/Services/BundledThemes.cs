@@ -7,14 +7,14 @@ using PdxLauncher.Core.Online;
 /// <summary>
 /// 随程序发布的自带游戏美术。
 /// <para>
-/// 目前只有 EU5：它的安装目录里没有 launcher-settings.json，也没有任何主题素材，
-/// 官方美术只在 Steam CDN 上（<c>library_hero_2x.jpg</c> 是唯一能拿到的原图，
-/// <c>library_600x900 / logo.png / header.jpg</c> 全部 404）。
-/// 所以把合成好的背景图随程序发布，主题解析时当「层 2.5」用。
+/// 不再只认 EU5：任何游戏只要安装包带了 <c>Assets\themes\&lt;gameId&gt;\background.jpg</c>，
+/// 就把它当作「层 2.5」的背景交给主题解析。这样服务端没有记录、安装目录也没有主题素材的游戏
+/// 不会掉进纯色底，同时内置素材可以随安装包一起更新（不必等客户端代码发版）。
 /// </para>
 /// <para>
 /// 文件位置：<c>&lt;程序目录&gt;\Assets\themes\&lt;gameId&gt;\background.jpg</c>；
-/// 缺失时返回 null（调用方回落到内置占位图），绝不抛异常。
+/// 同目录的 <c>logo.png</c> 存在时作为字标（EU5 官方徽标），不存在则 Logo 保持 null。
+/// 背景缺失或 gameId 非法时返回 null（调用方回落到内置占位图），绝不抛异常。
 /// </para>
 /// </summary>
 internal sealed class BundledThemes : IBundledThemeSource
@@ -22,33 +22,42 @@ internal sealed class BundledThemes : IBundledThemeSource
     private const string AssetsFolderName = "Assets";
     private const string ThemeFolderName = "themes";
     private const string BackgroundFileName = "background.jpg";
-    private const string Eu5GameId = "eu5";
+    private const string LogoFileName = "logo.png";
+
+    /// <summary>素材根目录（自检可传临时目录；生产走程序目录）。</summary>
+    private readonly string _baseDirectory;
+
+    /// <summary>默认从程序目录读；传入目录只给自检用。</summary>
+    public BundledThemes(string? baseDirectory = null) =>
+        _baseDirectory = baseDirectory ?? AppContext.BaseDirectory;
 
     /// <inheritdoc />
     public ThemeSpec? TryResolve(GameInstallation game)
     {
         ArgumentNullException.ThrowIfNull(game);
 
-        if (!string.Equals(game.GameId, Eu5GameId, StringComparison.OrdinalIgnoreCase))
+        if (!IsSafeGameId(game.GameId))
         {
             return null;
         }
 
-        var background = Path.Combine(
-            AppContext.BaseDirectory,
+        var themeDirectory = Path.Combine(
+            _baseDirectory,
             AssetsFolderName,
             ThemeFolderName,
-            Eu5GameId,
-            BackgroundFileName);
+            game.GameId);
+        var background = Path.Combine(themeDirectory, BackgroundFileName);
 
         if (!File.Exists(background))
         {
             return null;
         }
 
+        var logo = Path.Combine(themeDirectory, LogoFileName);
+
         return new ThemeSpec(
             background,
-            Logo: null,
+            Logo: File.Exists(logo) ? logo : null,
             AppIcon: null,
             AppTaskbarIcon: null,
             ButtonBackground: null,
@@ -59,5 +68,22 @@ internal sealed class BundledThemes : IBundledThemeSource
             ThemeResolver.FontWeightFallback,
             TextShadow: null,
             ThemeAssetSource.Bundled);
+    }
+
+    /// <summary>gameId 来自本地游戏库但仍是外部输入：禁止路径分隔符与上跳目录。</summary>
+    private static bool IsSafeGameId(string? gameId)
+    {
+        if (string.IsNullOrWhiteSpace(gameId))
+        {
+            return false;
+        }
+
+        if (gameId.Contains("..", StringComparison.Ordinal)
+            || gameId.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+        {
+            return false;
+        }
+
+        return gameId is not "." and not "..";
     }
 }

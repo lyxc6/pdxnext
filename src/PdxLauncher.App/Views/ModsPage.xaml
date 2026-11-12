@@ -37,6 +37,27 @@
              放在资源里，两个 ListView 共用同一套交互，改一处两栏同步。 -->
         <DataTemplate x:Key="PlaysetModRowTemplate" x:DataType="vm:ModRowViewModel">
             <Grid ColumnSpacing="8" Padding="4,8">
+                <!-- 右键菜单只做「定位 / 打开 / 复制」；移除是即时自动保存、没有二次确认，
+                     绝不放进菜单，避免误触即删。 -->
+                <Grid.ContextFlyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem
+                            Text="{x:Bind RowMenuOpenFolderText, Mode=OneWay}"
+                            IsEnabled="{x:Bind HasLocalFiles, Mode=OneWay}"
+                            Click="OnRowOpenFolderClick"
+                            AutomationProperties.AutomationId="{x:Bind OpenFolderMenuAutomationId, Mode=OneTime}" />
+                        <MenuFlyoutItem
+                            Text="{x:Bind RowMenuOpenSteamText, Mode=OneWay}"
+                            IsEnabled="{x:Bind CanMove, Mode=OneWay}"
+                            Click="OnRowOpenSteamClick"
+                            AutomationProperties.AutomationId="{x:Bind OpenSteamMenuAutomationId, Mode=OneTime}" />
+                        <MenuFlyoutItem
+                            Text="{x:Bind RowMenuCopyIdText, Mode=OneWay}"
+                            IsEnabled="{x:Bind CanMove, Mode=OneWay}"
+                            Click="OnRowCopyIdClick"
+                            AutomationProperties.AutomationId="{x:Bind CopyIdMenuAutomationId, Mode=OneTime}" />
+                    </MenuFlyout>
+                </Grid.ContextFlyout>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="40" />
                     <ColumnDefinition Width="Auto" />
@@ -67,17 +88,20 @@
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextAlignment="Right" />
                     </Button>
-                    <TextBox x:Name="PositionEditBox"
-                             Visibility="{x:Bind svc:XamlVisibility.FromBool(IsEditingPosition), Mode=OneWay}"
-                             MaxWidth="40"
-                             Padding="4,0"
-                             HorizontalContentAlignment="Right"
-                             MaxLength="4"
-                             InputScope="Number"
-                             KeyDown="OnPositionEditKeyDown"
-                             LostFocus="OnPositionEditLostFocus"
-                             AutomationProperties.AutomationId="{x:Bind PositionEditAutomationId, Mode=OneTime}"
-                             AutomationProperties.Name="{x:Bind PositionEditName, Mode=OneWay}" />
+                    <NumberBox x:Name="PositionEditBox"
+                               Visibility="{x:Bind svc:XamlVisibility.FromBool(IsEditingPosition), Mode=OneWay}"
+                               Minimum="1"
+                               Maximum="{x:Bind TotalCount, Mode=OneWay}"
+                               SmallChange="1"
+                               LargeChange="10"
+                               SpinButtonPlacementMode="Compact"
+                               ValidationMode="InvalidInputOverwritten"
+                               Width="64"
+                               Padding="8,0"
+                               KeyDown="OnPositionEditKeyDown"
+                               LostFocus="OnPositionEditLostFocus"
+                               AutomationProperties.AutomationId="{x:Bind PositionEditAutomationId, Mode=OneTime}"
+                               AutomationProperties.Name="{x:Bind PositionEditName, Mode=OneWay}" />
                 </Grid>
 
                 <!-- 缩略图 -->
@@ -339,6 +363,20 @@
                         AutomationProperties.AutomationId="btnDeletePlaySet"
                         AutomationProperties.Name="{x:Bind L.ModsToolbarDeleteName, Mode=OneWay}" />
 
+                <!-- 官方启动器的「分享 / 导入播放集」：文件格式与官方逐字段一致，可互相导入。 -->
+                <Button Content="{x:Bind L.ModsToolbarImport, Mode=OneWay}"
+                        Click="OnImportPlaySetClick"
+                        IsEnabled="{x:Bind ViewModel.IsEditorEnabled, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind L.ModsToolbarImportToolTip, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnImportPlaySet"
+                        AutomationProperties.Name="{x:Bind L.ModsToolbarImportName, Mode=OneWay}" />
+                <Button Content="{x:Bind L.ModsToolbarExport, Mode=OneWay}"
+                        Click="OnExportPlaySetClick"
+                        IsEnabled="{x:Bind ViewModel.CanManageSelection, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind L.ModsToolbarExportToolTip, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnExportPlaySet"
+                        AutomationProperties.Name="{x:Bind L.ModsToolbarExportName, Mode=OneWay}" />
+
                 <!-- 分组分隔线：左边改播放集本身，右边作用在当前播放集的 mod 与激活状态上 -->
                 <!-- 竖线做成与按钮同高的 32 高边框，不再用 margin 做交叉轴居中 -->
                 <Border Width="1"
@@ -459,7 +497,7 @@
               SizeChanged="OnTwoColumnGridSizeChanged"
               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsTwoColumnLayout), Mode=OneWay}">
             <Grid.ColumnDefinitions>
-                <!-- 左栏比 Mod 库页的 360 宽一档：候选名普遍很长（「Chinese IG Traits Overview」），
+                <!-- 左栏比 Mod 创建页（ModStudioPage.xaml 的 360 列）宽一档：候选名普遍很长（「Chinese IG Traits Overview」），
                      左栏默认 400 DIP、还能往右拖，扣掉勾选框与缩略图后仍放得下常见 mod 名。
                      Width 由 code-behind 按拖动结果写（400 是初值），上下限统一放在
                      Services/ColumnResize.cs 里。这里刻意不写 MinWidth：窗口拉窄时左栏必须能低于

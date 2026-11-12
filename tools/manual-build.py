@@ -40,6 +40,18 @@ MVVM_ANALYZER = os.path.join(
     NUGET, "communitytoolkit.mvvm/8.4.2/analyzers/dotnet/roslyn4.12/cs/CommunityToolkit.Mvvm.SourceGenerators.dll")
 MVVM_REF = os.path.join(NUGET, "communitytoolkit.mvvm/8.4.2/lib/net8.0/CommunityToolkit.Mvvm.dll")
 
+# 文案源生成器：resw → Localizer 属性 + Keys。手工构建不经过 MSBuild，必须自己
+# 把生成器 DLL 与两份 .resw 交给 csc（-analyzer / -additionalfile）。
+LOCALIZATION_GENERATOR_PROJ = os.path.join(
+    WS, "src", "PdxLauncher.Localization.Generator", "PdxLauncher.Localization.Generator.csproj")
+LOCALIZATION_GENERATOR = os.path.join(
+    WS, "src", "PdxLauncher.Localization.Generator", "bin", "Release", "netstandard2.0",
+    "PdxLauncher.Localization.Generator.dll")
+LOCALIZATION_RESW = [
+    os.path.join(WS, "src", "PdxLauncher.App", "Strings", "zh-CN", "Resources.resw"),
+    os.path.join(WS, "src", "PdxLauncher.App", "Strings", "en-US", "Resources.resw"),
+]
+
 # Core 现在引用了本地翻译相关的 NuGet 包（离线缓存里已有）：
 #   BergamotTranslatorSharp  -> Bergamot（NMT）本地引擎
 #   LLamaSharp               -> Index-Translate-2B（GGUF）进程内推理
@@ -187,6 +199,8 @@ def core_resources():
         (os.path.join(assets, "steam_api.dll"), "PdxLauncher.Patch.steam_api.dll"),
         (os.path.join(assets, "steam_api64.dll"), "PdxLauncher.Patch.steam_api64.dll"),
         (os.path.join(assets, "cream_api.ini"), "PdxLauncher.Patch.cream_api.ini"),
+        (os.path.join(assets, "dlc-catalog.json"), "PdxLauncher.Patch.dlc-catalog.json"),
+        (os.path.join(assets, "known-versions.json"), "PdxLauncher.Patch.known-versions.json"),
     ]
 
 
@@ -339,6 +353,13 @@ def build_app(core_dll):
         return
 
     # ---- csc
+    log("[app] 构建文案源生成器 ...")
+    run([DOTNET, "build", LOCALIZATION_GENERATOR_PROJ, "-c", "Release", "-m:1", "-nodeReuse:false"],
+        os.path.join(OBJ, "app.i18n-generator.log"), cwd=WS)
+    if not os.path.exists(LOCALIZATION_GENERATOR):
+        fail("app: 文案源生成器没有产出 " + LOCALIZATION_GENERATOR)
+        return
+
     srcs = sources(APP_PROJ)
     srcs += [os.path.join(APPSDK_INC, "WindowsAppRuntimeAutoInitializer.cs"),
              os.path.join(APPSDK_INC, "UndockedRegFreeWinRT-AutoInitializer.cs")]
@@ -348,6 +369,12 @@ def build_app(core_dll):
             "-define:DISABLE_XAML_GENERATED_MAIN"]
     if os.path.exists(MVVM_ANALYZER):
         args.append("-analyzer:" + MVVM_ANALYZER)
+    args.append("-analyzer:" + LOCALIZATION_GENERATOR)
+    for resw in LOCALIZATION_RESW:
+        if not os.path.exists(resw):
+            fail("app: 缺少文案源 " + resw)
+            return
+        args.append("-additionalfile:" + resw)
     args += ["-r:" + p for p in refs + [core_dll]]
     args += srcs + gen_cs
     csclog = os.path.join(objdir, "csc.log")

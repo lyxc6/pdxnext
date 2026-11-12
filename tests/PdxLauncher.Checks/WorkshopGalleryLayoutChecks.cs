@@ -4,7 +4,7 @@ using PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
 
 /// <summary>
-/// 工坊详情图片区尺寸自检：<see cref="WorkshopGalleryLayout"/> 的内联高度与查看器可用宽高。
+/// 工坊详情图片区尺寸自检：<see cref="WorkshopGalleryLayout"/> 的内联高度、查看器可用宽高与正文配图列宽。
 /// <para>
 /// 起因：查看器里的图被 ScrollViewer 按原图尺寸（工坊给的是 imw=5000）测量，1x 只露出左上角一块；
 /// 修好后 1x 必须是「整张刚好放进浮层」，所以这里把上下限、留白与 0/NaN 兜底钉死。
@@ -20,6 +20,7 @@ public static class WorkshopGalleryLayoutChecks
         var before = ChecksContext.Failures;
         CheckInlineHeight();
         CheckViewerContent();
+        CheckDescriptionWidth();
         CheckDegenerateInputs();
         return ChecksContext.Failures - before;
     }
@@ -52,6 +53,30 @@ public static class WorkshopGalleryLayoutChecks
         // 顶部栏没量出来（0）时，高度只扣留白。
         var noHeader = WorkshopGalleryLayout.ViewerContent(800, 600, 0);
         ChecksContext.Equal("无头栏高度", 568.0, noHeader.Height);
+    }
+
+    private static void CheckDescriptionWidth()
+    {
+        // 正文内容 960、卡片 960 + 左右各 16；图片框再扣掉自身 16 的内边距。
+        ChecksContext.Equal("正文内容宽 960", 960.0, WorkshopGalleryLayout.DescriptionContentMaxWidth);
+        ChecksContext.Equal("正文卡片宽 992", 992.0, WorkshopGalleryLayout.DescriptionCardMaxWidth);
+
+        // 宽窗口 / 正好卡在 960：图片都按列宽 944 走，不会因为窗口更宽而继续放大。
+        ChecksContext.Equal("1600 宽 → 944", 944.0, WorkshopGalleryLayout.DescriptionImageMaxWidth(1600));
+        ChecksContext.Equal("960 宽 → 944", 944.0, WorkshopGalleryLayout.DescriptionImageMaxWidth(960));
+
+        // 窄窗口跟随视图宽度，只扣 16 的图片框内边距。
+        ChecksContext.Equal("500 宽 → 484", 484.0, WorkshopGalleryLayout.DescriptionImageMaxWidth(500));
+
+        // 极窄窗口保留 120 下限，不把图压成 0；量不到宽度时用列宽兜底。
+        ChecksContext.Equal("136 宽 → 120", 120.0, WorkshopGalleryLayout.DescriptionImageMaxWidth(136));
+        ChecksContext.Equal("0 宽 → 944", 944.0, WorkshopGalleryLayout.DescriptionImageMaxWidth(0));
+        ChecksContext.Equal("NaN 宽 → 944", 944.0, WorkshopGalleryLayout.DescriptionImageMaxWidth(double.NaN));
+
+        // 占位框默认 240，但不能比图片本身还宽。
+        ChecksContext.Equal("占位框 944 → 240", 240.0, WorkshopGalleryLayout.PlaceholderMinWidth(944));
+        ChecksContext.Equal("占位框 120 → 120", 120.0, WorkshopGalleryLayout.PlaceholderMinWidth(120));
+        ChecksContext.Equal("占位框 0 → 240", 240.0, WorkshopGalleryLayout.PlaceholderMinWidth(0));
     }
 
     private static void CheckDegenerateInputs()

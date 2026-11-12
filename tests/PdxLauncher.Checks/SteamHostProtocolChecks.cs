@@ -51,29 +51,44 @@ public static class SteamHostProtocolChecks
         var lone = new[] { SteamHostProtocol.VerbArgument };
         Assert(!SteamHostProtocol.IsHostInvocation(lone), "只有 --steam-host 没有动词不算宿主调用");
 
-        // 动词表后来又多了两组：workshop-subscribed（整库订阅列表）+ workshop-batch（批量下载/本地禁用），
-        // 以及 workshop-mine / workshop-mine-detail（读「我自己发布的条目」）。
-        AssertEqual(9, SteamHostProtocol.Verbs.Count, "动词表恰好九个（probe + 四工坊操作 + 订阅列表 + 批量 + 我的条目两个）");
+        // 动词表后来又多了三组：workshop-subscribed（整库订阅列表）+ workshop-batch（批量下载/本地禁用），
+        // 以及 workshop-mine / workshop-mine-detail（读「我自己发布的条目」）；
+        // 成就读取（achievements）排在 probe 之后，是第一个「只读且要等回调」的动词；
+        // 导出探测（api-check）紧跟 achievements，供成就数据源在启动宿主前筛掉会崩的 DLL；
+        // 常驻宿主 serve 排在末位，保持既有动词的位置不变。
+        AssertEqual(12, SteamHostProtocol.Verbs.Count, "动词表恰好十二个（probe + 成就 + 导出探测 + 四工坊操作 + 订阅列表 + 批量 + 我的条目两个 + 常驻 serve）");
+        AssertEqual(
+            SteamHostProtocol.AchievementsVerb,
+            SteamHostProtocol.Verbs[1],
+            "动词表第二位是 achievements");
+        AssertEqual(
+            SteamHostProtocol.ApiCheckVerb,
+            SteamHostProtocol.Verbs[2],
+            "动词表第三位是 api-check");
         AssertEqual(
             SteamHostProtocol.WorkshopPublishVerb,
-            SteamHostProtocol.Verbs[4],
-            "动词表第五位是 workshop-publish");
+            SteamHostProtocol.Verbs[6],
+            "动词表第七位是 workshop-publish");
         AssertEqual(
             SteamHostProtocol.WorkshopSubscribedVerb,
-            SteamHostProtocol.Verbs[5],
-            "动词表末二位是 workshop-subscribed");
+            SteamHostProtocol.Verbs[7],
+            "动词表第八位是 workshop-subscribed");
         AssertEqual(
             SteamHostProtocol.WorkshopBatchVerb,
-            SteamHostProtocol.Verbs[6],
-            "动词表第七位是 workshop-batch");
+            SteamHostProtocol.Verbs[8],
+            "动词表第九位是 workshop-batch");
         AssertEqual(
             SteamHostProtocol.WorkshopMineVerb,
-            SteamHostProtocol.Verbs[7],
-            "动词表第八位是 workshop-mine");
+            SteamHostProtocol.Verbs[9],
+            "动词表第十位是 workshop-mine");
         AssertEqual(
             SteamHostProtocol.WorkshopMineDetailVerb,
-            SteamHostProtocol.Verbs[8],
-            "动词表末位是 workshop-mine-detail");
+            SteamHostProtocol.Verbs[10],
+            "动词表第十一位是 workshop-mine-detail");
+        AssertEqual(
+            SteamHostProtocol.ServeVerb,
+            SteamHostProtocol.Verbs[11],
+            "动词表末位是常驻 serve");
     }
 
     private static void CheckProbeResultRoundTrip()
