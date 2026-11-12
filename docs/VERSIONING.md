@@ -62,6 +62,10 @@ PdxNext 采用 [Semantic Versioning 2.0](https://semver.org/lang/zh-CN/)：`MAJO
    powershell -ExecutionPolicy Bypass -File tools\verify-installed-version.ps1
    ```
 
+   如果仓库路径含非 ASCII 字符（例如 `G:\Work\paradox启动器`），Inno Setup 7 的 Setup
+   可能在初始化阶段直接退出（exit code 1，且不写 `/LOG`）。先把 Setup 复制到纯 ASCII 目录
+   （如 `%TEMP%\pdxnext-setup-test\`）再运行；安装目标目录不受影响。
+
    安装后如果启动器自动拉起，先退出再跑校验。**校验不通过不能提交发版。**
 
 4. 把集成分支合进 `main`（`--no-ff`，保留一个发布点）：

@@ -261,6 +261,7 @@ $env:GITHUB_TOKEN = "ghp_..."
 | 更新后设置丢了 | 检查是否误把 `data` 打进安装包；`[Files]` 必须排除 `data\*` |
 | SmartScreen 拦截 | 无签名，属预期；选“更多信息 → 仍要运行”，或后续加 Authenticode |
 | 向导里没有「选择目标位置」 | 旧版本安装器在检测到旧安装时隐藏了该页（Inno `DisableDirPage` 默认 `auto`）。升级到本版本后始终显示；临时可用 `PdxNext-Setup-x.y.z.exe /DIR="D:\Apps\PdxNext"` 指定目录 |
+| Setup 静默安装立即退出（exit 1，无 `/LOG`） | 多半是 Setup 所在路径含非 ASCII 字符；把 Setup 复制到纯 ASCII 目录后再运行 |
 
 ## 9. 版本与发布顺序
 
