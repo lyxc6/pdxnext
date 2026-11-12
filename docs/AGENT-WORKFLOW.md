@@ -8,7 +8,7 @@
 
 | 角色 | 谁 | 做什么 | 不做什么 |
 | --- | --- | --- | --- |
-| 协调者 | 主会话（唯一有用户上下文的一方） | 复述需求 / 定验收 / 切任务 / 划写范围 / 派活 / 合并 / 写 `HANDOFF`+`CHANGELOG` | 不亲自写业务代码（除一行级修正与冲突解决） |
+| 协调者 | 主会话（唯一有用户上下文的一方） | 复述需求 / 定验收 / 切任务 / 划写范围 / 派活 / 合并 / 创建·登记·冻结版本分支 / 写 `HANDOFF`+`CHANGELOG` | 不亲自写业务代码（除一行级修正与冲突解决） |
 | 实现者 | 一个 subagent = 一个任务 | 读代码、改代码、自己构建+自检、提交 | 不越界改文件；不碰 `version.props`/`CHANGELOG.md`/`docs/HANDOFF.md` |
 | 验收者 | 另起的 subagent（全新上下文） | 只看 diff + 验收标准，自己再跑一遍构建与自检，逐条核对 | 不参与实现，不「顺手修一下」 |
 
@@ -17,27 +17,36 @@
 
 ## 2. 分支
 
-- `main` 永远可发布；**当前集成分支**记在仓库根 `integration-branch`（一行，1.3 期间是 `feat/1.3`，
-  1.4 起是 `feat/1.4`）。这是唯一来源，不要把版本分支名写死在别的文档或脚本里。
-- **一个对话一个分支**：每轮新对话先 `git switch <集成分支>`，再跑
+- `main` 永远可发布，只接受两类提交：活跃 `ver` 分支的 `--no-ff` 发版合并，以及协调者对
+  `integration-branch` 的登记/冻结提交。日常开发不在 `main` 上直接做。
+- **活跃版本分支**记在仓库根 `integration-branch`（多行，每行一个 `ver/x.y.z`，空行与 `#` 注释
+  忽略）。清单的权威副本在 `main`；`scripts/session.ps1` 读 `main:integration-branch`，各分支上的
+  副本只是继承快照，不参与校验。
+- `ver/x.y.z` 是**长期版本分支**：一个分支只对应一个未发布版本，从 `main` 创建；补丁版（1.3.1）
+  与新版本（1.4.0）可以同时活跃。发布后**立即冻结**：从清单移除，不再接受任何提交；修正只能
+  从 `main` 开新的更高补丁版分支。
+- **一个对话一个分支**：每轮新对话先 `git switch <活跃版本分支>`，再跑
 
   ```bat
   pwsh -File scripts/session.ps1 open <slug>
   ```
 
   得到 `sess/YYYYMMDD-<slug>`，基线是**对话开始时的当前分支**。
-  `open` 会硬校验当前分支就是 `integration-branch` 记录的集成分支；发版 / 热修要从别处起才加 `-Force`。
+  `open` 会硬校验当前分支在 `integration-branch` 清单里；从 `main`、已冻结分支或清单为空时直接
+  拒绝。`-Force` 只用于引导、发版或从 tag 起紧急修复。
   对话期间所有提交都留在 sess 分支，不往起始分支写任何东西。
 - 对话结束、验收通过后跑 `pwsh -File scripts/session.ps1 close -Message "中文说明"`：
-  `--no-ff` 合回起始分支（合并信息 `merge: 中文说明（sess/…）`），删掉 sess 分支并切回起始分支。
+  脚本校验基线仍是活跃版本分支，`--no-ff` 合回它，删除 sess 分支并切回。
   **一个对话只合并一次**；没做完就不合并，分支留着写进汇报。
-- 并行写任务仍在 worktree 里开 `feat/<task>`，但基线是**本对话的 sess 分支**，合回也是 sess 分支，
-  不再直接合集成分支。
-- **发版前先收尾**：`pwsh -File scripts/session.ps1 list` 必须为空。发版后集成分支保持只读（只接受
-  `<version>.x` 维护改动，如 1.3.x 修 bug），新对话一律在新集成分支上开。
-- `<version>.0` 发版时才 `集成分支 → main`，按 `docs/VERSIONING.md` §4 走完整流程（含本机安装版本校验）；
-  发版后按 §5.1 开下一个大分支，并把 `integration-branch` 指向它。
-- **发版前不改 `version.props`**，版本号停在上一个已发布版本；改动累积在 `CHANGELOG.md` 的 `[Unreleased]` 下。
+  基线已冻结/未登记时 `close` 硬失败，用 `-Into <活跃分支>` 重定向或从活跃分支重开。
+- 并行写任务仍在 worktree 里开 `feat/<task>`，但基线是**本对话的 sess 分支**，合回也是 sess 分支。
+  `feat/<task>` 只是短命任务名，不要和长期 `ver/*` 混用。
+- **发版前先收尾**：`pwsh -File scripts/session.ps1 list` 必须为空。发版后该版本分支立即冻结，
+  任何修复都从 `main` 开新的 `ver` 分支。
+- 每次发布（含补丁版）都按 `docs/VERSIONING.md` §4 走完整流程（含本机安装版本校验）；
+  发布后按 §5.1 冻结旧分支、登记新分支。
+- **发版前不改 `version.props`**，版本号停在上一个已发布版本；改动累积在 `CHANGELOG.md` 的
+  `[Unreleased]` 下。
 
 ## 3. 派活模板（每个 subagent 的 brief 必须包含这七项）
 
@@ -67,6 +76,7 @@
   ```
 
   各自构建 + 自检，协调者按依赖顺序 `git merge --no-ff feat/<task>` 合回 sess 分支后 `git worktree remove`。
+  这里的 `feat/<task>` 是短命任务分支；长期版本分支统一用 `ver/x.y.z`，两者不要混用。
 - **同一工作树同一时刻只允许一次 `dotnet build`**：`bin/`、`obj/` 会互相覆盖，构建还会锁
   `PdxLauncher.Core.dll`。
 - 一波最多 2 个写任务 + 1 个只读核对；写范围有重叠就判为拆分错误，改依赖串行。
@@ -110,6 +120,7 @@ dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 5. 有没有配套自检类？断言是否真的能失败（不是永远为真）？
 6. 提交里有没有带 `bin/`、`obj/`、`.scratch/`、`data/`？
 7. 有没有偷偷改 `version.props` / `CHANGELOG.md` / `docs/HANDOFF.md`？
+8. 本次 `close` 的目标是不是当前活跃版本分支（而不是已冻结/未登记分支）？
 
 任何一条不过就退回重做，不允许「先合再修」。
 
@@ -129,16 +140,19 @@ dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 - 提交信息：`type(scope): 中文摘要`（`feat` / `fix` / `perf` / `test` / `docs` / `chore`），正文写根因与行为变化。
 - 合并分两层：
   - worktree 的 `feat/<task>` → 本对话的 sess 分支：`git merge --no-ff feat/<task>`，合并信息 `merge: 中文说明（分支名）`。
-  - sess 分支 → 起始分支：`pwsh -File scripts/session.ps1 close -Message "中文说明"`，
-    脚本负责 `--no-ff`、删除分支、切回起始分支；纯 `*.md` 改动自动跳过构建。
+  - sess 分支 → 目标版本分支（本次对话开始时所在的活跃 `ver` 分支）：
+    `pwsh -File scripts/session.ps1 close -Message "中文说明"`，
+    脚本负责校验基线仍在活跃清单、`--no-ff`、删除分支、切回目标分支；纯 `*.md` 改动自动跳过构建。
 - 合并后删掉任务分支与 worktree；`git worktree list` 里不应留下已合并的分支。
-- 不 push，不 force push，不改写 `main` 历史，不在 `version.props` 已经进 Release 之后回去改版本号。
+- 合进已冻结或未登记的分支视为流程错误（`close` 会直接拒绝）。
+- 不 push、不 force push、不改写已推送历史；`main` 与 `ver` 分支的推送只由协调者在发版/登记流程里做。
+  不在 `version.props` 已经进 Release 之后回去改版本号。
 - 为什么合并交给脚本：历史上 31 次合并用了 git 默认信息，本节要求的 `merge: 中文说明` 只执行过 2 次。
 
 ## 9. 汇报格式
 
 每轮结束给用户四行：**做了什么 / 证据（构建、自检、实测）/ 没做什么及原因 / 下一步建议**，
-并写明本对话分支去向：`sess/… → 已合回 <起始分支>（commit）`。
+并写明本对话分支去向：`sess/… → 已合回 <活跃版本分支>（commit）`。
 细节留在 `HANDOFF.md`，不在对话里复述实现流水账。
 
 ## 10. 本地开发入口
@@ -164,7 +178,7 @@ dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 ```
 DEV_RESULT=PASS|FAIL_BUILD|FAIL_CHECK|FAIL_NOEXE|FAIL_LAUNCH
 DEV_MODE=run|build|nobuild
-DEV_BRANCH=feat/1.3
+DEV_BRANCH=ver/1.4.0
 DEV_HEAD=ac7225e
 DEV_DIRTY=213
 DEV_EXE=<绝对路径>

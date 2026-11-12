@@ -68,72 +68,118 @@ PdxNext 采用 [Semantic Versioning 2.0](https://semver.org/lang/zh-CN/)：`MAJO
 
    安装后如果启动器自动拉起，先退出再跑校验。**校验不通过不能提交发版。**
 
-4. 把集成分支合进 `main`（`--no-ff`，保留一个发布点）：
+4. 把**正在发布的版本分支**合进 `main`（`--no-ff`，保留一个发布点）：
 
    ```bat
    git switch main
    git pull --ff-only
-   git merge --no-ff <集成分支> -m "merge: 发布 <version>（<集成分支>）"
+   git merge --no-ff ver/<version> -m "merge: 发布 <version>（ver/<version>）"
+   ```
+
+   版本分支就是 `integration-branch` 清单里、`version.props` 等于本次版本的那一行。
+   发版前先确认没有未收尾的对话分支：`pwsh -File scripts/session.ps1 list` 应为空。
+
+5. 在 `main` 上冻结刚发布的版本分支（发布后立即从活跃清单移除）：
+
+   ```bat
+   rem 编辑 integration-branch，删掉 ver/<version> 这一行
+   git add integration-branch
+   git commit -m "chore(branch): 冻结 ver/<version>（发布 <version>）"
    git push origin main
    ```
 
-   集成分支就是仓库根 `integration-branch` 的内容（1.3 期间是 `feat/1.3`）。
-   发版前先确认没有未收尾的对话分支：`pwsh -File scripts/session.ps1 list` 应为空。
-5. 打 tag 并推送：
+   冻结提交必须在打 tag 之前完成，tag 才会指向 `main` 的最新提交；被冻结的分支保留引用，
+   之后不再接受任何提交。补丁版（1.3.1）与次版本（1.4.0）都走同一套顺序。
+
+6. 打 tag 并推送：
 
    ```bat
    git tag v1.1.0
    git push origin v1.1.0
    ```
 
-6. GitHub Actions `.github/workflows/release.yml` 自动：
-   - 校验 tag 与 `version.props` 一致；
+7. GitHub Actions `.github/workflows/release.yml` 自动：
+   - 校验 tag 与 `version.props` 一致，并要求被 tag 的提交在 `main` 历史里；
    - 构建、跑自检；
    - 生成 Setup + `update.json`；
    - 创建 Release 并上传两个资产。
-7. 下载一次 `releases/latest/download/update.json`，确认可访问、`version` 正确。
-8. 用旧版本安装一次，验证自动更新提示、下载、校验、安装、重启。
+8. 下载一次 `releases/latest/download/update.json`，确认可访问、`version` 正确。
+9. 用旧版本安装一次，验证自动更新提示、下载、校验、安装、重启。
 
-## 5. 分支与热修
+## 5. 分支模型：发布即冻结
 
-- `main` 始终保持可发布；日常开发在**当前集成分支**上（仓库根 `integration-branch` 的内容，
-  1.3 期间是 `feat/1.3`），每个对话再从它拉 `sess/YYYYMMDD-*`。
-- `sess/*` 是**对话级临时分支**（`scripts/session.ps1 open/close` 管理）：从当前分支拉出、
-  对话结束 `--no-ff` 合回后删除，**永不作为发布来源**，也不打 tag。
-- `main` 只接受**当前集成分支**（发版）或 `hotfix/*`（线上故障）合入。
-- 集成分支在发版后进入维护期：只接受 `<version>.x` 修 bug，新功能一律去新集成分支。
-- 线上故障：从对应 tag 拉 `hotfix/x.y.z`，只改最小范围，PATCH +1，走同一套 tag 流程；
-  合进 `main` 后，在研集成分支必须把 `main` 合回来，否则下个版本会丢掉这个热修。
-- 不做“静默改版本号”的 force push；`version.props` 一旦进入 Release 就不再改，重新发版必须递增。
-- 集成分支与 `main` 的推送只由协调者在发版流程里做；对话分支不 push。
+- `main` 永远可发布，只接受两类提交：
+  1. 活跃 `ver` 分支的 `--no-ff` 发版合并；
+  2. 协调者对仓库根 `integration-branch` 的登记/冻结提交（`chore(branch): ...`）。
+- `ver/x.y.z` 是**长期版本分支**：一个分支只对应一个未发布版本，从 `main` 创建、登记后接收
+  `sess/YYYYMMDD-*` 的合入；发布后立即冻结。
+- `sess/*` 是**对话级临时分支**（`scripts/session.ps1 open/close` 管理）：从某个活跃 `ver`
+  分支拉出、对话结束 `--no-ff` 合回后删除，**永不作为发布来源**，也不打 tag。
+- `feat/<task>` 只用于 worktree 内并行写任务，基线是本次对话的 sess 分支；
+  不再用 `feat/1.x` 这类名字充当长期版本分支。
+- **冻结规则**：版本分支合进 `main` 并打 tag 后，从 `integration-branch` 移除；此后不接受任何
+  提交（包括文档、`CHANGELOG.md`、`docs/HANDOFF.md`）。需要修正只能从 `main` 开新的更高补丁版
+  分支（如 1.3.1）。冻结分支保留引用，不删除、不 force push。
+- **创建规则**：
+  - 补丁版：从 `main`（最新发布点）开 `ver/x.y.(z+1)`，只含修复；
+  - 新版本：从 `main` 开 `ver/x.(y+1).0`，`CHANGELOG.md` 补 `## [Unreleased]`；
+  - 新分支先在 `main` 登记（`chore(branch): 激活 ver/...`），再从 `main` 创建并推送；
+    这样每个工作树都能在 `main` 的清单里看到它。
+- **多分支并存**：`integration-branch` 可以同时列多个 `ver` 分支（例如 `ver/1.3.1` 与 `ver/1.4.0`）。
+  补丁发布后要把 `main` 合进其它未发布的活跃分支，避免下一个版本漏修；冻结分支不参与合并。
+- 同一个 bug 影响多个未发布版本时，先在最低版本分支修并发布，再把 `main` 合进更高分支。
+- 合并 `main` 时的冲突口径：`version.props` 取 `main` 的已发布版本；`CHANGELOG.md` 同时保留
+  `main` 的新版本小节与该分支的 `[Unreleased]` 条目。
+- **版本号**：活跃分支的 `version.props` 停在上一个已发布版本，发版准备时才 bump；
+  `version.props` 一旦进入 Release 就不再改，重新发版必须递增。
+- 不做“静默改版本号”的 force push；不改写已推送历史。
+- `main` 与 `ver` 分支的推送只由协调者在发版/登记流程里做；对话分支不 push。
+- 不再使用 `hotfix/*`：线上故障就是开一个补丁版分支，走同一套流程。
+- `integration-branch` 每行一个分支（空行与 `#` 注释忽略）；**权威副本在 `main`**，
+  `scripts/session.ps1` 读的是 `main:integration-branch`，各分支上的副本只是继承快照，不参与校验。
 
-## 5.1 发完版开下一个大分支
+## 5.1 发布之后：冻结、补丁、下一个版本
 
-以 1.3.0 → 1.4 为例：
+以 1.3.0 发布完为例：
 
 1. 收尾所有对话分支：`pwsh -File scripts/session.ps1 list` 为空。
-2. 确认 1.3.0 已按 §4 合进 `main` 并打好 tag `v1.3.0`。
-3. 从 `main` 拉新集成分支（不要在旧集成分支上继续开发）：
+2. 确认 1.3.0 已按 §4 合进 `main`、冻结提交已完成、tag `v1.3.0` 已推送。
+3. 发布用的版本分支（1.3 时代是 `feat/1.3`；今后发布都用 `ver/x.y.z`）**立即冻结**：
+   不再提交，保留引用作为历史。
+4. 需要修 1.3.x 时，从 `main` 新开补丁版分支：
 
    ```bat
    git switch main
-   git pull --ff-only
-   git switch -c feat/1.4
-   git push -u origin feat/1.4
-   ```
-
-4. 把仓库根 `integration-branch` 改成新分支并提交——这是唯一需要改的配置：
-
-   ```bat
-   echo feat/1.4> integration-branch
+   rem 先编辑 integration-branch，加一行 ver/1.3.1
    git add integration-branch
-   git commit -m "chore(branch): 1.4 集成分支改为 feat/1.4"
+   git commit -m "chore(branch): 激活 ver/1.3.1"
+   git push origin main
+   git switch -c ver/1.3.1 main
+   git push -u origin ver/1.3.1
    ```
 
-5. `version.props` 先不动（仍停 1.3.0），`CHANGELOG.md` 保留 `[Unreleased]`；
-   等 1.4.0 发版时才按 §4 改。
-6. 旧 `feat/1.3` **保留到 1.4.0 发版**，期间只接受 1.3.x 维护改动（同样用 `sess/*` 分支，
-   基线写 `feat/1.3`）；1.4.0 发布后再删除。
+   在 `ver/1.3.1` 上用 `sess/*` 修 bug；发版时把 `version.props` bump 到 1.3.1，按 §4 合
+   `main`、冻结 `ver/1.3.1`、打 tag `v1.3.1`。
+
+5. 需要下一个版本（如 1.4.0）时，同样从 `main` 新开：
+   ```bat
+   git switch main
+   rem integration-branch 再加一行 ver/1.4.0（可以与 ver/1.3.1 并存）
+   git add integration-branch
+   git commit -m "chore(branch): 激活 ver/1.4.0"
+   git push origin main
+   git switch -c ver/1.4.0 main
+   git push -u origin ver/1.4.0
+   ```
+
+   在该分支补 `CHANGELOG.md` 的 `## [Unreleased]`；`version.props` 仍停 1.3.0
+   （或最近一次已发布版本），等 1.4.0 发版时才 bump。
+
+6. 多个 `ver` 分支同时活跃时：
+   - 每次发布后把 `main` 合进其它**未发布**的活跃分支（`git switch ver/1.4.0`
+     → `git merge main`），解决 `version.props`/`CHANGELOG.md` 冲突时按 §5 的口径；
+   - 冻结分支不参与任何合并，也不再作为会话基线。
+7. 永远不要“在已发布分支上再补一刀”；需要修正就开新的补丁分支（1.3.1、1.3.2 …）。
 
 ## 6. 与安装/更新的兼容约定
 

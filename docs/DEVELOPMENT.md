@@ -76,16 +76,17 @@ start.cmd /?     :: 打印用法
 
 ### 给其他对话 / 自动化的入口
 
-开工先按根 `AGENTS.md` 开一个对话分支 —— **一个对话一个分支**，从当前分支拉出：
+开工先按根 `AGENTS.md` 开一个对话分支 —— **一个对话一个分支**，从当前活跃版本分支拉出：
 
 ```bat
 pwsh -File scripts/session.ps1 open <slug>              :: 建 sess/YYYYMMDD-<slug>（脏改动跟随并 wip 提交）
-pwsh -File scripts/session.ps1 list                     :: 看进行中的对话分支与基线
-pwsh -File scripts/session.ps1 close -Message "中文说明"  :: 构建 + 自检 → --no-ff 合回 → 删分支
+pwsh -File scripts/session.ps1 list                     :: 看活跃版本分支与进行中的对话分支
+pwsh -File scripts/session.ps1 close -Message "中文说明"  :: 校验基线 → 构建 + 自检 → --no-ff 合回 → 删分支
 ```
 
-`open` 要求当前站在仓库根 `integration-branch` 记录的集成分支上（1.3 期间是 `feat/1.3`）；
-不在就先切过去。发版 / 热修要从别的分支起时才加 `-Force`。
+`open` 要求当前站在仓库根 `integration-branch` 清单里的某个活跃版本分支上（通常形如 `ver/x.y.z`）；
+不在就先 `git switch` 过去。清单为空、或从 `main` / 已冻结分支起时会被拒绝；`-Force` 只用于引导、
+发版或从 tag 起紧急修复。
 
 其他对话或自动化脚本统一用 `dev.cmd`，不要用 `start.cmd`（它遇到已运行实例会直接退出，也不负责验收）：
 
@@ -228,7 +229,8 @@ python tools\build-installer.py
 
 自动更新清单默认是
 `https://github.com/lyxc6/pdxnext/releases/latest/download/update.json`，仓库必须公开；
-发布走 GitHub Actions（推 `v*` tag 自动构建并上传），本地也可用 `tools\publish-release.ps1`。启动器检查 24 小时节流、下载时边写边算
+发布走 GitHub Actions（推 `v*` tag 自动构建并上传；`main` 与 `ver/**` 分支的推送会跑 CI），
+本地也可用 `tools\publish-release.ps1`。启动器检查 24 小时节流、下载时边写边算
 SHA-256、校验长度/摘要后按安装模式静默安装或提权安装。
 
 版本号唯一来源是 `version.props`；安装器排除 `data\`、`data-root.txt`、`*.log` 和

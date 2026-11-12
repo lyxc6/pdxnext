@@ -1,7 +1,8 @@
 # Agent 入口（PdxNext）
 
 本文件给下个对话 / 自动化 agent 用：先照这里开工，细节再读 `docs/AGENT-WORKFLOW.md`。
-仓库根：`G:\Work\paradox启动器`；当前集成分支记在仓库根 `integration-branch`（现在是 `feat/1.3`）。
+仓库根：`G:\Work\paradox启动器`；活跃版本分支记在仓库根 `integration-branch`（多行清单，每行一个
+`ver/x.y.z`；已发布分支冻结并从清单移除）。
 默认用中文汇报。
 
 ## 1. 对话生命周期：一个对话一个分支
@@ -19,10 +20,11 @@
    `slug` 用英文 kebab-case，例如 `fix-dlc-artwork`、`docs-session-rules`。
    没有 `pwsh` 时用 `powershell -File`，参数相同。
 
-   `open` 会校验你**必须站在 `integration-branch` 记录的集成分支上**；不在就先
-   `git switch <集成分支>`。只有发版 / 热修确实要从别的分支起时，才加 `-Force` 并在汇报里写明原因。
+   `open` 会校验你**必须站在 `integration-branch` 清单里的某个活跃版本分支上**（通常形如
+   `ver/x.y.z`）；不在就先 `git switch <活跃分支>`。清单为空、或从 `main` / 已冻结分支起时脚本
+   会直接拒绝；`-Force` 只用于引导、发版或从 tag 起紧急修复，并在汇报里写明原因。
 
-- 分支名 `sess/YYYYMMDD-<slug>`，基线是**对话开始时所在的当前分支**（通常是集成分支 `feat/1.3`）。
+- 分支名 `sess/YYYYMMDD-<slug>`，基线是**对话开始时所在的当前活跃版本分支**（通常是 `ver/x.y.z`）。
 - 开工时已有的未提交改动会跟着带到新分支，并由脚本提交成 `wip(session): ...` 基线提交；
   它只是检查点，不是交付内容。
 - 本对话的所有提交都留在 sess 分支；**不往起始分支写任何东西**。
@@ -39,18 +41,27 @@
    pwsh -File scripts/session.ps1 close -Message "中文说明"
    ```
 
-   脚本做四件事：切回起始分支 → `git merge --no-ff` → 删除 sess 分支 → 留在起始分支。
+   脚本做四件事：校验基线仍是活跃版本分支 → 切回该分支 → `git merge --no-ff` → 删除 sess 分支
+   并留在该分支。基线已冻结或不在 `integration-branch` 清单里时，`close` 会硬失败（不再只警告），
+   提示用 `-Into <活跃分支>` 重定向，或从活跃分支重开对话。
    纯 `*.md` 改动自动跳过构建；`-SkipVerify` 可强制跳过。合并冲突时脚本会中止合并并停在
-   sess 分支，先 `git merge <起始分支>` 解决冲突、提交，再重跑 `close`。
+   sess 分支，先 `git merge <目标分支>` 解决冲突、提交，再重跑 `close`。
 3. 汇报四行：**做了什么 / 证据（`dev.cmd build` 输出 + 实测）/ 没做什么及原因 / 下一步建议**，
    并写明本对话分支去向：`sess/… → 已合回 <分支>（commit）`。
 
 **没做完就不要 `close`**：分支留着，在汇报里写清停在哪、下个对话从哪接。
 
-### 1.3 换版本时（1.3 → 1.4）
+### 1.3 发版后：冻结旧分支，再开新版本分支
 
-- 发版顺序见 `docs/VERSIONING.md` §4；发版后开下一个大分支见 §5.1。
-- 唯一需要改的配置是仓库根 `integration-branch`：内容改成新分支名（如 `feat/1.4`），提交后所有新对话自动跟随。
+- **发布即冻结**：版本分支合进 `main` 并打 tag 后，从 `integration-branch` 移除；之后不再接受任何
+  提交。分支引用保留作为历史，不删除、不 force push、不改写已推送历史。
+- **补丁版**（如 1.3.1）：从 `main`（最新发布点）开 `ver/1.3.1`，登记、推送，在该分支修 bug，
+  再走同一套发版流程。
+- **新版本**（如 1.4.0）：从 `main` 开 `ver/1.4.0`，`CHANGELOG.md` 补 `## [Unreleased]`；
+  `version.props` 保持最近一次已发布版本，发版时才 bump。
+- **多分支并存**：补丁分支和新版本分支可以同时活跃；`integration-branch` 每行一个 `ver/x.y.z`，
+  会话只从清单里的分支开。冻结分支绝不再作为任何会话的基线。
+- 发版顺序见 `docs/VERSIONING.md` §4；冻结、登记与向其它活跃分支传播见 §5/§5.1。
   不要把版本分支名写死在其它文档或脚本里。
 - 发版前先 `pwsh -File scripts/session.ps1 list`，确认没有未收尾的 `sess/*` 分支。
 
