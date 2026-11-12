@@ -246,7 +246,7 @@ $env:GITHUB_TOKEN = "ghp_..."
 9. **模式切换**：已装每用户版本时尝试每机器安装 → 安装器提示先卸载；卸载后数据保留。
 10. **卸载**：控制面板卸载后程序目录移除，`data` / `%LOCALAPPDATA%\PdxNext-Data` 保留。
 11. **自检**：`dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"`
-    必须 `检查类: 111，失败: 0`。
+    必须 `检查类: 166，失败: 0`。
 
 ## 8. 排错
 
