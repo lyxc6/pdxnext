@@ -38,6 +38,9 @@ public static class LocalTranslationModelDownloadChecks
             CheckHashMismatchDropsPartial(tempRoot);
             CheckAlreadyCompleteIsSkipped(tempRoot);
             CheckCompletePartialIsFinalized(tempRoot);
+            CheckLongerPartialIsDropped(tempRoot);
+            CheckUnknownTotalStillReportsBytes(tempRoot);
+            CheckCancelDuringVerifyKeepsPartial(tempRoot);
             CheckCompressedResume(tempRoot);
             CheckFallbackWithoutRangeSupport(tempRoot);
             CheckStagedBytesAndRemove(tempRoot);
@@ -321,6 +324,115 @@ public static class LocalTranslationModelDownloadChecks
         ChecksContext.Check("下载器: 完整残片落位后清掉 .part", !File.Exists(PartPath(root)));
     }
 
+    /// <summary>
+    /// 残片比期望还长（模型换过版本 / 上次写到别的文件里）：不续传、不去撞 416，直接删掉重下。
+    /// </summary>
+    private static void CheckLongerPartialIsDropped(string tempRoot)
+    {
+        var root = Path.Combine(tempRoot, "longer-part");
+        var payload = Fill(16 * 1024, 0x6b);
+        var part = PartPath(root);
+        Directory.CreateDirectory(Path.GetDirectoryName(part)!);
+        File.WriteAllBytes(part, Fill(payload.Length + 4096, 0x6c));
+
+        var catalog = CreateCatalog(compressed: false, payload.Length, payload.Length);
+        var fetcher = new FakeDownloadFetcher(payload) { ChunkSize = 4 * 1024 };
+        var downloader = new LocalTranslationModelDownloader(fetcher, new NullLogger(), catalog, root);
+
+        var result = downloader
+            .DownloadAsync(LocalTranslationModelKind.IndexTranslate, null, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        ChecksContext.Check("下载器: 残片过长时仍能恢复", result.Success, result.Message);
+        ChecksContext.Equal("下载器: 残片过长时不发续传请求（从 0 开始）", 0L, fetcher.LastStartOffset ?? 0L);
+        ChecksContext.EqualBytes(
+            "下载器: 残片过长后内容被整份覆盖",
+            payload,
+            File.ReadAllBytes(TargetPath(root)));
+    }
+
+    /// <summary>
+    /// 分母拿不到（chunked / 无 Content-Length）：必须仍上报已下载字节，且总长是 0，
+    /// 让界面显示「已下载 N MB」而不是一个冻住的百分比——冻住的进度条正是这次要修的故障形态。
+    /// </summary>
+    private static void CheckUnknownTotalStillReportsBytes(string tempRoot)
+    {
+        var root = Path.Combine(tempRoot, "unknown-total");
+        var content = Fill(32 * 1024, 0x6d);
+        var gzip = Gzip(content);
+
+        // 压缩 + 假 fetcher 报「总长未知」：分母只能靠 ExpectedSize 折算，而压缩文件不能用它，
+        // 所以这条路径必须退化成「按字节上报」。
+        var catalog = CreateCatalog(compressed: true, content.Length, content.Length);
+        var fetcher = new FakeDownloadFetcher(gzip)
+        {
+            ChunkSize = 8 * 1024,
+            ReportUnknownTotal = true,
+        };
+        var downloader = new LocalTranslationModelDownloader(fetcher, new NullLogger(), catalog, root);
+
+        var reports = new List<LocalTranslationDownloadProgress>();
+        var result = downloader
+            .DownloadAsync(
+                LocalTranslationModelKind.IndexTranslate,
+                new SyncProgress(reports.Add),
+                CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+
+        ChecksContext.Check("下载器: 分母未知时仍能下载完成", result.Success, result.Message);
+        ChecksContext.Check(
+            "下载器: 分母未知时首条上报的总长是 0（界面按字节显示而不是百分比）",
+            reports.Count > 0 && reports[0].TotalBytes == 0,
+            reports.Count == 0 ? "(无上报)" : "TotalBytes=" + reports[0].TotalBytes + "，共 " + reports.Count + " 条");
+        ChecksContext.Check(
+            "下载器: 分母未知时已下载字节仍在增长",
+            reports.Count >= 2 && reports[^1].BytesReceived > reports[0].BytesReceived,
+            reports.Count == 0 ? "(无上报)" : reports[0].BytesReceived + " → " + reports[^1].BytesReceived);
+    }
+
+    /// <summary>
+    /// 收尾校验阶段被暂停：残片内容其实是完整的，必须保留，下次点「下载」直接落位而不是重下 1.31 GB；
+    /// 同时暂停要立刻生效，不能等整份 SHA-256 算完。
+    /// </summary>
+    private static void CheckCancelDuringVerifyKeepsPartial(string tempRoot)
+    {
+        var root = Path.Combine(tempRoot, "cancel-verify");
+        var content = Fill(2 * 1024 * 1024, 0x6e);
+        var gzip = Gzip(content);
+        WriteStaged(root, gzip, gzip.Length);
+
+        var catalog = CreateCatalog(
+            compressed: true,
+            content.Length,
+            content.Length,
+            sha: Sha256Hex(content));
+        var fetcher = new FakeDownloadFetcher(gzip);
+        var downloader = new LocalTranslationModelDownloader(fetcher, new NullLogger(), catalog, root);
+
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var cancelled = false;
+        try
+        {
+            downloader
+                .DownloadAsync(LocalTranslationModelKind.IndexTranslate, null, cancellation.Token)
+                .GetAwaiter()
+                .GetResult();
+        }
+        catch (OperationCanceledException)
+        {
+            cancelled = true;
+        }
+
+        ChecksContext.Check("下载器: 收尾阶段也响应取消", cancelled);
+        ChecksContext.Check("下载器: 收尾被取消后 .part 保留（内容完整可续）", File.Exists(PartPath(root)));
+        ChecksContext.Check(
+            "下载器: 收尾被取消后不留下 .tmp 残渣",
+            !File.Exists(TargetPath(root) + LocalTranslationModelStore.VerifyTempSuffix));
+    }
+
     /// <summary>压缩文件续传：<c>.part</c> 存 gzip 原始字节，续传后解压结果必须完整正确。</summary>
     private static void CheckCompressedResume(string tempRoot)
     {
@@ -531,6 +643,9 @@ public static class LocalTranslationModelDownloadChecks
 
         public int StallAfterChunks { get; init; }
 
+        /// <summary>true 表示模拟「服务端不给总长」（chunked），进度只能按字节上报。</summary>
+        public bool ReportUnknownTotal { get; init; }
+
         public int RequestCount { get; private set; }
 
         public long? LastStartOffset { get; private set; }
@@ -556,11 +671,12 @@ public static class LocalTranslationModelDownloadChecks
             }
 
             var remaining = _payload.Length - (int)from;
+            // 模拟 chunked：总长与本次长度都不给，下载器只能退化成「按字节上报」。
             return Task.FromResult(new HttpDownload(
                 CreateStream((int)from, remaining),
-                remaining,
+                ReportUnknownTotal ? null : remaining,
                 from,
-                _payload.Length));
+                ReportUnknownTotal ? null : _payload.Length));
         }
 
         public Task<string> PostJsonAsync(Uri uri, string jsonBody, CancellationToken cancellationToken) =>

@@ -82,7 +82,11 @@ public sealed class LocalModelRowViewModel : LocalizedObservableObject
         {
             if (SetProperty(ref _isDownloading, value))
             {
-                OnPropertyChanged(nameof(CanPause));
+                // 下载态直接决定「下载 / 删除 / 校验 / 打开文件夹」四个按钮的可用性；
+                // 只发 CanPause 的话，续传时（HasPartial 已是 true、IsBusy 已是 false）
+                // 这两个 setter 都不会再触发 RaiseStateProperties，按钮可用性就停在旧值上，
+                // 表现为「点了没反应」。
+                RaiseStateProperties();
             }
         }
     }

@@ -202,7 +202,8 @@ public sealed class LocalModelDownloadCoordinator : IDisposable
     }
 
     /// <inheritdoc />
-    public void Dispose()    {
+    public void Dispose()
+    {
         List<Job> jobs;
         lock (_gate)
         {

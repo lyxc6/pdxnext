@@ -161,10 +161,20 @@ public sealed class LocalTranslationModelDownloader
 
         // 残片已经是完整长度（上次传完、进程在收尾前退出）：不必再下一遍，
         // 直接走校验与落位。否则 416 自愈会把这 1.31 GB 从头重下一遍。
+        // 压缩文件的 ExpectedSize 是解压后长度，.part 是 gzip 字节，两者本来就不等，不适用这条。
         if (!file.Compressed && file.ExpectedSize > 0 && stagedLength == file.ExpectedSize)
         {
             _logger.Info($"本地模型残片已完整，直接校验落位：{file.FileName}");
-            return new DownloadedFile(FinishPlain(file, part, target), 0);
+            return new DownloadedFile(FinishPlain(file, part, target, cancellationToken), 0);
+        }
+
+        // 残片长度对不上 ExpectedSize 且已经过短：那是上次没传完，续传；但残片比期望还长
+        // （模型换过版本 / 上次写到别的文件里）就无法续传，删掉从头来，别让 416 兜底绕一圈。
+        if (!file.Compressed && file.ExpectedSize > 0 && stagedLength > file.ExpectedSize)
+        {
+            _logger.Warn($"本地模型残片比期望还长，删掉重下：{file.FileName}（{stagedLength} > {file.ExpectedSize}）");
+            TryDelete(part);
+            stagedLength = 0;
         }
 
         var uri = new Uri(file.Url);
@@ -214,8 +224,14 @@ public sealed class LocalTranslationModelDownloader
                 output.Seek(transferStart, SeekOrigin.Begin);
                 _logger.Info($"本地模型续传：{file.FileName} 从 {transferStart} 字节继续");
             }
-
             var expected = Math.Max(0, file.ExpectedSize);
+
+            // 分母：优先用响应给的总长；拿不到时退到清单里的 ExpectedSize（非压缩文件字节一一对应）。
+            // 再拿不到（压缩且无总长）就只报 doneBefore、把总长传 0，让界面显示「已下载 N MB」
+            // 而不是一个冻住的百分比——冻住的进度条正是这次要修的故障形态。
+            var denominator = transferTotal is > 0
+                ? transferTotal.Value
+                : expected > 0 && !file.Compressed ? expected : 0L;
             var transferDone = transferStart;
             var buffer = new byte[BufferSize];
             int read;
@@ -227,14 +243,15 @@ public sealed class LocalTranslationModelDownloader
 
                 // 压缩文件按「传输字节 / 传输总长」折算到解压后的期望尺寸：
                 // 进度永远以用户最终拿到的那个大小为分母，不会因为 gzip 比例而乱跳。
-                if (expected > 0 && transferTotal is > 0)
+                if (expected > 0 && denominator > 0)
                 {
-                    var transferFraction = Math.Clamp((double)transferDone / transferTotal.Value, 0d, 1d);
+                    var transferFraction = Math.Clamp((double)transferDone / denominator, 0d, 1d);
                     reporter.Report(doneBefore + (long)(expected * transferFraction), file.FileName, resumed);
                 }
                 else
                 {
-                    reporter.Report(doneBefore, file.FileName, resumed);
+                    // 分母未知：报「已完成 + 已传输量」，总长传 0（界面按字节显示，不画百分比）。
+                    reporter.ReportUnknownTotal(doneBefore + transferred, file.FileName, resumed);
                 }
             }
 
@@ -243,15 +260,19 @@ public sealed class LocalTranslationModelDownloader
 
         cancellationToken.ThrowIfCancellationRequested();
         var size = file.Compressed
-            ? FinishCompressed(file, part, target)
-            : FinishPlain(file, part, target);
+            ? FinishCompressed(file, part, target, cancellationToken)
+            : FinishPlain(file, part, target, cancellationToken);
         return new DownloadedFile(size, transferred);
     }
 
     /// <summary>
     /// 非压缩文件收尾：尺寸必须正好是期望值，哈希对得上才改名落位。
     /// </summary>
-    private long FinishPlain(LocalTranslationModelFile file, string part, string target)
+    private long FinishPlain(
+        LocalTranslationModelFile file,
+        string part,
+        string target,
+        CancellationToken cancellationToken)
     {
         var actual = SizeOf(part);
         if (file.ExpectedSize > 0 && actual != file.ExpectedSize)
@@ -263,7 +284,12 @@ public sealed class LocalTranslationModelDownloader
 
         try
         {
-            VerifyHash(part, file);
+            VerifyHash(part, file, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // 校验阶段被暂停：残片内容可能是对的，保留它，下次点「下载」会短路落位而不是重下。
+            throw;
         }
         catch
         {
@@ -279,13 +305,17 @@ public sealed class LocalTranslationModelDownloader
     /// 压缩文件收尾：<c>.part</c> 是 gzip 原始字节，解压到 <c>.tmp</c> 边算尺寸与哈希，
     /// 全对才改名落位，然后删掉残片。
     /// </summary>
-    private long FinishCompressed(LocalTranslationModelFile file, string part, string target)
+    private long FinishCompressed(
+        LocalTranslationModelFile file,
+        string part,
+        string target,
+        CancellationToken cancellationToken)
     {
         var temp = TempPath(target);
         long written = 0;
+        string? actualHash = null;
         try
         {
-            string? actualHash = null;
             using (var raw = new FileStream(
                        part,
                        FileMode.Open,
@@ -308,6 +338,8 @@ public sealed class LocalTranslationModelDownloader
                 int read;
                 while ((read = gzip.Read(buffer, 0, buffer.Length)) > 0)
                 {
+                    // 1.31 GB 的解压 + 哈希可能持续几十秒：暂停按钮必须在这段时间里也立刻生效。
+                    cancellationToken.ThrowIfCancellationRequested();
                     output.Write(buffer, 0, read);
                     hasher?.AppendData(buffer, 0, read);
                     written += read;
@@ -319,32 +351,46 @@ public sealed class LocalTranslationModelDownloader
                     actualHash = Convert.ToHexStringLower(hasher.GetHashAndReset());
                 }
             }
-
-            if (file.ExpectedSize > 0 && written != file.ExpectedSize)
-            {
-                throw new InvalidDataException(
-                    $"解压后大小不符：{file.FileName}（期望 {file.ExpectedSize}，实际 {written}）");
-            }
-
-            if (actualHash is not null
-                && !string.Equals(actualHash, file.Sha256, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidDataException($"校验失败：{file.FileName}");
-            }
-
-            File.Move(temp, target, overwrite: true);
-            TryDelete(part);
-            return written;
+        }
+        catch (OperationCanceledException)
+        {
+            // 收尾阶段被暂停：残片是完整的 gzip 字节，保留它，下次续传仍然成立。
+            TryDelete(temp);
+            throw;
         }
         catch
         {
+            // 解压本身失败（gzip 截断 / 磁盘满）：残片内容不可信，删掉重下。
             DeleteStaged(part, temp);
             throw;
         }
+
+        if (file.ExpectedSize > 0 && written != file.ExpectedSize)
+        {
+            DeleteStaged(part, temp);
+            throw new InvalidDataException(
+                $"解压后大小不符：{file.FileName}（期望 {file.ExpectedSize}，实际 {written}）");
+        }
+
+        if (actualHash is not null
+            && !string.Equals(actualHash, file.Sha256, StringComparison.OrdinalIgnoreCase))
+        {
+            DeleteStaged(part, temp);
+            throw new InvalidDataException($"校验失败：{file.FileName}");
+        }
+
+        // 落位在 finally 之外：目标文件被引擎占用 / 磁盘满时失败，这里不能连累已下载完的残片。
+        // 校验已经全部通过，残片内容就是正确内容，下次点「下载」会短路落位而不是重下。
+        File.Move(temp, target, overwrite: true);
+        TryDelete(part);
+        return written;
     }
 
     /// <summary>按清单里的 SHA-256 校验一个已落盘文件；清单没给哈希就跳过。</summary>
-    private static void VerifyHash(string path, LocalTranslationModelFile file)
+    private static void VerifyHash(
+        string path,
+        LocalTranslationModelFile file,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(file.Sha256))
         {
@@ -363,6 +409,8 @@ public sealed class LocalTranslationModelDownloader
         int read;
         while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
         {
+            // 1.31 GB 的 SHA-256 在慢盘上要好几秒：暂停必须在这段时间里也能立刻生效。
+            cancellationToken.ThrowIfCancellationRequested();
             hasher.AppendData(buffer, 0, read);
         }
 
@@ -463,6 +511,29 @@ public sealed class LocalTranslationModelDownloader
             _lastFraction = fraction;
             _lastTimestamp = now;
             _progress.Report(new LocalTranslationDownloadProgress(received, _total, currentFile, resumed));
+        }
+
+        /// <summary>
+        /// 分母未知时上报：<c>TotalBytes</c> 传 0，界面据此显示「已下载 N MB」而不是百分比。
+        /// <para>
+        /// 单独一个方法是为了保留节流：没有它，chunked 响应下每 128 KiB 都会刷一次回调。
+        /// </para>
+        /// </summary>
+        public void ReportUnknownTotal(long bytesReceived, string? currentFile, bool resumed)
+        {
+            if (_progress is null)
+            {
+                return;
+            }
+
+            var now = Environment.TickCount64;
+            if (_lastTimestamp != 0 && now - _lastTimestamp < (long)ProgressInterval.TotalMilliseconds)
+            {
+                return;
+            }
+
+            _lastTimestamp = now;
+            _progress.Report(new LocalTranslationDownloadProgress(Math.Max(0, bytesReceived), 0, currentFile, resumed));
         }
     }
 }

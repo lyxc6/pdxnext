@@ -56,7 +56,14 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
     private readonly SettingsViewModel _viewModel = new();
-    /// <summary>页面生命周期令牌；页面不缓存（NavigationCacheMode=Disabled），每次进入都会重建。</summary>
+
+    /// <summary>
+    /// 页面生命周期令牌：取消它等于「这一页不再接收结果」（缓存统计、校验、删除这些绑定页面的活）。
+    /// <para>
+    /// 本地模型下载<b>不受它约束</b>——下载归 <see cref="AppServices.LocalModelDownloads"/> 所有，
+    /// 页面只是订阅进度；离开设置页不会中断已开始的下载。
+    /// </para>
+    /// </summary>
     private CancellationTokenSource _lifetime = new();
 
     /// <summary>重载协调器：连点游戏时取消旧重载，只应用最新那次的结果。</summary>
@@ -104,6 +111,11 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             if (!AppServices.IsInitialized)
             {
                 await _viewModel.LoadAsync(null, _lifetime.Token).ConfigureAwait(true);
+
+                // 服务图还没装好时也不能漏掉模型行：否则这条分支回来时下载进度与「已暂停」文案
+                // 都不会出现，而「下载」按钮却仍是可点的，看起来像点了没反应。
+                _viewModel.RefreshLocalTranslationState();
+                _viewModel.ApplyLocalModelDownloads();
                 return;
             }
 

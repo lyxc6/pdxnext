@@ -321,6 +321,13 @@ public sealed class HttpFetcher : IHttpFetcher, IConditionalHttpFetcher, IDownlo
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+
+            // 续传按「原始传输字节」算偏移，所以响应体必须原样落在 .part 里。
+            // 连接池默认开了 AutomaticDecompression：若服务端或中间代理对响应做 Content-Encoding，
+            // 流里就是解压后的字节，而偏移仍是压缩字节的偏移——续传必然写到错误位置。
+            // 显式要求 identity，从源头上不让这件事发生。
+            request.Headers.TryAddWithoutValidation("Accept-Encoding", "identity");
+
             if (from > 0)
             {
                 request.Headers.Range = new RangeHeaderValue(from, null);

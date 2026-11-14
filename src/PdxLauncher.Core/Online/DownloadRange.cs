@@ -14,7 +14,10 @@ public static class DownloadRange
     /// 解析响应的起点与长度。未知的量一律返回 null，调用方据此降级（不猜）。
     /// </summary>
     /// <param name="response">下载响应；调用方已确认它 2xx。</param>
-    /// <param name="requestedStart">本次请求的 Range 起点（用于服务端不回 Content-Range 时兜底）。</param>
+    /// <param name="requestedStart">
+    /// 本次请求的 Range 起点。只用于日志/诊断语义：<b>不参与起点兜底</b>——
+    /// 206 不带 Content-Range 时一律按从头开始，见方法体注释。
+    /// </param>
     public static DownloadRangeInfo Read(HttpResponseMessage response, long requestedStart)
     {
         ArgumentNullException.ThrowIfNull(response);
@@ -23,12 +26,19 @@ public static class DownloadRange
         if (response.StatusCode == HttpStatusCode.PartialContent)
         {
             var range = response.Content.Headers.ContentRange;
-            var rangeStart = range?.From ?? requestedStart;
+
+            // 206 却不带 Content-Range 属于不合规响应：此时无法知道这段流从哪个偏移开始。
+            // 不能拿 requestedStart 兜底——那等于断言「服务端确实按我的 Range 给的」，
+            // 猜错就会把剩余内容写到错误的偏移上，拼出一个长度对、内容错的文件。
+            // 一律按「从头开始」处理：调用方会截断重写，尺寸校验随后拦下并整份重下。
+            if (range?.From is not long rangeFrom)
+            {
+                return new DownloadRangeInfo(0, contentLength, contentLength);
+            }
 
             // Content-Range 的 Length 才是「原始文件总长」；没有它就只能说不知道，
             // 绝不能拿 ContentLength（剩余长度）冒充，否则进度条会算成「刚下了一点就到头」。
-            var totalLength = range?.Length;
-            return new DownloadRangeInfo(rangeStart, totalLength, contentLength);
+            return new DownloadRangeInfo(rangeFrom, range.Length, contentLength);
         }
 
         // 200：服务端忽略了 Range（或不支持），流就是完整内容。起点归零，总长即本次长度。
