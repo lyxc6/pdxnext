@@ -35,10 +35,11 @@ public sealed partial class MainWindow : Window
     private const double MinimumWindowHeight = 600.0;
 
     /// <summary>
-    /// 整窗背景的解码宽度（物理像素）。1200 DIP 的窗口在 150% 缩放下约 1800 px，
-    /// 取 2560 保证 4K 下也不糊；2560×1423 的位图约 14.6 MB，与旧的主页横幅同量级。
+    /// 窗口尺寸变化后的去抖时长（毫秒）：用户拖动窗口边缘时会连续触发 SizeChanged，
+    /// 等它停稳再判断要不要按更大宽度重解背景，避免拖一次解十次。
     /// </summary>
-    private const int BackdropDecodeWidth = 2560;
+    /// <remarks>是否需要重解由 <see cref="Services.BackdropDecodeWidth.NeedsUpgrade"/> 判定（只放大不缩小）。</remarks>
+    private const int BackdropUpgradeDelayMilliseconds = 300;
 
     /// <summary>
     /// 「完整（模糊底）」档那层铺底的解码宽度（物理像素）。96 px 相当于把 2560 宽的图
@@ -84,6 +85,19 @@ public sealed partial class MainWindow : Window
 
     /// <summary>当前背景图的完整路径：切到「完整（模糊底）」档要用它补加载低分辨率铺底。</summary>
     private string? _backdropPath;
+
+    /// <summary>当前已经上屏的背景（路径 + 解码宽度）：用来跳过对同一张图、同一宽度的重复解码。</summary>
+    private (string? Path, int Width)? _appliedBackdrop;
+
+    /// <summary>按上一次会话的快照提前起的解码任务；游戏确认是同一张图时直接复用，不再解第二遍。</summary>
+    private Task<ImageSource?>? _preloadedBackdrop;
+
+    private string? _preloadedBackdropPath;
+    private int _preloadedBackdropWidth;
+    private CancellationTokenSource? _preloadRequest;
+
+    /// <summary>窗口变大后的背景重解码去抖定时器（只在确实需要更高分辨率时才重解）。</summary>
+    private DispatcherQueueTimer? _backdropUpgradeTimer;
 
     private bool _isStarted;
 
@@ -153,9 +167,14 @@ public sealed partial class MainWindow : Window
         {
             _bitmapLoader = new BitmapLoader(AppServices.FileSystem, AppServices.Logger, AppServices.ThemeImages);
             _backdropLifetime = new CancellationTokenSource();
+
+            // 背景解码不必等游戏发现：先用上一次会话的快照把同一张图在后台解好，
+            // 发现完成后再确认「还是这一张」，命中就直接上屏（解码与发现重叠）。
+            StartSpeculativeBackdropPreload();
         }
 
         RootGrid.Loaded += OnRootGridLoaded;
+        RootGrid.SizeChanged += OnRootGridSizeChanged;
         ContentFrame.Navigated += OnContentFrameNavigated;
         AppServices.CurrentGameChanged += OnCurrentGameChanged;
         AppServices.BackgroundDisplayChanged += OnBackgroundDisplayChanged;
@@ -229,6 +248,7 @@ public sealed partial class MainWindow : Window
             // 窗口先显示出来，这里才开始扫描 Steam 库（纯本地 IO，不联网）。
             AppServices.Breadcrumb("启动 游戏发现开始");
             await _viewModel.InitializeAsync(CancellationToken.None).ConfigureAwait(true);
+            StartupTimeline.MarkInternal(StartupTimeline.DiscoveryReady);
             AppServices.Breadcrumb("启动 游戏发现完成（" + startupWatch.ElapsedMilliseconds + " ms）");
             UpdateTitleBar();
             UpdateContentNavState();
@@ -570,6 +590,20 @@ public sealed partial class MainWindow : Window
             _backdropRequest?.Cancel();
             _backdropRequest?.Dispose();
             _backdropRequest = null;
+
+            RootGrid.SizeChanged -= OnRootGridSizeChanged;
+            if (_backdropUpgradeTimer is not null)
+            {
+                _backdropUpgradeTimer.Tick -= OnBackdropUpgradeTimerTick;
+                _backdropUpgradeTimer.Stop();
+                _backdropUpgradeTimer = null;
+            }
+
+            _preloadRequest?.Cancel();
+            _preloadRequest?.Dispose();
+            _preloadRequest = null;
+            _preloadedBackdrop = null;
+            _appliedBackdrop = null;
 
             _backdropLifetime?.Cancel();
             _backdropLifetime?.Dispose();
@@ -995,12 +1029,32 @@ public sealed partial class MainWindow : Window
     /// </summary>
     /// <remarks>
     /// 并发语义：每次进入都先取消上一次请求（<see cref="_backdropRequest"/>），再订阅整窗生命周期。
-    /// 只靠 <see cref="_backdropVersion"/> 丢结果是「解码完再扔」，连点五款游戏就是五次 2560px 全图
+    /// 只靠 <see cref="_backdropVersion"/> 丢结果是「解码完再扔」，连点五款游戏就是五次大图
     /// 解码排队在 UI 线程，实测能把后一次背景拖到 50 秒后才显示 —— 必须真正取消旧工作。
+    /// <para>
+    /// 三段省时间的手段（首帧性能）：
+    /// 1) 解码宽度按窗口现算（<see cref="Services.BackdropDecodeWidth"/>），不再无条件 2560；
+    /// 2) 启动时先按上一次会话的快照在后台解码（<see cref="StartSpeculativeBackdropPreload"/>），
+    ///    这里若发现还是同一张图就直接复用，解码与游戏发现重叠；
+    /// 3) 同一张图、同一宽度已经上屏时直接返回，不再解第二遍（<c>CurrentGameChanged</c> 与启动初始化各会触发一次）。
+    /// </para>
     /// </remarks>
     private async Task UpdateBackdropAsync()
     {
         if (_bitmapLoader is null || _backdropLifetime is null)
+        {
+            return;
+        }
+
+        ThemeSpec? theme = AppServices.IsInitialized ? AppServices.CurrentGame?.Theme : null;
+        var spec = theme ?? ThemeApplier.CreatePlaceholderSpec();
+        var decodeWidth = ResolveBackdropDecodeWidth();
+
+        // 同一张图、且屏上那张的分辨率已经不低于这次要的：不再解码、不再重设画笔。
+        if (_appliedBackdrop is { } applied
+            && applied.Width >= decodeWidth
+            && string.Equals(applied.Path ?? string.Empty, spec.Background ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+            && ShellBackgroundBrush.ImageSource is not null)
         {
             return;
         }
@@ -1018,14 +1072,27 @@ public sealed partial class MainWindow : Window
 
         ImageSource? background;
         ImageSource? blurred = null;
+        var appliedWidth = decodeWidth;
+        var usedPreload = false;
         try
         {
-            ThemeSpec? theme = AppServices.IsInitialized ? AppServices.CurrentGame?.Theme : null;
-            var spec = theme ?? ThemeApplier.CreatePlaceholderSpec();
+            // 命中启动快照的预解码就复用，否则照常解码这一次。
+            var preloaded = await TakePreloadedBackdropAsync(spec.Background).ConfigureAwait(true);
+            if (preloaded.Image is not null)
+            {
+                background = preloaded.Image;
+                appliedWidth = preloaded.Width;
+                usedPreload = true;
+            }
+            else
+            {
+                StartupTimeline.MarkInternal(StartupTimeline.BackdropDecodeStart);
+                background = await _bitmapLoader
+                    .LoadAsync(spec.Background, decodeWidth, token)
+                    .ConfigureAwait(true);
+                StartupTimeline.MarkInternal(StartupTimeline.BackdropDecoded);
+            }
 
-            background = await _bitmapLoader
-                .LoadAsync(spec.Background, BackdropDecodeWidth, token)
-                .ConfigureAwait(true);
             _backdropPath = spec.Background;
 
             // 只有「完整（模糊底）」档才需要那层低分辨率铺底，别的档位省掉一次解码。
@@ -1069,7 +1136,255 @@ public sealed partial class MainWindow : Window
 
         ShellBackgroundBrush.ImageSource = background;
         ShellBackgroundBlurBrush.ImageSource = blurred;
+        StartupTimeline.MarkInternal(StartupTimeline.BackdropBrushAssigned);
         await ApplyBackgroundDisplayModeAsync().ConfigureAwait(true);
+        StartupTimeline.MarkInternal(StartupTimeline.BackdropModeApplied);
+
+        if (AppServices.IsInitialized)
+        {
+            AppServices.Logger.Info(
+                "背景上屏: " + (background is null ? "无图" : appliedWidth + " px")
+                + "（" + (usedPreload ? "复用启动预解码" : "本次解码") + "）");
+        }
+
+        _appliedBackdrop = (spec.Background, appliedWidth);
+
+        // 首帧性能埋点：背景真正交给画笔（并完成显示方式应用）之后。
+        // 这里再打一行明细，覆盖「主页首帧早于背景」的启动顺序：日志里最后一次出现的
+        // [首帧明细] 就是本次启动的完整读数。
+        StartupTimeline.MarkInternal(StartupTimeline.BackdropPainted);
+        if (AppServices.IsInitialized)
+        {
+            AppServices.Logger.Info("[首帧明细] " + StartupTimeline.DescribeAll());
+        }
+
+        // 快照落盘放在打点之后、线程池上：写文件在这台机器上实测要 60 ms 量级（杀软把关），
+        // 摆在背景上屏的关键路径上等于自己给自己加一段首帧延迟。
+        SaveBackdropSnapshotInBackground(spec.Background, background);
+    }
+
+    /// <summary>按窗口物理尺寸算这次该解多宽；取不到窗口尺寸时退回原来的 2560（宁可清晰，不要糊）。</summary>
+    private int ResolveBackdropDecodeWidth()
+    {
+        try
+        {
+            var size = AppWindow.Size;
+            return Services.BackdropDecodeWidth.Resolve(size.Width, size.Height);
+        }
+        catch (Exception ex)
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Warn("读取窗口尺寸失败，背景按最大宽度解码: " + ex.Message);
+            }
+
+            return Services.BackdropDecodeWidth.Max;
+        }
+    }
+
+    /// <summary>
+    /// 预解码用的宽度：按「设置里保存的逻辑像素 × 当前 DPI」算，与 <see cref="ApplyWindowSize"/> 同一套算式。
+    /// <para>
+    /// 不用 <c>AppWindow.Size</c>：窗口构造期系统还没把 <c>Resize</c> 的结果反映到 Size 上，
+    /// 拿到的可能是旧值/默认值，导致预解码与真正上屏那次宽度不一致 —— 上一轮实测就是这样
+    /// 白解一遍又重新解一遍（多花 140 ms）。用保存值算出来的宽度与后面稳定状态下的一致。
+    /// </para>
+    /// </summary>
+    private int ResolvePreloadDecodeWidth()
+    {
+        try
+        {
+            var scale = GetScaleFactor();
+            var widthDip = AppServices.IsInitialized && AppServices.Settings.WindowWidth > 0
+                ? Math.Max(AppServices.Settings.WindowWidth, MinimumWindowWidth)
+                : DefaultWindowWidth;
+            var heightDip = AppServices.IsInitialized && AppServices.Settings.WindowHeight > 0
+                ? Math.Max(AppServices.Settings.WindowHeight, MinimumWindowHeight)
+                : DefaultWindowHeight;
+
+            return Services.BackdropDecodeWidth.Resolve(widthDip * scale, heightDip * scale);
+        }
+        catch (Exception ex)
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Warn("计算预解码宽度失败，按最大宽度处理: " + ex.Message);
+            }
+
+            return Services.BackdropDecodeWidth.Max;
+        }
+    }
+
+    /// <summary>
+    /// 启动时按上一次会话的快照把背景先解好（只解不上屏）。
+    /// 快照缺失 / 文件已不在 / 应用服务未就绪时什么都不做 —— 这条路只是加速，
+    /// 失败了照旧等游戏发现完成再解码。
+    /// </summary>
+    private void StartSpeculativeBackdropPreload()
+    {
+        if (_bitmapLoader is null || _backdropLifetime is null || !AppServices.IsInitialized)
+        {
+            return;
+        }
+
+        var snapshot = FrameSnapshotStore.Load(
+            AppServices.FileSystem,
+            AppServices.Logger,
+            FrameSnapshotStore.PathIn(AppServices.DataRoot));
+        if (snapshot?.BackgroundPath is not { Length: > 0 } path)
+        {
+            return;
+        }
+
+        if (!AppServices.FileSystem.FileExists(path))
+        {
+            return;
+        }
+
+        var loader = _bitmapLoader;
+        var decodeWidth = ResolvePreloadDecodeWidth();
+        var request = CancellationTokenSource.CreateLinkedTokenSource(_backdropLifetime.Token);
+        _preloadRequest = request;
+        _preloadedBackdropPath = path;
+        _preloadedBackdropWidth = decodeWidth;
+
+        StartupTimeline.MarkInternal(StartupTimeline.BackdropPreloadStart);
+        _preloadedBackdrop = PreloadAsync(loader, path, decodeWidth, request.Token);
+
+        static async Task<ImageSource?> PreloadAsync(
+            BitmapLoader loader,
+            string path,
+            int decodeWidth,
+            CancellationToken token)
+        {
+            var image = await loader.LoadAsync(path, decodeWidth, token).ConfigureAwait(true);
+            StartupTimeline.MarkInternal(StartupTimeline.BackdropPreloadReady);
+            return image;
+        }
+    }
+
+    /// <summary>
+    /// 取启动时预解码的结果：路径对得上才用（宽度只作记录 —— 窗口尺寸在构造期与布局完成后可能差一档，
+    /// 因此按路径命中、按实际宽度记账，需要更高分辨率时由 <see cref="OnBackdropUpgradeTimerTick"/> 再补）。
+    /// 对不上就立刻取消这次预解码，调用方照常解码本次要的图。预解码任务只被取用一次。
+    /// </summary>
+    private async Task<(ImageSource? Image, int Width)> TakePreloadedBackdropAsync(string? path)
+    {
+        var task = _preloadedBackdrop;
+        if (task is null)
+        {
+            return (null, 0);
+        }
+
+        var request = _preloadRequest;
+        var width = _preloadedBackdropWidth;
+        var matches = string.Equals(
+            _preloadedBackdropPath ?? string.Empty,
+            path ?? string.Empty,
+            StringComparison.OrdinalIgnoreCase);
+
+        _preloadedBackdrop = null;
+        _preloadRequest = null;
+        _preloadedBackdropPath = null;
+
+        if (!matches)
+        {
+            // 上一次会话的背景不是这次要的那张：立即停掉，别白解。
+            request?.Cancel();
+            request?.Dispose();
+            return (null, 0);
+        }
+
+        try
+        {
+            return (await task.ConfigureAwait(true), width);
+        }
+        finally
+        {
+            request?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 把这次上屏的背景记进快照，供下次冷启动提前解码；没有背景时不动旧快照。
+    /// 落盘交给线程池：几十毫秒的写文件不值得压在背景上屏的关键路径上。
+    /// </summary>
+    private static void SaveBackdropSnapshotInBackground(string? backgroundPath, ImageSource? background)
+    {
+        if (!AppServices.IsInitialized
+            || background is null
+            || string.IsNullOrWhiteSpace(backgroundPath))
+        {
+            return;
+        }
+
+        var fileSystem = AppServices.FileSystem;
+        var logger = AppServices.Logger;
+        var target = FrameSnapshotStore.PathIn(AppServices.DataRoot);
+        var snapshot = new FrameSnapshot(
+            FrameSnapshotStore.CurrentVersion,
+            AppServices.CurrentGame?.GameId,
+            backgroundPath,
+            DateTimeOffset.UtcNow);
+
+        _ = Task.Run(() => FrameSnapshotStore.Save(fileSystem, logger, snapshot, target));
+    }
+
+    /// <summary>窗口尺寸变了：去抖后只在确实需要更高分辨率时才按更大宽度重解背景（只放大不缩小）。</summary>
+    private void OnRootGridSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_appliedBackdrop is null)
+        {
+            return;
+        }
+
+        var timer = _backdropUpgradeTimer;
+        if (timer is null)
+        {
+            timer = DispatcherQueue?.CreateTimer();
+            if (timer is null)
+            {
+                return;
+            }
+
+            timer.Interval = TimeSpan.FromMilliseconds(BackdropUpgradeDelayMilliseconds);
+            timer.IsRepeating = false;
+            timer.Tick += OnBackdropUpgradeTimerTick;
+            _backdropUpgradeTimer = timer;
+        }
+
+        timer.Stop();
+        timer.Start();
+    }
+
+    private void OnBackdropUpgradeTimerTick(DispatcherQueueTimer sender, object args)
+    {
+        sender.Stop();
+
+        if (_appliedBackdrop is not { } applied)
+        {
+            return;
+        }
+
+        try
+        {
+            var size = AppWindow.Size;
+            if (!Services.BackdropDecodeWidth.NeedsUpgrade(applied.Width, size.Width, size.Height))
+            {
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Warn("重算背景解码宽度失败: " + ex.Message);
+            }
+
+            return;
+        }
+
+        _ = UpdateBackdropAsync();
     }
 
     /// <summary>当前设置里的背景显示方式；应用还没初始化时按默认「覆盖」处理。</summary>

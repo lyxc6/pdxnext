@@ -90,6 +90,9 @@ public sealed partial class HomePage : Page
     /// <summary>最近一次启动结果：切语言时按新语言重写启动结果 InfoBar。</summary>
     private ProcessStartResult? _lastLaunchResult;
 
+    /// <summary>首帧探测只挂一次：<c>CompositionTarget.Rendering</c> 命中后退订，不能重复挂。</summary>
+    private bool _firstFrameHooked;
+
     /// <summary>正在展示「内部链接」公告提示的链接；null 表示当前没有这类提示需要随语言重算。</summary>
     private string? _newsInfoLink;
 
@@ -125,6 +128,9 @@ public sealed partial class HomePage : Page
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+
+        // 首帧性能埋点：XAML 树已经构造完（此时还没进可视化树，也没有测量/布局）。
+        StartupTimeline.MarkInternal(StartupTimeline.HomePageCreated);
     }
 
     public HomeViewModel ViewModel => _viewModel;
@@ -136,6 +142,9 @@ public sealed partial class HomePage : Page
     {
         try
         {
+            StartupTimeline.MarkInternal(StartupTimeline.HomePageLoaded);
+            HookFirstFrame();
+
             if (_lifetime.IsCancellationRequested)
             {
                 _lifetime = new CancellationTokenSource();
@@ -170,9 +179,50 @@ public sealed partial class HomePage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        CompositionTarget.Rendering -= OnFirstFrameRendering;
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         Localizer.Instance.LanguageChanged -= OnLanguageChanged;
         _lifetime.Cancel();
+    }
+
+    /// <summary>
+    /// 首帧探测：主页第一次真的被合成器画出来时记一条里程碑并打一行明细日志。
+    /// <para>
+    /// 只挂一次（<see cref="_firstFrameHooked"/>），命中后立刻退订 —— <c>Rendering</c> 每帧都触发，
+    /// 留在订阅里就是永久的多余开销。这行日志是首帧性能改造的唯一可复现证据来源，
+    /// Release 也记：用户反馈「启动慢」时先看这一行。
+    /// </para>
+    /// </summary>
+    private void HookFirstFrame()
+    {
+        if (_firstFrameHooked)
+        {
+            return;
+        }
+
+        _firstFrameHooked = true;
+        CompositionTarget.Rendering += OnFirstFrameRendering;
+    }
+
+    private void OnFirstFrameRendering(object? sender, object e)
+    {
+        CompositionTarget.Rendering -= OnFirstFrameRendering;
+
+        try
+        {
+            StartupTimeline.MarkInternal(StartupTimeline.FirstFrame);
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Info("[首帧明细] " + StartupTimeline.DescribeAll());
+            }
+        }
+        catch (Exception ex)
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Warn("记录首帧耗时失败: " + ex.Message);
+            }
+        }
     }
 
     /// <summary>切语言后重写 InfoBar 这类不参与 x:Bind 的文案（标题与正文在代码里拼）。</summary>
@@ -223,8 +273,14 @@ public sealed partial class HomePage : Page
             }
 
             var game = AppServices.CurrentGame;
+
+            // 主题外观与页面数据互不依赖，并行跑：串行时「读继续存档 + 读播放集」和
+            // 「主题素材解码」的耗时会相加，并行后取两者较大值（首帧前少等一段）。
+            var themeTask = ApplyThemeAsync(game, token);
             await _viewModel.LoadAsync(game, token).ConfigureAwait(true);
-            await ApplyThemeAsync(game, token).ConfigureAwait(true);
+            StartupTimeline.MarkInternal(StartupTimeline.HomePageDataReady);
+            await themeTask.ConfigureAwait(true);
+            StartupTimeline.MarkInternal(StartupTimeline.HomePageThemeReady);
         },
         _lifetime.Token,
         ex =>
@@ -248,9 +304,14 @@ public sealed partial class HomePage : Page
 
             // 素材解码交给 ThemeApplier 的异步版：整窗背景/字标动辄 1900px，
             // 同步 new BitmapImage { UriSource } 会在 UI 线程上开文件读头，切游戏时就是一段卡顿。
+            // 主页只要按钮外观：背景由 MainWindow 铺满整窗、字标下面用 BitmapLoader 按显示宽度另解，
+            // 所以这里传 ButtonChrome，跳过背景 / 字标 / 应用图标的原尺寸解码。
             var visuals = _themeApplier is null
                 ? null
-                : await _themeApplier.CreateAsync(spec, cancellationToken).ConfigureAwait(true);
+                : await _themeApplier
+                    .CreateAsync(spec, cancellationToken, ThemeAssetScope.ButtonChrome)
+                    .ConfigureAwait(true);
+            StartupTimeline.MarkInternal(StartupTimeline.HomePageThemeVisuals);
             if (visuals is null)
             {
                 return;
