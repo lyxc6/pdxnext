@@ -150,6 +150,14 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\StartupTimeline.cs" Link="Linked\StartupTimeline.cs" />
     <!--
+      首帧性能的两块纯逻辑：整窗背景的解码宽度策略（纯算术）与背景预热快照的读写
+      （只依赖 IFileSystem / IAppLogger + System.Text.Json）。两者都不碰 UI 类型，可以原样链接。
+      策略错了只在真机上表现为「背景糊」或「启动没变快」，快照错了最多白解一次图，编译器都看不见，
+      所以由 FirstFrameChecks 钉住边界与往返口径。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\BackdropDecodeWidth.cs" Link="Linked\BackdropDecodeWidth.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\FrameSnapshotStore.cs" Link="Linked\FrameSnapshotStore.cs" />
+    <!--
       日志尾部读取：只碰 System.IO / System.Text 与 Core 的 FileLogger 常量，不引用 UI 类型。
       它决定性能页「日志」分区显示什么：截断处的半行/半个 UTF-8 字符、级别过滤丢堆栈都是真机上才看得见的错，
       所以由 LogTailReaderChecks 钉住。
