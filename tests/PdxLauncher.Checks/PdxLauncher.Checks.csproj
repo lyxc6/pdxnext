@@ -257,5 +257,12 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\WorkshopDependencyViewModel.cs" Link="Linked\WorkshopDependencyViewModel.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\WorkshopDependencyNodeViewModel.cs" Link="Linked\WorkshopDependencyNodeViewModel.cs" />
+    <!--
+      本地模型下载的归属者与行视图模型。两者都只依赖 Core + 本地化基类（自检用替身），不碰 WinUI。
+      它们错了不会崩：进度条永远 0%、暂停后按钮点不动、残片删不掉——都只在真机上表现为「下载坏了」，
+      所以由 LocalModelDownloadCoordinatorChecks / LocalModelUiChecks 直接钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\LocalModelDownloadCoordinator.cs" Link="Linked\LocalModelDownloadCoordinator.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\LocalModelRowViewModel.cs" Link="Linked\LocalModelRowViewModel.cs" />
   </ItemGroup>
 </Project>

@@ -1,4 +1,4 @@
-﻿namespace PdxLauncher.Core.Updates;
+namespace PdxLauncher.Core.Updates;
 
 using System.ComponentModel;
 using System.Diagnostics;
@@ -255,7 +255,10 @@ public sealed class UpdateService
 
         try
         {
-            var download = await _http.GetDownloadAsync(manifest.SetupUri, cancellationToken).ConfigureAwait(false);
+            // 更新包不做续传：失败会删掉 .part 整份重下，行为与上一版一致。
+            var download = await _http
+                .GetDownloadAsync(manifest.SetupUri, startOffset: null, cancellationToken)
+                .ConfigureAwait(false);
             using var content = download.Content;
             var total = download.ContentLength ?? manifest.Size;
             await using var output = new FileStream(

@@ -136,6 +136,13 @@ public static class AppServices
     /// </summary>
     public static LocalTranslationRuntime? LocalTranslation { get; private set; }
 
+    /// <summary>
+    /// 本地模型下载的归属者：下载活在 App 层而不是设置页，切走再回来能接着看进度、接着下
+    /// （1.31 GB 的 Index-Translate 模型不可能要求用户一直停在设置页）。
+    /// 没有本地翻译运行时它就是 null。
+    /// </summary>
+    public static LocalModelDownloadCoordinator? LocalModelDownloads { get; private set; }
+
     /// <summary>游戏目录补丁（一键打补丁 / 移除补丁）。只在用户点按钮时读写游戏目录，不做任何自动变更。</summary>
     public static IGamePatchService GamePatch { get; private set; } = null!;
 
@@ -365,6 +372,9 @@ public static class AppServices
         HttpThrottle = httpThrottle;
         Translation = translation;
         LocalTranslation = localTranslation;
+        LocalModelDownloads = localTranslation is null
+            ? null
+            : new LocalModelDownloadCoordinator(localTranslation.DownloadAsync, logger);
         GamePatch = gamePatch;
         DlcOwnership = dlcOwnership;
         // 成就读取一律走一次性宿主：拉起 `--steam-host achievements`、读一次、进程退出，

@@ -4451,6 +4451,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="SettingsTranslateLocalModelDownloading" xml:space="preserve">
     <value>Downloading {0}%</value>
   </data>
+  <data name="SettingsTranslateLocalModelDownloadProgress" xml:space="preserve">
+    <value>Downloading {0}% ({1} / {2})</value>
+  </data>
   <data name="SettingsTranslateLocalModelIndexTranslate" xml:space="preserve">
     <value>Index-Translate-2B (best quality, about 1.3 GB)</value>
   </data>
@@ -4462,6 +4465,12 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="SettingsTranslateLocalModelOpenFolder" xml:space="preserve">
     <value>Open folder</value>
+  </data>
+  <data name="SettingsTranslateLocalModelPause" xml:space="preserve">
+    <value>Pause</value>
+  </data>
+  <data name="SettingsTranslateLocalModelPaused" xml:space="preserve">
+    <value>Paused at {0}% (Download resumes from here)</value>
   </data>
   <data name="SettingsTranslateLocalModelRemove" xml:space="preserve">
     <value>Delete</value>

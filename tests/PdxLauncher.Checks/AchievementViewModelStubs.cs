@@ -160,4 +160,12 @@ internal static class Keys
     public const string DlcToggleToolTipLocked = "dlc.toggleToolTipLocked";
     public const string DlcUnknownBadge = "dlc.unknownBadge";
     public const string DlcUnownedBadge = "dlc.unownedBadge";
+
+    // 本地翻译模型行（LocalModelRowViewModel 被链接进自检）：取值只需稳定可比，
+    // 真正的中英文案由 LocalModelUiChecks 读 resw 校验。
+    public const string SettingsTranslateLocalModelInstalled = "settings.translate.localModelInstalled";
+    public const string SettingsTranslateLocalModelNotInstalled = "settings.translate.localModelNotInstalled";
+    public const string SettingsTranslateLocalModelStatusConfigMissing = "settings.translate.localModelStatusConfigMissing";
+    public const string SettingsTranslateLocalModelStatusMissingFiles = "settings.translate.localModelStatusMissingFiles";
+    public const string SettingsTranslateLocalModelStatusSizeMismatch = "settings.translate.localModelStatusSizeMismatch";
 }

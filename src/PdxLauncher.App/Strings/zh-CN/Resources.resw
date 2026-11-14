@@ -4451,6 +4451,9 @@
   <data name="SettingsTranslateLocalModelDownloading" xml:space="preserve">
     <value>下载中 {0}%</value>
   </data>
+  <data name="SettingsTranslateLocalModelDownloadProgress" xml:space="preserve">
+    <value>下载中 {0}%（{1} / {2}）</value>
+  </data>
   <data name="SettingsTranslateLocalModelIndexTranslate" xml:space="preserve">
     <value>Index-Translate-2B（质量最好，约 1.3 GB）</value>
   </data>
@@ -4462,6 +4465,12 @@
   </data>
   <data name="SettingsTranslateLocalModelOpenFolder" xml:space="preserve">
     <value>打开文件夹</value>
+  </data>
+  <data name="SettingsTranslateLocalModelPause" xml:space="preserve">
+    <value>暂停</value>
+  </data>
+  <data name="SettingsTranslateLocalModelPaused" xml:space="preserve">
+    <value>已暂停 {0}%（下次「下载」接着下）</value>
   </data>
   <data name="SettingsTranslateLocalModelRemove" xml:space="preserve">
     <value>删除</value>

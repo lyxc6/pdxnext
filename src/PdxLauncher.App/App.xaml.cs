@@ -67,7 +67,12 @@ public partial class App : Application
 
         // 单实例：第一个窗口起来后再开监听，第二个进程点开时能直接把这里叫到前台。
         SingleInstanceGuard.StartActivationServer(_window.DispatcherQueue, _window);
-        _window.Closed += (_, _) => SingleInstanceGuard.StopActivationServer();
+        _window.Closed += (_, _) =>
+        {
+            // 进程退出时干净取消在途的模型下载：.part 留在盘上，下次启动点「下载」继续。
+            AppServices.LocalModelDownloads?.Dispose();
+            SingleInstanceGuard.StopActivationServer();
+        };
 
         // UI 线程看门狗：任何页面上的同步长活（大文件加载、同步 IO/解码）都会在这里留下
         // 「停顿 N ms + 最近位置」，比窗口卡死后什么都抓不到要强。
