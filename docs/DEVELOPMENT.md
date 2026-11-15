@@ -91,10 +91,10 @@ pwsh -File scripts/session.ps1 close -Message "中文说明"  :: 校验基线 �
 其他对话或自动化脚本统一用 `dev.cmd`，不要用 `start.cmd`（它遇到已运行实例会直接退出，也不负责验收）：
 
 ```bat
-dev.cmd         :: 结束旧实例 → Release 构建 + 自检 → 启动，末尾输出 DEV_* 标记
+dev.cmd         :: 结束本目录旧实例 → Release 构建 + 自检 → 启动，末尾输出 DEV_* 标记
 dev.cmd logs    :: 同上，启动后在本终端跟随日志（Ctrl+C 只停跟随，程序继续运行）
 dev.cmd build   :: 只构建 + 自检，不启动（验收用）
-dev.cmd nobuild :: 不构建，结束旧实例后直接启动已构建的程序；加 logs 也跟随日志
+dev.cmd nobuild :: 不构建，结束本目录旧实例后直接启动已构建的程序；加 logs 也跟随日志
 ```
 
 查看当前改动（只读）：
@@ -105,9 +105,30 @@ status.cmd nopause  :: 同上，不停住（VS Code 任务用）
 ```
 
 `dev.cmd` 退出码：`0` 通过、`1` 构建失败、`2` 自检失败、`3` 没有可执行文件、`4` 启动后退出；
-末尾固定输出 `DEV_RESULT=` / `DEV_EXE=` / `DEV_DATA=` / `DEV_LOG=` / `DEV_PID=` 等行。
-它会**结束正在运行的 `PdxLauncher.App.exe`**（运行中的 exe 会锁 `PdxLauncher.Core.dll`），
-所以同一工作树同一时刻只允许一个 `dev.cmd`。更完整的约定见 `docs\AGENT-WORKFLOW.md` §10 与根 `AGENTS.md`。
+末尾固定输出 `DEV_RESULT=` / `DEV_EXE=` / `DEV_DATA=` / `DEV_LOG=` / `DEV_PID=` / `DEV_OTHER_PIDS=` 等行。
+它只会**结束本工作树 exe 路径**的实例（运行中的 exe 会锁 `PdxLauncher.Core.dll`），
+所以同一工作树同一时刻只允许一个 `dev.cmd`；同一台机器上装在别的盘（例如 `D:\app\PdxNext`）
+的那份**不会被结束**，只会在输出里以 `DEV_OTHER_PIDS=` 列出来。更完整的约定见 `docs\AGENT-WORKFLOW.md` §10 与根 `AGENTS.md`。
+
+单实例（`src/PdxLauncher.Core/PdxInstanceScope.cs` + `src/PdxLauncher.App/Services/SingleInstanceGuard.cs`）：
+
+- 锁名 = `Local\PdxNext.App.<FNV-1a 16 位>`，散列键是**程序目录**（`AppContext.BaseDirectory` 的
+  Windows 规范化大写形式）。同一目录内只允许一个实例（两个进程写同一个 `data\pdxnext.sqlite`
+  会互相踩），不同目录互不阻塞 —— 同一台机器上装在 C / D / E 盘的 PdxNext 可以同时开着。
+- 激活管道同规则：`PdxNext.App.Activate.<同一个键>`，`dev.cmd`/用户双击第二次时只会把**同目录**
+  那个窗口叫到前台。
+- 安装器仍然有效的秘密：`Local\PdxNext.App`（**没有后缀**）保留下来，由每个实例以
+  `initiallyOwned: false` 持有句柄 —— 它不再是互斥锁，只是「有副本在运行」的存在性标记。
+  `installer/PdxNext.iss` 的 `AppMutex` 读的就是它，所以安装/卸载前仍会要求关掉所有副本。
+  这条**不要改**：改名字就要同步改 `.iss`，而 `.iss` 里没有可用的散列函数。
+- 已知限制（本次不修）：
+  1. 作用域键是**exe 目录**，不是数据根。两份不同目录的实例如果把 `data-root.txt` 指到同一个目录，
+     仍会并发写同一个库。
+  2. 旧版（1.3.0 及以前，全局锁）与新版本在同一目录混跑时互不识别：旧版持有的是无后缀的全局名，
+     新版看的是带后缀的作用域名。正常路径上 `dev.cmd` 会先结束同目录进程，实际不构成风险。
+- 进程管理统一走 `scripts/pdx-app-process.ps1`（`-Action status|stop|wait`，按 `Path` 全等匹配）。
+  禁止再用 `taskkill /im PdxLauncher.App.exe` 或 `Get-Process PdxLauncher.App | Stop-Process`：
+  那会把用户装在别的盘、正在用的副本一起关掉。`StartScriptChecks` 已把这条钉成断言，写回去会红。
 
 单独构建（脚本化、CI、或只想跑某一步时用；只启动已构建的 Release 用 `dev.cmd nobuild`，
 要在终端看运行日志用 `dev.cmd nobuild logs`）：
@@ -657,7 +678,7 @@ src/
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
   PdxLauncher.Localization.Generator/ :: Roslyn 增量源生成器：编译期读 Strings/*/Resources.resw，生成 Localizer 属性与 Keys（不落盘）
 tests/
-  PdxLauncher.Checks/          :: 169 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 170 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
@@ -681,7 +702,7 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**753 个 .cs + 22 个 .xaml**（不含 `obj/` 生成物；2026-11-15 实测：Core 366 / App 201+22 / Imaging 10 / Checks 176；运行时打印的「检查类」是 **169**，其余文件是自检框架与替身）。
+**755 个 .cs + 22 个 .xaml**（不含 `obj/` 生成物；2026-11-15 实测：Core 367 / App 201+22 / Imaging 10 / Checks 177；运行时打印的「检查类」是 **170**，其余文件是自检框架与替身）。
 
 ---
 
@@ -691,7 +712,7 @@ tools/
 dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 169，失败: 0，断言失败总数: 0` 即通过（2026-11-15 实测 169 类；真机段只锁结构——行数、启用态这类本机数据只打印 `info` 不作断言，Victoria 3 播放集那条写死的 `mod 行数 >= 22` 已按这个原则删掉，见 HANDOFF §0.85.5；CK3 播放集条数同理从 `>= 3` 放宽到 `>= 1`，见 §0.99）。覆盖：Steam 探测与
+输出 `检查类: 170，失败: 0，断言失败总数: 0` 即通过（2026-11-15 实测 170 类；真机段只锁结构——行数、启用态这类本机数据只打印 `info` 不作断言，Victoria 3 播放集那条写死的 `mod 行数 >= 22` 已按这个原则删掉，见 HANDOFF §0.85.5；CK3 播放集条数同理从 `>= 3` 放宽到 `>= 1`，见 §0.99）。覆盖：Steam 探测与
 launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取、
 Mod 创建（legacy `.mod`/`descriptor.mod` 与 V3 `.metadata/metadata.json` 生成、非法输入拒绝、本地清单合并、发布记录与发布协议参数、
 工坊发布面：可见性四档映射、1 MB 与张数上限、五种 YouTube 链接解析、30 种语言码与归一化、请求 JSON 全字段往返、旧 `public` 记录回显、内嵌默认封面的 PNG 签名与落盘一致、

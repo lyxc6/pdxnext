@@ -32,10 +32,32 @@ public static class SingleInstanceChecks
         ChecksContext.Check(
             "单实例: 更新器仍能释放 Mutex",
             program.Contains("ReleaseAppMutex() => SingleInstanceGuard.ReleaseMutex()", StringComparison.Ordinal));
+        var scope = Read(root, "src", "PdxLauncher.Core", "PdxInstanceScope.cs");
         ChecksContext.Check(
             "单实例: 安装器 AppMutex 名字未改",
-            guard.Contains(@"Local\PdxNext.App", StringComparison.Ordinal)
+            scope.Contains(@"Local\PdxNext.App", StringComparison.Ordinal)
+                && guard.Contains("InstallerMutexName = PdxInstanceScope.InstallerMutexName", StringComparison.Ordinal)
                 && program.Contains("SingleInstanceGuard.ReleaseMutex", StringComparison.Ordinal));
+
+        // 作用域隔离（多盘并存）：锁与管道都必须按程序目录派生，不能再用全局同名。
+        ChecksContext.Check(
+            "单实例: 锁名按程序目录派生",
+            guard.Contains("PdxInstanceScope.MutexNameFor", StringComparison.Ordinal)
+                && guard.Contains("PdxInstanceScope.PipeNameFor", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "单实例: 锁名不再是全局同名常量",
+            !guard.Contains(@"public const string MutexName = @""Local\PdxNext.App""", StringComparison.Ordinal)
+                && guard.Contains("public static string MutexName", StringComparison.Ordinal)
+                && guard.Contains("public static string ActivationPipeName", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "单实例: 安装器标记 mutex 仍单独创建",
+            guard.Contains("PdxInstanceScope.InstallerMutexName", StringComparison.Ordinal)
+                && guard.Contains("initiallyOwned: false", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "单实例: 释放/重建同时覆盖作用域锁与安装器标记",
+            guard.Contains("_installerMarker", StringComparison.Ordinal)
+                && guard.Contains("AcquireInstallerMarker", StringComparison.Ordinal));
+
         ChecksContext.Check(
             "单实例: 第一个实例在窗口起来后启动管道监听",
             app.Contains("SingleInstanceGuard.StartActivationServer", StringComparison.Ordinal)

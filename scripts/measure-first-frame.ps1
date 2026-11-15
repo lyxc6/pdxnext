@@ -35,7 +35,7 @@ $phases = @(
 )
 
 function Stop-Launcher {
-    Get-Process -Name 'PdxLauncher.App' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    & (Join-Path $PSScriptRoot "pdx-app-process.ps1") -Action stop -Exe $ExePath | Out-Null
     Start-Sleep -Milliseconds 900
 }
 

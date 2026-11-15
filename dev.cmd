@@ -66,6 +66,10 @@ set "EXE=src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64
 set "EXEDIR=%ROOT%src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64"
 set "DATA=%EXEDIR%\data"
 set "LOG=%DATA%\logs\pdxnext.log"
+rem Match by exe path, not by process name: another PdxNext copy installed on a
+different drive must neither be killed nor mistaken for our own launch.
+set "PROC=%ROOT%scripts\pdx-app-process.ps1"
+set "EXEABS=%ROOT%%EXE%"
 
 echo ============================================
 call "%ROOT%scripts\msg.cmd" V_TITLE
@@ -147,21 +151,27 @@ if errorlevel 1 start "" "%ROOT%%EXE%"
 call "%ROOT%scripts\msg.cmd" V_WAIT
 
 set "PID="
-set /a WAIT=0
-:waitloop
-ping -n 2 127.0.0.1 >nul
-set "PID="
-for /f "usebackq tokens=2 delims=," %%p in (`tasklist /fi "imagename eq PdxLauncher.App.exe" /fo csv /nh 2^>nul`) do set "PID=%%~p"
-if defined PID goto launched
-set /a WAIT+=1
-if !WAIT! lss 10 goto waitloop
-call "%ROOT%scripts\msg.cmd" V_FAILSTART "%LOG%"
+set "OTHER="
+set "OTHERPIDS="
+set "STARTED="
+set "STOPPED="
+rem Wait for THIS directory's instance (up to ~10s). Only a process whose exe path
+rem matches exactly counts; a same-named copy on another drive never does.
+for /f "usebackq tokens=1,* delims==" %%a in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%PROC%" -Action wait -Exe "%EXEABS%" -TimeoutSeconds 10`) do (
+    if /i "%%a"=="PID" set "PID=%%b"
+    if /i "%%a"=="STARTED" set "STARTED=%%b"
+    if /i "%%a"=="OTHER" set "OTHER=%%b"
+    if /i "%%a"=="OTHER_PIDS" set "OTHERPIDS=%%b"
+)
+if "%STARTED%"=="1" if defined PID if not "%PID%"=="0" goto launched
+call "%ROOT%scripts\msg.cmd" V_CONFLICT "%LOG%"
 echo DEV_RESULT=FAIL_LAUNCH
 set "RC=4"
 goto fail
 
 :launched
 call "%ROOT%scripts\msg.cmd" V_PID %PID%
+if defined OTHERPIDS if not "%OTHER%"=="0" call "%ROOT%scripts\msg.cmd" V_OTHER_RUNNING %OTHERPIDS%
 echo.
 call "%ROOT%scripts\msg.cmd" V_OKRUN
 if "%FOLLOW%"=="0" call "%ROOT%scripts\msg.cmd" V_LOGHINT
@@ -176,6 +186,7 @@ echo DEV_EXE=%ROOT%%EXE%
 echo DEV_DATA=%DATA%
 echo DEV_LOG=%LOG%
 echo DEV_PID=%PID%
+echo DEV_OTHER_PIDS=%OTHERPIDS%
 if "%FOLLOW%"=="1" call :followlog
 exit /b 0
 
@@ -205,6 +216,7 @@ echo DEV_EXE=%ROOT%%EXE%
 echo DEV_DATA=%DATA%
 echo DEV_LOG=%LOG%
 echo DEV_PID=0
+echo DEV_OTHER_PIDS=
 exit /b 0
 
 :fail
@@ -215,16 +227,24 @@ echo DEV_BRANCH=%BRANCH%
 echo DEV_HEAD=%HEAD%
 echo DEV_DIRTY=%DIRTY%
 echo DEV_PID=0
+echo DEV_OTHER_PIDS=%OTHERPIDS%
 exit /b %RC%
 
 :killapp
-tasklist /fi "imagename eq PdxLauncher.App.exe" /nh 2>nul | findstr /i /c:"PdxLauncher.App.exe" >nul
-if errorlevel 1 (
-    call "%ROOT%scripts\msg.cmd" V_NOSTOP
-    exit /b 0
+rem Stop only THIS directory's instance. A copy installed elsewhere on the machine
+rem (for example D:\app\PdxNext) is the user's real install: leave it running.
+set "STOPPED=0"
+set "OTHER=0"
+set "OTHERPIDS="
+for /f "usebackq tokens=1,* delims==" %%a in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%PROC%" -Action stop -Exe "%EXEABS%"`) do (
+    if /i "%%a"=="STOPPED" set "STOPPED=%%b"
+    if /i "%%a"=="OTHER" set "OTHER=%%b"
+    if /i "%%a"=="OTHER_PIDS" set "OTHERPIDS=%%b"
 )
-call "%ROOT%scripts\msg.cmd" V_KILL
-taskkill /im PdxLauncher.App.exe /f >nul 2>nul
-ping -n 3 127.0.0.1 >nul
-call "%ROOT%scripts\msg.cmd" V_KILLED
+if "%STOPPED%"=="0" (
+    call "%ROOT%scripts\msg.cmd" V_NOSTOP
+) else (
+    call "%ROOT%scripts\msg.cmd" V_KILLED
+)
+if defined OTHERPIDS if not "%OTHER%"=="0" call "%ROOT%scripts\msg.cmd" V_OTHER_RUNNING %OTHERPIDS%
 exit /b 0
