@@ -207,7 +207,7 @@ try
 {
     if (-not (Test-Path $exe)) { throw "NO_EXE $exe" }
 
-    Get-Process PdxLauncher.App -ErrorAction SilentlyContinue | Stop-Process -Force
+    & (Join-Path $PSScriptRoot "pdx-app-process.ps1") -Action stop -Exe $exe | Out-Null
     Start-Sleep -Milliseconds 700
 
     # 必须 UseShellExecute=$false：未签名 worktree exe 走 ShellExecute 会弹安全警告（Win32 1223）。

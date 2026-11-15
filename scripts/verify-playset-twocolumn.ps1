@@ -22,7 +22,7 @@ $shotDir = Join-Path $rootDir '.scratch\rework'
 New-Item -ItemType Directory -Force -Path $shotDir | Out-Null
 
 if (-not (Test-Path $exe)) { "NO_EXE $exe"; exit 1 }
-Get-Process PdxLauncher.App -ErrorAction SilentlyContinue | Stop-Process -Force
+& (Join-Path $PSScriptRoot "pdx-app-process.ps1") -Action stop -Exe $exe | Out-Null
 Start-Sleep -Milliseconds 700
 # UseShellExecute=$false: an unsigned exe started through ShellExecute raises the
 # "Open File - Security Warning" dialog (cancel = Win32 1223).

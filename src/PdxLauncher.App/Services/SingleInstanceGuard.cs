@@ -12,33 +12,42 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
 using PdxLauncher.App.Localization;
+using PdxLauncher.Core;
 
 /// <summary>
 /// 单实例保护：第二个 UI 进程不再创建窗口，而是通过命名管道让第一个实例把窗口前置。
 /// <para>
-/// 以前只在 <see cref="Program"/> 里创建了同名 Mutex 给安装器探测「程序是否在运行」，
-/// 但从不检查 <c>createdNew</c>，所以快速重启 / 双击两次可以并存两个进程，共享同一个
-/// <c>data</c> 目录并并发写 settings / SQLite。这里把 Mutex 升级成真正的单实例锁，
-/// 管道只传一个 <c>show</c>，不传任何业务数据。
+/// 作用域是**程序目录**（见 <see cref="PdxInstanceScope"/>），不是整台机器：同一台机器上装在
+/// 两个盘的 PdxNext 各自独立运行，互不顶替；同一目录内仍然只允许一个实例，避免两个进程
+/// 共享同一个 <c>data</c> 目录并发写 settings / SQLite。
+/// </para>
+/// <para>
+/// 另外保留一个全局同名、**不持有所有权**的标记 mutex <see cref="PdxInstanceScope.InstallerMutexName"/>，
+/// 让 <c>installer/PdxNext.iss</c> 的 <c>AppMutex</c> 仍能检测到「有副本在运行」；多个副本
+/// 同时创建它只是 <c>createdNew=false</c>，不会互相争锁。
 /// </para>
 /// </summary>
 public static class SingleInstanceGuard
 {
     /// <summary>安装器 <c>AppMutex</c> 读的就是这个名字，不能改。</summary>
-    public const string MutexName = @"Local\PdxNext.App";
+    public const string InstallerMutexName = PdxInstanceScope.InstallerMutexName;
 
-    /// <summary>同会话内的激活管道名（NamedPipe 自带会话内可见性，不需要 Local 前缀）。</summary>
-    public const string ActivationPipeName = "PdxNext.App.Activate";
+    /// <summary>本目录的作用域锁名（真正决定「能不能开第二个窗口」）。</summary>
+    public static string MutexName => PdxInstanceScope.MutexNameFor(AppContext.BaseDirectory);
+
+    /// <summary>本目录的激活管道名（同会话内可见，不需要 Local 前缀）。</summary>
+    public static string ActivationPipeName => PdxInstanceScope.PipeNameFor(AppContext.BaseDirectory);
 
     private const int SwRestore = 9;
     private const uint MbOk = 0x00000000;
     private const uint MbIconInformation = 0x00000040;
 
     private static Mutex? _mutex;
+    private static Mutex? _installerMarker;
     private static CancellationTokenSource? _serverCts;
 
-    /// <summary>第一个实例拿锁；已有实例时返回 false，调用方应尝试唤醒它并退出。</summary>
-    /// <param name="alreadyRunning">true = 锁被另一个进程持有。</param>
+    /// <summary>第一个实例拿锁；已有本目录实例时返回 false，调用方应尝试唤醒它并退出。</summary>
+    /// <param name="alreadyRunning">true = 本目录的锁被另一个进程持有。</param>
     public static bool TryAcquire(out bool alreadyRunning)
     {
         var mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
@@ -50,10 +59,34 @@ public static class SingleInstanceGuard
         }
 
         _mutex = mutex;
+        AcquireInstallerMarker();
         return true;
     }
 
-    /// <summary>通知第一个实例把主窗口前置；连接不上返回 false。</summary>
+    /// <summary>
+    /// 创建安装器标记 mutex 并一直持有句柄（不需要所有权）。
+    /// <para>
+    /// 失败不影响单实例判定：安装器最多是「以为没有副本在跑」，而单实例锁本身仍然成立。
+    /// </para>
+    /// </summary>
+    private static void AcquireInstallerMarker()
+    {
+        if (_installerMarker is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            _installerMarker = new Mutex(initiallyOwned: false, InstallerMutexName);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            AppServices.Logger?.Warn("安装器标记 mutex 创建失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>通知本目录的第一个实例把主窗口前置；连接不上返回 false。</summary>
     public static bool SignalExistingInstance()
     {
         // 第一个实例可能还在 ComposeServices / 创建窗口，管道服务器要等窗口激活后才起。
@@ -135,16 +168,21 @@ public static class SingleInstanceGuard
     {
         var mutex = Interlocked.Exchange(ref _mutex, null);
         mutex?.Dispose();
+
+        // 标记也一起放掉：安装器启动时若还看到它，会直接判定「程序正在运行」并退出。
+        var marker = Interlocked.Exchange(ref _installerMarker, null);
+        marker?.Dispose();
     }
 
     /// <summary>
     /// 安装器取消 / 启动失败后重新拿回单实例锁。
     /// <para>
     /// 更新流程会先释放 Mutex 让安装器的 CloseApplications 能关窗口；如果 UAC 被取消或
-    /// 安装器没起来，必须把锁拿回来，否则当前进程继续跑却没有锁，下一次双击会开出第二个实例。
+    /// 安装器没起来，必须把锁拿回来，否则当前进程继续跑却没有锁，下一次双击会开出第二个
+    /// 同目录实例。
     /// </para>
     /// </summary>
-    /// <returns>true = 重新拿到；false = 锁已被另一个实例占用（或无法创建）。</returns>
+    /// <returns>true = 重新拿到；false = 锁已被本目录的另一个实例占用（或无法创建）。</returns>
     public static bool TryReacquire()
     {
         if (_mutex is not null)
@@ -163,6 +201,7 @@ public static class SingleInstanceGuard
             }
 
             _mutex = mutex;
+            AcquireInstallerMarker();
             return true;
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)

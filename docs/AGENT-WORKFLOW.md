@@ -185,14 +185,21 @@ DEV_EXE=<绝对路径>
 DEV_DATA=<exe目录>\data
 DEV_LOG=<exe目录>\data\logs\pdxnext.log
 DEV_PID=12345
+DEV_OTHER_PIDS=67890,11111
 ```
 
-退出码：`0` 通过、`1` 构建失败、`2` 自检失败、`3` 没有可执行文件、`4` 启动后 10 秒内退出。
+`DEV_PID` 只会是本目录 exe 的进程；`DEV_OTHER_PIDS` 是同名的**其它目录副本**（用户装在别的盘的
+那份），仅用于告知，`dev.cmd` 不会碰它们。
+
+退出码：`0` 通过、`1` 构建失败、`2` 自检失败、`3` 没有可执行文件、`4` 启动后 10 秒内没有等到
+**本目录**的实例（`V_CONFLICT`，多半是同目录已有实例抢走了锁）。
 
 ### 10.3 注意
 
-- `dev.cmd` 默认**结束正在运行的 `PdxLauncher.App.exe`**：运行中的 exe 会锁 `PdxLauncher.Core.dll`，
-  旧窗口也会让 UI 检查量到旧构建。
+- `dev.cmd` 默认**只结束本工作树 exe 路径**的实例：运行中的 exe 会锁 `PdxLauncher.Core.dll`，
+  旧窗口也会让 UI 检查量到旧构建。同一台机器上装在别的盘（例如 `D:\app\PdxNext`）的那份属于
+  用户实际在用的安装版，**不会被结束**，只会以 `DEV_OTHER_PIDS=` 列进输出；`DEV_PID` 只报本目录那个。
+  这套按路径过滤由 `scripts\pdx-app-process.ps1` 提供，禁止退回 `taskkill /im PdxLauncher.App.exe`。
 - 同一工作树同一时刻只允许一个 `dev.cmd` / `dotnet build`；两个对话同时跑会互相覆盖 `bin/`、`obj/`。
 - `status.cmd` 只读，不写任何文件。改动文件最多列 60 个，超出部分打印剩余项数；
   完整清单仍用 `git status`。
