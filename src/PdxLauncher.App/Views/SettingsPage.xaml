@@ -1424,8 +1424,22 @@
                                                                Visibility="{x:Bind svc:XamlVisibility.FromString(OperationText), Mode=OneWay}"
                                                                Style="{StaticResource SettingsHintTextStyle}"
                                                                TextWrapping="Wrap" />
+                                                    <!--
+                                                        逐字节进度条：1.31 GB 的 Index-Translate 是单个文件，
+                                                        没有它就只能看到「下载中 0%」僵在原地。
+                                                    -->
+                                                    <ProgressBar Maximum="100"
+                                                                 Value="{x:Bind DownloadPercent, Mode=OneWay}"
+                                                                 Visibility="{x:Bind svc:XamlVisibility.FromBool(IsDownloading), Mode=OneWay}"
+                                                                 AutomationProperties.AutomationId="barLocalModelDownload"
+                                                                 HorizontalAlignment="Stretch" />
                                                 </StackPanel>
                                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                    <Button Content="{x:Bind L.SettingsTranslateLocalModelPause, Mode=OneWay}"
+                                                            IsEnabled="{x:Bind CanPause, Mode=OneWay}"
+                                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(CanPause), Mode=OneWay}"
+                                                            Click="OnPauseLocalModelClick"
+                                                            AutomationProperties.AutomationId="btnPauseLocalModel" />
                                                     <Button Content="{x:Bind L.SettingsTranslateLocalModelDownload, Mode=OneWay}"
                                                             IsEnabled="{x:Bind CanDownload, Mode=OneWay}"
                                                             Click="OnDownloadLocalModelClick"

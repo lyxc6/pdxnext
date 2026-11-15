@@ -3,6 +3,7 @@ namespace PdxLauncher.Core.Online;
 using System.Globalization;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using PdxLauncher.Core.Abstractions;
 
 /// <summary>
@@ -14,7 +15,7 @@ using PdxLauncher.Core.Abstractions;
 /// 换对象等于把它们的引用变成指向已释放连接池的僵尸。
 /// </para>
 /// </summary>
-public sealed class HttpFetcher : IHttpFetcher, IConditionalHttpFetcher, IDisposable
+public sealed class HttpFetcher : IHttpFetcher, IConditionalHttpFetcher, IDownloadFetcher, IDisposable
 {
     /// <summary>
     /// 连接超时 30 秒。旧值 15 秒实测会在到 metadata-assets 的 TLS 握手上大面积超时
@@ -248,57 +249,112 @@ public sealed class HttpFetcher : IHttpFetcher, IConditionalHttpFetcher, IDispos
     }
 
     /// <summary>
-    /// 下载入口：与 <see cref="GetAsync"/> 相同，但额外返回 Content-Length，供进度条使用。
-    /// 只给更新下载器用（不放进 <see cref="IHttpFetcher"/>，避免所有测试假实现都要跟着改）。
+    /// 下载入口：与 <see cref="GetAsync"/> 相同，但额外带上长度信息，并支持从任意字节续传。
+    /// <para>
+    /// 只给下载器用（不放进 <see cref="IHttpFetcher"/>，避免所有测试假实现都要跟着改）。
+    /// <paramref name="startOffset"/> 大于 0 时发 <c>Range</c>；服务端回 200（忽略 Range）时
+    /// <see cref="HttpDownload.RangeStart"/> 是 0，调用方必须截断后从头写。
+    /// </para>
     /// </summary>
-    public async Task<HttpDownload> GetDownloadAsync(Uri uri, CancellationToken cancellationToken)
+    /// <param name="uri">下载地址；必须命中白名单。</param>
+    /// <param name="startOffset">续传起点；null / 0 表示从头下载。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    public async Task<HttpDownload> GetDownloadAsync(
+        Uri uri,
+        long? startOffset,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(uri);
         EnsureAllowed(uri);
 
-        var slot = await AcquireSlotAsync(uri, cancellationToken).ConfigureAwait(false);
-        HttpResponseMessage response;
-        try
+        var resumeAt = startOffset ?? 0;
+        if (resumeAt < 0)
         {
-            response = await Volatile.Read(ref _client)
-                .GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-                .ConfigureAwait(false);
+            throw new ArgumentOutOfRangeException(nameof(startOffset), resumeAt, "续传起点不能是负数。");
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+
+        var response = await SendDownloadRequestAsync(uri, resumeAt, cancellationToken).ConfigureAwait(false);
+
+        // 416：本地 .part 比服务端文件还长（模型换过版本，或上次写到一半被截断）。
+        // 去掉 Range 重发一次，宁可整份重下，也不要拼出一个「长度对、内容错」的文件。
+        if (response.StatusCode == HttpStatusCode.RequestedRangeNotSatisfiable && resumeAt > 0)
         {
-            // 同 GetAsync：连接超时翻译成 NetworkTimeoutException，别让它伪装成「用户取消」。
-            slot?.Dispose();
-            throw new NetworkTimeoutException(
-                uri.Host,
-                "连接超时（" + (int)ConnectTimeout.TotalSeconds + " 秒）：" + uri.Host,
-                ex);
-        }
-        catch
-        {
-            slot?.Dispose();
-            throw;
+            _logger.Info("续传被服务端拒绝（416），改为从头下载：" + uri);
+            response.Dispose();
+            resumeAt = 0;
+            response = await SendDownloadRequestAsync(uri, 0, cancellationToken).ConfigureAwait(false);
         }
 
         if (!response.IsSuccessStatusCode)
         {
             var failure = ClassifyFailure(uri, response);
             response.Dispose();
-            slot?.Dispose();
             throw failure;
         }
-
-        _throttle?.ReportSuccess(uri.Host);
-        slot?.Dispose();
 
         try
         {
             var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            return new HttpDownload(stream, response.Content.Headers.ContentLength);
+            var range = DownloadRange.Read(response, resumeAt);
+            return new HttpDownload(stream, range.ContentLength, range.RangeStart, range.TotalLength);
         }
         catch (Exception)
         {
             response.Dispose();
             throw;
+        }
+    }
+
+    /// <summary>
+    /// 发一次下载请求并拿到响应头（<see cref="HttpCompletionOption.ResponseHeadersRead"/>，流式）。
+    /// 连接超时同样翻译成 <see cref="NetworkTimeoutException"/>；出口闸门只覆盖到「拿到响应头」。
+    /// </summary>
+    /// <param name="uri">下载地址。</param>
+    /// <param name="from">Range 起点；0 表示不发 Range。</param>
+    /// <param name="cancellationToken">取消令牌。</param>
+    private async Task<HttpResponseMessage> SendDownloadRequestAsync(
+        Uri uri,
+        long from,
+        CancellationToken cancellationToken)
+    {
+        var slot = await AcquireSlotAsync(uri, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+
+            // 续传按「原始传输字节」算偏移，所以响应体必须原样落在 .part 里。
+            // 连接池默认开了 AutomaticDecompression：若服务端或中间代理对响应做 Content-Encoding，
+            // 流里就是解压后的字节，而偏移仍是压缩字节的偏移——续传必然写到错误位置。
+            // 显式要求 identity，从源头上不让这件事发生。
+            request.Headers.TryAddWithoutValidation("Accept-Encoding", "identity");
+
+            if (from > 0)
+            {
+                request.Headers.Range = new RangeHeaderValue(from, null);
+            }
+
+            var response = await Volatile.Read(ref _client)
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _throttle?.ReportSuccess(uri.Host);
+            }
+
+            return response;
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            // 同 GetAsync：连接超时翻译成 NetworkTimeoutException，别让它伪装成「用户取消」。
+            throw new NetworkTimeoutException(
+                uri.Host,
+                "连接超时（" + (int)ConnectTimeout.TotalSeconds + " 秒）：" + uri.Host,
+                ex);
+        }
+        finally
+        {
+            slot?.Dispose();
         }
     }
 

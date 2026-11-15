@@ -2,6 +2,7 @@ namespace PdxLauncher.Checks;
 
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Online;
@@ -33,7 +34,63 @@ public static class HttpFetcherChecks
         CheckSwapsWithProxyObjects();
         CheckDisposeIsIdempotent();
         CheckTimeoutExceptionContract();
+        CheckDownloadRangeParsing();
         return ChecksContext.Failures - before;
+    }
+
+    /// <summary>
+    /// 下载长度解析：206 必须取 <c>Content-Range</c> 的起点与总量；200 必须把起点归零。
+    /// <para>
+    /// 判错的后果很安静：把剩余长度当总量，进度条会「从 0 冲到底」；把被忽略的 Range 当成已续传，
+    /// 文件前段会被重复写一遍——两种都不会崩，只会写出一个坏模型，所以口径必须钉死。
+    /// </para>
+    /// </summary>
+    private static void CheckDownloadRangeParsing()
+    {
+        using (var partial = new HttpResponseMessage(HttpStatusCode.PartialContent)
+               {
+                   Content = new ByteArrayContent(new byte[70]),
+               })
+        {
+            partial.Content.Headers.ContentRange = new ContentRangeHeaderValue(30, 99, 100);
+            var info = DownloadRange.Read(partial, requestedStart: 30);
+            ChecksContext.Equal("HttpFetcher.DownloadRange：206 起点取 Content-Range", 30L, info.RangeStart);
+            ChecksContext.Equal("HttpFetcher.DownloadRange：206 总长取 Content-Range 总量", 100L, info.TotalLength);
+            ChecksContext.Equal("HttpFetcher.DownloadRange：206 本次长度是剩余部分", 70L, info.ContentLength);
+            ChecksContext.Check(
+                "HttpFetcher.DownloadRange：206 不会被当成从头开始",
+                info.RangeStart != 0,
+                "RangeStart=" + info.RangeStart);
+        }
+
+        using (var full = new HttpResponseMessage(HttpStatusCode.OK)
+               {
+                   Content = new ByteArrayContent(new byte[64]),
+               })
+        {
+            var info = DownloadRange.Read(full, requestedStart: 30);
+            ChecksContext.Equal("HttpFetcher.DownloadRange：200 起点归零（服务端忽略 Range）", 0L, info.RangeStart);
+            ChecksContext.Equal("HttpFetcher.DownloadRange：200 总长就是本次长度", 64L, info.TotalLength);
+            ChecksContext.Equal("HttpFetcher.DownloadRange：200 本次长度", 64L, info.ContentLength);
+        }
+
+        // 206 却不带 Content-Range：不能拿请求的起点兜底。猜错就会把剩余内容写到错误偏移上，
+        // 拼出一个长度对、内容错的文件；一律按从头开始，由尺寸校验拦下后整份重下。
+        using (var partialNoHeader = new HttpResponseMessage(HttpStatusCode.PartialContent)
+               {
+                   Content = new ByteArrayContent(new byte[70]),
+               })
+        {
+            var info = DownloadRange.Read(partialNoHeader, requestedStart: 30);
+            ChecksContext.Equal(
+                "HttpFetcher.DownloadRange：206 缺 Content-Range 时按从头开始",
+                0L,
+                info.RangeStart);
+            ChecksContext.Check(
+                "HttpFetcher.DownloadRange：206 缺 Content-Range 不会假装已续传",
+                info.RangeStart != 30,
+                "RangeStart=" + info.RangeStart);
+        }
     }
 
     /// <summary>

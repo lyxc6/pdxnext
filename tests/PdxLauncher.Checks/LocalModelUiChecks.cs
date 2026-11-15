@@ -1,6 +1,9 @@
 namespace PdxLauncher.Checks;
 
+using PdxLauncher.App.Localization;
+using PdxLauncher.App.ViewModels;
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Online.Translation.Local;
 
 /// <summary>
 /// 设置页「本地离线模型」自检：把这次修好的几处口径钉成源码断言。
@@ -38,6 +41,9 @@ public static class LocalModelUiChecks
         "settings.translate.localModelResidueMore",
         "settings.translate.localModelRemoveTranslationBusy",
         "settings.translate.localModelStatusResidueReason",
+        "settings.translate.localModelDownloadProgress",
+        "settings.translate.localModelPaused",
+        "settings.translate.localModelPause",
     ];
 
     public static int Run(IFileSystem fs)
@@ -93,6 +99,8 @@ public static class LocalModelUiChecks
         CheckRemoveMessagesAreSelfProving(settingsViewModel);
         CheckOperationResultExpires(settingsViewModel, rowViewModel);
         CheckEnginesUseRunnable(bergamot, indexTranslate);
+        CheckDownloadProgressUi(xaml, pageCode, settingsViewModel);
+        CheckRowDownloadState();
         CheckLocalizationKeys(root);
 
         return ChecksContext.Failures - before;
@@ -246,6 +254,112 @@ public static class LocalModelUiChecks
             "本地模型: 引擎不再用 IsInstalled 判可用",
             !bergamot.Contains("_store.IsInstalled(", StringComparison.Ordinal)
             && !indexTranslate.Contains("_store.IsInstalled(", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 下载进度必须是「逐字节进度条 + 暂停按钮 + App 层协调器」这一套：
+    /// 行内进度条（之前只有一个转圈环，1.31 GB 的单文件下载全程看不见进展）、
+    /// 能暂停（暂停后残片留着续传）、下载不跟页面令牌绑定（切页不取消、回来能接上）。
+    /// </summary>
+    private static void CheckDownloadProgressUi(string xaml, string pageCode, string settingsViewModel)
+    {
+        ChecksContext.Check(
+            "本地模型: 行内有下载进度条",
+            xaml.Contains(@"AutomationId=""barLocalModelDownload""", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "本地模型: 进度条绑 DownloadPercent",
+            xaml.Contains(@"Value=""{x:Bind DownloadPercent, Mode=OneWay}""", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "本地模型: 进度条只在下载时出现",
+            xaml.Contains(@"Visibility=""{x:Bind svc:XamlVisibility.FromBool(IsDownloading), Mode=OneWay}""", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "本地模型: 行内有暂停按钮",
+            xaml.Contains(@"AutomationId=""btnPauseLocalModel""", StringComparison.Ordinal)
+            && xaml.Contains(@"Click=""OnPauseLocalModelClick""", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "本地模型: 暂停按钮绑 CanPause",
+            xaml.Contains(@"IsEnabled=""{x:Bind CanPause, Mode=OneWay}""", StringComparison.Ordinal));
+
+        ChecksContext.Check(
+            "本地模型: 页面订阅下载进度事件",
+            pageCode.Contains("downloads.Changed += OnLocalModelDownloadChanged", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "本地模型: 页面离开时退订下载进度事件",
+            pageCode.Contains("LocalModelDownloads?.Changed -= OnLocalModelDownloadChanged", StringComparison.Ordinal),
+            "不退订会让已关闭的页面被协调器钉住");
+        ChecksContext.Check(
+            "本地模型: 进度回调切回 UI 线程再写行",
+            pageCode.Contains("DispatcherQueue.TryEnqueue(() => _viewModel.ApplyLocalModelDownload(snapshot))", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "本地模型: 下载改走 App 层协调器",
+            pageCode.Contains("_viewModel.StartLocalModelDownload(row)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "本地模型: 下载不再吃页面生命周期令牌",
+            !pageCode.Contains("DownloadLocalModelAsync(row, _lifetime.Token)", StringComparison.Ordinal),
+            "页面不缓存，1.31 GB 的下载会被切页取消");
+        ChecksContext.Check(
+            "本地模型: 进页时接上在途下载",
+            pageCode.Contains("_viewModel.ApplyLocalModelDownloads();", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "本地模型: ViewModel 通过 AppServices.LocalModelDownloads 起下载",
+            settingsViewModel.Contains("AppServices.LocalModelDownloads", StringComparison.Ordinal)
+            && settingsViewModel.Contains("coordinator.TryStart(row.Kind)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "本地模型: 进度文案带字节数",
+            settingsViewModel.Contains("SettingsTranslateLocalModelDownloadProgress", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "本地模型: 暂停文案",
+            settingsViewModel.Contains("SettingsTranslateLocalModelPaused", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "本地模型: 占用统计算上残片",
+            settingsViewModel.Contains("GetStagedBytes(row.Kind)", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 行状态机（直接跑被链接进来的行视图模型）：下载中全部按钮禁用、暂停后可续下也可删残片。
+    /// 这几条错了不会崩，只在真机上表现为「按钮点了没反应」。
+    /// </summary>
+    private static void CheckRowDownloadState()
+    {
+        var row = new LocalModelRowViewModel(
+            LocalTranslationModelKind.IndexTranslate,
+            Keys.SettingsTranslateLocalModelNotInstalled,
+            "自检模型");
+
+        var notInstalled = new LocalTranslationModelState(
+            LocalTranslationModelKind.IndexTranslate,
+            LocalTranslationModelInstallStatus.NotInstalled,
+            @"C:\models\index-translate-2b",
+            [],
+            [],
+            null);
+        row.ApplyState(notInstalled, directoryExists: false);
+        ChecksContext.Check(
+            "本地模型: 未安装时可下载、不可删",
+            row.CanDownload && !row.CanRemove,
+            "CanDownload=" + row.CanDownload + " CanRemove=" + row.CanRemove);
+
+        row.BeginDownload(43);
+        ChecksContext.Check(
+            "本地模型: 下载中进度条可见并带百分比",
+            row.IsDownloading && row.DownloadPercent == 43,
+            "DownloadPercent=" + row.DownloadPercent);
+        ChecksContext.Check(
+            "本地模型: 下载中不能再点下载 / 删除",
+            !row.CanDownload && !row.CanRemove);
+        ChecksContext.Check("本地模型: 下载中可暂停", row.CanPause);
+
+        row.EndDownload(hasPartial: true);
+        ChecksContext.Check(
+            "本地模型: 结束后进度条收起、暂停按钮消失",
+            !row.IsDownloading && !row.CanPause);
+        ChecksContext.Check(
+            "本地模型: 暂停（有残片）后既能续下、也能删掉残片",
+            row.CanDownload && row.CanRemove,
+            "CanDownload=" + row.CanDownload + " CanRemove=" + row.CanRemove);
+
+        row.EndDownload(hasPartial: false);
+        ChecksContext.Check("本地模型: 没有残片又没装好时不可删", !row.CanRemove);
     }
 
     /// <summary>新增文案中英都要有。</summary>

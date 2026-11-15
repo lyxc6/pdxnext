@@ -887,10 +887,11 @@ public static class PlaysetChecks
 
         var playsets = repository.GetPlaySetsAsync(game, CancellationToken.None).GetAwaiter().GetResult();
         // 真机断言只锁结构、不锁具体数据：launcher-v2.sqlite 由官方启动器随时改写（增删播放集、切换激活项），
-        // 把名称 / Id / 行数写死必然随用户操作漂移（本机就从「激活 IronyModManager」漂成了「激活 1.20」）。
+        // 把名称 / Id / 行数写死必然随用户操作漂移（本机就从「激活 IronyModManager」漂成了「激活 1.20」，
+        // 2026-11-14 用户又删掉一个播放集变剩 2 个 —— 写死 ">= 3" 就会无端变红，见 DEVELOPMENT.md 自检段）。
         ChecksContext.Check(
-            "CK3 至少有 3 个播放集",
-            playsets.Count >= 3,
+            "CK3 至少 1 个播放集",
+            playsets.Count >= 1,
             playsets.Count.ToString(CultureInfo.InvariantCulture));
         ChecksContext.Check(
             "CK3 播放集名称全部非空",

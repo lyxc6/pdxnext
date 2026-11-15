@@ -10,6 +10,23 @@ using Windows.UI;
 using Windows.UI.Text;
 
 /// <summary>
+/// 主题素材的取用范围。
+/// <para>
+/// 主页只消费按钮外观（底图 / 配色 / 字体）与配色，整幅背景由 <c>MainWindow</c> 单独解码铺满整窗，
+/// 字标由 <see cref="BitmapLoader"/> 按显示宽度另解。所以主页路径没必要把背景 / 字标 / 应用图标
+/// 再按原尺寸解一遍 —— 那是一张 14~33 MB 的位图（实测占掉主页主题阶段的大部分时间）。
+/// </para>
+/// </summary>
+public enum ThemeAssetScope
+{
+    /// <summary>全部素材：背景 / 字标 / 应用图标 / 按钮底图。</summary>
+    All,
+
+    /// <summary>只取按钮外观需要的素材：按钮底图（外加配色与字体），跳过背景 / 字标 / 应用图标。</summary>
+    ButtonChrome,
+}
+
+/// <summary>
 /// 把纯数据的 <see cref="ThemeSpec"/> 翻译成 XAML 可直接赋值的 UI 对象。
 /// 规则（docs/DATA-FORMATS.md §6）：颜色/字体/字号/字重/阴影永远取安装目录主题；
 /// hsla 解析复用 Core 的 <see cref="HslaColor"/>，不在这里重复实现。
@@ -69,18 +86,29 @@ public sealed class ThemeApplier
     /// </summary>
     /// <param name="spec">主题规格。</param>
     /// <param name="cancellationToken">取消（切页面/切游戏时放弃旧主题）。</param>
-    public async Task<ThemeVisuals> CreateAsync(ThemeSpec spec, CancellationToken cancellationToken)
+    /// <param name="scope">
+    /// 素材范围。<see cref="ThemeAssetScope.ButtonChrome"/> 只读 / 解按钮底图，
+    /// 背景、字标、应用图标一律跳过（主页就是这么用的，见该枚举的说明）。
+    /// </param>
+    public async Task<ThemeVisuals> CreateAsync(
+        ThemeSpec spec,
+        CancellationToken cancellationToken,
+        ThemeAssetScope scope = ThemeAssetScope.All)
     {
         ArgumentNullException.ThrowIfNull(spec);
 
+        var full = scope == ThemeAssetScope.All;
+
         // 四张图一次读完：纯文件 IO，放线程池，别让 UI 线程逐张等盘。
+        // 只取按钮外观时背景 / 字标 / 应用图标连字节都不读 —— 主页没有它们的消费方，
+        // 读进来再按原尺寸解码等于白烧一次十几到几十 MB 的位图（首帧性能的主要来源之一）。
         var assets = await Task
             .Run(
                 () => new[]
                 {
-                    ReadAssetBytes(spec.Background),
-                    ReadAssetBytes(spec.Logo),
-                    ReadAssetBytes(spec.AppIcon),
+                    full ? ReadAssetBytes(spec.Background) : null,
+                    full ? ReadAssetBytes(spec.Logo) : null,
+                    full ? ReadAssetBytes(spec.AppIcon) : null,
                     ReadAssetBytes(spec.ButtonBackground),
                 },
                 cancellationToken)
