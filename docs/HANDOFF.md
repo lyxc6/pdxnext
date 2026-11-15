@@ -7606,3 +7606,84 @@ mod 名和行尾三个按钮完全看不见，右栏也不能滚动到这些内�
 **实现**（本次）：`AppManifest` 解析 `buildid` 与 `InstalledDepots`（新增 `AppDepot` / `InstalledDlcAppIds` / `KnowsDlcDepots`）；新增 `Core\Dlc\DlcContentState` 与 `DlcContentInspector`（纯计算）；DLC 页每行新增第三枚徽标「Steam 已装 / 仅本地文件 / 内容未安装」；日志每轮记一行内容来源汇总。判定口径见 `docs/DATA-FORMATS.md` §3.2。
 
 **验证**：`dev.cmd build` 通过（146 个检查类、0 失败）；真机探针（用 Core 直连真实安装目录）输出 SteamInstalled 9 / FilesPresent 9，与上面的 depot 对照逐条一致。
+---
+
+## 0.99 2026-11-15：本地翻译模型下载 —— 逐字节进度、断点续传与跨页面续跑
+
+对话分支：`sess/20261114-perf-first-frame`（基线 `ver/1.4.0`）。提交 `04d79a8`（实现）+ `399e5fc`（独立验收后修正）。
+
+### 0.99.1 问题（用户报告）
+
+「翻译下载那边无法正常显示下载进度」——设置页本地离线模型点「下载」后界面停在「下载中 0%」，直到结束才跳到 100%。
+
+**根因（Core，不是 UI）**：`LocalTranslationModelDownloader.DownloadAsync` 只在**每个文件下完**时上报一次 `done/total`，
+内部 128 KiB 写盘循环一次都没上报。而 Index-Translate-2B 在清单里是**单个 1.31 GB 文件**（`IndexTranslateSize = 1312164352`），
+于是整段下载期间只有一次 0%、结束一次 100%；Bergamot（4 个文件）表现为 0 → 88 → 96 → 98 → 100 的「跳台阶」。
+
+**已排除的嫌疑**（都实测过，别再走一遍）：
+- 不是 `HttpClient.Timeout` 截断流：本地回环慢速流实测（`Timeout=2s` + `ResponseHeadersRead`，20 字节分 20 次吐），响应体完整读完用了 10.2 s —— 180 秒总超时不覆盖流式响应体。
+- 不是白名单/节流：`huggingface.co`、`storage.googleapis.com` 都在 `OnlineHosts`，host 走默认策略（并发 4、无最小间隔）。
+- 项目其它下载进度是**好的**：更新包（`UpdateService` 每 256 KiB 上报 → `UpdateFlow` 的 `ProgressBar`）、工坊/发布（Steam 侧百分比）都对。坏的只有本地翻译模型这一条。
+
+**顺带的两个同源缺陷**：中断/切页后 1.31 GB 从头重下（无续传）；切到别的页面会静默取消下载
+（`SettingsPage.OnUnloaded` 的 `_lifetime.Cancel()`）。
+
+### 0.99.2 改法
+
+**Core**
+- 新增 `LocalTranslationDownloadProgress(BytesReceived, TotalBytes, CurrentFileName, Resumed)`，逐字节上报；
+  节流规则「分数变化 ≥0.5% **或** 距上次 ≥250 ms」，最密 4 次/秒（否则 1.31 GB / 128 KiB ≈ 一万次回调会把 `DispatcherQueue` 灌满）。
+- `.part` 改存**原始传输字节**（压缩文件即 gzip 原始字节），所以 Range 续传对压缩/非压缩统一成立，解压只在收尾阶段。
+- 新增 `IDownloadFetcher`（`GetDownloadAsync(uri, startOffset, ct)` + `DownloadRange.Read` 解析 `Content-Range`）；
+  **`IHttpFetcher` 没有扩张**，6 个自检假实现一行不用改，`http as IDownloadFetcher` 探测失败时退回「无续传、但有逐字节进度」。
+- 服务端忽略 Range 回 200 → 截断重写，绝不拼接；416 → 内部去掉 Range 重发；残片比期望还长 → 直接删掉重下；
+  残片已等于期望长度 → 短路落位，不重下 1.31 GB。
+- 收尾统一解压 / 尺寸 / SHA-256 校验，不符即删残片；**取消与网络异常保留残片**供续传；解压与哈希循环里都查令牌
+  （否则 1.31 GB 的收尾要几十秒，期间「暂停」看着像失灵）。
+
+**App**
+- 新增 `Services/LocalModelDownloadCoordinator`（挂在 `AppServices.LocalModelDownloads`）：下载从设置页挪到 App 层，
+  单飞、可暂停（保留残片续传）、切页继续、进页接上进度、退出时（`App.xaml.cs` 的 `Closed`）取消。
+- `LocalModelRowViewModel` 新增 `IsDownloading` / `DownloadPercent` / `HasPartialDownload` / `CanPause`；
+  暂停后有残片时「删除」也可点（否则那 1.31 GB 删不掉）；占用统计 `LocalModelSizeText` 把残片算进去（`Store.GetStagedBytes`）。
+- 设置页行内新增进度条（`barLocalModelDownload`）与「暂停」按钮（`btnPauseLocalModel`）：
+  `下载中 43%（560 MB / 1.3 GB）` / `已暂停 16%（下次「下载」接着下）`。
+- 「下载」不再吃页面生命周期令牌：下载归协调器所有，页面只订阅 `Changed`（`DispatcherQueue.TryEnqueue` 回 UI 线程），
+  `OnUnloaded` 只退订不停下载。
+
+**文案**：`SettingsTranslateLocalModelDownloadProgress` / `SettingsTranslateLocalModelPaused` / `SettingsTranslateLocalModelPause`，中英同步。
+
+### 0.99.3 独立验收（按 `docs/AGENT-WORKFLOW.md` §6）
+
+全新上下文的只读评审（不改文件、不跑构建），提出 5 条，逐条修完后并入 `399e5fc`：
+
+| # | 问题 | 后果 | 修法 |
+| --- | --- | --- | --- |
+| 1 | 206 缺 `Content-Range` 时拿请求起点兜底 | 猜错把剩余内容写到错误偏移，拼出「长度对、内容错」的文件 | 一律按从头开始，由尺寸校验拦下后整份重下 |
+| 2 | 下载请求没显式要 identity | 连接池自动解压会把 `.part` 存成解压后字节，而 Range 偏移按压缩字节算 | `Accept-Encoding: identity` |
+| 3 | 分母拿不到（chunked）时只报 `doneBefore` | 进度原地不动 —— 正是本次要修的故障形态 | 按字节上报 + 总长传 0（界面显示字节，不画百分比） |
+| 4 | 收尾 `File.Move` 在 try 内 | 目标被占用/磁盘满会把已下完的残片删掉，重下整份 | Move 移出校验 try |
+| 5 | `IsDownloading` 只发 `CanPause` | 续传时按钮可用性停在旧值，点了没反应 | 改发 `RaiseStateProperties()` |
+
+另修：`Dispose` 签名换行；设置页「服务未就绪」早期返回分支也接上在途下载；`_lifetime` 注释与 `NavigationCacheMode="Required"` 对齐。
+
+### 0.99.4 验证
+
+- `dev.cmd build` → **169 个检查类 / 失败 0 / 0 警告 0 错误**，`DEV_RESULT=PASS`。
+- 新增自检：`LocalTranslationModelDownloadChecks`（逐字节中间进度、节流上限、续传、忽略 Range、取消留残片、
+  哈希不符删残片、压缩续传、完整残片短路、过长残片覆盖、分母未知按字节上报、收尾阶段取消保留残片、残片占用与删除）、
+  `LocalModelDownloadCoordinatorChecks`（单飞、暂停→续传带断点百分比、完成/失败收敛、异常收敛、Forget、Dispose）；
+  扩展 `LocalModelUiChecks`（进度条/暂停/协调器接线 + 行状态机）与 `HttpFetcherChecks`（206/200/缺 `Content-Range` 解析）。
+- **真机 UIA 实测**（把 `bergamot-en-zh` 临时移走造「未安装」行，测完还原，`models` 下三个目录逐字节不变、无残留 `.part`）：
+  进度条与文案同步前进（`0 → 1 → 3 → 8 → 13 → 16%`）；暂停后 `.part = 6185067` 字节、文案 `已暂停 16%`；
+  再点下载从 16% 起（日志 `本地模型续传：model.enzh.intgemm.alphas.bin 从 6185067 字节继续`）；
+  **下载中途切到主页停留 10 秒，回来前它已下完**（日志 `15:53:29 本地模型已就绪`，切走是 `15:53:23`）——
+  证明下载真的活过了页面生命周期；收尾 5 个文件尺寸与清单一致、`.part` 清掉。
+
+### 0.99.5 注意
+
+- **不再能用「只在文件下完时上报」**：凡是「单个大文件 + 长时间传输」的下载器，进度必须落在传输循环里。
+- **`.part` 的语义是「原始传输字节」**：任何改动都要保持这条，否则压缩文件续传会写坏。
+- **缩略/语义别混**：`HttpDownload.RangeStart` 为 0 就等于「从头开始」，200 与不合规 206 都走这条路；调用方必须截断重写。
+- 已知小限制：压缩文件（Bergamot ≤60 MB）若「传完但收尾前崩溃」，续传会重下该文件（压缩后长度不可知）；1.31 GB 的 GGUF 不受影响。
+- `PlaysetChecks` 的 CK3 条数断言从 `>= 3` 放宽到 `>= 1`：用户删播放集到 2 个不该让自检变红（`DEVELOPMENT.md` 的「真机只锁结构」原则）。
