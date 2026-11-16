@@ -201,6 +201,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>已经提示过失败的范围（简介 / 更新日志 / 评论 / 合集标题），避免重复刷屏。</summary>
     private readonly HashSet<string> _translateFailureScopes = new(StringComparer.Ordinal);
 
+    /// <summary>这一轮「重试」是否正在跑：只用来禁用按钮挡住连点，不代表任何范围在翻译。</summary>
+    private bool _isRetryingTranslation;
+
     /// <summary>合集标题翻译的去抖：一次铺 49 行，等页面稳定后再整批翻。</summary>
     private static readonly TimeSpan CollectionNameTranslationDebounce = TimeSpan.FromMilliseconds(250);
 
@@ -488,17 +491,15 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     public bool HasTranslationNotice => !string.IsNullOrWhiteSpace(TranslationNotice);
 
     /// <summary>
-    /// 「翻译没出结果」提示旁的重试按钮是否可用：有提示、且此刻没有别的翻译在跑。
+    /// 「翻译没出结果」提示旁的重试按钮是否可用：有提示、且这一轮重试本身没在跑。
     /// <para>
-    /// 三个范围共用一条提示条，重试会把失败过的范围整批重跑，所以只要还有范围在途就禁掉按钮，
-    /// 避免连点叠出两批请求。
+    /// 刻意**不**去看 <see cref="IsTranslatingDescription"/> 等「正在进行」标志：评论是逐条译的，
+    /// 引擎连不通时一条条超时，那几个标志会连续几十秒为 true，按钮在整个失败窗口里都是灰的、
+    /// 点不动——而这正是用户最需要点它的时候。重试自身用 <see cref="_isRetryingTranslation"/> 表示，
+    /// 只用来挡住连点叠出两批请求。
     /// </para>
     /// </summary>
-    public bool CanRetryTranslation =>
-        HasTranslationNotice
-        && !IsTranslatingDescription
-        && !IsTranslatingChangelog
-        && !IsTranslatingComments;
+    public bool CanRetryTranslation => HasTranslationNotice && !_isRetryingTranslation;
 
     /// <summary>作者主页是否可用（决定作者那一行能不能点）。</summary>
     public bool HasAuthorProfile => !string.IsNullOrWhiteSpace(AuthorProfileUrl);
@@ -2303,27 +2304,37 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         // 主机冷却只是本进程对上一次失败的保守推断，用户点重试说明情况可能已经变了。
         AppServices.Translation.ResetRetryableFailures();
 
-        foreach (var scope in scopes)
+        _isRetryingTranslation = true;
+        OnPropertyChanged(nameof(CanRetryTranslation));
+        try
         {
-            if (cancellationToken.IsCancellationRequested)
+            foreach (var scope in scopes)
             {
-                return;
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                switch (scope)
+                {
+                    case "description" when DescriptionDocument is { IsEmpty: false } document:
+                        await TranslateDescriptionAsync(document, cancellationToken).ConfigureAwait(true);
+                        break;
+
+                    case "changelog" when ChangelogDocument is { IsEmpty: false } changelog:
+                        await TranslateChangelogAsync(changelog, cancellationToken).ConfigureAwait(true);
+                        break;
+
+                    case "comments" when CommentsTranslationEnabled:
+                        await TranslateCommentsAsync(cancellationToken).ConfigureAwait(true);
+                        break;
+                }
             }
-
-            switch (scope)
-            {
-                case "description" when DescriptionDocument is { IsEmpty: false } document:
-                    await TranslateDescriptionAsync(document, cancellationToken).ConfigureAwait(true);
-                    break;
-
-                case "changelog" when ChangelogDocument is { IsEmpty: false } changelog:
-                    await TranslateChangelogAsync(changelog, cancellationToken).ConfigureAwait(true);
-                    break;
-
-                case "comments" when CommentsTranslationEnabled:
-                    await TranslateCommentsAsync(cancellationToken).ConfigureAwait(true);
-                    break;
-            }
+        }
+        finally
+        {
+            _isRetryingTranslation = false;
+            OnPropertyChanged(nameof(CanRetryTranslation));
         }
     }
 
@@ -2879,23 +2890,11 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(ShowTranslatingChangelog));
     }
 
-    partial void OnIsTranslatingDescriptionChanged(bool value)
-    {
-        OnPropertyChanged(nameof(ShowTranslatingDescription));
-        OnPropertyChanged(nameof(CanRetryTranslation));
-    }
+    partial void OnIsTranslatingDescriptionChanged(bool value) => OnPropertyChanged(nameof(ShowTranslatingDescription));
 
-    partial void OnIsTranslatingChangelogChanged(bool value)
-    {
-        OnPropertyChanged(nameof(ShowTranslatingChangelog));
-        OnPropertyChanged(nameof(CanRetryTranslation));
-    }
+    partial void OnIsTranslatingChangelogChanged(bool value) => OnPropertyChanged(nameof(ShowTranslatingChangelog));
 
-    partial void OnIsTranslatingCommentsChanged(bool value)
-    {
-        OnPropertyChanged(nameof(ShowTranslatingComments));
-        OnPropertyChanged(nameof(CanRetryTranslation));
-    }
+    partial void OnIsTranslatingCommentsChanged(bool value) => OnPropertyChanged(nameof(ShowTranslatingComments));
 
     partial void OnCachedHintChanged(string value) => OnPropertyChanged(nameof(HasCachedHint));
 
