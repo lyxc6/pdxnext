@@ -139,6 +139,14 @@
     <Compile Include="..\..\src\PdxLauncher.App\Services\PageStateStore.cs" Link="Linked\PageStateStore.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\PageStateSnapshot.cs" Link="Linked\PageStateSnapshot.cs" />
     <!--
+      mod 名称译名的唯一管道：Mod 库、播放集页、添加模组页三处共用同一张 TranslationCache.Names 表。
+      它只依赖 Core 的 TranslationCache 与 TranslationOptions（读盘 / 落盘 / 目标语言全由构造注入），
+      不碰 AppServices 静态与任何 WinUI 类型，所以可以原样链接进来。它错了的表现是「同一个 mod
+      在不同页面显示不同译文或干脆没有」，编译器和真机都不容易看出来，因此回填条件、落盘列表与
+      三处页面的使用口径由 ModNameTranslationChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\ModNameTranslator.cs" Link="Linked\ModNameTranslator.cs" />
+    <!--
       Debug 内存埋点：只依赖 Core 的 IAppLogger，缓存计数由调用点通过委托传入，
       不碰 WinUI / AppServices，因此可以原样链接进来。它错了不会崩，只会让基线文档的读数不可信，
       所以描述格式（MB 一位小数、缓存计数拼法）与「Capture 永不抛」由 MemoryDiagnosticsChecks 钉住。

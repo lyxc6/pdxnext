@@ -258,6 +258,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0"
                                    Text="{x:Bind Name, Mode=OneTime}"
@@ -285,7 +286,39 @@
                                        Style="{StaticResource CaptionTextBlockStyle}"
                                        Foreground="{ThemeResource PdxOriginSubscribedForegroundBrush}" />
                         </Border>
+                        <!-- 版本支持三角：与添加模组页同一套判定与提示，提示挂在透明命中容器上（字形本身不可命中）。 -->
+                        <Border Grid.Column="3"
+                                MinWidth="24"
+                                MinHeight="24"
+                                Padding="4"
+                                Background="Transparent"
+                                VerticalAlignment="Center"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(HasVersionWarning), Mode=OneWay}"
+                                ToolTipService.ToolTip="{x:Bind VersionWarningText, Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind WarningAutomationId, Mode=OneTime}"
+                                AutomationProperties.Name="{x:Bind L.ModlibWarningName, Mode=OneWay}"
+                                AutomationProperties.HelpText="{x:Bind VersionWarningText, Mode=OneWay}">
+                            <FontIcon Glyph="&#xE7BA;"
+                                      FontSize="12"
+                                      VerticalAlignment="Center"
+                                      Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                        </Border>
                     </Grid>
+                    <!-- 译名：与 Mod 库 / 添加模组页同一张表回填，左栏宽度有限，过长按省略号收尾。 -->
+                    <Border Padding="8,4"
+                            HorizontalAlignment="Left"
+                            CornerRadius="8"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            Visibility="{x:Bind svc:XamlVisibility.FromString(TranslatedName), Mode=OneWay}">
+                        <!-- AutomationId 挂在 TextBlock 上：Border 没有 automation peer，挂在 Border 上 UIA 查不到。 -->
+                        <TextBlock Text="{x:Bind TranslatedName, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   TextTrimming="CharacterEllipsis"
+                                   AutomationProperties.AutomationId="{x:Bind TranslatedAutomationId, Mode=OneTime}" />
+                    </Border>
                     <TextBlock Text="{x:Bind SubtitleText, Mode=OneWay}"
                                Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"

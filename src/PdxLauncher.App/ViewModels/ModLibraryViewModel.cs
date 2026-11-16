@@ -47,10 +47,10 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     private readonly IAppLogger _logger;
 
     /// <summary>
-    /// 本页已知的名称译名：按 mod 主键存原文、目标语言与译文。
-    /// 搜索 / 排序 / 来源筛选只重建行，译文直接从这份字典回填，不重复请求翻译。
+    /// 本页用的名称译名管道：与播放集页、添加模组页共用同一个实现，也就共用同一张
+    /// <c>TranslationCache.Names</c> 表——三处对同一个 mod 显示的一定是同一句译文。
     /// </summary>
-    private readonly Dictionary<Guid, TranslationCache.NameTranslation> _nameTranslations = new();
+    private readonly ModNameTranslator _nameTranslator;
 
     /// <summary>本轮名称翻译的代次；重建行时自增，迟到的旧批次不再回填。</summary>
     private int _translationVersion;
@@ -140,6 +140,12 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         _selectedSortMode = SortModes[0];
         SourceFilterModes = BuildSourceFilterModes();
         _selectedSourceFilter = SourceFilterModes[0];
+
+        _nameTranslator = new ModNameTranslator(
+            GetNameTranslationTargetLanguage,
+            load: (language, token) => AppServices.Translation.LoadNameTranslationsAsync(language, token),
+            save: (language, updates, token) =>
+                AppServices.Translation.SaveNameTranslationsAsync(language, updates, token));
     }
 
     /// <summary>当前可见的 mod 行（已按搜索词过滤、按排序方式排序）。</summary>
@@ -607,13 +613,9 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
                 ModThumbnailSizes.Pixels(AppServices.Settings.ModThumbnailSize));
 
             // 已经译过的名称直接回填：搜索 / 排序 / 筛选重建行时不再等一轮翻译。
-            if (targetLanguage is not null
-                && _nameTranslations.TryGetValue(entry.ModId, out var cached)
-                && string.Equals(cached.TargetLanguage, targetLanguage, StringComparison.Ordinal)
-                && string.Equals(cached.SourceName, entry.Name, StringComparison.Ordinal)
-                && !string.IsNullOrWhiteSpace(cached.Translation))
+            if (_nameTranslator.TryBackfill(entry.ModId, entry.Name, targetLanguage, out var translated))
             {
-                row.TranslatedName = cached.Translation;
+                row.TranslatedName = translated;
             }
 
             Mods.Add(row);
@@ -803,47 +805,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         {
             // 页面关闭或批次被新搜索取代时，已经回填到行的译名仍然有效：
             // 落盘后下次进入 Mod 库可以直接显示，不必重翻这一批。
-            await SaveNameTranslationsAsync(rows, targetLanguage).ConfigureAwait(true);
-        }
-    }
-
-    /// <summary>
-    /// 把这一批新拿到的译名按 ModId 持久化，下次进入 Mod 库或换引擎模式时直接复用。
-    /// </summary>
-    private async Task SaveNameTranslationsAsync(
-        IReadOnlyList<ModLibraryRowViewModel> rows,
-        string targetLanguage)
-    {
-        var updates = new List<TranslationCache.NameTranslation>(rows.Count);
-        foreach (var row in rows)
-        {
-            var translatedName = row.TranslatedName;
-            if (string.IsNullOrWhiteSpace(row.Name) || string.IsNullOrWhiteSpace(translatedName))
-            {
-                continue;
-            }
-
-            updates.Add(new TranslationCache.NameTranslation(
-                row.ModId,
-                row.Name,
-                targetLanguage,
-                translatedName));
-        }
-
-        if (updates.Count == 0)
-        {
-            return;
-        }
-
-        try
-        {
-            await AppServices.Translation
-                .SaveNameTranslationsAsync(targetLanguage, updates, CancellationToken.None)
-                .ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            _logger.Warn("Mod 库名称译名持久化失败：" + ex.Message);
+            await _nameTranslator.SaveAsync(targetLanguage, CancellationToken.None).ConfigureAwait(true);
         }
     }
 
@@ -853,23 +815,18 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     /// </summary>
     private async Task LoadCachedNameTranslationsAsync(CancellationToken cancellationToken)
     {
-        _nameTranslations.Clear();
         var targetLanguage = GetNameTranslationTargetLanguage();
         if (targetLanguage is null)
         {
+            _nameTranslator.Clear();
             return;
         }
 
         try
         {
             // 用 Func<Task<…>> 明确选中 Task.Run 的异步重载，别把内层 Task 当成结果。
-            Func<Task<IReadOnlyDictionary<Guid, TranslationCache.NameTranslation>>> load =
-                () => AppServices.Translation.LoadNameTranslationsAsync(targetLanguage, cancellationToken);
-            var cached = await Task.Run(load, cancellationToken).ConfigureAwait(true);
-            foreach (var pair in cached)
-            {
-                _nameTranslations[pair.Key] = pair.Value;
-            }
+            Func<Task> load = () => _nameTranslator.LoadAsync(targetLanguage, cancellationToken);
+            await Task.Run(load, cancellationToken).ConfigureAwait(true);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -882,16 +839,9 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     }
 
     /// <summary>当前该用的名称翻译目标语言；名称翻译或翻译总开关关闭时返回 null。</summary>
-    private static string? GetNameTranslationTargetLanguage()
-    {
-        if (!AppServices.Settings.TranslateNamesEnabled)
-        {
-            return null;
-        }
-
-        var options = AppServices.Translation.CurrentOptions;
-        return options.Enabled ? options.TargetLanguage : null;
-    }
+    private static string? GetNameTranslationTargetLanguage() => ModNameTranslator.ResolveTargetLanguage(
+        AppServices.Settings.TranslateNamesEnabled,
+        AppServices.Translation.CurrentOptions);
 
     /// <summary>
     /// 把一条译文回填到对应行；回调可能来自线程池，切回 UI 线程后再改行属性。
@@ -944,11 +894,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         }
 
         // 即使这一行已经被筛掉也记下来：下次搜索 / 排序重建时可以直接复用。
-        _nameTranslations[row.ModId] = new TranslationCache.NameTranslation(
-            row.ModId,
-            row.Name,
-            targetLanguage,
-            translatedName);
+        _nameTranslator.Remember(row.ModId, row.Name, targetLanguage, translatedName);
     }
 
     /// <summary>
