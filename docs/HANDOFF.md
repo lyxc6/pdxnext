@@ -7687,3 +7687,69 @@ mod 名和行尾三个按钮完全看不见，右栏也不能滚动到这些内�
 - **缩略/语义别混**：`HttpDownload.RangeStart` 为 0 就等于「从头开始」，200 与不合规 206 都走这条路；调用方必须截断重写。
 - 已知小限制：压缩文件（Bergamot ≤60 MB）若「传完但收尾前崩溃」，续传会重下该文件（压缩后长度不可知）；1.31 GB 的 GGUF 不受影响。
 - `PlaysetChecks` 的 CK3 条数断言从 `>= 3` 放宽到 `>= 1`：用户删播放集到 2 个不该让自检变红（`DEVELOPMENT.md` 的「真机只锁结构」原则）。
+
+---
+
+## 0.100 2026-11-16：并行对话不再需要「等其他对话」（会话分支脚本与文档）
+
+对话分支：`sess/20261116-git-concurrency`（基线 `ver/1.4.0`）。
+
+### 0.100.1 问题（用户提问「文档的 git 设定是不是有问题，为什么分支，还说要等其他对话？」）
+
+查了脚本、文档与仓库现状，**没有任何一句文档写「等其他对话」**——那是三条规则叠出来的实际效果：
+
+| 场景 | 实测结果（临时仓库复现） |
+| --- | --- |
+| 在 sess 分支上再 `open` | 拒绝，提示只有「先 close」一条路（`session.ps1` 旧 L241-244） |
+| 在 worktree（检出 `feat/*`）里 `open` | 拒绝：不在活跃版本清单 |
+| 基线被另一棵工作树检出时 `close` | `git switch base` fatal 128，报 git 原文，不指名谁占着 |
+| 工作区有别人未提交改动时 `open` | `git add -A` 把半成品扫进 `wip(session)` 提交 |
+| 对话分支被当前树检出时删分支 | `cannot delete branch ... used by worktree` |
+
+根因是**这套分支模型只在「一个工作树一个对话」下成立**，而文档从未写这条前提：`open` 硬校验必须站在
+活跃版本分支上，主工作树同一时刻只能检出一个分支，于是第二条对话除了「等第一条 close」没有合法入口。
+
+### 0.100.2 改法
+
+`scripts/session.ps1`（核心）：
+
+- `open -Worktree`：在 `.agents/worktrees/<slug>` 用 `git worktree add -b` 另开一棵树，主工作树不动；
+  基线取当前分支，当前在 sess 分支时取其 `pdxBase`（所以可以在已开对话的同时再开一条并行对话）；
+  工作树路径记进 `git config branch.<name>.pdxWorktree`，输出 `SESSION_WORKTREE=`。
+- `open` 脏工作区**默认拒绝（退出 3）**：先提交 / 加 `-Worktree` / 确需带走才加 `-CarryDirty`；
+  `-CarryDirty` 的 `wip(session)` 提交信息会列出带走的文件（>10 项折叠）。
+- `close` 跨树合并：定位「检出基线的那棵工作树」，在**它的目录里** `git merge --no-ff`（`Invoke-Git -In`），
+  所以基线被别的对话占着也不耽误；那棵树自己有未提交改动时**拒绝并退出 6**（指名路径 + 两条排查命令），
+  不把别人的半成品卷进合并；基线无人检出的老路径保持不变。
+- `close` 在链接工作树里收尾后 `switch --detach`：否则那棵树会把基线锁给一棵马上要删掉的树
+  （实测触发 `already used by worktree`，主工作树之后切不过去）。
+- `git switch` 失败时解析 `already used by worktree at '<path>'`，转成「谁占着、去哪干活」的可读提示。
+- `list` 增补：并行写法提示、每棵对话树的 `worktree=` 与「干净 / 脏 N」、以及「基线所在的工作树」。
+- 退出码新增 `6 = 基线所在树有未提交改动`；usage / `.DESCRIPTION` / `.NOTES` 同步。
+
+文档：
+
+- `docs/AGENT-WORKFLOW.md` §2（open/close 语义）、§4（并行写 + 串行合 + `feat/1.3` 已冻结、脏工作区不做基线）；
+- `AGENTS.md` §1.1（三种开工写法）、§1.2（close 在基线属主树里合并、退出 6、`git worktree remove`）；
+- `docs/DEVELOPMENT.md`（命令表、`SESSION_*` 标记、退出码）、`docs/VERSIONING.md` §5（sess 可检出在 worktree，仍是临时分支）。
+
+### 0.100.3 验证
+
+- 新增 `SessionScriptChecks`（31 条断言）：脚本必须带 `-Worktree`/`-CarryDirty`/`pdxWorktree`/`SESSION_WORKTREE=`、
+  脏树默认退出 3、已在 sess 分支时**同时**给 close 与 `-Worktree` 两条路、close 用 `-In $mergeIn` 并退出 6、
+  链接树 detach、list 打印占用树、§4 不再写 `feat/1.3` 主干、README/DEVELOPMENT 的检查类计数等于实际文件数。
+- 临时 clone 逐条实测（不碰真实历史）：脏树 `open` 退出 3 且不建分支；`-CarryDirty` 生成带文件名的 `wip`；
+  两棵树各自提交后从链接树 `close` → 在属主树合并、链接树 detach、主树仍能切回 `ver/1.4.0`；
+  属主树脏 → 退出 6 且不推进基线；冲突 → 退出 2 + `merge --abort`，解决后重跑成功；A→B→C 三次串行合并全成功。
+- `dev.cmd build` → **172 个检查类 / 失败 0 / 0 警告 0 错误**，`DEV_RESULT=PASS`。
+
+### 0.100.4 注意（遗留，本轮**未做**）
+
+- **16 个已合并的本地分支没删**（`feat/*`、`feature/*`、`fix/*`、`playset-two-column`，都已 ahead=0 合入 `ver/1.4.0`）；
+  3 个陈旧 worktree（`ach-filters` / `dlc-artwork-unowned` / `saves-polish`）仍在，`.agents` 占 2.3 GB —— 
+  这与 §8「合并后删掉任务分支与 worktree」不符，清理需要用户确认（`git branch -d` 与 `git worktree remove` 都是删除动作）。
+- **`feat/1.3` 上有一条孤儿提交 `ee5ec41`**（`docs(handoff): 记录 1.3.0 已发布与本机版本校验结果`）：
+  `feat/1.3` 在 1.3.0 发布时已冻结，这条提交**没有进 `main` 也没有进 `ver/1.4.0`**，
+  也就是 HANDOFF 顶部那句「1.3.0 已于 2026-11-12 发布」在 `ver/1.4.0` 里是缺的。本轮未动，需要时从 `feat/1.3` 摘回。
+- `version.props` 仍是 1.3.0（1.4.0 未发版，符合规范）。
+- 并行写仍然**只是不互相遮挡**：`close` 的合并串行靠人（同一时刻只跑一个 close），脚本没有加锁。

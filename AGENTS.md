@@ -20,13 +20,24 @@
    `slug` 用英文 kebab-case，例如 `fix-dlc-artwork`、`docs-session-rules`。
    没有 `pwsh` 时用 `powershell -File`，参数相同。
 
-   `open` 会校验你**必须站在 `integration-branch` 清单里的某个活跃版本分支上**（通常形如
-   `ver/x.y.z`）；不在就先 `git switch <活跃分支>`。清单为空、或从 `main` / 已冻结分支起时脚本
+   `open` 会校验**基线**是 `integration-branch` 清单里的某个活跃版本分支（通常形如
+   `ver/x.y.z`）；不在就先 `git switch <活跃分支>`。清单为空、或基线是 `main` / 已冻结分支时脚本
    会直接拒绝；`-Force` 只用于引导、发版或从 tag 起紧急修复，并在汇报里写明原因。
 
-- 分支名 `sess/YYYYMMDD-<slug>`，基线是**对话开始时所在的当前活跃版本分支**（通常是 `ver/x.y.z`）。
-- 开工时已有的未提交改动会跟着带到新分支，并由脚本提交成 `wip(session): ...` 基线提交；
-  它只是检查点，不是交付内容。
+   **同一台机器上有别的对话在写代码时不用等它**，另开一棵工作树即可：
+
+   ```bat
+   pwsh -File scripts/session.ps1 open <slug> -Worktree
+   ```
+
+   它会建 `.agents\worktrees\<slug>` 并打印 `SESSION_WORKTREE=`；之后本对话的 `dev.cmd` / `dev.cmd build`
+   都在那个目录里跑（各自的 `bin\`、`obj\` 互不影响）。合并仍是串行的：同一时刻只跑一个 `close`。
+
+- 分支名 `sess/YYYYMMDD-<slug>`，基线是**活跃版本分支**（当前分支，`-Worktree` 时是当前 sess 分支的
+  `pdxBase`，或 `-From` 指定的分支）。
+- 工作区有未提交改动时 `open` **直接拒绝**（退出 3）：那是别人的半成品，自动扫进 `wip` 提交后很难拆。
+  先提交、改用 `-Worktree`，或确认要带走时加 `-CarryDirty`（会提交成 `wip(session): ...` 基线，
+  只是检查点，不是交付内容）。
 - 本对话的所有提交都留在 sess 分支；**不往起始分支写任何东西**。
 - 子 agent / subagent **不要自己建分支或切分支**。并行写任务用 worktree（`docs/AGENT-WORKFLOW.md` §4），
   但基线是本对话的 sess 分支，合回也是 sess 分支。
@@ -41,11 +52,15 @@
    pwsh -File scripts/session.ps1 close -Message "中文说明"
    ```
 
-   脚本做四件事：校验基线仍是活跃版本分支 → 切回该分支 → `git merge --no-ff` → 删除 sess 分支
-   并留在该分支。基线已冻结或不在 `integration-branch` 清单里时，`close` 会硬失败（不再只警告），
+   脚本做四件事：校验基线仍是活跃版本分支 → 在**检出该基线的那棵工作树**里 `git merge --no-ff` →
+   删除 sess 分支。并行对话时那棵树通常就是主工作树，所以不必等别的对话先收尾；它自己有未提交改动时
+   `close` 会硬失败（退出 6，指名路径）——先把那边的改动提交到它自己的对话分支。
+   基线已冻结或不在 `integration-branch` 清单里时，`close` 会硬失败（不再只警告），
    提示用 `-Into <活跃分支>` 重定向，或从活跃分支重开对话。
-   纯 `*.md` 改动自动跳过构建；`-SkipVerify` 可强制跳过。合并冲突时脚本会中止合并并停在
-   sess 分支，先 `git merge <目标分支>` 解决冲突、提交，再重跑 `close`。
+   纯 `*.md` 改动自动跳过构建；`-SkipVerify` 可强制跳过。合并冲突时脚本会中止合并并保留 sess 分支，
+   先 `git merge <目标分支>` 解决冲突、提交，再重跑 `close`。
+   用 `-Worktree` 开的对话收尾后，链接树会 detach（不再占着基线分支），按提示
+   `git worktree remove <路径>` 清理即可。
 3. 汇报四行：**做了什么 / 证据（`dev.cmd build` 输出 + 实测）/ 没做什么及原因 / 下一步建议**，
    并写明本对话分支去向：`sess/… → 已合回 <分支>（commit）`。
 
