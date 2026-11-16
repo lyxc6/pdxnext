@@ -36,6 +36,7 @@ public static class TranslationChecks
             CheckFreeEngineBatching();
             CheckFreeEngineRateLimit();
             CheckMyMemoryQuota();
+            CheckEndpointHealthClearHostCooldowns();
             CheckTranslationFailureNote();
             CheckMultiEngineFailureNotes();
             CheckMultiEngineFallback();
@@ -824,6 +825,46 @@ public static class TranslationChecks
         var recovered = engine.TranslateAsync("hello", "zh-CN", CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Equal("恢复时间过后重新翻译", "你好", recovered ?? string.Empty);
         ChecksContext.Check("恢复后清掉额度标记", !health.IsQuotaExhausted);
+    }
+
+    // ---------------------------------------------------------------- 重试时的冷却清理
+
+    /// <summary>
+    /// 用户点「重试」时清掉主机的临时冷却，但**不能**清掉额度冷却。
+    /// <para>
+    /// 清错了的后果只在真机上可见：要么重试按钮点了等于没点（「暂时跳过」立刻又失败），
+    /// 要么把服务端额度这个事实清掉，白打一串必然 429 的请求。编译器看不见，所以钉在这里。
+    /// </para>
+    /// </summary>
+    private static void CheckEndpointHealthClearHostCooldowns()
+    {
+        var clock = new MutableClock(new DateTimeOffset(2026, 11, 3, 15, 0, 0, TimeSpan.Zero));
+        var health = new TranslationEndpointHealth(() => clock.UtcNow);
+
+        foreach (var host in FreeTranslationEngine.Hosts)
+        {
+            health.MarkDead(host, TimeSpan.FromMinutes(10));
+        }
+
+        var resumeAt = clock.UtcNow.AddHours(2);
+        health.MarkQuotaExhaustedUntil(resumeAt);
+
+        ChecksContext.Check("清理前主机处于冷却", FreeTranslationEngine.Hosts.All(health.IsDead));
+        ChecksContext.Check("清理前额度已标记用完", health.IsQuotaExhausted);
+
+        health.ClearHostCooldowns();
+
+        ChecksContext.Check("清理后主机冷却全部解除", FreeTranslationEngine.Hosts.All(host => !health.IsDead(host)));
+        ChecksContext.Check("清理后额度冷却仍然保留", health.IsQuotaExhausted);
+        ChecksContext.Equal("清理不动额度恢复时间", resumeAt, health.QuotaResumeAt ?? DateTimeOffset.MinValue);
+
+        // 冷却能再次生效（不是把 MarkDead 一并废掉）。
+        health.MarkDead(FreeTranslationEngine.Hosts[0], TimeSpan.FromMinutes(5));
+        ChecksContext.Check("清理后还能重新标记冷却", health.IsDead(FreeTranslationEngine.Hosts[0]));
+
+        // 自检用的 Reset 仍然连额度一起清。
+        health.Reset();
+        ChecksContext.Check("Reset 同时清掉额度标记", !health.IsQuotaExhausted);
     }
 
     // ---------------------------------------------------------------- 多引擎失败原因

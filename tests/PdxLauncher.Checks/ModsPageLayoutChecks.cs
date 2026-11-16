@@ -304,6 +304,19 @@ public static class ModsPageLayoutChecks
             "播放集页: 候选行 id 用 modCandidate 前缀",
             template.Contains("{x:Bind RowAutomationId, Mode=OneTime}", StringComparison.Ordinal)
                 && template.Contains("{x:Bind CheckAutomationId, Mode=OneTime}", StringComparison.Ordinal));
+
+        // 左栏候选行与「添加模组」子页共用同一个行 VM：译名与版本支持三角必须两边都在，
+        // 否则改一处漏一处，另一处界面静默丢功能。
+        ChecksContext.Check(
+            "播放集页: 候选行有译名框（与 Mod 库 / 添加模组页同一张表）",
+            template.Contains("{x:Bind TranslatedName", StringComparison.Ordinal)
+                && template.Contains("Visibility=\"{x:Bind svc:XamlVisibility.FromString(TranslatedName)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 候选行版本支持三角挂在可命中的容器上",
+            template.Contains("FromBool(HasVersionWarning)", StringComparison.Ordinal)
+                && template.Contains("{x:Bind WarningAutomationId, Mode=OneTime}", StringComparison.Ordinal)
+                && template.Contains("ToolTipService.ToolTip=\"{x:Bind VersionWarningText", StringComparison.Ordinal)
+                && template.Contains("Background=\"Transparent\"", StringComparison.Ordinal));
     }
 
     /// <summary>

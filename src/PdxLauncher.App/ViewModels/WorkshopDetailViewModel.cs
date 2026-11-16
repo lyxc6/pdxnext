@@ -201,6 +201,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>已经提示过失败的范围（简介 / 更新日志 / 评论 / 合集标题），避免重复刷屏。</summary>
     private readonly HashSet<string> _translateFailureScopes = new(StringComparer.Ordinal);
 
+    /// <summary>这一轮「重试」是否正在跑：只用来禁用按钮挡住连点，不代表任何范围在翻译。</summary>
+    private bool _isRetryingTranslation;
+
     /// <summary>合集标题翻译的去抖：一次铺 49 行，等页面稳定后再整批翻。</summary>
     private static readonly TimeSpan CollectionNameTranslationDebounce = TimeSpan.FromMilliseconds(250);
 
@@ -486,6 +489,17 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     /// <summary>是否有「翻译没出结果」的页面级提示。</summary>
     public bool HasTranslationNotice => !string.IsNullOrWhiteSpace(TranslationNotice);
+
+    /// <summary>
+    /// 「翻译没出结果」提示旁的重试按钮是否可用：有提示、且这一轮重试本身没在跑。
+    /// <para>
+    /// 刻意**不**去看 <see cref="IsTranslatingDescription"/> 等「正在进行」标志：评论是逐条译的，
+    /// 引擎连不通时一条条超时，那几个标志会连续几十秒为 true，按钮在整个失败窗口里都是灰的、
+    /// 点不动——而这正是用户最需要点它的时候。重试自身用 <see cref="_isRetryingTranslation"/> 表示，
+    /// 只用来挡住连点叠出两批请求。
+    /// </para>
+    /// </summary>
+    public bool CanRetryTranslation => HasTranslationNotice && !_isRetryingTranslation;
 
     /// <summary>作者主页是否可用（决定作者那一行能不能点）。</summary>
     public bool HasAuthorProfile => !string.IsNullOrWhiteSpace(AuthorProfileUrl);
@@ -2200,6 +2214,13 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                     continue;
                 }
 
+                // 已经译好的评论不再重翻：重试只需要补没出结果的那些，
+                // 否则一次重试会把整页评论再打一遍引擎（评论是逐条翻的，很贵）。
+                if (comment.HasTranslation)
+                {
+                    continue;
+                }
+
                 attempted++;
                 var translated = await AppServices.Translation
                     .TranslateDocumentAsync(comment.Body, cancellationToken)
@@ -2256,6 +2277,69 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         _logger.Warn("创意工坊详情翻译没有出结果（" + scope + "）：" + reason);
         TranslationNotice = T(Keys.WorkshopTranslateUnavailable, reason);
     }
+
+    /// <summary>
+    /// 用户点了提示条上的「重试」：把失败过的范围整批重跑一遍。
+    /// <para>
+    /// 只重跑失败过的范围（<see cref="_translateFailureScopes"/> 里记着），不重新拉详情：
+    /// 原文文档本来就在这一页上，重新拉一次既多打网络请求，也会把滚动位置和已经播好的截图冲掉。
+    /// </para>
+    /// <para>
+    /// 重跑前必须清掉范围记录和提示条：<see cref="ReportTranslationFailure"/> 按范围去重，
+    /// 不清的话第二次失败会被当成「已经提示过」而吞掉，界面上就看不到新原因。
+    /// </para>
+    /// </summary>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public async Task RetryTranslationAsync(CancellationToken cancellationToken)
+    {
+        if (!CanRetryTranslation)
+        {
+            return;
+        }
+
+        var scopes = _translateFailureScopes.ToArray();
+        _translateFailureScopes.Clear();
+        TranslationNotice = string.Empty;
+
+        // 主机冷却只是本进程对上一次失败的保守推断，用户点重试说明情况可能已经变了。
+        AppServices.Translation.ResetRetryableFailures();
+
+        _isRetryingTranslation = true;
+        OnPropertyChanged(nameof(CanRetryTranslation));
+        try
+        {
+            foreach (var scope in scopes)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                switch (scope)
+                {
+                    case "description" when DescriptionDocument is { IsEmpty: false } document:
+                        await TranslateDescriptionAsync(document, cancellationToken).ConfigureAwait(true);
+                        break;
+
+                    case "changelog" when ChangelogDocument is { IsEmpty: false } changelog:
+                        await TranslateChangelogAsync(changelog, cancellationToken).ConfigureAwait(true);
+                        break;
+
+                    case "comments" when CommentsTranslationEnabled:
+                        await TranslateCommentsAsync(cancellationToken).ConfigureAwait(true);
+                        break;
+                }
+            }
+        }
+        finally
+        {
+            _isRetryingTranslation = false;
+            OnPropertyChanged(nameof(CanRetryTranslation));
+        }
+    }
+
+    /// <summary>评论翻译是否开着（重试时决定要不要重新翻评论区）。</summary>
+    private static bool CommentsTranslationEnabled => AppServices.Settings.TranslateCommentsEnabled;
 
     /// <summary>图片墙：先按顺序建好行，下载留给 <see cref="DownloadGalleryAsync"/>。</summary>
     private void BuildGallery(WorkshopRowViewModel row, IReadOnlyList<string> urls)
@@ -2814,7 +2898,11 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     partial void OnCachedHintChanged(string value) => OnPropertyChanged(nameof(HasCachedHint));
 
-    partial void OnTranslationNoticeChanged(string value) => OnPropertyChanged(nameof(HasTranslationNotice));
+    partial void OnTranslationNoticeChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasTranslationNotice));
+        OnPropertyChanged(nameof(CanRetryTranslation));
+    }
 
     partial void OnAuthorProfileUrlChanged(string? value) => OnPropertyChanged(nameof(HasAuthorProfile));
 

@@ -217,6 +217,19 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>已经提示过「本页标题完全没翻出来」的页键（同一页只提示一次）。</summary>
     private string? _translateFailureKey;
 
+    /// <summary>
+    /// 本页是否还剩「整页标题一条都没译出来」的状态：状态条上的「重试」按钮据此显隐。
+    /// 成功译出任何一条、或换成新的一页（页键变了）都会清掉。
+    /// </summary>
+    [ObservableProperty]
+    private bool _canRetryTranslation;
+
+    /// <summary>失败提示占住状态条之前的那句文案（重试成功后要还回去）。</summary>
+    private string _statusBeforeTranslationFailure = string.Empty;
+
+    /// <summary>失败提示当前确实写进状态条的那串文字（用来判断它有没有被更新的提示覆盖）。</summary>
+    private string _translationFailureStatusText = string.Empty;
+
     /// <summary>搜索词。</summary>
     [ObservableProperty]
     private string _searchText = string.Empty;
@@ -1326,6 +1339,11 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             {
                 ReportTranslationFailure(rows.Count, watch.ElapsedMilliseconds);
             }
+            else
+            {
+                ClearTranslationFailureStatus();
+                CanRetryTranslation = false;
+            }
         }
         catch (OperationCanceledException)
         {
@@ -1359,7 +1377,57 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             "创意工坊标题全部未翻译（" + key + "）：" + (failure ?? T(Keys.CommonUnknown))
             + "；本批 " + count + " 条 / " + elapsedMs + " ms"
             + (failure is null ? "，引擎未给出失败原因" : string.Empty));
-        SetStatus(T(Keys.WorkshopTranslateUnavailable, failure ?? T(Keys.CommonUnknown)));
+
+        // 记住被顶掉的那句文案：重试成功后要还回去，不能让状态条一直停在一句已经不成立的提示。
+        if (!string.Equals(StatusMessage, _translationFailureStatusText, StringComparison.Ordinal))
+        {
+            _statusBeforeTranslationFailure = StatusMessage;
+        }
+
+        _translationFailureStatusText = T(Keys.WorkshopTranslateUnavailable, failure ?? T(Keys.CommonUnknown));
+        SetStatus(_translationFailureStatusText);
+        CanRetryTranslation = true;
+    }
+
+    /// <summary>
+    /// 翻译失败提示已经不再成立（这一批译出结果了）：把状态条还回之前那句。
+    /// <para>
+    /// 只在状态条**仍然**显示着那条失败提示时才动它——期间已经有别的操作写了新文案（例如
+    /// 「已在浏览器中打开」）时不能覆盖，否则用户刚看到的反馈会被一句旧文案顶掉。
+    /// </para>
+    /// </summary>
+    private void ClearTranslationFailureStatus()
+    {
+        if (!string.Equals(StatusMessage, _translationFailureStatusText, StringComparison.Ordinal))
+        {
+            _translationFailureStatusText = string.Empty;
+            return;
+        }
+
+        SetStatus(_statusBeforeTranslationFailure);
+        _translationFailureStatusText = string.Empty;
+    }
+
+    /// <summary>
+    /// 用户点了状态条上的「重试」：把当前这一页的标题重翻一遍。
+    /// <para>
+    /// 先清 <see cref="_translateFailureKey"/>：失败提示按页去重，不清的话这次再失败会被当成
+    /// 「已经提示过」而吞掉，用户只会看到提示条消失、什么都不出来。
+    /// </para>
+    /// <para>
+    /// 页键与行都没变，所以直接复用 <see cref="StartNameTranslation"/> 的去抖与「新批次取代旧批次」，
+    /// 不去重拉整页列表——重新拉列表会把用户翻到的页码和滚动位置一起冲掉。
+    /// </para>
+    /// </summary>
+    public void RetryNameTranslation()
+    {
+        _translateFailureKey = null;
+        CanRetryTranslation = false;
+
+        // 重试期间先把失败提示撤掉，换回原来那句：用户点下去就能看到状态条有反应。
+        ClearTranslationFailureStatus();
+        AppServices.Translation.ResetRetryableFailures();
+        StartNameTranslation(Rows, _pageToken);
     }
 
     /// <summary>整体替换列表行；先取消上一轮封面下载，避免旧页任务继续占用带宽。</summary>
@@ -1367,6 +1435,12 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     private void ReplaceRows(IEnumerable<WorkshopRowViewModel> rows)
     {
         CancelCoverFill();
+
+        // 新行取代旧行：上一页的「标题全没译出来」不再适用，重试入口与那条提示一起撤掉。
+        ClearTranslationFailureStatus();
+        CanRetryTranslation = false;
+        _translateFailureKey = null;
+
         var watch = System.Diagnostics.Stopwatch.StartNew();
         Rows.ReplaceAll(rows);
         watch.Stop();

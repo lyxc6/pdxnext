@@ -114,11 +114,23 @@ public static class AddModsPageChecks
         var c24 = template.IndexOf("<ColumnDefinition Width=\"24\" />", StringComparison.Ordinal);
         var c40 = template.IndexOf("<ColumnDefinition Width=\"40\" />", StringComparison.Ordinal);
         var cStar = template.IndexOf("<ColumnDefinition Width=\"*\" />", StringComparison.Ordinal);
-        var c96 = template.IndexOf("<ColumnDefinition Width=\"96\" />", StringComparison.Ordinal);
+        var cAuto = template.IndexOf("<ColumnDefinition Width=\"Auto\" />", StringComparison.Ordinal);
+
+        // 版本列必须按内容取宽（Auto），不能写死 96：一行有「mod 版本 2025.10.10」+「支持 1.15.*」两段字，
+        // 远超 96 DIP，写死之后内容溢出被列表边缘裁掉，那一列里的版本支持三角也跟着看不见。
         ChecksContext.Check(
-            "添加模组页: 列 24/40/*/96 且顺序正确",
-            c24 >= 0 && c40 > c24 && cStar > c40 && c96 > cStar,
-            "24=" + c24 + " 40=" + c40 + " *=" + cStar + " 96=" + c96);
+            "添加模组页: 列 24/40/*/Auto 且顺序正确",
+            c24 >= 0 && c40 > c24 && cStar > c40 && cAuto > cStar,
+            "24=" + c24 + " 40=" + c40 + " *=" + cStar + " Auto=" + cAuto);
+        ChecksContext.Check(
+            "添加模组页: 版本列宽度下限由内容 MinWidth=96 保证（不写死列宽）",
+            template.Contains("MinWidth=\"96\"", StringComparison.Ordinal),
+            template);
+        ChecksContext.Check(
+            "添加模组页: 版本列两行字各自 MaxWidth 收窄（省略号才会生效）",
+            template.Contains("MaxWidth=\"200\"", StringComparison.Ordinal)
+                && template.Contains("TextTrimming=\"CharacterEllipsis\"", StringComparison.Ordinal),
+            "MaxWidth200=" + template.Contains("MaxWidth=\"200\"", StringComparison.Ordinal));
 
         // 勾选框不写 MinWidth=0 就会吃到 CheckBox 的 120 DIP 默认最小宽度，行首白留 100 多 DIP。
         var checkBlock = ElementBlock(template, "CheckAutomationId");
@@ -184,6 +196,67 @@ public static class AddModsPageChecks
             xaml.Contains("HasVersionWarning", StringComparison.Ordinal)
                 && xaml.Contains("SystemFillColorCautionBrush", StringComparison.Ordinal),
             xaml);
+
+        // 三角的提示必须挂在「包住字形的命中容器」上：FontIcon 只有字形本身可命中，
+        // 提示绑在它身上时鼠标落在旁边空白处不会弹（真机踩过）。容器还负责 HelpText 与 UIA 定位。
+        var warningBlock = PairedElementBlock(xaml, "WarningAutomationId");
+        ChecksContext.Check(
+            "添加模组页: 三角提示挂在透明命中容器上（不挂字形）",
+            warningBlock.Contains("Background=\"Transparent\"", StringComparison.Ordinal)
+                && warningBlock.Contains("ToolTipService.ToolTip=\"{x:Bind VersionWarningText", StringComparison.Ordinal)
+                && warningBlock.Contains("AutomationProperties.HelpText=\"{x:Bind VersionWarningText", StringComparison.Ordinal),
+            warningBlock);
+        ChecksContext.Check(
+            "添加模组页: 三角容器最小命中区 24（读屏与鼠标都能点到）",
+            warningBlock.Contains("MinWidth=\"24\"", StringComparison.Ordinal)
+                && warningBlock.Contains("MinHeight=\"24\"", StringComparison.Ordinal)
+                && warningBlock.Contains("Padding=\"4\"", StringComparison.Ordinal),
+            warningBlock);
+        ChecksContext.Check(
+            "添加模组页: 三角的无障碍名复用 Mod 库的「版本支持提示」",
+            warningBlock.Contains("L.ModlibWarningName", StringComparison.Ordinal),
+            warningBlock);
+
+        // 译名：添加模组页此前完全不翻译，用户看不到原名的中文意思；现在与 Mod 库同一张表回填。
+        // 译名：添加模组页此前完全不翻译，用户看不到原名的中文意思；现在与 Mod 库同一张表回填。
+        // AutomationId 挂在里层 TextBlock 上（Border 没有 automation peer，挂 Border 上 UIA 查不到），
+        // 所以断言取「包含这个 Id 的 Border 整块」来核对框的样式。
+        var translatedAnchor = xaml.IndexOf("TranslatedAutomationId", StringComparison.Ordinal);
+        var translatedStart = translatedAnchor >= 0 ? xaml.LastIndexOf("<Border", translatedAnchor, StringComparison.Ordinal) : -1;
+        var translatedEnd = translatedStart >= 0 ? xaml.IndexOf("</Border>", translatedAnchor, StringComparison.Ordinal) : -1;
+        var translatedBlock = translatedStart >= 0 && translatedEnd > translatedStart
+            ? xaml[translatedStart..(translatedEnd + "</Border>".Length)]
+            : string.Empty;
+        ChecksContext.Check(
+            "添加模组页: 行内有译名框（与 Mod 库同款描边框）",
+            translatedBlock.Contains("Text=\"{x:Bind TranslatedName", StringComparison.Ordinal)
+                && translatedBlock.Contains("Visibility=\"{x:Bind svc:XamlVisibility.FromString(TranslatedName)", StringComparison.Ordinal)
+                && translatedBlock.Contains("Padding=\"8,4\"", StringComparison.Ordinal)
+                && translatedBlock.Contains("HorizontalAlignment=\"Left\"", StringComparison.Ordinal)
+                && translatedBlock.Contains("CornerRadius=\"8\"", StringComparison.Ordinal),
+            translatedBlock);
+        ChecksContext.Check(
+            "添加模组页: 译名 AutomationId 挂在 TextBlock 上（Border 没有 automation peer）",
+            translatedBlock.Contains("AutomationProperties.AutomationId=\"{x:Bind TranslatedAutomationId", StringComparison.Ordinal)
+                && translatedBlock.Contains("<TextBlock Text=\"{x:Bind TranslatedName", StringComparison.Ordinal),
+            translatedBlock);
+        ChecksContext.Check(
+            "添加模组页: 行 ViewModel 暴露 TranslatedName / HasTranslatedName",
+            rowVm.Contains("public string? TranslatedName", StringComparison.Ordinal)
+                && rowVm.Contains("public bool HasTranslatedName", StringComparison.Ordinal)
+                && rowVm.Contains("TranslatedAutomationId", StringComparison.Ordinal),
+            rowVm);
+
+        // 同一个行 VM 被两个页面共用（本页与播放集页左栏）。改一处漏一处的话，另一处界面就静默丢功能，
+        // 所以这里把「两边都绑了同一批属性」钉死。
+        var modsPage = Read(root, "src", "PdxLauncher.App", "Views", "ModsPage.xaml");
+        ChecksContext.Check(
+            "添加模组页: 候选行 VM 与播放集左栏模板共用同一批绑定（译名 + 三角）",
+            modsPage.Contains("<DataTemplate x:Key=\"PlaysetCandidateRowTemplate\" x:DataType=\"vm:AddModRowViewModel\">", StringComparison.Ordinal)
+                && modsPage.Contains("{x:Bind TranslatedName", StringComparison.Ordinal)
+                && modsPage.Contains("FromBool(HasVersionWarning)", StringComparison.Ordinal)
+                && modsPage.Contains("{x:Bind WarningAutomationId", StringComparison.Ordinal),
+            modsPage);
 
         ChecksContext.Check(
             "添加模组页: 行 ViewModel 暴露 RequiredVersionText / HasVersionWarning",
@@ -357,6 +430,56 @@ public static class AddModsPageChecks
         var start = text.LastIndexOf('<', index);
         var end = text.IndexOf("/>", index, StringComparison.Ordinal);
         return start >= 0 && end > start ? text[start..(end + 2)] : string.Empty;
+    }
+
+    /// <summary>
+    /// 取包含 <paramref name="marker"/> 的那个**成对标签**元素（从最近的 &lt; 到匹配的 &lt;/Tag&gt;）。
+    /// 三角与译名都是包着子元素的 <c>Border</c>，自闭合版 <see cref="ElementBlock"/> 取不到它们。
+    /// </summary>
+    private static string PairedElementBlock(string text, string marker)
+    {
+        var index = text.IndexOf(marker, StringComparison.Ordinal);
+        if (index < 0)
+        {
+            return string.Empty;
+        }
+
+        var start = text.LastIndexOf('<', index);
+        if (start < 0)
+        {
+            return string.Empty;
+        }
+
+        var tagEnd = text.IndexOf('>', index);
+        if (tagEnd < 0)
+        {
+            return string.Empty;
+        }
+
+        // 自闭合就没有配对标签：原样返回这一小段。
+        if (text[tagEnd - 1] == '/')
+        {
+            return text[start..(tagEnd + 1)];
+        }
+
+        // 标签名（去掉属性与命名空间前缀后取第一个词）。
+        var openTag = text[start..(tagEnd + 1)];
+        var nameStart = 1;
+        while (nameStart < openTag.Length && char.IsWhiteSpace(openTag[nameStart]))
+        {
+            nameStart++;
+        }
+
+        var nameEnd = nameStart;
+        while (nameEnd < openTag.Length && !char.IsWhiteSpace(openTag[nameEnd]) && openTag[nameEnd] != '>')
+        {
+            nameEnd++;
+        }
+
+        var tagName = openTag[nameStart..nameEnd];
+        var closeTag = "</" + tagName + ">";
+        var close = text.IndexOf(closeTag, tagEnd, StringComparison.Ordinal);
+        return close > tagEnd ? text[start..(close + closeTag.Length)] : text[start..(tagEnd + 1)];
     }
 
     private static string Read(string root, params string[] parts)

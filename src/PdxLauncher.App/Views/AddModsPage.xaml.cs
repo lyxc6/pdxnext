@@ -219,6 +219,21 @@ public sealed partial class AddModsPage : Page
         OnBackClick(sender, e);
     }
 
+    /// <summary>
+    /// 译名整批失败后点「重试」：只重跑缺译名的那一批，不重读 mod 库、不打乱勾选与滚动位置。
+    /// </summary>
+    private void OnTranslationRetryClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _viewModel.RetryNameTranslation();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("添加模组页重试翻译失败：" + ex.Message);
+        }
+    }
+
     /// <summary>确认添加：把勾选的 mod 交回播放集页。</summary>
     private void OnConfirmClick(object sender, RoutedEventArgs e)
     {

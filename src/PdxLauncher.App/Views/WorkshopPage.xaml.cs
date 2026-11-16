@@ -216,6 +216,22 @@ public sealed partial class WorkshopPage : Page
     }
 
     /// <summary>
+    /// 状态条上的翻译重试：只把当前这一页的标题重翻一遍，不重拉列表
+    /// （重新拉会把用户翻到的页码、搜索条件和滚动位置一起冲掉）。
+    /// </summary>
+    private void OnTranslationRetryClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _viewModel.RetryNameTranslation();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("WorkshopPage 翻译重试失败", ex);
+        }
+    }
+
+    /// <summary>
     /// 搜索框输入。x:Bind 不支持 UpdateSourceTrigger，所以 Text 只做 OneWay 绑定，
     /// 由这里把用户输入写回 ViewModel。写回只更新文本，**不发请求**：
     /// 真正提交的是回车/放大镜（<see cref="OnSearchQuerySubmitted"/>）或刷新按钮。
