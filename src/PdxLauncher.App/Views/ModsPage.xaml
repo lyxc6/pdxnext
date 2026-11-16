@@ -150,9 +150,12 @@
                                   Visibility="{x:Bind svc:XamlVisibility.FromBool(HasWarning), Mode=OneWay}"
                                   ToolTipService.ToolTip="{x:Bind WarningText, Mode=OneWay}" />
                     </StackPanel>
-                    <!-- 译名：原文与译文同显，译文在标题下方的描边框里（不加「译文」标题）。 -->
+                    <!-- 译名：原文与译文同显，译文在标题下方的描边框里（不加「译文」标题）。
+                         HorizontalAlignment=Left 让框只包住译文本身的宽度（StackPanel 里默认 Stretch 会通栏拉满），
+                         译文过长时仍按可用宽度省略号收尾。 -->
                     <Border Margin="0,8,0,0"
                             Padding="8,4"
+                            HorizontalAlignment="Left"
                             CornerRadius="8"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -756,14 +759,26 @@
                            AutomationProperties.AutomationId="txtModsStatus"
                            AutomationProperties.Name="{x:Bind L.ModsStatusName, Mode=OneWay}" />
 
-                <!-- 忙碌提示放状态栏，工具条只留交互控件，窄窗口时不会挤掉按钮 -->
-                <ProgressRing Grid.Column="1"
-                              Width="16"
-                              Height="16"
-                              VerticalAlignment="Center"
-                              IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                              AutomationProperties.AutomationId="ringModsBusy"
-                              AutomationProperties.Name="{x:Bind L.ModsHeaderBusy, Mode=OneWay}" />
+                <!-- 忙碌提示与翻译重试放状态栏，工具条只留交互控件，窄窗口时不会挤掉按钮 -->
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="8"
+                            VerticalAlignment="Center">
+                    <Button Padding="12,4"
+                            VerticalAlignment="Center"
+                            Content="{x:Bind L.CommonRetry, Mode=OneWay}"
+                            Click="OnTranslationRetryClick"
+                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.CanRetryTranslation), Mode=OneWay}"
+                            AutomationProperties.AutomationId="btnModsTranslationRetry"
+                            AutomationProperties.Name="{x:Bind L.CommonRetry, Mode=OneWay}" />
+
+                    <ProgressRing Width="16"
+                                  Height="16"
+                                  VerticalAlignment="Center"
+                                  IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                                  AutomationProperties.AutomationId="ringModsBusy"
+                                  AutomationProperties.Name="{x:Bind L.ModsHeaderBusy, Mode=OneWay}" />
+                </StackPanel>
             </Grid>
         </Border>
 

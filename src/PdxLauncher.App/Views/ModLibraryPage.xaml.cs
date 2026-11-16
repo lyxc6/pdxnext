@@ -232,9 +232,24 @@ public sealed partial class ModLibraryPage : Page
 
     // ------------------------------------------------------------ 控件事件
 
-    private async void OnRefreshClick(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// 状态栏上的翻译重试：把这一页还没译名的行重翻一遍。
+    /// 只重翻译名，不重读 Mod 库（重读会把整页缩略图重新解码，列表会闪一下）。
+    /// </summary>
+    private void OnTranslationRetryClick(object sender, RoutedEventArgs e)
     {
         try
+        {
+            _viewModel.RetryNameTranslation();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModLibraryPage 翻译重试失败", ex);
+        }
+    }
+
+    private async void OnRefreshClick(object sender, RoutedEventArgs e)
+    {        try
         {
             await _viewModel.RefreshAsync().ConfigureAwait(true);
         }

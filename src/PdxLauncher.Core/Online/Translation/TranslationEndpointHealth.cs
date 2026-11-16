@@ -87,6 +87,25 @@ public sealed class TranslationEndpointHealth
         }
     }
 
+    /// <summary>
+    /// 清掉「这台主机暂时连不上」与「被限流」的冷却，让下一次请求按真实情况再试一遍。
+    /// <para>
+    /// 只在用户点「重试」时调用：那些冷却只是本进程对一次失败的保守推断，用户可能刚换了代理、
+    /// 关掉 VPN 或限流已经过去；不清掉的话，重试会立刻拿到「暂时跳过」，看上去像按钮没反应。
+    /// </para>
+    /// <para>
+    /// <b>保留</b> <see cref="QuotaResumeAt"/>：额度用完是服务端的事实状态，清掉它只会让重试白打一串
+    /// 请求再失败一次，而界面文案本来就已经写出恢复时间。
+    /// </para>
+    /// </summary>
+    public void ClearHostCooldowns()
+    {
+        lock (_gate)
+        {
+            _deadUntil.Clear();
+        }
+    }
+
     /// <summary>清空全部状态（自检用；正式代码不需要）。</summary>
     public void Reset()
     {

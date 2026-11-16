@@ -387,6 +387,26 @@ public sealed partial class WorkshopDetailPage : Page
         await RunAsync(_viewModel.Row);
     }
 
+    /// <summary>
+    /// 「翻译没出结果」提示条上的重试：只重跑失败过的翻译范围，不重拉整份详情
+    /// （那会把已经铺好的正文、截图和滚动位置一起冲掉）。
+    /// </summary>
+    private async void OnTranslationRetryClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await _viewModel.RetryTranslationAsync(CurrentToken).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面已离开：这一批重试作废。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("创意工坊详情翻译重试失败", ex);
+        }
+    }
+
     private async Task RunAsync(WorkshopRowViewModel row)
     {
         _lifetime?.Cancel();

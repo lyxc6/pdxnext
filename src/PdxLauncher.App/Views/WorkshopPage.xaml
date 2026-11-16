@@ -371,9 +371,12 @@
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </Border>
-                                <!-- 译文：与原文并存，只显示译文正文（不加「译文」标题），翻译没开或失败时整块隐藏。 -->
+                                <!-- 译文：与原文并存，只显示译文正文（不加「译文」标题），翻译没开或失败时整块隐藏。
+                                     HorizontalAlignment=Left 让框只包住译文本身（纵向 StackPanel 里默认 Stretch 会通栏拉满），
+                                     译文过长时仍按可用宽度省略号收尾。 -->
                                 <Border Margin="0,8,0,0"
                                         Padding="8,4"
+                                        HorizontalAlignment="Left"
                                         CornerRadius="8"
                                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -577,6 +580,7 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
                     <!-- 页头原来的「游戏名 + 结果数」搬到这里：页面标题已经在导航栏上，页内不再重复一行。 -->
@@ -619,6 +623,16 @@
                                VerticalAlignment="Center"
                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowCoverProgress), Mode=OneWay}"
                                AutomationProperties.AutomationId="txtWorkshopCoverProgress" />
+
+                    <!-- 本页标题一条都没译出来时，状态条右侧给一个重试入口（只重翻当前页，不重拉列表）。 -->
+                    <Button Grid.Column="3"
+                            Padding="12,4"
+                            VerticalAlignment="Center"
+                            Content="{x:Bind L.CommonRetry, Mode=OneWay}"
+                            Click="OnTranslationRetryClick"
+                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.CanRetryTranslation), Mode=OneWay}"
+                            AutomationProperties.AutomationId="btnWorkshopTranslationRetry"
+                            AutomationProperties.Name="{x:Bind L.CommonRetry, Mode=OneWay}" />
                 </Grid>
             </Border>
         </Grid>

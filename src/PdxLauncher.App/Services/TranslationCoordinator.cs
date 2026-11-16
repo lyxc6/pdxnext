@@ -119,6 +119,19 @@ public sealed class TranslationCoordinator : IDisposable
     public void ClearCache() => _cache?.Clear();
 
     /// <summary>
+    /// 用户点了「重试」之后重来一遍：清掉各翻译主机的临时冷却（连不上 5 分钟 / 429 60 秒）。
+    /// <para>
+    /// 引擎每批都按设置新建、默认共用 <see cref="TranslationEndpointHealth.Shared"/>，所以在协调器上
+    /// 收口就够了。MyMemory 的额度冷却故意保留：那是服务端事实，清了只会多打一串必然失败的请求。
+    /// </para>
+    /// </summary>
+    public void ResetRetryableFailures()
+    {
+        TranslationEndpointHealth.Shared.ClearHostCooldowns();
+        _logger.Info("用户重试翻译：已清掉翻译主机的临时冷却");
+    }
+
+    /// <summary>
     /// 读出按「ModId + 目标语言」持久化的名称译名；与引擎模式、缓存天数无关。
     /// 没有缓存时返回空表。
     /// </summary>

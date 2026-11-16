@@ -35,6 +35,9 @@ public sealed class ModsViewModel : LocalizedObservableObject
     private bool _isLoaded;
     private string _statusMessage = string.Empty;
     private bool _translateFailureReported;
+    private bool _canRetryTranslation;
+    private string _translationFailureStatusText = string.Empty;
+    private string _statusBeforeTranslationFailure = string.Empty;
     private string _searchText = string.Empty;
     private bool _bulkEnabledUpdate;
 
@@ -173,6 +176,16 @@ public sealed class ModsViewModel : LocalizedObservableObject
     {
         get => _statusMessage;
         private set => SetProperty(ref _statusMessage, value);
+    }
+
+    /// <summary>
+    /// 状态栏上的「重试」入口是否可见：本轮译名一条都没译出来时为 true。
+    /// 换播放集 / 重建列表 / 任何一条译出结果都会复位。
+    /// </summary>
+    public bool CanRetryTranslation
+    {
+        get => _canRetryTranslation;
+        private set => SetProperty(ref _canRetryTranslation, value);
     }
 
     /// <summary>搜索框内容；变化时重建可见行。</summary>
@@ -614,6 +627,10 @@ public sealed class ModsViewModel : LocalizedObservableObject
     /// <param name="cancellationToken">页面生命周期取消令牌（供后台译名使用）。</param>
     private void RebuildVisibleMods(CancellationToken cancellationToken = default)
     {
+        // 新一批行取代旧行：上一轮「一条都没译出来」的重试入口与那条提示跟着收起。
+        ClearTranslationFailureStatus();
+        CanRetryTranslation = false;
+
         var filtered = PlaySetEditor.Filter(_allMods, SearchText);
         var canMove = CanMoveMods;
         Mods.Clear();
@@ -871,6 +888,12 @@ public sealed class ModsViewModel : LocalizedObservableObject
             {
                 ReportTranslationFailure(rows.Count);
             }
+            else
+            {
+                // 这一批出过译文了：状态条上的重试入口与那条失败提示都不再需要。
+                ClearTranslationFailureStatus();
+                CanRetryTranslation = false;
+            }
         }
         catch (OperationCanceledException)
         {
@@ -893,7 +916,49 @@ public sealed class ModsViewModel : LocalizedObservableObject
         _translateFailureReported = true;
         var reason = AppServices.Translation.LastFailure ?? T(Keys.CommonUnknown);
         _logger.Warn("Mod 名称全部未翻译（" + count + " 条）：" + reason);
-        StatusMessage = T(Keys.ModsTranslateUnavailable, reason);
+
+        // 记住被顶掉的那句文案：重试成功后要还回去，不能让状态条一直停在一句已经不成立的提示。
+        if (!string.Equals(StatusMessage, _translationFailureStatusText, StringComparison.Ordinal))
+        {
+            _statusBeforeTranslationFailure = StatusMessage;
+        }
+
+        _translationFailureStatusText = T(Keys.ModsTranslateUnavailable, reason);
+        StatusMessage = _translationFailureStatusText;
+        CanRetryTranslation = true;
+    }
+
+    /// <summary>
+    /// 翻译失败提示已经不再成立（这一批译出结果了）：把状态条还回之前那句。
+    /// 只在状态条**仍然**显示着那条失败提示时才动它，别覆盖用户刚看到的其它反馈。
+    /// </summary>
+    private void ClearTranslationFailureStatus()
+    {
+        if (!string.Equals(StatusMessage, _translationFailureStatusText, StringComparison.Ordinal))
+        {
+            _translationFailureStatusText = string.Empty;
+            return;
+        }
+
+        StatusMessage = _statusBeforeTranslationFailure;
+        _translationFailureStatusText = string.Empty;
+    }
+
+    /// <summary>
+    /// 用户点了状态条上的「重试」：把当前播放集里还没译名的行重翻一遍。
+    /// <para>
+    /// 先复位「只提示一次」与重试标志：失败提示按轮次去重，不复位的话这次再失败会被当成
+    /// 「已经提示过」而吞掉，用户只会看到提示条消失。
+    /// </para>
+    /// </summary>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public void RetryNameTranslation(CancellationToken cancellationToken)
+    {
+        _translateFailureReported = false;
+        CanRetryTranslation = false;
+        ClearTranslationFailureStatus();
+        AppServices.Translation.ResetRetryableFailures();
+        StartNameTranslation(cancellationToken);
     }
 
     /// <summary>行内开关变化：同步集合顺序（不重排），刷新计数与状态，并自动保存。</summary>

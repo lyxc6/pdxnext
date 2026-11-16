@@ -487,6 +487,19 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>是否有「翻译没出结果」的页面级提示。</summary>
     public bool HasTranslationNotice => !string.IsNullOrWhiteSpace(TranslationNotice);
 
+    /// <summary>
+    /// 「翻译没出结果」提示旁的重试按钮是否可用：有提示、且此刻没有别的翻译在跑。
+    /// <para>
+    /// 三个范围共用一条提示条，重试会把失败过的范围整批重跑，所以只要还有范围在途就禁掉按钮，
+    /// 避免连点叠出两批请求。
+    /// </para>
+    /// </summary>
+    public bool CanRetryTranslation =>
+        HasTranslationNotice
+        && !IsTranslatingDescription
+        && !IsTranslatingChangelog
+        && !IsTranslatingComments;
+
     /// <summary>作者主页是否可用（决定作者那一行能不能点）。</summary>
     public bool HasAuthorProfile => !string.IsNullOrWhiteSpace(AuthorProfileUrl);
 
@@ -2200,6 +2213,13 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                     continue;
                 }
 
+                // 已经译好的评论不再重翻：重试只需要补没出结果的那些，
+                // 否则一次重试会把整页评论再打一遍引擎（评论是逐条翻的，很贵）。
+                if (comment.HasTranslation)
+                {
+                    continue;
+                }
+
                 attempted++;
                 var translated = await AppServices.Translation
                     .TranslateDocumentAsync(comment.Body, cancellationToken)
@@ -2256,6 +2276,59 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         _logger.Warn("创意工坊详情翻译没有出结果（" + scope + "）：" + reason);
         TranslationNotice = T(Keys.WorkshopTranslateUnavailable, reason);
     }
+
+    /// <summary>
+    /// 用户点了提示条上的「重试」：把失败过的范围整批重跑一遍。
+    /// <para>
+    /// 只重跑失败过的范围（<see cref="_translateFailureScopes"/> 里记着），不重新拉详情：
+    /// 原文文档本来就在这一页上，重新拉一次既多打网络请求，也会把滚动位置和已经播好的截图冲掉。
+    /// </para>
+    /// <para>
+    /// 重跑前必须清掉范围记录和提示条：<see cref="ReportTranslationFailure"/> 按范围去重，
+    /// 不清的话第二次失败会被当成「已经提示过」而吞掉，界面上就看不到新原因。
+    /// </para>
+    /// </summary>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public async Task RetryTranslationAsync(CancellationToken cancellationToken)
+    {
+        if (!CanRetryTranslation)
+        {
+            return;
+        }
+
+        var scopes = _translateFailureScopes.ToArray();
+        _translateFailureScopes.Clear();
+        TranslationNotice = string.Empty;
+
+        // 主机冷却只是本进程对上一次失败的保守推断，用户点重试说明情况可能已经变了。
+        AppServices.Translation.ResetRetryableFailures();
+
+        foreach (var scope in scopes)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            switch (scope)
+            {
+                case "description" when DescriptionDocument is { IsEmpty: false } document:
+                    await TranslateDescriptionAsync(document, cancellationToken).ConfigureAwait(true);
+                    break;
+
+                case "changelog" when ChangelogDocument is { IsEmpty: false } changelog:
+                    await TranslateChangelogAsync(changelog, cancellationToken).ConfigureAwait(true);
+                    break;
+
+                case "comments" when CommentsTranslationEnabled:
+                    await TranslateCommentsAsync(cancellationToken).ConfigureAwait(true);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>评论翻译是否开着（重试时决定要不要重新翻评论区）。</summary>
+    private static bool CommentsTranslationEnabled => AppServices.Settings.TranslateCommentsEnabled;
 
     /// <summary>图片墙：先按顺序建好行，下载留给 <see cref="DownloadGalleryAsync"/>。</summary>
     private void BuildGallery(WorkshopRowViewModel row, IReadOnlyList<string> urls)
@@ -2806,15 +2879,31 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(ShowTranslatingChangelog));
     }
 
-    partial void OnIsTranslatingDescriptionChanged(bool value) => OnPropertyChanged(nameof(ShowTranslatingDescription));
+    partial void OnIsTranslatingDescriptionChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowTranslatingDescription));
+        OnPropertyChanged(nameof(CanRetryTranslation));
+    }
 
-    partial void OnIsTranslatingChangelogChanged(bool value) => OnPropertyChanged(nameof(ShowTranslatingChangelog));
+    partial void OnIsTranslatingChangelogChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowTranslatingChangelog));
+        OnPropertyChanged(nameof(CanRetryTranslation));
+    }
 
-    partial void OnIsTranslatingCommentsChanged(bool value) => OnPropertyChanged(nameof(ShowTranslatingComments));
+    partial void OnIsTranslatingCommentsChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowTranslatingComments));
+        OnPropertyChanged(nameof(CanRetryTranslation));
+    }
 
     partial void OnCachedHintChanged(string value) => OnPropertyChanged(nameof(HasCachedHint));
 
-    partial void OnTranslationNoticeChanged(string value) => OnPropertyChanged(nameof(HasTranslationNotice));
+    partial void OnTranslationNoticeChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasTranslationNotice));
+        OnPropertyChanged(nameof(CanRetryTranslation));
+    }
 
     partial void OnAuthorProfileUrlChanged(string? value) => OnPropertyChanged(nameof(HasAuthorProfile));
 

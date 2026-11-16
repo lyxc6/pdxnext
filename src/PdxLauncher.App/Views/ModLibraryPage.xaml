@@ -161,9 +161,12 @@
                                                    Foreground="{ThemeResource PdxOriginSubscribedForegroundBrush}" />
                                     </Border>
                                 </StackPanel>
-                                <!-- 译名：原文与译文同显，译文在标题下方的描边框里（决策：不做二选一切换；不加「译文」标题）。 -->
+                                <!-- 译名：原文与译文同显，译文在标题下方的描边框里（决策：不做二选一切换；不加「译文」标题）。
+                                     HorizontalAlignment=Left 让框只包住译文本身（纵向 StackPanel 里默认 Stretch 会通栏拉满），
+                                     译文过长时仍按可用宽度省略号收尾。 -->
                                 <Border Margin="0,8,0,0"
                                         Padding="8,4"
+                                        HorizontalAlignment="Left"
                                         CornerRadius="8"
                                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -351,19 +354,33 @@
             </StackPanel>
         </Grid>
 
-        <!-- 状态栏 -->
+        <!-- 状态栏：平时显示加载 / 筛选计数，译名整批失败时显示原因并在右侧给一个重试入口。 -->
         <Border Grid.Row="2"
                 Padding="12,8"
                 CornerRadius="8"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1">
-            <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
-                       Style="{StaticResource CaptionTextBlockStyle}"
-                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                       TextWrapping="Wrap"
-                       AutomationProperties.AutomationId="txtModLibraryStatus"
-                       AutomationProperties.Name="{x:Bind L.ModlibStatusName, Mode=OneWay}" />
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           TextWrapping="Wrap"
+                           AutomationProperties.AutomationId="txtModLibraryStatus"
+                           AutomationProperties.Name="{x:Bind L.ModlibStatusName, Mode=OneWay}" />
+                <Button Grid.Column="1"
+                        Padding="12,4"
+                        VerticalAlignment="Center"
+                        Content="{x:Bind L.CommonRetry, Mode=OneWay}"
+                        Click="OnTranslationRetryClick"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.CanRetryTranslation), Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnModLibraryTranslationRetry"
+                        AutomationProperties.Name="{x:Bind L.CommonRetry, Mode=OneWay}" />
+            </Grid>
         </Border>
     </Grid>
 </Page>

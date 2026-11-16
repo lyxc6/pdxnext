@@ -93,6 +93,19 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     [ObservableProperty]
     private string _statusMessage = string.Empty;
 
+    /// <summary>
+    /// 状态栏上的「重试」入口是否可见：本轮译名一条都没译出来时为 true。
+    /// 重建行（搜索 / 排序 / 换筛选）不会清掉它，只有真的译出结果或重新加载才会。
+    /// </summary>
+    [ObservableProperty]
+    private bool _canRetryTranslation;
+
+    /// <summary>上一次译名整批失败的原因（拼状态栏文案用）；成功后清空。</summary>
+    private string _translationFailureReason = string.Empty;
+
+    /// <summary>失败提示当前确实写进状态栏的那串文字（用来判断它有没有被更新的提示覆盖）。</summary>
+    private string _translationFailureStatusText = string.Empty;
+
     /// <summary>搜索词：名称 / 注册 ID / 目录，输入即过滤。</summary>
     [ObservableProperty]
     private string _searchText = string.Empty;
@@ -170,6 +183,10 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     {
         // 刷新、搜索与 Steam 写操作之后的重载都沿用这个令牌，页面关闭后不再继续翻译。
         _pageToken = cancellationToken;
+
+        // 新一轮加载重新给一次机会：上一轮的重试提示作废。
+        CanRetryTranslation = false;
+        _translationFailureReason = string.Empty;
 
         Game = game;
         _snapshot = ModLibrarySnapshot.Empty;
@@ -548,6 +565,14 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
             return SupportMessages.ManagedByGame;
         }
 
+        // 译名整批失败时，状态栏留的是那条原因 + 重试按钮；切语言后要按新语言重拼，
+        // 不能退回「已加载 N 个 mod」把失败提示悄悄抹掉。
+        if (CanRetryTranslation && !string.IsNullOrEmpty(_translationFailureReason))
+        {
+            _translationFailureStatusText = T(Keys.ModsTranslateUnavailable, _translationFailureReason);
+            return _translationFailureStatusText;
+        }
+
         return BuildStatusMessage(SearchText.Trim());
     }
 
@@ -594,9 +619,27 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
             Mods.Add(row);
         }
 
-        StatusMessage = BuildStatusMessage(query);
+        StatusMessage = CanRetryTranslation && !string.IsNullOrEmpty(_translationFailureStatusText)
+            ? _translationFailureStatusText
+            : BuildStatusMessage(query);
         RaiseDerived();
 
+        StartNameTranslation();
+    }
+
+    /// <summary>
+    /// 用户点了状态栏上的「重试」：把这一页还没译名的行重翻一遍。
+    /// <para>
+    /// 重试前先收起提示：否则重试期间状态栏还挂着上一次的原因，看不出这次在动。
+    /// </para>
+    /// </summary>
+    public void RetryNameTranslation()
+    {
+        CanRetryTranslation = false;
+        _translationFailureReason = string.Empty;
+        _translationFailureStatusText = string.Empty;
+        StatusMessage = BuildStatusMessage(SearchText.Trim());
+        AppServices.Translation.ResetRetryableFailures();
         StartNameTranslation();
     }
 
@@ -723,9 +766,29 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
             var anyTranslated = rows.Any(static row => !string.IsNullOrWhiteSpace(row.TranslatedName));
             if (!anyTranslated)
             {
-                // 这一页没有状态条，失败只落日志；原因带上引擎与错误，便于排查。
-                _logger.Warn("Mod 库名称全部未翻译（" + rows.Count + " 条）："
-                    + (AppServices.Translation.LastFailure ?? T(Keys.CommonUnknown)));
+                // 这一页原来没有提示位，用户只能盯着没变化的标题怀疑功能坏了；
+                // 现在复用「Mod 页」那条文案（不新增 .resw 键）并在旁边给一个重试按钮。
+                var reason = AppServices.Translation.LastFailure ?? T(Keys.CommonUnknown);
+                _logger.Warn("Mod 库名称全部未翻译（" + rows.Count + " 条）：" + reason);
+                _translationFailureReason = reason;
+                CanRetryTranslation = true;
+                _translationFailureStatusText = T(Keys.ModsTranslateUnavailable, reason);
+                StatusMessage = _translationFailureStatusText;
+            }
+            else
+            {
+                _translationFailureReason = string.Empty;
+                CanRetryTranslation = false;
+
+                // 只在状态栏仍然是那条失败提示时才还回计数文案：否则会盖掉用户刚看到的其它反馈
+                // （打开文件夹、Steam 操作结果等）。
+                if (!string.IsNullOrEmpty(_translationFailureStatusText)
+                    && string.Equals(StatusMessage, _translationFailureStatusText, StringComparison.Ordinal))
+                {
+                    StatusMessage = BuildStatusMessage(SearchText.Trim());
+                }
+
+                _translationFailureStatusText = string.Empty;
             }
         }
         catch (OperationCanceledException)

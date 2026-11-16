@@ -973,10 +973,25 @@ public sealed partial class ModsPage : Page
 
     // ------------------------------------------------------------ 行右键菜单
 
-    /// <summary>在资源管理器里打开 mod 的本地位置：目录型打开目录，压缩包型定位到压缩包。</summary>
-    private void OnRowOpenFolderClick(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// 状态栏上的翻译重试：把当前播放集里还没译名的行重翻一遍。
+    /// 只重翻译名，不重读播放集（重读会打断正在编辑的位次与滚动位置）。
+    /// </summary>
+    private void OnTranslationRetryClick(object sender, RoutedEventArgs e)
     {
         try
+        {
+            _viewModel.RetryNameTranslation(_lifetime.Token);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 翻译重试失败", ex);
+        }
+    }
+
+    /// <summary>在资源管理器里打开 mod 的本地位置：目录型打开目录，压缩包型定位到压缩包。</summary>
+    private void OnRowOpenFolderClick(object sender, RoutedEventArgs e)
+    {        try
         {
             if (sender is not FrameworkElement { DataContext: ModRowViewModel row })
             {
