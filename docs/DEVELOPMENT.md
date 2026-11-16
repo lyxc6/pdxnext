@@ -79,14 +79,28 @@ start.cmd /?     :: 打印用法
 开工先按根 `AGENTS.md` 开一个对话分支 —— **一个对话一个分支**，从当前活跃版本分支拉出：
 
 ```bat
-pwsh -File scripts/session.ps1 open <slug>              :: 建 sess/YYYYMMDD-<slug>（脏改动跟随并 wip 提交）
-pwsh -File scripts/session.ps1 list                     :: 看活跃版本分支与进行中的对话分支
+pwsh -File scripts/session.ps1 open <slug>              :: 建 sess/YYYYMMDD-<slug>
+pwsh -File scripts/session.ps1 open <slug> -Worktree    :: 同上，但另开 .agents\worktrees\<slug> 一棵树
+pwsh -File scripts/session.ps1 list                     :: 看活跃版本分支、进行中的对话分支、各自工作树与干净与否
 pwsh -File scripts/session.ps1 close -Message "中文说明"  :: 校验基线 → 构建 + 自检 → --no-ff 合回 → 删分支
 ```
 
-`open` 要求当前站在仓库根 `integration-branch` 清单里的某个活跃版本分支上（通常形如 `ver/x.y.z`）；
-不在就先 `git switch` 过去。清单为空、或从 `main` / 已冻结分支起时会被拒绝；`-Force` 只用于引导、
+`open` 要求**基线**是仓库根 `integration-branch` 清单里的某个活跃版本分支（通常形如 `ver/x.y.z`）；
+不在就先 `git switch` 过去。清单为空、或基线是 `main` / 已冻结分支时会被拒绝；`-Force` 只用于引导、
 发版或从 tag 起紧急修复。
+
+- **工作区有未提交改动时 `open` 直接拒绝（退出 3）**：先提交，或加 `-Worktree` 另开一棵树，
+  确需带走旧改动才加 `-CarryDirty`（会提交成 `wip(session)` 基线）。
+- **两条对话同时写代码不用互相等待**：每条对话 `open <slug> -Worktree`，各自一棵树、各自的
+  `bin\`/`obj\`；脚本会打印 `SESSION_WORKTREE=`，之后的 `dev.cmd` / `dev.cmd build` 都在那个目录里跑。
+- **合并串行**：同一时刻只跑一个 `close`。它会在「检出基线的那棵工作树」里 `--no-ff` 合并，
+  因此基线被别的对话占着也不耽误；但那棵树自己有未提交改动时 `close` 拒绝（退出 6）并指名路径。
+- 基线已冻结/未登记时 `close` 拒绝；`-Into <活跃分支>` 可重定向。纯 `*.md` 改动自动跳过构建。
+
+`open` / `close` 的机器可读标记：`SESSION_BRANCH=` / `SESSION_BASE=` / `SESSION_INTEGRATION=` /
+`SESSION_WIP=` / `SESSION_WORKTREE=` / `SESSION_BASE_OWNER=` / `SESSION_MERGED=`。
+退出码：`0` 通过、`1` 用法或环境错误、`2` 合并冲突、`3` 工作区脏、`4` 构建或自检失败、
+`5` 对话分支仍被别的 worktree 占用、`6` 基线所在树有未提交改动。
 
 其他对话或自动化脚本统一用 `dev.cmd`，不要用 `start.cmd`（它遇到已运行实例会直接退出，也不负责验收）：
 
@@ -697,7 +711,7 @@ src/
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
   PdxLauncher.Localization.Generator/ :: Roslyn 增量源生成器：编译期读 Strings/*/Resources.resw，生成 Localizer 属性与 Keys（不落盘）
 tests/
-  PdxLauncher.Checks/          :: 170 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 172 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步

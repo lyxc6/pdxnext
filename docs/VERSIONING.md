@@ -115,6 +115,8 @@ PdxNext 采用 [Semantic Versioning 2.0](https://semver.org/lang/zh-CN/)：`MAJO
   `sess/YYYYMMDD-*` 的合入；发布后立即冻结。
 - `sess/*` 是**对话级临时分支**（`scripts/session.ps1 open/close` 管理）：从某个活跃 `ver`
   分支拉出、对话结束 `--no-ff` 合回后删除，**永不作为发布来源**，也不打 tag。
+  并行对话可以把 `sess/*` 检出在 `.agents/worktrees/<slug>`（`open <slug> -Worktree`）；
+  它仍然只是临时分支，合回后删除，不要当成长期分支使用。
 - `feat/<task>` 只用于 worktree 内并行写任务，基线是本次对话的 sess 分支；
   不再用 `feat/1.x` 这类名字充当长期版本分支。
 - **冻结规则**：版本分支合进 `main` 并打 tag 后，从 `integration-branch` 移除；此后不接受任何
