@@ -20,6 +20,8 @@
 
 **风险**：徽标纯视觉，UI Automation 读不到数值，只能靠 Name；`ReplaceGames` 每次重扫都会连发通知，注意别在循环里逐个发。
 
+> **2026-11-18 状态**：用户要求左栏不显示这个数字，已把徽标、`ShellBadgeLibraryName` 文案键与视图模型里的 `GamesCount/LibraryBadgeName/HasNoGames` 一并移除，自检改成 `ShellNavNoBadgeChecks` 钉住「不再出现」。**不要再按上面的清单把它加回来。**
+
 ## 2. NumberBox（行内序号步进）
 
 **现状证据**：`src/PdxLauncher.App/Views/ModsPage.xaml:70–80` 是编辑态 `TextBox x:Name="PositionEditBox"`（`MaxWidth="40"`、`Padding="4,0"`、`MaxLength="4"`、`InputScope="Number"`、`KeyDown`、`LostFocus`），与 `:53–69` 的显示态按钮按 `IsEditingPosition` 互斥。文本解析在 `src/PdxLauncher.App/Services/PositionInput.cs:23`；提交在 `src/PdxLauncher.App/ViewModels/ModsViewModel.cs:984`。Code-behind 靠 `FindDescendant<TextBox>` 找控件（`ModsPage.xaml.cs:720`），焦点写入 `box.Text`（`:690`）。
