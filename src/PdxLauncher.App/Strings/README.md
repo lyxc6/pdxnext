@@ -103,7 +103,7 @@ var dialog = new ContentDialog
 
 ```bash
 bash tools/build-app.sh -v q     # 0 警告 0 错误（生成器会在编译期校验键集）
-dotnet "tests/PdxLauncher.Checks/bin/Release/net10.0/PdxLauncher.Checks.dll"
+dotnet "tests/PdxLauncher.Checks/bin/Release/net11.0/PdxLauncher.Checks.dll"
 ```
 
 自查残留（PowerShell/终端里都可用）：

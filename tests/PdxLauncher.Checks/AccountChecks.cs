@@ -334,7 +334,7 @@ public static class AccountChecks
             IReadOnlyDictionary<string, string>? Headers = null);
     }
 
-    /// <summary>可逆的假保护器：自检不依赖 DPAPI（检查工程跑在 net10.0、也可能在别的机器上）。</summary>
+    /// <summary>可逆的假保护器：自检不依赖 DPAPI（检查工程跑在 net11.0、也可能在别的机器上）。</summary>
     private sealed class FakeProtector : ISecretProtector
     {
         private const string Prefix = "fake:";

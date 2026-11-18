@@ -245,7 +245,7 @@ $env:GITHUB_TOKEN = "ghp_..."
 8. **离线/404**：断网或清单 404 → 启动器只记日志，不弹错误（手动检查才提示）。
 9. **模式切换**：已装每用户版本时尝试每机器安装 → 安装器提示先卸载；卸载后数据保留。
 10. **卸载**：控制面板卸载后程序目录移除，`data` / `%LOCALAPPDATA%\PdxNext-Data` 保留。
-11. **自检**：`dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"`
+11. **自检**：`dotnet "tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll"`
     必须 `检查类: 166，失败: 0`。
 
 ## 8. 排错
@@ -268,7 +268,7 @@ $env:GITHUB_TOKEN = "ghp_..."
 1. 改 `version.props`；
 2. `publish.cmd`（构建 + 自检 + `dist\PdxNext`）；
 3. `python tools\build-installer.py`（Setup + `update.json`）；
-4. 跑 `dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"`；
+4. 跑 `dotnet "tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll"`；
 5. `tools\publish-release.ps1` 上传 Setup 和 `update.json`；
 6. 用旧版本启动器做一次真实升级验证；
 7. 更新 `README.md`（版本徽章与截图）、`docs/DEVELOPMENT.md`、`docs/HANDOFF.md` 和发布说明。

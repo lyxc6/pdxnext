@@ -33,7 +33,7 @@ public static class ThemeRefreshScope
                 return [];
             }
 
-            return [Find(all, only.GameId) ?? only];
+            return (GameInstallation[])[Find(all, only.GameId) ?? only];
         }
 
         var ordered = new List<GameInstallation>(all.Count + 1);

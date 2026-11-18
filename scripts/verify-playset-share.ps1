@@ -13,7 +13,7 @@ Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Drawing
 
 $rootDir = Split-Path -Parent $PSScriptRoot
-$exe = Join-Path $rootDir 'src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe'
+$exe = Join-Path $rootDir 'src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe'
 $shotDir = Join-Path $rootDir '.scratch\rework'
 New-Item -ItemType Directory -Force -Path $shotDir | Out-Null
 

@@ -46,8 +46,8 @@ call "%ROOT%scripts\msg.cmd" S_USAGE4
 exit /b 0
 
 :argsdone
-set "EXE=src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
-if /i "%CONFIG%"=="Debug" set "EXE=src\PdxLauncher.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
+set "EXE=src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
+if /i "%CONFIG%"=="Debug" set "EXE=src\PdxLauncher.App\bin\x64\Debug\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
 
 echo ============================================
 call "%ROOT%scripts\msg.cmd" S_TITLE
@@ -95,7 +95,7 @@ if errorlevel 1 (
 if "%RUNCHECKS%"=="1" (
     echo.
     call "%ROOT%scripts\msg.cmd" S_STEPCHECK
-    dotnet "tests\PdxLauncher.Checks\bin\%CONFIG%\net10.0\PdxLauncher.Checks.dll"
+    dotnet "tests\PdxLauncher.Checks\bin\%CONFIG%\net11.0\PdxLauncher.Checks.dll"
     if errorlevel 1 (
         echo.
         call "%ROOT%scripts\msg.cmd" S_FAILCHECK

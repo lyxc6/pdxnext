@@ -30,7 +30,7 @@ public static class SavContainerReaderChecks
         CheckVictoria3ZipTooManyEntries(fs, reader);
         CheckVictoria3PkFalsePositive(fs, reader);
         CheckVictoria3ZipEntryReadFailure(fs, reader);
-        CheckVictoria3StoredCrcIgnored(fs, reader);
+        CheckVictoria3StoredCrcRejected(fs, reader);
         CheckEu5(reader);
         CheckEu5HourComponent(fs, reader);
         CheckStellaris(reader);
@@ -260,9 +260,9 @@ public static class SavContainerReaderChecks
         }
     }
 
-    private static void CheckVictoria3StoredCrcIgnored(IFileSystem fs, SavContainerReader reader)
+    private static void CheckVictoria3StoredCrcRejected(IFileSystem fs, SavContainerReader reader)
     {
-        Console.WriteLine("[SavContainerReaderChecks] zip 不校验 CRC：stored meta 坏 1 字节仍 Ok");
+        Console.WriteLine("[SavContainerReaderChecks] zip 校验 CRC：stored meta 坏 1 字节降级，不编造版本");
         var root = PlaysetChecks.CreateTempRoot(fs, "saves-v3zip-crc");
         try
         {
@@ -278,8 +278,12 @@ public static class SavContainerReaderChecks
             fs.WriteAllBytesAtomic(path, bytes);
 
             var meta = reader.Parse("victoria3", path, SaveContainer.BinaryToken);
-            ChecksContext.Equal("坏 CRC 仍 Ok（ZipArchive 不校验 CRC）", SaveParseState.Ok, meta.ParseState);
-            ChecksContext.Equal("版本随坏字节变化", "0.99.0", meta.GameVersion ?? "<null>");
+            ChecksContext.Equal("坏 CRC 降级（.NET 11 的 ZipArchive 校验 CRC）", SaveParseState.Degraded, meta.ParseState);
+            ChecksContext.Check("坏 CRC 不编造版本", meta.GameVersion is null, meta.GameVersion ?? "<null>");
+            ChecksContext.Check(
+                "坏 CRC 的降级原因指向条目读取失败",
+                (meta.DegradeReason ?? string.Empty).Contains("条目读取失败", StringComparison.Ordinal),
+                meta.DegradeReason ?? "<null>");
         }
         finally
         {

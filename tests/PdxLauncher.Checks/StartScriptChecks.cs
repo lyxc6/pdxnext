@@ -13,7 +13,7 @@ using PdxLauncher.Core.Abstractions;
 /// </summary>
 public static class StartScriptChecks
 {
-    /// <summary>exe 路径里出现的 TFM 片段（如 net10.0-windows10.0.26100.0）。</summary>
+    /// <summary>exe 路径里出现的 TFM 片段（如 net11.0-windows10.0.26100.0）。</summary>
     private static readonly Regex TfmPattern = new(@"net\d+\.\d+-windows\d+(?:\.\d+)+", RegexOptions.CultureInvariant);
 
     /// <summary>顶层 .cmd 里对 messages.txt 的取键调用。</summary>

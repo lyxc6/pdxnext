@@ -19,7 +19,7 @@ if /i "%~1"=="/?" goto usage
 if /i "%~1"=="-h" goto usage
 if /i "%~1"=="--help" goto usage
 
-set "EXE=src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
+set "EXE=src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
 
 echo ============================================
 call "%ROOT%scripts\msg.cmd" G_TITLE

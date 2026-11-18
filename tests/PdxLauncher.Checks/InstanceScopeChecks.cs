@@ -14,7 +14,7 @@ using PdxLauncher.Core.Abstractions;
 public static class InstanceScopeChecks
 {
     /// <summary>仓库里构建出来的目录（只用来做「不同目录不同键」的样本，不要求存在）。</summary>
-    private const string RepoDir = @"G:\Work\paradox启动器\src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64";
+    private const string RepoDir = @"G:\Work\paradox启动器\src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64";
 
     /// <summary>用户实际安装目录（样本；同样不要求存在）。</summary>
     private const string InstalledDir = @"D:\app\PdxNext";

@@ -118,7 +118,7 @@
 
 ```bat
 dotnet build "PdxLauncher.sln" -c Release -m:1
-dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
+dotnet "tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll"
 :: 文案键集由 PdxLauncher.Localization.Generator 在编译期校验（缺键/占位符不一致直接报错）
 ```
 

@@ -21,7 +21,7 @@ Add-Type -AssemblyName System.Windows.Forms
 
 $rootDir = Split-Path -Parent $PSScriptRoot
 if (-not $Exe) {
-    $Exe = Join-Path $rootDir 'src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe'
+    $Exe = Join-Path $rootDir 'src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe'
 }
 $docsDir = Join-Path $rootDir 'docs'
 

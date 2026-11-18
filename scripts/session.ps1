@@ -556,7 +556,7 @@ function Invoke-Close {
             }
 
             Write-Step '自检...'
-            $checks = 'tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll'
+            $checks = 'tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll'
             $raw = @(& dotnet $checks 2>&1)
             $checkCode = $LASTEXITCODE
             $text = ($raw | ForEach-Object { "$_" }) -join "`n"

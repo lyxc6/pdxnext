@@ -231,7 +231,7 @@ public sealed class SavesViewModel : LocalizedObservableObject
             }
 
             // 第一段：枚举文件（内部 Task.Run，UI 线程零 IO）。不解析任何内容。
-            var index = await _library.ScanFilesAsync([gameId], cancellationToken).ConfigureAwait(true);
+            var index = await _library.ScanFilesAsync((string[])[gameId], cancellationToken).ConfigureAwait(true);
             cancellationToken.ThrowIfCancellationRequested();
 
             if (!_requests.TryCommit(generation, () => ApplyFiles(index)))

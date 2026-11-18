@@ -35,10 +35,10 @@ jobs:
             throw "Branch $env:GITHUB_REF_NAME is frozen or not registered in main's integration-branch"
           }
 
-      - name: Set up .NET 10
+      - name: Set up .NET 11
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "10.0.x"
+          dotnet-version: "11.0.x"
 
       - name: Use nuget.org for this CI run
         shell: pwsh
@@ -56,4 +56,4 @@ jobs:
       - name: Restore, build and self-check
         run: |
           dotnet build PdxLauncher.sln -c Release -m:1
-          dotnet tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll
+          dotnet tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll
