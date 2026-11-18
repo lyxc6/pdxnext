@@ -11,14 +11,14 @@
   <a href="https://github.com/lyxc6/pdxnext/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/lyxc6/pdxnext/ci.yml?branch=main&amp;label=CI" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/lyxc6/pdxnext?color=blue" alt="license"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4" alt="platform">
-  <img src="https://img.shields.io/badge/.NET-10-512BD4" alt=".NET 10">
+  <img src="https://img.shields.io/badge/.NET-11-512BD4" alt=".NET 11">
 </p>
 
 ---
 
 ## 这是什么
 
-P 社官方启动器是 Electron 应用：要联网、要登录、冷启动慢。PdxNext 用 **WinUI 3 / .NET 10** 把它重新写了一遍，只做启动器真正该做的事——发现游戏、整理播放集与 Mod、开关 DLC、拉起游戏——并直接复用你机器上已有的游戏、Mod 与订阅，不重装游戏、不迁移数据、不写官方启动器的目录。
+P 社官方启动器是 Electron 应用：要联网、要登录、冷启动慢。PdxNext 用 **WinUI 3 / .NET 11** 把它重新写了一遍，只做启动器真正该做的事——发现游戏、整理播放集与 Mod、开关 DLC、拉起游戏——并直接复用你机器上已有的游戏、Mod 与订阅，不重装游戏、不迁移数据、不写官方启动器的目录。
 
 - **秒开**：原生界面，启动即用，不加载网页，不等账号校验。
 - **可离线**：默认全程离线可用；联网只用于可选的公告、主题图、DLC 简介与 DLC 头图、创意工坊浏览。
@@ -101,7 +101,7 @@ start.cmd
 
 - 需要 .NET SDK 10 与 Windows 10/11 SDK；Windows App SDK 以自包含方式随包，无需单独安装。
 - 仓库的 `NuGet.config` 清空了默认源、按全离线构建，依赖必须已在本机 NuGet 缓存中，细节见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
-- 产物在 `bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\`，**分发时要整个目录一起拷**，只拷 exe 会起不来。
+- 产物在 `bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\`，**分发时要整个目录一起拷**，只拷 exe 会起不来。
 - 自检程序 `tests/PdxLauncher.Checks` 覆盖 172 个检查类；CI 见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
 
 ## 兼容性

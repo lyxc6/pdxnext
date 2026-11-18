@@ -56,7 +56,7 @@
 
 ```bat
 dotnet build "PdxLauncher.sln" -c Release -m:1
-dotnet tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll
+dotnet tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll
 ```
 
 输出里应有 `=== SpacingChecks ===`，且 `间距 XAML：非 4 倍数总数为 0`、`间距 C#：非 4 倍数总数为 0`。

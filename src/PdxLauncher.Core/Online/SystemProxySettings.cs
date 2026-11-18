@@ -23,7 +23,7 @@ public sealed record SystemProxySettings(
     /// <summary>读取当前用户的 WinINET 代理配置；失败（非 Windows、无权限、值损坏）返回 null。</summary>
     public static SystemProxySettings? Read()
     {
-        // 注册表 API 在 net10.0 里带 [SupportedOSPlatform("windows")]，显式守卫避免 CA1416。
+        // 注册表 API 在 net11.0 里带 [SupportedOSPlatform("windows")]，显式守卫避免 CA1416。
         if (!OperatingSystem.IsWindows())
         {
             return null;

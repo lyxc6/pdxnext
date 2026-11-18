@@ -62,8 +62,8 @@ exit /b 0
 :argsdone
 rem logs means "run and follow": it wins over build's "do not launch" flag.
 if "%FOLLOW%"=="1" set "NOLAUNCH=0"
-set "EXE=src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
-set "EXEDIR=%ROOT%src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64"
+set "EXE=src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
+set "EXEDIR=%ROOT%src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64"
 set "DATA=%EXEDIR%\data"
 set "LOG=%DATA%\logs\pdxnext.log"
 rem Match by exe path, not by process name: another PdxNext copy installed on a
@@ -122,7 +122,7 @@ if errorlevel 1 (
 echo.
 
 call "%ROOT%scripts\msg.cmd" V_STEPCHECK
-dotnet "tests\PdxLauncher.Checks\bin\%CONFIG%\net10.0\PdxLauncher.Checks.dll"
+dotnet "tests\PdxLauncher.Checks\bin\%CONFIG%\net11.0\PdxLauncher.Checks.dll"
 if errorlevel 1 (
     echo.
     call "%ROOT%scripts\msg.cmd" V_FAILCHECK
