@@ -4670,9 +4670,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="ShellAlwaysOnTopUnsupported" xml:space="preserve">
     <value>This window is not using the Overlapped presenter; always-on-top is unavailable</value>
   </data>
-  <data name="ShellBadgeLibraryName" xml:space="preserve">
-    <value>Game library, {0} games</value>
-  </data>
   <data name="ShellCrashCopied" xml:space="preserve">
     <value>Copied to clipboard</value>
   </data>
