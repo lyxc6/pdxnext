@@ -14,6 +14,10 @@
 
 - 会话分支脚本：工作区有未提交改动时 `open` 不再自动 `git add -A` 扫进 `wip` 基线，改为拒绝（退出 3）；确需带走旧改动要显式加 `-CarryDirty`，并且 `wip` 提交信息会列出带走的文件。已在对话分支上再 `open` 时同时给出「先 close」与「`-Worktree` 另开一棵树」两条路。
 
+### Removed
+
+- 左栏「游戏库」不再显示右侧计数徽标（按用户要求去掉那个数字）：`NavigationViewItem.InfoBadge`、`ShellViewModel.GamesCount/LibraryBadgeName/HasNoGames`、文案键 `ShellBadgeLibraryName`（中英同步）与 `MainWindow` 只为它公开的 `ViewModel` 属性一并移除；自检从 `ShellNavBadgeChecks`（钉住徽标存在）改为 `ShellNavNoBadgeChecks`（钉住不再出现），检查类仍 172。
+
 ### Fixed
 
 - 本地离线模型下载：进度从「每个文件下完才报一次」改成**逐字节上报**（节流为「变化 ≥0.5% 或距上次 ≥250 ms」）。此前 Index-Translate-2B（单个 1.31 GB 文件）整段下载停在「下载中 0%」、结束直接跳 100%；现在行内进度条与「下载中 43%（560 MB / 1.3 GB）」持续前进。

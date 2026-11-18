@@ -4670,9 +4670,6 @@
   <data name="ShellAlwaysOnTopUnsupported" xml:space="preserve">
     <value>当前窗口不是 Overlapped 呈现方式，无法切换置顶</value>
   </data>
-  <data name="ShellBadgeLibraryName" xml:space="preserve">
-    <value>游戏库，共 {0} 款游戏</value>
-  </data>
   <data name="ShellCrashCopied" xml:space="preserve">
     <value>已复制到剪贴板</value>
   </data>

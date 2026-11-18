@@ -120,12 +120,6 @@ public sealed partial class MainWindow : Window
     public Localizer L => Localizer.Instance;
 
     /// <summary>
-    /// XAML 里取外壳数据的入口：左栏「游戏库」徽标直接绑 <see cref="ShellViewModel.GamesCount"/>
-    /// 与 <see cref="ShellViewModel.LibraryBadgeName"/>。
-    /// </summary>
-    public ShellViewModel ViewModel { get; }
-
-    /// <summary>
     /// 全局确认浮层：所有「确认 / 取消」对话框都走它，
     /// 这样「取消」在左、「确认（主色）」在右在所有页面保持一致。
     /// </summary>
@@ -142,7 +136,6 @@ public sealed partial class MainWindow : Window
 
         _navigation = new NavigationService(AppServices.Logger);
         _viewModel = new ShellViewModel(_navigation);
-        ViewModel = _viewModel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         _viewModel.NavigationRequested += OnNavigationRequested;
 
