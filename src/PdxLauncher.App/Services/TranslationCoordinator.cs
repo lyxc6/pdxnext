@@ -174,7 +174,7 @@ public sealed class TranslationCoordinator : IDisposable
             return null;
         }
 
-        var results = await TranslateBatchAsync([text], cancellationToken).ConfigureAwait(false);
+        var results = await TranslateBatchAsync((string[])[text], cancellationToken).ConfigureAwait(false);
         return results.Count > 0 ? results[0] : null;
     }
 
@@ -280,7 +280,7 @@ public sealed class TranslationCoordinator : IDisposable
 
         var translator = new MarkdownTranslator(async (text, token) =>
         {
-            var results = await TranslateBatchAsync([text], token).ConfigureAwait(false);
+            var results = await TranslateBatchAsync((string[])[text], token).ConfigureAwait(false);
             return results.Count > 0 ? results[0] : null;
         });
 
@@ -324,12 +324,12 @@ public sealed class TranslationCoordinator : IDisposable
                 break;
             }
 
-            var service = new TranslationService([engine], cache: null, _logger);
+            var service = new TranslationService((ITranslationEngine[])[engine], cache: null, _logger);
             string? text = null;
             _logger.Info("探测翻译引擎：" + engine.Id);
             try
             {
-                var translated = await service.TranslateAsync([ProbeText], options, cancellationToken)
+                var translated = await service.TranslateAsync((string[])[ProbeText], options, cancellationToken)
                     .ConfigureAwait(false);
                 text = translated.Count > 0 ? translated[0] : null;
                 _logger.Info("探测结果（" + engine.Id + "）：" + (text is null ? "无译文" : "有译文"));

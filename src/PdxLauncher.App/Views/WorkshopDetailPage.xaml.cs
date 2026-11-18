@@ -779,7 +779,9 @@ public sealed partial class WorkshopDetailPage : Page
         // 单张图也能看大图，不再把用户甩去浏览器。
         if (_viewModel.ResolveImagePath(targetUrl) is { Length: > 0 } singlePath)
         {
-            OpenViewer([new WorkshopScreenshotViewModel(0, targetUrl) { Path = singlePath }], 0);
+            OpenViewer(
+                (WorkshopScreenshotViewModel[])[new WorkshopScreenshotViewModel(0, targetUrl) { Path = singlePath }],
+                0);
             return;
         }
 

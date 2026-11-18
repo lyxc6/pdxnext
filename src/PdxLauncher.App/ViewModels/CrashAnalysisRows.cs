@@ -229,8 +229,7 @@ public static class CrashAnalysisText
         var memory = GetMeta(meta, "SystemMemory") ?? "?";
         var os = GetMeta(meta, "OperatingSystem") ?? localizer.CrashTimeUnknown;
 
-        return
-        [
+        return (CrashSummaryRowViewModel[])[
             new(
                 localizer.CrashSummaryGame,
                 string.IsNullOrWhiteSpace(report.GameVersion) ? report.GameName : report.GameVersion,

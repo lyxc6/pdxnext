@@ -528,8 +528,7 @@ public sealed class AchievementsViewModel : LocalizedObservableObject
     /// </summary>
     private void RebuildFilterOptions()
     {
-        _filterOptions =
-        [
+        _filterOptions = (string[])[
             T(Keys.AchievementsFilterAll),
             T(Keys.AchievementsFilterUnlocked),
             T(Keys.AchievementsFilterLocked),

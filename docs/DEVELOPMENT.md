@@ -22,10 +22,10 @@
 
 ### 前置条件
 
-- **.NET SDK 10**（实测 10.0.402，`dotnet --version` 可查）。不需要 Visual Studio，不需要装
+- **.NET SDK 11**（仓库根 `global.json` 锁 `11.0.100`，实测 `dotnet --version` = 11.0.100）。不需要 Visual Studio，不需要装
   Windows App SDK Runtime，也不需要联网——`NuGet.config` 里用 `<packageSources><clear /></packageSources>`，
-  全部包走本机缓存 `%USERPROFILE%\.nuget\packages`（含 `Microsoft.WindowsAppSDK 2.5.1` /
-  `Microsoft.WindowsAppSDK.WinUI 2.3.9` / `CommunityToolkit.Mvvm 8.4.2` /
+  全部包走本机缓存 `%USERPROFILE%\.nuget\packages`（含 `Microsoft.WindowsAppSDK 2.7.0` /
+  `Microsoft.WindowsAppSDK.WinUI 2.7.0` / `CommunityToolkit.Mvvm 8.4.2` /
   `CommunityToolkit.WinUI.Controls.SettingsControls 8.2.251219` 及其 4 个传递依赖）。缓存里缺包时构建直接失败。
 - **运行端什么都不用装**，见下面「自包含」。
 
@@ -34,8 +34,8 @@
 `NuGet.config` 里是 `<clear />`（一个包源都没有），所以包必须**事先躺在本机缓存里**。克隆后先确认：
 
 ```bat
-dir "%USERPROFILE%\.nuget\packages\microsoft.windowsappsdk"      :: 应有 2.5.1
-dir "%USERPROFILE%\.nuget\packages\microsoft.windowsappsdk.winui" :: 应有 2.3.9
+dir "%USERPROFILE%\.nuget\packages\microsoft.windowsappsdk"      :: 应有 2.7.0
+dir "%USERPROFILE%\.nuget\packages\microsoft.windowsappsdk.winui" :: 应有 2.7.0
 dir "%USERPROFILE%\.nuget\packages\communitytoolkit.mvvm"         :: 应有 8.4.2
 :: 官方设置项控件（设置页 SettingsCard）：
 dir "%USERPROFILE%\.nuget\packages\communitytoolkit.winui.controls.settingscontrols" :: 应有 8.2.251219
@@ -54,6 +54,12 @@ build.cmd
 缺包时构建会直接失败（没有联网还原的退路）。临时要联网还原的话，把 `NuGet.config` 里的
 `<clear />` 换成 `<add key="nuget.org" value="https://api.nuget.org/v3/index.json" />`，
 拿到包之后改回来——`<clear />` 是故意的，本项目构建期一次网络请求都不发。
+
+> **2026-11-19 升级到 .NET 11 + WindowsAppSDK 2.7 后**：新机器首次构建需要按上一段 warm-up 一次，
+> 会下载 .NET 11 运行时包（`Microsoft.NETCore.App.Runtime.win-x64 11.0.0` 等）、
+> `Microsoft.Windows.SDK.NET.Ref 10.0.26100.87` 以及 WindowsAppSDK 2.7 的全部子包
+> （Base / Foundation / WinUI / DWrite / Widgets / AI / ML / Search / Runtime + `Microsoft.Windows.SDK.BuildTools.MSIX`）。
+> 预热完成后仍可完全离线构建；CI 每次构建本来就临时把源换成 nuget.org（见 `.github/workflows/ci.yml`），不需要改。
 
 包缓存默认在 `%USERPROFILE%\.nuget\packages`，设了环境变量 `NUGET_PACKAGES` 时以环境变量为准
 （`tools\manual-build.py` 与 `tools\package-app.py` 读的是同一个变量，不写死路径）。
@@ -184,7 +190,7 @@ publish.cmd D:\out\PdxNext  :: 输出到指定目录
 构建产物（直接双击可运行）：
 
 ```
-src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe
+src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe
 ```
 
 发布产物（要拷给别人时用这个目录，**不要只拷 exe**）：
@@ -753,7 +759,7 @@ tools/
 ## 4. 自检
 
 ```bat
-dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
+dotnet "tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll"
 ```
 
 输出 `检查类: 170，失败: 0，断言失败总数: 0` 即通过（2026-11-15 实测 170 类；真机段只锁结构——行数、启用态这类本机数据只打印 `info` 不作断言，Victoria 3 播放集那条写死的 `mod 行数 >= 22` 已按这个原则删掉，见 HANDOFF §0.85.5；CK3 播放集条数同理从 `>= 3` 放宽到 `>= 1`，见 §0.99）。覆盖：Steam 探测与
