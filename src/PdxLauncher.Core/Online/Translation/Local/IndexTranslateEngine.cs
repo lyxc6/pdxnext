@@ -115,7 +115,24 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
                         return null;
                     }
 
-                    builder.Append(output.Trim());
+                    // 2B 模型偶尔会把提示词当成正文续写（中文原文、本来没什么可译时尤其明显）。
+                    // 先截掉提示词尾巴：只剩提示词就判失败，绝不让【约束要求】那一段进界面或缓存。
+                    // 与原文逐字相同的结果由 TranslationService 统一当「没翻」处理（不展示、不算失败）。
+                    var hadPromptMarkup = TranslationEchoGuard.ContainsPromptMarkup(output);
+                    var cleaned = TranslationEchoGuard.Trim(output);
+                    if (cleaned is null)
+                    {
+                        Volatile.Write(ref _lastFailure, "本地模型只吐回了提示词（已丢弃）");
+                        _logger.Warn("Index-Translate 输出只有提示词，已丢弃");
+                        return null;
+                    }
+
+                    if (hadPromptMarkup)
+                    {
+                        _logger.Warn("Index-Translate 输出混入提示词，已按标记截断");
+                    }
+
+                    builder.Append(cleaned);
                     AppendChunkTail(builder, chunk);
                 }
 
@@ -191,19 +208,31 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
     }
 
     /// <summary>
+    /// 用当前术语词典拼提示词；词典内容每次现读，用户在设置页改完词条立刻生效。
+    /// </summary>
+    private string BuildPrompt(string text, string target) => BuildPromptText(text, target, _glossary.Entries);
+
+    /// <summary>
     /// 拼提示词：词典为空时用最简指令，有词条时改用 instTrans 的硬约束格式。
+    /// <para>
+    /// 约束块写在【源文】<b>之前</b>，源文放最后一行。这是一次实测返修：约束块放在源文后面时，
+    /// 补全模型译完原文会顺着往下写，把「【约束要求】…只输出译文」原样吐进译文
+    /// （中文原文、本来没什么可译时尤其明显）。源文收尾，模型写完译文就没有可续写的文本了。
+    /// </para>
     /// <para>
     /// 硬约束格式里的「专名/术语对照」是模型必须逐条对齐的清单，实测能压住专名臆造
     /// （例如把 Shinra 译成「神电公司」），所以有词条时不再附会最简指令。
     /// </para>
     /// </summary>
-    private string BuildPrompt(string text, string target)
+    /// <param name="text">待翻译的原文。</param>
+    /// <param name="target">目标语言码（zh / en）。</param>
+    /// <param name="entries">术语词典词条；空表用最简指令。</param>
+    internal static string BuildPromptText(string text, string target, IReadOnlyList<LocalGlossaryEntry> entries)
     {
         var language = target == "zh" ? "中文" : "英文";
         var builder = new StringBuilder();
 
-        var entries = _glossary.Entries;
-        if (entries.Count == 0)
+        if (entries is null || entries.Count == 0)
         {
             builder.Append("请将以下文本翻译为");
             builder.Append(language);
@@ -213,17 +242,16 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
             return builder.ToString();
         }
 
-        builder.Append("请将以下文本翻译为");
+        builder.Append("请将下面的文本翻译为");
         builder.Append(language);
-        builder.AppendLine("，并且严格遵循所有约束要求。");
-        builder.AppendLine();
-        builder.AppendLine("【源文】");
-        builder.AppendLine(text);
+        builder.AppendLine("，并且严格遵循所有约束要求，只输出译文。");
         builder.AppendLine();
         builder.AppendLine("【约束要求】");
         builder.AppendLine("1. 【硬性要求】专名/术语对照: " + string.Join("、", entries.Select(e => $"{e.Source}→{e.Target}")));
+        builder.AppendLine("2. 保留原文的换行、标点与 Markdown/BBCode 记号。");
         builder.AppendLine();
-        builder.AppendLine("只输出译文，不要有任何额外说明。");
+        builder.AppendLine("【源文】");
+        builder.Append(text);
         return builder.ToString();
     }
 

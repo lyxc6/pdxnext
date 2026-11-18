@@ -158,7 +158,9 @@ public sealed class OpenAiCompatibleTranslationEngine : ITranslationEngine
 
         if (texts.Count == 1)
         {
-            return [content];
+            // 模型偶尔会把提示词当成译文续写；交给统一闸门截断，
+            // 绝不让「只输出译文，不要解释」这类指令文字进缓存或界面。
+            return [TranslationEchoGuard.Trim(content)];
         }
 
         var parts = content.Split(BatchSeparator, StringSplitOptions.None);
@@ -172,7 +174,7 @@ public sealed class OpenAiCompatibleTranslationEngine : ITranslationEngine
         var results = new string?[parts.Length];
         for (var i = 0; i < parts.Length; i++)
         {
-            results[i] = parts[i].Trim();
+            results[i] = TranslationEchoGuard.Trim(parts[i]);
         }
 
         return results;

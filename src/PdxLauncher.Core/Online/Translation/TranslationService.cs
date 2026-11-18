@@ -94,6 +94,12 @@ public sealed class TranslationService
             var cached = await TryGetCachedAsync(options, text, cancellationToken).ConfigureAwait(false);
             if (cached is not null)
             {
+                if (IsIdentityTranslation(text, cached))
+                {
+                    // 与原文逐字相同等于没翻（中文原文最常见）：不展示、不算失败。
+                    continue;
+                }
+
                 results[i] = cached;
                 NotifyItemTranslated(onItemTranslated, i, cached);
                 continue;
@@ -112,20 +118,33 @@ public sealed class TranslationService
         for (var i = 0; i < pending.Count && i < outcomes.Length; i++)
         {
             var outcome = outcomes[i];
-            results[pending[i]] = outcome.Text;
-            if (!string.IsNullOrEmpty(outcome.Text) && outcome.EngineId is not null)
+            var source = texts[pending[i]];
+            var translated = IsIdentityTranslation(source, outcome.Text) ? null : outcome.Text;
+            results[pending[i]] = translated;
+            if (!string.IsNullOrEmpty(translated) && outcome.EngineId is not null)
             {
-                await TrySetCachedAsync(outcome.EngineId, options, texts[pending[i]], outcome.Text, cancellationToken)
+                await TrySetCachedAsync(outcome.EngineId, options, source, translated, cancellationToken)
                     .ConfigureAwait(false);
             }
 
-            if (!string.IsNullOrEmpty(outcome.Text))
+            if (!string.IsNullOrEmpty(translated))
             {
-                NotifyItemTranslated(onItemTranslated, pending[i], outcome.Text);
+                NotifyItemTranslated(onItemTranslated, pending[i], translated);
             }
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// 译文与原文去掉首尾空白后逐字相同 = 没翻出来（本地模型遇到中文原文、或名字本来就不该译时
+    /// 会原样回一句）。这类结果不展示、不算失败、也不写缓存：否则界面上会多出一个和标题一样的「译文」框，
+    /// 详情页还会因为「整批都是这种结果」弹出一条假的翻译失败提示。
+    /// </summary>
+    private static bool IsIdentityTranslation(string source, string? translation)
+    {
+        return !string.IsNullOrEmpty(translation)
+            && string.Equals(translation.Trim(), source.Trim(), StringComparison.Ordinal);
     }
 
     /// <summary>
