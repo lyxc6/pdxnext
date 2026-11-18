@@ -18,7 +18,7 @@
 
 ## 0. 一句话现状
 
-启动器是 WinUI 3 标准控件 UI，Release **0 警告 0 错误**，自检 **166 个检查类 / 0 失败**（2026-11-11 实测）。
+启动器是 WinUI 3 标准控件 UI，Release **0 警告 0 错误**，自检 **172 个检查类 / 0 失败**（2026-11-18 实测）。
 1.3 收尾已完成：创意工坊（筛选/合集/详情分区/依赖树/注释滚动条/DB v3）、设置页 SettingsCard、存档备份、成就、DLC、崩溃分析、播放集导入导出、单实例与导航重试均落地；
 最近两轮集中修高危缺陷（单实例/导航递归/工坊令牌/Mod 顺序/EU5 JSON/加载文件/DLC 保存）与中低危显示/本地化问题，见 **§0.98**。
 运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构；版本号已定为 1.3.0（`version.props`），剩余安装包实测与 push/tag。
@@ -7753,3 +7753,34 @@ mod 名和行尾三个按钮完全看不见，右栏也不能滚动到这些内�
   也就是 HANDOFF 顶部那句「1.3.0 已于 2026-11-12 发布」在 `ver/1.4.0` 里是缺的。本轮未动，需要时从 `feat/1.3` 摘回。
 - `version.props` 仍是 1.3.0（1.4.0 未发版，符合规范）。
 - 并行写仍然**只是不互相遮挡**：`close` 的合并串行靠人（同一时刻只跑一个 close），脚本没有加锁。
+
+## 0.101 2026-11-18：左栏「游戏库」去掉计数徽标
+
+对话分支：`sess/20261118-remove-library-badge`（基线 `ver/1.4.0`）。
+
+### 0.101.1 问题（用户：「把游戏库这个旁边这个数字关掉」）
+
+左栏 `navLibrary` 右侧常驻一个 `InfoBadge`，值是已发现游戏数（本机 9）。用户要求不再显示这个数字。
+
+### 0.101.2 改法
+
+- `src/PdxLauncher.App/MainWindow.xaml`：删掉 `NavigationViewItem.InfoBadge` 整段，以及根节点 `xmlns:svc`（全文只有徽标那一行在用）；`navLibrary` 的 AutomationId / Content / Tag / 图标保持不变。
+- `src/PdxLauncher.App/MainWindow.xaml.cs`：删掉 `public ShellViewModel ViewModel` 与构造里的赋值（该属性只为徽标的 `x:Bind` 存在）；私有 `_viewModel`、`PropertyChanged` / `NavigationRequested` 订阅保留。
+- `src/PdxLauncher.App/ViewModels/ShellViewModel.cs`：删 `GamesCount` / `LibraryBadgeName` / `HasNoGames` 及 `ReplaceGames` 里三条对应通知。
+- 两份 `Resources.resw`：各删 `ShellBadgeLibraryName`（中英同步，生成器编译期校验键集）。
+- 自检：`ShellNavBadgeChecks` → `ShellNavNoBadgeChecks`，断言翻转为「钉住不再出现」——navLibrary 菜单项仍在、段内与全文无 `InfoBadge` / `badgeNavLibrary` / `GamesCount` / `LibraryBadgeName`、VM 无三成员、MainWindow 不再公开 `ViewModel`、两种 resw 无该键且键集仍一致；`*Checks.cs` 仍 172。
+- `CHANGELOG.md` 在 `[Unreleased]/Removed` 记一条；`docs/CONTROLS-CHANGE-SPEC.md` §1 标注「2026-11-18 已移除，勿按旧规格加回」。
+
+### 0.101.3 验证
+
+- `dev.cmd build`（SDK 处理见 0.101.4）：**0 警告 0 错误、`检查类: 172，失败: 0`、`DEV_RESULT=PASS`**。
+- `--only ShellNavNoBadgeChecks` 全 ok；变异测试（临时插回 `<InfoBadge>`，不重新编译）→ 4 条断言 FAIL，`git restore` 复原后归零，证明断言能真失败。
+- UIA 真机（1782×1191，Victoria 3）：`navLibrary=True name=游戏库`、`badgeNavLibrary=False`；截图目视左栏「游戏库」右侧无数字，其它导航项与选中态正常。
+- 独立验收 subagent 复跑构建、变异测试、UIA 与八条清单，全通过；本分支合回 `ver/1.4.0`。
+
+### 0.101.4 注意（遗留，本轮未做）
+
+- **本机默认 SDK 是 11.0.100**（11/17 安装），仓库 `NuGet.config` 为离线 `clear` 时直接 `dev.cmd build` 会 NU1100（缺 10.0.15 runtime pack），与代码无关。验收时临时用**未跟踪**的根 `global.json` 钉 `10.0.402`，验完已删除；是否把根 `global.json` 作为仓库级修复提交，待用户决定。
+- `docs/DEVELOPMENT.md` 738/748 行的「170 个检查类」在 11/16 起已漂到 172（本轮 diff 之外，未动）。
+- `dev.cmd` 69–70 行的 `rem` 注释跨行，每次构建多出一行 `'different' is not recognized...` 噪声（既有缺陷，未动）。
+- `README.md` 的三张截图仍是旧图（左栏带徽标），本次未重截；需要时跑 `scripts/capture-readme.ps1`（会重写数 MB PNG）。
