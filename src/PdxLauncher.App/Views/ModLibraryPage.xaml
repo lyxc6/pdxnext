@@ -110,6 +110,25 @@
                               AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
                               AutomationProperties.Name="{x:Bind Name, Mode=OneTime}"
                               AutomationProperties.HelpText="{x:Bind WarningText, Mode=OneWay}">
+                            <!-- 翻译项是页面级动作（对当前列表全部名称生效），菜单打开时按 ViewModel 状态
+                                 在 code-behind 里统一设 IsEnabled。 -->
+                            <Grid.ContextFlyout>
+                                <MenuFlyout Opening="OnTranslationMenuOpening">
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.CommonPageRefresh, Mode=OneWay}"
+                                        Click="OnRefreshClick"
+                                        AutomationProperties.AutomationId="menuModLibraryPageRefresh" />
+                                    <MenuFlyoutSeparator />
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"
+                                        Click="OnTranslationRetryClick"
+                                        AutomationProperties.AutomationId="menuModLibraryTranslationRetry" />
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.CommonTranslationRefresh, Mode=OneWay}"
+                                        Click="OnTranslationRefreshClick"
+                                        AutomationProperties.AutomationId="menuModLibraryTranslationRefresh" />
+                                </MenuFlyout>
+                            </Grid.ContextFlyout>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
@@ -372,14 +391,6 @@
                            TextWrapping="Wrap"
                            AutomationProperties.AutomationId="txtModLibraryStatus"
                            AutomationProperties.Name="{x:Bind L.ModlibStatusName, Mode=OneWay}" />
-                <Button Grid.Column="1"
-                        Padding="12,4"
-                        VerticalAlignment="Center"
-                        Content="{x:Bind L.CommonRetry, Mode=OneWay}"
-                        Click="OnTranslationRetryClick"
-                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.CanRetryTranslation), Mode=OneWay}"
-                        AutomationProperties.AutomationId="btnModLibraryTranslationRetry"
-                        AutomationProperties.Name="{x:Bind L.CommonRetry, Mode=OneWay}" />
             </Grid>
         </Border>
     </Grid>

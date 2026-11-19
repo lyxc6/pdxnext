@@ -250,6 +250,9 @@
   <data name="CommonOpenFolder" xml:space="preserve">
     <value>Open folder</value>
   </data>
+  <data name="CommonPageRefresh" xml:space="preserve">
+    <value>Refresh page</value>
+  </data>
   <data name="CommonRefresh" xml:space="preserve">
     <value>Refresh</value>
   </data>
@@ -270,6 +273,12 @@
   </data>
   <data name="CommonSourceSubscribed" xml:space="preserve">
     <value>Subscribed</value>
+  </data>
+  <data name="CommonTranslationRefresh" xml:space="preserve">
+    <value>Refresh translation</value>
+  </data>
+  <data name="CommonTranslationRetry" xml:space="preserve">
+    <value>Retry translation</value>
   </data>
   <data name="CommonUnknown" xml:space="preserve">
     <value>Unknown</value>

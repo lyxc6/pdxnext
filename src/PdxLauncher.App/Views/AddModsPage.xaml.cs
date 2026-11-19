@@ -1,6 +1,7 @@
 namespace PdxLauncher.App.Views;
 
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
@@ -220,7 +221,7 @@ public sealed partial class AddModsPage : Page
     }
 
     /// <summary>
-    /// 译名整批失败后点「重试」：只重跑缺译名的那一批，不重读 mod 库、不打乱勾选与滚动位置。
+    /// 行右键菜单里的「重试翻译」：只重跑缺译名的那一批，不重读 mod 库、不打乱勾选与滚动位置。
     /// </summary>
     private void OnTranslationRetryClick(object sender, RoutedEventArgs e)
     {
@@ -231,6 +232,48 @@ public sealed partial class AddModsPage : Page
         catch (Exception ex)
         {
             AppServices.Logger.Warn("添加模组页重试翻译失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>行右键菜单里的「刷新译文」：忽略缓存与已有译名，本页候选全部强制重翻。</summary>
+    private void OnTranslationRefreshClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _viewModel.RefreshNameTranslation();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("添加模组页刷新译文失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 行右键菜单即将打开：翻译菜单项是页面级动作，挂载在行模板上绑不到页面 ViewModel，
+    /// 就在这里按当前状态统一设 IsEnabled。
+    /// </summary>
+    private void OnTranslationMenuOpening(object sender, object e)
+    {
+        if (sender is not MenuFlyout flyout)
+        {
+            return;
+        }
+
+        var retryEnabled = _viewModel.CanRetryTranslation;
+        var refreshEnabled = AppServices.Translation.IsEnabled;
+        foreach (var item in flyout.Items)
+        {
+            if (item is not MenuFlyoutItem menuItem)
+            {
+                continue;
+            }
+
+            menuItem.IsEnabled = AutomationProperties.GetAutomationId(menuItem) switch
+            {
+                "menuAddModsTranslationRetry" => retryEnabled,
+                "menuAddModsTranslationRefresh" => refreshEnabled,
+                _ => menuItem.IsEnabled,
+            };
         }
     }
 

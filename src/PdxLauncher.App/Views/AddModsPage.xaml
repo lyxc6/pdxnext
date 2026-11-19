@@ -164,6 +164,20 @@
                               AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
                               AutomationProperties.Name="{x:Bind Name, Mode=OneTime}"
                               AutomationProperties.HelpText="{x:Bind VersionWarningText, Mode=OneWay}">
+                            <!-- 翻译项是页面级动作（对本页全部候选生效），菜单打开时按 ViewModel 状态
+                                 在 code-behind 里统一设 IsEnabled。 -->
+                            <Grid.ContextFlyout>
+                                <MenuFlyout Opening="OnTranslationMenuOpening">
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"
+                                        Click="OnTranslationRetryClick"
+                                        AutomationProperties.AutomationId="menuAddModsTranslationRetry" />
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.CommonTranslationRefresh, Mode=OneWay}"
+                                        Click="OnTranslationRefreshClick"
+                                        AutomationProperties.AutomationId="menuAddModsTranslationRefresh" />
+                                </MenuFlyout>
+                            </Grid.ContextFlyout>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="24" />
                                 <ColumnDefinition Width="40" />
@@ -406,15 +420,6 @@
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                            AutomationProperties.AutomationId="txtAddModsSelectedCount"
                            AutomationProperties.Name="{x:Bind ViewModel.SelectedCountText, Mode=OneWay}" />
-
-                <Button Grid.Column="2"
-                        VerticalAlignment="Center"
-                        Padding="12,4"
-                        Content="{x:Bind L.CommonRetry, Mode=OneWay}"
-                        Click="OnTranslationRetryClick"
-                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.CanRetryTranslation), Mode=OneWay}"
-                        AutomationProperties.AutomationId="btnAddModsTranslationRetry"
-                        AutomationProperties.Name="{x:Bind L.CommonRetry, Mode=OneWay}" />
 
                 <Button Grid.Column="3"
                         VerticalAlignment="Center"

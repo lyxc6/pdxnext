@@ -167,14 +167,19 @@ public sealed class TranslationCoordinator : IDisposable
     /// </summary>
     /// <param name="text">原文。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    public async Task<string?> TranslateAsync(string text, CancellationToken cancellationToken)
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
+    public async Task<string?> TranslateAsync(
+        string text,
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
             return null;
         }
 
-        var results = await TranslateBatchAsync((string[])[text], cancellationToken).ConfigureAwait(false);
+        var results = await TranslateBatchAsync((string[])[text], cancellationToken, forceRefresh: forceRefresh)
+            .ConfigureAwait(false);
         return results.Count > 0 ? results[0] : null;
     }
 
@@ -187,10 +192,12 @@ public sealed class TranslationCoordinator : IDisposable
     /// 每条译文就绪时的进度回调（索引与 <paramref name="texts"/> 对应）：缓存命中和引擎结果都会回调。
     /// 服务在线程池上跑，回调可能不在 UI 线程，调用方写界面属性前要自行切回 UI 线程。
     /// </param>
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
     public async Task<IReadOnlyList<string?>> TranslateBatchAsync(
         IReadOnlyList<string> texts,
         CancellationToken cancellationToken,
-        Action<int, string?>? onItemTranslated = null)
+        Action<int, string?>? onItemTranslated = null,
+        bool forceRefresh = false)
     {
         ArgumentNullException.ThrowIfNull(texts);
 
@@ -231,7 +238,7 @@ public sealed class TranslationCoordinator : IDisposable
             // 与推理都是同步 CPU 活，调用方（工坊列表 / Mod 库）就在 UI 线程上，
             // 在这里 await 它会直接把整个窗口冻住几十秒。
             var translated = await Task.Run(
-                    () => service.TranslateAsync(texts, options, linked.Token, onItemTranslated),
+                    () => service.TranslateAsync(texts, options, linked.Token, onItemTranslated, forceRefresh),
                     linked.Token)
                 .ConfigureAwait(false);
 
@@ -263,9 +270,11 @@ public sealed class TranslationCoordinator : IDisposable
     /// </summary>
     /// <param name="document">原文文档。</param>
     /// <param name="cancellationToken">取消令牌。</param>
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
     public async Task<MarkdownDocument> TranslateDocumentAsync(
         MarkdownDocument? document,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         if (document is null || document.IsEmpty)
         {
@@ -280,7 +289,8 @@ public sealed class TranslationCoordinator : IDisposable
 
         var translator = new MarkdownTranslator(async (text, token) =>
         {
-            var results = await TranslateBatchAsync((string[])[text], token).ConfigureAwait(false);
+            var results = await TranslateBatchAsync((string[])[text], token, forceRefresh: forceRefresh)
+                .ConfigureAwait(false);
             return results.Count > 0 ? results[0] : null;
         });
 

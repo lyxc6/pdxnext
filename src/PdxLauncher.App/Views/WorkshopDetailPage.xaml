@@ -524,30 +524,17 @@
                     </Border>
 
                     <!-- 翻译没出结果：说明原因，并指路到设置页的「测试翻译」；
-                         右侧给一个重试按钮，把失败过的范围（简介 / 更新日志 / 评论）整批重跑。 -->
+                         重试与刷新入口在合集子项的行右键菜单里。 -->
                     <Border Padding="12"
                             CornerRadius="8"
                             BorderThickness="1"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                             Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasTranslationNotice), Mode=OneWay}">
-                        <Grid ColumnSpacing="12">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="{x:Bind ViewModel.TranslationNotice, Mode=OneWay}"
-                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                       TextWrapping="Wrap"
-                                       AutomationProperties.AutomationId="txtWorkshopDetailTranslationNotice" />
-                            <Button Grid.Column="1"
-                                    VerticalAlignment="Center"
-                                    Content="{x:Bind L.CommonRetry, Mode=OneWay}"
-                                    Click="OnTranslationRetryClick"
-                                    IsEnabled="{x:Bind ViewModel.CanRetryTranslation, Mode=OneWay}"
-                                    AutomationProperties.AutomationId="btnWorkshopDetailTranslationRetry"
-                                    AutomationProperties.Name="{x:Bind L.CommonRetry, Mode=OneWay}" />
-                        </Grid>
+                        <TextBlock Text="{x:Bind ViewModel.TranslationNotice, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   TextWrapping="Wrap"
+                                   AutomationProperties.AutomationId="txtWorkshopDetailTranslationNotice" />
                     </Border>
                     </StackPanel>
 
@@ -673,6 +660,25 @@
                                               ColumnSpacing="12"
                                               AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
                                               AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
+                                            <!-- 翻译项是页面级动作（对整页描述 / 更新日志 / 评论 / 合集标题生效），
+                                                 菜单打开时按 ViewModel 状态在 code-behind 里统一设 IsEnabled。 -->
+                                            <Grid.ContextFlyout>
+                                                <MenuFlyout Opening="OnTranslationMenuOpening">
+                                                    <MenuFlyoutItem
+                                                        Text="{x:Bind L.CommonPageRefresh, Mode=OneWay}"
+                                                        Click="OnRetryClick"
+                                                        AutomationProperties.AutomationId="menuWorkshopDetailPageRefresh" />
+                                                    <MenuFlyoutSeparator />
+                                                    <MenuFlyoutItem
+                                                        Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"
+                                                        Click="OnTranslationRetryClick"
+                                                        AutomationProperties.AutomationId="menuWorkshopDetailTranslationRetry" />
+                                                    <MenuFlyoutItem
+                                                        Text="{x:Bind L.CommonTranslationRefresh, Mode=OneWay}"
+                                                        Click="OnTranslationRefreshClick"
+                                                        AutomationProperties.AutomationId="menuWorkshopDetailTranslationRefresh" />
+                                                </MenuFlyout>
+                                            </Grid.ContextFlyout>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="*" />

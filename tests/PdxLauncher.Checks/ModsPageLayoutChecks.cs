@@ -211,7 +211,9 @@ public static class ModsPageLayoutChecks
     }
 
     /// <summary>
-    /// 行右键菜单：只放「打开本地文件夹 / 在 Steam 中打开 / 复制注册 ID」三项。
+    /// 行右键菜单：前三项是行内动作「打开本地文件夹 / 在 Steam 中打开 / 复制注册 ID」，
+    /// 后两项是页面级翻译入口「重试翻译 / 刷新译文」（候选行的右键也有这两项）。
+    /// 翻译项挂载在行模板上绑不到页面 ViewModel，由 <c>Opening</c> 处理器统一设 IsEnabled。
     /// 「移除」是即时自动保存、没有二次确认，误触即删，所以绝不允许出现在菜单里。
     /// </summary>
     private static void CheckRowContextMenu(string xaml, string rowViewModel)
@@ -228,12 +230,15 @@ public static class ModsPageLayoutChecks
             template.Contains("<Grid.ContextFlyout>", StringComparison.Ordinal));
         ChecksContext.Check(
             "播放集页: ContextFlyout 是 MenuFlyout",
-            template.Contains("<MenuFlyout>", StringComparison.Ordinal));
+            template.Contains("<MenuFlyout", StringComparison.Ordinal));
 
-        var start = template.IndexOf("<MenuFlyout>", StringComparison.Ordinal);
+        var start = template.IndexOf("<MenuFlyout", StringComparison.Ordinal);
         var end = start >= 0 ? template.IndexOf("</MenuFlyout>", start, StringComparison.Ordinal) : -1;
         var menu = start >= 0 && end > start ? template[start..end] : string.Empty;
-        ChecksContext.Equal("播放集页: 右键菜单恰好三项", 3, CountOccurrences(menu, "<MenuFlyoutItem"));
+        ChecksContext.Equal(
+            "播放集页: 右键菜单恰好五项（打开/Steam/复制ID + 重试翻译/刷新译文）",
+            5,
+            CountOccurrences(menu, "<MenuFlyoutItem"));
 
         ChecksContext.Check(
             "播放集页: 菜单项一是打开本地文件夹（文案随目录/压缩包切换）",
@@ -254,9 +259,23 @@ public static class ModsPageLayoutChecks
             menu.Contains("{x:Bind HasLocalFiles, Mode=OneWay}", StringComparison.Ordinal)
                 && menu.Contains("{x:Bind CanMove, Mode=OneWay}", StringComparison.Ordinal));
         ChecksContext.Check(
+            "播放集页: 翻译项接 Opening 门控与重试/刷新处理器",
+            menu.Contains("Opening=\"OnTranslationMenuOpening\"", StringComparison.Ordinal)
+                && menu.Contains("Click=\"OnTranslationRetryClick\"", StringComparison.Ordinal)
+                && menu.Contains("Click=\"OnTranslationRefreshClick\"", StringComparison.Ordinal)
+                && menu.Contains("AutomationId=\"menuModsTranslationRetry\"", StringComparison.Ordinal)
+                && menu.Contains("AutomationId=\"menuModsTranslationRefresh\"", StringComparison.Ordinal));
+        ChecksContext.Check(
             "播放集页: 右键菜单里没有「移除」",
             !menu.Contains("RemoveCommand", StringComparison.Ordinal)
                 && !menu.Contains("ModsRowRemove", StringComparison.Ordinal));
+
+        var candidate = SliceTemplate(xaml, "PlaysetCandidateRowTemplate");
+        ChecksContext.Check(
+            "播放集页: 候选行右键也有翻译重试/刷新（同一 Opening 门控）",
+            candidate.Contains("Opening=\"OnTranslationMenuOpening\"", StringComparison.Ordinal)
+                && candidate.Contains("Click=\"OnTranslationRetryClick\"", StringComparison.Ordinal)
+                && candidate.Contains("Click=\"OnTranslationRefreshClick\"", StringComparison.Ordinal));
 
         ChecksContext.Check(
             "播放集页: 行 VM 暴露 HasLocalFiles",

@@ -37,10 +37,11 @@
              放在资源里，两个 ListView 共用同一套交互，改一处两栏同步。 -->
         <DataTemplate x:Key="PlaysetModRowTemplate" x:DataType="vm:ModRowViewModel">
             <Grid ColumnSpacing="8" Padding="4,8">
-                <!-- 右键菜单只做「定位 / 打开 / 复制」；移除是即时自动保存、没有二次确认，
-                     绝不放进菜单，避免误触即删。 -->
+                <!-- 右键菜单只做「定位 / 打开 / 复制」和翻译重试 / 刷新；移除是即时自动保存、没有二次确认，
+                     绝不放进菜单，避免误触即删。翻译项是页面级动作（对整个播放集生效），菜单打开时
+                     按 ViewModel 状态在 code-behind 里统一设 IsEnabled。 -->
                 <Grid.ContextFlyout>
-                    <MenuFlyout>
+                    <MenuFlyout Opening="OnTranslationMenuOpening">
                         <MenuFlyoutItem
                             Text="{x:Bind RowMenuOpenFolderText, Mode=OneWay}"
                             IsEnabled="{x:Bind HasLocalFiles, Mode=OneWay}"
@@ -56,6 +57,15 @@
                             IsEnabled="{x:Bind CanMove, Mode=OneWay}"
                             Click="OnRowCopyIdClick"
                             AutomationProperties.AutomationId="{x:Bind CopyIdMenuAutomationId, Mode=OneTime}" />
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem
+                            Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"
+                            Click="OnTranslationRetryClick"
+                            AutomationProperties.AutomationId="menuModsTranslationRetry" />
+                        <MenuFlyoutItem
+                            Text="{x:Bind L.CommonTranslationRefresh, Mode=OneWay}"
+                            Click="OnTranslationRefreshClick"
+                            AutomationProperties.AutomationId="menuModsTranslationRefresh" />
                     </MenuFlyout>
                 </Grid.ContextFlyout>
                 <Grid.ColumnDefinitions>
@@ -216,6 +226,19 @@
                   Padding="4,8"
                   AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
                   AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
+                <!-- 翻译项是页面级动作（对整个候选栏生效），菜单打开时按 ViewModel 状态统一设 IsEnabled。 -->
+                <Grid.ContextFlyout>
+                    <MenuFlyout Opening="OnTranslationMenuOpening">
+                        <MenuFlyoutItem
+                            Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"
+                            Click="OnTranslationRetryClick"
+                            AutomationProperties.AutomationId="menuModsTranslationRetry" />
+                        <MenuFlyoutItem
+                            Text="{x:Bind L.CommonTranslationRefresh, Mode=OneWay}"
+                            Click="OnTranslationRefreshClick"
+                            AutomationProperties.AutomationId="menuModsTranslationRefresh" />
+                    </MenuFlyout>
+                </Grid.ContextFlyout>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
@@ -792,19 +815,11 @@
                            AutomationProperties.AutomationId="txtModsStatus"
                            AutomationProperties.Name="{x:Bind L.ModsStatusName, Mode=OneWay}" />
 
-                <!-- 忙碌提示与翻译重试放状态栏，工具条只留交互控件，窄窗口时不会挤掉按钮 -->
+                <!-- 忙碌提示放状态栏，工具条只留交互控件，窄窗口时不会挤掉按钮；翻译重试 / 刷新在行右键菜单里 -->
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             Spacing="8"
                             VerticalAlignment="Center">
-                    <Button Padding="12,4"
-                            VerticalAlignment="Center"
-                            Content="{x:Bind L.CommonRetry, Mode=OneWay}"
-                            Click="OnTranslationRetryClick"
-                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.CanRetryTranslation), Mode=OneWay}"
-                            AutomationProperties.AutomationId="btnModsTranslationRetry"
-                            AutomationProperties.Name="{x:Bind L.CommonRetry, Mode=OneWay}" />
-
                     <ProgressRing Width="16"
                                   Height="16"
                                   VerticalAlignment="Center"

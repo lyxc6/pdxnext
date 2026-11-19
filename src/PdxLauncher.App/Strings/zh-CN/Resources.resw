@@ -250,6 +250,9 @@
   <data name="CommonOpenFolder" xml:space="preserve">
     <value>打开文件夹</value>
   </data>
+  <data name="CommonPageRefresh" xml:space="preserve">
+    <value>刷新页面</value>
+  </data>
   <data name="CommonRefresh" xml:space="preserve">
     <value>刷新</value>
   </data>
@@ -269,7 +272,13 @@
     <value>本地</value>
   </data>
   <data name="CommonSourceSubscribed" xml:space="preserve">
-    <value>订阅</value>
+    <value>已订阅</value>
+  </data>
+  <data name="CommonTranslationRefresh" xml:space="preserve">
+    <value>刷新译文</value>
+  </data>
+  <data name="CommonTranslationRetry" xml:space="preserve">
+    <value>重试翻译</value>
   </data>
   <data name="CommonUnknown" xml:space="preserve">
     <value>未知</value>
