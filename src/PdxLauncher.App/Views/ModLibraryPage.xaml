@@ -373,7 +373,7 @@
             </StackPanel>
         </Grid>
 
-        <!-- 状态栏：平时显示加载 / 筛选计数，译名整批失败时显示原因并在右侧给一个重试入口。 -->
+        <!-- 状态栏：平时显示加载 / 筛选计数，译名整批失败时显示原因；重试入口在 mod 行的右键菜单里。 -->
         <Border Grid.Row="2"
                 Padding="12,8"
                 CornerRadius="8"
@@ -383,7 +383,6 @@
             <Grid ColumnSpacing="12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
                            Style="{StaticResource CaptionTextBlockStyle}"

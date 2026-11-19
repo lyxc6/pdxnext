@@ -655,13 +655,34 @@ Mod 库、播放集里的 mod 行、工坊详情页的简介与更新日志、�
   一条都没译出来时，页面顶部的提示会**逐条列出每个引擎各自的原因**（如「mymemory: 免费额度已用完，约 2 小时后恢复」），
   而不是只报第一个失败者。MyMemory 的免费额度用完（HTTP 429）后，本进程内**立刻停止再请求**并显示恢复时间，
   不会每段译文都白打一次；额度恢复后自动重新尝试。
-- **翻译失败旁边有「重试」**：工坊列表底部状态条、播放集页状态条、Mod 库状态条、添加模组页底栏、工坊详情页的失败提示条
-  各有一个「重试」按钮（`btnWorkshopTranslationRetry` / `btnModsTranslationRetry` / `btnModLibraryTranslationRetry` /
-  `btnAddModsTranslationRetry` / `btnWorkshopDetailTranslationRetry`）。点击只重跑失败过的那一批（详情页按范围重跑
-  简介 / 更新日志 / 评论，不重拉详情；已译好的评论跳过），不重读列表、不打乱页码与滚动位置。
+- **翻译失败可在 mod 行右键菜单里「重试翻译」/「刷新译文」**：整批失败的原因仍逐条显示在工坊列表底部状态条、
+  播放集页状态条、Mod 库状态条、添加模组页底栏与工坊详情页的失败提示条上；重试入口不再是状态条里的独立按钮
+  （此前的五个 `btn*TranslationRetry` 按钮已删除），而是每个 mod 行的右键菜单。工坊列表 / 播放集 / Mod 库 /
+  添加模组 / 工坊详情合集子项五种行的菜单都带「重试翻译」（`menuWorkshopTranslationRetry` /
+  `menuModsTranslationRetry` / `menuModLibraryTranslationRetry` / `menuAddModsTranslationRetry` /
+  `menuWorkshopDetailTranslationRetry`）与「刷新译文」（`menu*TranslationRefresh`，忽略缓存与已有译文强制重翻，
+  绕缓存由翻译链路的 force 参数负责）；工坊列表、Mod 库、工坊详情三处另带「刷新页面」
+  （`menuWorkshopPageRefresh` / `menuModLibraryPageRefresh` / `menuWorkshopDetailPageRefresh`），
+  播放集与添加模组的菜单没有这一项。
+  播放集页左栏候选行的右键是专属重试入口 `menuModsCandidateTranslationRetry`（门控跟候选栏自己的
+  `CanRetryCandidateTranslation`，点击也分流到候选栏的重试，与右栏的 `menuModsTranslationRetry` 互不影响）；
+  候选栏与右栏的失败标志各自独立，哪边失败就灰哪边的重试。
+  工坊详情页的正文根（`DetailContent`）另挂一组同款翻译菜单：普通（非合集）详情页没有合集子项行可右键，
+  它是这类页面唯一的翻译入口；合集页里子项行上有同款菜单，就近优先。两组菜单共用同一组 Click 处理器与
+  `Opening` 门控，AutomationId 各用一套——合集子项行的三项带 `Collection` 前缀
+  （`menuWorkshopDetailCollectionPageRefresh` / `menuWorkshopDetailCollectionTranslationRetry` /
+  `menuWorkshopDetailCollectionTranslationRefresh`），同页两份菜单不会按 ID 命中歧义。
+  「重试翻译」只重跑失败过的那一批（详情页按范围重跑简介 / 更新日志 / 评论 / 合集标题，不重拉详情），
+  不重读列表、不打乱页码与滚动位置。
+  菜单项挂载在行模板上绑不到页面 ViewModel，菜单 `Opening`（各页 `OnTranslationMenuOpening`）时按当前状态
+  统一设 `IsEnabled`：「重试翻译」跟 `CanRetryTranslation`（播放集候选行跟 `CanRetryCandidateTranslation`）、
+  「刷新译文」跟翻译功能开关走（详情页另要求详情已加载完），「刷新页面」恒可用。
   重试还会调 `TranslationCoordinator.ResetRetryableFailures()` 清掉主机的临时冷却（连不上 5 分钟 / 429 60 秒），
-  否则重试会立刻拿到「暂时跳过」、用户以为按钮没反应；MyMemory 的额度冷却**故意保留**——那是服务端事实。
-  Mod 库此前整批失败只写日志，现在与其他页一样给出可见提示与重试入口（复用 `mods.translateUnavailable` 文案）。
+  否则重试会立刻拿到「暂时跳过」、用户以为点了没反应；MyMemory 的额度冷却**故意保留**——那是服务端事实。
+  详情页重试里的合集标题与评论范围带 force 绕开旧缓存（失败后旧缓存条目还在，不带 force 会把旧译文当
+  本轮结果填回，引擎根本不会被问到）；简介 / 更新日志的重试维持缓存语义（失败只在引擎真回了「与原文相同 /
+  结构没保住」时才记档，不存在会被误用的旧译文）。
+  Mod 库此前整批失败只写日志，现在与其他页一样给出可见提示（复用 `ModsTranslateUnavailable` 文案）与重试入口。
 - Markdown 结构在翻译后保持不变：标题层级、列表序号、链接地址、强调样式原样保留，代码块 / 图片 / 分隔线不翻译。
 - **模型不许把提示词吐进译文**：本地 Index-Translate 的提示词是「约束块在前、【源文】在最后」——
   约束放在源文后面时，补全模型译完原文会顺着往下写，把「【约束要求】…只输出译文」原样吐出来

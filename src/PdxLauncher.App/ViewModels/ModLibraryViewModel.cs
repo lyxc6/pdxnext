@@ -52,8 +52,17 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     /// </summary>
     private readonly ModNameTranslator _nameTranslator;
 
-    /// <summary>本轮名称翻译的代次；重建行时自增，迟到的旧批次不再回填。</summary>
+    /// <summary>
+    /// 名称翻译批次的代次：每次起新批次（重建行 / 重试 / 强制刷新）都自增，
+    /// 被取代的旧批次的回填与收尾守卫都按它判定过期。
+    /// </summary>
     private int _translationVersion;
+
+    /// <summary>
+    /// 「刷新译文」的强制批次是否在途：期间重建行（搜索 / 排序 / 换筛选都会整批换新行实例）
+    /// 也按强制重翻，不让旧缓存把刚要求重翻的旧译文原样填回新行。
+    /// </summary>
+    private bool _nameRefreshInFlight;
 
     /// <summary>名称翻译去抖令牌：新批次接管时取消上一批，避免批次越积越多。</summary>
     private CancellationTokenSource? _translationDebounce;
@@ -94,7 +103,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     private string _statusMessage = string.Empty;
 
     /// <summary>
-    /// 状态栏上的「重试」入口是否可见：本轮译名一条都没译出来时为 true。
+    /// 行右键菜单里的「重试翻译」是否可用：本轮译名一条都没译出来时为 true。
     /// 重建行（搜索 / 排序 / 换筛选）不会清掉它，只有真的译出结果或重新加载才会。
     /// </summary>
     [ObservableProperty]
@@ -571,7 +580,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
             return SupportMessages.ManagedByGame;
         }
 
-        // 译名整批失败时，状态栏留的是那条原因 + 重试按钮；切语言后要按新语言重拼，
+        // 译名整批失败时，状态栏留的是那条原因（重试入口在行右键菜单里）；切语言后要按新语言重拼，
         // 不能退回「已加载 N 个 mod」把失败提示悄悄抹掉。
         if (CanRetryTranslation && !string.IsNullOrEmpty(_translationFailureReason))
         {
@@ -630,9 +639,11 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 用户点了状态栏上的「重试」：把这一页还没译名的行重翻一遍。
+    /// 用户点了 Mod 库行右键菜单里的「重试翻译」：把这一页还没译名的行强制重翻一遍。
     /// <para>
     /// 重试前先收起提示：否则重试期间状态栏还挂着上一次的原因，看不出这次在动。
+    /// 带 <c>forceRefresh</c>：失败后旧缓存条目还在，不带 force 会命中旧缓存把旧译文原样填回行
+    /// 并按成功路径清掉失败提示，引擎根本不会被问到。
     /// </para>
     /// </summary>
     public void RetryNameTranslation()
@@ -642,7 +653,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         _translationFailureStatusText = string.Empty;
         StatusMessage = BuildStatusMessage(SearchText.Trim());
         AppServices.Translation.ResetRetryableFailures();
-        StartNameTranslation();
+        StartNameTranslation(forceRefresh: true);
     }
 
     /// <summary>
@@ -650,6 +661,8 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     /// <para>
     /// 除了像重试那样收起提示，还要清掉内存译名表与行上的旧译文：
     /// 不清的话「只翻没译名的行」的过滤与重建行时的回填会把旧译文原样填回来。
+    /// 强制批次在途期间（<see cref="_nameRefreshInFlight"/>），重建行会以 force 重启批次，
+    /// 保证最终显示的是新译文而不是旧缓存。
     /// </para>
     /// </summary>
     public void RefreshNameTranslation()
@@ -671,7 +684,13 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
 
     /// <summary>
     /// 后台给可见行补译名：翻译是网络操作，不能挡着列表显示。
-    /// 只翻译还没有译名的行；连续重建时先取消上一批，250ms 内的多次变化合并成一批。
+    /// 只翻译还没有译名的行；连续重建时先取消上一批，250ms 内的多次变化合并成一批；
+    /// 每起新批次都推进 <see cref="_translationVersion"/>，重试 / 强制刷新也不例外。
+    /// <para>
+    /// 强制刷新在途时（<see cref="_nameRefreshInFlight"/>），这里重启的批次同样强制绕开旧缓存——
+    /// 否则旧缓存把刚要求重翻的旧译文原样填回重建出来的新行，强制批次的结果全落在
+    /// 已被换掉的旧行上，刷新等于被静默吞掉。
+    /// </para>
     /// </summary>
     /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
     private void StartNameTranslation(bool forceRefresh = false)
@@ -691,13 +710,24 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
             return;
         }
 
+        // 强制刷新在途期间重建出来的行同样绕开旧缓存。
+        var force = forceRefresh || _nameRefreshInFlight;
+
         CancelPendingNameTranslation();
         _dispatcher ??= Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
-        var version = _translationVersion;
+        // 每次起新批次都推进代次（与 Mod 页 / 工坊页一致）：只在重建行时自增的话，
+        // 「重试 / 刷新译文」起的新批次与被它取消的旧批次同版，旧批次收尾时会在下面的
+        // finally 里把强制批次还挂在途的 _nameRefreshInFlight 抢着复位。
+        var version = ++_translationVersion;
         var debounce = CancellationTokenSource.CreateLinkedTokenSource(_pageToken);
         _translationDebounce = debounce;
-        _ = TranslateNamesAfterDebounceAsync(pending, targetLanguage, version, debounce, forceRefresh);
+        if (force)
+        {
+            _nameRefreshInFlight = true;
+        }
+
+        _ = TranslateNamesAfterDebounceAsync(pending, targetLanguage, version, debounce, force);
     }
 
     /// <summary>去抖到点后翻这一批；令牌被新批次取消时什么都不做。</summary>
@@ -832,6 +862,14 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         }
         finally
         {
+            // 只有最新一代批次（版本仍是当前值）收尾才算这一轮强制刷新结束：
+            // 每次起新批次都推进版本，被重试 / 刷新 / 重建行取代的旧批次在这里对不上号，
+            // 不会把接班的（也是强制的）批次还挂在途的标志提前复位。
+            if (version == _translationVersion)
+            {
+                _nameRefreshInFlight = false;
+            }
+
             // 页面关闭或批次被新搜索取代时，已经回填到行的译名仍然有效：
             // 落盘后下次进入 Mod 库可以直接显示，不必重翻这一批。
             await _nameTranslator.SaveAsync(targetLanguage, CancellationToken.None).ConfigureAwait(true);

@@ -429,8 +429,12 @@ public sealed partial class WorkshopDetailPage : Page
     }
 
     /// <summary>
-    /// 合集子项行右键菜单即将打开：翻译菜单项是页面级动作，挂载在行模板上绑不到页面 ViewModel，
-    /// 就在这里按当前状态统一设 IsEnabled（「刷新页面」恒可用）。
+    /// 翻译菜单即将打开（合集子项行 / 详情正文根共用同款菜单）：菜单项是页面级动作，
+    /// 挂载在模板上绑不到页面 ViewModel，就在这里按当前状态统一设 IsEnabled（「刷新页面」恒可用）。
+    /// <para>
+    /// 重试与刷新在详情还在网络加载时禁用：正文 / 更新日志没就位时这两个范围会被静默跳过，
+    /// 等加载完成后普通翻译又走缓存，与「绕过缓存强制重翻」的菜单语义相悖。
+    /// </para>
     /// </summary>
     private void OnTranslationMenuOpening(object sender, object e)
     {
@@ -439,8 +443,8 @@ public sealed partial class WorkshopDetailPage : Page
             return;
         }
 
-        var retryEnabled = _viewModel.CanRetryTranslation;
-        var refreshEnabled = AppServices.Translation.IsEnabled;
+        var retryEnabled = _viewModel.CanRetryTranslation && !_viewModel.IsLoading;
+        var refreshEnabled = AppServices.Translation.IsEnabled && !_viewModel.IsLoading;
         foreach (var item in flyout.Items)
         {
             if (item is not MenuFlyoutItem menuItem)
@@ -450,8 +454,12 @@ public sealed partial class WorkshopDetailPage : Page
 
             menuItem.IsEnabled = AutomationProperties.GetAutomationId(menuItem) switch
             {
+                // 正文根菜单与合集子项行菜单是同页两份同款菜单，AutomationId 各用一套，
+                // 门控口径一致：重试跟失败标志、刷新跟翻译开关（都要求详情已加载完）。
                 "menuWorkshopDetailTranslationRetry" => retryEnabled,
                 "menuWorkshopDetailTranslationRefresh" => refreshEnabled,
+                "menuWorkshopDetailCollectionTranslationRetry" => retryEnabled,
+                "menuWorkshopDetailCollectionTranslationRefresh" => refreshEnabled,
                 _ => menuItem.IsEnabled,
             };
         }

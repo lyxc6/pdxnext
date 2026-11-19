@@ -599,7 +599,6 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
                     <!-- 页头原来的「游戏名 + 结果数」搬到这里：页面标题已经在导航栏上，页内不再重复一行。 -->

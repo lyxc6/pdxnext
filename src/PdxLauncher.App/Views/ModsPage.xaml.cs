@@ -974,13 +974,24 @@ public sealed partial class ModsPage : Page
     // ------------------------------------------------------------ 行右键菜单
 
     /// <summary>
-    /// 行右键菜单里的「重试翻译」：把当前播放集里还没译名的行重翻一遍。
+    /// 行右键菜单里的「重试翻译」：按菜单来源分流——播放集行的菜单重翻右栏还没译名的行，
+    /// 候选行的菜单（menuModsCandidateTranslationRetry）重翻候选栏还没译名的行。
     /// 只重翻译名，不重读播放集（重读会打断正在编辑的位次与滚动位置）。
     /// </summary>
     private void OnTranslationRetryClick(object sender, RoutedEventArgs e)
     {
         try
         {
+            if (sender is MenuFlyoutItem item
+                && string.Equals(
+                    AutomationProperties.GetAutomationId(item),
+                    "menuModsCandidateTranslationRetry",
+                    StringComparison.Ordinal))
+            {
+                _viewModel.RetryCandidateNameTranslation();
+                return;
+            }
+
             _viewModel.RetryNameTranslation(_lifetime.Token);
         }
         catch (Exception ex)
@@ -1005,6 +1016,12 @@ public sealed partial class ModsPage : Page
     /// <summary>
     /// 行右键菜单即将打开：翻译菜单项是页面级动作，挂载在行模板上绑不到页面 ViewModel，
     /// 就在这里按当前状态统一设 IsEnabled。
+    /// <para>
+    /// 播放集行与候选行共用本处理器，但重试的门控各管各的栏：播放集行按右栏的整轮失败标志
+    /// （<see cref="ModsViewModel.CanRetryTranslation"/>），候选行按候选栏自己的失败标志
+    /// （<see cref="ModsViewModel.CanRetryCandidateTranslation"/>）——两者互不影响，
+    /// 靠候选菜单专属的 AutomationId 区分来源。
+    /// </para>
     /// </summary>
     private void OnTranslationMenuOpening(object sender, object e)
     {
@@ -1013,7 +1030,6 @@ public sealed partial class ModsPage : Page
             return;
         }
 
-        var retryEnabled = _viewModel.CanRetryTranslation;
         var refreshEnabled = AppServices.Translation.IsEnabled;
         foreach (var item in flyout.Items)
         {
@@ -1024,7 +1040,8 @@ public sealed partial class ModsPage : Page
 
             menuItem.IsEnabled = AutomationProperties.GetAutomationId(menuItem) switch
             {
-                "menuModsTranslationRetry" => retryEnabled,
+                "menuModsTranslationRetry" => _viewModel.CanRetryTranslation,
+                "menuModsCandidateTranslationRetry" => _viewModel.CanRetryCandidateTranslation,
                 "menuModsTranslationRefresh" => refreshEnabled,
                 _ => menuItem.IsEnabled,
             };
