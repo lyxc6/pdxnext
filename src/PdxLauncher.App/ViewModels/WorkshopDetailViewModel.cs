@@ -549,15 +549,20 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>是否有评论页码文案。</summary>
     public bool HasCommentsPageText => !string.IsNullOrWhiteSpace(CommentsPageText);
 
-    /// <summary>能不能翻上一页。</summary>
-    public bool CanCommentsPrev => HasCommentsPaging && _commentsShownStart > 0 && !IsLoadingComments;
+    /// <summary>能不能翻上一页（加载中 / 逐条重翻中禁点：翻页会整页重建 Comments）。</summary>
+    public bool CanCommentsPrev =>
+        HasCommentsPaging && _commentsShownStart > 0 && !IsLoadingComments && !IsTranslatingComments;
 
     /// <summary>
     /// 能不能翻下一页（加载中禁点，避免连点重复请求）。
     /// <para>判据是「已显示到哪儿」而不是页号：首屏内嵌 10 条、接口一页 15 条，两者不对齐。</para>
+    /// <para>逐条重翻中同样禁点：翻页重建 <see cref="Comments"/> 会让正在遍历的快照整批作废。</para>
     /// </summary>
     public bool CanCommentsNext =>
-        HasCommentsPaging && _commentsShownStart + _commentsShownCount < CommentsTotal && !IsLoadingComments;
+        HasCommentsPaging
+        && _commentsShownStart + _commentsShownCount < CommentsTotal
+        && !IsLoadingComments
+        && !IsTranslatingComments;
 
     /// <summary>这张卡是不是 PDX 的订阅卡（Steam 走「在 Steam 中订阅」）。</summary>
     public bool CanSubscribe => Row?.Source == WorkshopSource.Pdx;
@@ -1574,6 +1579,14 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                 .TranslateBatchAsync(names, debounce.Token, forceRefresh: forceRefresh)
                 .ConfigureAwait(true);
 
+            // 协调器把 OperationCanceledException 吞成「全 null 数组」返回，catch 在这里永远不命中；
+            // 不按令牌拦一下，「刷新译文」开头取消旧批次的动作会被误判成「整批没翻出结果」，
+            // 在页面上留下假的「翻译没出结果」提示。取消的批次直接作废。
+            if (debounce.Token.IsCancellationRequested)
+            {
+                return;
+            }
+
             var anyTranslated = false;
             for (var i = 0; i < rows.Count && i < translated.Count; i++)
             {
@@ -1590,6 +1603,16 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             if (!anyTranslated)
             {
                 ReportTranslationFailure("collection-names");
+            }
+            else
+            {
+                // 合集标题这一范围翻出了结果：视作成功，把它从失败清单里摘掉；
+                // 其它范围还在失败就保留提示（提示与失败清单同生共死，见 ReportTranslationFailure）。
+                _translateFailureScopes.Remove("collection-names");
+                if (_translateFailureScopes.Count == 0 && HasTranslationNotice)
+                {
+                    TranslationNotice = string.Empty;
+                }
             }
         }
         catch (OperationCanceledException)
@@ -2213,7 +2236,11 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         IsTranslatingComments = true;
         try
         {
-            foreach (var comment in Comments)
+            // 先对集合做一次快照再逐条 await：每条都在 UI 线程挂起，期间评论翻页
+            // 会整页重建 Comments（先 Clear 再 Add），直接 foreach ObservableCollection
+            // 会在遍历中途抛 InvalidOperationException，被下面的 catch 吞掉，
+            // 强制刷新就半途而废且没有任何提示。快照里的旧行即使被翻页换下也不再改写。
+            foreach (var comment in Comments.ToList())
             {
                 if (cancellationToken.IsCancellationRequested)
                 {
@@ -2299,6 +2326,13 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// 重跑前必须清掉范围记录和提示条：<see cref="ReportTranslationFailure"/> 按范围去重，
     /// 不清的话第二次失败会被当成「已经提示过」而吞掉，界面上就看不到新原因。
     /// </para>
+    /// <para>
+    /// 合集标题与评论的重跑带 <c>forceRefresh</c> 绕开旧缓存：失败后旧缓存条目还在
+    /// （缓存只有 TTL、没有失败标记，强制刷新失败也不会写回覆盖），不带 force 会把旧译文
+    /// 当成本轮的结果填回并按成功清掉提示，引擎根本不会被问到。简介 / 更新日志的重跑
+    /// 维持缓存语义：这两档的失败只在引擎真回了「与原文相同 / 结构没保住」时才记档
+    /// （异常只记日志、不记档），不存在会被误用的旧译文。
+    /// </para>
     /// </summary>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
     public async Task RetryTranslationAsync(CancellationToken cancellationToken)
@@ -2337,7 +2371,17 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                         break;
 
                     case "comments" when CommentsTranslationEnabled:
-                        await TranslateCommentsAsync(cancellationToken).ConfigureAwait(true);
+                        // 带 force：评论逐条译，条目级失败被吞掉后照样按「整范围没结果」记档，
+                        // 而强制刷新失败不会覆盖旧缓存条目（缓存只在成功时写回）——
+                        // 不带 force 会命中旧缓存把旧译文原样填回并视作成功，引擎根本不会被问到。
+                        await TranslateCommentsAsync(cancellationToken, forceRefresh: true).ConfigureAwait(true);
+                        break;
+
+                    // 合集标题：带 force 绕开旧缓存。失败的批次整批都没结果，但磁盘缓存里
+                    // 刷新前的旧条目还在（缓存只有 TTL、没有失败标记），不带 force 会命中旧缓存
+                    // 把旧译文原样填回行并按成功路径清掉失败提示，引擎根本不会被问到。
+                    case "collection-names" when AppServices.Settings.TranslateNamesEnabled:
+                        StartCollectionNameTranslation(cancellationToken, forceRefresh: true);
                         break;
                 }
             }
@@ -2975,7 +3019,14 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
     partial void OnIsTranslatingChangelogChanged(bool value) => OnPropertyChanged(nameof(ShowTranslatingChangelog));
 
-    partial void OnIsTranslatingCommentsChanged(bool value) => OnPropertyChanged(nameof(ShowTranslatingComments));
+    partial void OnIsTranslatingCommentsChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowTranslatingComments));
+
+        // 翻译开始 / 结束都会改翻页按钮的可用性（重翻期间禁点，见 CanCommentsPrev）。
+        OnPropertyChanged(nameof(CanCommentsPrev));
+        OnPropertyChanged(nameof(CanCommentsNext));
+    }
 
     partial void OnCachedHintChanged(string value) => OnPropertyChanged(nameof(HasCachedHint));
 

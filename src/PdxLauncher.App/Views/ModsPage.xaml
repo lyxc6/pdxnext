@@ -38,8 +38,8 @@
         <DataTemplate x:Key="PlaysetModRowTemplate" x:DataType="vm:ModRowViewModel">
             <Grid ColumnSpacing="8" Padding="4,8">
                 <!-- 右键菜单只做「定位 / 打开 / 复制」和翻译重试 / 刷新；移除是即时自动保存、没有二次确认，
-                     绝不放进菜单，避免误触即删。翻译项是页面级动作（对整个播放集生效），菜单打开时
-                     按 ViewModel 状态在 code-behind 里统一设 IsEnabled。 -->
+                     绝不放进菜单，避免误触即删。翻译重试只对本栏（播放集行）生效，刷新对双栏都生效；
+                     菜单打开时按 ViewModel 状态在 code-behind 里统一设 IsEnabled。 -->
                 <Grid.ContextFlyout>
                     <MenuFlyout Opening="OnTranslationMenuOpening">
                         <MenuFlyoutItem
@@ -226,13 +226,16 @@
                   Padding="4,8"
                   AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
                   AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
-                <!-- 翻译项是页面级动作（对整个候选栏生效），菜单打开时按 ViewModel 状态统一设 IsEnabled。 -->
+                <!-- 翻译重试只对候选栏生效：AutomationId 用候选专属的 menuModsCandidateTranslationRetry，
+                     与播放集行菜单的重试区分来源——门控与点击分支都靠它分流（此前两份菜单共用同一个
+                     menuModsTranslationRetry，候选栏失败时菜单灰掉、点到的却是右栏）。刷新对双栏都生效，
+                     菜单打开时按 ViewModel 状态在 code-behind 里统一设 IsEnabled。 -->
                 <Grid.ContextFlyout>
                     <MenuFlyout Opening="OnTranslationMenuOpening">
                         <MenuFlyoutItem
                             Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"
                             Click="OnTranslationRetryClick"
-                            AutomationProperties.AutomationId="menuModsTranslationRetry" />
+                            AutomationProperties.AutomationId="menuModsCandidateTranslationRetry" />
                         <MenuFlyoutItem
                             Text="{x:Bind L.CommonTranslationRefresh, Mode=OneWay}"
                             Click="OnTranslationRefreshClick"

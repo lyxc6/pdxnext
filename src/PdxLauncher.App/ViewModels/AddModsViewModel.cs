@@ -54,7 +54,7 @@ public sealed class AddModsViewModel : LocalizedObservableObject
     /// <summary>失败提示当前确实写进状态栏的那串文字（用来判断它有没有被更新的提示覆盖）。</summary>
     private string _translationFailureStatusText = string.Empty;
 
-    /// <summary>状态栏上「重试」入口是否可见：本轮译名一条都没译出来时为 true。</summary>
+    /// <summary>行右键菜单里的「重试翻译」是否可用：本轮译名一条都没译出来时为 true。</summary>
     private bool _canRetryTranslation;
 
     /// <summary>全部候选行（不受搜索影响）；勾选状态保存在行上，过滤后仍然保留。</summary>
@@ -95,7 +95,7 @@ public sealed class AddModsViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 状态栏上的「重试」入口是否可见：本轮译名一条都没译出来时为 true。
+    /// 行右键菜单里的「重试翻译」是否可用：本轮译名一条都没译出来时为 true。
     /// 重新加载或真的译出结果都会复位。
     /// </summary>
     public bool CanRetryTranslation
@@ -368,9 +368,13 @@ public sealed class AddModsViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 用户点了状态栏上的「重试」：把本页还没译名的行重翻一遍。
+    /// 用户点了添加模组行右键菜单里的「重试翻译」：把本页还没译名的行强制重翻一遍。
     /// 与 Mod 库 / 播放集页同口径——先收起提示，再清掉翻译主机的临时冷却，否则重试会立刻拿到
     /// 「暂时跳过」，用户以为按钮没反应。
+    /// <para>
+    /// 带 <c>forceRefresh</c>：失败后旧缓存条目还在，不带 force 会命中旧缓存把旧译文原样填回行
+    /// 并按成功路径清掉失败提示，引擎根本不会被问到。
+    /// </para>
     /// </summary>
     public void RetryNameTranslation()
     {
@@ -379,7 +383,7 @@ public sealed class AddModsViewModel : LocalizedObservableObject
         CanRetryTranslation = false;
         StatusMessage = string.Empty;
         AppServices.Translation.ResetRetryableFailures();
-        StartNameTranslation(CancellationToken.None);
+        StartNameTranslation(CancellationToken.None, forceRefresh: true);
     }
 
     /// <summary>
