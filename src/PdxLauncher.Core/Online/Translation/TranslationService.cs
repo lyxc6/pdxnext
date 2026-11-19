@@ -68,11 +68,15 @@ public sealed class TranslationService
     /// 每条译文就绪时的进度回调（索引与 <paramref name="texts"/> 对应）：缓存命中和引擎结果都会回调。
     /// 可能在线程池线程上触发，写界面属性前要自行切回 UI 线程。
     /// </param>
+    /// <param name="bypassCache">
+    /// 为 true 时跳过读缓存，全部文本直接交给引擎（「刷新译文」用）；结果照常写回缓存覆盖旧值。
+    /// </param>
     public async Task<IReadOnlyList<string?>> TranslateAsync(
         IReadOnlyList<string> texts,
         TranslationOptions options,
         CancellationToken cancellationToken,
-        Action<int, string?>? onItemTranslated = null)
+        Action<int, string?>? onItemTranslated = null,
+        bool bypassCache = false)
     {
         ArgumentNullException.ThrowIfNull(texts);
         var results = new string?[texts.Count];
@@ -91,7 +95,7 @@ public sealed class TranslationService
                 continue;
             }
 
-            var cached = await TryGetCachedAsync(options, text, cancellationToken).ConfigureAwait(false);
+            var cached = bypassCache ? null : await TryGetCachedAsync(options, text, cancellationToken).ConfigureAwait(false);
             if (cached is not null)
             {
                 if (IsIdentityTranslation(text, cached))
@@ -153,14 +157,19 @@ public sealed class TranslationService
     /// <param name="text">原文。</param>
     /// <param name="options">选项。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    public async Task<string?> TranslateAsync(string text, TranslationOptions options, CancellationToken cancellationToken)
+    /// <param name="bypassCache">为 true 时跳过读缓存，直接交给引擎；结果照常写回缓存覆盖旧值。</param>
+    public async Task<string?> TranslateAsync(
+        string text,
+        TranslationOptions options,
+        CancellationToken cancellationToken,
+        bool bypassCache = false)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
             return text;
         }
 
-        var results = await TranslateAsync([text], options, cancellationToken).ConfigureAwait(false);
+        var results = await TranslateAsync([text], options, cancellationToken, bypassCache: bypassCache).ConfigureAwait(false);
         return results.Count > 0 ? results[0] : null;
     }
 

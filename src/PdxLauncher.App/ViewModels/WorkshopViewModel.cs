@@ -1233,7 +1233,11 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// </summary>
     /// <param name="rows">要翻译的行。</param>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    private void StartNameTranslation(IEnumerable<WorkshopRowViewModel> rows, CancellationToken cancellationToken)
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
+    private void StartNameTranslation(
+        IEnumerable<WorkshopRowViewModel> rows,
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         if (!AppServices.Settings.TranslateNamesEnabled || !AppServices.Translation.IsEnabled)
         {
@@ -1252,18 +1256,19 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
         var debounce = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _translationDebounce = debounce;
-        _ = TranslateNamesAfterDebounceAsync(pending, debounce);
+        _ = TranslateNamesAfterDebounceAsync(pending, debounce, forceRefresh);
     }
 
     /// <summary>去抖到点后翻这一批；令牌被新批次取消时什么都不做。</summary>
     private async Task TranslateNamesAfterDebounceAsync(
         IReadOnlyList<WorkshopRowViewModel> rows,
-        CancellationTokenSource debounce)
+        CancellationTokenSource debounce,
+        bool forceRefresh = false)
     {
         try
         {
             await Task.Delay(NameTranslationDebounce, debounce.Token).ConfigureAwait(true);
-            await TranslateNamesAsync(rows, debounce.Token).ConfigureAwait(true);
+            await TranslateNamesAsync(rows, debounce.Token, forceRefresh).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -1303,7 +1308,8 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
     /// <summary>整页标题一次性批翻（引擎内部并发），译完统一回填。</summary>
     private async Task TranslateNamesAsync(
         IReadOnlyList<WorkshopRowViewModel> rows,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         var watch = System.Diagnostics.Stopwatch.StartNew();
         try
@@ -1311,7 +1317,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
             AppServices.Breadcrumb("工坊 翻译标题 " + rows.Count + " 条");
             var names = rows.Select(static row => row.Name).ToList();
             var translated = await AppServices.Translation
-                .TranslateBatchAsync(names, cancellationToken)
+                .TranslateBatchAsync(names, cancellationToken, forceRefresh: forceRefresh)
                 .ConfigureAwait(true);
 
             var anyTranslated = false;
@@ -1428,6 +1434,28 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
         ClearTranslationFailureStatus();
         AppServices.Translation.ResetRetryableFailures();
         StartNameTranslation(Rows, _pageToken);
+    }
+
+    /// <summary>
+    /// 用户点了行右键菜单里的「刷新译文」：忽略缓存，当前页全部标题强制重翻一遍。
+    /// <para>
+    /// 工坊行没有共享译名表，只要把行上的旧译文清掉，「只翻没译名的行」的过滤就会自然放行全部行；
+    /// 缓存绕过由翻译链路的 force 参数负责。页键与行都不变，不重拉列表（保留页码与滚动位置）。
+    /// </para>
+    /// </summary>
+    public void RefreshNameTranslation()
+    {
+        _translateFailureKey = null;
+        CanRetryTranslation = false;
+        ClearTranslationFailureStatus();
+        AppServices.Translation.ResetRetryableFailures();
+
+        foreach (var row in Rows)
+        {
+            row.TranslatedName = null;
+        }
+
+        StartNameTranslation(Rows, _pageToken, forceRefresh: true);
     }
 
     /// <summary>整体替换列表行；先取消上一轮封面下载，避免旧页任务继续占用带宽。</summary>

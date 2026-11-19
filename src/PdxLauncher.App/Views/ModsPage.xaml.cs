@@ -974,7 +974,7 @@ public sealed partial class ModsPage : Page
     // ------------------------------------------------------------ 行右键菜单
 
     /// <summary>
-    /// 状态栏上的翻译重试：把当前播放集里还没译名的行重翻一遍。
+    /// 行右键菜单里的「重试翻译」：把当前播放集里还没译名的行重翻一遍。
     /// 只重翻译名，不重读播放集（重读会打断正在编辑的位次与滚动位置）。
     /// </summary>
     private void OnTranslationRetryClick(object sender, RoutedEventArgs e)
@@ -986,6 +986,48 @@ public sealed partial class ModsPage : Page
         catch (Exception ex)
         {
             AppServices.Logger.Error("ModsPage 翻译重试失败", ex);
+        }
+    }
+
+    /// <summary>行右键菜单里的「刷新译文」：忽略缓存与已有译名，整个播放集（含候选栏）强制重翻。</summary>
+    private void OnTranslationRefreshClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _viewModel.RefreshNameTranslation(_lifetime.Token);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 翻译刷新失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 行右键菜单即将打开：翻译菜单项是页面级动作，挂载在行模板上绑不到页面 ViewModel，
+    /// 就在这里按当前状态统一设 IsEnabled。
+    /// </summary>
+    private void OnTranslationMenuOpening(object sender, object e)
+    {
+        if (sender is not MenuFlyout flyout)
+        {
+            return;
+        }
+
+        var retryEnabled = _viewModel.CanRetryTranslation;
+        var refreshEnabled = AppServices.Translation.IsEnabled;
+        foreach (var item in flyout.Items)
+        {
+            if (item is not MenuFlyoutItem menuItem)
+            {
+                continue;
+            }
+
+            menuItem.IsEnabled = AutomationProperties.GetAutomationId(menuItem) switch
+            {
+                "menuModsTranslationRetry" => retryEnabled,
+                "menuModsTranslationRefresh" => refreshEnabled,
+                _ => menuItem.IsEnabled,
+            };
         }
     }
 

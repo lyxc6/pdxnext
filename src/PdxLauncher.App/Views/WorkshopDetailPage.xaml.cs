@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
@@ -388,7 +389,7 @@ public sealed partial class WorkshopDetailPage : Page
     }
 
     /// <summary>
-    /// 「翻译没出结果」提示条上的重试：只重跑失败过的翻译范围，不重拉整份详情
+    /// 合集子项行右键菜单里的「重试翻译」：只重跑失败过的翻译范围，不重拉整份详情
     /// （那会把已经铺好的正文、截图和滚动位置一起冲掉）。
     /// </summary>
     private async void OnTranslationRetryClick(object sender, RoutedEventArgs e)
@@ -404,6 +405,55 @@ public sealed partial class WorkshopDetailPage : Page
         catch (Exception ex)
         {
             AppServices.Logger.Error("创意工坊详情翻译重试失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 合集子项行右键菜单里的「刷新译文」：忽略缓存与已有译文，
+    /// 合集标题 / 简介 / 更新日志 / 评论区全部强制重翻，不重拉整份详情。
+    /// </summary>
+    private async void OnTranslationRefreshClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await _viewModel.RefreshTranslationAsync(CurrentToken).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面已离开：这一批刷新作废。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("创意工坊详情翻译刷新失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 合集子项行右键菜单即将打开：翻译菜单项是页面级动作，挂载在行模板上绑不到页面 ViewModel，
+    /// 就在这里按当前状态统一设 IsEnabled（「刷新页面」恒可用）。
+    /// </summary>
+    private void OnTranslationMenuOpening(object sender, object e)
+    {
+        if (sender is not MenuFlyout flyout)
+        {
+            return;
+        }
+
+        var retryEnabled = _viewModel.CanRetryTranslation;
+        var refreshEnabled = AppServices.Translation.IsEnabled;
+        foreach (var item in flyout.Items)
+        {
+            if (item is not MenuFlyoutItem menuItem)
+            {
+                continue;
+            }
+
+            menuItem.IsEnabled = AutomationProperties.GetAutomationId(menuItem) switch
+            {
+                "menuWorkshopDetailTranslationRetry" => retryEnabled,
+                "menuWorkshopDetailTranslationRefresh" => refreshEnabled,
+                _ => menuItem.IsEnabled,
+            };
         }
     }
 

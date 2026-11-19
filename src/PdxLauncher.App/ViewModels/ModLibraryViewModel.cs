@@ -646,10 +646,35 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     }
 
     /// <summary>
+    /// 用户点了行右键菜单里的「刷新译文」：忽略缓存，当前列表全部名称强制重翻一遍。
+    /// <para>
+    /// 除了像重试那样收起提示，还要清掉内存译名表与行上的旧译文：
+    /// 不清的话「只翻没译名的行」的过滤与重建行时的回填会把旧译文原样填回来。
+    /// </para>
+    /// </summary>
+    public void RefreshNameTranslation()
+    {
+        CanRetryTranslation = false;
+        _translationFailureReason = string.Empty;
+        _translationFailureStatusText = string.Empty;
+        StatusMessage = BuildStatusMessage(SearchText.Trim());
+        AppServices.Translation.ResetRetryableFailures();
+
+        _nameTranslator.Clear();
+        foreach (var row in Mods)
+        {
+            row.TranslatedName = null;
+        }
+
+        StartNameTranslation(forceRefresh: true);
+    }
+
+    /// <summary>
     /// 后台给可见行补译名：翻译是网络操作，不能挡着列表显示。
     /// 只翻译还没有译名的行；连续重建时先取消上一批，250ms 内的多次变化合并成一批。
     /// </summary>
-    private void StartNameTranslation()
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
+    private void StartNameTranslation(bool forceRefresh = false)
     {
         var targetLanguage = GetNameTranslationTargetLanguage();
         if (targetLanguage is null)
@@ -672,7 +697,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         var version = _translationVersion;
         var debounce = CancellationTokenSource.CreateLinkedTokenSource(_pageToken);
         _translationDebounce = debounce;
-        _ = TranslateNamesAfterDebounceAsync(pending, targetLanguage, version, debounce);
+        _ = TranslateNamesAfterDebounceAsync(pending, targetLanguage, version, debounce, forceRefresh);
     }
 
     /// <summary>去抖到点后翻这一批；令牌被新批次取消时什么都不做。</summary>
@@ -680,12 +705,14 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         IReadOnlyList<ModLibraryRowViewModel> rows,
         string targetLanguage,
         int version,
-        CancellationTokenSource debounce)
+        CancellationTokenSource debounce,
+        bool forceRefresh = false)
     {
         try
         {
             await Task.Delay(NameTranslationDebounce, debounce.Token).ConfigureAwait(true);
-            await TranslateNamesAsync(rows, targetLanguage, version, debounce.Token).ConfigureAwait(true);
+            await TranslateNamesAsync(rows, targetLanguage, version, debounce.Token, forceRefresh)
+                .ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -730,7 +757,8 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         IReadOnlyList<ModLibraryRowViewModel> rows,
         string targetLanguage,
         int version,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         try
         {
@@ -744,7 +772,8 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
                         index,
                         translatedName,
                         targetLanguage,
-                        version))
+                        version),
+                    forceRefresh: forceRefresh)
                 .ConfigureAwait(true);
 
             if (cancellationToken.IsCancellationRequested || version != _translationVersion)

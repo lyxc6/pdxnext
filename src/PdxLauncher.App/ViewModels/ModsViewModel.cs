@@ -885,7 +885,8 @@ public sealed class ModsViewModel : LocalizedObservableObject
     /// 后台给可见行补译名：翻译是网络操作，不能挡着列表显示。
     /// </summary>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    private void StartNameTranslation(CancellationToken cancellationToken)
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
+    private void StartNameTranslation(CancellationToken cancellationToken, bool forceRefresh = false)
     {
         if (!AppServices.Settings.TranslateNamesEnabled || !AppServices.Translation.IsEnabled)
         {
@@ -904,20 +905,21 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
         // 新一轮加载重新给一次提示机会。
         _translateFailureReported = false;
-        _ = TranslateNamesAsync(pending, cancellationToken);
+        _ = TranslateNamesAsync(pending, cancellationToken, forceRefresh);
     }
 
     /// <summary>整页名称一次性批翻（引擎内部并发），译完统一回填。</summary>
     private async Task TranslateNamesAsync(
         IReadOnlyList<ModRowViewModel> rows,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         var targetLanguage = _translator.TargetLanguage;
         try
         {
             var names = rows.Select(static row => row.Name).ToList();
             var translated = await AppServices.Translation
-                .TranslateBatchAsync(names, cancellationToken)
+                .TranslateBatchAsync(names, cancellationToken, forceRefresh: forceRefresh)
                 .ConfigureAwait(true);
 
             var anyTranslated = false;
@@ -966,7 +968,8 @@ public sealed class ModsViewModel : LocalizedObservableObject
     /// 左栏候选的译名：与右栏同一张表、同一套去抖，但用独立令牌——
     /// 左右两栏的搜索互不干扰，共用一个令牌会互相取消、最后两边都没译全。
     /// </summary>
-    private void StartCandidateNameTranslation()
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用）。</param>
+    private void StartCandidateNameTranslation(bool forceRefresh = false)
     {
         var targetLanguage = _translator.TargetLanguage;
         if (targetLanguage is null)
@@ -986,20 +989,21 @@ public sealed class ModsViewModel : LocalizedObservableObject
         CancelPendingCandidateTranslation();
         var debounce = new CancellationTokenSource();
         _candidateTranslationDebounce = debounce;
-        _ = TranslateCandidateNamesAfterDebounceAsync(pending, targetLanguage, debounce);
+        _ = TranslateCandidateNamesAfterDebounceAsync(pending, targetLanguage, debounce, forceRefresh);
     }
 
     private async Task TranslateCandidateNamesAfterDebounceAsync(
         IReadOnlyList<AddModRowViewModel> rows,
         string targetLanguage,
-        CancellationTokenSource debounce)
+        CancellationTokenSource debounce,
+        bool forceRefresh = false)
     {
         try
         {
             await Task.Delay(TimeSpan.FromMilliseconds(250), debounce.Token).ConfigureAwait(true);
             var names = rows.Select(static row => row.Name).ToList();
             var translated = await AppServices.Translation
-                .TranslateBatchAsync(names, debounce.Token)
+                .TranslateBatchAsync(names, debounce.Token, forceRefresh: forceRefresh)
                 .ConfigureAwait(true);
 
             for (var i = 0; i < rows.Count && i < translated.Count; i++)
@@ -1115,6 +1119,39 @@ public sealed class ModsViewModel : LocalizedObservableObject
         ClearTranslationFailureStatus();
         AppServices.Translation.ResetRetryableFailures();
         StartNameTranslation(cancellationToken);
+    }
+
+    /// <summary>
+    /// 用户点了行右键菜单里的「刷新译文」：忽略缓存与已有译名，整页（含左栏候选）强制重翻一遍。
+    /// <para>
+    /// 除了像重试那样复位失败标志，还要清掉内存译名表与行上的旧译文：
+    /// 不清的话 <see cref="TranslateNamesAsync"/> 的「只翻没译名的行」过滤与重建行时的回填
+    /// 会把旧译文原样填回来，引擎根本不会被问到。
+    /// </para>
+    /// </summary>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public void RefreshNameTranslation(CancellationToken cancellationToken)
+    {
+        _translateFailureReported = false;
+        CanRetryTranslation = false;
+        ClearTranslationFailureStatus();
+        AppServices.Translation.ResetRetryableFailures();
+
+        _translator.Clear();
+        foreach (var row in Mods)
+        {
+            row.TranslatedName = null;
+        }
+
+        StartNameTranslation(cancellationToken, forceRefresh: true);
+
+        CancelPendingCandidateTranslation();
+        foreach (var row in Candidates)
+        {
+            row.TranslatedName = null;
+        }
+
+        StartCandidateNameTranslation(forceRefresh: true);
     }
 
     /// <summary>行内开关变化：同步集合顺序（不重排），刷新计数与状态，并自动保存。</summary>

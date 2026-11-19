@@ -201,7 +201,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <summary>已经提示过失败的范围（简介 / 更新日志 / 评论 / 合集标题），避免重复刷屏。</summary>
     private readonly HashSet<string> _translateFailureScopes = new(StringComparer.Ordinal);
 
-    /// <summary>这一轮「重试」是否正在跑：只用来禁用按钮挡住连点，不代表任何范围在翻译。</summary>
+    /// <summary>这一轮「重试 / 刷新译文」是否正在跑：只用来挡住连点，不代表任何范围在翻译。</summary>
     private bool _isRetryingTranslation;
 
     /// <summary>合集标题翻译的去抖：一次铺 49 行，等页面稳定后再整批翻。</summary>
@@ -1537,7 +1537,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// 合集子项标题翻译：复用列表页同一个批量翻译接口，250ms 去抖后一次翻整批。
     /// 只翻标题（与工坊列表一致），短描述保持原文。
     /// </summary>
-    private void StartCollectionNameTranslation(CancellationToken cancellationToken)
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
+    private void StartCollectionNameTranslation(CancellationToken cancellationToken, bool forceRefresh = false)
     {
         if (!AppServices.Settings.TranslateNamesEnabled || !AppServices.Translation.IsEnabled)
         {
@@ -1556,12 +1557,13 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         CancelCollectionNameTranslation();
         var debounce = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _collectionNameTranslation = debounce;
-        _ = TranslateCollectionNamesAfterDebounceAsync(pending, debounce);
+        _ = TranslateCollectionNamesAfterDebounceAsync(pending, debounce, forceRefresh);
     }
 
     private async Task TranslateCollectionNamesAfterDebounceAsync(
         IReadOnlyList<WorkshopRowViewModel> rows,
-        CancellationTokenSource debounce)
+        CancellationTokenSource debounce,
+        bool forceRefresh = false)
     {
         try
         {
@@ -1569,7 +1571,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
             var names = rows.Select(static row => row.Name).ToList();
             var translated = await AppServices.Translation
-                .TranslateBatchAsync(names, debounce.Token)
+                .TranslateBatchAsync(names, debounce.Token, forceRefresh: forceRefresh)
                 .ConfigureAwait(true);
 
             var anyTranslated = false;
@@ -2094,13 +2096,17 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     }
 
     /// <summary>翻译简介正文并写回译文属性。</summary>
-    private async Task TranslateDescriptionAsync(MarkdownDocument document, CancellationToken cancellationToken)
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
+    private async Task TranslateDescriptionAsync(
+        MarkdownDocument document,
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         IsTranslatingDescription = true;
         try
         {
             var translated = await AppServices.Translation
-                .TranslateDocumentAsync(document, cancellationToken)
+                .TranslateDocumentAsync(document, cancellationToken, forceRefresh)
                 .ConfigureAwait(true);
             if (translated.IsEmpty)
             {
@@ -2146,13 +2152,17 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     }
 
     /// <summary>翻译更新日志并写回译文属性。</summary>
-    private async Task TranslateChangelogAsync(MarkdownDocument document, CancellationToken cancellationToken)
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
+    private async Task TranslateChangelogAsync(
+        MarkdownDocument document,
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         IsTranslatingChangelog = true;
         try
         {
             var translated = await AppServices.Translation
-                .TranslateDocumentAsync(document, cancellationToken)
+                .TranslateDocumentAsync(document, cancellationToken, forceRefresh)
                 .ConfigureAwait(true);
             if (translated.IsEmpty)
             {
@@ -2195,7 +2205,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     }
 
     /// <summary>逐条翻译评论正文。</summary>
-    private async Task TranslateCommentsAsync(CancellationToken cancellationToken)
+    /// <param name="forceRefresh">为 true 时跳过缓存并连已译出的评论一起重翻（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
+    private async Task TranslateCommentsAsync(CancellationToken cancellationToken, bool forceRefresh = false)
     {
         var attempted = 0;
         var translatedAny = false;
@@ -2216,14 +2227,14 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
                 // 已经译好的评论不再重翻：重试只需要补没出结果的那些，
                 // 否则一次重试会把整页评论再打一遍引擎（评论是逐条翻的，很贵）。
-                if (comment.HasTranslation)
+                if (!forceRefresh && comment.HasTranslation)
                 {
                     continue;
                 }
 
                 attempted++;
                 var translated = await AppServices.Translation
-                    .TranslateDocumentAsync(comment.Body, cancellationToken)
+                    .TranslateDocumentAsync(comment.Body, cancellationToken, forceRefresh)
                     .ConfigureAwait(true);
                 if (translated.IsEmpty)
                 {
@@ -2329,6 +2340,76 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                         await TranslateCommentsAsync(cancellationToken).ConfigureAwait(true);
                         break;
                 }
+            }
+        }
+        finally
+        {
+            _isRetryingTranslation = false;
+            OnPropertyChanged(nameof(CanRetryTranslation));
+        }
+    }
+
+    /// <summary>
+    /// 用户点了行右键菜单里的「刷新译文」：忽略缓存与已有译文，合集标题 / 简介 / 更新日志 / 评论区全部强制重翻。
+    /// <para>
+    /// 与重试不同：重试只补失败过的范围，刷新是无条件全量重跑。先把各范围的旧译文清掉
+    /// （合集行清 <see cref="WorkshopRowViewModel.TranslatedName"/>、评论逐条清），
+    /// 否则「只补没出结果的」过滤会把旧译文原样留着，引擎根本不会被问到；
+    /// 缓存绕过由翻译链路的 force 参数负责。不重新拉详情：原文都在这一页上。
+    /// </para>
+    /// </summary>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public async Task RefreshTranslationAsync(CancellationToken cancellationToken)
+    {
+        if (_isRetryingTranslation)
+        {
+            return;
+        }
+
+        _translateFailureScopes.Clear();
+        TranslationNotice = string.Empty;
+        AppServices.Translation.ResetRetryableFailures();
+
+        _isRetryingTranslation = true;
+        OnPropertyChanged(nameof(CanRetryTranslation));
+        try
+        {
+            // 合集标题：清行上的旧译文再整批重翻（开关没开时 Start 会直接返回，不动行）。
+            foreach (var row in CollectionItems)
+            {
+                row.TranslatedName = null;
+            }
+
+            CancelCollectionNameTranslation();
+            StartCollectionNameTranslation(cancellationToken, forceRefresh: true);
+
+            if (DescriptionDocument is { IsEmpty: false } description
+                && AppServices.Settings.TranslateDescriptionEnabled)
+            {
+                // 先清旧译文再重翻：界面按块配对显示，旧译文若留在原处会和重翻中的原文短暂错配。
+                TranslatedDescriptionDocument = null;
+                TranslatedDescriptionText = string.Empty;
+                await TranslateDescriptionAsync(description, cancellationToken, forceRefresh: true)
+                    .ConfigureAwait(true);
+            }
+
+            if (ChangelogDocument is { IsEmpty: false } changelog
+                && AppServices.Settings.TranslateChangelogEnabled)
+            {
+                TranslatedChangelogDocument = null;
+                await TranslateChangelogAsync(changelog, cancellationToken, forceRefresh: true)
+                    .ConfigureAwait(true);
+            }
+
+            if (AppServices.Settings.TranslateCommentsEnabled)
+            {
+                foreach (var comment in Comments)
+                {
+                    comment.TranslatedBody = null;
+                    comment.TranslatedBodyPlain = null;
+                }
+
+                await TranslateCommentsAsync(cancellationToken, forceRefresh: true).ConfigureAwait(true);
             }
         }
         finally

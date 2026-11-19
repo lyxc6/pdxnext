@@ -332,6 +332,25 @@
                               Padding="4,8"
                               AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
                               AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
+                            <!-- 翻译项是页面级动作（对当前页全部标题生效），菜单打开时按 ViewModel 状态
+                                 在 code-behind 里统一设 IsEnabled。 -->
+                            <Grid.ContextFlyout>
+                                <MenuFlyout Opening="OnTranslationMenuOpening">
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.CommonPageRefresh, Mode=OneWay}"
+                                        Click="OnRefreshClick"
+                                        AutomationProperties.AutomationId="menuWorkshopPageRefresh" />
+                                    <MenuFlyoutSeparator />
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"
+                                        Click="OnTranslationRetryClick"
+                                        AutomationProperties.AutomationId="menuWorkshopTranslationRetry" />
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.CommonTranslationRefresh, Mode=OneWay}"
+                                        Click="OnTranslationRefreshClick"
+                                        AutomationProperties.AutomationId="menuWorkshopTranslationRefresh" />
+                                </MenuFlyout>
+                            </Grid.ContextFlyout>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
@@ -623,16 +642,6 @@
                                VerticalAlignment="Center"
                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.ShowCoverProgress), Mode=OneWay}"
                                AutomationProperties.AutomationId="txtWorkshopCoverProgress" />
-
-                    <!-- 本页标题一条都没译出来时，状态条右侧给一个重试入口（只重翻当前页，不重拉列表）。 -->
-                    <Button Grid.Column="3"
-                            Padding="12,4"
-                            VerticalAlignment="Center"
-                            Content="{x:Bind L.CommonRetry, Mode=OneWay}"
-                            Click="OnTranslationRetryClick"
-                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.CanRetryTranslation), Mode=OneWay}"
-                            AutomationProperties.AutomationId="btnWorkshopTranslationRetry"
-                            AutomationProperties.Name="{x:Bind L.CommonRetry, Mode=OneWay}" />
                 </Grid>
             </Border>
         </Grid>

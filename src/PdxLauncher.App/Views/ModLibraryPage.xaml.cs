@@ -2,6 +2,7 @@ namespace PdxLauncher.App.Views;
 
 using System.Diagnostics;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 using PdxLauncher.App.Controls;
@@ -233,7 +234,7 @@ public sealed partial class ModLibraryPage : Page
     // ------------------------------------------------------------ 控件事件
 
     /// <summary>
-    /// 状态栏上的翻译重试：把这一页还没译名的行重翻一遍。
+    /// 行右键菜单里的「重试翻译」：把这一页还没译名的行重翻一遍。
     /// 只重翻译名，不重读 Mod 库（重读会把整页缩略图重新解码，列表会闪一下）。
     /// </summary>
     private void OnTranslationRetryClick(object sender, RoutedEventArgs e)
@@ -245,6 +246,48 @@ public sealed partial class ModLibraryPage : Page
         catch (Exception ex)
         {
             AppServices.Logger.Error("ModLibraryPage 翻译重试失败", ex);
+        }
+    }
+
+    /// <summary>行右键菜单里的「刷新译文」：忽略缓存与已有译名，当前列表全部名称强制重翻。</summary>
+    private void OnTranslationRefreshClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _viewModel.RefreshNameTranslation();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModLibraryPage 翻译刷新失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 行右键菜单即将打开：翻译菜单项是页面级动作，挂载在行模板上绑不到页面 ViewModel，
+    /// 就在这里按当前状态统一设 IsEnabled（「刷新页面」恒可用）。
+    /// </summary>
+    private void OnTranslationMenuOpening(object sender, object e)
+    {
+        if (sender is not MenuFlyout flyout)
+        {
+            return;
+        }
+
+        var retryEnabled = _viewModel.CanRetryTranslation;
+        var refreshEnabled = AppServices.Translation.IsEnabled;
+        foreach (var item in flyout.Items)
+        {
+            if (item is not MenuFlyoutItem menuItem)
+            {
+                continue;
+            }
+
+            menuItem.IsEnabled = AutomationProperties.GetAutomationId(menuItem) switch
+            {
+                "menuModLibraryTranslationRetry" => retryEnabled,
+                "menuModLibraryTranslationRefresh" => refreshEnabled,
+                _ => menuItem.IsEnabled,
+            };
         }
     }
 

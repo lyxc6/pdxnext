@@ -382,6 +382,30 @@ public sealed class AddModsViewModel : LocalizedObservableObject
         StartNameTranslation(CancellationToken.None);
     }
 
+    /// <summary>
+    /// 用户点了行右键菜单里的「刷新译文」：忽略缓存，本页候选全部名称强制重翻一遍。
+    /// <para>
+    /// 除了像重试那样收起提示，还要清掉内存译名表与行上的旧译文：
+    /// 不清的话「只翻没译名的行」的过滤会把旧译文原样留着，引擎根本不会被问到。
+    /// </para>
+    /// </summary>
+    public void RefreshNameTranslation()
+    {
+        _translationFailureReason = string.Empty;
+        _translationFailureStatusText = string.Empty;
+        CanRetryTranslation = false;
+        StatusMessage = string.Empty;
+        AppServices.Translation.ResetRetryableFailures();
+
+        _translator.Clear();
+        foreach (var row in _allRows)
+        {
+            row.TranslatedName = null;
+        }
+
+        StartNameTranslation(CancellationToken.None, forceRefresh: true);
+    }
+
     /// <summary>当前该用的名称翻译目标语言；名称翻译或翻译总开关关闭时为 null。</summary>
     private static string? ResolveNameTranslationTargetLanguage() => ModNameTranslator.ResolveTargetLanguage(
         AppServices.Settings.TranslateNamesEnabled,
@@ -392,7 +416,8 @@ public sealed class AddModsViewModel : LocalizedObservableObject
     /// 只翻还没有译名的行；连续重建时先取消上一批，250ms 内的多次变化合并成一批。
     /// </summary>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    private void StartNameTranslation(CancellationToken cancellationToken)
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
+    private void StartNameTranslation(CancellationToken cancellationToken, bool forceRefresh = false)
     {
         var targetLanguage = _translator.TargetLanguage;
         if (targetLanguage is null)
@@ -416,7 +441,7 @@ public sealed class AddModsViewModel : LocalizedObservableObject
         var pageToken = cancellationToken.CanBeCanceled ? cancellationToken : CancellationToken.None;
         var debounce = CancellationTokenSource.CreateLinkedTokenSource(pageToken);
         _translationDebounce = debounce;
-        _ = TranslateNamesAfterDebounceAsync(pending, targetLanguage, version, debounce);
+        _ = TranslateNamesAfterDebounceAsync(pending, targetLanguage, version, debounce, forceRefresh);
     }
 
     /// <summary>去抖到点后翻这一批；令牌被新批次取消时什么都不做。</summary>
@@ -424,12 +449,14 @@ public sealed class AddModsViewModel : LocalizedObservableObject
         IReadOnlyList<AddModRowViewModel> rows,
         string targetLanguage,
         int version,
-        CancellationTokenSource debounce)
+        CancellationTokenSource debounce,
+        bool forceRefresh = false)
     {
         try
         {
             await Task.Delay(NameTranslationDebounce, debounce.Token).ConfigureAwait(true);
-            await TranslateNamesAsync(rows, targetLanguage, version, debounce.Token).ConfigureAwait(true);
+            await TranslateNamesAsync(rows, targetLanguage, version, debounce.Token, forceRefresh)
+                .ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -474,7 +501,8 @@ public sealed class AddModsViewModel : LocalizedObservableObject
         IReadOnlyList<AddModRowViewModel> rows,
         string targetLanguage,
         int version,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         try
         {
@@ -488,7 +516,8 @@ public sealed class AddModsViewModel : LocalizedObservableObject
                         index,
                         translatedName,
                         targetLanguage,
-                        version))
+                        version),
+                    forceRefresh: forceRefresh)
                 .ConfigureAwait(true);
 
             if (cancellationToken.IsCancellationRequested || version != _translationVersion)
