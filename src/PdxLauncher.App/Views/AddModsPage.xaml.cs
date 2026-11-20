@@ -98,6 +98,17 @@ public sealed partial class AddModsPage : Page
             SortBox.SelectedItem = _viewModel.SelectedSortMode;
         }
 
+        // 同排序框：x:Bind 按属性顺序赋值，来源 / 版本下拉的 SelectedItem 也可能先于 ItemsSource 被清空。
+        if (SourceFilterBox.SelectedItem is null)
+        {
+            SourceFilterBox.SelectedItem = _viewModel.SelectedSourceFilter;
+        }
+
+        if (VersionFilterBox.SelectedItem is null)
+        {
+            VersionFilterBox.SelectedItem = _viewModel.SelectedVersionFilter;
+        }
+
         await LoadAsync().ConfigureAwait(true);
     }
 
@@ -182,6 +193,30 @@ public sealed partial class AddModsPage : Page
 
         _viewModel.SelectedSortMode = mode;
         SaveSortState();
+    }
+
+    /// <summary>来源下拉选择变化：写回 ViewModel 触发重建（与搜索 / 版本 / 排序叠加）。</summary>
+    private void OnSourceFilterSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
+    {
+        if (e.SelectedItem is not string mode
+            || string.Equals(mode, _viewModel.SelectedSourceFilter, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _viewModel.SelectedSourceFilter = mode;
+    }
+
+    /// <summary>版本兼容性下拉选择变化：写回 ViewModel 触发重建（与搜索 / 来源 / 排序叠加）。</summary>
+    private void OnVersionFilterSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
+    {
+        if (e.SelectedItem is not string mode
+            || string.Equals(mode, _viewModel.SelectedVersionFilter, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _viewModel.SelectedVersionFilter = mode;
     }
 
     /// <summary>把上次选的排序方式套回 ViewModel 与下拉框；旧语言的文案对不上选项时保持默认。</summary>

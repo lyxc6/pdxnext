@@ -1783,6 +1783,18 @@
   <data name="ModsAddPageSelectedCount" xml:space="preserve">
     <value>{0} mods selected</value>
   </data>
+  <data name="ModsAddPageSourceFilterAll" xml:space="preserve">
+    <value>All sources</value>
+  </data>
+  <data name="ModsAddPageSourceFilterLocal" xml:space="preserve">
+    <value>Local only</value>
+  </data>
+  <data name="ModsAddPageSourceFilterName" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="ModsAddPageSourceFilterSubscribed" xml:space="preserve">
+    <value>Subscribed only</value>
+  </data>
   <data name="ModsAddPageSortByName" xml:space="preserve">
     <value>Name A-Z</value>
   </data>
@@ -1806,6 +1818,18 @@
   </data>
   <data name="ModsAddPageVersion" xml:space="preserve">
     <value>Supports {0}</value>
+  </data>
+  <data name="ModsAddPageVersionFilterAll" xml:space="preserve">
+    <value>All versions</value>
+  </data>
+  <data name="ModsAddPageVersionFilterBelow" xml:space="preserve">
+    <value>Version too low</value>
+  </data>
+  <data name="ModsAddPageVersionFilterName" xml:space="preserve">
+    <value>Version compatibility</value>
+  </data>
+  <data name="ModsAddPageVersionFilterOther" xml:space="preserve">
+    <value>Other</value>
   </data>
   <data name="ModsAutoSortApply" xml:space="preserve">
     <value>Apply Order</value>

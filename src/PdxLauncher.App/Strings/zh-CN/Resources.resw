@@ -1783,6 +1783,18 @@
   <data name="ModsAddPageSelectedCount" xml:space="preserve">
     <value>已选 {0} 个 mod</value>
   </data>
+  <data name="ModsAddPageSourceFilterAll" xml:space="preserve">
+    <value>全部来源</value>
+  </data>
+  <data name="ModsAddPageSourceFilterLocal" xml:space="preserve">
+    <value>仅本地</value>
+  </data>
+  <data name="ModsAddPageSourceFilterName" xml:space="preserve">
+    <value>来源</value>
+  </data>
+  <data name="ModsAddPageSourceFilterSubscribed" xml:space="preserve">
+    <value>仅订阅</value>
+  </data>
   <data name="ModsAddPageSortByName" xml:space="preserve">
     <value>名称 A-Z</value>
   </data>
@@ -1806,6 +1818,18 @@
   </data>
   <data name="ModsAddPageVersion" xml:space="preserve">
     <value>支持 {0}</value>
+  </data>
+  <data name="ModsAddPageVersionFilterAll" xml:space="preserve">
+    <value>全部版本</value>
+  </data>
+  <data name="ModsAddPageVersionFilterBelow" xml:space="preserve">
+    <value>版本偏低</value>
+  </data>
+  <data name="ModsAddPageVersionFilterName" xml:space="preserve">
+    <value>版本兼容性</value>
+  </data>
+  <data name="ModsAddPageVersionFilterOther" xml:space="preserve">
+    <value>其余</value>
   </data>
   <data name="ModsAutoSortApply" xml:space="preserve">
     <value>应用排序</value>

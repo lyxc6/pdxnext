@@ -334,10 +334,13 @@ public static class AddModsPageChecks
             vm.Contains("_selectedSortMode = _sortModes[0]", StringComparison.Ordinal),
             vm);
 
-        // 排序必须在搜索过滤之后做：先缩小集合再排序，结果才与「搜索 + 排序」的直觉一致。
+        // 排序必须在全部筛选之后做：先叠加搜索 / 来源 / 版本三道条件缩小集合再排序，
+        // 结果才与「搜索 + 筛选 + 排序」的直觉一致（排序蓝图里只剩 ApplySort(matches)）。
         ChecksContext.Check(
-            "添加模组页: 排序在搜索过滤之后应用",
-            vm.Contains("ApplySort(_allRows.Where(row => row.Matches(query)))", StringComparison.Ordinal)
+            "添加模组页: 排序在搜索 / 筛选之后应用",
+            vm.Contains("Rows = ApplySort(matches).ToArray();", StringComparison.Ordinal)
+                && vm.Contains("&& MatchesSourceFilter(row)", StringComparison.Ordinal)
+                && vm.Contains("&& MatchesVersionFilter(row)", StringComparison.Ordinal)
                 && vm.Contains("private IEnumerable<AddModRowViewModel> ApplySort", StringComparison.Ordinal),
             vm);
 
@@ -382,11 +385,11 @@ public static class AddModsPageChecks
             return;
         }
 
-        // 注意断言的是 Rows 本身而不是 _allRows：后者是搜索前的全量快照，Clear + 重建是正常的。
+        // 注意断言的是 Rows 本身而不是 _allRows：后者是筛选前的全量快照，Clear + 重建是正常的。
         ChecksContext.Check(
             "添加模组页: 可见行是整表替换（不留 Clear()+逐条 Add）",
             !Regex.IsMatch(vm, @"(?<!_all)Rows\.(Clear|Add)\(")
-                && vm.Contains("Rows = query.Length == 0", StringComparison.Ordinal),
+                && vm.Contains("Rows = ApplySort(matches).ToArray();", StringComparison.Ordinal),
             vm);
 
         ChecksContext.Check(

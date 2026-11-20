@@ -106,11 +106,13 @@
         </Grid>
 
         <!--
-            搜索行：搜索框定宽 320，右侧跟排序下拉。
-            排序框与搜索框同高（PdxDropDown 的 DropDownButton 是 32），不额外占行。
+            搜索行：搜索框定宽 320，右侧依次是排序、来源、版本兼容性三个下拉。
+            下拉框与搜索框同高（PdxDropDown 的 DropDownButton 是 32），不额外占行。
         -->
         <Grid Grid.Row="1" ColumnSpacing="8">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -137,6 +139,26 @@
                                   SelectionChanged="OnSortSelectionChanged"
                                   AutomationProperties.AutomationId="cmbAddModsSort"
                                   AutomationProperties.Name="{x:Bind ViewModel.SortName, Mode=OneWay}" />
+
+            <controls:PdxDropDown Grid.Column="2"
+                                  x:Name="SourceFilterBox"
+                                  MinWidth="120"
+                                  VerticalAlignment="Center"
+                                  ItemsSource="{x:Bind ViewModel.SourceFilterModes, Mode=OneWay}"
+                                  SelectedItem="{x:Bind ViewModel.SelectedSourceFilter, Mode=OneWay}"
+                                  SelectionChanged="OnSourceFilterSelectionChanged"
+                                  AutomationProperties.AutomationId="cmbAddModsSourceFilter"
+                                  AutomationProperties.Name="{x:Bind ViewModel.SourceFilterName, Mode=OneWay}" />
+
+            <controls:PdxDropDown Grid.Column="3"
+                                  x:Name="VersionFilterBox"
+                                  MinWidth="120"
+                                  VerticalAlignment="Center"
+                                  ItemsSource="{x:Bind ViewModel.VersionFilterModes, Mode=OneWay}"
+                                  SelectedItem="{x:Bind ViewModel.SelectedVersionFilter, Mode=OneWay}"
+                                  SelectionChanged="OnVersionFilterSelectionChanged"
+                                  AutomationProperties.AutomationId="cmbAddModsVersionFilter"
+                                  AutomationProperties.Name="{x:Bind ViewModel.VersionFilterName, Mode=OneWay}" />
         </Grid>
 
         <!-- 主体：候选列表 + 空状态 -->

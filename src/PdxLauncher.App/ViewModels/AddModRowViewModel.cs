@@ -151,12 +151,17 @@ public sealed class AddModRowViewModel : LocalizedObservableObject
         : T(Keys.ModsAddPageVersion, Entry.RequiredVersion);
 
     /// <summary>
+    /// 声明的支持版本与当前游戏版本的对照结论：判定复用 <see cref="ModLibraryWarnings"/>，
+    /// 行上的警告图标与「添加模组」页的版本筛选都读这一份，口径不会分叉。
+    /// </summary>
+    public ModVersionSupport VersionSupport
+        => ModLibraryWarnings.ClassifyVersionSupport(Entry.RequiredVersion, _gameVersion);
+
+    /// <summary>
     /// 声明的支持版本是否低于当前游戏版本：判定复用 <see cref="ModLibraryWarnings"/>，
     /// 这里不自己做版本比较（版本号解析规则只该有一份）。
     /// </summary>
-    public bool HasVersionWarning
-        => ModLibraryWarnings.ClassifyVersionSupport(Entry.RequiredVersion, _gameVersion)
-            == ModVersionSupport.Below;
+    public bool HasVersionWarning => VersionSupport == ModVersionSupport.Below;
 
     /// <summary>版本列的提示文案：只在版本偏低时给一句解释，否则为空串。</summary>
     public string VersionWarningText => HasVersionWarning

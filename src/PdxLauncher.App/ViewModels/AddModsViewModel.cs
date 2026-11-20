@@ -4,6 +4,7 @@ using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Playsets;
 
 /// <summary>
 /// 「添加模组」子页的 ViewModel：列出 mod 库里「还没进目标播放集」的候选 mod，
@@ -24,6 +25,28 @@ public sealed class AddModsViewModel : LocalizedObservableObject
         Keys.ModsAddPageSortByName,
         Keys.ModsAddPageSortBySize,
         Keys.ModsAddPageSortBySubscribed,
+    ];
+
+    /// <summary>
+    /// 「来源」筛选的键：全部 / 本地 / 订阅。与排序一样，下拉框显示文案、选中项也存文案，
+    /// 所以切语言时要按键把选中项换到新语言的文案上。
+    /// </summary>
+    private static readonly string[] SourceFilterKeys =
+    [
+        Keys.ModsAddPageSourceFilterAll,
+        Keys.ModsAddPageSourceFilterLocal,
+        Keys.ModsAddPageSourceFilterSubscribed,
+    ];
+
+    /// <summary>
+    /// 「版本兼容性」筛选的键：全部 / 版本偏低 / 其余。版本判定只认
+    /// <see cref="ModVersionSupport.Below"/>，其余三种结论（未声明 / 游戏版本未知 / 不低于）都归「其余」。
+    /// </summary>
+    private static readonly string[] VersionFilterKeys =
+    [
+        Keys.ModsAddPageVersionFilterAll,
+        Keys.ModsAddPageVersionFilterBelow,
+        Keys.ModsAddPageVersionFilterOther,
     ];
 
     private readonly IPlaySetRepository _playSets;
@@ -65,6 +88,12 @@ public sealed class AddModsViewModel : LocalizedObservableObject
     private string _statusMessage = string.Empty;
     private string _selectedSortMode = string.Empty;
     private IReadOnlyList<string> _sortModes = Array.Empty<string>();
+    private string _selectedSourceFilter = string.Empty;
+    private string _sourceFilterKey = Keys.ModsAddPageSourceFilterAll;
+    private IReadOnlyList<string> _sourceFilterModes = Array.Empty<string>();
+    private string _selectedVersionFilter = string.Empty;
+    private string _versionFilterKey = Keys.ModsAddPageVersionFilterAll;
+    private IReadOnlyList<string> _versionFilterModes = Array.Empty<string>();
     private bool _isRelocalizing;
     private bool _isBusy;
     private int _selectedCount;
@@ -86,6 +115,10 @@ public sealed class AddModsViewModel : LocalizedObservableObject
 
         _sortModes = BuildSortModes();
         _selectedSortMode = _sortModes[0];
+        _sourceFilterModes = BuildSourceFilterModes();
+        _selectedSourceFilter = _sourceFilterModes[0];
+        _versionFilterModes = BuildVersionFilterModes();
+        _selectedVersionFilter = _versionFilterModes[0];
 
         _translator = new ModNameTranslator(
             ResolveNameTranslationTargetLanguage,
@@ -114,8 +147,9 @@ public sealed class AddModsViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 当前可见的候选行（受搜索过滤）。整表一次性替换：每次搜索只发一次 PropertyChanged，
-    /// ListView 收到一次新的 ItemsSource 后自己回收容器，不再「Clear() 再逐条 Add」抖动。
+    /// 当前可见的候选行（受搜索、来源、版本三道筛选，再按排序方式排列）。整表一次性替换：
+    /// 每次筛选只发一次 PropertyChanged，ListView 收到一次新的 ItemsSource 后自己回收容器，
+    /// 不再「Clear() 再逐条 Add」抖动。
     /// </summary>
     public IReadOnlyList<AddModRowViewModel> Rows
     {
@@ -174,7 +208,7 @@ public sealed class AddModsViewModel : LocalizedObservableObject
     /// <summary>是否一个候选都没有（该显示空状态提示）。</summary>
     public bool ShowEmptyState => _allRows.Count == 0;
 
-    /// <summary>有候选但被搜索过滤光了（该显示「无匹配」提示）。</summary>
+    /// <summary>有候选但被搜索 / 来源 / 版本筛选光了（该显示「无匹配」提示）。</summary>
     public bool ShowNoMatch => _allRows.Count > 0 && Rows.Count == 0;
 
     /// <summary>是否正在读取候选。</summary>
@@ -262,6 +296,82 @@ public sealed class AddModsViewModel : LocalizedObservableObject
 
     /// <summary>排序下拉框的无障碍名称。</summary>
     public string SortName => T(Keys.ModsAddPageSortName);
+
+    /// <summary>来源筛选下拉框的选项（全部 / 本地 / 订阅；切语言时整体替换）。</summary>
+    public IReadOnlyList<string> SourceFilterModes
+    {
+        get => _sourceFilterModes;
+        private set
+        {
+            _sourceFilterModes = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>当前来源筛选，取值来自 <see cref="SourceFilterModes"/>；变化后立即重建可见行。</summary>
+    public string SelectedSourceFilter
+    {
+        get => _selectedSourceFilter;
+        set
+        {
+            var mode = value ?? string.Empty;
+            if (string.Equals(_selectedSourceFilter, mode, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _selectedSourceFilter = mode;
+            // 记住选中项的逻辑键：Localizer.Apply 先切资源上下文再回调 Relocalize，
+            // 那时旧的显示文案已经对不上任何新语言选项，只能靠这里存的键还原。
+            _sourceFilterKey = ResolveSourceFilterKey();
+            OnPropertyChanged();
+
+            if (!_isRelocalizing)
+            {
+                RebuildVisibleRows();
+            }
+        }
+    }
+
+    /// <summary>来源筛选下拉框的无障碍名称。</summary>
+    public string SourceFilterName => T(Keys.ModsAddPageSourceFilterName);
+
+    /// <summary>版本兼容性筛选下拉框的选项（全部 / 版本偏低 / 其余；切语言时整体替换）。</summary>
+    public IReadOnlyList<string> VersionFilterModes
+    {
+        get => _versionFilterModes;
+        private set
+        {
+            _versionFilterModes = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>当前版本兼容性筛选，取值来自 <see cref="VersionFilterModes"/>；变化后立即重建可见行。</summary>
+    public string SelectedVersionFilter
+    {
+        get => _selectedVersionFilter;
+        set
+        {
+            var mode = value ?? string.Empty;
+            if (string.Equals(_selectedVersionFilter, mode, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _selectedVersionFilter = mode;
+            _versionFilterKey = ResolveVersionFilterKey();
+            OnPropertyChanged();
+
+            if (!_isRelocalizing)
+            {
+                RebuildVisibleRows();
+            }
+        }
+    }
+
+    /// <summary>版本兼容性筛选下拉框的无障碍名称。</summary>
+    public string VersionFilterName => T(Keys.ModsAddPageVersionFilterName);
 
     /// <summary>设置目标播放集名称（只用于副标题展示）。</summary>
     public void SetPlaySet(string? playSetName)
@@ -625,12 +735,22 @@ public sealed class AddModsViewModel : LocalizedObservableObject
     protected override void Relocalize()
     {
         var sortKey = ResolveSortKey();
+        var sourceFilterKey = ResolveSourceFilterKey();
+        var versionFilterKey = ResolveVersionFilterKey();
         SortModes = BuildSortModes();
+        SourceFilterModes = BuildSourceFilterModes();
+        VersionFilterModes = BuildVersionFilterModes();
+
+        // 缓存当前语言下的逻辑键，下一步切上下文后 Resolve 仍按新语言的文案找回同一个选项。
+        _sourceFilterKey = sourceFilterKey;
+        _versionFilterKey = versionFilterKey;
 
         _isRelocalizing = true;
         try
         {
             SelectedSortMode = T(sortKey);
+            SelectedSourceFilter = T(sourceFilterKey);
+            SelectedVersionFilter = T(versionFilterKey);
         }
         finally
         {
@@ -639,21 +759,25 @@ public sealed class AddModsViewModel : LocalizedObservableObject
 
         // 新旧语言的文案可能恰好相同，那样上面的赋值不会变更，仍需通知一次让下拉框重新选中。
         OnPropertyChanged(nameof(SelectedSortMode));
+        OnPropertyChanged(nameof(SelectedSourceFilter));
+        OnPropertyChanged(nameof(SelectedVersionFilter));
     }
 
-    /// <summary>按搜索关键字重算可见行（行对象复用，勾选状态因此保留）。</summary>
+    /// <summary>按搜索词、来源、版本三道条件重算可见行（行对象复用，勾选状态因此保留）。</summary>
     /// <remarks>
-    /// 只换 <see cref="Rows"/> 的引用、不清空逐条加：搜索框每敲一个字都会走到这里，
+    /// 只换 <see cref="Rows"/> 的引用、不清空逐条加：搜索框每敲一个字、每次换筛选都会走到这里，
     /// <c>ObservableCollection.Clear()</c> + 每行一次 CollectionChanged 会让 ListView 拆掉全部容器、
     /// 再一条条建回来，滚动条和行高都会跳一下。一次性赋一个新列表，界面只收到一次变更。
-    /// 排序在过滤之后做，搜索与排序可以叠加。
+    /// 三道过滤全部做完后再排序，搜索 / 来源 / 版本与排序可以叠加。
     /// </remarks>
     private void RebuildVisibleRows()
     {
         var query = (_searchText ?? string.Empty).Trim();
-        Rows = query.Length == 0
-            ? ApplySort(_allRows).ToArray()
-            : ApplySort(_allRows.Where(row => row.Matches(query))).ToArray();
+        var matches = _allRows.Where(row =>
+            (query.Length == 0 || row.Matches(query))
+            && MatchesSourceFilter(row)
+            && MatchesVersionFilter(row));
+        Rows = ApplySort(matches).ToArray();
 
         OnPropertyChanged(nameof(HasRows));
         OnPropertyChanged(nameof(ShowEmptyState));
@@ -663,6 +787,85 @@ public sealed class AddModsViewModel : LocalizedObservableObject
 
     /// <summary>按当前语言生成排序下拉框的选项。</summary>
     private static IReadOnlyList<string> BuildSortModes() => SortKeys.Select(static key => T(key)).ToArray();
+
+    /// <summary>按当前语言生成来源筛选的选项。</summary>
+    private static IReadOnlyList<string> BuildSourceFilterModes() =>
+        SourceFilterKeys.Select(static key => T(key)).ToArray();
+
+    /// <summary>按当前语言生成版本兼容性筛选的选项。</summary>
+    private static IReadOnlyList<string> BuildVersionFilterModes() =>
+        VersionFilterKeys.Select(static key => T(key)).ToArray();
+
+    /// <summary>选中项对应的来源筛选键；先按当前语言的文案匹配，对不上时回落到上次记住的键，
+    /// 再对不上（外部塞了乱码）才回落到「全部」。</summary>
+    private string ResolveSourceFilterKey()
+    {
+        foreach (var key in SourceFilterKeys)
+        {
+            if (string.Equals(T(key), SelectedSourceFilter, StringComparison.Ordinal))
+            {
+                return key;
+            }
+        }
+
+        return SourceFilterKeys.Contains(_sourceFilterKey, StringComparer.Ordinal)
+            ? _sourceFilterKey
+            : SourceFilterKeys[0];
+    }
+
+    /// <summary>选中项对应的版本筛选键；匹配口径同 <see cref="ResolveSourceFilterKey"/>。</summary>
+    private string ResolveVersionFilterKey()
+    {
+        foreach (var key in VersionFilterKeys)
+        {
+            if (string.Equals(T(key), SelectedVersionFilter, StringComparison.Ordinal))
+            {
+                return key;
+            }
+        }
+
+        return VersionFilterKeys.Contains(_versionFilterKey, StringComparer.Ordinal)
+            ? _versionFilterKey
+            : VersionFilterKeys[0];
+    }
+
+    /// <summary>按来源筛选键过滤候选行（全部不过滤）。</summary>
+    private bool MatchesSourceFilter(AddModRowViewModel row)
+    {
+        var key = ResolveSourceFilterKey();
+        if (string.Equals(key, Keys.ModsAddPageSourceFilterLocal, StringComparison.Ordinal))
+        {
+            return row.Entry.Origin == ModOrigin.Local;
+        }
+
+        if (string.Equals(key, Keys.ModsAddPageSourceFilterSubscribed, StringComparison.Ordinal))
+        {
+            return row.Entry.Origin == ModOrigin.Subscribed;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 按版本兼容性筛选键过滤候选行：只有 <see cref="ModVersionSupport.Below"/> 算「版本偏低」，
+    /// 未声明 / 游戏版本未知 / 不低于都归「其余」。判定取自行上的 VersionSupport（同一份
+    /// ModLibraryWarnings 结论），这里不再解析版本号。
+    /// </summary>
+    private bool MatchesVersionFilter(AddModRowViewModel row)
+    {
+        var key = ResolveVersionFilterKey();
+        if (string.Equals(key, Keys.ModsAddPageVersionFilterBelow, StringComparison.Ordinal))
+        {
+            return row.VersionSupport == ModVersionSupport.Below;
+        }
+
+        if (string.Equals(key, Keys.ModsAddPageVersionFilterOther, StringComparison.Ordinal))
+        {
+            return row.VersionSupport != ModVersionSupport.Below;
+        }
+
+        return true;
+    }
 
     /// <summary>
     /// 选中项对应的排序方式键。选中项可能是语言切换前的旧文案，

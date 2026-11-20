@@ -210,6 +210,18 @@
       这样「缓存先渲染 + 后台失败不回滚」可以用 fake IAchievementSource 直接断言。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementsViewModel.cs" Link="Linked\AchievementsViewModel.cs" />
+    <!--
+      「添加模组」页 VM 与行 VM：来源 / 版本筛选整表替换、行复用与勾选保留、切语言按键还原都在这里。
+      AddModsViewModel 只依赖 Core 契约 + ModLibraryService + ModNameTranslator + AppServices 静态，
+      LocalizedObservableObject / Keys / AppServices / TranslationCoordinator / DispatcherQueue 由
+      AchievementViewModelStubs.cs 与 ModsAddPageFilterStubs.cs 提供最小替身，不引用 WinUI。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AddModsViewModel.cs" Link="Linked\AddModsViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AddModRowViewModel.cs" Link="Linked\AddModRowViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\ModSizeText.cs" Link="Linked\ModSizeText.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\ModLibraryService.cs" Link="Linked\ModLibraryService.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\WorkshopStateReader.cs" Link="Linked\WorkshopStateReader.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\IWorkshopStateSource.cs" Link="Linked\IWorkshopStateSource.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementRowViewModel.cs" Link="Linked\AchievementRowViewModel.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementIconPresentation.cs" Link="Linked\AchievementIconPresentation.cs" />
     <!--

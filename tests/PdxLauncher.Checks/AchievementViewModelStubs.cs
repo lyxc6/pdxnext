@@ -13,8 +13,11 @@ public abstract class LocalizedObservableObject : INotifyPropertyChanged
 {
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    protected static string T(string key, params object?[] args) =>
-        args.Length == 0 ? key : key + ":" + string.Join("|", args.Select(static arg => arg?.ToString()));
+    protected static string T(string key, params object?[] args)
+    {
+        var text = args.Length == 0 ? key : key + ":" + string.Join("|", args.Select(static arg => arg?.ToString()));
+        return Localizer.Prefix + text;
+    }
 
     protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -23,6 +26,9 @@ public abstract class LocalizedObservableObject : INotifyPropertyChanged
     protected virtual void Relocalize()
     {
     }
+
+    /// <summary>自检里模拟一次语言切换回调：与真实 Localizer.Apply → RefreshLocalizedText 同入口。</summary>
+    internal void RefreshLocalizedText() => Relocalize();
 
     protected bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? name = null)
     {
@@ -37,13 +43,22 @@ public abstract class LocalizedObservableObject : INotifyPropertyChanged
     }
 }
 
-/// <summary>与 App 同名的 Localizer 替身：只把「键 + 参数」拼成可比较的字符串。</summary>
+/// <summary>与 App 同名的 Localizer 替身：默认把「键 + 参数」拼成可比较的字符串。</summary>
 internal sealed class Localizer
 {
     public static Localizer Instance { get; } = new();
 
-    public string T(string key, params object?[] args) =>
-        args.Length == 0 ? key : key + ":" + string.Join("|", args.Select(static arg => arg?.ToString()));
+    /// <summary>
+    /// 自检切语言时设置的文案前缀：真实 Localizer.Apply 先切资源上下文再回调 Relocalize，
+    /// 这里用「前缀变化」模拟同一件事，确保 Relocalize 必须按键而不能按旧文案找回选中项。
+    /// </summary>
+    internal static string Prefix { get; set; } = string.Empty;
+
+    public string T(string key, params object?[] args)
+    {
+        var text = args.Length == 0 ? key : key + ":" + string.Join("|", args.Select(static arg => arg?.ToString()));
+        return Prefix + text;
+    }
 }
 
 /// <summary>成就相关文案键；取值与 Resources.resw 一致，避免自检与真实键名漂移。</summary>
@@ -71,6 +86,42 @@ internal static class Keys
     public const string AchievementsUnavailableNoGame = "achievements.unavailable.noGame";
     public const string AchievementsUnavailableNotSupported = "achievements.unavailable.notSupported";
     public const string AchievementsUnavailableSteamUnavailable = "achievements.unavailable.steamUnavailable";
+
+    // 添加模组页相关键（AddModsViewModel 被链接进自检时用；这里的字面值只是稳定的假译文）。
+    public const string ModsAddPageSortByName = "ModsAddPageSortByName";
+    public const string ModsAddPageSortBySize = "ModsAddPageSortBySize";
+    public const string ModsAddPageSortBySubscribed = "ModsAddPageSortBySubscribed";
+    public const string ModsAddPageSortName = "ModsAddPageSortName";
+    public const string ModsAddPageTitle = "ModsAddPageTitle";
+    public const string ModsAddPageTarget = "ModsAddPageTarget";
+    public const string ModsAddPageSearchPlaceholder = "ModsAddPageSearchPlaceholder";
+    public const string ModsAddPageSearchName = "ModsAddPageSearchName";
+    public const string ModsAddPageListName = "ModsAddPageListName";
+    public const string ModsAddPageEmpty = "ModsAddPageEmpty";
+    public const string ModsAddPageNoMatch = "ModsAddPageNoMatch";
+    public const string ModsAddPageHint = "ModsAddPageHint";
+    public const string ModsAddPageAdd = "ModsAddPageAdd";
+    public const string ModsAddPageBack = "ModsAddPageBack";
+    public const string ModsAddPageSelectedCount = "ModsAddPageSelectedCount";
+    public const string ModsAddPageCandidateCount = "ModsAddPageCandidateCount";
+    public const string ModsAddPageVersion = "ModsAddPageVersion";
+    public const string ModsAddPageModVersion = "ModsAddPageModVersion";
+    public const string CommonSourceLocal = "CommonSourceLocal";
+    public const string CommonSourceSubscribed = "CommonSourceSubscribed";
+    public const string ModsStatusSelectGameFirst = "ModsStatusSelectGameFirst";
+    public const string ModsStatusReadLibraryFailed = "ModsStatusReadLibraryFailed";
+    public const string ModsTranslateUnavailable = "ModsTranslateUnavailable";
+    public const string CommonUnknown = "CommonUnknown";
+    public const string ModlibVersionSupportDeclared = "ModlibVersionSupportDeclared";
+    public const string ModlibVersionSupportBelow = "ModlibVersionSupportBelow";
+    public const string ModsAddPageSourceFilterAll = "ModsAddPageSourceFilterAll";
+    public const string ModsAddPageSourceFilterLocal = "ModsAddPageSourceFilterLocal";
+    public const string ModsAddPageSourceFilterSubscribed = "ModsAddPageSourceFilterSubscribed";
+    public const string ModsAddPageSourceFilterName = "ModsAddPageSourceFilterName";
+    public const string ModsAddPageVersionFilterAll = "ModsAddPageVersionFilterAll";
+    public const string ModsAddPageVersionFilterBelow = "ModsAddPageVersionFilterBelow";
+    public const string ModsAddPageVersionFilterOther = "ModsAddPageVersionFilterOther";
+    public const string ModsAddPageVersionFilterName = "ModsAddPageVersionFilterName";
     public const string SavesActionBackup = "saves.action.backup";
     public const string SavesActionDelete = "saves.action.delete";
     public const string SavesActionDeleteBackup = "saves.action.deleteBackup";
