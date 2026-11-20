@@ -43,12 +43,17 @@ dir "%USERPROFILE%\.nuget\packages\communitytoolkit.winui.triggers"             
 dir "%USERPROFILE%\.nuget\packages\communitytoolkit.winui.helpers"                   :: 8.2.251219
 dir "%USERPROFILE%\.nuget\packages\communitytoolkit.winui.extensions"                :: 8.2.251219
 dir "%USERPROFILE%\.nuget\packages\communitytoolkit.common"                          :: 8.2.1
+:: 日志查看器（TextViewControl → Win2D → WASDK.WinUI 1.8 依赖链）：
+dir "%USERPROFILE%\.nuget\packages\textviewcontrol"                                 :: 应有 1.0.3
+dir "%USERPROFILE%\.nuget\packages\microsoft.graphics.win2d"                        :: 应有 1.4.0
+dir "%USERPROFILE%\.nuget\packages\microsoft.windowsappsdk.winui"                   :: 1.8.260204000 也要有
 build.cmd
 ```
 
 这 5 个包是 `PdxLauncher.App.csproj` 里 `CommunityToolkit.WinUI.Controls.SettingsControls` 的依赖链
 （SettingsControls → Triggers → Helpers → Extensions → Common）。换机器时把这 5 个目录一起复制过去即可，
-之后仍然完全离线。首次引入时联网 warm-up 一次：
+之后仍然完全离线。日志查看器的 3 个包也照此一起复制；注意 WASDK.WinUI 1.8.x 只是 Win2D 1.4 的
+依赖解析项，项目实际构建仍用 2.7.0（还原后 `project.assets.json` 里只有 2.7.0 被选中）。首次引入时联网 warm-up 一次：
 `dotnet restore src\PdxLauncher.App\PdxLauncher.App.csproj -s https://api.nuget.org/v3/index.json -p:Platform=x64`。
 
 缺包时构建会直接失败（没有联网还原的退路）。临时要联网还原的话，把 `NuGet.config` 里的

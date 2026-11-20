@@ -214,23 +214,36 @@ public static class LogTailReader
         var blocks = new List<List<LogDisplayLine>>();
         List<LogDisplayLine>? current = null;
 
-        foreach (string line in text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        string[] lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        int last = lines.Length;
+        if (last > 0 && lines[last - 1].Length == 0)
         {
-            string level = string.Empty;
+            // 文件以换行结尾时 Split 会多出一个空段，不是一条日志行。
+            last--;
+        }
+
+        for (int index = 0; index < last; index++)
+        {
+            string line = lines[index];
             if (HeaderPattern.Match(line) is { Success: true } match)
             {
-                level = match.Groups["level"].Value;
                 current = new List<LogDisplayLine>();
                 blocks.Add(current);
+                current.Add(new LogDisplayLine(line, match.Groups["level"].Value));
             }
-            else if (current is null)
+            else
             {
-                // 开头就是续行/残缺行：单独成块，级别未知，仍保留可读文本。
-                current = new List<LogDisplayLine>();
-                blocks.Add(current);
-            }
+                if (current is null)
+                {
+                    // 开头就是续行/残缺行：单独成块，级别未知，仍保留可读文本。
+                    current = new List<LogDisplayLine>();
+                    blocks.Add(current);
+                }
 
-            current.Add(new LogDisplayLine(line, level));
+                // 异常堆栈续行跟随块头的级别，让整块显示同一种颜色。
+                string level = current.Count > 0 ? current[0].Level : string.Empty;
+                current.Add(new LogDisplayLine(line, level));
+            }
         }
 
         IEnumerable<List<LogDisplayLine>> selected = filter switch
