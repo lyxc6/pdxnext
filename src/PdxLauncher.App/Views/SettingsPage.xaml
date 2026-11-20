@@ -358,6 +358,20 @@
                                           IsOn="{x:Bind ViewModel.AlwaysOnTop, Mode=TwoWay}" />
                         </ct:SettingsCard>
 
+                        <ct:SettingsCard Header="{x:Bind L.SettingsInterfaceModEditorPane, Mode=OneWay}"
+                                         HorizontalAlignment="Stretch"
+                                         Background="{ThemeResource PdxCardBackgroundBrush}"
+                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                         BorderThickness="1"
+                                         CornerRadius="8"
+                                         MinHeight="56"
+                                         Padding="16,12"
+                                         IsClickEnabled="False">
+                            <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglModEditorLeftPane"
+                                          AutomationProperties.Name="{x:Bind L.SettingsInterfaceModEditorPaneName, Mode=OneWay}"
+                                          IsOn="{x:Bind ViewModel.ModEditorLeftPaneVisible, Mode=TwoWay}" />
+                        </ct:SettingsCard>
+
                         <TextBlock Text="{x:Bind L.SettingsInterfaceHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
                     </StackPanel>
 
