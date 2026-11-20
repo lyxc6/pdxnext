@@ -193,6 +193,12 @@ public sealed class AppSettings
     /// </summary>
     public bool DiagnosticsLogWrap { get; set; }
 
+    /// <summary>
+    /// 性能与日志页的日志尾部是否每 5 秒自动刷新。默认关；
+    /// 与 <see cref="DiagnosticsLogWrap"/> 一样跨页面重开保留。
+    /// </summary>
+    public bool DiagnosticsLogAutoRefresh { get; set; }
+
     /// <summary>启动后自动检查更新（默认开）。每机器安装仍会弹 UAC 才能升级。</summary>
     public bool AutoCheckUpdates { get; set; } = true;
 

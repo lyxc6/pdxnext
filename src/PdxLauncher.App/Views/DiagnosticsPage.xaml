@@ -5,6 +5,7 @@
     xmlns:controls="using:PdxLauncher.App.Controls"
     xmlns:ct="using:CommunityToolkit.WinUI.Controls"
     xmlns:svc="using:PdxLauncher.App.Services"
+    xmlns:tv="using:TextViewControl"
     xmlns:vm="using:PdxLauncher.App.ViewModels"
     NavigationCacheMode="Disabled"
     Background="{ThemeResource PdxPageVeilBrush}">
@@ -19,6 +20,17 @@
         <Style x:Key="DiagnosticsSubsectionTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource SubtitleTextBlockStyle}">
             <Setter Property="Margin" Value="0,8,0,0" />
         </Style>
+
+        <DataTemplate x:Key="GaugeRingTemplate" x:DataType="vm:GaugeViewModel">
+            <controls:PdxGaugeRing Value="{x:Bind Percent, Mode=OneWay}"
+                                   Title="{x:Bind Title, Mode=OneWay}"
+                                   ValueText="{x:Bind ValueText, Mode=OneWay}"
+                                   DetailText="{x:Bind DetailText, Mode=OneWay}"
+                                   Status="{x:Bind Status, Mode=OneWay}"
+                                   TrendPoints="{x:Bind TrendPoints, Mode=OneWay}"
+                                   AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneWay}"
+                                   AutomationProperties.Name="{x:Bind Title, Mode=OneWay}" />
+        </DataTemplate>
 
         <DataTemplate x:Key="MetricRowTemplate" x:DataType="vm:DiagnosticMetricViewModel">
             <ct:SettingsCard Header="{x:Bind Title}"
@@ -225,7 +237,13 @@
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                <ToggleSwitch x:Name="tglDiagLive"
+                                              AutomationProperties.AutomationId="tglDiagLive"
+                                              OnContent="{x:Bind L.DiagnosticsGaugeLiveOn, Mode=OneWay}"
+                                              OffContent="{x:Bind L.DiagnosticsGaugeLiveOff, Mode=OneWay}"
+                                              IsOn="{x:Bind ViewModel.LiveEnabled, Mode=TwoWay}"
+                                              Toggled="OnLiveToggled" />
                                 <ProgressRing Width="16" Height="16"
                                               IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsBusy), Mode=OneWay}" />
@@ -234,6 +252,20 @@
                                         Click="OnRefreshOverviewClick" />
                             </StackPanel>
                         </Grid>
+
+                        <!-- 实时预算仪表：内存 / 缓存 / 日志 / 启动，四个环每秒分级刷新。 -->
+                        <TextBlock Text="{x:Bind L.DiagnosticsGaugeSubtitle, Mode=OneWay}"
+                                   Style="{StaticResource DiagnosticsHintTextStyle}" />
+                        <ItemsControl x:Name="diagGauges"
+                                      AutomationProperties.AutomationId="diagGauges"
+                                      ItemsSource="{x:Bind ViewModel.Gauges, Mode=OneWay}"
+                                      ItemTemplate="{StaticResource GaugeRingTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <controls:PdxWrapPanel Spacing="16" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
 
                         <TextBlock Text="{x:Bind L.DiagnosticsOverviewMetricsTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
                         <ItemsControl ItemsSource="{x:Bind ViewModel.Metrics, Mode=OneWay}"
@@ -427,22 +459,13 @@
                     <controls:PdxWrapPanel Spacing="16">
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <TextBlock Text="{x:Bind L.DiagnosticsLogFilterTitle, Mode=OneWay}" VerticalAlignment="Center" />
-                            <RadioButton AutomationProperties.AutomationId="rdoDiagLogAll"
-                                         GroupName="diagLogFilter"
-                                         Content="{x:Bind L.DiagnosticsLogFilterAll, Mode=OneWay}"
-                                         Tag="All"
-                                         IsChecked="True"
-                                         Checked="OnLogFilterChecked" />
-                            <RadioButton AutomationProperties.AutomationId="rdoDiagLogWarn"
-                                         GroupName="diagLogFilter"
-                                         Content="{x:Bind L.DiagnosticsLogFilterWarn, Mode=OneWay}"
-                                         Tag="Warning"
-                                         Checked="OnLogFilterChecked" />
-                            <RadioButton AutomationProperties.AutomationId="rdoDiagLogError"
-                                         GroupName="diagLogFilter"
-                                         Content="{x:Bind L.DiagnosticsLogFilterError, Mode=OneWay}"
-                                         Tag="Error"
-                                         Checked="OnLogFilterChecked" />
+                            <controls:PdxDropDown AutomationProperties.AutomationId="cmbDiagLogFilter"
+                                                  AutomationProperties.Name="{x:Bind L.DiagnosticsLogFilterTitle, Mode=OneWay}"
+                                                  MinWidth="160"
+                                                  MinHeight="32"
+                                                  ItemsSource="{x:Bind ViewModel.LogFilterOptions, Mode=OneWay}"
+                                                  DisplayMemberPath="Title"
+                                                  SelectedItem="{x:Bind ViewModel.SelectedLogFilterOption, Mode=TwoWay}" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal"
                                     Spacing="20"
@@ -470,7 +493,7 @@
                                               AutomationProperties.Name="{x:Bind L.DiagnosticsLogAutoRefreshName, Mode=OneWay}"
                                               OffContent=""
                                               OnContent=""
-                                              Toggled="OnAutoRefreshToggled" />
+                                              IsOn="{x:Bind ViewModel.AutoRefresh, Mode=TwoWay}" />
                             </StackPanel>
                         </StackPanel>
                     </controls:PdxWrapPanel>
@@ -478,19 +501,20 @@
                     <TextBlock Text="{x:Bind ViewModel.LogTailTitleText, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
                 </StackPanel>
 
-                <TextBox Grid.Row="1"
-                         x:Name="txtDiagLogTail"
-                         AutomationProperties.AutomationId="txtDiagLogTail"
-                         Text="{x:Bind ViewModel.LogTailText, Mode=OneWay}"
-                         IsReadOnly="True"
-                         AcceptsReturn="True"
-                         TextWrapping="{x:Bind svc:XamlTextWrapping.FromBool(ViewModel.LogWrap), Mode=OneWay}"
-                         IsSpellCheckEnabled="False"
-                         FontFamily="Cascadia Mono, Consolas"
-                         MinHeight="160"
-                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                         ScrollViewer.VerticalScrollBarVisibility="Auto"
-                         Padding="12,8" />
+                <!-- TextViewControl 用 Win2D 自绘，支持整行按级别着色、自动换行与大日志；
+                     独立于外层滚动容器，随窗口伸缩。日志为空时叠加占位提示。 -->
+                <Grid Grid.Row="1">
+                    <tv:TextControl x:Name="LogView"
+                                    AutomationProperties.AutomationId="txtDiagLogTail"
+                                    MinHeight="160" />
+                    <TextBlock x:Name="LogTailEmptyText"
+                               Text="{x:Bind ViewModel.LogTailEmptyText, Mode=OneWay}"
+                               Style="{StaticResource DiagnosticsHintTextStyle}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Visibility="Collapsed"
+                               IsHitTestVisible="False" />
+                </Grid>
             </Grid>
         </Grid>
 

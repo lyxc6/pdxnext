@@ -1018,6 +1018,33 @@
   <data name="DiagnosticsNetworkThrottleTitle" xml:space="preserve">
     <value>各站点请求与限流</value>
   </data>
+  <data name="DiagnosticsGaugeCache" xml:space="preserve">
+    <value>缓存</value>
+  </data>
+  <data name="DiagnosticsGaugeLiveOff" xml:space="preserve">
+    <value>已暂停</value>
+  </data>
+  <data name="DiagnosticsGaugeLiveOn" xml:space="preserve">
+    <value>实时中</value>
+  </data>
+  <data name="DiagnosticsGaugeLiveToggle" xml:space="preserve">
+    <value>实时刷新</value>
+  </data>
+  <data name="DiagnosticsGaugeLog" xml:space="preserve">
+    <value>日志</value>
+  </data>
+  <data name="DiagnosticsGaugeMemory" xml:space="preserve">
+    <value>内存</value>
+  </data>
+  <data name="DiagnosticsGaugePercent" xml:space="preserve">
+    <value>预算 {0}%</value>
+  </data>
+  <data name="DiagnosticsGaugeStartup" xml:space="preserve">
+    <value>启动</value>
+  </data>
+  <data name="DiagnosticsGaugeSubtitle" xml:space="preserve">
+    <value>实时预算仪表 · 每秒刷新，缓存与日志每 5 秒刷新</value>
+  </data>
   <data name="DiagnosticsOverviewCountersTitle" xml:space="preserve">
     <value>缓存与内容</value>
   </data>

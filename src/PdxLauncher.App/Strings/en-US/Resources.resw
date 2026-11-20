@@ -1018,6 +1018,33 @@
   <data name="DiagnosticsNetworkThrottleTitle" xml:space="preserve">
     <value>Requests and throttling per host</value>
   </data>
+  <data name="DiagnosticsGaugeCache" xml:space="preserve">
+    <value>Cache</value>
+  </data>
+  <data name="DiagnosticsGaugeLiveOff" xml:space="preserve">
+    <value>Paused</value>
+  </data>
+  <data name="DiagnosticsGaugeLiveOn" xml:space="preserve">
+    <value>Live</value>
+  </data>
+  <data name="DiagnosticsGaugeLiveToggle" xml:space="preserve">
+    <value>Live refresh</value>
+  </data>
+  <data name="DiagnosticsGaugeLog" xml:space="preserve">
+    <value>Log</value>
+  </data>
+  <data name="DiagnosticsGaugeMemory" xml:space="preserve">
+    <value>Memory</value>
+  </data>
+  <data name="DiagnosticsGaugePercent" xml:space="preserve">
+    <value>{0}% of budget</value>
+  </data>
+  <data name="DiagnosticsGaugeStartup" xml:space="preserve">
+    <value>Startup</value>
+  </data>
+  <data name="DiagnosticsGaugeSubtitle" xml:space="preserve">
+    <value>Real-time budget dashboard · refreshes every second, cache and log every 5 seconds</value>
+  </data>
   <data name="DiagnosticsOverviewCountersTitle" xml:space="preserve">
     <value>Cache and content</value>
   </data>
