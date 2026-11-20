@@ -181,8 +181,17 @@ public sealed class ModRowViewModel : LocalizedObservableObject
     /// <summary>右键菜单「复制注册 ID」的自动化 Id。</summary>
     public string CopyIdMenuAutomationId => "modCopyId_" + ModId.ToString("N");
 
+    /// <summary>右键菜单「转为本地 mod」的自动化 Id。</summary>
+    public string ConvertToLocalMenuAutomationId => "modConvertToLocal_" + ModId.ToString("N");
+
     /// <summary>这一行有没有本地文件（目录型或压缩包型）；右键菜单据此禁用「打开本地文件夹」。</summary>
     public bool HasLocalFiles => !string.IsNullOrWhiteSpace(DirPath) || !string.IsNullOrWhiteSpace(ArchivePath);
+
+    /// <summary>
+    /// 右键菜单「转为本地 mod」是否可用：来源不是本地（订阅 / 老库未归一）且磁盘有可复制的内容。
+    /// 本地 mod 已经是本地来源，不需要再转；没有本地文件则没有可复制的东西。
+    /// </summary>
+    public bool CanConvertToLocal => !IsLocalOrigin && HasLocalFiles;
 
     /// <summary>右键菜单第一项文案：目录型是「打开本地文件夹」，只有压缩包时是「在文件夹中显示」。</summary>
     public string RowMenuOpenFolderText => string.IsNullOrWhiteSpace(DirPath)

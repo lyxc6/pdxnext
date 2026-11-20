@@ -201,6 +201,35 @@ public sealed class PlaySetRepositoryRouter : IPlaySetRepository
             store => store.UpdateModPathsAsync(game, modId, dirPath, archivePath, cancellationToken),
             cancellationToken);
 
+    /// <inheritdoc />
+    public Task<AppResult<bool>> AdoptLocalModAsync(
+        GameInstallation game,
+        Guid oldModId,
+        string? oldDirPath,
+        string? oldArchivePath,
+        PlaySetMod localMod,
+        CancellationToken cancellationToken)
+        => WriteAsync(
+            game,
+            store => store.AdoptLocalModAsync(game, oldModId, oldDirPath, oldArchivePath, localMod, cancellationToken),
+            cancellationToken);
+
+    /// <inheritdoc />
+    public Task<AppResult<bool>> RevertLocalModAdoptionAsync(
+        GameInstallation game,
+        Guid newModId,
+        Guid oldModId,
+        string? oldDirPath,
+        string? oldArchivePath,
+        CancellationToken cancellationToken,
+        string? newDirPath = null,
+        string? newArchivePath = null)
+        => WriteAsync(
+            game,
+            store => store.RevertLocalModAdoptionAsync(
+                game, newModId, oldModId, oldDirPath, oldArchivePath, cancellationToken, newDirPath, newArchivePath),
+            cancellationToken);
+
     public Task<AppResult<bool>> SavePlaySetModsAsync(
         GameInstallation game,
         Guid playSetId,

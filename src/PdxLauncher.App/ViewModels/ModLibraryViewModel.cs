@@ -94,6 +94,10 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     [ObservableProperty]
     private bool _isSteamActionBusy;
 
+    /// <summary>工坊转本地是否在途；期间右键菜单可据此防重入。</summary>
+    [ObservableProperty]
+    private bool _isConvertToLocalBusy;
+
     /// <summary>是否已完成过一次加载（未完成时不弹空状态，避免闪一下提示）。</summary>
     [ObservableProperty]
     private bool _isLoaded;
@@ -448,7 +452,44 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 覆盖状态栏文案。页面上的行操作（打开文件夹 / 打开创意工坊）不在本类里执行，
+    /// 右键菜单「转为本地 mod」：把订阅且有本地内容的 mod 复制成同内容的本地 mod。
+    /// 成功只在状态栏反馈（静默），失败写入状态栏并把异常抛给页面弹 ShowMessage；
+    /// 在途期间置 <see cref="IsConvertToLocalBusy"/> 防重入。
+    /// </summary>
+    /// <param name="row">被转换的 Mod 库行。</param>
+    /// <param name="cancellationToken">本次转换的取消令牌（页面用它链接生命周期令牌并暴露取消按钮）。</param>
+    public async Task ConvertToLocalAsync(ModLibraryRowViewModel row, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        var game = Game;
+        if (game is null)
+        {
+            throw new InvalidOperationException(T(Keys.ModsGameNone));
+        }
+
+        IsConvertToLocalBusy = true;
+        try
+        {
+            var result = await WorkshopToLocalInvoker.ConvertAsync(
+                game, row.ModId, row.Name, cancellationToken).ConfigureAwait(true);
+            if (!result.IsSuccess)
+            {
+                SetStatus(T(Keys.ConvertToLocalFailedDetail, result.ErrorMessage ?? string.Empty));
+                throw new InvalidOperationException(result.ErrorMessage ?? "convert-to-local-failed");
+            }
+
+            // 转换改写了来源与路径，重载一次让徽标 / 来源筛选跟上，随后写成功文案（重载会覆盖状态栏）。
+            await LoadAsync(game, _pageToken).ConfigureAwait(true);
+            SetStatus(T(Keys.ConvertToLocalStatusDone, row.Name));
+        }
+        finally
+        {
+            IsConvertToLocalBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// 覆盖状态栏文案。页面上的行操作（打开文件夹 / 打开创意工坊 / 转为本地 mod）不在本类里执行，
     /// 但结果需要反馈到同一条状态栏，所以留一个入口给 code-behind。
     /// </summary>
     /// <param name="message">要显示的文案。</param>

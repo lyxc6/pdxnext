@@ -32,6 +32,80 @@ internal static class LegacyDescriptorText
         return NormalizeEnd(result, newline);
     }
 
+    /// <summary>删除某个键所在的整行（键不存在时原样返回）。用于删掉工坊描述符的 <c>remote_file_id</c>。</summary>
+    public static string RemoveKey(string text, string key)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrWhiteSpace(key))
+        {
+            return text;
+        }
+
+        var matches = Parse(text)
+            .Where(item => item.Key.Equals(key, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(item => item.KeyStart)
+            .ToArray();
+
+        var result = text;
+        foreach (var match in matches)
+        {
+            // 行首到换行（含换行）整段删掉，避免留下空行或半行；末行没有换行则删到结尾。
+            var lineStart = LineStart(result, match.KeyStart);
+            var lineFeed = result.IndexOf('\n', match.ValueEnd);
+            var end = lineFeed < 0 ? result.Length : lineFeed + 1;
+            result = string.Concat(result.AsSpan(0, lineStart), result.AsSpan(end));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 设置某个键的值：已存在就原位替换（保留注释与键序），缺失就补在 <c>name</c> 之后。
+    /// 值会按 Clausewitz 规则加引号转义，调用方传原始字符串即可（path / archive 的最终绝对路径）。
+    /// </summary>
+    public static string SetKeyValue(string text, string key, string value)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return text;
+        }
+
+        var newline = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
+        var quoted = Quote(value ?? string.Empty);
+        var assignments = Parse(text);
+        var existing = assignments.FirstOrDefault(
+            item => item.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
+
+        if (existing is not null)
+        {
+            var replaced = string.Concat(
+                text.AsSpan(0, existing.ValueStart),
+                quoted,
+                text.AsSpan(existing.ValueEnd));
+            return NormalizeEnd(replaced, newline);
+        }
+
+        // 键不存在：补在 name 这一行之后；连 name 都没有就补到末尾。
+        var name = assignments.FirstOrDefault(
+            item => item.Key.Equals("name", StringComparison.OrdinalIgnoreCase));
+        var line = key + "=" + quoted + newline;
+        if (name is null)
+        {
+            var withBreak = text.EndsWith(newline, StringComparison.Ordinal) ? text : text + newline;
+            return NormalizeEnd(withBreak + line, newline);
+        }
+
+        var indent = LineIndent(text, name.KeyStart);
+        var lineFeed = text.IndexOf('\n', name.ValueEnd);
+        if (lineFeed < 0)
+        {
+            return NormalizeEnd(text + newline + indent + line, newline);
+        }
+
+        return NormalizeEnd(
+            text[..(lineFeed + 1)] + indent + line + text[(lineFeed + 1)..],
+            newline);
+    }
+
     private static string ReplaceValues(string text, IReadOnlyDictionary<string, string> values)
     {
         var assignments = Parse(text);
@@ -275,13 +349,21 @@ internal static class LegacyDescriptorText
         return index;
     }
 
-    private static string LineIndent(string text, int index)
+    /// <summary>返回 <paramref name="index"/> 所在行的行首（上一个换行之后的位置）。</summary>
+    private static int LineStart(string text, int index)
     {
         var start = index;
         while (start > 0 && text[start - 1] != '\n')
         {
             start--;
         }
+
+        return start;
+    }
+
+    private static string LineIndent(string text, int index)
+    {
+        var start = LineStart(text, index);
 
         var end = start;
         while (end < text.Length && (text[end] == ' ' || text[end] == '\t'))

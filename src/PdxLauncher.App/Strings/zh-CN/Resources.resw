@@ -5822,4 +5822,19 @@
   <data name="WorkshopDependenciesGroupUnknown" xml:space="preserve">
     <value>状态未知（{0}）</value>
   </data>
+  <data name="CommonConvertToLocal" xml:space="preserve">
+    <value>转为本地 mod</value>
+  </data>
+  <data name="ConvertToLocalConfirmDetail" xml:space="preserve">
+    <value>将「{0}」转为本地 mod？转换后不再随创意工坊订阅更新，请确认已下载到本地。</value>
+  </data>
+  <data name="ConvertToLocalStatusDone" xml:space="preserve">
+    <value>已将「{0}」转为本地 mod</value>
+  </data>
+  <data name="ConvertToLocalFailedDetail" xml:space="preserve">
+    <value>转为本地 mod 失败：{0}</value>
+  </data>
+  <data name="ConvertToLocalCancelled" xml:space="preserve">
+    <value>已取消转为本地 mod</value>
+  </data>
 </root>

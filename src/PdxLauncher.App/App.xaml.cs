@@ -12,6 +12,7 @@ using PdxLauncher.Core.Games;
 using PdxLauncher.Core.Infrastructure;
 using PdxLauncher.Core.Launching;
 using PdxLauncher.Core.LoadFiles;
+using PdxLauncher.Core.ModStudio;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Online.Translation;
 using PdxLauncher.Core.Online.Translation.Local;
@@ -177,6 +178,20 @@ public partial class App : Application
             logger,
             ownPlaySets,
             projector);
+
+        // 工坊 mod 转本地 mod：packager 负责 ContentLoadV1 目录源现场打包；
+        // mods（ModCatalogRouter）同时实现 IModCatalog 与 IScanCacheInvalidator，转换后失效扫描缓存靠它。
+        var modArchivePackager = new ModArchivePackager();
+        var workshopToLocal = new WorkshopToLocalConverter(
+            fileSystem,
+            playSets,
+            mods,
+            mods,
+            modArchivePackager,
+            new OwnModStore(database, clock, logger),
+            logger,
+            clock);
+
         var loadFiles = new LoadFileWriter(fileSystem, logger);
         var processLauncher = new ProcessLauncher(logger);
         var launcher = new GameLauncher(processLauncher, fileSystem, logger);
@@ -266,6 +281,7 @@ public partial class App : Application
             documents,
             updates,
             Array.Empty<GameInstallation>(),
+            workshopToLocal,
             new NetworkLink(network.Http, network.PdxHttp, network.TranslationTransport),
             localTranslation);
 

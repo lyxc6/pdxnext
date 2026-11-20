@@ -5822,4 +5822,19 @@ then call list_games to verify.</value>
   <data name="WorkshopDependenciesGroupUnknown" xml:space="preserve">
     <value>Unknown ({0})</value>
   </data>
+  <data name="CommonConvertToLocal" xml:space="preserve">
+    <value>Convert to local mod</value>
+  </data>
+  <data name="ConvertToLocalConfirmDetail" xml:space="preserve">
+    <value>Convert "{0}" to a local mod? It will no longer update with the Workshop subscription — make sure it has been downloaded locally.</value>
+  </data>
+  <data name="ConvertToLocalStatusDone" xml:space="preserve">
+    <value>Converted "{0}" to a local mod</value>
+  </data>
+  <data name="ConvertToLocalFailedDetail" xml:space="preserve">
+    <value>Failed to convert to local mod: {0}</value>
+  </data>
+  <data name="ConvertToLocalCancelled" xml:space="preserve">
+    <value>Conversion to local mod cancelled</value>
+  </data>
 </root>

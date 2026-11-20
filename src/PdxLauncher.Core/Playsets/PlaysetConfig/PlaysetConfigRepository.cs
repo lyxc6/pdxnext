@@ -272,6 +272,29 @@ public sealed class PlaysetConfigRepository : IPlaySetRepository
         CancellationToken cancellationToken)
         => Task.FromResult(AppResult<bool>.Fail(ErrorKind.Unsupported, "unsupported-format:playset-config"));
 
+    /// <inheritdoc />
+    /// <remarks>CS2 不在用户口径内，与 <see cref="UpdateModPathsAsync"/> 一致返回 Unsupported。</remarks>
+    public Task<AppResult<bool>> AdoptLocalModAsync(
+        GameInstallation game,
+        Guid oldModId,
+        string? oldDirPath,
+        string? oldArchivePath,
+        PlaySetMod localMod,
+        CancellationToken cancellationToken)
+        => Task.FromResult(AppResult<bool>.Fail(ErrorKind.Unsupported, "unsupported-format:playset-config"));
+
+    /// <inheritdoc />
+    public Task<AppResult<bool>> RevertLocalModAdoptionAsync(
+        GameInstallation game,
+        Guid newModId,
+        Guid oldModId,
+        string? oldDirPath,
+        string? oldArchivePath,
+        CancellationToken cancellationToken,
+        string? newDirPath = null,
+        string? newArchivePath = null)
+        => Task.FromResult(AppResult<bool>.Fail(ErrorKind.Unsupported, "unsupported-format:playset-config"));
+
     public Task<AppResult<bool>> SavePlaySetModsAsync(
         GameInstallation game,
         Guid playSetId,

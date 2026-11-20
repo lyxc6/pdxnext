@@ -515,6 +515,9 @@ public static class ProgressiveSavesChecks
 
         public void Copy(string source, string destination, bool overwrite) => inner.Copy(source, destination, overwrite);
 
+        public void CopyDirectory(string source, string destination, bool overwrite, CancellationToken cancellationToken = default) =>
+            inner.CopyDirectory(source, destination, overwrite, cancellationToken);
+
         public void Move(string source, string destination, bool overwrite) => inner.Move(source, destination, overwrite);
 
         public void MoveDirectory(string source, string destination) => inner.MoveDirectory(source, destination);

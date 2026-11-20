@@ -31,6 +31,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
     private GameInstallation? _game;
     private bool _isBusy;
+    private bool _isConvertToLocalBusy;
     private bool _isAutoSortRunning;
     private bool _isLoaded;
     private string _statusMessage = string.Empty;
@@ -189,6 +190,13 @@ public sealed class ModsViewModel : LocalizedObservableObject
                 RaiseActivationState();
             }
         }
+    }
+
+    /// <summary>工坊转本地是否在途；菜单项据此临时禁用，防止重复点击叠加写库。</summary>
+    public bool IsConvertToLocalBusy
+    {
+        get => _isConvertToLocalBusy;
+        private set => SetProperty(ref _isConvertToLocalBusy, value);
     }
 
     /// <summary>
@@ -1475,6 +1483,43 @@ public sealed class ModsViewModel : LocalizedObservableObject
         return PositionEditResult.Applied;
     }
 
+    // ------------------------------------------------------------ 工坊转本地
+
+    /// <summary>
+    /// 播放集行右键菜单「转为本地 mod」：把订阅且有本地文件的 mod 复制成同内容的本地 mod。
+    /// Core 在单事务里分配新 ModId 并改写所有播放集引用，成功后重载本页让行上的来源 / 路径跟上；
+    /// 成功只在状态栏反馈（静默），失败把异常抛给页面弹 ShowMessage。
+    /// </summary>
+    /// <param name="row">被转换的播放集行。</param>
+    /// <param name="cancellationToken">本次转换的取消令牌（页面用它链接生命周期令牌并暴露取消按钮）。</param>
+    public async Task ConvertToLocalAsync(ModRowViewModel row, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        var game = Game;
+        if (game is null)
+        {
+            throw new InvalidOperationException(T(Keys.ModsGameNone));
+        }
+
+        IsConvertToLocalBusy = true;
+        try
+        {
+            var result = await WorkshopToLocalInvoker.ConvertAsync(
+                game, row.ModId, row.Name, cancellationToken).ConfigureAwait(true);
+            if (!result.IsSuccess)
+            {
+                throw new InvalidOperationException(result.ErrorMessage ?? "convert-to-local-failed");
+            }
+
+            await LoadAsync(game, cancellationToken).ConfigureAwait(true);
+            ReportConvertedToLocal(row);
+        }
+        finally
+        {
+            IsConvertToLocalBusy = false;
+        }
+    }
+
     // ------------------------------------------------------------ 行右键菜单的状态栏反馈
 
     /// <summary>右键菜单「打开本地文件夹」成功后写状态栏。</summary>
@@ -1496,6 +1541,16 @@ public sealed class ModsViewModel : LocalizedObservableObject
         ArgumentNullException.ThrowIfNull(row);
         StatusMessage = T(Keys.ModsStatusCopiedId, row.Name);
     }
+
+    /// <summary>右键菜单「转为本地 mod」成功后写状态栏（成功静默，不弹框）。</summary>
+    public void ReportConvertedToLocal(ModRowViewModel row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        StatusMessage = T(Keys.ConvertToLocalStatusDone, row.Name);
+    }
+
+    /// <summary>覆盖状态栏文案：页面在行操作失败时需要把原因反馈到同一条状态栏。</summary>
+    public void SetStatus(string message) => StatusMessage = message ?? string.Empty;
 
     /// <summary>启用全部 / 禁用全部（作用于整个播放集，搜索过滤也不例外），随后自动保存。</summary>
     public void SetAllEnabled(bool enabled)

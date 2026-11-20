@@ -336,6 +336,9 @@ public static class SaveGameScannerChecks
 
         public void Copy(string source, string destination, bool overwrite) => _inner.Copy(source, destination, overwrite);
 
+        public void CopyDirectory(string source, string destination, bool overwrite, CancellationToken cancellationToken = default) =>
+            _inner.CopyDirectory(source, destination, overwrite, cancellationToken);
+
         public void Move(string source, string destination, bool overwrite) => _inner.Move(source, destination, overwrite);
 
         public void MoveDirectory(string source, string destination) => _inner.MoveDirectory(source, destination);
