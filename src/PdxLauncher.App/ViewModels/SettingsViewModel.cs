@@ -950,6 +950,24 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// <summary>标题栏图钉改变置顶后，刷新设置页开关的绑定值。</summary>
     public void RefreshAlwaysOnTop() => OnPropertyChanged(nameof(AlwaysOnTop));
 
+    /// <summary>
+    /// Mod 编辑页左栏显隐开关：赋值后立即落盘、广播，让另一侧的页面同步；失败回滚。
+    /// </summary>
+    public bool ModEditorLeftPaneVisible
+    {
+        get => AppServices.Settings.ModEditorLeftPaneVisible;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.ModEditorLeftPaneVisible,
+            v => AppServices.Settings.ModEditorLeftPaneVisible = v,
+            Keys.SettingsInterfaceModEditorPaneOn,
+            Keys.SettingsInterfaceModEditorPaneOff,
+            afterSave: AppServices.NotifyModEditorPaneVisibilityChanged);
+    }
+
+    /// <summary>Mod 编辑页改了左栏显隐后，刷新设置页开关的绑定值。</summary>
+    public void RefreshModEditorPane() => OnPropertyChanged(nameof(ModEditorLeftPaneVisible));
+
     // ------------------------------------------------------------ 启动区
 
     /// <summary>实际启动的可执行文件（绝对路径，只读展示）。</summary>

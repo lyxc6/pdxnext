@@ -231,6 +231,16 @@ public static class AppServices
     public static void NotifyBackgroundDisplayChanged() =>
         BackgroundDisplayChanged?.Invoke(null, EventArgs.Empty);
 
+    /// <summary>
+    /// 设置页或 Mod 编辑页改了左栏显隐后触发（sender 与参数都无意义）。
+    /// 订阅方必须自己 marshal 到 UI 线程（页面统一用 DispatcherQueue.TryEnqueue）。
+    /// </summary>
+    public static event EventHandler? ModEditorPaneVisibilityChanged;
+
+    /// <summary>通知订阅方：Mod 编辑页左栏显隐变了，需要把绑定值拉回最新。</summary>
+    public static void NotifyModEditorPaneVisibilityChanged() =>
+        ModEditorPaneVisibilityChanged?.Invoke(null, EventArgs.Empty);
+
     /// <summary>冷启动阶段已发现的所有游戏。</summary>
     public static IReadOnlyList<GameInstallation> Games { get; private set; } = Array.Empty<GameInstallation>();
 
@@ -593,6 +603,12 @@ public static class AppServices
 
     /// <summary>mod 缩略图缓存目录（mod-thumbnails.json 与 mod-thumbnails/）。</summary>
     public static string ModThumbnailCacheRoot => Path.Combine(DataRoot, "mod-cache");
+
+    /// <summary>
+    /// 从游戏导出的脚本文档 / 数据类型文档落盘根目录（&lt;DataRoot&gt;\mod-definitions）。
+    /// 落点始终在解析后的 <see cref="DataRoot"/> 之内（每机器安装下可能是 LocalAppData\PdxNext-Data）。
+    /// </summary>
+    public static string ModDefinitionsRoot => Path.Combine(DataRoot, "mod-definitions");
 
     /// <summary>DDS 缩略图转好的 PNG 缓存目录（image-cache/）。</summary>
     public static string ImageCacheRoot => Path.Combine(DataRoot, "image-cache");

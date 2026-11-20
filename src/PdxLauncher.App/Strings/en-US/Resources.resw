@@ -3666,6 +3666,18 @@ Continue?</value>
   <data name="SettingsInterfaceLanguageZhCNTitle" xml:space="preserve">
     <value>简体中文</value>
   </data>
+  <data name="SettingsInterfaceModEditorPane" xml:space="preserve">
+    <value>Show Mod Editor left pane</value>
+  </data>
+  <data name="SettingsInterfaceModEditorPaneName" xml:space="preserve">
+    <value>Mod Editor left pane</value>
+  </data>
+  <data name="SettingsInterfaceModEditorPaneOff" xml:space="preserve">
+    <value>Left pane hidden</value>
+  </data>
+  <data name="SettingsInterfaceModEditorPaneOn" xml:space="preserve">
+    <value>Left pane shown</value>
+  </data>
   <data name="SettingsInterfaceModThumbnailSize" xml:space="preserve">
     <value>Mod image size</value>
   </data>

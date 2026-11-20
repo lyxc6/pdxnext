@@ -3666,6 +3666,18 @@
   <data name="SettingsInterfaceLanguageZhCNTitle" xml:space="preserve">
     <value>简体中文</value>
   </data>
+  <data name="SettingsInterfaceModEditorPane" xml:space="preserve">
+    <value>显示 Mod 编辑页左栏</value>
+  </data>
+  <data name="SettingsInterfaceModEditorPaneName" xml:space="preserve">
+    <value>Mod 编辑页左栏</value>
+  </data>
+  <data name="SettingsInterfaceModEditorPaneOff" xml:space="preserve">
+    <value>左栏已收起</value>
+  </data>
+  <data name="SettingsInterfaceModEditorPaneOn" xml:space="preserve">
+    <value>左栏已显示</value>
+  </data>
   <data name="SettingsInterfaceModThumbnailSize" xml:space="preserve">
     <value>Mod 图片大小</value>
   </data>

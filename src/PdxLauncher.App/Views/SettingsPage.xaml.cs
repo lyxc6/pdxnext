@@ -99,6 +99,11 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             AlwaysOnTopService.Changed -= OnAlwaysOnTopChanged;
             AlwaysOnTopService.Changed += OnAlwaysOnTopChanged;
             _viewModel.RefreshAlwaysOnTop();
+
+            AppServices.ModEditorPaneVisibilityChanged -= OnModEditorPaneVisibilityChanged;
+            AppServices.ModEditorPaneVisibilityChanged += OnModEditorPaneVisibilityChanged;
+            _viewModel.RefreshModEditorPane();
+
             UpdateContentColumnWidth();
 
             // 本地模型下载活在 App 层协调器里：页面出现时接上，页面离开时退订（下载本身不停）。
@@ -148,6 +153,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     {
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         AlwaysOnTopService.Changed -= OnAlwaysOnTopChanged;
+        AppServices.ModEditorPaneVisibilityChanged -= OnModEditorPaneVisibilityChanged;
         AppServices.LocalModelDownloads?.Changed -= OnLocalModelDownloadChanged;
 
         // 代理地址是逐键写入内存的，离开页面时统一落盘。
@@ -203,6 +209,15 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         if (!DispatcherQueue.TryEnqueue(_viewModel.RefreshAlwaysOnTop))
         {
             AppServices.Logger.Warn("SettingsPage 无法派发置顶状态变化");
+        }
+    }
+
+    /// <summary>Mod 编辑页改了左栏显隐时，同步设置页的开关。</summary>
+    private void OnModEditorPaneVisibilityChanged(object? sender, EventArgs e)
+    {
+        if (!DispatcherQueue.TryEnqueue(_viewModel.RefreshModEditorPane))
+        {
+            AppServices.Logger.Warn("SettingsPage 无法派发 Mod 编辑页左栏显隐变化");
         }
     }
 
