@@ -350,6 +350,25 @@ public static class AddModsPageChecks
                 && page.Contains("RestoreSortState", StringComparison.Ordinal)
                 && page.Contains("SaveSortState", StringComparison.Ordinal),
             page);
+
+        // 来源 / 版本筛选与排序一样属于整页显示偏好：离开页面要写进 AddModsState、
+        // 再进入要按键还原，不能只保留排序却让筛选回落「全部」。
+        var state = Read(root, "src", "PdxLauncher.App", "Services", "AddModsState.cs");
+        ChecksContext.Check(
+            "添加模组页: AddModsState 含排序 / 来源 / 版本三项且向后兼容",
+            state.Contains("string SortMode", StringComparison.Ordinal)
+                && state.Contains("string SourceFilter =", StringComparison.Ordinal)
+                && state.Contains("string VersionFilter =", StringComparison.Ordinal),
+            state);
+        ChecksContext.Check(
+            "添加模组页: 来源 / 版本筛选随页面状态存取",
+            page.Contains("_viewModel.SelectedSourceFilter,", StringComparison.Ordinal)
+                && page.Contains("_viewModel.SelectedVersionFilter);", StringComparison.Ordinal)
+                && page.Contains("_viewModel.SourceFilterModes.Any", StringComparison.Ordinal)
+                && page.Contains("_viewModel.VersionFilterModes.Any", StringComparison.Ordinal)
+                && page.Contains("SourceFilterBox.SelectedItem = state.SourceFilter", StringComparison.Ordinal)
+                && page.Contains("VersionFilterBox.SelectedItem = state.VersionFilter", StringComparison.Ordinal),
+            page);
     }
 
     /// <summary>XAML 里不许出现硬编码中文（注释除外）：所有文案走 Localizer。</summary>
