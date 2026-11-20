@@ -28,7 +28,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-set "PUBDIR=src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\publish"
+set "PUBDIR=src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\publish"
 
 echo ============================================
 call "%~dp0scripts\msg.cmd" P_TITLE
@@ -45,7 +45,7 @@ if errorlevel 1 (
 
 echo.
 call "%~dp0scripts\msg.cmd" P_STEP2
-dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll" >nul 2>nul
+dotnet "tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll" >nul 2>nul
 if errorlevel 1 (
     call "%~dp0scripts\msg.cmd" P_FAILCHECK
     exit /b 1
