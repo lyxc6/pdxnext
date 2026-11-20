@@ -27,10 +27,13 @@ public sealed class GaugeTrendBuffer
         Trim(now);
     }
 
-    /// <summary>取当前窗口内的百分比快照（从旧到新）。</summary>
-    public IReadOnlyList<double> Values()
+    /// <summary>取当前窗口内的百分比快照（从旧到新，按真实时钟淘汰过期点）。</summary>
+    public IReadOnlyList<double> Values() => Values(DateTimeOffset.Now);
+
+    /// <summary>取当前窗口内的百分比快照（从旧到新）；传入 now 便于自检不依赖真实时钟。</summary>
+    public IReadOnlyList<double> Values(DateTimeOffset now)
     {
-        Trim(DateTimeOffset.Now);
+        Trim(now);
         return _samples.Select(sample => sample.Percent).ToArray();
     }
 

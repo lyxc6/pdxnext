@@ -44,26 +44,26 @@ public static class GaugeTrendChecks
     {
         var now = DateTimeOffset.Parse("2026-11-20T12:00:00Z");
         var buffer = new GaugeTrendBuffer();
-        ChecksContext.Equal("趋势缓冲：初始为空", 0, buffer.Values().Count);
+        ChecksContext.Equal("趋势缓冲：初始为空", 0, buffer.Values(now).Count);
 
         buffer.Append(10, now);
         buffer.Append(20, now.AddSeconds(1));
         buffer.Append(30, now.AddSeconds(2));
-        ChecksContext.Equal("趋势缓冲：三个采样点", 3, buffer.Values().Count);
-        CheckApprox("趋势缓冲：末点值", 30, buffer.Values()[2], 0.001);
+        ChecksContext.Equal("趋势缓冲：三个采样点", 3, buffer.Values(now).Count);
+        CheckApprox("趋势缓冲：末点值", 30, buffer.Values(now)[2], 0.001);
 
         // 同一秒内覆盖最后一个点，不新增。
         buffer.Append(35, now.AddSeconds(2).AddMilliseconds(200));
-        ChecksContext.Equal("趋势缓冲：同秒覆盖不新增", 3, buffer.Values().Count);
-        CheckApprox("趋势缓冲：覆盖后的末点值", 35, buffer.Values()[2], 0.001);
+        ChecksContext.Equal("趋势缓冲：同秒覆盖不新增", 3, buffer.Values(now).Count);
+        CheckApprox("趋势缓冲：覆盖后的末点值", 35, buffer.Values(now)[2], 0.001);
 
         // 超过 60 秒的旧点全部淘汰（t=0/1/2 距 t=70 都超过 60 秒），只剩新点。
         buffer.Append(40, now.AddSeconds(70));
-        ChecksContext.Equal("趋势缓冲：淘汰过期点后只剩新点", 1, buffer.Values().Count);
-        CheckApprox("趋势缓冲：淘汰后首点值", 40, buffer.Values()[0], 0.001);
+        ChecksContext.Equal("趋势缓冲：淘汰过期点后只剩新点", 1, buffer.Values(now).Count);
+        CheckApprox("趋势缓冲：淘汰后首点值", 40, buffer.Values(now)[0], 0.001);
 
         buffer.Clear();
-        ChecksContext.Equal("趋势缓冲：清空后为空", 0, buffer.Values().Count);
+        ChecksContext.Equal("趋势缓冲：清空后为空", 0, buffer.Values(now).Count);
     }
 
     private static void CheckApprox(string label, double expected, double actual, double tolerance) =>
