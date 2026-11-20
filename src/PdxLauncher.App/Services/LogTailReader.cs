@@ -2,6 +2,7 @@ namespace PdxLauncher.App.Services;
 
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 using PdxLauncher.Core.Infrastructure;
 
@@ -17,6 +18,10 @@ public static class LogTailReader
 
     /// <summary>默认最多读取的字节数（只读尾部，避免大文件把整页拖慢）。</summary>
     public const int DefaultMaxBytes = 128 * 1024;
+
+    private static readonly Regex HeaderPattern = new(
+        @"^(?<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \[(?<level>INFO|WARN|ERROR)\] (?<message>.*)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
     /// 读取日志文件末尾 <paramref name="maxLines"/> 行。只读最后 <paramref name="maxBytes"/> 字节；
@@ -144,7 +149,7 @@ public static class LogTailReader
 
     /// <summary>
     /// 与 <see cref="Filter"/> 相同的过滤规则，但把每个日志块（含异常堆栈）整体倒序，
-    /// 让最新一条排在最前面——性能页的只读日志框高度有限，从上往下读就该从最新读起。
+    /// 让最新一条排在最前面——日志区高度有限，从上往下读就该从最新读起。
     /// </summary>
     public static string FilterNewestFirst(string? text, LogLevelFilter filter)
     {
@@ -184,6 +189,70 @@ public static class LogTailReader
 
         blocks.Reverse();
         return string.Join("\n", blocks);
+    }
+
+    /// <summary>
+    /// 把日志尾部解析成「每行一条」的显示模型，供 TextViewControl 按级别整行着色：
+    /// <list type="bullet">
+    /// <item>用严格正则识别 <c>[INFO]/[WARN]/[ERROR]</c>，不再把正文里的 <c>[ERROR]</c> 当级别；</item>
+    /// <item>异常堆栈续行跟随所属块的级别（<see cref="LogDisplayLine.Level"/> 与块头一致）；</item>
+    /// <item>过滤档位与 <see cref="Filter"/> 一致（All / WARN+ERROR / 仅 ERROR）；</item>
+    /// <item><paramref name="newestFirst"/> 为 true 时按日志块整体倒序，最新块排最前。</item>
+    /// </list>
+    /// 本方法是纯函数，不引用任何 UI 类型，自检工程可以直接链接本文件。
+    /// </summary>
+    public static IReadOnlyList<LogDisplayLine> ParseDisplayLines(
+        string? text,
+        LogLevelFilter filter = LogLevelFilter.All,
+        bool newestFirst = true)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return Array.Empty<LogDisplayLine>();
+        }
+
+        var blocks = new List<List<LogDisplayLine>>();
+        List<LogDisplayLine>? current = null;
+
+        foreach (string line in text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n'))
+        {
+            string level = string.Empty;
+            if (HeaderPattern.Match(line) is { Success: true } match)
+            {
+                level = match.Groups["level"].Value;
+                current = new List<LogDisplayLine>();
+                blocks.Add(current);
+            }
+            else if (current is null)
+            {
+                // 开头就是续行/残缺行：单独成块，级别未知，仍保留可读文本。
+                current = new List<LogDisplayLine>();
+                blocks.Add(current);
+            }
+
+            current.Add(new LogDisplayLine(line, level));
+        }
+
+        IEnumerable<List<LogDisplayLine>> selected = filter switch
+        {
+            LogLevelFilter.Error => blocks.Where(block => block.Count > 0 && block[0].Level == "ERROR"),
+            LogLevelFilter.Warning => blocks.Where(block => block.Count > 0
+                && (block[0].Level == "WARN" || block[0].Level == "ERROR")),
+            _ => blocks,
+        };
+
+        if (newestFirst)
+        {
+            selected = selected.Reverse();
+        }
+
+        var result = new List<LogDisplayLine>();
+        foreach (var block in selected)
+        {
+            result.AddRange(block);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -265,6 +334,12 @@ public enum LogLevelFilter
     /// <summary>只有 ERROR。</summary>
     Error,
 }
+
+/// <summary>
+/// 一行日志的显示模型。<see cref="Level"/> 取 <c>INFO</c>/<c>WARN</c>/<c>ERROR</c>，
+/// 异常堆栈续行继承所属块头；无法解析的头/续行为空串（按中性色显示）。
+/// </summary>
+public sealed record LogDisplayLine(string Text, string Level);
 
 /// <summary>日志文件统计。<paramref name="LastWriteUtc"/> 取主文件的最后写入时间，读不到时为 null。</summary>
 public sealed record LogMetrics(long CurrentBytes, int ArchiveCount, long TotalBytes, DateTimeOffset? LastWriteUtc)
