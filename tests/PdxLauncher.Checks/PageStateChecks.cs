@@ -46,12 +46,23 @@ public static class PageStateChecks
                 && readBack.SourceFilter == "全部"
                 && Math.Abs(readBack.VerticalOffset - 512.5) < 0.001);
 
-        var addMods = new AddModsState(SortMode: "大小（大到小）");
+        var addMods = new AddModsState(
+            SortMode: "大小（大到小）",
+            SourceFilter: "仅订阅",
+            VersionFilter: "版本偏低");
         PageStateStore.AddMods = addMods;
         ChecksContext.Check(
             "页面状态：添加模组页快照字段原样存取",
             PageStateStore.AddMods is not null
-                && PageStateStore.AddMods.SortMode == "大小（大到小）");
+                && PageStateStore.AddMods.SortMode == "大小（大到小）"
+                && PageStateStore.AddMods.SourceFilter == "仅订阅"
+                && PageStateStore.AddMods.VersionFilter == "版本偏低");
+
+        // 旧版本只记了 SortMode 的 JSON 必须还能读：两项新筛选为空串，页面按「全部」处理。
+        var legacyAddMods = PageStateSnapshot.Deserialize("{\"ModLibrary\":null,\"ModStudio\":null,\"AddMods\":{\"SortMode\":\"名称\"}}");
+        ChecksContext.Check(
+            "页面状态：旧添加模组页快照（只有排序）仍可读且筛选回落为空",
+            legacyAddMods?.AddMods is { SortMode: "名称", SourceFilter: "", VersionFilter: "" });
 
         var draft = new ModStudioDraft(
             CreateName: "我的模组",

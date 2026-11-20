@@ -334,10 +334,13 @@ public static class AddModsPageChecks
             vm.Contains("_selectedSortMode = _sortModes[0]", StringComparison.Ordinal),
             vm);
 
-        // 排序必须在搜索过滤之后做：先缩小集合再排序，结果才与「搜索 + 排序」的直觉一致。
+        // 排序必须在全部筛选之后做：先叠加搜索 / 来源 / 版本三道条件缩小集合再排序，
+        // 结果才与「搜索 + 筛选 + 排序」的直觉一致（排序蓝图里只剩 ApplySort(matches)）。
         ChecksContext.Check(
-            "添加模组页: 排序在搜索过滤之后应用",
-            vm.Contains("ApplySort(_allRows.Where(row => row.Matches(query)))", StringComparison.Ordinal)
+            "添加模组页: 排序在搜索 / 筛选之后应用",
+            vm.Contains("Rows = ApplySort(matches).ToArray();", StringComparison.Ordinal)
+                && vm.Contains("&& MatchesSourceFilter(row)", StringComparison.Ordinal)
+                && vm.Contains("&& MatchesVersionFilter(row)", StringComparison.Ordinal)
                 && vm.Contains("private IEnumerable<AddModRowViewModel> ApplySort", StringComparison.Ordinal),
             vm);
 
@@ -346,6 +349,25 @@ public static class AddModsPageChecks
             page.Contains("PageStateStore.AddMods", StringComparison.Ordinal)
                 && page.Contains("RestoreSortState", StringComparison.Ordinal)
                 && page.Contains("SaveSortState", StringComparison.Ordinal),
+            page);
+
+        // 来源 / 版本筛选与排序一样属于整页显示偏好：离开页面要写进 AddModsState、
+        // 再进入要按键还原，不能只保留排序却让筛选回落「全部」。
+        var state = Read(root, "src", "PdxLauncher.App", "Services", "AddModsState.cs");
+        ChecksContext.Check(
+            "添加模组页: AddModsState 含排序 / 来源 / 版本三项且向后兼容",
+            state.Contains("string SortMode", StringComparison.Ordinal)
+                && state.Contains("string SourceFilter =", StringComparison.Ordinal)
+                && state.Contains("string VersionFilter =", StringComparison.Ordinal),
+            state);
+        ChecksContext.Check(
+            "添加模组页: 来源 / 版本筛选随页面状态存取",
+            page.Contains("_viewModel.SelectedSourceFilter,", StringComparison.Ordinal)
+                && page.Contains("_viewModel.SelectedVersionFilter);", StringComparison.Ordinal)
+                && page.Contains("_viewModel.SourceFilterModes.Any", StringComparison.Ordinal)
+                && page.Contains("_viewModel.VersionFilterModes.Any", StringComparison.Ordinal)
+                && page.Contains("SourceFilterBox.SelectedItem = state.SourceFilter", StringComparison.Ordinal)
+                && page.Contains("VersionFilterBox.SelectedItem = state.VersionFilter", StringComparison.Ordinal),
             page);
     }
 
@@ -382,11 +404,11 @@ public static class AddModsPageChecks
             return;
         }
 
-        // 注意断言的是 Rows 本身而不是 _allRows：后者是搜索前的全量快照，Clear + 重建是正常的。
+        // 注意断言的是 Rows 本身而不是 _allRows：后者是筛选前的全量快照，Clear + 重建是正常的。
         ChecksContext.Check(
             "添加模组页: 可见行是整表替换（不留 Clear()+逐条 Add）",
             !Regex.IsMatch(vm, @"(?<!_all)Rows\.(Clear|Add)\(")
-                && vm.Contains("Rows = query.Length == 0", StringComparison.Ordinal),
+                && vm.Contains("Rows = ApplySort(matches).ToArray();", StringComparison.Ordinal),
             vm);
 
         ChecksContext.Check(
