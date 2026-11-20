@@ -219,6 +219,15 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
+                    x:Name="NavModEditor"
+                    AutomationProperties.AutomationId="navModEditor"
+                    Content="{x:Bind L.ShellNavModEditor, Mode=OneWay}"
+                    Tag="modeditor">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D2;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
                     x:Name="NavWorkshop"
                     AutomationProperties.AutomationId="navWorkshop"
                     Content="{x:Bind L.ShellNavWorkshop, Mode=OneWay}"

@@ -1531,6 +1531,213 @@
   <data name="LibraryVersionUnknown" xml:space="preserve">
     <value>版本未知</value>
   </data>
+  <data name="ModEditorTitle" xml:space="preserve">
+    <value>Mod 编辑</value>
+  </data>
+  <data name="ModEditorSubtitle" xml:space="preserve">
+    <value>导出、检索、建模板与清单，全本地完成</value>
+  </data>
+  <data name="ModEditorPaneToggle" xml:space="preserve">
+    <value>显示左栏</value>
+  </data>
+  <data name="ModEditorPanePickerName" xml:space="preserve">
+    <value>选择分区</value>
+  </data>
+  <data name="ModEditorSectionExport" xml:space="preserve">
+    <value>一键导出</value>
+  </data>
+  <data name="ModEditorSectionSearch" xml:space="preserve">
+    <value>本地全文检索</value>
+  </data>
+  <data name="ModEditorSectionTemplate" xml:space="preserve">
+    <value>一键建模板</value>
+  </data>
+  <data name="ModEditorSectionLibrary" xml:space="preserve">
+    <value>Mod 清单</value>
+  </data>
+  <data name="ModEditorExportTitle" xml:space="preserve">
+    <value>一键导出脚本文档</value>
+  </data>
+  <data name="ModEditorExportHint" xml:space="preserve">
+    <value>以 debug 启动游戏，在游戏内控制台输入命令生成文档；启动器只监视目录并拷贝，不代替你执行命令。</value>
+  </data>
+  <data name="ModEditorExportScriptDocs" xml:space="preserve">
+    <value>导出脚本文档</value>
+  </data>
+  <data name="ModEditorExportDumpDataTypes" xml:space="preserve">
+    <value>导出数据类型文档</value>
+  </data>
+  <data name="ModEditorExportLaunchDebug" xml:space="preserve">
+    <value>调试启动游戏</value>
+  </data>
+  <data name="ModEditorExportWatchDirLabel" xml:space="preserve">
+    <value>监视目录</value>
+  </data>
+  <data name="ModEditorExportWatchDirPlaceholder" xml:space="preserve">
+    <value>粘贴游戏输出目录的绝对路径</value>
+  </data>
+  <data name="ModEditorExportPickWatchDir" xml:space="preserve">
+    <value>浏览…</value>
+  </data>
+  <data name="ModEditorExportWatchDirInvalid" xml:space="preserve">
+    <value>监视目录无效，请选游戏输出目录</value>
+  </data>
+  <data name="ModEditorExportPickerUnavailable" xml:space="preserve">
+    <value>无法打开文件选择器</value>
+  </data>
+  <data name="ModEditorExportCommandScriptDocs" xml:space="preserve">
+    <value>在控制台输入 `script_docs`</value>
+  </data>
+  <data name="ModEditorExportCommandDumpDataTypes" xml:space="preserve">
+    <value>在控制台输入 `dump_data_types`</value>
+  </data>
+  <data name="ModEditorExportConsoleHint" xml:space="preserve">
+    <value>在游戏中按 ~ 打开控制台，输入上面的命令后回车。</value>
+  </data>
+  <data name="ModEditorExportWaiting" xml:space="preserve">
+    <value>等待开始…</value>
+  </data>
+  <data name="ModEditorExportWatching" xml:space="preserve">
+    <value>正在监视目录…</value>
+  </data>
+  <data name="ModEditorExportCopied" xml:space="preserve">
+    <value>已导入 {0} 个文件到 {1}</value>
+  </data>
+  <data name="ModEditorExportNoGame" xml:space="preserve">
+    <value>请先选择游戏</value>
+  </data>
+  <data name="ModEditorExportUnsupportedGame" xml:space="preserve">
+    <value>当前游戏不支持内容管理</value>
+  </data>
+  <data name="ModEditorExportFailed" xml:space="preserve">
+    <value>导出失败</value>
+  </data>
+  <data name="ModEditorExportStop" xml:space="preserve">
+    <value>停止</value>
+  </data>
+  <data name="ModEditorExportOpenFolder" xml:space="preserve">
+    <value>打开目录</value>
+  </data>
+  <data name="ModEditorExportDebugArgLabel" xml:space="preserve">
+    <value>调试参数</value>
+  </data>
+  <data name="ModEditorSearchTitle" xml:space="preserve">
+    <value>本地全文检索</value>
+  </data>
+  <data name="ModEditorSearchHint" xml:space="preserve">
+    <value>在已导入的文档中检索（大小写不敏感，支持中文）</value>
+  </data>
+  <data name="ModEditorSearchPlaceholder" xml:space="preserve">
+    <value>输入关键词</value>
+  </data>
+  <data name="ModEditorSearchName" xml:space="preserve">
+    <value>搜索词</value>
+  </data>
+  <data name="ModEditorSearchButton" xml:space="preserve">
+    <value>搜索</value>
+  </data>
+  <data name="ModEditorSearchNoGame" xml:space="preserve">
+    <value>请先选择游戏</value>
+  </data>
+  <data name="ModEditorSearchNoDocs" xml:space="preserve">
+    <value>还没有导入任何文档</value>
+  </data>
+  <data name="ModEditorSearchEmpty" xml:space="preserve">
+    <value>请输入关键词</value>
+  </data>
+  <data name="ModEditorSearchResultCount" xml:space="preserve">
+    <value>命中 {0} 条</value>
+  </data>
+  <data name="ModEditorSearchLine" xml:space="preserve">
+    <value>行 {0}</value>
+  </data>
+  <data name="ModEditorSearchOpenFile" xml:space="preserve">
+    <value>打开文件</value>
+  </data>
+  <data name="ModEditorTemplateTitle" xml:space="preserve">
+    <value>一键建模板</value>
+  </data>
+  <data name="ModEditorTemplateHint" xml:space="preserve">
+    <value>按当前游戏的描述符规范新建一个本地 mod 模板</value>
+  </data>
+  <data name="ModEditorTemplateName" xml:space="preserve">
+    <value>名称</value>
+  </data>
+  <data name="ModEditorTemplateFolder" xml:space="preserve">
+    <value>目录名</value>
+  </data>
+  <data name="ModEditorTemplateVersion" xml:space="preserve">
+    <value>版本</value>
+  </data>
+  <data name="ModEditorTemplateSupported" xml:space="preserve">
+    <value>支持版本</value>
+  </data>
+  <data name="ModEditorTemplateTags" xml:space="preserve">
+    <value>标签（逗号分隔）</value>
+  </data>
+  <data name="ModEditorTemplateDescription" xml:space="preserve">
+    <value>简介</value>
+  </data>
+  <data name="ModEditorTemplatePreview" xml:space="preserve">
+    <value>封面图</value>
+  </data>
+  <data name="ModEditorTemplatePickPreview" xml:space="preserve">
+    <value>选择封面…</value>
+  </data>
+  <data name="ModEditorTemplateCreate" xml:space="preserve">
+    <value>创建模板</value>
+  </data>
+  <data name="ModEditorTemplateSuccess" xml:space="preserve">
+    <value>模板已创建</value>
+  </data>
+  <data name="ModEditorTemplateFailed" xml:space="preserve">
+    <value>创建模板失败</value>
+  </data>
+  <data name="ModEditorTemplateUnsupported" xml:space="preserve">
+    <value>当前游戏不支持创建模板</value>
+  </data>
+  <data name="ModEditorTemplateNameRequired" xml:space="preserve">
+    <value>请填写名称</value>
+  </data>
+  <data name="ModEditorTemplateFolderHint" xml:space="preserve">
+    <value>目录名只能用字母、数字、下划线和连字符</value>
+  </data>
+  <data name="ModEditorLibraryTitle" xml:space="preserve">
+    <value>Mod 清单与路径</value>
+  </data>
+  <data name="ModEditorLibraryHint" xml:space="preserve">
+    <value>当前游戏的本地 mod 清单与所在路径</value>
+  </data>
+  <data name="ModEditorLibraryNoGame" xml:space="preserve">
+    <value>请先选择游戏</value>
+  </data>
+  <data name="ModEditorLibraryEmpty" xml:space="preserve">
+    <value>还没有本地 mod</value>
+  </data>
+  <data name="ModEditorLibraryCount" xml:space="preserve">
+    <value>共 {0} 个</value>
+  </data>
+  <data name="ModEditorLibraryNameColumn" xml:space="preserve">
+    <value>名称</value>
+  </data>
+  <data name="ModEditorLibraryPathColumn" xml:space="preserve">
+    <value>路径</value>
+  </data>
+  <data name="ModEditorLibrarySourceColumn" xml:space="preserve">
+    <value>来源</value>
+  </data>
+  <data name="ModEditorLibrarySourceLocal" xml:space="preserve">
+    <value>本地</value>
+  </data>
+  <data name="ModEditorLibrarySourceSteam" xml:space="preserve">
+    <value>Steam</value>
+  </data>
+  <data name="ModEditorLibraryRefresh" xml:space="preserve">
+    <value>刷新</value>
+  </data>
+  <data name="ModEditorLibraryOpenFolder" xml:space="preserve">
+    <value>打开目录</value>
+  </data>
   <data name="ModlibDetailNoWorkshop" xml:space="preserve">
     <value>这个 mod 没有工坊详情页（本地 mod）</value>
   </data>
@@ -4732,6 +4939,9 @@
   </data>
   <data name="ShellNavLibrary" xml:space="preserve">
     <value>游戏库</value>
+  </data>
+  <data name="ShellNavModEditor" xml:space="preserve">
+    <value>Mod 编辑</value>
   </data>
   <data name="ShellNavModLibrary" xml:space="preserve">
     <value>Mod 库</value>

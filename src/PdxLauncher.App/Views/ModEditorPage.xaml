@@ -1,0 +1,335 @@
+<Page
+    x:Class="PdxLauncher.App.Views.ModEditorPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ct="using:CommunityToolkit.WinUI.Controls"
+    xmlns:svc="using:PdxLauncher.App.Services"
+    xmlns:vm="using:PdxLauncher.App.ViewModels"
+    NavigationCacheMode="Disabled"
+    Background="{ThemeResource PdxPageVeilBrush}">
+
+    <Page.Resources>
+        <Style x:Key="ModEditorHintTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="4,0,4,8" />
+        </Style>
+        <Style x:Key="ModEditorSubsectionTitleStyle" TargetType="TextBlock" BasedOn="{StaticResource SubtitleTextBlockStyle}">
+            <Setter Property="Margin" Value="0,8,0,0" />
+        </Style>
+    </Page.Resources>
+
+    <Grid Padding="20"
+          RowSpacing="12"
+          ColumnSpacing="16"
+          AutomationProperties.AutomationId="pageModEditor">
+        <Grid.ColumnDefinitions>
+            <!-- 左栏显隐由 code-behind 写 Width：可见 216、隐藏 0。 -->
+            <ColumnDefinition x:Name="leftPaneColumn" Width="216" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- ===== 页头：标题 + 游戏名 + 左栏开关 ===== -->
+        <Grid Grid.Row="0" Grid.ColumnSpan="2" ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="4">
+                <TextBlock Text="{x:Bind L.ModEditorTitle, Mode=OneWay}" Style="{StaticResource TitleTextBlockStyle}" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{x:Bind L.ModEditorSubtitle, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="{x:Bind ViewModel.GameDisplayName, Mode=OneWay}"
+                               Style="{StaticResource CaptionTextBlockStyle}"
+                               AutomationProperties.AutomationId="txtModEditorGameName" />
+                </StackPanel>
+            </StackPanel>
+            <ToggleSwitch Grid.Column="1" MinWidth="0"
+                          AutomationProperties.AutomationId="tglModEditorLeftPane"
+                          AutomationProperties.Name="{x:Bind L.ModEditorPaneToggle, Mode=OneWay}"
+                          Header="{x:Bind L.ModEditorPaneToggle, Mode=OneWay}"
+                          IsOn="{x:Bind ViewModel.IsLeftPaneVisible, Mode=TwoWay}" />
+        </Grid>
+
+        <!-- ===== 左栏：四个分区（受设置控制显隐） ===== -->
+        <NavigationView Grid.Row="1" Grid.Column="0"
+                        x:Name="navModEditorSections"
+                        AutomationProperties.AutomationId="lstModEditorSections"
+                        AutomationProperties.Name="{x:Bind L.ModEditorTitle, Mode=OneWay}"
+                        Background="Transparent"
+                        PaneDisplayMode="Left"
+                        OpenPaneLength="216"
+                        IsPaneOpen="True"
+                        IsSettingsVisible="False"
+                        IsBackButtonVisible="Collapsed"
+                        IsPaneToggleButtonVisible="False"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsLeftPaneVisible), Mode=OneWay}"
+                        SelectionChanged="OnSectionChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem AutomationProperties.AutomationId="navModEditorExport" Tag="0"
+                                    Content="{x:Bind L.ModEditorSectionExport, Mode=OneWay}">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Save" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.AutomationId="navModEditorSearch" Tag="1"
+                                    Content="{x:Bind L.ModEditorSectionSearch, Mode=OneWay}">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Globe" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.AutomationId="navModEditorTemplate" Tag="2"
+                                    Content="{x:Bind L.ModEditorSectionTemplate, Mode=OneWay}">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Document" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.AutomationId="navModEditorLibrary" Tag="3"
+                                    Content="{x:Bind L.ModEditorSectionLibrary, Mode=OneWay}">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="View" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+        </NavigationView>
+
+        <!-- ===== 右栏：四个分区 ===== -->
+        <Grid Grid.Row="1" Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- 左栏隐藏时，用顶部分节选择器切换，保证四项照常可达。 -->
+            <ComboBox x:Name="sectionPicker"
+                      Grid.Row="0"
+                      MinWidth="200"
+                      Margin="0,0,0,8"
+                      AutomationProperties.AutomationId="cmbModEditorSection"
+                      AutomationProperties.Name="{x:Bind L.ModEditorPanePickerName, Mode=OneWay}"
+                      SelectedIndex="{x:Bind ViewModel.SelectedSectionIndex, Mode=TwoWay}"
+                      SelectionChanged="OnPickerSelectionChanged"
+                      Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(ViewModel.IsLeftPaneVisible), Mode=OneWay}">
+                <ComboBoxItem Content="{x:Bind L.ModEditorSectionExport, Mode=OneWay}" />
+                <ComboBoxItem Content="{x:Bind L.ModEditorSectionSearch, Mode=OneWay}" />
+                <ComboBoxItem Content="{x:Bind L.ModEditorSectionTemplate, Mode=OneWay}" />
+                <ComboBoxItem Content="{x:Bind L.ModEditorSectionLibrary, Mode=OneWay}" />
+            </ComboBox>
+
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Visible"
+                          HorizontalScrollBarVisibility="Disabled"
+                          HorizontalScrollMode="Disabled"
+                          HorizontalContentAlignment="Stretch">
+                <StackPanel Spacing="12" Margin="0,0,16,0">
+
+                    <!-- ============ 一、一键导出 ============ -->
+                    <StackPanel x:Name="secModEditorExport" Spacing="8"
+                                AutomationProperties.AutomationId="secModEditorExport">
+                        <TextBlock Text="{x:Bind L.ModEditorExportTitle, Mode=OneWay}"
+                                   Style="{StaticResource SubtitleTextBlockStyle}" />
+                        <TextBlock Text="{x:Bind L.ModEditorExportHint, Mode=OneWay}"
+                                   Style="{StaticResource ModEditorHintTextStyle}" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="{x:Bind L.ModEditorExportScriptDocs, Mode=OneWay}"
+                                    AutomationProperties.AutomationId="btnModEditorScriptDocs"
+                                    Command="{x:Bind ViewModel.ExportScriptDocsCommand}" />
+                            <Button Content="{x:Bind L.ModEditorExportDumpDataTypes, Mode=OneWay}"
+                                    AutomationProperties.AutomationId="btnModEditorDumpDataTypes"
+                                    Command="{x:Bind ViewModel.ExportDumpDataTypesCommand}" />
+                            <Button Content="{x:Bind L.ModEditorExportLaunchDebug, Mode=OneWay}"
+                                    AutomationProperties.AutomationId="btnModEditorLaunchDebug"
+                                    Command="{x:Bind ViewModel.LaunchDebugCommand}" />
+                            <Button Content="{x:Bind L.ModEditorExportStop, Mode=OneWay}"
+                                    AutomationProperties.AutomationId="btnModEditorStop"
+                                    Command="{x:Bind ViewModel.StopWatchCommand}" />
+                        </StackPanel>
+
+                        <TextBlock Text="{x:Bind L.ModEditorExportConsoleHint, Mode=OneWay}"
+                                   Style="{StaticResource ModEditorHintTextStyle}" />
+                        <TextBlock Text="{x:Bind L.ModEditorExportCommandScriptDocs, Mode=OneWay}"
+                                   AutomationProperties.AutomationId="txtModEditorCmdScriptDocs"
+                                   Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBlock Text="{x:Bind L.ModEditorExportCommandDumpDataTypes, Mode=OneWay}"
+                                   AutomationProperties.AutomationId="txtModEditorCmdDumpDataTypes"
+                                   Style="{StaticResource CaptionTextBlockStyle}" />
+
+                        <ct:SettingsCard Header="{x:Bind L.ModEditorExportWatchDirLabel, Mode=OneWay}"
+                                         Background="{ThemeResource PdxCardBackgroundBrush}"
+                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                         BorderThickness="1" CornerRadius="8" MinHeight="56" Padding="16,12"
+                                         IsClickEnabled="False">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBox MinWidth="240"
+                                         AutomationProperties.AutomationId="txtModEditorWatchDir"
+                                         PlaceholderText="{x:Bind L.ModEditorExportWatchDirPlaceholder, Mode=OneWay}"
+                                         Text="{x:Bind ViewModel.WatchDirectory, Mode=TwoWay}" />
+                                <Button Content="{x:Bind L.ModEditorExportPickWatchDir, Mode=OneWay}"
+                                        AutomationProperties.AutomationId="btnModEditorPickWatchDir"
+                                        Command="{x:Bind ViewModel.PickWatchDirectoryCommand}" />
+                            </StackPanel>
+                        </ct:SettingsCard>
+
+                        <ct:SettingsCard Header="{x:Bind L.ModEditorExportDebugArgLabel, Mode=OneWay}"
+                                         Background="{ThemeResource PdxCardBackgroundBrush}"
+                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                         BorderThickness="1" CornerRadius="8" MinHeight="56" Padding="16,12"
+                                         IsClickEnabled="False">
+                            <TextBox MinWidth="240"
+                                     AutomationProperties.AutomationId="txtModEditorDebugArg"
+                                     Text="{x:Bind ViewModel.DebugArg, Mode=TwoWay}" />
+                        </ct:SettingsCard>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ProgressRing Width="16" Height="16" IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
+                            <TextBlock Text="{x:Bind ViewModel.ExportStatus, Mode=OneWay}"
+                                       AutomationProperties.AutomationId="txtModEditorExportStatus"
+                                       Style="{StaticResource CaptionTextBlockStyle}" />
+                            <Button Content="{x:Bind L.ModEditorExportOpenFolder, Mode=OneWay}"
+                                    AutomationProperties.AutomationId="btnModEditorOpenExportFolder" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- ============ 二、本地全文检索 ============ -->
+                    <StackPanel x:Name="secModEditorSearch" Spacing="8"
+                                AutomationProperties.AutomationId="secModEditorSearch">
+                        <TextBlock Text="{x:Bind L.ModEditorSearchTitle, Mode=OneWay}"
+                                   Style="{StaticResource SubtitleTextBlockStyle}" />
+                        <TextBlock Text="{x:Bind L.ModEditorSearchHint, Mode=OneWay}"
+                                   Style="{StaticResource ModEditorHintTextStyle}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBox MinWidth="320"
+                                     AutomationProperties.AutomationId="txtModEditorQuery"
+                                     AutomationProperties.Name="{x:Bind L.ModEditorSearchName, Mode=OneWay}"
+                                     PlaceholderText="{x:Bind L.ModEditorSearchPlaceholder, Mode=OneWay}"
+                                     Text="{x:Bind ViewModel.Query, Mode=TwoWay}" />
+                            <Button Content="{x:Bind L.ModEditorSearchButton, Mode=OneWay}"
+                                    AutomationProperties.AutomationId="btnModEditorSearch"
+                                    Command="{x:Bind ViewModel.SearchCommand}" />
+                        </StackPanel>
+                        <TextBlock Text="{x:Bind ViewModel.SearchResultCount, Mode=OneWay}"
+                                   AutomationProperties.AutomationId="txtModEditorSearchCount"
+                                   Style="{StaticResource CaptionTextBlockStyle}" />
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.SearchHits, Mode=OneWay}"
+                                      AutomationProperties.AutomationId="lstModEditorSearchHits">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ModEditorSearchRow">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="{x:Bind FileName, Mode=OneWay}" MinWidth="160" />
+                                        <TextBlock Text="{x:Bind LineNumber, Mode=OneWay}" MinWidth="48" />
+                                        <TextBlock Text="{x:Bind Snippet, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- ============ 三、一键建模板 ============ -->
+                    <StackPanel x:Name="secModEditorTemplate" Spacing="8"
+                                AutomationProperties.AutomationId="secModEditorTemplate">
+                        <TextBlock Text="{x:Bind L.ModEditorTemplateTitle, Mode=OneWay}"
+                                   Style="{StaticResource SubtitleTextBlockStyle}" />
+                        <TextBlock Text="{x:Bind L.ModEditorTemplateHint, Mode=OneWay}"
+                                   Style="{StaticResource ModEditorHintTextStyle}" />
+                        <TextBlock Text="{x:Bind L.ModEditorTemplateName, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBox AutomationProperties.AutomationId="txtModEditorTemplateName"
+                                 Text="{x:Bind ViewModel.TemplateName, Mode=TwoWay}" />
+                        <TextBlock Text="{x:Bind L.ModEditorTemplateFolder, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBox AutomationProperties.AutomationId="txtModEditorTemplateFolder"
+                                 Text="{x:Bind ViewModel.TemplateFolder, Mode=TwoWay}" />
+                        <TextBlock Text="{x:Bind ViewModel.CreateFolderHint, Mode=OneWay}"
+                                   AutomationProperties.AutomationId="txtModEditorFolderHint"
+                                   Style="{StaticResource ModEditorHintTextStyle}" />
+                        <TextBlock Text="{x:Bind L.ModEditorTemplateVersion, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBox AutomationProperties.AutomationId="txtModEditorTemplateVersion"
+                                 Text="{x:Bind ViewModel.TemplateVersion, Mode=TwoWay}" />
+                        <TextBlock Text="{x:Bind L.ModEditorTemplateSupported, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBox AutomationProperties.AutomationId="txtModEditorTemplateSupported"
+                                 Text="{x:Bind ViewModel.TemplateSupported, Mode=TwoWay}" />
+                        <TextBlock Text="{x:Bind L.ModEditorTemplateTags, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBox AutomationProperties.AutomationId="txtModEditorTemplateTags"
+                                 Text="{x:Bind ViewModel.TemplateTags, Mode=TwoWay}" />
+                        <TextBlock Text="{x:Bind L.ModEditorTemplateDescription, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBox AutomationProperties.AutomationId="txtModEditorTemplateDescription"
+                                 AcceptsReturn="True" TextWrapping="Wrap"
+                                 Text="{x:Bind ViewModel.TemplateDescription, Mode=TwoWay}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{x:Bind L.ModEditorTemplatePreview, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+                            <Button Content="{x:Bind L.ModEditorTemplatePickPreview, Mode=OneWay}"
+                                    AutomationProperties.AutomationId="btnModEditorPickPreview"
+                                    Command="{x:Bind ViewModel.PickPreviewImageCommand}" />
+                            <TextBlock Text="{x:Bind ViewModel.TemplatePreviewPath, Mode=OneWay}"
+                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Button Content="{x:Bind L.ModEditorTemplateCreate, Mode=OneWay}"
+                                AutomationProperties.AutomationId="btnModEditorCreateTemplate"
+                                IsEnabled="{x:Bind ViewModel.CanCreate, Mode=OneWay}"
+                                Command="{x:Bind ViewModel.CreateTemplateCommand}" />
+                    </StackPanel>
+
+                    <!-- ============ 四、Mod 清单与路径 ============ -->
+                    <StackPanel x:Name="secModEditorLibrary" Spacing="8"
+                                AutomationProperties.AutomationId="secModEditorLibrary">
+                        <TextBlock Text="{x:Bind L.ModEditorLibraryTitle, Mode=OneWay}"
+                                   Style="{StaticResource SubtitleTextBlockStyle}" />
+                        <TextBlock Text="{x:Bind L.ModEditorLibraryHint, Mode=OneWay}"
+                                   Style="{StaticResource ModEditorHintTextStyle}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="{x:Bind L.ModEditorLibraryRefresh, Mode=OneWay}"
+                                    AutomationProperties.AutomationId="btnModEditorRefreshLibrary"
+                                    Command="{x:Bind ViewModel.RefreshLibraryCommand}" />
+                            <Button Content="{x:Bind L.ModEditorLibraryOpenFolder, Mode=OneWay}"
+                                    AutomationProperties.AutomationId="btnModEditorOpenLibraryFolder" />
+                            <TextBlock Text="{x:Bind ViewModel.LibraryCount, Mode=OneWay}"
+                                       AutomationProperties.AutomationId="txtModEditorLibraryCount"
+                                       Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ListView ItemsSource="{x:Bind ViewModel.LibraryRows, Mode=OneWay}"
+                                  AutomationProperties.AutomationId="lstModEditorLibrary">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ModEditorLibraryRow">
+                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                        <TextBlock Text="{x:Bind Name, Mode=OneWay}" MinWidth="160" />
+                                        <TextBlock Text="{x:Bind Path, Mode=OneWay}" MinWidth="240"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{x:Bind Source, Mode=OneWay}" MinWidth="64" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- ===== 底部状态条 ===== -->
+        <Border Grid.Row="2" Grid.ColumnSpan="2"
+                Margin="0,0,16,0" Padding="16,12"
+                Background="{ThemeResource PdxCardBackgroundBrush}"
+                BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                BorderThickness="1" CornerRadius="8"
+                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasStatusMessage), Mode=OneWay}">
+            <TextBlock AutomationProperties.AutomationId="txtModEditorStatus"
+                       Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                       TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+        </Border>
+    </Grid>
+</Page>

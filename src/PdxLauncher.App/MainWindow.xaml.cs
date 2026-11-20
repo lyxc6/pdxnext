@@ -837,6 +837,7 @@ public sealed partial class MainWindow : Window
             NavPlaySets.Visibility = contentVisibility;
             NavModLibrary.Visibility = contentVisibility;
             NavModStudio.Visibility = contentVisibility;
+            NavModEditor.Visibility = contentVisibility;
             NavDlc.Visibility = contentVisibility;
             NavWorkshop.Visibility = workshopAvailable ? Visibility.Visible : Visibility.Collapsed;
 
@@ -849,6 +850,7 @@ public sealed partial class MainWindow : Window
                 && (string.Equals(tag, NavigationService.PlaySetsTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.ModLibraryTag, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tag, NavigationService.ModStudioTag, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(tag, NavigationService.ModEditorTag, StringComparison.OrdinalIgnoreCase)
                     || (!workshopAvailable
                         && (string.Equals(tag, NavigationService.WorkshopTag, StringComparison.OrdinalIgnoreCase)
                             || string.Equals(tag, NavigationService.WorkshopDetailTag, StringComparison.OrdinalIgnoreCase)))
