@@ -183,6 +183,12 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\PerformanceGaugeMath.cs" Link="Linked\PerformanceGaugeMath.cs" />
     <!--
+      仪表迷你趋势线映射：纯函数，只依赖 System.Math，把百分比序列映射到固定画布折线点。
+      映射错了趋势线会画反或贴边被裁，编译器看不见，所以边界由 GaugeTrendChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\GaugeTrendMath.cs" Link="Linked\GaugeTrendMath.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\GaugeTrendBuffer.cs" Link="Linked\GaugeTrendBuffer.cs" />
+    <!--
       截图逐张结算计数器（顶部「正在下载截图…」的唯一数据源）。它只依赖 System.Math，
       不碰 UI 线程之外的东西，可以原样链接进来。漏结算会让提示永远转下去，多结算会让提示提前消失，
       两种都不崩、只在真机上表现为「一直转」或「看不见提示」，所以由 ScreenshotLoadTrackerChecks 钉住。

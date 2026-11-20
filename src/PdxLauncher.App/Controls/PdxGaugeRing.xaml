@@ -6,9 +6,10 @@
 
     <!--
         带值圆环仪表（性能概览的四个核心指标）。
-        画布固定 120×120，外层 Viewbox 按控件尺寸等比缩放；弧线由 PdxGaugeRing 代码按 Value 生成。
-        颜色三态走 VisualState + WinUI 内置语义画笔，跟随 Light / Dark / HighContrast；
-        圆心只放短数值，标题放在环下方，避免旋转时文字跟着动。
+        画布固定 120×120，外层 Viewbox 按控件尺寸等比缩放；弧线由 PdxGaugeRing 代码按补间后的值生成。
+        三态描边取 WinUI 内置语义画笔，跟随 Light / Dark / HighContrast；
+        GlowPath 与弧线同几何、更粗更淡，由 PulseOpacity 驱动短暂高亮；
+        环下方一条 60 秒迷你趋势折线，值越高线越靠上。
     -->
     <Style TargetType="local:PdxGaugeRing">
         <Setter Property="Width" Value="132" />
@@ -24,19 +25,25 @@
                                 <VisualState x:Name="Normal">
                                     <VisualState.Setters>
                                         <Setter Target="ArcPath.Stroke" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        <Setter Target="GlowPath.Stroke" Value="{ThemeResource AccentFillColorDefaultBrush}" />
                                         <Setter Target="PercentText.Foreground" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        <Setter Target="TrendPath.Stroke" Value="{ThemeResource AccentFillColorDefaultBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Warning">
                                     <VisualState.Setters>
                                         <Setter Target="ArcPath.Stroke" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                                        <Setter Target="GlowPath.Stroke" Value="{ThemeResource SystemFillColorCautionBrush}" />
                                         <Setter Target="PercentText.Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                                        <Setter Target="TrendPath.Stroke" Value="{ThemeResource SystemFillColorCautionBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Critical">
                                     <VisualState.Setters>
                                         <Setter Target="ArcPath.Stroke" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                                        <Setter Target="GlowPath.Stroke" Value="{ThemeResource SystemFillColorCriticalBrush}" />
                                         <Setter Target="PercentText.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                                        <Setter Target="TrendPath.Stroke" Value="{ThemeResource SystemFillColorCriticalBrush}" />
                                     </VisualState.Setters>
                                 </VisualState>
                             </VisualStateGroup>
@@ -48,9 +55,13 @@
                                 <Ellipse Width="104" Height="104"
                                          Stroke="{ThemeResource SubtleFillColorSecondaryBrush}"
                                          StrokeThickness="8" />
-                                <!-- 前景弧：Path.Data 由代码按 Value 生成，从正上方顺时针画出。 -->
-                                <Path x:Name="ArcPath"
-                                      StrokeThickness="8" />
+                                <!-- 高亮弧：与前景弧同几何、更粗，透明度由 PulseOpacity 动画驱动。 -->
+                                <Path x:Name="GlowPath"
+                                      StrokeThickness="12"
+                                      StrokeLineJoin="Round"
+                                      Opacity="{Binding PulseOpacity, RelativeSource={RelativeSource TemplatedParent}}" />
+                                <!-- 前景弧：Path.Data 由代码按补间值生成，从正上方顺时针画出。 -->
+                                <Path x:Name="ArcPath" StrokeThickness="8" />
                                 <!-- 圆心读数：短数值 + 占预算百分比，均不随弧线旋转。 -->
                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
                                     <TextBlock Text="{TemplateBinding ValueText}"
@@ -67,6 +78,11 @@
                                                IsTextSelectionEnabled="False" />
                                 </StackPanel>
                             </Grid>
+                        </Viewbox>
+
+                        <!-- 60 秒迷你趋势线：固定 120×24 画布，折线越高表示最近占比越高。 -->
+                        <Viewbox Width="120" Height="24" Stretch="Uniform">
+                            <Path x:Name="TrendPath" StrokeThickness="1.5" />
                         </Viewbox>
 
                         <TextBlock Text="{TemplateBinding Title}"

@@ -52,6 +52,9 @@ public static class DiagnosticsPageChecks
         var xaml = Read(root, Path.Combine("src", "PdxLauncher.App", "Views", "DiagnosticsPage.xaml"));
         var codeBehind = Read(root, Path.Combine("src", "PdxLauncher.App", "Views", "DiagnosticsPage.xaml.cs"));
         var viewModel = Read(root, Path.Combine("src", "PdxLauncher.App", "ViewModels", "DiagnosticsViewModel.cs"));
+        var rows = Read(root, Path.Combine("src", "PdxLauncher.App", "ViewModels", "DiagnosticsRows.cs"));
+        var gaugeControl = Read(root, Path.Combine("src", "PdxLauncher.App", "Controls", "PdxGaugeRing.cs"));
+        var gaugeStyle = Read(root, Path.Combine("src", "PdxLauncher.App", "Controls", "PdxGaugeRing.xaml"));
         var catalog = Read(root, Path.Combine("src", "PdxLauncher.App", "ViewModels", "CacheRowCatalog.cs"));
         var navigation = Read(root, Path.Combine("src", "PdxLauncher.App", "Services", "NavigationService.cs"));
         var mainWindowXaml = Read(root, Path.Combine("src", "PdxLauncher.App", "MainWindow.xaml"));
@@ -123,6 +126,25 @@ public static class DiagnosticsPageChecks
             viewModel.Contains("ObservableCollection<GaugeViewModel> Gauges", StringComparison.Ordinal) &&
             viewModel.Contains("LiveStatusText", StringComparison.Ordinal) &&
             viewModel.Contains("PerformanceGaugeMath.ComputeMemory", StringComparison.Ordinal));
+
+        // 动画三项：补间弧长、更新脉冲、60 秒迷你趋势线。
+        ChecksContext.Check("仪表环用 Storyboard + CubicEase 补间弧长",
+            gaugeControl.Contains("new DoubleAnimation", StringComparison.Ordinal) &&
+            gaugeControl.Contains("new CubicEase", StringComparison.Ordinal) &&
+            gaugeControl.Contains("nameof(AnimatedPercent)", StringComparison.Ordinal));
+        ChecksContext.Check("仪表环数值更新有高亮脉冲",
+            gaugeControl.Contains("StartPulse", StringComparison.Ordinal) &&
+            gaugeControl.Contains("nameof(PulseOpacity)", StringComparison.Ordinal) &&
+            gaugeStyle.Contains("x:Name=\"GlowPath\"", StringComparison.Ordinal));
+        ChecksContext.Check("仪表环有 60 秒迷你趋势折线",
+            gaugeControl.Contains("nameof(TrendPoints)", StringComparison.Ordinal) &&
+            gaugeControl.Contains("new LineSegment", StringComparison.Ordinal) &&
+            gaugeStyle.Contains("x:Name=\"TrendPath\"", StringComparison.Ordinal) &&
+            xaml.Contains("TrendPoints=\"{x:Bind TrendPoints, Mode=OneWay}\"", StringComparison.Ordinal));
+        ChecksContext.Check("仪表就地更新而不是 Clear+重建（补间前提）",
+            viewModel.Contains("gauge.Apply(reading.Percent", StringComparison.Ordinal) &&
+            !viewModel.Contains("Gauges.Clear();", StringComparison.Ordinal) &&
+            rows.Contains("public bool Apply(double percent", StringComparison.Ordinal));
 
         ChecksContext.Check("日志尾部只读", xaml.Contains("IsReadOnly=\"True\"", StringComparison.Ordinal));
         ChecksContext.Check("日志尾部折行由开关驱动",
