@@ -950,6 +950,40 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// <summary>标题栏图钉改变置顶后，刷新设置页开关的绑定值。</summary>
     public void RefreshAlwaysOnTop() => OnPropertyChanged(nameof(AlwaysOnTop));
 
+    /// <summary>
+    /// Mod 编辑页左栏显隐开关：赋值后立即落盘、广播，让另一侧的页面同步；失败回滚。
+    /// </summary>
+    public bool ModEditorLeftPaneVisible
+    {
+        get => AppServices.Settings.ModEditorLeftPaneVisible;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.ModEditorLeftPaneVisible,
+            v => AppServices.Settings.ModEditorLeftPaneVisible = v,
+            Keys.SettingsInterfaceModEditorPaneOn,
+            Keys.SettingsInterfaceModEditorPaneOff,
+            afterSave: AppServices.NotifyModEditorPaneVisibilityChanged);
+    }
+
+    /// <summary>Mod 编辑页改了左栏显隐后，刷新设置页开关的绑定值。</summary>
+    public void RefreshModEditorPane() => OnPropertyChanged(nameof(ModEditorLeftPaneVisible));
+
+    /// <summary>
+    /// 左栏菜单「Mod 编辑」入口显隐开关（高级分区）：赋值后立即落盘、广播，
+    /// 让主窗口重算导航项可见性；失败回滚。
+    /// </summary>
+    public bool ShowModEditorNav
+    {
+        get => AppServices.Settings.ShowModEditorNav;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.ShowModEditorNav,
+            v => AppServices.Settings.ShowModEditorNav = v,
+            Keys.SettingsAdvancedModEditorNavOn,
+            Keys.SettingsAdvancedModEditorNavOff,
+            afterSave: AppServices.NotifyModEditorNavVisibilityChanged);
+    }
+
     // ------------------------------------------------------------ 启动区
 
     /// <summary>实际启动的可执行文件（绝对路径，只读展示）。</summary>
@@ -2162,7 +2196,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             long total = 0;
             foreach (var row in _localModelRows)
             {
+                // 残片也算：暂停一次 1.31 GB 的下载后，占用数字不能对它视而不见。
                 total += runtime.Store.GetInstalledSize(row.Kind);
+                total += runtime.Store.GetStagedBytes(row.Kind);
             }
 
             return total <= 0 ? string.Empty : SizeFormatter.Format(total);
@@ -2184,68 +2220,139 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         RegexOptions.Compiled);
 
     /// <summary>
-    /// 下载某个本地模型；下载中该行显示进度，完成后重新读 Core 的安装状态。
+    /// 开始下载（或从残片续传）某个本地模型。
+    /// <para>
+    /// 真正的下载活在 <see cref="AppServices.LocalModelDownloads"/> 里，不跟页面生命周期绑定：
+    /// 页面不做缓存，离开设置页会取消页面令牌，1.31 GB 的模型不可能要求用户一直盯着这一页。
+    /// </para>
     /// </summary>
     /// <param name="row">模型行。</param>
-    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    public async Task DownloadLocalModelAsync(LocalModelRowViewModel row, CancellationToken cancellationToken)
+    public void StartLocalModelDownload(LocalModelRowViewModel row)
     {
-        var runtime = AppServices.LocalTranslation;
-        if (runtime is null || row is null || row.IsBusy)
+        ArgumentNullException.ThrowIfNull(row);
+        var coordinator = AppServices.LocalModelDownloads;
+        if (coordinator is null || row.IsDownloading)
         {
             return;
         }
 
-        row.IsBusy = true;
-        row.SetOperation(T(Keys.SettingsTranslateLocalModelDownloading, 0));
-        try
+        // 正在下载时 TryStart 返回 false：连点两下不该叠出两条请求。已暂停则算续传，会真的重开。
+        if (!coordinator.TryStart(row.Kind))
         {
-            var progress = new Progress<double>(value => row.SetOperation(
-                T(Keys.SettingsTranslateLocalModelDownloading, (int)Math.Round(value * 100))));
-            var result = await runtime.DownloadAsync(row.Kind, progress, cancellationToken).ConfigureAwait(true);
+            return;
+        }
 
-            // 不再手写本行的安装布尔：以 Core 的重新探测为准，
-            // 这样「下完了但 config.txt 没写成」也会如实显示为 ConfigMissing。
-            ApplyLocalModelState(row, runtime);
-            if (result.Success)
-            {
+        var percent = coordinator.GetSnapshot(row.Kind)?.Percent ?? 0;
+        row.BeginDownload(percent);
+        row.SetOperation(T(Keys.SettingsTranslateLocalModelDownloading, percent));
+        OnPropertyChanged(nameof(LocalModelSizeText));
+    }
+
+    /// <summary>暂停下载：已下载的残片保留，下次点「下载」续传。</summary>
+    /// <param name="row">模型行。</param>
+    public void PauseLocalModelDownload(LocalModelRowViewModel row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        AppServices.LocalModelDownloads?.Pause(row.Kind);
+    }
+
+    /// <summary>
+    /// 把协调器的一份快照落到对应的模型行上（页面订阅 <c>Changed</c> 后调用；也用于进页时接上进度）。
+    /// </summary>
+    /// <param name="snapshot">下载快照。</param>
+    public void ApplyLocalModelDownload(LocalModelDownloadSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        var row = _localModelRows.FirstOrDefault(item => item.Kind == snapshot.Kind);
+        if (row is null)
+        {
+            return;
+        }
+
+        var runtime = AppServices.LocalTranslation;
+        switch (snapshot.State)
+        {
+            case LocalModelDownloadState.Running:
+                row.BeginDownload(snapshot.Percent);
+                row.SetOperation(DescribeDownload(snapshot));
+                break;
+
+            case LocalModelDownloadState.Paused:
+                row.EndDownload(hasPartial: true);
+                // 不带过期时间：这句话描述的是当前状态，直到用户续传或删除它才该消失。
+                row.SetOperation(T(Keys.SettingsTranslateLocalModelPaused, snapshot.Percent));
+                break;
+
+            case LocalModelDownloadState.Completed:
+                row.EndDownload(hasPartial: false);
+                if (runtime is not null)
+                {
+                    ApplyLocalModelState(row, runtime);
+                }
+
                 ShowLocalModelOperation(
                     row,
                     T(Keys.SettingsTranslateLocalModelStatusDownloaded, row.Title),
-                    cancellationToken);
-            }
-            else
-            {
+                    CancellationToken.None);
+                break;
+
+            default:
+                row.EndDownload(hasPartial: HasStagedFiles(runtime, row.Kind));
+                if (runtime is not null)
+                {
+                    ApplyLocalModelState(row, runtime);
+                }
+
                 ShowLocalModelOperation(
                     row,
                     T(
                         Keys.SettingsTranslateLocalModelStatusFailed,
-                        ToDisplayText(result.Message, row.Directory)),
-                    cancellationToken);
-            }
+                        ToDisplayText(snapshot.Error, row.Directory)),
+                    CancellationToken.None);
+                break;
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+
+        OnPropertyChanged(nameof(LocalModelSizeText));
+    }
+
+    /// <summary>
+    /// 进页 / 切回页面时把还在进行（或已暂停）的下载接到行上。
+    /// 已完成 / 已失败的 job 不在 <see cref="LocalModelDownloadCoordinator.Active"/> 里：
+    /// 它们的最终状态以 Core 的安装状态为准，不需要"回放"。
+    /// </summary>
+    public void ApplyLocalModelDownloads()
+    {
+        var coordinator = AppServices.LocalModelDownloads;
+        if (coordinator is null)
         {
-            row.ClearOperation();
-            ApplyLocalModelState(row, runtime);
+            return;
         }
-        catch (Exception ex)
+
+        foreach (var snapshot in coordinator.Active)
         {
-            AppServices.Logger.Error("下载本地翻译模型失败", ex);
-            ApplyLocalModelState(row, runtime);
-            ShowLocalModelOperation(
-                row,
-                T(
-                    Keys.SettingsTranslateLocalModelStatusFailed,
-                    ToDisplayText(ex.Message, row.Directory)),
-                cancellationToken);
-        }
-        finally
-        {
-            row.IsBusy = false;
-            OnPropertyChanged(nameof(LocalModelSizeText));
+            ApplyLocalModelDownload(snapshot);
         }
     }
+
+    /// <summary>进度文案：拿得到总长就写「百分比 + 已下载 / 总量」，拿不到只写百分比。</summary>
+    private static string DescribeDownload(LocalModelDownloadSnapshot snapshot)
+    {
+        if (snapshot.TotalBytes <= 0)
+        {
+            return T(Keys.SettingsTranslateLocalModelDownloading, snapshot.Percent);
+        }
+
+        return T(
+            Keys.SettingsTranslateLocalModelDownloadProgress,
+            snapshot.Percent,
+            SizeFormatter.Format(snapshot.BytesReceived),
+            SizeFormatter.Format(snapshot.TotalBytes));
+    }
+
+    /// <summary>磁盘上是否还留着这个模型的下载残片（决定「删除」可不可点）。</summary>
+    private static bool HasStagedFiles(LocalTranslationRuntime? runtime, LocalTranslationModelKind kind) =>
+        runtime is not null && runtime.Store.GetStagedBytes(kind) > 0;
 
     /// <summary>
     /// 删除某个本地模型：先确认没有在途翻译（Core 的 <c>Remove</c> 契约要求调用方保证），
@@ -2287,6 +2394,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
             ApplyLocalModelState(row, runtime);
             ShowLocalModelOperation(row, DescribeRemoveResult(result), cancellationToken);
+
+            // 残片随目录一起被删掉了：把暂停过的 job 也忘掉，否则下次点「下载」会被旧 job 挡住。
+            AppServices.LocalModelDownloads?.Forget(row.Kind);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -2303,6 +2413,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
         finally
         {
+            row.HasPartialDownload = HasStagedFiles(runtime, row.Kind);
             row.IsBusy = false;
             OnPropertyChanged(nameof(LocalModelSizeText));
         }
@@ -2630,6 +2741,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             // 尺寸不符 / 未安装五态各有各的文案，不再用单个 IsInstalled 布尔糊过去。
             var row = new LocalModelRowViewModel(model.Kind, titleKey, model.DisplayName);
             ApplyLocalModelState(row, runtime);
+            row.HasPartialDownload = runtime.Store.GetStagedBytes(model.Kind) > 0;
             _localModelRows.Add(row);
         }
 

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <RootNamespace>PdxLauncher.Checks</RootNamespace>
     <AssemblyName>PdxLauncher.Checks</AssemblyName>
   </PropertyGroup>
@@ -13,7 +13,7 @@
     <!--
       链接 App 层的 PlaySetEditor 源码进来做自检。该文件通篇只用 Core 的类型
       （IPlaySetRepository / ILoadFileWriter / IAppLogger / GameInstallation / DlcCatalog 全在 Core），
-      不引用任何 XAML/UI 类型，因此在 net10.0 的检查工程里可原样编译。
+      不引用任何 XAML/UI 类型，因此在 net11.0 的检查工程里可原样编译。
       用「链接源码」而不是「引用 PdxLauncher.App」：App 是 WinExe + windows TFM，检查工程引用不了。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\PlaySetEditor.cs" Link="Linked\PlaySetEditor.cs" />
@@ -139,6 +139,14 @@
     <Compile Include="..\..\src\PdxLauncher.App\Services\PageStateStore.cs" Link="Linked\PageStateStore.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\PageStateSnapshot.cs" Link="Linked\PageStateSnapshot.cs" />
     <!--
+      mod 名称译名的唯一管道：Mod 库、播放集页、添加模组页三处共用同一张 TranslationCache.Names 表。
+      它只依赖 Core 的 TranslationCache 与 TranslationOptions（读盘 / 落盘 / 目标语言全由构造注入），
+      不碰 AppServices 静态与任何 WinUI 类型，所以可以原样链接进来。它错了的表现是「同一个 mod
+      在不同页面显示不同译文或干脆没有」，编译器和真机都不容易看出来，因此回填条件、落盘列表与
+      三处页面的使用口径由 ModNameTranslationChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\ModNameTranslator.cs" Link="Linked\ModNameTranslator.cs" />
+    <!--
       Debug 内存埋点：只依赖 Core 的 IAppLogger，缓存计数由调用点通过委托传入，
       不碰 WinUI / AppServices，因此可以原样链接进来。它错了不会崩，只会让基线文档的读数不可信，
       所以描述格式（MB 一位小数、缓存计数拼法）与「Capture 永不抛」由 MemoryDiagnosticsChecks 钉住。
@@ -150,6 +158,14 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\StartupTimeline.cs" Link="Linked\StartupTimeline.cs" />
     <!--
+      首帧性能的两块纯逻辑：整窗背景的解码宽度策略（纯算术）与背景预热快照的读写
+      （只依赖 IFileSystem / IAppLogger + System.Text.Json）。两者都不碰 UI 类型，可以原样链接。
+      策略错了只在真机上表现为「背景糊」或「启动没变快」，快照错了最多白解一次图，编译器都看不见，
+      所以由 FirstFrameChecks 钉住边界与往返口径。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\BackdropDecodeWidth.cs" Link="Linked\BackdropDecodeWidth.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\FrameSnapshotStore.cs" Link="Linked\FrameSnapshotStore.cs" />
+    <!--
       日志尾部读取：只碰 System.IO / System.Text 与 Core 的 FileLogger 常量，不引用 UI 类型。
       它决定性能页「日志」分区显示什么：截断处的半行/半个 UTF-8 字符、级别过滤丢堆栈都是真机上才看得见的错，
       所以由 LogTailReaderChecks 钉住。
@@ -160,6 +176,18 @@
       规则错了只会给出错误的「去优化什么」，编译器看不见，所以每个阈值两侧由 PerformanceHintsChecks 钉住。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\PerformanceHints.cs" Link="Linked\PerformanceHints.cs" />
+    <!--
+      性能仪表环映射：纯函数，只依赖 PerformanceHints / FileLogger 预算常量与 Math，
+      不碰 UI。映射错了环会显示错误颜色或满环时机不对，编译器看不见，
+      所以每个预算边界由 PerformanceGaugeMathChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\PerformanceGaugeMath.cs" Link="Linked\PerformanceGaugeMath.cs" />
+    <!--
+      仪表迷你趋势线映射：纯函数，只依赖 System.Math，把百分比序列映射到固定画布折线点。
+      映射错了趋势线会画反或贴边被裁，编译器看不见，所以边界由 GaugeTrendChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\GaugeTrendMath.cs" Link="Linked\GaugeTrendMath.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\GaugeTrendBuffer.cs" Link="Linked\GaugeTrendBuffer.cs" />
     <!--
       截图逐张结算计数器（顶部「正在下载截图…」的唯一数据源）。它只依赖 System.Math，
       不碰 UI 线程之外的东西，可以原样链接进来。漏结算会让提示永远转下去，多结算会让提示提前消失，
@@ -194,6 +222,18 @@
       这样「缓存先渲染 + 后台失败不回滚」可以用 fake IAchievementSource 直接断言。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementsViewModel.cs" Link="Linked\AchievementsViewModel.cs" />
+    <!--
+      「添加模组」页 VM 与行 VM：来源 / 版本筛选整表替换、行复用与勾选保留、切语言按键还原都在这里。
+      AddModsViewModel 只依赖 Core 契约 + ModLibraryService + ModNameTranslator + AppServices 静态，
+      LocalizedObservableObject / Keys / AppServices / TranslationCoordinator / DispatcherQueue 由
+      AchievementViewModelStubs.cs 与 ModsAddPageFilterStubs.cs 提供最小替身，不引用 WinUI。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AddModsViewModel.cs" Link="Linked\AddModsViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AddModRowViewModel.cs" Link="Linked\AddModRowViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\ModSizeText.cs" Link="Linked\ModSizeText.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\ModLibraryService.cs" Link="Linked\ModLibraryService.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\WorkshopStateReader.cs" Link="Linked\WorkshopStateReader.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\IWorkshopStateSource.cs" Link="Linked\IWorkshopStateSource.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementRowViewModel.cs" Link="Linked\AchievementRowViewModel.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementIconPresentation.cs" Link="Linked\AchievementIconPresentation.cs" />
     <!--
@@ -249,5 +289,12 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\WorkshopDependencyViewModel.cs" Link="Linked\WorkshopDependencyViewModel.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\WorkshopDependencyNodeViewModel.cs" Link="Linked\WorkshopDependencyNodeViewModel.cs" />
+    <!--
+      本地模型下载的归属者与行视图模型。两者都只依赖 Core + 本地化基类（自检用替身），不碰 WinUI。
+      它们错了不会崩：进度条永远 0%、暂停后按钮点不动、残片删不掉——都只在真机上表现为「下载坏了」，
+      所以由 LocalModelDownloadCoordinatorChecks / LocalModelUiChecks 直接钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\LocalModelDownloadCoordinator.cs" Link="Linked\LocalModelDownloadCoordinator.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\LocalModelRowViewModel.cs" Link="Linked\LocalModelRowViewModel.cs" />
   </ItemGroup>
 </Project>

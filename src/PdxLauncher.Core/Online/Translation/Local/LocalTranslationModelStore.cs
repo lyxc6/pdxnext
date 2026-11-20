@@ -22,6 +22,15 @@ public sealed class LocalTranslationModelStore
     /// <summary>模型目录名。</summary>
     public const string ModelsFolderName = "models";
 
+    /// <summary>
+    /// 下载中的残片后缀：内容就是「原始传输字节」（压缩文件即 gzip 原始字节），
+    /// 因此断点续传对压缩 / 非压缩统一成立，解压只发生在收尾阶段。
+    /// </summary>
+    public const string PartialSuffix = ".part";
+
+    /// <summary>收尾阶段的解压 / 校验临时文件后缀。</summary>
+    public const string VerifyTempSuffix = ".tmp";
+
     /// <summary>Index-Translate 官方仓库直链前缀。</summary>
     public const string IndexTranslateBaseUrl =
         "https://huggingface.co/IndexTeam/Index-Translate-2B-GGUF/resolve/main/";
@@ -210,6 +219,41 @@ public sealed class LocalTranslationModelStore
 
         return total;
     }
+
+    /// <summary>
+    /// 还没装完的临时文件占用（<c>.part</c> / <c>.tmp</c>）。
+    /// <para>
+    /// 1.31 GB 的残片不该在界面上隐形：占用统计要算上它，否则用户不知道磁盘被谁吃了；
+    /// 删除按钮也要靠它决定「暂停后还没装好的模型能不能删」。
+    /// </para>
+    /// </summary>
+    /// <param name="kind">模型种类。</param>
+    /// <returns>清单内文件对应残片的字节数之和。</returns>
+    public long GetStagedBytes(LocalTranslationModelKind kind)
+    {
+        var model = _catalog.Get(kind);
+        if (model is null)
+        {
+            return 0;
+        }
+
+        var directory = DirectoryOf(kind);
+        if (!Directory.Exists(directory))
+        {
+            return 0;
+        }
+
+        long total = 0;
+        foreach (var file in model.Files)
+        {
+            total += SizeOf(Path.Combine(directory, file.FileName + PartialSuffix));
+            total += SizeOf(Path.Combine(directory, file.FileName + VerifyTempSuffix));
+        }
+
+        return total;
+    }
+
+    private static long SizeOf(string path) => File.Exists(path) ? new FileInfo(path).Length : 0;
 
     /// <summary>
     /// 校验模型文件。

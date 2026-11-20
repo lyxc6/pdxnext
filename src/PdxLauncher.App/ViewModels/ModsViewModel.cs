@@ -31,12 +31,47 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
     private GameInstallation? _game;
     private bool _isBusy;
+    private bool _isConvertToLocalBusy;
     private bool _isAutoSortRunning;
     private bool _isLoaded;
     private string _statusMessage = string.Empty;
     private bool _translateFailureReported;
+    private bool _canRetryTranslation;
+    private string _translationFailureStatusText = string.Empty;
+    private string _statusBeforeTranslationFailure = string.Empty;
     private string _searchText = string.Empty;
     private bool _bulkEnabledUpdate;
+
+    /// <summary>
+    /// 名称译名管道：与 Mod 库、添加模组页共用同一张 <c>TranslationCache.Names</c> 表。
+    /// 此前本页只调引擎、从不读写这张表，于是同一个 mod 在 Mod 库有译名、在本页却要重翻一遍
+    /// （或干脆没有），三处显示不一致。
+    /// </summary>
+    private readonly ModNameTranslator _translator;
+
+    /// <summary>左栏候选的译名去抖令牌；与右栏各自独立，互不取消。</summary>
+    private CancellationTokenSource? _candidateTranslationDebounce;
+
+    /// <summary>右栏名称翻译批次的取消令牌：新批次接管时取消上一批，避免批次越积越多。</summary>
+    private CancellationTokenSource? _nameTranslationCts;
+
+    /// <summary>右栏名称翻译代次：每次起新批次自增，被取代的旧批次不再回填、不再写名称表。</summary>
+    private int _nameTranslationGeneration;
+
+    /// <summary>
+    /// 右栏「刷新译文」的强制批次是否在途：期间重建可见行（搜索 / 换集 / 自动排序）也按强制重翻，
+    /// 不让旧缓存把刚清掉的行填回旧译文。
+    /// </summary>
+    private bool _nameRefreshInFlight;
+
+    /// <summary>候选栏自己的「重试」入口是否可见：本轮候选译名一条都没译出来时为 true。与右栏互不影响。</summary>
+    private bool _canRetryCandidateTranslation;
+
+    /// <summary>候选名称翻译代次：每次起新批次自增，被取代的旧批次不再回填、不再写名称表。</summary>
+    private int _candidateTranslationGeneration;
+
+    /// <summary>候选栏「刷新译文」的强制批次是否在途：期间重建候选行（换集 / 增删）也按强制重翻。</summary>
+    private bool _candidateRefreshInFlight;
 
     /// <summary>双列布局左栏（可添加的 mod）专用搜索词。</summary>
     private string _candidateSearchText = string.Empty;
@@ -82,6 +117,12 @@ public sealed class ModsViewModel : LocalizedObservableObject
         _modLibrary = modLibrary;
         _pathRepairer = pathRepairer;
         _logger = logger;
+
+        _translator = new ModNameTranslator(
+            ResolveNameTranslationTargetLanguage,
+            load: (language, token) => AppServices.Translation.LoadNameTranslationsAsync(language, token),
+            save: (language, updates, token) =>
+                AppServices.Translation.SaveNameTranslationsAsync(language, updates, token));
     }
 
     /// <summary>
@@ -151,6 +192,13 @@ public sealed class ModsViewModel : LocalizedObservableObject
         }
     }
 
+    /// <summary>工坊转本地是否在途；菜单项据此临时禁用，防止重复点击叠加写库。</summary>
+    public bool IsConvertToLocalBusy
+    {
+        get => _isConvertToLocalBusy;
+        private set => SetProperty(ref _isConvertToLocalBusy, value);
+    }
+
     /// <summary>
     /// 自动排序扫描是否进行中。取消按钮绑定这个属性：IsBusy 期间所有编辑入口都被禁用，
     /// 若取消按钮也绑 IsEditorEnabled，就会在最需要它的时刻点不动。
@@ -173,6 +221,28 @@ public sealed class ModsViewModel : LocalizedObservableObject
     {
         get => _statusMessage;
         private set => SetProperty(ref _statusMessage, value);
+    }
+
+    /// <summary>
+    /// 播放集行右键菜单里的「重试翻译」是否可用：本轮译名一条都没译出来时为 true。
+    /// 换播放集 / 重建列表 / 任何一条译出结果都会复位。
+    /// </summary>
+    public bool CanRetryTranslation
+    {
+        get => _canRetryTranslation;
+        private set => SetProperty(ref _canRetryTranslation, value);
+    }
+
+    /// <summary>
+    /// 候选行右键菜单「重试翻译」的门控：本轮**候选栏**译名一条都没译出来时为 true。
+    /// 与右栏的 <see cref="CanRetryTranslation"/> 各管各的栏——候选行的菜单不借右栏的失败标志，
+    /// 否则会出现「候选栏失败时菜单灰掉、播放集失败时反而在候选行上可点」的错位。
+    /// 重建候选行 / 真的译出结果 / 刷新译文都会复位。
+    /// </summary>
+    public bool CanRetryCandidateTranslation
+    {
+        get => _canRetryCandidateTranslation;
+        private set => SetProperty(ref _canRetryCandidateTranslation, value);
     }
 
     /// <summary>搜索框内容；变化时重建可见行。</summary>
@@ -476,6 +546,15 @@ public sealed class ModsViewModel : LocalizedObservableObject
             // 记下这一份「库内现状」，保存前用它确认官方启动器没在这期间动过同一个播放集。
             _modsBaseline = PlaySetEditor.DescribePlaySetMods(_allMods);
 
+            // 译名先读盘：与 Mod 库同一张表，上次译过的名字这次直接显示，不用重翻。
+            // 读盘丢线程池，避免切播放集时在 UI 线程上同步读缓存文档。
+            var targetLanguage = _translator.TargetLanguage;
+            if (targetLanguage is not null)
+            {
+                Func<Task> load = () => _translator.LoadAsync(targetLanguage, cancellationToken);
+                await Task.Run(load, cancellationToken).ConfigureAwait(true);
+            }
+
             // DDS 缩略图先转成 PNG，行里才是真实封面而不是占位图。
             await AppServices.ImageArt
                 .PrewarmAsync(_allMods.Select(static m => m.ThumbnailPath), cancellationToken)
@@ -614,6 +693,10 @@ public sealed class ModsViewModel : LocalizedObservableObject
     /// <param name="cancellationToken">页面生命周期取消令牌（供后台译名使用）。</param>
     private void RebuildVisibleMods(CancellationToken cancellationToken = default)
     {
+        // 新一批行取代旧行：上一轮「一条都没译出来」的重试入口与那条提示跟着收起。
+        ClearTranslationFailureStatus();
+        CanRetryTranslation = false;
+
         var filtered = PlaySetEditor.Filter(_allMods, SearchText);
         var canMove = CanMoveMods;
         Mods.Clear();
@@ -662,6 +745,12 @@ public sealed class ModsViewModel : LocalizedObservableObject
             T(ModOrigins.DescribeKey(origin)),
             origin == ModOrigin.Local,
             warningKey is null ? null : T(warningKey));
+
+        // 译名与 Mod 库、添加模组页同一张表：搜过 / 译过的名字直接回填，不必再等一轮翻译。
+        if (_translator.TryBackfill(mod.ModId, mod.Name, _translator.TargetLanguage, out var translatedName))
+        {
+            row.TranslatedName = translatedName;
+        }
 
         row.TotalCount = totalCount;
         row.CanMove = canMove;
@@ -723,10 +812,8 @@ public sealed class ModsViewModel : LocalizedObservableObject
             return;
         }
 
-        var candidate = new AddModRowViewModel(
-            entry,
-            onSelectionChanged: null,
-            automationPrefix: "modCandidate");
+        // 带上当前游戏版本：左栏候选行也会判「声明的支持版本是否偏低」，与添加模组页同一口径。
+        var candidate = CreateCandidateRow(entry);
         var query = CandidateSearchText.Trim();
         if (query.Length > 0 && !candidate.Matches(query))
         {
@@ -770,6 +857,8 @@ public sealed class ModsViewModel : LocalizedObservableObject
     /// </remarks>
     private void RebuildCandidates()
     {
+        // 新一批候选行取代旧行：上一轮候选译名的重试入口跟着收起（与右栏 RebuildVisibleMods 同口径）。
+        CanRetryCandidateTranslation = false;
         Candidates.Clear();
         if (!IsTwoColumnLayout || SelectedPlaySet is null || _librarySnapshot.Mods.Count == 0)
         {
@@ -788,10 +877,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
             }
 
             // 前缀 modCandidate：与「添加模组」子页的 addModCandidate 区分，UIA 脚本不会串。
-            var row = new AddModRowViewModel(
-                entry,
-                onSelectionChanged: null,
-                automationPrefix: "modCandidate");
+            var row = CreateCandidateRow(entry);
             if (query.Length > 0 && !row.Matches(query))
             {
                 continue;
@@ -801,6 +887,28 @@ public sealed class ModsViewModel : LocalizedObservableObject
         }
 
         RaiseCandidateState();
+        StartCandidateNameTranslation();
+    }
+
+    /// <summary>
+    /// 造一条左栏候选行：游戏版本用于版本支持三角，译名从共享的 Names 表回填。
+    /// 全量重建与「移除后插回」共用它，避免两条路径各写一份「候选行长什么样」。
+    /// </summary>
+    /// <param name="entry">mod 库条目。</param>
+    private AddModRowViewModel CreateCandidateRow(ModLibraryEntry entry)
+    {
+        var row = new AddModRowViewModel(
+            entry,
+            onSelectionChanged: null,
+            automationPrefix: "modCandidate",
+            gameVersion: _game?.Version);
+
+        if (_translator.TryBackfill(entry.ModId, entry.Name, _translator.TargetLanguage, out var translatedName))
+        {
+            row.TranslatedName = translatedName;
+        }
+
+        return row;
     }
 
     /// <summary>通知左栏计数/空状态与右栏空/无匹配状态。</summary>
@@ -818,9 +926,16 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
     /// <summary>
     /// 后台给可见行补译名：翻译是网络操作，不能挡着列表显示。
+    /// <para>
+    /// 每次起新批次都取消上一批并推进代次：搜索 / 换集 / 自动排序重建出的全是新行实例，
+    /// 旧批次的结果只会落在孤儿行上，迟到的旧译文还会经 <see cref="ModNameTranslator.Remember"/>
+    /// 把新批刚写的结果盖回名称表。「刷新译文」在途时（<see cref="_nameRefreshInFlight"/>），
+    /// 这里重启的批次同样强制绕开旧缓存——否则旧缓存会把刚要求重翻的旧译文原样填回新行。
+    /// </para>
     /// </summary>
     /// <param name="cancellationToken">页面生命周期取消令牌。</param>
-    private void StartNameTranslation(CancellationToken cancellationToken)
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
+    private void StartNameTranslation(CancellationToken cancellationToken, bool forceRefresh = false)
     {
         if (!AppServices.Settings.TranslateNamesEnabled || !AppServices.Translation.IsEnabled)
         {
@@ -837,22 +952,66 @@ public sealed class ModsViewModel : LocalizedObservableObject
             return;
         }
 
+        // 强制刷新在途期间重建出来的行同样绕开旧缓存；此时无译名的行正等着强制批次的新结果。
+        var force = forceRefresh || _nameRefreshInFlight;
+
         // 新一轮加载重新给一次提示机会。
         _translateFailureReported = false;
-        _ = TranslateNamesAsync(pending, cancellationToken);
+
+        CancelPendingNameTranslation();
+        var batchCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _nameTranslationCts = batchCts;
+        var generation = ++_nameTranslationGeneration;
+        if (force)
+        {
+            _nameRefreshInFlight = true;
+        }
+
+        _ = TranslateNamesAsync(pending, batchCts.Token, force, generation, batchCts);
+    }
+
+    /// <summary>取消还没跑完的右栏名称翻译批次。</summary>
+    private void CancelPendingNameTranslation()
+    {
+        var previous = _nameTranslationCts;
+        _nameTranslationCts = null;
+        if (previous is null)
+        {
+            return;
+        }
+
+        try
+        {
+            previous.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 上一批刚好自己收尾释放了令牌，不用再取消。
+        }
     }
 
     /// <summary>整页名称一次性批翻（引擎内部并发），译完统一回填。</summary>
     private async Task TranslateNamesAsync(
         IReadOnlyList<ModRowViewModel> rows,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceRefresh,
+        int generation,
+        CancellationTokenSource batchCts)
     {
+        var targetLanguage = _translator.TargetLanguage;
         try
         {
             var names = rows.Select(static row => row.Name).ToList();
             var translated = await AppServices.Translation
-                .TranslateBatchAsync(names, cancellationToken)
+                .TranslateBatchAsync(names, cancellationToken, forceRefresh: forceRefresh)
                 .ConfigureAwait(true);
+
+            // 被新一批取代或页面已关闭：这批结果作废——不回填行、不写名称表、不动状态条，
+            // 否则迟到的旧值会把新一批刚写好的结果又盖回旧译文。
+            if (generation != _nameTranslationGeneration || cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
 
             var anyTranslated = false;
             for (var i = 0; i < rows.Count && i < translated.Count; i++)
@@ -865,22 +1024,182 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
                 rows[i].TranslatedName = translatedName;
                 anyTranslated = true;
+
+                // 记进共享表：Mod 库与添加模组页直接复用同一句译文，三处显示一致。
+                _translator.Remember(rows[i].ModId, rows[i].Name, targetLanguage ?? string.Empty, translatedName);
             }
 
             if (!anyTranslated)
             {
                 ReportTranslationFailure(rows.Count);
             }
+            else
+            {
+                // 这一批出过译文了：行右键菜单里的重试入口与那条失败提示都不再需要。
+                ClearTranslationFailureStatus();
+                CanRetryTranslation = false;
+            }
         }
         catch (OperationCanceledException)
         {
-            // 页面已关闭或设置已变更：这批译文作废，不记错误。
+            // 页面已关闭或被新一批取代：这批译文作废，不记错误。
         }
         catch (Exception ex)
         {
             _logger.Warn("Mod 名称翻译失败：" + ex.Message);
         }
+        finally
+        {
+            if (ReferenceEquals(_nameTranslationCts, batchCts))
+            {
+                _nameTranslationCts = null;
+            }
+
+            batchCts.Dispose();
+
+            // 只有最新一代批次收尾才算这一轮强制刷新结束；被取代的旧批次不碰标志，
+            // 接班的（也是强制的）批次收尾时才复位。
+            if (generation == _nameTranslationGeneration)
+            {
+                _nameRefreshInFlight = false;
+            }
+
+            // 页面关闭或被新一轮加载取代时，已经回填到行的译名仍然有效：落盘后其他页面直接复用。
+            await _translator.SaveAsync(targetLanguage, CancellationToken.None).ConfigureAwait(true);
+        }
     }
+
+    /// <summary>
+    /// 左栏候选的译名：与右栏同一张表、同一套去抖，但用独立令牌——
+    /// 左右两栏的搜索互不干扰，共用一个令牌会互相取消、最后两边都没译全。
+    /// <para>
+    /// 与右栏一样带代次与在途强制守卫：换集 / 增删重建候选行时取消旧批、按需重启强制批次，
+    /// 不让旧缓存把刚要求重翻的候选行填回旧译文。
+    /// </para>
+    /// </summary>
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用）。</param>
+    private void StartCandidateNameTranslation(bool forceRefresh = false)
+    {
+        var targetLanguage = _translator.TargetLanguage;
+        if (targetLanguage is null)
+        {
+            return;
+        }
+
+        var pending = Candidates
+            .Where(static row => !string.IsNullOrWhiteSpace(row.Name)
+                && string.IsNullOrWhiteSpace(row.TranslatedName))
+            .ToList();
+        if (pending.Count == 0)
+        {
+            return;
+        }
+
+        // 强制刷新在途期间重建出来的候选行同样绕开旧缓存。
+        var force = forceRefresh || _candidateRefreshInFlight;
+
+        CancelPendingCandidateTranslation();
+        var debounce = new CancellationTokenSource();
+        _candidateTranslationDebounce = debounce;
+        var generation = ++_candidateTranslationGeneration;
+        if (force)
+        {
+            _candidateRefreshInFlight = true;
+        }
+
+        _ = TranslateCandidateNamesAfterDebounceAsync(pending, targetLanguage, debounce, force, generation);
+    }
+
+    private async Task TranslateCandidateNamesAfterDebounceAsync(
+        IReadOnlyList<AddModRowViewModel> rows,
+        string targetLanguage,
+        CancellationTokenSource debounce,
+        bool forceRefresh,
+        int generation)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(250), debounce.Token).ConfigureAwait(true);
+            var names = rows.Select(static row => row.Name).ToList();
+            var translated = await AppServices.Translation
+                .TranslateBatchAsync(names, debounce.Token, forceRefresh: forceRefresh)
+                .ConfigureAwait(true);
+
+            // 被新一批取代或页面已关闭：这批结果作废——不回填行、不写名称表、不动重试入口。
+            if (generation != _candidateTranslationGeneration || debounce.IsCancellationRequested)
+            {
+                return;
+            }
+
+            var anyTranslated = false;
+            for (var i = 0; i < rows.Count && i < translated.Count; i++)
+            {
+                var translatedName = translated[i];
+                if (string.IsNullOrWhiteSpace(translatedName))
+                {
+                    continue;
+                }
+
+                rows[i].TranslatedName = translatedName;
+                anyTranslated = true;
+                _translator.Remember(rows[i].ModId, rows[i].Name, targetLanguage, translatedName);
+            }
+
+            // 候选栏自己的失败标志：本轮一条都没译出来时，候选行右键菜单里的「重试翻译」才可用。
+            CanRetryCandidateTranslation = !anyTranslated;
+
+            await _translator.SaveAsync(targetLanguage, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // 被新一批取代或页面已关闭：这批作废。
+        }
+        catch (Exception ex)
+        {
+            _logger.Warn("候选 mod 名称翻译失败：" + ex.Message);
+        }
+        finally
+        {
+            if (ReferenceEquals(_candidateTranslationDebounce, debounce))
+            {
+                _candidateTranslationDebounce = null;
+            }
+
+            debounce.Dispose();
+
+            // 只有最新一代批次收尾才算这一轮强制刷新结束；被取代的旧批次不碰标志。
+            if (generation == _candidateTranslationGeneration)
+            {
+                _candidateRefreshInFlight = false;
+            }
+        }
+    }
+
+    /// <summary>取消还没跑完的候选译名批次。</summary>
+    private void CancelPendingCandidateTranslation()
+    {
+        var previous = _candidateTranslationDebounce;
+        _candidateTranslationDebounce = null;
+        if (previous is null)
+        {
+            return;
+        }
+
+        try
+        {
+            previous.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // 上一批刚好自己收尾释放了令牌，不用再取消。
+        }
+    }
+
+    /// <summary>当前该用的名称翻译目标语言；名称翻译或翻译总开关关闭时为 null。</summary>
+    private static string? ResolveNameTranslationTargetLanguage() => ModNameTranslator.ResolveTargetLanguage(
+        AppServices.Settings.TranslateNamesEnabled,
+        AppServices.Translation.CurrentOptions);
+
 
     /// <summary>整页一条译文都没拿到时，在底部状态条说明原因（同一次加载只提示一次）。</summary>
     private void ReportTranslationFailure(int count)
@@ -893,7 +1212,110 @@ public sealed class ModsViewModel : LocalizedObservableObject
         _translateFailureReported = true;
         var reason = AppServices.Translation.LastFailure ?? T(Keys.CommonUnknown);
         _logger.Warn("Mod 名称全部未翻译（" + count + " 条）：" + reason);
-        StatusMessage = T(Keys.ModsTranslateUnavailable, reason);
+
+        // 记住被顶掉的那句文案：重试成功后要还回去，不能让状态条一直停在一句已经不成立的提示。
+        if (!string.Equals(StatusMessage, _translationFailureStatusText, StringComparison.Ordinal))
+        {
+            _statusBeforeTranslationFailure = StatusMessage;
+        }
+
+        _translationFailureStatusText = T(Keys.ModsTranslateUnavailable, reason);
+        StatusMessage = _translationFailureStatusText;
+        CanRetryTranslation = true;
+    }
+
+    /// <summary>
+    /// 翻译失败提示已经不再成立（这一批译出结果了）：把状态条还回之前那句。
+    /// 只在状态条**仍然**显示着那条失败提示时才动它，别覆盖用户刚看到的其它反馈。
+    /// </summary>
+    private void ClearTranslationFailureStatus()
+    {
+        if (!string.Equals(StatusMessage, _translationFailureStatusText, StringComparison.Ordinal))
+        {
+            _translationFailureStatusText = string.Empty;
+            return;
+        }
+
+        StatusMessage = _statusBeforeTranslationFailure;
+        _translationFailureStatusText = string.Empty;
+    }
+
+    /// <summary>
+    /// 用户点了播放集行右键菜单里的「重试翻译」：把当前播放集（右栏）里还没译名的行强制重翻一遍。
+    /// <para>
+    /// 先复位「只提示一次」与重试标志：失败提示按轮次去重，不复位的话这次再失败会被当成
+    /// 「已经提示过」而吞掉，用户只会看到提示条消失。
+    /// </para>
+    /// <para>
+    /// 带 <c>forceRefresh</c>：失败后旧缓存条目还在（缓存只有 TTL、没有失败标记），
+    /// 不带 force 会命中旧缓存把旧译文原样填回行并按成功路径清掉失败提示，引擎根本不会被问到——
+    /// 用户点重试就是要真正重翻。
+    /// </para>
+    /// </summary>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public void RetryNameTranslation(CancellationToken cancellationToken)
+    {
+        _translateFailureReported = false;
+        CanRetryTranslation = false;
+        ClearTranslationFailureStatus();
+        AppServices.Translation.ResetRetryableFailures();
+        StartNameTranslation(cancellationToken, forceRefresh: true);
+    }
+
+    /// <summary>
+    /// 用户点了候选行右键菜单里的「重试翻译」：把候选栏里还没译名的行强制重翻一遍。
+    /// 只管候选栏（与右栏的 <see cref="RetryNameTranslation"/> 各管各的栏），重翻前先取消
+    /// 在途候选批次，避免两批并发把结果写错行。
+    /// <para>
+    /// 与其他重试入口一样先清掉主机的临时冷却（连不上 5 分钟 / 429 60 秒）：
+    /// 候选栏因连不上或限流整批失败后，不清冷却的话重试会立刻再拿到「暂时跳过」，
+    /// 失败标志原样回来，用户以为点了没反应。MyMemory 的额度冷却不在这里动——那是服务端事实。
+    /// </para>
+    /// </summary>
+    public void RetryCandidateNameTranslation()
+    {
+        CancelPendingCandidateTranslation();
+        CanRetryCandidateTranslation = false;
+        AppServices.Translation.ResetRetryableFailures();
+        StartCandidateNameTranslation(forceRefresh: true);
+    }
+
+    /// <summary>
+    /// 用户点了行右键菜单里的「刷新译文」：忽略缓存与已有译名，整页（含左栏候选）强制重翻一遍。
+    /// <para>
+    /// 除了像重试那样复位失败标志，还要清掉内存译名表与行上的旧译文：
+    /// 不清的话 <see cref="TranslateNamesAsync"/> 的「只翻没译名的行」过滤与重建行时的回填
+    /// 会把旧译文原样填回来，引擎根本不会被问到。
+    /// </para>
+    /// <para>
+    /// 强制批次在途期间（<see cref="_nameRefreshInFlight"/> / <see cref="_candidateRefreshInFlight"/>），
+    /// 任何重建可见行的操作都会以 force 重启批次，保证最终显示的是新译文而不是旧缓存。
+    /// </para>
+    /// </summary>
+    /// <param name="cancellationToken">页面生命周期取消令牌。</param>
+    public void RefreshNameTranslation(CancellationToken cancellationToken)
+    {
+        _translateFailureReported = false;
+        CanRetryTranslation = false;
+        ClearTranslationFailureStatus();
+        AppServices.Translation.ResetRetryableFailures();
+
+        _translator.Clear();
+        foreach (var row in Mods)
+        {
+            row.TranslatedName = null;
+        }
+
+        StartNameTranslation(cancellationToken, forceRefresh: true);
+
+        CancelPendingCandidateTranslation();
+        CanRetryCandidateTranslation = false;
+        foreach (var row in Candidates)
+        {
+            row.TranslatedName = null;
+        }
+
+        StartCandidateNameTranslation(forceRefresh: true);
     }
 
     /// <summary>行内开关变化：同步集合顺序（不重排），刷新计数与状态，并自动保存。</summary>
@@ -1061,6 +1483,43 @@ public sealed class ModsViewModel : LocalizedObservableObject
         return PositionEditResult.Applied;
     }
 
+    // ------------------------------------------------------------ 工坊转本地
+
+    /// <summary>
+    /// 播放集行右键菜单「转为本地 mod」：把订阅且有本地文件的 mod 复制成同内容的本地 mod。
+    /// Core 在单事务里分配新 ModId 并改写所有播放集引用，成功后重载本页让行上的来源 / 路径跟上；
+    /// 成功只在状态栏反馈（静默），失败把异常抛给页面弹 ShowMessage。
+    /// </summary>
+    /// <param name="row">被转换的播放集行。</param>
+    /// <param name="cancellationToken">本次转换的取消令牌（页面用它链接生命周期令牌并暴露取消按钮）。</param>
+    public async Task ConvertToLocalAsync(ModRowViewModel row, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        var game = Game;
+        if (game is null)
+        {
+            throw new InvalidOperationException(T(Keys.ModsGameNone));
+        }
+
+        IsConvertToLocalBusy = true;
+        try
+        {
+            var result = await WorkshopToLocalInvoker.ConvertAsync(
+                game, row.ModId, row.Name, cancellationToken).ConfigureAwait(true);
+            if (!result.IsSuccess)
+            {
+                throw new InvalidOperationException(result.ErrorMessage ?? "convert-to-local-failed");
+            }
+
+            await LoadAsync(game, cancellationToken).ConfigureAwait(true);
+            ReportConvertedToLocal(row);
+        }
+        finally
+        {
+            IsConvertToLocalBusy = false;
+        }
+    }
+
     // ------------------------------------------------------------ 行右键菜单的状态栏反馈
 
     /// <summary>右键菜单「打开本地文件夹」成功后写状态栏。</summary>
@@ -1082,6 +1541,16 @@ public sealed class ModsViewModel : LocalizedObservableObject
         ArgumentNullException.ThrowIfNull(row);
         StatusMessage = T(Keys.ModsStatusCopiedId, row.Name);
     }
+
+    /// <summary>右键菜单「转为本地 mod」成功后写状态栏（成功静默，不弹框）。</summary>
+    public void ReportConvertedToLocal(ModRowViewModel row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        StatusMessage = T(Keys.ConvertToLocalStatusDone, row.Name);
+    }
+
+    /// <summary>覆盖状态栏文案：页面在行操作失败时需要把原因反馈到同一条状态栏。</summary>
+    public void SetStatus(string message) => StatusMessage = message ?? string.Empty;
 
     /// <summary>启用全部 / 禁用全部（作用于整个播放集，搜索过滤也不例外），随后自动保存。</summary>
     public void SetAllEnabled(bool enabled)

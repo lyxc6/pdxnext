@@ -6,6 +6,7 @@ using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.CrashAnalysis;
 using PdxLauncher.Core.Mods;
+using PdxLauncher.Core.ModStudio;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Online.Translation.Local;
 using PdxLauncher.Core.Patch;
@@ -42,6 +43,12 @@ public static class AppServices
     public static PlaySetShareService PlaySetShare { get; private set; } = null!;
 
     public static IModCatalog Mods { get; private set; } = null!;
+
+    /// <summary>
+    /// 工坊 mod 转本地 mod：把已订阅且有本地内容的 mod 复制成同内容的本地 mod，
+    /// 磁盘先行、写库在后、失败逆序补偿。由 App 启动时用 Core 实现装配（见 App.xaml.cs）。
+    /// </summary>
+    public static WorkshopToLocalConverter WorkshopToLocal { get; private set; } = null!;
 
     public static IDlcCatalog Dlcs { get; private set; } = null!;
 
@@ -136,6 +143,13 @@ public static class AppServices
     /// </summary>
     public static LocalTranslationRuntime? LocalTranslation { get; private set; }
 
+    /// <summary>
+    /// 本地模型下载的归属者：下载活在 App 层而不是设置页，切走再回来能接着看进度、接着下
+    /// （1.31 GB 的 Index-Translate 模型不可能要求用户一直停在设置页）。
+    /// 没有本地翻译运行时它就是 null。
+    /// </summary>
+    public static LocalModelDownloadCoordinator? LocalModelDownloads { get; private set; }
+
     /// <summary>游戏目录补丁（一键打补丁 / 移除补丁）。只在用户点按钮时读写游戏目录，不做任何自动变更。</summary>
     public static IGamePatchService GamePatch { get; private set; } = null!;
 
@@ -217,6 +231,26 @@ public static class AppServices
     public static void NotifyBackgroundDisplayChanged() =>
         BackgroundDisplayChanged?.Invoke(null, EventArgs.Empty);
 
+    /// <summary>
+    /// 设置页或 Mod 编辑页改了左栏显隐后触发（sender 与参数都无意义）。
+    /// 订阅方必须自己 marshal 到 UI 线程（页面统一用 DispatcherQueue.TryEnqueue）。
+    /// </summary>
+    public static event EventHandler? ModEditorPaneVisibilityChanged;
+
+    /// <summary>通知订阅方：Mod 编辑页左栏显隐变了，需要把绑定值拉回最新。</summary>
+    public static void NotifyModEditorPaneVisibilityChanged() =>
+        ModEditorPaneVisibilityChanged?.Invoke(null, EventArgs.Empty);
+
+    /// <summary>
+    /// 设置页改了「Mod 编辑」菜单入口显隐后触发（sender 与参数都无意义）。
+    /// 订阅方必须自己 marshal 到 UI 线程（主窗口用 DispatcherQueue.TryEnqueue）。
+    /// </summary>
+    public static event EventHandler? ModEditorNavVisibilityChanged;
+
+    /// <summary>通知订阅方：Mod 编辑菜单入口显隐变了，需要重算导航项可见性。</summary>
+    public static void NotifyModEditorNavVisibilityChanged() =>
+        ModEditorNavVisibilityChanged?.Invoke(null, EventArgs.Empty);
+
     /// <summary>冷启动阶段已发现的所有游戏。</summary>
     public static IReadOnlyList<GameInstallation> Games { get; private set; } = Array.Empty<GameInstallation>();
 
@@ -290,6 +324,7 @@ public static class AppServices
         IJsonDocumentStore documents,
         UpdateService updates,
         IReadOnlyList<GameInstallation> games,
+        WorkshopToLocalConverter workshopToLocal,
         NetworkLink? networkLink = null,
         LocalTranslationRuntime? localTranslation = null)
     {
@@ -327,6 +362,7 @@ public static class AppServices
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(updates);
         ArgumentNullException.ThrowIfNull(games);
+        ArgumentNullException.ThrowIfNull(workshopToLocal);
 
         FileSystem = fileSystem;
         Logger = logger;
@@ -336,6 +372,7 @@ public static class AppServices
         PlaySets = playSets;
         PlaySetShare = new PlaySetShareService(playSets, fileSystem, logger);
         Mods = mods;
+        WorkshopToLocal = workshopToLocal;
         Dlcs = dlcs;
         LoadFiles = loadFiles;
         Launcher = launcher;
@@ -365,6 +402,9 @@ public static class AppServices
         HttpThrottle = httpThrottle;
         Translation = translation;
         LocalTranslation = localTranslation;
+        LocalModelDownloads = localTranslation is null
+            ? null
+            : new LocalModelDownloadCoordinator(localTranslation.DownloadAsync, logger);
         GamePatch = gamePatch;
         DlcOwnership = dlcOwnership;
         // 成就读取一律走一次性宿主：拉起 `--steam-host achievements`、读一次、进程退出，
@@ -405,6 +445,24 @@ public static class AppServices
     {
         ArgumentNullException.ThrowIfNull(games);
         Games = games;
+
+        // 游戏发现完成（冷启动与刷新都会走这里）时顺手清一次工坊转本地遗留的过期暂存目录，
+        // 避免半成品被 LocalModInventory 当成 unregistered 显示。清理只读 <ModDir>/.pdxnext-staging，
+        // 失败只记日志，绝不影响游戏列表本身。
+        if (IsInitialized && WorkshopToLocal is not null)
+        {
+            foreach (var game in games)
+            {
+                try
+                {
+                    WorkshopToLocal.CleanupAbandonedStaging(game);
+                }
+                catch (Exception exception)
+                {
+                    Logger.Warn("清理工坊转本地暂存失败（gameId=" + game.GameId + "）：" + exception.Message);
+                }
+            }
+        }
 
         var next = ReconcileCurrentGame(games);
         var current = CurrentGame;
@@ -555,6 +613,12 @@ public static class AppServices
 
     /// <summary>mod 缩略图缓存目录（mod-thumbnails.json 与 mod-thumbnails/）。</summary>
     public static string ModThumbnailCacheRoot => Path.Combine(DataRoot, "mod-cache");
+
+    /// <summary>
+    /// 从游戏导出的脚本文档 / 数据类型文档落盘根目录（&lt;DataRoot&gt;\mod-definitions）。
+    /// 落点始终在解析后的 <see cref="DataRoot"/> 之内（每机器安装下可能是 LocalAppData\PdxNext-Data）。
+    /// </summary>
+    public static string ModDefinitionsRoot => Path.Combine(DataRoot, "mod-definitions");
 
     /// <summary>DDS 缩略图转好的 PNG 缓存目录（image-cache/）。</summary>
     public static string ImageCacheRoot => Path.Combine(DataRoot, "image-cache");

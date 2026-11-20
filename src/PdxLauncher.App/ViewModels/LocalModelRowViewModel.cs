@@ -22,6 +22,9 @@ public sealed class LocalModelRowViewModel : LocalizedObservableObject
     private LocalTranslationModelState? _state;
     private bool _directoryExists;
     private bool _isBusy;
+    private bool _isDownloading;
+    private bool _hasPartialDownload;
+    private int _downloadPercent;
     private string _statusText = string.Empty;
     private string _operationText = string.Empty;
     private DateTimeOffset _operationExpiresAt;
@@ -71,6 +74,51 @@ public sealed class LocalModelRowViewModel : LocalizedObservableObject
         }
     }
 
+    /// <summary>正在下载（行内进度条与「暂停」按钮的可见性都由它决定）。</summary>
+    public bool IsDownloading
+    {
+        get => _isDownloading;
+        private set
+        {
+            if (SetProperty(ref _isDownloading, value))
+            {
+                // 下载态直接决定「下载 / 删除 / 校验 / 打开文件夹」四个按钮的可用性；
+                // 只发 CanPause 的话，续传时（HasPartial 已是 true、IsBusy 已是 false）
+                // 这两个 setter 都不会再触发 RaiseStateProperties，按钮可用性就停在旧值上，
+                // 表现为「点了没反应」。
+                RaiseStateProperties();
+            }
+        }
+    }
+
+    /// <summary>下载百分比（0 到 100）；总长未知时是 0。</summary>
+    public int DownloadPercent
+    {
+        get => _downloadPercent;
+        private set => SetProperty(ref _downloadPercent, value);
+    }
+
+    /// <summary>
+    /// 磁盘上留着这个模型的下载残片（暂停过或失败过）。
+    /// <para>
+    /// 它同时决定「删除」可不可点：一个暂停在 43% 的 1.31 GB 残片，用户必须能自己删掉。
+    /// </para>
+    /// </summary>
+    public bool HasPartialDownload
+    {
+        get => _hasPartialDownload;
+        set
+        {
+            if (SetProperty(ref _hasPartialDownload, value))
+            {
+                RaiseStateProperties();
+            }
+        }
+    }
+
+    /// <summary>可以点「暂停」：只有真的在下的时候。</summary>
+    public bool CanPause => _isDownloading;
+
     /// <summary>
     /// 这一行常驻的安装状态文案（按 Core 五态区分：未安装 / 缺文件 / 尺寸不符 /
     /// 缺配置 / 已安装）。语言切换时由 <see cref="Relocalize"/> 按新语言重建。
@@ -103,11 +151,13 @@ public sealed class LocalModelRowViewModel : LocalizedObservableObject
     /// <summary>当前是否有操作结果 / 进度文案。</summary>
     public bool HasOperationText => !string.IsNullOrWhiteSpace(_operationText);
 
-    /// <summary>可以点「下载」：引擎跑不起来（没装、缺文件、尺寸不符或缺配置）且当前不忙。</summary>
-    public bool CanDownload => !IsRunnable && !_isBusy;
+    /// <summary>可以点「下载」：引擎跑不起来（没装、缺文件、尺寸不符或缺配置）、当前不忙、也不在下。</summary>
+    public bool CanDownload => !IsRunnable && !_isBusy && !_isDownloading;
 
-    /// <summary>可以点「删除」：以 <c>IsInstalled</c> 为准（缺配置也应该能删）且当前不忙。</summary>
-    public bool CanRemove => IsInstalled && !_isBusy;
+    /// <summary>
+    /// 可以点「删除」：装好了，或磁盘上还留着一份残片（暂停后那 1.31 GB 必须能删），且当前不忙。
+    /// </summary>
+    public bool CanRemove => (IsInstalled || _hasPartialDownload) && !_isBusy && !_isDownloading;
 
     /// <summary>可以点「校验」：已安装或尺寸不符时才有意义；未安装 / 缺文件时禁用。</summary>
     public bool CanVerify => _state is not null
@@ -144,6 +194,29 @@ public sealed class LocalModelRowViewModel : LocalizedObservableObject
     {
         _operationExpiresAt = DateTimeOffset.MinValue;
         OperationText = string.Empty;
+    }
+
+    /// <summary>
+    /// 进入下载态：进度条出现、所有动作按钮禁用。
+    /// </summary>
+    /// <param name="percent">当前百分比（续传时直接从断点处开始，不从 0 重新读秒）。</param>
+    public void BeginDownload(int percent)
+    {
+        DownloadPercent = Math.Clamp(percent, 0, 100);
+        HasPartialDownload = true;
+        IsDownloading = true;
+        IsBusy = true;
+    }
+
+    /// <summary>
+    /// 结束下载态（完成 / 暂停 / 失败都走这里）。
+    /// </summary>
+    /// <param name="hasPartial">磁盘上是否还留着残片。</param>
+    public void EndDownload(bool hasPartial)
+    {
+        IsDownloading = false;
+        IsBusy = false;
+        HasPartialDownload = hasPartial;
     }
 
     /// <summary>到点后清空操作文案；返回是否真的清掉了。</summary>
@@ -212,6 +285,7 @@ public sealed class LocalModelRowViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(IsRunnable));
         OnPropertyChanged(nameof(CanDownload));
         OnPropertyChanged(nameof(CanRemove));
+        OnPropertyChanged(nameof(CanPause));
         OnPropertyChanged(nameof(CanVerify));
         OnPropertyChanged(nameof(CanOpenFolder));
         OnPropertyChanged(nameof(OperationExpiresAt));

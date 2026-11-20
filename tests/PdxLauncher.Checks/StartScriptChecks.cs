@@ -13,11 +13,20 @@ using PdxLauncher.Core.Abstractions;
 /// </summary>
 public static class StartScriptChecks
 {
-    /// <summary>exe 路径里出现的 TFM 片段（如 net10.0-windows10.0.26100.0）。</summary>
+    /// <summary>exe 路径里出现的 TFM 片段（如 net11.0-windows10.0.26100.0）。</summary>
     private static readonly Regex TfmPattern = new(@"net\d+\.\d+-windows\d+(?:\.\d+)+", RegexOptions.CultureInvariant);
 
     /// <summary>顶层 .cmd 里对 messages.txt 的取键调用。</summary>
     private static readonly Regex MsgKeyPattern = new(@"scripts\\msg\.cmd""\s+([A-Za-z0-9_]+)", RegexOptions.CultureInvariant);
+
+    /// <summary>所有参与启动/推进的顶层 .cmd：它们都必须纯 ASCII 且只调用 messages.txt 里已有的键。</summary>
+    private static readonly string[] TopLevelScripts = ["start.cmd", "dev.cmd", "status.cmd"];
+
+    /// <summary>按进程名结束/统计 PdxLauncher.App 的旧写法（会误伤别的安装目录里的副本）。</summary>
+    private static readonly Regex BareProcessNamePattern =
+        new(
+            @"taskkill\s+/im\s+PdxLauncher\.App\.exe|imagename eq PdxLauncher\.App\.exe|Get-Process\s+(?:-Name\s+)?PdxLauncher\.App",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     public static int Run(IFileSystem fs)
     {
@@ -41,8 +50,91 @@ public static class StartScriptChecks
         CheckExecutablePaths(fs, root, text);
         CheckSerialBuild(text);
         CheckVsCodeTasks(fs, root);
+        CheckTopLevelScripts(fs, root, messagesPath);
 
         return ChecksContext.Failures - before;
+    }
+
+    /// <summary>
+    /// 三个顶层 .cmd 的共同契约：纯 ASCII、提示键都在 messages.txt 里、构建必须 -m:1、
+    /// 并且不能按「进程名」结束/统计 PdxLauncher.App.exe。
+    /// <para>
+    /// 最后一条是这次多盘并存的根因：同一台机器上装在别的盘的副本同名，
+    /// 按名字杀会顺手关掉用户正在用的那份，按名字统计会把别人的 PID 报成「自己启动成功」。
+    /// </para>
+    /// </summary>
+    private static void CheckTopLevelScripts(IFileSystem fs, string root, string messagesPath)
+    {
+        Console.WriteLine("[StartScriptChecks] dev.cmd / status.cmd 同一套契约");
+        foreach (var name in TopLevelScripts)
+        {
+            var path = Path.Combine(root, name);
+            if (!ChecksContext.Check(name + " 存在", fs.FileExists(path), path))
+            {
+                continue;
+            }
+
+            var bytes = fs.ReadAllBytes(path);
+            var offender = Array.FindIndex(bytes, b => b >= 0x80);
+            ChecksContext.Check(
+                name + " 全部字节 < 0x80",
+                offender < 0,
+                offender < 0 ? bytes.Length + "B" : "第 " + (1 + CountNewlines(bytes, offender)) + " 行有非 ASCII 字节 0x" + bytes[offender].ToString("X2"));
+
+            var text = System.Text.Encoding.UTF8.GetString(bytes);
+            CheckMessageKeys(fs, text, messagesPath, name);
+
+            var buildLine = text.Split('\n').FirstOrDefault(l => l.Contains("dotnet build", StringComparison.Ordinal));
+            if (buildLine is not null)
+            {
+                ChecksContext.Check(name + " 的 dotnet build 带 -m:1", buildLine.Contains("-m:1", StringComparison.Ordinal), buildLine.Trim());
+            }
+
+            var bare = BareProcessNamePattern.Match(text);
+            ChecksContext.Check(
+                name + " 不按进程名结束/统计 PdxLauncher.App.exe（多盘副本会被误伤）",
+                !bare.Success,
+                bare.Success ? bare.Value : "ok");
+
+            if (name is "dev.cmd" or "status.cmd" or "start.cmd")
+            {
+                ChecksContext.Check(
+                    name + " 走 scripts\\pdx-app-process.ps1 按 exe 路径过滤",
+                    text.Contains(@"scripts\pdx-app-process.ps1", StringComparison.Ordinal),
+                    name);
+            }
+        }
+
+        var helper = Path.Combine(root, "scripts", "pdx-app-process.ps1");
+        ChecksContext.Check("scripts\\pdx-app-process.ps1 存在", fs.FileExists(helper), helper);
+        if (fs.FileExists(helper))
+        {
+            var helperText = fs.ReadAllText(helper);
+            ChecksContext.Check(
+                "pdx-app-process.ps1 支持 status/stop/wait 三种动作",
+                helperText.Contains("'status'", StringComparison.Ordinal)
+                    && helperText.Contains("'stop'", StringComparison.Ordinal)
+                    && helperText.Contains("'wait'", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "pdx-app-process.ps1 按 Path 全等比较（不按进程名杀）",
+                helperText.Contains("OrdinalIgnoreCase", StringComparison.Ordinal)
+                    && helperText.Contains("LOCAL_PIDS", StringComparison.Ordinal)
+                    && helperText.Contains("OTHER_PIDS", StringComparison.Ordinal));
+        }
+    }
+
+    private static int CountNewlines(byte[] bytes, int upto)
+    {
+        var lines = 1;
+        for (var i = 0; i < upto; i++)
+        {
+            if (bytes[i] == (byte)'\n')
+            {
+                lines++;
+            }
+        }
+
+        return lines;
     }
 
     private static void CheckAsciiOnly(byte[] bytes)
@@ -67,9 +159,9 @@ public static class StartScriptChecks
         ChecksContext.Check("start.cmd 全部字节 < 0x80", false, "第 " + line + " 行有非 ASCII 字节 0x" + bytes[offender].ToString("X2"));
     }
 
-    private static void CheckMessageKeys(IFileSystem fs, string text, string messagesPath)
+    private static void CheckMessageKeys(IFileSystem fs, string text, string messagesPath, string scriptName = "start.cmd")
     {
-        Console.WriteLine("[StartScriptChecks] 提示键都在 messages.txt 里");
+        Console.WriteLine("[StartScriptChecks] 提示键都在 messages.txt 里（" + scriptName + "）");
         if (!ChecksContext.Check("scripts\\messages.txt 存在", fs.FileExists(messagesPath), messagesPath))
         {
             return;
@@ -92,10 +184,10 @@ public static class StartScriptChecks
         }
 
         var keys = MsgKeyPattern.Matches(text).Select(m => m.Groups[1].Value).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(k => k, StringComparer.Ordinal).ToList();
-        ChecksContext.Check("start.cmd 至少调用一次 msg.cmd", keys.Count > 0, keys.Count + " 个键");
+        ChecksContext.Check(scriptName + " 至少调用一次 msg.cmd", keys.Count > 0, keys.Count + " 个键");
         foreach (var key in keys)
         {
-            ChecksContext.Check("提示键 " + key + " 已定义", known.Contains(key));
+            ChecksContext.Check(scriptName + " 提示键 " + key + " 已定义", known.Contains(key));
         }
     }
 

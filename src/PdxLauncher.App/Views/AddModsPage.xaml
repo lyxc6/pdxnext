@@ -106,11 +106,13 @@
         </Grid>
 
         <!--
-            搜索行：搜索框定宽 320，右侧跟排序下拉。
-            排序框与搜索框同高（PdxDropDown 的 DropDownButton 是 32），不额外占行。
+            搜索行：搜索框定宽 320，右侧依次是排序、来源、版本兼容性三个下拉。
+            下拉框与搜索框同高（PdxDropDown 的 DropDownButton 是 32），不额外占行。
         -->
         <Grid Grid.Row="1" ColumnSpacing="8">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -137,6 +139,26 @@
                                   SelectionChanged="OnSortSelectionChanged"
                                   AutomationProperties.AutomationId="cmbAddModsSort"
                                   AutomationProperties.Name="{x:Bind ViewModel.SortName, Mode=OneWay}" />
+
+            <controls:PdxDropDown Grid.Column="2"
+                                  x:Name="SourceFilterBox"
+                                  MinWidth="120"
+                                  VerticalAlignment="Center"
+                                  ItemsSource="{x:Bind ViewModel.SourceFilterModes, Mode=OneWay}"
+                                  SelectedItem="{x:Bind ViewModel.SelectedSourceFilter, Mode=OneWay}"
+                                  SelectionChanged="OnSourceFilterSelectionChanged"
+                                  AutomationProperties.AutomationId="cmbAddModsSourceFilter"
+                                  AutomationProperties.Name="{x:Bind ViewModel.SourceFilterName, Mode=OneWay}" />
+
+            <controls:PdxDropDown Grid.Column="3"
+                                  x:Name="VersionFilterBox"
+                                  MinWidth="120"
+                                  VerticalAlignment="Center"
+                                  ItemsSource="{x:Bind ViewModel.VersionFilterModes, Mode=OneWay}"
+                                  SelectedItem="{x:Bind ViewModel.SelectedVersionFilter, Mode=OneWay}"
+                                  SelectionChanged="OnVersionFilterSelectionChanged"
+                                  AutomationProperties.AutomationId="cmbAddModsVersionFilter"
+                                  AutomationProperties.Name="{x:Bind ViewModel.VersionFilterName, Mode=OneWay}" />
         </Grid>
 
         <!-- 主体：候选列表 + 空状态 -->
@@ -152,7 +174,9 @@
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="vm:AddModRowViewModel">
                         <!--
-                            列：勾选 24 / 缩略图 40 / 名称 + 徽标 * / 版本 96。
+                            列：勾选 24 / 缩略图 40 / 名称 + 徽标 + 译名 * / 版本 Auto。
+                            版本列不能写死 96：两行版本字（如「mod 版本 2025.10.10」）比 96 宽，
+                            溢出会被列表边缘裁掉，三角也随之看不见；宽度下限由列内容自己的 MinWidth 保证。
                             勾选框必须 MinWidth=0：WinUI 的 CheckBox 默认最小宽度 120 DIP，
                             不压下去会在行首留出 100 多 DIP 的空白（播放集页同一个坑已经踩过）。
                         -->
@@ -160,12 +184,27 @@
                               Padding="8,4"
                               MinHeight="56"
                               AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
-                              AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
+                              AutomationProperties.Name="{x:Bind Name, Mode=OneTime}"
+                              AutomationProperties.HelpText="{x:Bind VersionWarningText, Mode=OneWay}">
+                            <!-- 翻译项是页面级动作（对本页全部候选生效），菜单打开时按 ViewModel 状态
+                                 在 code-behind 里统一设 IsEnabled。 -->
+                            <Grid.ContextFlyout>
+                                <MenuFlyout Opening="OnTranslationMenuOpening">
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"
+                                        Click="OnTranslationRetryClick"
+                                        AutomationProperties.AutomationId="menuAddModsTranslationRetry" />
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.CommonTranslationRefresh, Mode=OneWay}"
+                                        Click="OnTranslationRefreshClick"
+                                        AutomationProperties.AutomationId="menuAddModsTranslationRefresh" />
+                                </MenuFlyout>
+                            </Grid.ContextFlyout>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="24" />
                                 <ColumnDefinition Width="40" />
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
                             <!-- 勾选框：勾中的 mod 会被加入播放集 -->
@@ -189,9 +228,10 @@
                                        Stretch="Uniform" />
                             </Border>
 
-                            <!-- 名称 + 徽标 + 副标题（大小 / 注册 id） -->
+                            <!-- 名称 + 徽标 + 译名 + 副标题（大小 / 注册 id） -->
                             <Grid Grid.Column="2" VerticalAlignment="Center" RowSpacing="4">
                                 <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
@@ -238,7 +278,27 @@
                                     </Border>
                                 </Grid>
 
-                                <TextBlock Grid.Row="1"
+                                <!-- 译名：与 Mod 库 / 播放集页同一张表（ModId + 目标语言）回填的译文，
+                                     原文与译文同显，框只包住译文本身（HorizontalAlignment=Left）。 -->
+                                <Border Grid.Row="1"
+                                        Margin="0,4,0,0"
+                                        Padding="8,4"
+                                        HorizontalAlignment="Left"
+                                        CornerRadius="8"
+                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromString(TranslatedName), Mode=OneWay}">
+                                    <!-- AutomationId 挂在 TextBlock 上而不是外层 Border：Border 没有 automation peer，
+                                         把 Id 挂在 Border 上 UIA 树里查不到这个节点，脚本与读屏都定位不到译名。 -->
+                                    <TextBlock Text="{x:Bind TranslatedName, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                               TextTrimming="CharacterEllipsis"
+                                               AutomationProperties.AutomationId="{x:Bind TranslatedAutomationId, Mode=OneTime}" />
+                                </Border>
+
+                                <TextBlock Grid.Row="2"
                                            Text="{x:Bind SubtitleText, Mode=OneWay}"
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -248,34 +308,51 @@
                             <!--
                                 版本列：第一行是 mod 作者版本，第二行是声明支持的游戏版本；
                                 缺失给短横（支持版本）或不显示（mod 版本），偏低于当前游戏版本时加警告图标。
+                                列宽按内容取（Auto + 内容 MinWidth=96）：固定 96 时「mod 版本 2025.10.10」
+                                这种长文本会溢出被列表边缘裁掉，三角跟着看不见；文本各自 MaxWidth 才让省略号生效。
                             -->
                             <StackPanel Grid.Column="3"
                                         Orientation="Horizontal"
                                         Spacing="4"
                                         HorizontalAlignment="Right"
                                         VerticalAlignment="Center">
-                                <!-- 警告图标只在版本偏低时出现；Id 挂在始终存在的文字上，自动化不受可见性影响。 -->
-                                <FontIcon Glyph="&#xE7BA;"
-                                          FontSize="16"
-                                          VerticalAlignment="Center"
-                                          Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                                          Visibility="{x:Bind svc:XamlVisibility.FromBool(HasVersionWarning), Mode=OneWay}"
-                                          ToolTipService.ToolTip="{x:Bind VersionWarningText, Mode=OneWay}"
-                                          AutomationProperties.Name="{x:Bind VersionWarningText, Mode=OneWay}" />
+                                <!--
+                                    三角的提示挂在包住字形的透明容器上，不挂 FontIcon：
+                                    FontIcon 只有字形本身可命中，鼠标落在旁边空空如也时提示不会弹。
+                                    容器始终存在、只切可见性，AutomationId 因此对 UIA 稳定。
+                                -->
+                                <Border MinWidth="24"
+                                        MinHeight="24"
+                                        Padding="4"
+                                        Background="Transparent"
+                                        VerticalAlignment="Center"
+                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(HasVersionWarning), Mode=OneWay}"
+                                        ToolTipService.ToolTip="{x:Bind VersionWarningText, Mode=OneWay}"
+                                        AutomationProperties.AutomationId="{x:Bind WarningAutomationId, Mode=OneTime}"
+                                        AutomationProperties.Name="{x:Bind L.ModlibWarningName, Mode=OneWay}"
+                                        AutomationProperties.HelpText="{x:Bind VersionWarningText, Mode=OneWay}">
+                                    <FontIcon Glyph="&#xE7BA;"
+                                              FontSize="16"
+                                              VerticalAlignment="Center"
+                                              Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                                </Border>
                                 <StackPanel Orientation="Vertical"
+                                            MinWidth="96"
                                             HorizontalAlignment="Right"
                                             VerticalAlignment="Center">
-                                    <TextBlock Text="{x:Bind ModVersionText, Mode=OneWay}"
+                                    <TextBlock MaxWidth="200"
+                                               Text="{x:Bind ModVersionText, Mode=OneWay}"
                                                HorizontalAlignment="Right"
                                                TextAlignment="Right"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                                TextTrimming="CharacterEllipsis"
-                                               ToolTipService.ToolTip="{x:Bind ModVersionName, Mode=OneWay}"
+                                               ToolTipService.ToolTip="{x:Bind ModVersionText, Mode=OneWay}"
                                                AutomationProperties.AutomationId="{x:Bind ModVersionAutomationId, Mode=OneTime}"
                                                AutomationProperties.Name="{x:Bind ModVersionName, Mode=OneWay}"
                                                Visibility="{x:Bind svc:XamlVisibility.FromBool(HasModVersion), Mode=OneWay}" />
-                                    <TextBlock Text="{x:Bind RequiredVersionText, Mode=OneWay}"
+                                    <TextBlock MaxWidth="200"
+                                               Text="{x:Bind RequiredVersionText, Mode=OneWay}"
                                                HorizontalAlignment="Right"
                                                TextAlignment="Right"
                                                Style="{StaticResource CaptionTextBlockStyle}"

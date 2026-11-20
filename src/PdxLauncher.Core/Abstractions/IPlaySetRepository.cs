@@ -49,6 +49,45 @@ public interface IPlaySetRepository
         string? archivePath,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// 「工坊 mod 转本地 mod」的正向库写入：单事务里插入一条新的本地 <c>mods</c> 行
+    /// （显式 <c>source='local'</c>、<c>steamId=NULL</c>），再把所有引用 <paramref name="oldModId"/> 的
+    /// <c>playsets_mods.modId</c> 改成 <paramref name="localMod"/> 的 ModId。
+    /// <para>
+    /// <c>enabled</c> / <c>position</c> 原样保留；旧 mods 行不删，供失败时反向补偿。
+    /// EU5（playsets.json）按 <paramref name="oldDirPath"/> / <paramref name="oldArchivePath"/> 重写
+    /// <c>orderedListMods.path</c>。<see cref="ModOrigins.Normalize(string?, string?)"/> 判定来源，
+    /// 不能只看 steamId；写入一律经 Router 的 WriteAsync 并检查返回值。
+    /// </para>
+    /// </summary>
+    Task<AppResult<bool>> AdoptLocalModAsync(
+        GameInstallation game,
+        Guid oldModId,
+        string? oldDirPath,
+        string? oldArchivePath,
+        PlaySetMod localMod,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// <see cref="AdoptLocalModAsync"/> 的逆操作，供「自有库行写入失败」等部分成功场景补偿：
+    /// 单事务里先把 <c>playsets_mods.modId</c> 从 new 改回 old，确认引用恢复后再删新 <c>mods</c> 行。
+    /// <b>顺序不可颠倒</b>，也绝不调用会删 <c>playsets_mods</c> 行的 DeleteMods。
+    /// <para>
+    /// EU5 把 <c>orderedListMods.path</c> 写回旧值；因为签名里只有旧路径，
+    /// <paramref name="newDirPath"/> / <paramref name="newArchivePath"/> 由转换调用方传入，
+    /// 用来在 playsets.json 里定位刚改写的条目（sqlite 实现忽略这两个参数）。
+    /// </para>
+    /// </summary>
+    Task<AppResult<bool>> RevertLocalModAdoptionAsync(
+        GameInstallation game,
+        Guid newModId,
+        Guid oldModId,
+        string? oldDirPath,
+        string? oldArchivePath,
+        CancellationToken cancellationToken,
+        string? newDirPath = null,
+        string? newArchivePath = null);
+
     Task<AppResult<bool>> SavePlaySetModsAsync(
         GameInstallation game,
         Guid playSetId,

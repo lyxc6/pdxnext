@@ -3,6 +3,32 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)；版本号遵循
 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
+## [1.4.0] - 2026-11-21
+
+### Added
+
+- 本地离线模型下载：新增 `LocalTranslationModelDownloadChecks`（逐字节进度 / 节流 / 续传 / 忽略 Range / 取消留残片 / 哈希不符删残片 / 压缩续传 / 分母未知按字节上报 / 收尾阶段取消）与 `LocalModelDownloadCoordinatorChecks`（单飞 / 暂停续传 / 完成与失败收敛 / Forget / 退出取消），检查类 166 → 169。
+- 会话分支脚本：`open -Worktree` 在 `.agents\worktrees\<slug>` 另开一棵工作树，两条对话可以同时写代码而不用互相等待（各自的 `bin\`/`obj\`）；`close` 会在「检出基线的那棵工作树」里合并。新增 `SessionScriptChecks`（31 条断言钉住并行写法、脏树拒绝、跨树合并与 detach），检查类 169 → 172。
+
+### Changed
+
+- 会话分支脚本：工作区有未提交改动时 `open` 不再自动 `git add -A` 扫进 `wip` 基线，改为拒绝（退出 3）；确需带走旧改动要显式加 `-CarryDirty`，并且 `wip` 提交信息会列出带走的文件。已在对话分支上再 `open` 时同时给出「先 close」与「`-Worktree` 另开一棵树」两条路。
+
+### Removed
+
+- 左栏「游戏库」不再显示右侧计数徽标（按用户要求去掉那个数字）：`NavigationViewItem.InfoBadge`、`ShellViewModel.GamesCount/LibraryBadgeName/HasNoGames`、文案键 `ShellBadgeLibraryName`（中英同步）与 `MainWindow` 只为它公开的 `ViewModel` 属性一并移除；自检从 `ShellNavBadgeChecks`（钉住徽标存在）改为 `ShellNavNoBadgeChecks`（钉住不再出现），检查类仍 172。
+
+### Fixed
+
+- 本地离线模型下载：进度从「每个文件下完才报一次」改成**逐字节上报**（节流为「变化 ≥0.5% 或距上次 ≥250 ms」）。此前 Index-Translate-2B（单个 1.31 GB 文件）整段下载停在「下载中 0%」、结束直接跳 100%；现在行内进度条与「下载中 43%（560 MB / 1.3 GB）」持续前进。
+- 本地离线模型下载：新增**断点续传**。`.part` 改存原始传输字节（压缩文件即 gzip 原始字节），中断、暂停或退出应用后再点「下载」从断点继续，不再每次重下 1.3 GB；服务端不支持 Range（回 200）时自动截断重下，不拼接；残片已完整时直接校验落位。
+- 本地离线模型下载：**切页不再中断下载**。下载归 App 层协调器所有，离开设置页只是停止看进度，回来会接上；关闭应用时取消并保留残片供下次续传。
+- 本地离线模型：新增「暂停」按钮与行内进度条；暂停后有残片时「删除」也可用；磁盘占用统计把残片算进去，不再隐形。
+- 本地离线模型下载：收尾的解压 / SHA-256 校验阶段也响应暂停（1.31 GB 校验要几秒到几十秒，此前这段时间按钮看着像失灵），且取消时保留残片而不是当失败删掉。
+- 本地离线模型下载：206 响应缺 `Content-Range` 时不再拿请求起点兜底，一律按从头开始，避免把剩余内容写到错误偏移拼出「长度对、内容错」的文件；下载请求显式要求 `Accept-Encoding: identity`，避免自动解压与按字节续传冲突。
+- 自检：`PlaysetChecks` 的 CK3 播放集条数断言从「≥ 3」放宽到「≥ 1」，真机数据变化不再让自检无端变红（沿用「真机只锁结构」原则）。
+- 会话分支：基线版本分支被另一棵工作树检出时，`close` 不再以 `git switch` 的 fatal 退 128 结束 —— 它在占用者的目录里合并；那棵树自己有未提交改动时退出 6 并指名路径，避免把别人的半成品卷进合并。链接工作树收尾后自动 `detach`，不再把基线锁给一棵即将删除的树。
+
 ## [1.3.0] - 2026-11-12
 
 ### Added

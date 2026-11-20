@@ -36,7 +36,7 @@
 | 8.3.260402-preview2 | 不选。改为依赖拆包后的 `Microsoft.WindowsAppSDK.WinUI 1.8.260204000`，会引入第二套 WinAppSDK 版本口径。 |
 | 8.1.x / 8.0.x | 不选。`SettingsExpander` 的 `Items`/`IsExpanded` 行为与 8.2 有差异，无收益。 |
 
-包内资产只有 `lib/net7.0-windows10.0.18362`、`net8.0-windows10.0.19041`、`net9.0-windows10.0.19041` 三档，**没有 net10**；`net10.0-windows10.0.26100.0` 会回退吃 `net9.0-windows10.0.19041`（实测 `project.assets.json` 确认）。传递依赖共 5 个包：SettingsControls → Triggers → Helpers → Extensions → `CommunityToolkit.Common 8.2.1`。
+包内资产只有 `lib/net7.0-windows10.0.18362`、`net8.0-windows10.0.19041`、`net9.0-windows10.0.19041` 三档，**没有 net10 / net11**；`net11.0-windows10.0.26100.0` 会回退吃 `net9.0-windows10.0.19041`（实测 `project.assets.json` 确认）。传递依赖共 5 个包：SettingsControls → Triggers → Helpers → Extensions → `CommunityToolkit.Common 8.2.1`。
 
 ### 1.3 实测步骤与结果
 
@@ -329,7 +329,7 @@ dotnet build src\PdxLauncher.App\PdxLauncher.App.csproj -c Release -p:Platform=x
 
 ```powershell
 dotnet build PdxLauncher.sln -c Release -m:1
-dotnet tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll
+dotnet tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll
 .\publish.cmd
 # 断言：publish 目录有 5 个 CommunityToolkit.*.dll；PdxLauncher.App.pri 字节数 > 2 290 728
 ```

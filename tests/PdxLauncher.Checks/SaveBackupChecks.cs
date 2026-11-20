@@ -1001,6 +1001,9 @@ public static class SaveBackupChecks
         public virtual void Copy(string source, string destination, bool overwrite) =>
             Inner.Copy(source, destination, overwrite);
 
+        public virtual void CopyDirectory(string source, string destination, bool overwrite, CancellationToken cancellationToken = default) =>
+            Inner.CopyDirectory(source, destination, overwrite, cancellationToken);
+
         public virtual void Move(string source, string destination, bool overwrite) =>
             Inner.Move(source, destination, overwrite);
 

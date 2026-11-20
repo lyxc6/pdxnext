@@ -250,6 +250,9 @@
   <data name="CommonOpenFolder" xml:space="preserve">
     <value>Open folder</value>
   </data>
+  <data name="CommonPageRefresh" xml:space="preserve">
+    <value>Refresh page</value>
+  </data>
   <data name="CommonRefresh" xml:space="preserve">
     <value>Refresh</value>
   </data>
@@ -270,6 +273,12 @@
   </data>
   <data name="CommonSourceSubscribed" xml:space="preserve">
     <value>Subscribed</value>
+  </data>
+  <data name="CommonTranslationRefresh" xml:space="preserve">
+    <value>Refresh translation</value>
+  </data>
+  <data name="CommonTranslationRetry" xml:space="preserve">
+    <value>Retry translation</value>
   </data>
   <data name="CommonUnknown" xml:space="preserve">
     <value>Unknown</value>
@@ -1009,6 +1018,33 @@
   <data name="DiagnosticsNetworkThrottleTitle" xml:space="preserve">
     <value>Requests and throttling per host</value>
   </data>
+  <data name="DiagnosticsGaugeCache" xml:space="preserve">
+    <value>Cache</value>
+  </data>
+  <data name="DiagnosticsGaugeLiveOff" xml:space="preserve">
+    <value>Paused</value>
+  </data>
+  <data name="DiagnosticsGaugeLiveOn" xml:space="preserve">
+    <value>Live</value>
+  </data>
+  <data name="DiagnosticsGaugeLiveToggle" xml:space="preserve">
+    <value>Live refresh</value>
+  </data>
+  <data name="DiagnosticsGaugeLog" xml:space="preserve">
+    <value>Log</value>
+  </data>
+  <data name="DiagnosticsGaugeMemory" xml:space="preserve">
+    <value>Memory</value>
+  </data>
+  <data name="DiagnosticsGaugePercent" xml:space="preserve">
+    <value>{0}% of budget</value>
+  </data>
+  <data name="DiagnosticsGaugeStartup" xml:space="preserve">
+    <value>Startup</value>
+  </data>
+  <data name="DiagnosticsGaugeSubtitle" xml:space="preserve">
+    <value>Real-time budget dashboard · refreshes every second, cache and log every 5 seconds</value>
+  </data>
   <data name="DiagnosticsOverviewCountersTitle" xml:space="preserve">
     <value>Cache and content</value>
   </data>
@@ -1522,6 +1558,219 @@
   <data name="LibraryVersionUnknown" xml:space="preserve">
     <value>Version unknown</value>
   </data>
+  <data name="ModEditorTitle" xml:space="preserve">
+    <value>Mod Editor</value>
+  </data>
+  <data name="ModEditorSubtitle" xml:space="preserve">
+    <value>Export, search, templates and library, all local</value>
+  </data>
+  <data name="ModEditorPaneToggle" xml:space="preserve">
+    <value>Show left pane</value>
+  </data>
+  <data name="ModEditorPanePickerName" xml:space="preserve">
+    <value>Select section</value>
+  </data>
+  <data name="ModEditorSectionExport" xml:space="preserve">
+    <value>One-click export</value>
+  </data>
+  <data name="ModEditorSectionSearch" xml:space="preserve">
+    <value>Local full-text search</value>
+  </data>
+  <data name="ModEditorSectionTemplate" xml:space="preserve">
+    <value>Create template</value>
+  </data>
+  <data name="ModEditorSectionLibrary" xml:space="preserve">
+    <value>Mod library</value>
+  </data>
+  <data name="ModEditorExportTitle" xml:space="preserve">
+    <value>Export script documents</value>
+  </data>
+  <data name="ModEditorExportHint" xml:space="preserve">
+    <value>Launch the game in debug mode and type commands in its console; the launcher only watches a folder and copies files, it never runs the commands for you.</value>
+  </data>
+  <data name="ModEditorExportScriptDocs" xml:space="preserve">
+    <value>Export script docs</value>
+  </data>
+  <data name="ModEditorExportDumpDataTypes" xml:space="preserve">
+    <value>Export data types</value>
+  </data>
+  <data name="ModEditorExportLaunchDebug" xml:space="preserve">
+    <value>Launch in debug mode</value>
+  </data>
+  <data name="ModEditorExportWatchDirLabel" xml:space="preserve">
+    <value>Watch directory</value>
+  </data>
+  <data name="ModEditorExportWatchDirPlaceholder" xml:space="preserve">
+    <value>Paste the absolute path of the game output directory</value>
+  </data>
+  <data name="ModEditorExportPickWatchDir" xml:space="preserve">
+    <value>Browse…</value>
+  </data>
+  <data name="ModEditorExportWatchDirInvalid" xml:space="preserve">
+    <value>Invalid watch directory; pick the game output directory</value>
+  </data>
+  <data name="ModEditorExportPickerUnavailable" xml:space="preserve">
+    <value>Cannot open the folder picker</value>
+  </data>
+  <data name="ModEditorExportCommandScriptDocs" xml:space="preserve">
+    <value>Type `script_docs` in the console</value>
+  </data>
+  <data name="ModEditorExportCommandDumpDataTypes" xml:space="preserve">
+    <value>Type `dump_data_types` in the console</value>
+  </data>
+  <data name="ModEditorExportConsoleHint" xml:space="preserve">
+    <value>Press ~ in the game to open the console, then type the command above and press Enter.</value>
+  </data>
+  <data name="ModEditorExportWaiting" xml:space="preserve">
+    <value>Waiting to start…</value>
+  </data>
+  <data name="ModEditorExportWatching" xml:space="preserve">
+    <value>Watching directory…</value>
+  </data>
+  <data name="ModEditorExportCopied" xml:space="preserve">
+    <value>Imported {0} files into {1}</value>
+  </data>
+  <data name="ModEditorExportNoGame" xml:space="preserve">
+    <value>Select a game first</value>
+  </data>
+  <data name="ModEditorExportUnsupportedGame" xml:space="preserve">
+    <value>The current game does not support content management</value>
+  </data>
+  <data name="ModEditorExportFailed" xml:space="preserve">
+    <value>Export failed</value>
+  </data>
+  <data name="ModEditorSearchFailed" xml:space="preserve">
+    <value>Search failed</value>
+  </data>
+  <data name="ModEditorLibraryFailed" xml:space="preserve">
+    <value>Failed to load the mod list</value>
+  </data>
+  <data name="ModEditorExportStop" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="ModEditorExportOpenFolder" xml:space="preserve">
+    <value>Open folder</value>
+  </data>
+  <data name="ModEditorExportDebugArgLabel" xml:space="preserve">
+    <value>Debug arguments</value>
+  </data>
+  <data name="ModEditorSearchTitle" xml:space="preserve">
+    <value>Local full-text search</value>
+  </data>
+  <data name="ModEditorSearchHint" xml:space="preserve">
+    <value>Search imported documents (case-insensitive, Chinese supported)</value>
+  </data>
+  <data name="ModEditorSearchPlaceholder" xml:space="preserve">
+    <value>Enter a keyword</value>
+  </data>
+  <data name="ModEditorSearchName" xml:space="preserve">
+    <value>Search term</value>
+  </data>
+  <data name="ModEditorSearchButton" xml:space="preserve">
+    <value>Search</value>
+  </data>
+  <data name="ModEditorSearchNoGame" xml:space="preserve">
+    <value>Select a game first</value>
+  </data>
+  <data name="ModEditorSearchNoDocs" xml:space="preserve">
+    <value>No documents imported yet</value>
+  </data>
+  <data name="ModEditorSearchEmpty" xml:space="preserve">
+    <value>Enter a keyword</value>
+  </data>
+  <data name="ModEditorSearchResultCount" xml:space="preserve">
+    <value>{0} matches</value>
+  </data>
+  <data name="ModEditorSearchLine" xml:space="preserve">
+    <value>Line {0}</value>
+  </data>
+  <data name="ModEditorSearchOpenFile" xml:space="preserve">
+    <value>Open file</value>
+  </data>
+  <data name="ModEditorTemplateTitle" xml:space="preserve">
+    <value>Create template</value>
+  </data>
+  <data name="ModEditorTemplateHint" xml:space="preserve">
+    <value>Create a local mod template for the current game following its descriptor rules</value>
+  </data>
+  <data name="ModEditorTemplateName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="ModEditorTemplateFolder" xml:space="preserve">
+    <value>Folder name</value>
+  </data>
+  <data name="ModEditorTemplateVersion" xml:space="preserve">
+    <value>Version</value>
+  </data>
+  <data name="ModEditorTemplateSupported" xml:space="preserve">
+    <value>Supported version</value>
+  </data>
+  <data name="ModEditorTemplateTags" xml:space="preserve">
+    <value>Tags (comma separated)</value>
+  </data>
+  <data name="ModEditorTemplateDescription" xml:space="preserve">
+    <value>Description</value>
+  </data>
+  <data name="ModEditorTemplatePreview" xml:space="preserve">
+    <value>Preview image</value>
+  </data>
+  <data name="ModEditorTemplatePickPreview" xml:space="preserve">
+    <value>Pick preview…</value>
+  </data>
+  <data name="ModEditorTemplateCreate" xml:space="preserve">
+    <value>Create template</value>
+  </data>
+  <data name="ModEditorTemplateSuccess" xml:space="preserve">
+    <value>Template created: {0}</value>
+  </data>
+  <data name="ModEditorTemplateFailed" xml:space="preserve">
+    <value>Failed to create template: {0}</value>
+  </data>
+  <data name="ModEditorTemplateUnsupported" xml:space="preserve">
+    <value>The current game does not support template creation</value>
+  </data>
+  <data name="ModEditorTemplateNameRequired" xml:space="preserve">
+    <value>Name is required</value>
+  </data>
+  <data name="ModEditorTemplateFolderHint" xml:space="preserve">
+    <value>Folder name may contain only letters, digits, underscores and hyphens</value>
+  </data>
+  <data name="ModEditorLibraryTitle" xml:space="preserve">
+    <value>Mod library and paths</value>
+  </data>
+  <data name="ModEditorLibraryHint" xml:space="preserve">
+    <value>Local mod list and paths for the current game</value>
+  </data>
+  <data name="ModEditorLibraryNoGame" xml:space="preserve">
+    <value>Select a game first</value>
+  </data>
+  <data name="ModEditorLibraryEmpty" xml:space="preserve">
+    <value>No local mods yet</value>
+  </data>
+  <data name="ModEditorLibraryCount" xml:space="preserve">
+    <value>{0} total</value>
+  </data>
+  <data name="ModEditorLibraryNameColumn" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="ModEditorLibraryPathColumn" xml:space="preserve">
+    <value>Path</value>
+  </data>
+  <data name="ModEditorLibrarySourceColumn" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="ModEditorLibrarySourceLocal" xml:space="preserve">
+    <value>Local</value>
+  </data>
+  <data name="ModEditorLibrarySourceSteam" xml:space="preserve">
+    <value>Steam</value>
+  </data>
+  <data name="ModEditorLibraryRefresh" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="ModEditorLibraryOpenFolder" xml:space="preserve">
+    <value>Open folder</value>
+  </data>
   <data name="ModlibDetailNoWorkshop" xml:space="preserve">
     <value>This mod has no workshop page (local mod)</value>
   </data>
@@ -1774,6 +2023,18 @@
   <data name="ModsAddPageSelectedCount" xml:space="preserve">
     <value>{0} mods selected</value>
   </data>
+  <data name="ModsAddPageSourceFilterAll" xml:space="preserve">
+    <value>All sources</value>
+  </data>
+  <data name="ModsAddPageSourceFilterLocal" xml:space="preserve">
+    <value>Local only</value>
+  </data>
+  <data name="ModsAddPageSourceFilterName" xml:space="preserve">
+    <value>Source</value>
+  </data>
+  <data name="ModsAddPageSourceFilterSubscribed" xml:space="preserve">
+    <value>Subscribed only</value>
+  </data>
   <data name="ModsAddPageSortByName" xml:space="preserve">
     <value>Name A-Z</value>
   </data>
@@ -1797,6 +2058,18 @@
   </data>
   <data name="ModsAddPageVersion" xml:space="preserve">
     <value>Supports {0}</value>
+  </data>
+  <data name="ModsAddPageVersionFilterAll" xml:space="preserve">
+    <value>All versions</value>
+  </data>
+  <data name="ModsAddPageVersionFilterBelow" xml:space="preserve">
+    <value>Version too low</value>
+  </data>
+  <data name="ModsAddPageVersionFilterName" xml:space="preserve">
+    <value>Version compatibility</value>
+  </data>
+  <data name="ModsAddPageVersionFilterOther" xml:space="preserve">
+    <value>Other</value>
   </data>
   <data name="ModsAutoSortApply" xml:space="preserve">
     <value>Apply Order</value>
@@ -3657,6 +3930,36 @@ Continue?</value>
   <data name="SettingsInterfaceLanguageZhCNTitle" xml:space="preserve">
     <value>简体中文</value>
   </data>
+  <data name="SettingsInterfaceModEditorPane" xml:space="preserve">
+    <value>Show Mod Editor left pane</value>
+  </data>
+  <data name="SettingsInterfaceModEditorPaneName" xml:space="preserve">
+    <value>Mod Editor left pane</value>
+  </data>
+  <data name="SettingsInterfaceModEditorPaneOff" xml:space="preserve">
+    <value>Left pane hidden</value>
+  </data>
+  <data name="SettingsInterfaceModEditorPaneOn" xml:space="preserve">
+    <value>Left pane shown</value>
+  </data>
+  <data name="SettingsAdvancedModEditorNav" xml:space="preserve">
+    <value>Show Mod Editor menu entry</value>
+  </data>
+  <data name="SettingsAdvancedModEditorNavDesc" xml:space="preserve">
+    <value>When off, the "Mod Editor" entry is hidden from the side menu; if you are on that page, you are returned home.</value>
+  </data>
+  <data name="SettingsAdvancedModEditorNavName" xml:space="preserve">
+    <value>Mod Editor menu entry</value>
+  </data>
+  <data name="SettingsAdvancedModEditorNavOff" xml:space="preserve">
+    <value>"Mod Editor" menu entry hidden</value>
+  </data>
+  <data name="SettingsAdvancedModEditorNavOn" xml:space="preserve">
+    <value>"Mod Editor" menu entry shown</value>
+  </data>
+  <data name="SettingsSectionModEditorNav" xml:space="preserve">
+    <value>Mod Editor</value>
+  </data>
   <data name="SettingsInterfaceModThumbnailSize" xml:space="preserve">
     <value>Mod image size</value>
   </data>
@@ -4451,6 +4754,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="SettingsTranslateLocalModelDownloading" xml:space="preserve">
     <value>Downloading {0}%</value>
   </data>
+  <data name="SettingsTranslateLocalModelDownloadProgress" xml:space="preserve">
+    <value>Downloading {0}% ({1} / {2})</value>
+  </data>
   <data name="SettingsTranslateLocalModelIndexTranslate" xml:space="preserve">
     <value>Index-Translate-2B (best quality, about 1.3 GB)</value>
   </data>
@@ -4462,6 +4768,12 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="SettingsTranslateLocalModelOpenFolder" xml:space="preserve">
     <value>Open folder</value>
+  </data>
+  <data name="SettingsTranslateLocalModelPause" xml:space="preserve">
+    <value>Pause</value>
+  </data>
+  <data name="SettingsTranslateLocalModelPaused" xml:space="preserve">
+    <value>Paused at {0}% (Download resumes from here)</value>
   </data>
   <data name="SettingsTranslateLocalModelRemove" xml:space="preserve">
     <value>Delete</value>
@@ -4661,9 +4973,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="ShellAlwaysOnTopUnsupported" xml:space="preserve">
     <value>This window is not using the Overlapped presenter; always-on-top is unavailable</value>
   </data>
-  <data name="ShellBadgeLibraryName" xml:space="preserve">
-    <value>Game library, {0} games</value>
-  </data>
   <data name="ShellCrashCopied" xml:space="preserve">
     <value>Copied to clipboard</value>
   </data>
@@ -4705,6 +5014,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="ShellNavLibrary" xml:space="preserve">
     <value>Game Library</value>
+  </data>
+  <data name="ShellNavModEditor" xml:space="preserve">
+    <value>Mod Editor</value>
   </data>
   <data name="ShellNavModLibrary" xml:space="preserve">
     <value>Mod Library</value>
@@ -5806,5 +6118,20 @@ then call list_games to verify.</value>
   </data>
   <data name="WorkshopDependenciesGroupUnknown" xml:space="preserve">
     <value>Unknown ({0})</value>
+  </data>
+  <data name="CommonConvertToLocal" xml:space="preserve">
+    <value>Convert to local mod</value>
+  </data>
+  <data name="ConvertToLocalConfirmDetail" xml:space="preserve">
+    <value>Convert "{0}" to a local mod? It will no longer update with the Workshop subscription — make sure it has been downloaded locally.</value>
+  </data>
+  <data name="ConvertToLocalStatusDone" xml:space="preserve">
+    <value>Converted "{0}" to a local mod</value>
+  </data>
+  <data name="ConvertToLocalFailedDetail" xml:space="preserve">
+    <value>Failed to convert to local mod: {0}</value>
+  </data>
+  <data name="ConvertToLocalCancelled" xml:space="preserve">
+    <value>Conversion to local mod cancelled</value>
   </data>
 </root>

@@ -293,6 +293,106 @@ public sealed class OwnDatabasePlaySetRepository : IPlaySetRepository
             cancellationToken);
     }
 
+    /// <inheritdoc />
+    public Task<AppResult<bool>> AdoptLocalModAsync(
+        GameInstallation game,
+        Guid oldModId,
+        string? oldDirPath,
+        string? oldArchivePath,
+        PlaySetMod localMod,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(localMod);
+
+        if (oldModId == Guid.Empty || localMod.ModId == Guid.Empty || oldModId == localMod.ModId)
+        {
+            return Task.FromResult(AppResult<bool>.Fail(ErrorKind.Invalid, "mod-id-invalid"));
+        }
+
+        var newId = localMod.ModId.ToString("D");
+        var updatedAt = _clock.UtcNow.ToUnixTimeMilliseconds();
+        return WriteAsync(
+            game,
+            "工坊转本地（插入本地行并替换播放集引用）",
+            connection =>
+            {
+                // 自有库固定列：显式 source=local / steamId=NULL，不靠 workshopId 推导，也不靠 Upsert 的 COALESCE。
+                connection.Execute(
+                    "INSERT OR IGNORE INTO mods (gameId, id, displayName, dirPath, archivePath, gameRegistryId, " +
+                    "steamId, source, requiredVersion, status, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    game.GameId,
+                    newId,
+                    localMod.Name ?? string.Empty,
+                    string.IsNullOrWhiteSpace(localMod.DirPath) ? null : localMod.DirPath,
+                    string.IsNullOrWhiteSpace(localMod.ArchivePath) ? null : localMod.ArchivePath,
+                    string.IsNullOrWhiteSpace(localMod.GameRegistryId) ? null : localMod.GameRegistryId,
+                    null,
+                    ModOrigins.LocalSource,
+                    string.IsNullOrWhiteSpace(localMod.RequiredVersion) ? null : localMod.RequiredVersion,
+                    string.IsNullOrWhiteSpace(localMod.Status) ? "ready_to_play" : localMod.Status,
+                    updatedAt);
+
+                // 只换 modId，enabled / position 原样保留；按 (gameId, modId) 隔离，绝不跨游戏合并。
+                var changed = connection.Execute(
+                    "UPDATE playsets_mods SET modId = ? WHERE gameId = ? AND modId = ?",
+                    newId,
+                    game.GameId,
+                    oldModId.ToString("D"));
+
+                _logger.Info(
+                    "工坊转本地（自有库）：本地行 " + localMod.ModId.ToString("N") +
+                    "，替换引用 " + oldModId.ToString("N") +
+                    "（" + changed.ToString(System.Globalization.CultureInfo.InvariantCulture) + " 处，gameId=" + game.GameId + "）");
+                return AppResult<bool>.Ok(true);
+            },
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<AppResult<bool>> RevertLocalModAdoptionAsync(
+        GameInstallation game,
+        Guid newModId,
+        Guid oldModId,
+        string? oldDirPath,
+        string? oldArchivePath,
+        CancellationToken cancellationToken,
+        string? newDirPath = null,
+        string? newArchivePath = null)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+
+        if (newModId == Guid.Empty || oldModId == Guid.Empty || newModId == oldModId)
+        {
+            return Task.FromResult(AppResult<bool>.Fail(ErrorKind.Invalid, "mod-id-invalid"));
+        }
+
+        return WriteAsync(
+            game,
+            "工坊转本地回滚（先恢复引用再删新行）",
+            connection =>
+            {
+                // 先恢复引用，再删新行：顺序反了会抹掉用户播放集配置。
+                var restored = connection.Execute(
+                    "UPDATE playsets_mods SET modId = ? WHERE gameId = ? AND modId = ?",
+                    oldModId.ToString("D"),
+                    game.GameId,
+                    newModId.ToString("D"));
+
+                connection.Execute(
+                    "DELETE FROM mods WHERE gameId = ? AND id = ?",
+                    game.GameId,
+                    newModId.ToString("D"));
+
+                _logger.Info(
+                    "工坊转本地回滚（自有库）：引用 new→old " +
+                    restored.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                    " 处，已删本地行 " + newModId.ToString("N") + "（gameId=" + game.GameId + "）");
+                return AppResult<bool>.Ok(true);
+            },
+            cancellationToken);
+    }
+
     public Task<AppResult<bool>> SavePlaySetModsAsync(
         GameInstallation game,
         Guid playSetId,

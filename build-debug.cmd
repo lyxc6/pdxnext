@@ -16,9 +16,9 @@ if errorlevel 1 exit /b 1
 
 echo.
 call "%~dp0scripts\msg.cmd" D_TITLE2
-dotnet "tests\PdxLauncher.Checks\bin\Debug\net10.0\PdxLauncher.Checks.dll"
+dotnet "tests\PdxLauncher.Checks\bin\Debug\net11.0\PdxLauncher.Checks.dll"
 if errorlevel 1 exit /b 1
 
 echo.
-call "%~dp0scripts\msg.cmd" D_EXE src\PdxLauncher.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe
+call "%~dp0scripts\msg.cmd" D_EXE src\PdxLauncher.App\bin\x64\Debug\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe
 exit /b 0

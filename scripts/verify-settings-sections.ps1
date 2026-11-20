@@ -7,12 +7,12 @@ Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Drawing
 
 $rootDir = Split-Path -Parent $PSScriptRoot
-$exe = Join-Path $rootDir 'src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe'
+$exe = Join-Path $rootDir 'src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe'
 $shotDir = Join-Path $rootDir '.scratch\rework'
 New-Item -ItemType Directory -Force -Path $shotDir | Out-Null
 
 if (-not (Test-Path $exe)) { "NO_EXE $exe"; exit 1 }
-Get-Process PdxLauncher.App -ErrorAction SilentlyContinue | Stop-Process -Force
+& (Join-Path $PSScriptRoot "pdx-app-process.ps1") -Action stop -Exe $exe | Out-Null
 Start-Sleep -Milliseconds 700
 # 注意：必须用 UseShellExecute=$false 启动。worktree 里的未签名 exe 走 ShellExecute
 # 会触发「打开文件 - 安全警告」（取消 = Win32 1223），Start-Process 会报「操作已被用户取消」。

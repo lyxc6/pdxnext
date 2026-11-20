@@ -32,7 +32,7 @@ public sealed class LocalTranslationRuntime : IDisposable
         Glossary = new LocalTranslationGlossary(fileSystem);
         Catalog = LocalTranslationModelCatalog.CreateDefault();
         Store = new LocalTranslationModelStore(Catalog, rootDirectory: null, logger: logger);
-        Downloader = new LocalTranslationModelDownloader(http, logger, Catalog, Store);
+        Downloader = new LocalTranslationModelDownloader(http, logger, Catalog);
     }
 
     /// <summary>术语词典。</summary>
@@ -91,9 +91,12 @@ public sealed class LocalTranslationRuntime : IDisposable
     }
 
     /// <summary>下载并安装模型。</summary>
+    /// <param name="kind">模型种类。</param>
+    /// <param name="progress">进度回调（逐字节节流上报）。</param>
+    /// <param name="cancellationToken">取消令牌；取消时已下载的 <c>.part</c> 保留，下次续传。</param>
     public Task<LocalTranslationModelDownloadResult> DownloadAsync(
         LocalTranslationModelKind kind,
-        IProgress<double>? progress = null,
+        IProgress<LocalTranslationDownloadProgress>? progress = null,
         CancellationToken cancellationToken = default) =>
         Downloader.DownloadAsync(kind, progress, cancellationToken);
 

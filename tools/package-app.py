@@ -3,7 +3,7 @@
 
 背景：本机没有 Windows App Runtime 框架包（MSIX 未注册，Add-AppxPackage 被拒），
 所以必须走「非打包 + 自包含」路线：
-  1. 复制 .NET 10 运行时 + WindowsAppSDK 原生 payload 到输出目录
+  1. 复制 .NET 11 运行时 + WindowsAppSDK 原生 payload 到输出目录
   2. 从 MSBuild 的 ReferencePath 里挑出托管的投影程序集（不能靠 glob，会漏）
   3. 用 package.appxfragment 生成 reg-free WinRT 的 SxS 清单，mt.exe 合并进 exe
   4. 用 apphost.exe 模板 + 占位符替换生成 exe，并写 deps.json / runtimeconfig.json
@@ -29,20 +29,20 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(SCRATCH, "publish")
 
 NUGET = os.environ.get("NUGET_PACKAGES") or os.path.join(os.path.expanduser("~"), ".nuget", "packages")
 SHARED = r"C:/Program Files/dotnet/shared"
-APPHOST = r"C:/Program Files/dotnet/packs/Microsoft.NETCore.App.Host.win-x64/10.0.13/runtimes/win-x64/native/apphost.exe"
-MT = os.path.join(NUGET, "microsoft.windows.sdk.buildtools/10.0.28000.2705/bin/10.0.28000.0/x64/mt.exe")
+APPHOST = r"C:/Program Files/dotnet/packs/Microsoft.NETCore.App.Host.win-x64/11.0.0/runtimes/win-x64/native/apphost.exe"
+MT = os.path.join(NUGET, "microsoft.windows.sdk.buildtools/10.0.28000.2957/bin/10.0.28000.0/x64/mt.exe")
 
 APP_NAME = "PdxLauncher.App"
 APP_DLL = APP_NAME + ".dll"
-NET_VERSION = "10.0.13"
+NET_VERSION = "11.0.0"
 
 # 这些包提供原生 payload（dll/pri/winmd），必须整体复制
 NATIVE_PKGS = [
-    ("microsoft.windowsappsdk.winui/2.3.9", "runtimes-framework/win-x64/native"),
-    ("microsoft.windowsappsdk.foundation/2.3.12", "runtimes-framework/win-x64/native"),
-    ("microsoft.windowsappsdk.dwrite/2.1.0", "runtimes-framework/win-x64/native"),
-    ("microsoft.windowsappsdk.interactiveexperiences/2.1.9", "runtimes-framework/win-x64/native"),
-    ("microsoft.windowsappsdk.widgets/2.0.5", "runtimes-framework/win-x64/native"),
+    ("microsoft.windowsappsdk.winui/2.7.0", "runtimes-framework/win-x64/native"),
+    ("microsoft.windowsappsdk.foundation/2.7.0", "runtimes-framework/win-x64/native"),
+    ("microsoft.windowsappsdk.dwrite/2.7.0", "runtimes-framework/win-x64/native"),
+    ("microsoft.windowsappsdk.interactiveexperiences/2.7.0", "runtimes-framework/win-x64/native"),
+    ("microsoft.windowsappsdk.widgets/2.7.0", "runtimes-framework/win-x64/native"),
 ]
 
 # 托管投影程序集：只认这些路径关键字（glob 会漏，必须从 refs.json 里筛）
@@ -62,28 +62,25 @@ MANAGED_KEYS = (
 )
 
 FRAGMENT_PKGS = [
-    ("microsoft.windowsappsdk.foundation/2.3.12", "runtimes-framework/package.appxfragment"),
-    ("microsoft.windowsappsdk.winui/2.3.9", "runtimes-framework/package.appxfragment"),
-    ("microsoft.windowsappsdk.interactiveexperiences/2.1.9", "runtimes-framework/package.appxfragment"),
+    ("microsoft.windowsappsdk.foundation/2.7.0", "runtimes-framework/package.appxfragment"),
+    ("microsoft.windowsappsdk.winui/2.7.0", "runtimes-framework/package.appxfragment"),
+    ("microsoft.windowsappsdk.interactiveexperiences/2.7.0", "runtimes-framework/package.appxfragment"),
 ]
 
 # 本地离线翻译引擎（Index-Translate-2B + Bergamot）需要的托管程序集。
 # 这些不是 WinRT 投影程序集，MANAGED_KEYS 覆盖不到，必须单独整组复制。
+# 框架自带的 System.Text.Json / System.Collections.Immutable / System.Linq.AsyncEnumerable
+# 由第 1 步复制的 .NET 11 共享运行时提供，不要再从 NuGet 覆盖。
 LOCAL_TRANSLATION_MANAGED = [
     "bergamottranslatorsharp/0.7.0/lib/net10.0/BergamotTranslatorSharp.dll",
     "llamasharp/0.30.0/lib/net10.0/LLamaSharp.dll",
     "communitytoolkit.highperformance/8.4.2/lib/net8.0/CommunityToolkit.HighPerformance.dll",
-    "microsoft.bcl.asyncinterfaces/10.0.13/lib/netstandard2.0/Microsoft.Bcl.AsyncInterfaces.dll",
     "microsoft.bcl.memory/10.0.13/lib/net10.0/Microsoft.Bcl.Memory.dll",
     "microsoft.extensions.ai.abstractions/10.11.0/lib/net10.0/Microsoft.Extensions.AI.Abstractions.dll",
     "microsoft.extensions.logging.abstractions/10.0.13/lib/net10.0/Microsoft.Extensions.Logging.Abstractions.dll",
     "system.linq.async/7.0.1/lib/net10.0/System.Linq.Async.dll",
-    "system.linq.asyncenumerable/10.0.13/lib/net10.0/System.Linq.AsyncEnumerable.dll",
     "system.numerics.tensors/10.0.13/lib/net10.0/System.Numerics.Tensors.dll",
     "system.interactive.async/7.0.1/lib/net10.0/System.Interactive.Async.dll",
-    "system.collections.immutable/10.0.13/lib/net10.0/System.Collections.Immutable.dll",
-    "system.text.json/10.0.13/lib/net10.0/System.Text.Json.dll",
-    "microsoft.extensions.primitives/10.0.13/lib/net10.0/Microsoft.Extensions.Primitives.dll",
     "microsoft.extensions.dependencyinjection.abstractions/10.0.13/lib/net10.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll",
 ]
 
@@ -281,10 +278,10 @@ def write_deps(dll_path):
         if entry.lower().endswith(".dll"):
             runtime[entry] = {"assemblyVersion": "", "fileVersion": ""}
     deps = {
-        "runtimeTarget": {"name": ".NETCoreApp,Version=v10.0", "signature": ""},
+        "runtimeTarget": {"name": ".NETCoreApp,Version=v11.0", "signature": ""},
         "compilationOptions": {},
         "targets": {
-            ".NETCoreApp,Version=v10.0": {
+            ".NETCoreApp,Version=v11.0": {
                 APP_NAME + "/1.0.0": {"runtime": runtime}
             }
         },
@@ -299,7 +296,7 @@ def write_deps(dll_path):
 def write_runtimeconfig(path):
     config = {
         "runtimeOptions": {
-            "tfm": "net10.0",
+            "tfm": "net11.0",
             "frameworks": [
                 {"name": "Microsoft.NETCore.App", "version": NET_VERSION},
                 {"name": "Microsoft.WindowsDesktop.App", "version": NET_VERSION},

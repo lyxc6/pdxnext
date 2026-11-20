@@ -23,7 +23,8 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
     private ProxyResolution? _proxy;
     private LogMetrics _logMetrics = LogMetrics.Empty;
     private string _rawTail = string.Empty;
-    private string _logTailText = string.Empty;
+    private IReadOnlyList<LogDisplayLine> _logDisplayLines = Array.Empty<LogDisplayLine>();
+    private string _logTailEmptyText = string.Empty;
     private string _logSummaryText = string.Empty;
     private string _logRotationText = string.Empty;
     private string _logLastWriteText = string.Empty;
@@ -35,11 +36,14 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
     private int _workshopEntries;
     private IReadOnlyList<StartupMark> _marks = Array.Empty<StartupMark>();
     private LogLevelFilter _logFilter = LogLevelFilter.All;
+    private LogFilterOption _selectedLogFilterOption = LogFilterCatalog.All[0];
     private bool _logWrap;
+    private bool _autoRefresh;
     private DateTimeOffset? _sampledAt;
     private bool _isBusy;
     private bool _isCacheBusy;
     private bool _isLogBusy;
+    private bool _live = true;
     private string? _statusKey;
     private object?[] _statusArgs = Array.Empty<object?>();
     private string _statusMessage = string.Empty;
@@ -47,8 +51,10 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
     public DiagnosticsViewModel()
     {
         _logWrap = AppServices.IsInitialized && AppServices.Settings.DiagnosticsLogWrap;
+        _autoRefresh = AppServices.IsInitialized && AppServices.Settings.DiagnosticsLogAutoRefresh;
         CacheRows = new ObservableCollection<CacheRowViewModel>(CacheRowCatalog.Create());
         RebuildMetrics();
+        RebuildGauges();
         RebuildStartup();
         UpdateLogTexts();
         RebuildNetwork();
@@ -59,6 +65,9 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
 
     /// <summary>概览指标卡（工作集、托管堆、GC、句柄…）。</summary>
     public ObservableCollection<DiagnosticMetricViewModel> Metrics { get; } = new();
+
+    /// <summary>概览的四个核心仪表环（内存 / 缓存 / 日志 / 启动耗时）。</summary>
+    public ObservableCollection<GaugeViewModel> Gauges { get; } = new();
 
     /// <summary>按严重度排好的优化建议。</summary>
     public ObservableCollection<DiagnosticHintViewModel> Hints { get; } = new();
@@ -96,7 +105,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
 
     public bool HasStartupMarks => StartupRows.Count > 0;
 
-    public bool HasLogTail => !string.IsNullOrEmpty(LogTailText);
+    public bool HasLogTail => _logDisplayLines.Count > 0;
 
     public bool HasProxyWarning => !string.IsNullOrWhiteSpace(ProxyWarningText);
 
@@ -108,6 +117,22 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
         ? T(Keys.DiagnosticsOverviewUpdated, at.ToLocalTime().ToString("g", CultureInfo.CurrentCulture))
         : string.Empty;
 
+    /// <summary>实时刷新开关（由页面读写，默认开；关掉后概览不再定时采样）。</summary>
+    public bool LiveEnabled
+    {
+        get => _live;
+        set
+        {
+            if (SetProperty(ref _live, value))
+            {
+                OnPropertyChanged(nameof(LiveStatusText));
+            }
+        }
+    }
+
+    /// <summary>实时状态文案（实时中 / 已暂停），供概览标题行显示。</summary>
+    public string LiveStatusText => T(LiveEnabled ? Keys.DiagnosticsGaugeLiveOn : Keys.DiagnosticsGaugeLiveOff);
+
     /// <summary>日志占用摘要：当前大小 / 归档个数 / 合计。</summary>
     public string LogSummaryText => _logSummaryText;
 
@@ -117,11 +142,34 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
     /// <summary>主文件最后写入时间。</summary>
     public string LogLastWriteText => _logLastWriteText;
 
-    /// <summary>只读日志框的内容（最新一条在最前）。</summary>
-    public string LogTailText => _logTailText;
+    /// <summary>日志显示行（最新一条在最前；异常堆栈续行跟随所属块）。</summary>
+    public IReadOnlyList<LogDisplayLine> LogDisplayLines => _logDisplayLines;
+
+    /// <summary>无日志时的占位文案；有日志时为空串。</summary>
+    public string LogTailEmptyText => _logTailEmptyText;
 
     /// <summary>日志尾部小标题（「最近 N 行（最新在上）」）。</summary>
     public string LogTailTitleText => T(Keys.DiagnosticsLogTailTitle, LogTailLines);
+
+    /// <summary>级别筛选下拉的选项（全部 / 警告及以上 / 仅错误）。</summary>
+    public IReadOnlyList<LogFilterOption> LogFilterOptions => LogFilterCatalog.All;
+
+    /// <summary>下拉当前选中项；setter 同步过滤档位并重算日志行。</summary>
+    public LogFilterOption SelectedLogFilterOption
+    {
+        get => _selectedLogFilterOption;
+        set
+        {
+            if (value is null || ReferenceEquals(_selectedLogFilterOption, value))
+            {
+                return;
+            }
+
+            _selectedLogFilterOption = value;
+            OnPropertyChanged(nameof(SelectedLogFilterOption));
+            LogFilter = value.Filter;
+        }
+    }
 
     /// <summary>档位过滤：全部 / 警告及以上 / 仅错误。</summary>
     public LogLevelFilter LogFilter
@@ -129,10 +177,19 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
         get => _logFilter;
         set
         {
-            if (SetProperty(ref _logFilter, value))
+            if (!SetProperty(ref _logFilter, value))
             {
-                UpdateLogTexts();
+                return;
             }
+
+            var option = LogFilterCatalog.Resolve(value);
+            if (!ReferenceEquals(_selectedLogFilterOption, option))
+            {
+                _selectedLogFilterOption = option;
+                OnPropertyChanged(nameof(SelectedLogFilterOption));
+            }
+
+            RebuildLogDisplayLines();
         }
     }
 
@@ -153,6 +210,49 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
             _logWrap = value;
             OnPropertyChanged(nameof(LogWrap));
             PersistLogWrap(value);
+        }
+    }
+
+    /// <summary>
+    /// 日志尾部是否每 5 秒自动刷新。与 <see cref="LogWrap"/> 对齐：TwoWay 绑定 + 设置持久化，
+    /// 页面进入日志分区时按此状态启停定时器（定时器在页面代码里，避免 VM 引用 DispatcherTimer）。
+    /// </summary>
+    public bool AutoRefresh
+    {
+        get => _autoRefresh;
+        set
+        {
+            if (_autoRefresh == value)
+            {
+                return;
+            }
+
+            _autoRefresh = value;
+            OnPropertyChanged(nameof(AutoRefresh));
+            PersistAutoRefresh(value);
+        }
+    }
+
+    /// <summary>把自动刷新开关写回设置；失败只记日志，开关仍然即时生效。</summary>
+    private static void PersistAutoRefresh(bool value)
+    {
+        try
+        {
+            if (!AppServices.IsInitialized)
+            {
+                return;
+            }
+
+            AppServices.Settings.DiagnosticsLogAutoRefresh = value;
+            var saved = AppServices.SaveSettings();
+            if (!saved.IsSuccess)
+            {
+                AppServices.Logger.Warn("保存日志自动刷新设置失败: " + saved.ErrorMessage);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("保存日志自动刷新设置失败: " + ex.Message);
         }
     }
 
@@ -249,6 +349,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
         }
 
         RefreshHints();
+        RebuildGauges();
     }
 
     /// <summary>重新统计七类缓存占用；只读文件属性，不联网。</summary>
@@ -271,6 +372,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
             _workshopEntries = AppServices.WorkshopInfo.Count + AppServices.WorkshopItemPages.Count;
             OnPropertyChanged(nameof(CacheTotalText));
             RefreshHints();
+            RebuildGauges();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -352,6 +454,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
             _rawTail = tail;
             UpdateLogTexts();
             RefreshHints();
+            RebuildGauges();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -402,6 +505,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
 
         RebuildStartup();
         RefreshHints();
+        RebuildGauges();
     }
 
     /// <summary>回写状态栏文案（记住键与参数，切语言后按新语言重建）。</summary>
@@ -415,15 +519,74 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
     protected override void Relocalize()
     {
         RebuildMetrics();
+        RebuildGauges();
         RebuildNetwork();
         RebuildStartup();
         UpdateLogTexts();
         RefreshHints();
         OnPropertyChanged(nameof(CacheTotalText));
         OnPropertyChanged(nameof(LastSampleText));
+        OnPropertyChanged(nameof(LiveStatusText));
         if (_statusKey is not null)
         {
             StatusMessage = T(_statusKey, _statusArgs);
+        }
+    }
+
+    /// <summary>
+    /// 就地更新概览的四个核心仪表环（内存 / 缓存 / 日志 / 启动耗时）。
+    /// 不 Clear+重建：DataTemplate 里的 PdxGaugeRing 必须一直挂在视觉树上，补间动画才生效。
+    /// </summary>
+    private void RebuildGauges()
+    {
+        var workingSet = _snapshot?.WorkingSetBytes ?? 0;
+        ApplyGauge(
+            "memory",
+            Keys.DiagnosticsGaugeMemory,
+            SizeFormatter.Format(workingSet),
+            PerformanceGaugeMath.ComputeMemory(workingSet));
+
+        ApplyGauge(
+            "cache",
+            Keys.DiagnosticsGaugeCache,
+            SizeFormatter.Format(_cacheBytes),
+            PerformanceGaugeMath.ComputeCache(_cacheBytes));
+
+        ApplyGauge(
+            "log",
+            Keys.DiagnosticsGaugeLog,
+            SizeFormatter.Format(_logMetrics.CurrentBytes),
+            PerformanceGaugeMath.ComputeLog(_logMetrics.CurrentBytes));
+
+        double startupMs = _marks.Count == 0 ? 0 : _marks[^1].ElapsedMilliseconds;
+        ApplyGauge(
+            "startup",
+            Keys.DiagnosticsGaugeStartup,
+            startupMs <= 0 ? T(Keys.DiagnosticsStartupEmpty) : FormatDuration(TimeSpan.FromMilliseconds(startupMs)),
+            PerformanceGaugeMath.ComputeStartup(startupMs));
+    }
+
+    private void ApplyGauge(string key, string titleKey, string valueText, GaugeReading reading)
+    {
+        var title = T(titleKey);
+        var detail = T(Keys.DiagnosticsGaugePercent, Math.Round(reading.Percent).ToString(CultureInfo.InvariantCulture));
+        var automationId = "diagGauge" + Pascalize(key);
+
+        var existing = Gauges.FirstOrDefault(gauge => gauge.Key == key);
+        if (existing is { } gauge)
+        {
+            gauge.Apply(reading.Percent, valueText, detail, reading.Status);
+        }
+        else
+        {
+            Gauges.Add(new GaugeViewModel(
+                key,
+                title,
+                valueText,
+                detail,
+                reading.Percent,
+                reading.Status,
+                automationId));
         }
     }
 
@@ -563,16 +726,26 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
             ? T(Keys.DiagnosticsLogLastWrite, last.ToLocalTime().ToString("g", CultureInfo.CurrentCulture))
             : T(Keys.DiagnosticsLogLastWriteEmpty);
 
-        string filtered = string.IsNullOrEmpty(_rawTail)
-            ? string.Empty
-            : LogTailReader.FilterNewestFirst(_rawTail, _logFilter);
-        _logTailText = string.IsNullOrEmpty(filtered) ? T(Keys.DiagnosticsLogTailEmpty) : filtered;
+        _logDisplayLines = LogTailReader.ParseDisplayLines(_rawTail, _logFilter, newestFirst: true);
+        _logTailEmptyText = _logDisplayLines.Count == 0 ? T(Keys.DiagnosticsLogTailEmpty) : string.Empty;
 
         OnPropertyChanged(nameof(LogSummaryText));
         OnPropertyChanged(nameof(LogRotationText));
         OnPropertyChanged(nameof(LogLastWriteText));
-        OnPropertyChanged(nameof(LogTailText));
+        OnPropertyChanged(nameof(LogDisplayLines));
+        OnPropertyChanged(nameof(LogTailEmptyText));
         OnPropertyChanged(nameof(LogTailTitleText));
+        OnPropertyChanged(nameof(HasLogTail));
+    }
+
+    /// <summary>仅重建日志显示行（切换过滤档位时走这里，摘要文案不变）。</summary>
+    private void RebuildLogDisplayLines()
+    {
+        _logDisplayLines = LogTailReader.ParseDisplayLines(_rawTail, _logFilter, newestFirst: true);
+        _logTailEmptyText = _logDisplayLines.Count == 0 ? T(Keys.DiagnosticsLogTailEmpty) : string.Empty;
+
+        OnPropertyChanged(nameof(LogDisplayLines));
+        OnPropertyChanged(nameof(LogTailEmptyText));
         OnPropertyChanged(nameof(HasLogTail));
     }
 

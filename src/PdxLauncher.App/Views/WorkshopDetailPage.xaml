@@ -137,6 +137,27 @@
                             HorizontalScrollMode="Disabled"
                             AutomationProperties.AutomationId="scrollWorkshopDetail">
                     <StackPanel x:Name="DetailContent" Spacing="12">
+                        <!-- 翻译项是页面级动作：正文任意位置右键都能重试 / 刷新译文，
+                             普通（非合集）详情页没有合集子项行可右键，这是它唯一的翻译入口。
+                             合集子项行上有同款菜单，就近优先；菜单打开时按 ViewModel 状态
+                             在 code-behind 里统一设 IsEnabled。 -->
+                        <StackPanel.ContextFlyout>
+                            <MenuFlyout Opening="OnTranslationMenuOpening">
+                                <MenuFlyoutItem
+                                    Text="{x:Bind L.CommonPageRefresh, Mode=OneWay}"
+                                    Click="OnRetryClick"
+                                    AutomationProperties.AutomationId="menuWorkshopDetailPageRefresh" />
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutItem
+                                    Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"
+                                    Click="OnTranslationRetryClick"
+                                    AutomationProperties.AutomationId="menuWorkshopDetailTranslationRetry" />
+                                <MenuFlyoutItem
+                                    Text="{x:Bind L.CommonTranslationRefresh, Mode=OneWay}"
+                                    Click="OnTranslationRefreshClick"
+                                    AutomationProperties.AutomationId="menuWorkshopDetailTranslationRefresh" />
+                            </MenuFlyout>
+                        </StackPanel.ContextFlyout>
 
                     <!-- 1. 图片区：内联 FlipView 翻页 + 缩略图条，点大图进全屏查看器 -->
                     <Border x:Name="sectionGallery"
@@ -523,7 +544,8 @@
                                    TextWrapping="Wrap" />
                     </Border>
 
-                    <!-- 翻译没出结果：说明原因，并指路到设置页的「测试翻译」。 -->
+                    <!-- 翻译没出结果：说明原因，并指路到设置页的「测试翻译」；
+                         重试与刷新入口在正文右键菜单里（合集子项的行右键也有同款菜单）。 -->
                     <Border Padding="12"
                             CornerRadius="8"
                             BorderThickness="1"
@@ -659,6 +681,28 @@
                                               ColumnSpacing="12"
                                               AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
                                               AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
+                                            <!-- 翻译项是页面级动作（对整页描述 / 更新日志 / 评论 / 合集标题生效），
+                                                 菜单打开时按 ViewModel 状态在 code-behind 里统一设 IsEnabled。
+                                                 AutomationId 用合集子项专属的 Collection 前缀：
+                                                 正文根菜单挂同款三项，同页两份菜单共用 ID 会让按 ID
+                                                 定位的自动化工具命中歧义。 -->
+                                            <Grid.ContextFlyout>
+                                                <MenuFlyout Opening="OnTranslationMenuOpening">
+                                                    <MenuFlyoutItem
+                                                        Text="{x:Bind L.CommonPageRefresh, Mode=OneWay}"
+                                                        Click="OnRetryClick"
+                                                        AutomationProperties.AutomationId="menuWorkshopDetailCollectionPageRefresh" />
+                                                    <MenuFlyoutSeparator />
+                                                    <MenuFlyoutItem
+                                                        Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"
+                                                        Click="OnTranslationRetryClick"
+                                                        AutomationProperties.AutomationId="menuWorkshopDetailCollectionTranslationRetry" />
+                                                    <MenuFlyoutItem
+                                                        Text="{x:Bind L.CommonTranslationRefresh, Mode=OneWay}"
+                                                        Click="OnTranslationRefreshClick"
+                                                        AutomationProperties.AutomationId="menuWorkshopDetailCollectionTranslationRefresh" />
+                                                </MenuFlyout>
+                                            </Grid.ContextFlyout>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="*" />

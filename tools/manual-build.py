@@ -25,15 +25,15 @@ BUILD = os.path.join(SCRATCH, "build")
 OBJ = os.path.join(SCRATCH, "obj")
 
 DOTNET = "dotnet"
-CSC = r"C:/Program Files/dotnet/sdk/10.0.402/Roslyn/bincore/csc.dll"
-NETREF = r"C:/Program Files/dotnet/packs/Microsoft.NETCore.App.Ref/10.0.13/ref/net10.0"
+CSC = r"C:/Program Files/dotnet/sdk/11.0.100/Roslyn/bincore/csc.dll"
+NETREF = r"C:/Program Files/dotnet/packs/Microsoft.NETCore.App.Ref/11.0.0/ref/net11.0"
 # .NET SDK 自带的分析器（源生成器）：[GeneratedRegex] 必须有 regex 生成器才会生成实现部件。
 NETREF_ANALYZERS = os.path.join(os.path.dirname(os.path.dirname(NETREF)), "analyzers", "dotnet", "cs")
 REGEX_GENERATOR = os.path.join(NETREF_ANALYZERS, "System.Text.RegularExpressions.Generator.dll")
 NUGET = os.environ.get("NUGET_PACKAGES") or os.path.join(os.path.expanduser("~"), ".nuget", "packages")
-XAMLCOMPILER = os.path.join(NUGET, "microsoft.windowsappsdk.winui/2.3.9/tools/net472/XamlCompiler.exe")
-MT = os.path.join(NUGET, "microsoft.windows.sdk.buildtools/10.0.28000.2705/bin/10.0.28000.0/x64/mt.exe")
-APPSDK_INC = os.path.join(NUGET, "microsoft.windowsappsdk.foundation/2.3.12/include")
+XAMLCOMPILER = os.path.join(NUGET, "microsoft.windowsappsdk.winui/2.7.0/tools/net472/XamlCompiler.exe")
+MT = os.path.join(NUGET, "microsoft.windows.sdk.buildtools/10.0.28000.2957/bin/10.0.28000.0/x64/mt.exe")
+APPSDK_INC = os.path.join(NUGET, "microsoft.windowsappsdk.foundation/2.7.0/include")
 # CommunityToolkit.Mvvm 的源生成器：[ObservableProperty] / [RelayCommand] 必须有它才会生成属性与命令。
 # 实测 csc -analyzer 可以直接驱动它（字段式写法通过，partial property 写法在 8.4.2 下不支持）。
 MVVM_ANALYZER = os.path.join(
@@ -57,11 +57,11 @@ LOCALIZATION_RESW = [
 #   LLamaSharp               -> Index-Translate-2B（GGUF）进程内推理
 #   LLamaSharp.Backend.Cpu   -> llama.cpp 的 CPU 原生后端
 # 手工构建不经过 MSBuild 的 NuGet 资产解析，必须自己补 -r: 引用与原生 payload。
+# 下面这些包的最新资产仍是 lib/net10.0（包本身未出 net11 目标），net11 工程可以正常引用。
 NUGET_CORE_REFS = [
     os.path.join(NUGET, "bergamottranslatorsharp/0.7.0/lib/net10.0/BergamotTranslatorSharp.dll"),
     os.path.join(NUGET, "llamasharp/0.30.0/lib/net10.0/LLamaSharp.dll"),
     os.path.join(NUGET, "communitytoolkit.highperformance/8.4.2/lib/net8.0/CommunityToolkit.HighPerformance.dll"),
-    os.path.join(NUGET, "microsoft.bcl.asyncinterfaces/10.0.13/lib/netstandard2.0/Microsoft.Bcl.AsyncInterfaces.dll"),
     os.path.join(NUGET, "microsoft.bcl.memory/10.0.13/lib/net10.0/Microsoft.Bcl.Memory.dll"),
     os.path.join(NUGET, "microsoft.extensions.ai.abstractions/10.11.0/lib/net10.0/Microsoft.Extensions.AI.Abstractions.dll"),
     os.path.join(NUGET, "microsoft.extensions.logging.abstractions/10.0.13/lib/net10.0/Microsoft.Extensions.Logging.Abstractions.dll"),
@@ -270,8 +270,8 @@ def run_checks(checks_dll):
     log("[checks] 运行自检 ...")
     rcfile = os.path.join(BUILD, "PdxLauncher.Checks.runtimeconfig.json")
     with open(rcfile, "w", encoding="utf-8") as f:
-        json.dump({"runtimeOptions": {"tfm": "net10.0", "framework": {
-            "name": "Microsoft.NETCore.App", "version": "10.0.13"}}}, f)
+        json.dump({"runtimeOptions": {"tfm": "net11.0", "framework": {
+            "name": "Microsoft.NETCore.App", "version": "11.0.0"}}}, f)
     logpath = os.path.join(BUILD, "checks.run.log")
     rc = run([DOTNET, checks_dll], logpath, cwd=BUILD)
     text = readlog(logpath)

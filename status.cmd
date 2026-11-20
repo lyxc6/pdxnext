@@ -19,7 +19,7 @@ if /i "%~1"=="/?" goto usage
 if /i "%~1"=="-h" goto usage
 if /i "%~1"=="--help" goto usage
 
-set "EXE=src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
+set "EXE=src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
 
 echo ============================================
 call "%ROOT%scripts\msg.cmd" G_TITLE
@@ -84,12 +84,19 @@ git log -5 --oneline 2>nul
 
 echo.
 set "APPID="
-for /f "usebackq tokens=2 delims=," %%p in (`tasklist /fi "imagename eq PdxLauncher.App.exe" /fo csv /nh 2^>nul`) do set "APPID=%%~p"
+set "OTHERPIDS="
+set "OTHER=0"
+for /f "usebackq tokens=1,* delims==" %%a in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\pdx-app-process.ps1" -Action status -Exe "%ROOT%%EXE%"`) do (
+    if /i "%%a"=="LOCAL_PIDS" set "APPID=%%b"
+    if /i "%%a"=="OTHER" set "OTHER=%%b"
+    if /i "%%a"=="OTHER_PIDS" set "OTHERPIDS=%%b"
+)
 if defined APPID (
     call "%ROOT%scripts\msg.cmd" G_RUNNING %APPID%
 ) else (
     call "%ROOT%scripts\msg.cmd" G_NOTRUNNING
 )
+if defined OTHERPIDS if not "%OTHER%"=="0" call "%ROOT%scripts\msg.cmd" G_OTHER_RUNNING %OTHERPIDS%
 
 if exist "%ROOT%%EXE%" (
     for %%F in ("%ROOT%%EXE%") do set "EXETIME=%%~tF"

@@ -332,6 +332,25 @@
                               Padding="4,8"
                               AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
                               AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
+                            <!-- 翻译项是页面级动作（对当前页全部标题生效），菜单打开时按 ViewModel 状态
+                                 在 code-behind 里统一设 IsEnabled。 -->
+                            <Grid.ContextFlyout>
+                                <MenuFlyout Opening="OnTranslationMenuOpening">
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.CommonPageRefresh, Mode=OneWay}"
+                                        Click="OnRefreshClick"
+                                        AutomationProperties.AutomationId="menuWorkshopPageRefresh" />
+                                    <MenuFlyoutSeparator />
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"
+                                        Click="OnTranslationRetryClick"
+                                        AutomationProperties.AutomationId="menuWorkshopTranslationRetry" />
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.CommonTranslationRefresh, Mode=OneWay}"
+                                        Click="OnTranslationRefreshClick"
+                                        AutomationProperties.AutomationId="menuWorkshopTranslationRefresh" />
+                                </MenuFlyout>
+                            </Grid.ContextFlyout>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
@@ -371,9 +390,12 @@
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                 </Border>
-                                <!-- 译文：与原文并存，只显示译文正文（不加「译文」标题），翻译没开或失败时整块隐藏。 -->
+                                <!-- 译文：与原文并存，只显示译文正文（不加「译文」标题），翻译没开或失败时整块隐藏。
+                                     HorizontalAlignment=Left 让框只包住译文本身（纵向 StackPanel 里默认 Stretch 会通栏拉满），
+                                     译文过长时仍按可用宽度省略号收尾。 -->
                                 <Border Margin="0,8,0,0"
                                         Padding="8,4"
+                                        HorizontalAlignment="Left"
                                         CornerRadius="8"
                                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"

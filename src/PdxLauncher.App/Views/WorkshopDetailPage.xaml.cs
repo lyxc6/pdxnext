@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
@@ -387,6 +388,83 @@ public sealed partial class WorkshopDetailPage : Page
         await RunAsync(_viewModel.Row);
     }
 
+    /// <summary>
+    /// 合集子项行右键菜单里的「重试翻译」：只重跑失败过的翻译范围，不重拉整份详情
+    /// （那会把已经铺好的正文、截图和滚动位置一起冲掉）。
+    /// </summary>
+    private async void OnTranslationRetryClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await _viewModel.RetryTranslationAsync(CurrentToken).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面已离开：这一批重试作废。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("创意工坊详情翻译重试失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 合集子项行右键菜单里的「刷新译文」：忽略缓存与已有译文，
+    /// 合集标题 / 简介 / 更新日志 / 评论区全部强制重翻，不重拉整份详情。
+    /// </summary>
+    private async void OnTranslationRefreshClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await _viewModel.RefreshTranslationAsync(CurrentToken).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // 页面已离开：这一批刷新作废。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("创意工坊详情翻译刷新失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 翻译菜单即将打开（合集子项行 / 详情正文根共用同款菜单）：菜单项是页面级动作，
+    /// 挂载在模板上绑不到页面 ViewModel，就在这里按当前状态统一设 IsEnabled（「刷新页面」恒可用）。
+    /// <para>
+    /// 重试与刷新在详情还在网络加载时禁用：正文 / 更新日志没就位时这两个范围会被静默跳过，
+    /// 等加载完成后普通翻译又走缓存，与「绕过缓存强制重翻」的菜单语义相悖。
+    /// </para>
+    /// </summary>
+    private void OnTranslationMenuOpening(object sender, object e)
+    {
+        if (sender is not MenuFlyout flyout)
+        {
+            return;
+        }
+
+        var retryEnabled = _viewModel.CanRetryTranslation && !_viewModel.IsLoading;
+        var refreshEnabled = AppServices.Translation.IsEnabled && !_viewModel.IsLoading;
+        foreach (var item in flyout.Items)
+        {
+            if (item is not MenuFlyoutItem menuItem)
+            {
+                continue;
+            }
+
+            menuItem.IsEnabled = AutomationProperties.GetAutomationId(menuItem) switch
+            {
+                // 正文根菜单与合集子项行菜单是同页两份同款菜单，AutomationId 各用一套，
+                // 门控口径一致：重试跟失败标志、刷新跟翻译开关（都要求详情已加载完）。
+                "menuWorkshopDetailTranslationRetry" => retryEnabled,
+                "menuWorkshopDetailTranslationRefresh" => refreshEnabled,
+                "menuWorkshopDetailCollectionTranslationRetry" => retryEnabled,
+                "menuWorkshopDetailCollectionTranslationRefresh" => refreshEnabled,
+                _ => menuItem.IsEnabled,
+            };
+        }
+    }
+
     private async Task RunAsync(WorkshopRowViewModel row)
     {
         _lifetime?.Cancel();
@@ -759,7 +837,9 @@ public sealed partial class WorkshopDetailPage : Page
         // 单张图也能看大图，不再把用户甩去浏览器。
         if (_viewModel.ResolveImagePath(targetUrl) is { Length: > 0 } singlePath)
         {
-            OpenViewer([new WorkshopScreenshotViewModel(0, targetUrl) { Path = singlePath }], 0);
+            OpenViewer(
+                (WorkshopScreenshotViewModel[])[new WorkshopScreenshotViewModel(0, targetUrl) { Path = singlePath }],
+                0);
             return;
         }
 

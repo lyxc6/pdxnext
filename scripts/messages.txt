@@ -48,7 +48,7 @@ S_NOEXE:[错误] 找不到可执行文件，未启动程序。
 S_EXPECT:        期望路径  
 S_STARTING:启动 PdxNext...
 S_EXE:  可执行文件  
-S_ALREADY:[提示] PdxNext 已在运行，本次不重复启动。加 new 参数可强制开新窗口。
+S_ALREADY:[提示] 本目录的 PdxNext 已在运行，本次不重复启动。加 new 参数可强制开新窗口。
 S_PRESSKEY:按任意键关闭窗口...
 
 # dev.cmd -- dev entry point for agents and other conversations
@@ -56,10 +56,12 @@ V_TITLE:  PdxNext 开发启动（构建 + 自检 + 重启）
 V_BRANCH:  当前分支:
 V_HEAD:  最近提交:
 V_DIRTY:  改动文件:
-V_STOP:检查并结束正在运行的 PdxNext...
-V_KILL:      正在结束旧实例...
-V_KILLED:      已结束旧实例。
-V_NOSTOP:      当前没有运行中的实例。
+V_STOP:检查并结束本目录正在运行的 PdxNext...
+V_KILL:      正在结束本目录的旧实例...
+V_KILLED:      已结束本目录的旧实例。
+V_NOSTOP:      本目录没有运行中的实例。
+V_OTHER_RUNNING:      注意：其它目录的 PdxNext 副本也在运行，本次不会结束它，PID:
+V_CONFLICT:[失败] 启动后没等到本目录的实例，可能被同目录的另一个实例抢先。日志:
 V_NODOTNET:[错误] 找不到 dotnet。请安装 .NET SDK 10 或更高版本。
 V_BUILDING:构建 Release 解决方案...
 V_FAILBUILD:[失败] 构建失败，未启动程序。
@@ -99,7 +101,8 @@ G_MORE:      …… 未列出的项数:
 G_DIFF: 改动统计（已暂存 + 未暂存，不含未跟踪）:
 G_DIFF_NONE:      （无）
 G_COMMITS: 最近 5 次提交:
-G_RUNNING:  程序状态: 正在运行，PID:
+G_RUNNING:  程序状态: 本目录正在运行，PID:
+G_OTHER_RUNNING:  其它目录的副本: 正在运行，PID:
 G_NOTRUNNING:  程序状态: 未运行
 G_EXETIME:  构建时间:
 G_EXE:  可执行文件:

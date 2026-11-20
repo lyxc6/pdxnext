@@ -13,12 +13,12 @@ Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Drawing
 
 $rootDir = Split-Path -Parent $PSScriptRoot
-$exe = Join-Path $rootDir 'src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe'
+$exe = Join-Path $rootDir 'src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe'
 $shotDir = Join-Path $rootDir '.scratch\rework'
 New-Item -ItemType Directory -Force -Path $shotDir | Out-Null
 
 if (-not (Test-Path $exe)) { "NO_EXE $exe"; exit 1 }
-Get-Process PdxLauncher.App -ErrorAction SilentlyContinue | Stop-Process -Force
+& (Join-Path $PSScriptRoot "pdx-app-process.ps1") -Action stop -Exe $exe | Out-Null
 Start-Sleep -Milliseconds 700
 # UseShellExecute=$false: 未签名 exe 走 ShellExecute 会弹「打开文件 - 安全警告」（取消 = Win32 1223）。
 $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -182,7 +182,20 @@ if ($rows.Count -eq 0) {
 
   # 行高：56 DIP 在 100%~150% 缩放之间约 56~84 物理像素；原来被 CheckBox 的 120 DIP
   # 默认最小宽顶上去时是 90 以上，超过 88 就说明行里又出现了比内容更高的东西。
-  if ($fr.Height -gt 88) { $failed++; "ROW_TOO_TALL h=$([math]::Round($fr.Height,1))" }
+  # 译名框会让行变高（与 Mod 库一致），所以按「这一行有没有译名」分别判定：
+  # 无译名仍按 88，有译名放宽到 128（56 + caption 框 + 间距，150% 缩放下的上限）。
+  $rowHasTranslated = $false
+  $firstId = $first.Current.AutomationId
+  $firstSuffix = $firstId.Substring($firstId.LastIndexOf('_') + 1)
+  $rowTranslated = ByIdPrefix 'addModCandidateTranslated_' |
+    Where-Object { $_.Current.AutomationId.EndsWith($firstSuffix, [StringComparison]::OrdinalIgnoreCase) } |
+    Select-Object -First 1
+  if ($rowTranslated) { $rowHasTranslated = $true }
+  $maxRowHeight = if ($rowHasTranslated) { 128 } else { 88 }
+  if ($fr.Height -gt $maxRowHeight) {
+    $failed++
+    "ROW_TOO_TALL h=$([math]::Round($fr.Height,1)) limit=$maxRowHeight translated=$rowHasTranslated"
+  }
 
   if ($checks.Count -gt 0) {
     $cr = $checks[0].Current.BoundingRectangle
@@ -212,6 +225,54 @@ if ($rows.Count -eq 0) {
     "VERSION_RIGHT_ALIGN min=$minR max=$maxR (spread=$($maxR - $minR))"
     if (($maxR - $minR) -gt 2) { $failed++; "VERSION_NOT_RIGHT_ALIGNED spread=$($maxR - $minR)" }
   }
+
+  # 版本支持三角：节点必须完整落在行内（原来版本列写死 96 DIP，两行版本字比它宽，
+  # 溢出被列表边缘裁掉，三角跟着看不见）。HelpText 必须说「版本支持」那套话，不是「mod 坏了」。
+  $warnings = ByIdPrefix 'addModCandidateWarning_'
+  "WARNING_CELLS=$($warnings.Count)"
+  $visibleWarnings = 0
+  $offscreen = 0
+  $warningSample = $null
+  foreach ($w in $warnings) {
+    $wr = $w.Current.BoundingRectangle
+    $help = $w.Current.HelpText
+    if ([string]::IsNullOrWhiteSpace($help)) { $failed++; "WARNING_NO_HELP id=$($w.Current.AutomationId)" }
+
+    # 列表是虚拟化的：视野外的行容器存在但矩形为空，那不是「被裁」，跳过它们。
+    if ($w.Current.IsOffscreen -or $wr.Width -le 0 -or $wr.Height -le 0) {
+      $offscreen++
+      continue
+    }
+
+    # 用同一行（按 AutomationId 的 mod id 后缀配对）的行矩形判断有没有被裁。
+    $id = $w.Current.AutomationId
+    $modSuffix = $id.Substring($id.LastIndexOf('_') + 1)
+    $row = $rows | Where-Object { $_.Current.AutomationId.EndsWith($modSuffix, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1
+    if ($row) {
+      $rr = $row.Current.BoundingRectangle
+      if ($wr.Left -lt ($rr.Left + 8) -or $wr.Right -gt ($rr.Right - 8)) {
+        $failed++; "WARNING_CLIPPED id=$id cell=($([math]::Round($wr.Left,0))..$([math]::Round($wr.Right,0)) 行=$([math]::Round($rr.Left,0))..$([math]::Round($rr.Right,0)))"
+      } else {
+        $visibleWarnings++
+        if (-not $warningSample) {
+          $warningSample = "id=$id help='$help' cell=$([math]::Round($wr.Width,0))x$([math]::Round($wr.Height,0))"
+        }
+      }
+    }
+  }
+  "WARNING_VISIBLE=$visibleWarnings offscreen=$offscreen"
+  if ($warningSample) { "WARNING_SAMPLE $warningSample" }
+
+  # 译名：开启「翻译名称」时，行内应有译名节点且文本非空；关着时该节点不存在（不是空框）。
+  $translated = ByIdPrefix 'addModCandidateTranslated_'
+  "TRANSLATED_CELLS=$($translated.Count)"
+  $translatedSample = $null
+  foreach ($t in $translated) {
+    $text = $t.Current.Name
+    if ([string]::IsNullOrWhiteSpace($text)) { $failed++; "TRANSLATED_EMPTY id=$($t.Current.AutomationId)" }
+    if (-not $translatedSample -and $text) { $translatedSample = $text }
+  }
+  if ($translatedSample) { "TRANSLATED_SAMPLE '$translatedSample'" }
 }
 
 Shot 'addmods-page'

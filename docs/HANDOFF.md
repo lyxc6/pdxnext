@@ -18,7 +18,7 @@
 
 ## 0. 一句话现状
 
-启动器是 WinUI 3 标准控件 UI，Release **0 警告 0 错误**，自检 **166 个检查类 / 0 失败**（2026-11-11 实测）。
+启动器是 WinUI 3 标准控件 UI，Release **0 警告 0 错误**，自检 **172 个检查类 / 0 失败**（2026-11-18 实测）。
 1.3 收尾已完成：创意工坊（筛选/合集/详情分区/依赖树/注释滚动条/DB v3）、设置页 SettingsCard、存档备份、成就、DLC、崩溃分析、播放集导入导出、单实例与导航重试均落地；
 最近两轮集中修高危缺陷（单实例/导航递归/工坊令牌/Mod 顺序/EU5 JSON/加载文件/DLC 保存）与中低危显示/本地化问题，见 **§0.98**。
 运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构；版本号已定为 1.3.0（`version.props`），剩余安装包实测与 push/tag。
@@ -7606,3 +7606,181 @@ mod 名和行尾三个按钮完全看不见，右栏也不能滚动到这些内�
 **实现**（本次）：`AppManifest` 解析 `buildid` 与 `InstalledDepots`（新增 `AppDepot` / `InstalledDlcAppIds` / `KnowsDlcDepots`）；新增 `Core\Dlc\DlcContentState` 与 `DlcContentInspector`（纯计算）；DLC 页每行新增第三枚徽标「Steam 已装 / 仅本地文件 / 内容未安装」；日志每轮记一行内容来源汇总。判定口径见 `docs/DATA-FORMATS.md` §3.2。
 
 **验证**：`dev.cmd build` 通过（146 个检查类、0 失败）；真机探针（用 Core 直连真实安装目录）输出 SteamInstalled 9 / FilesPresent 9，与上面的 depot 对照逐条一致。
+---
+
+## 0.99 2026-11-15：本地翻译模型下载 —— 逐字节进度、断点续传与跨页面续跑
+
+对话分支：`sess/20261114-perf-first-frame`（基线 `ver/1.4.0`）。提交 `04d79a8`（实现）+ `399e5fc`（独立验收后修正）。
+
+### 0.99.1 问题（用户报告）
+
+「翻译下载那边无法正常显示下载进度」——设置页本地离线模型点「下载」后界面停在「下载中 0%」，直到结束才跳到 100%。
+
+**根因（Core，不是 UI）**：`LocalTranslationModelDownloader.DownloadAsync` 只在**每个文件下完**时上报一次 `done/total`，
+内部 128 KiB 写盘循环一次都没上报。而 Index-Translate-2B 在清单里是**单个 1.31 GB 文件**（`IndexTranslateSize = 1312164352`），
+于是整段下载期间只有一次 0%、结束一次 100%；Bergamot（4 个文件）表现为 0 → 88 → 96 → 98 → 100 的「跳台阶」。
+
+**已排除的嫌疑**（都实测过，别再走一遍）：
+- 不是 `HttpClient.Timeout` 截断流：本地回环慢速流实测（`Timeout=2s` + `ResponseHeadersRead`，20 字节分 20 次吐），响应体完整读完用了 10.2 s —— 180 秒总超时不覆盖流式响应体。
+- 不是白名单/节流：`huggingface.co`、`storage.googleapis.com` 都在 `OnlineHosts`，host 走默认策略（并发 4、无最小间隔）。
+- 项目其它下载进度是**好的**：更新包（`UpdateService` 每 256 KiB 上报 → `UpdateFlow` 的 `ProgressBar`）、工坊/发布（Steam 侧百分比）都对。坏的只有本地翻译模型这一条。
+
+**顺带的两个同源缺陷**：中断/切页后 1.31 GB 从头重下（无续传）；切到别的页面会静默取消下载
+（`SettingsPage.OnUnloaded` 的 `_lifetime.Cancel()`）。
+
+### 0.99.2 改法
+
+**Core**
+- 新增 `LocalTranslationDownloadProgress(BytesReceived, TotalBytes, CurrentFileName, Resumed)`，逐字节上报；
+  节流规则「分数变化 ≥0.5% **或** 距上次 ≥250 ms」，最密 4 次/秒（否则 1.31 GB / 128 KiB ≈ 一万次回调会把 `DispatcherQueue` 灌满）。
+- `.part` 改存**原始传输字节**（压缩文件即 gzip 原始字节），所以 Range 续传对压缩/非压缩统一成立，解压只在收尾阶段。
+- 新增 `IDownloadFetcher`（`GetDownloadAsync(uri, startOffset, ct)` + `DownloadRange.Read` 解析 `Content-Range`）；
+  **`IHttpFetcher` 没有扩张**，6 个自检假实现一行不用改，`http as IDownloadFetcher` 探测失败时退回「无续传、但有逐字节进度」。
+- 服务端忽略 Range 回 200 → 截断重写，绝不拼接；416 → 内部去掉 Range 重发；残片比期望还长 → 直接删掉重下；
+  残片已等于期望长度 → 短路落位，不重下 1.31 GB。
+- 收尾统一解压 / 尺寸 / SHA-256 校验，不符即删残片；**取消与网络异常保留残片**供续传；解压与哈希循环里都查令牌
+  （否则 1.31 GB 的收尾要几十秒，期间「暂停」看着像失灵）。
+
+**App**
+- 新增 `Services/LocalModelDownloadCoordinator`（挂在 `AppServices.LocalModelDownloads`）：下载从设置页挪到 App 层，
+  单飞、可暂停（保留残片续传）、切页继续、进页接上进度、退出时（`App.xaml.cs` 的 `Closed`）取消。
+- `LocalModelRowViewModel` 新增 `IsDownloading` / `DownloadPercent` / `HasPartialDownload` / `CanPause`；
+  暂停后有残片时「删除」也可点（否则那 1.31 GB 删不掉）；占用统计 `LocalModelSizeText` 把残片算进去（`Store.GetStagedBytes`）。
+- 设置页行内新增进度条（`barLocalModelDownload`）与「暂停」按钮（`btnPauseLocalModel`）：
+  `下载中 43%（560 MB / 1.3 GB）` / `已暂停 16%（下次「下载」接着下）`。
+- 「下载」不再吃页面生命周期令牌：下载归协调器所有，页面只订阅 `Changed`（`DispatcherQueue.TryEnqueue` 回 UI 线程），
+  `OnUnloaded` 只退订不停下载。
+
+**文案**：`SettingsTranslateLocalModelDownloadProgress` / `SettingsTranslateLocalModelPaused` / `SettingsTranslateLocalModelPause`，中英同步。
+
+### 0.99.3 独立验收（按 `docs/AGENT-WORKFLOW.md` §6）
+
+全新上下文的只读评审（不改文件、不跑构建），提出 5 条，逐条修完后并入 `399e5fc`：
+
+| # | 问题 | 后果 | 修法 |
+| --- | --- | --- | --- |
+| 1 | 206 缺 `Content-Range` 时拿请求起点兜底 | 猜错把剩余内容写到错误偏移，拼出「长度对、内容错」的文件 | 一律按从头开始，由尺寸校验拦下后整份重下 |
+| 2 | 下载请求没显式要 identity | 连接池自动解压会把 `.part` 存成解压后字节，而 Range 偏移按压缩字节算 | `Accept-Encoding: identity` |
+| 3 | 分母拿不到（chunked）时只报 `doneBefore` | 进度原地不动 —— 正是本次要修的故障形态 | 按字节上报 + 总长传 0（界面显示字节，不画百分比） |
+| 4 | 收尾 `File.Move` 在 try 内 | 目标被占用/磁盘满会把已下完的残片删掉，重下整份 | Move 移出校验 try |
+| 5 | `IsDownloading` 只发 `CanPause` | 续传时按钮可用性停在旧值，点了没反应 | 改发 `RaiseStateProperties()` |
+
+另修：`Dispose` 签名换行；设置页「服务未就绪」早期返回分支也接上在途下载；`_lifetime` 注释与 `NavigationCacheMode="Required"` 对齐。
+
+### 0.99.4 验证
+
+- `dev.cmd build` → **169 个检查类 / 失败 0 / 0 警告 0 错误**，`DEV_RESULT=PASS`。
+- 新增自检：`LocalTranslationModelDownloadChecks`（逐字节中间进度、节流上限、续传、忽略 Range、取消留残片、
+  哈希不符删残片、压缩续传、完整残片短路、过长残片覆盖、分母未知按字节上报、收尾阶段取消保留残片、残片占用与删除）、
+  `LocalModelDownloadCoordinatorChecks`（单飞、暂停→续传带断点百分比、完成/失败收敛、异常收敛、Forget、Dispose）；
+  扩展 `LocalModelUiChecks`（进度条/暂停/协调器接线 + 行状态机）与 `HttpFetcherChecks`（206/200/缺 `Content-Range` 解析）。
+- **真机 UIA 实测**（把 `bergamot-en-zh` 临时移走造「未安装」行，测完还原，`models` 下三个目录逐字节不变、无残留 `.part`）：
+  进度条与文案同步前进（`0 → 1 → 3 → 8 → 13 → 16%`）；暂停后 `.part = 6185067` 字节、文案 `已暂停 16%`；
+  再点下载从 16% 起（日志 `本地模型续传：model.enzh.intgemm.alphas.bin 从 6185067 字节继续`）；
+  **下载中途切到主页停留 10 秒，回来前它已下完**（日志 `15:53:29 本地模型已就绪`，切走是 `15:53:23`）——
+  证明下载真的活过了页面生命周期；收尾 5 个文件尺寸与清单一致、`.part` 清掉。
+
+### 0.99.5 注意
+
+- **不再能用「只在文件下完时上报」**：凡是「单个大文件 + 长时间传输」的下载器，进度必须落在传输循环里。
+- **`.part` 的语义是「原始传输字节」**：任何改动都要保持这条，否则压缩文件续传会写坏。
+- **缩略/语义别混**：`HttpDownload.RangeStart` 为 0 就等于「从头开始」，200 与不合规 206 都走这条路；调用方必须截断重写。
+- 已知小限制：压缩文件（Bergamot ≤60 MB）若「传完但收尾前崩溃」，续传会重下该文件（压缩后长度不可知）；1.31 GB 的 GGUF 不受影响。
+- `PlaysetChecks` 的 CK3 条数断言从 `>= 3` 放宽到 `>= 1`：用户删播放集到 2 个不该让自检变红（`DEVELOPMENT.md` 的「真机只锁结构」原则）。
+
+---
+
+## 0.100 2026-11-16：并行对话不再需要「等其他对话」（会话分支脚本与文档）
+
+对话分支：`sess/20261116-git-concurrency`（基线 `ver/1.4.0`）。
+
+### 0.100.1 问题（用户提问「文档的 git 设定是不是有问题，为什么分支，还说要等其他对话？」）
+
+查了脚本、文档与仓库现状，**没有任何一句文档写「等其他对话」**——那是三条规则叠出来的实际效果：
+
+| 场景 | 实测结果（临时仓库复现） |
+| --- | --- |
+| 在 sess 分支上再 `open` | 拒绝，提示只有「先 close」一条路（`session.ps1` 旧 L241-244） |
+| 在 worktree（检出 `feat/*`）里 `open` | 拒绝：不在活跃版本清单 |
+| 基线被另一棵工作树检出时 `close` | `git switch base` fatal 128，报 git 原文，不指名谁占着 |
+| 工作区有别人未提交改动时 `open` | `git add -A` 把半成品扫进 `wip(session)` 提交 |
+| 对话分支被当前树检出时删分支 | `cannot delete branch ... used by worktree` |
+
+根因是**这套分支模型只在「一个工作树一个对话」下成立**，而文档从未写这条前提：`open` 硬校验必须站在
+活跃版本分支上，主工作树同一时刻只能检出一个分支，于是第二条对话除了「等第一条 close」没有合法入口。
+
+### 0.100.2 改法
+
+`scripts/session.ps1`（核心）：
+
+- `open -Worktree`：在 `.agents/worktrees/<slug>` 用 `git worktree add -b` 另开一棵树，主工作树不动；
+  基线取当前分支，当前在 sess 分支时取其 `pdxBase`（所以可以在已开对话的同时再开一条并行对话）；
+  工作树路径记进 `git config branch.<name>.pdxWorktree`，输出 `SESSION_WORKTREE=`。
+- `open` 脏工作区**默认拒绝（退出 3）**：先提交 / 加 `-Worktree` / 确需带走才加 `-CarryDirty`；
+  `-CarryDirty` 的 `wip(session)` 提交信息会列出带走的文件（>10 项折叠）。
+- `close` 跨树合并：定位「检出基线的那棵工作树」，在**它的目录里** `git merge --no-ff`（`Invoke-Git -In`），
+  所以基线被别的对话占着也不耽误；那棵树自己有未提交改动时**拒绝并退出 6**（指名路径 + 两条排查命令），
+  不把别人的半成品卷进合并；基线无人检出的老路径保持不变。
+- `close` 在链接工作树里收尾后 `switch --detach`：否则那棵树会把基线锁给一棵马上要删掉的树
+  （实测触发 `already used by worktree`，主工作树之后切不过去）。
+- `git switch` 失败时解析 `already used by worktree at '<path>'`，转成「谁占着、去哪干活」的可读提示。
+- `list` 增补：并行写法提示、每棵对话树的 `worktree=` 与「干净 / 脏 N」、以及「基线所在的工作树」。
+- 退出码新增 `6 = 基线所在树有未提交改动`；usage / `.DESCRIPTION` / `.NOTES` 同步。
+
+文档：
+
+- `docs/AGENT-WORKFLOW.md` §2（open/close 语义）、§4（并行写 + 串行合 + `feat/1.3` 已冻结、脏工作区不做基线）；
+- `AGENTS.md` §1.1（三种开工写法）、§1.2（close 在基线属主树里合并、退出 6、`git worktree remove`）；
+- `docs/DEVELOPMENT.md`（命令表、`SESSION_*` 标记、退出码）、`docs/VERSIONING.md` §5（sess 可检出在 worktree，仍是临时分支）。
+
+### 0.100.3 验证
+
+- 新增 `SessionScriptChecks`（31 条断言）：脚本必须带 `-Worktree`/`-CarryDirty`/`pdxWorktree`/`SESSION_WORKTREE=`、
+  脏树默认退出 3、已在 sess 分支时**同时**给 close 与 `-Worktree` 两条路、close 用 `-In $mergeIn` 并退出 6、
+  链接树 detach、list 打印占用树、§4 不再写 `feat/1.3` 主干、README/DEVELOPMENT 的检查类计数等于实际文件数。
+- 临时 clone 逐条实测（不碰真实历史）：脏树 `open` 退出 3 且不建分支；`-CarryDirty` 生成带文件名的 `wip`；
+  两棵树各自提交后从链接树 `close` → 在属主树合并、链接树 detach、主树仍能切回 `ver/1.4.0`；
+  属主树脏 → 退出 6 且不推进基线；冲突 → 退出 2 + `merge --abort`，解决后重跑成功；A→B→C 三次串行合并全成功。
+- `dev.cmd build` → **172 个检查类 / 失败 0 / 0 警告 0 错误**，`DEV_RESULT=PASS`。
+
+### 0.100.4 注意（遗留，本轮**未做**）
+
+- **16 个已合并的本地分支没删**（`feat/*`、`feature/*`、`fix/*`、`playset-two-column`，都已 ahead=0 合入 `ver/1.4.0`）；
+  3 个陈旧 worktree（`ach-filters` / `dlc-artwork-unowned` / `saves-polish`）仍在，`.agents` 占 2.3 GB —— 
+  这与 §8「合并后删掉任务分支与 worktree」不符，清理需要用户确认（`git branch -d` 与 `git worktree remove` 都是删除动作）。
+- **`feat/1.3` 上有一条孤儿提交 `ee5ec41`**（`docs(handoff): 记录 1.3.0 已发布与本机版本校验结果`）：
+  `feat/1.3` 在 1.3.0 发布时已冻结，这条提交**没有进 `main` 也没有进 `ver/1.4.0`**，
+  也就是 HANDOFF 顶部那句「1.3.0 已于 2026-11-12 发布」在 `ver/1.4.0` 里是缺的。本轮未动，需要时从 `feat/1.3` 摘回。
+- `version.props` 仍是 1.3.0（1.4.0 未发版，符合规范）。
+- 并行写仍然**只是不互相遮挡**：`close` 的合并串行靠人（同一时刻只跑一个 close），脚本没有加锁。
+
+## 0.101 2026-11-18：左栏「游戏库」去掉计数徽标
+
+对话分支：`sess/20261118-remove-library-badge`（基线 `ver/1.4.0`）。
+
+### 0.101.1 问题（用户：「把游戏库这个旁边这个数字关掉」）
+
+左栏 `navLibrary` 右侧常驻一个 `InfoBadge`，值是已发现游戏数（本机 9）。用户要求不再显示这个数字。
+
+### 0.101.2 改法
+
+- `src/PdxLauncher.App/MainWindow.xaml`：删掉 `NavigationViewItem.InfoBadge` 整段，以及根节点 `xmlns:svc`（全文只有徽标那一行在用）；`navLibrary` 的 AutomationId / Content / Tag / 图标保持不变。
+- `src/PdxLauncher.App/MainWindow.xaml.cs`：删掉 `public ShellViewModel ViewModel` 与构造里的赋值（该属性只为徽标的 `x:Bind` 存在）；私有 `_viewModel`、`PropertyChanged` / `NavigationRequested` 订阅保留。
+- `src/PdxLauncher.App/ViewModels/ShellViewModel.cs`：删 `GamesCount` / `LibraryBadgeName` / `HasNoGames` 及 `ReplaceGames` 里三条对应通知。
+- 两份 `Resources.resw`：各删 `ShellBadgeLibraryName`（中英同步，生成器编译期校验键集）。
+- 自检：`ShellNavBadgeChecks` → `ShellNavNoBadgeChecks`，断言翻转为「钉住不再出现」——navLibrary 菜单项仍在、段内与全文无 `InfoBadge` / `badgeNavLibrary` / `GamesCount` / `LibraryBadgeName`、VM 无三成员、MainWindow 不再公开 `ViewModel`、两种 resw 无该键且键集仍一致；`*Checks.cs` 仍 172。
+- `CHANGELOG.md` 在 `[Unreleased]/Removed` 记一条；`docs/CONTROLS-CHANGE-SPEC.md` §1 标注「2026-11-18 已移除，勿按旧规格加回」。
+
+### 0.101.3 验证
+
+- `dev.cmd build`（SDK 处理见 0.101.4）：**0 警告 0 错误、`检查类: 172，失败: 0`、`DEV_RESULT=PASS`**。
+- `--only ShellNavNoBadgeChecks` 全 ok；变异测试（临时插回 `<InfoBadge>`，不重新编译）→ 4 条断言 FAIL，`git restore` 复原后归零，证明断言能真失败。
+- UIA 真机（1782×1191，Victoria 3）：`navLibrary=True name=游戏库`、`badgeNavLibrary=False`；截图目视左栏「游戏库」右侧无数字，其它导航项与选中态正常。
+- 独立验收 subagent 复跑构建、变异测试、UIA 与八条清单，全通过；本分支合回 `ver/1.4.0`。
+
+### 0.101.4 注意（遗留，本轮未做）
+
+- **本机默认 SDK 是 11.0.100**（11/17 安装），仓库 `NuGet.config` 为离线 `clear` 时直接 `dev.cmd build` 会 NU1100（缺 10.0.15 runtime pack），与代码无关。验收时临时用**未跟踪**的根 `global.json` 钉 `10.0.402`，验完已删除；是否把根 `global.json` 作为仓库级修复提交，待用户决定。
+- `docs/DEVELOPMENT.md` 738/748 行的「170 个检查类」在 11/16 起已漂到 172（本轮 diff 之外，未动）。
+- `dev.cmd` 69–70 行的 `rem` 注释跨行，每次构建多出一行 `'different' is not recognized...` 噪声（既有缺陷，未动）。
+- `README.md` 的三张截图仍是旧图（左栏带徽标），本次未重截；需要时跑 `scripts/capture-readme.ps1`（会重写数 MB PNG）。

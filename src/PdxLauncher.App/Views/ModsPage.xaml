@@ -37,10 +37,11 @@
              放在资源里，两个 ListView 共用同一套交互，改一处两栏同步。 -->
         <DataTemplate x:Key="PlaysetModRowTemplate" x:DataType="vm:ModRowViewModel">
             <Grid ColumnSpacing="8" Padding="4,8">
-                <!-- 右键菜单只做「定位 / 打开 / 复制」；移除是即时自动保存、没有二次确认，
-                     绝不放进菜单，避免误触即删。 -->
+                <!-- 右键菜单只做「定位 / 打开 / 复制」和翻译重试 / 刷新；移除是即时自动保存、没有二次确认，
+                     绝不放进菜单，避免误触即删。翻译重试只对本栏（播放集行）生效，刷新对双栏都生效；
+                     菜单打开时按 ViewModel 状态在 code-behind 里统一设 IsEnabled。 -->
                 <Grid.ContextFlyout>
-                    <MenuFlyout>
+                    <MenuFlyout Opening="OnTranslationMenuOpening">
                         <MenuFlyoutItem
                             Text="{x:Bind RowMenuOpenFolderText, Mode=OneWay}"
                             IsEnabled="{x:Bind HasLocalFiles, Mode=OneWay}"
@@ -56,6 +57,20 @@
                             IsEnabled="{x:Bind CanMove, Mode=OneWay}"
                             Click="OnRowCopyIdClick"
                             AutomationProperties.AutomationId="{x:Bind CopyIdMenuAutomationId, Mode=OneTime}" />
+                        <MenuFlyoutItem
+                            Text="{x:Bind L.CommonConvertToLocal, Mode=OneWay}"
+                            IsEnabled="{x:Bind CanConvertToLocal, Mode=OneWay}"
+                            Click="OnConvertToLocalClick"
+                            AutomationProperties.AutomationId="{x:Bind ConvertToLocalMenuAutomationId, Mode=OneTime}" />
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem
+                            Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"
+                            Click="OnTranslationRetryClick"
+                            AutomationProperties.AutomationId="menuModsTranslationRetry" />
+                        <MenuFlyoutItem
+                            Text="{x:Bind L.CommonTranslationRefresh, Mode=OneWay}"
+                            Click="OnTranslationRefreshClick"
+                            AutomationProperties.AutomationId="menuModsTranslationRefresh" />
                     </MenuFlyout>
                 </Grid.ContextFlyout>
                 <Grid.ColumnDefinitions>
@@ -150,9 +165,12 @@
                                   Visibility="{x:Bind svc:XamlVisibility.FromBool(HasWarning), Mode=OneWay}"
                                   ToolTipService.ToolTip="{x:Bind WarningText, Mode=OneWay}" />
                     </StackPanel>
-                    <!-- 译名：原文与译文同显，译文在标题下方的描边框里（不加「译文」标题）。 -->
+                    <!-- 译名：原文与译文同显，译文在标题下方的描边框里（不加「译文」标题）。
+                         HorizontalAlignment=Left 让框只包住译文本身的宽度（StackPanel 里默认 Stretch 会通栏拉满），
+                         译文过长时仍按可用宽度省略号收尾。 -->
                     <Border Margin="0,8,0,0"
                             Padding="8,4"
+                            HorizontalAlignment="Left"
                             CornerRadius="8"
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -213,6 +231,22 @@
                   Padding="4,8"
                   AutomationProperties.AutomationId="{x:Bind RowAutomationId, Mode=OneTime}"
                   AutomationProperties.Name="{x:Bind Name, Mode=OneTime}">
+                <!-- 翻译重试只对候选栏生效：AutomationId 用候选专属的 menuModsCandidateTranslationRetry，
+                     与播放集行菜单的重试区分来源——门控与点击分支都靠它分流（此前两份菜单共用同一个
+                     menuModsTranslationRetry，候选栏失败时菜单灰掉、点到的却是右栏）。刷新对双栏都生效，
+                     菜单打开时按 ViewModel 状态在 code-behind 里统一设 IsEnabled。 -->
+                <Grid.ContextFlyout>
+                    <MenuFlyout Opening="OnTranslationMenuOpening">
+                        <MenuFlyoutItem
+                            Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"
+                            Click="OnTranslationRetryClick"
+                            AutomationProperties.AutomationId="menuModsCandidateTranslationRetry" />
+                        <MenuFlyoutItem
+                            Text="{x:Bind L.CommonTranslationRefresh, Mode=OneWay}"
+                            Click="OnTranslationRefreshClick"
+                            AutomationProperties.AutomationId="menuModsTranslationRefresh" />
+                    </MenuFlyout>
+                </Grid.ContextFlyout>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
@@ -255,6 +289,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0"
                                    Text="{x:Bind Name, Mode=OneTime}"
@@ -282,7 +317,39 @@
                                        Style="{StaticResource CaptionTextBlockStyle}"
                                        Foreground="{ThemeResource PdxOriginSubscribedForegroundBrush}" />
                         </Border>
+                        <!-- 版本支持三角：与添加模组页同一套判定与提示，提示挂在透明命中容器上（字形本身不可命中）。 -->
+                        <Border Grid.Column="3"
+                                MinWidth="24"
+                                MinHeight="24"
+                                Padding="4"
+                                Background="Transparent"
+                                VerticalAlignment="Center"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(HasVersionWarning), Mode=OneWay}"
+                                ToolTipService.ToolTip="{x:Bind VersionWarningText, Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind WarningAutomationId, Mode=OneTime}"
+                                AutomationProperties.Name="{x:Bind L.ModlibWarningName, Mode=OneWay}"
+                                AutomationProperties.HelpText="{x:Bind VersionWarningText, Mode=OneWay}">
+                            <FontIcon Glyph="&#xE7BA;"
+                                      FontSize="12"
+                                      VerticalAlignment="Center"
+                                      Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                        </Border>
                     </Grid>
+                    <!-- 译名：与 Mod 库 / 添加模组页同一张表回填，左栏宽度有限，过长按省略号收尾。 -->
+                    <Border Padding="8,4"
+                            HorizontalAlignment="Left"
+                            CornerRadius="8"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            Visibility="{x:Bind svc:XamlVisibility.FromString(TranslatedName), Mode=OneWay}">
+                        <!-- AutomationId 挂在 TextBlock 上：Border 没有 automation peer，挂在 Border 上 UIA 查不到。 -->
+                        <TextBlock Text="{x:Bind TranslatedName, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                   TextTrimming="CharacterEllipsis"
+                                   AutomationProperties.AutomationId="{x:Bind TranslatedAutomationId, Mode=OneTime}" />
+                    </Border>
                     <TextBlock Text="{x:Bind SubtitleText, Mode=OneWay}"
                                Style="{StaticResource CaptionTextBlockStyle}"
                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -756,14 +823,31 @@
                            AutomationProperties.AutomationId="txtModsStatus"
                            AutomationProperties.Name="{x:Bind L.ModsStatusName, Mode=OneWay}" />
 
-                <!-- 忙碌提示放状态栏，工具条只留交互控件，窄窗口时不会挤掉按钮 -->
-                <ProgressRing Grid.Column="1"
-                              Width="16"
-                              Height="16"
-                              VerticalAlignment="Center"
-                              IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                              AutomationProperties.AutomationId="ringModsBusy"
-                              AutomationProperties.Name="{x:Bind L.ModsHeaderBusy, Mode=OneWay}" />
+                <!-- 忙碌提示放状态栏，工具条只留交互控件，窄窗口时不会挤掉按钮；翻译重试 / 刷新在行右键菜单里 -->
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            Spacing="8"
+                            VerticalAlignment="Center">
+                    <ProgressRing Width="16"
+                                  Height="16"
+                                  VerticalAlignment="Center"
+                                  IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                                  AutomationProperties.AutomationId="ringModsBusy"
+                                  AutomationProperties.Name="{x:Bind L.ModsHeaderBusy, Mode=OneWay}" />
+                    <!-- 转换专用进度 / 取消：只在本次转换在途时出现，不随 IsBusy 一起被禁用。 -->
+                    <ProgressRing Width="16"
+                                  Height="16"
+                                  VerticalAlignment="Center"
+                                  IsActive="{x:Bind ViewModel.IsConvertToLocalBusy, Mode=OneWay}"
+                                  AutomationProperties.AutomationId="ringConvertToLocalBusy"
+                                  AutomationProperties.Name="{x:Bind L.CommonConvertToLocal, Mode=OneWay}" />
+                    <Button Content="{x:Bind L.CommonCancel, Mode=OneWay}"
+                            Click="OnCancelConvertToLocalClick"
+                            Visibility="{x:Bind ViewModel.IsConvertToLocalBusy, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind L.CommonCancel, Mode=OneWay}"
+                            AutomationProperties.AutomationId="btnCancelConvertToLocal"
+                            AutomationProperties.Name="{x:Bind L.CommonCancel, Mode=OneWay}" />
+                </StackPanel>
             </Grid>
         </Border>
 

@@ -56,7 +56,14 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
     private readonly SettingsViewModel _viewModel = new();
-    /// <summary>页面生命周期令牌；页面不缓存（NavigationCacheMode=Disabled），每次进入都会重建。</summary>
+
+    /// <summary>
+    /// 页面生命周期令牌：取消它等于「这一页不再接收结果」（缓存统计、校验、删除这些绑定页面的活）。
+    /// <para>
+    /// 本地模型下载<b>不受它约束</b>——下载归 <see cref="AppServices.LocalModelDownloads"/> 所有，
+    /// 页面只是订阅进度；离开设置页不会中断已开始的下载。
+    /// </para>
+    /// </summary>
     private CancellationTokenSource _lifetime = new();
 
     /// <summary>重载协调器：连点游戏时取消旧重载，只应用最新那次的结果。</summary>
@@ -92,11 +99,28 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             AlwaysOnTopService.Changed -= OnAlwaysOnTopChanged;
             AlwaysOnTopService.Changed += OnAlwaysOnTopChanged;
             _viewModel.RefreshAlwaysOnTop();
+
+            AppServices.ModEditorPaneVisibilityChanged -= OnModEditorPaneVisibilityChanged;
+            AppServices.ModEditorPaneVisibilityChanged += OnModEditorPaneVisibilityChanged;
+            _viewModel.RefreshModEditorPane();
+
             UpdateContentColumnWidth();
+
+            // 本地模型下载活在 App 层协调器里：页面出现时接上，页面离开时退订（下载本身不停）。
+            if (AppServices.LocalModelDownloads is { } downloads)
+            {
+                downloads.Changed -= OnLocalModelDownloadChanged;
+                downloads.Changed += OnLocalModelDownloadChanged;
+            }
 
             if (!AppServices.IsInitialized)
             {
                 await _viewModel.LoadAsync(null, _lifetime.Token).ConfigureAwait(true);
+
+                // 服务图还没装好时也不能漏掉模型行：否则这条分支回来时下载进度与「已暂停」文案
+                // 都不会出现，而「下载」按钮却仍是可点的，看起来像点了没反应。
+                _viewModel.RefreshLocalTranslationState();
+                _viewModel.ApplyLocalModelDownloads();
                 return;
             }
 
@@ -111,6 +135,9 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
             // 本地模型与术语词典是独立于设置文件的状态，进入页面时读一次。
             _viewModel.RefreshLocalTranslationState();
+
+            // 行已经重建好了：把还在跑 / 已暂停的下载接到新行上，进度不会因为切页而归零。
+            _viewModel.ApplyLocalModelDownloads();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -126,10 +153,24 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     {
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         AlwaysOnTopService.Changed -= OnAlwaysOnTopChanged;
+        AppServices.ModEditorPaneVisibilityChanged -= OnModEditorPaneVisibilityChanged;
+        AppServices.LocalModelDownloads?.Changed -= OnLocalModelDownloadChanged;
 
         // 代理地址是逐键写入内存的，离开页面时统一落盘。
         _viewModel.PersistSettings();
         _lifetime.Cancel();
+    }
+
+    /// <summary>
+    /// 本地模型下载的进度在后台线程上报：切回 UI 线程写行属性。
+    /// 下载本体归协调器所有，所以离开页面只是停止"看"，不会停止下载。
+    /// </summary>
+    private void OnLocalModelDownloadChanged(object? sender, LocalModelDownloadSnapshot snapshot)
+    {
+        if (!DispatcherQueue.TryEnqueue(() => _viewModel.ApplyLocalModelDownload(snapshot)))
+        {
+            AppServices.Logger.Warn("SettingsPage 无法派发本地模型下载进度");
+        }
     }
 
     /// <summary>
@@ -168,6 +209,15 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         if (!DispatcherQueue.TryEnqueue(_viewModel.RefreshAlwaysOnTop))
         {
             AppServices.Logger.Warn("SettingsPage 无法派发置顶状态变化");
+        }
+    }
+
+    /// <summary>Mod 编辑页改了左栏显隐时，同步设置页的开关。</summary>
+    private void OnModEditorPaneVisibilityChanged(object? sender, EventArgs e)
+    {
+        if (!DispatcherQueue.TryEnqueue(_viewModel.RefreshModEditorPane))
+        {
+            AppServices.Logger.Warn("SettingsPage 无法派发 Mod 编辑页左栏显隐变化");
         }
     }
 
@@ -324,13 +374,28 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
     // -------------------------------------------------- 本地离线翻译
 
-    /// <summary>下载某个本地离线模型（行内进度条会转）。</summary>
+    /// <summary>下载某个本地离线模型：下载本体活在 App 层协调器里，切页也不会断。</summary>
     private async void OnDownloadLocalModelClick(object sender, RoutedEventArgs e) =>
         await RunGuardedAsync(
             "SettingsPage 下载本地模型失败",
-            () => sender is FrameworkElement { DataContext: LocalModelRowViewModel row }
-                ? _viewModel.DownloadLocalModelAsync(row, _lifetime.Token)
-                : Task.CompletedTask);
+            () =>
+            {
+                if (sender is FrameworkElement { DataContext: LocalModelRowViewModel row })
+                {
+                    _viewModel.StartLocalModelDownload(row);
+                }
+
+                return Task.CompletedTask;
+            });
+
+    /// <summary>暂停下载：已下载的残片保留，下次点「下载」从断点续传。</summary>
+    private void OnPauseLocalModelClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: LocalModelRowViewModel row })
+        {
+            _viewModel.PauseLocalModelDownload(row);
+        }
+    }
 
     /// <summary>深度校验某个本地模型的完整性（后台算 SHA-256）。</summary>
     private async void OnVerifyLocalModelClick(object sender, RoutedEventArgs e) =>

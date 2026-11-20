@@ -1,6 +1,7 @@
 namespace PdxLauncher.App.Views;
 
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Navigation;
 
@@ -61,7 +62,7 @@ public sealed partial class AddModsPage : Page
         _request = e.Parameter as AddModsNavigationRequest;
     }
 
-    /// <summary>离开页面时记住排序方式，并立即落盘（下次进入或重启后恢复）。</summary>
+    /// <summary>离开页面时记住排序与两项筛选，并立即落盘（下次进入或重启后恢复）。</summary>
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         SaveSortState();
@@ -87,7 +88,7 @@ public sealed partial class AddModsPage : Page
 
         _viewModel.SetPlaySet(_request.PlaySetName);
 
-        // 页面是重建的：先把上次离开时的排序方式放回去，再加载候选。
+        // 页面是重建的：先把上次离开时的排序与两项筛选放回去，再加载候选。
         RestoreSortState();
 
         // x:Bind 在 InitializeComponent 里按属性顺序赋值，下拉控件的 SelectedItem 可能先于
@@ -95,6 +96,17 @@ public sealed partial class AddModsPage : Page
         if (SortBox.SelectedItem is null)
         {
             SortBox.SelectedItem = _viewModel.SelectedSortMode;
+        }
+
+        // 同排序框：x:Bind 按属性顺序赋值，来源 / 版本下拉的 SelectedItem 也可能先于 ItemsSource 被清空。
+        if (SourceFilterBox.SelectedItem is null)
+        {
+            SourceFilterBox.SelectedItem = _viewModel.SelectedSourceFilter;
+        }
+
+        if (VersionFilterBox.SelectedItem is null)
+        {
+            VersionFilterBox.SelectedItem = _viewModel.SelectedVersionFilter;
         }
 
         await LoadAsync().ConfigureAwait(true);
@@ -183,28 +195,73 @@ public sealed partial class AddModsPage : Page
         SaveSortState();
     }
 
-    /// <summary>把上次选的排序方式套回 ViewModel 与下拉框；旧语言的文案对不上选项时保持默认。</summary>
+    /// <summary>来源下拉选择变化：写回 ViewModel 触发重建（与搜索 / 版本 / 排序叠加）。</summary>
+    private void OnSourceFilterSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
+    {
+        if (e.SelectedItem is not string mode
+            || string.Equals(mode, _viewModel.SelectedSourceFilter, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _viewModel.SelectedSourceFilter = mode;
+        SaveSortState();
+    }
+
+    /// <summary>版本兼容性下拉选择变化：写回 ViewModel 触发重建（与搜索 / 来源 / 排序叠加）。</summary>
+    private void OnVersionFilterSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
+    {
+        if (e.SelectedItem is not string mode
+            || string.Equals(mode, _viewModel.SelectedVersionFilter, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _viewModel.SelectedVersionFilter = mode;
+        SaveSortState();
+    }
+
+    /// <summary>
+    /// 把上次离开时的排序与两项筛选套回 ViewModel 与下拉框；旧语言的文案对不上选项时保持默认。
+    /// 每项独立恢复：某一项对不上（例如切过语言）不影响其余项。
+    /// </summary>
     private void RestoreSortState()
     {
         var state = PageStateStore.AddMods;
-        if (state is null || string.IsNullOrEmpty(state.SortMode))
+        if (state is null)
         {
             return;
         }
 
-        if (!_viewModel.SortModes.Any(mode => string.Equals(mode, state.SortMode, StringComparison.Ordinal)))
+        if (!string.IsNullOrEmpty(state.SortMode)
+            && _viewModel.SortModes.Any(mode => string.Equals(mode, state.SortMode, StringComparison.Ordinal)))
         {
-            return;
+            _viewModel.SelectedSortMode = state.SortMode;
+            SortBox.SelectedItem = state.SortMode;
         }
 
-        _viewModel.SelectedSortMode = state.SortMode;
-        SortBox.SelectedItem = state.SortMode;
+        if (!string.IsNullOrEmpty(state.SourceFilter)
+            && _viewModel.SourceFilterModes.Any(mode => string.Equals(mode, state.SourceFilter, StringComparison.Ordinal)))
+        {
+            _viewModel.SelectedSourceFilter = state.SourceFilter;
+            SourceFilterBox.SelectedItem = state.SourceFilter;
+        }
+
+        if (!string.IsNullOrEmpty(state.VersionFilter)
+            && _viewModel.VersionFilterModes.Any(mode => string.Equals(mode, state.VersionFilter, StringComparison.Ordinal)))
+        {
+            _viewModel.SelectedVersionFilter = state.VersionFilter;
+            VersionFilterBox.SelectedItem = state.VersionFilter;
+        }
     }
 
-    /// <summary>把当前排序方式写进页面状态（内存态）；落盘由离开页面或关窗时统一做。</summary>
+    /// <summary>把当前排序与两项筛选写进页面状态（内存态）；落盘由离开页面或关窗时统一做。</summary>
     private void SaveSortState()
     {
-        PageStateStore.AddMods = new AddModsState(_viewModel.SelectedSortMode);
+        PageStateStore.AddMods = new AddModsState(
+            _viewModel.SelectedSortMode,
+            _viewModel.SelectedSourceFilter,
+            _viewModel.SelectedVersionFilter);
     }
 
     /// <summary>返回播放集页（不添加任何 mod）。</summary>
@@ -217,6 +274,63 @@ public sealed partial class AddModsPage : Page
     private void OnCancelClick(object sender, RoutedEventArgs e)
     {
         OnBackClick(sender, e);
+    }
+
+    /// <summary>
+    /// 行右键菜单里的「重试翻译」：只重跑缺译名的那一批，不重读 mod 库、不打乱勾选与滚动位置。
+    /// </summary>
+    private void OnTranslationRetryClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _viewModel.RetryNameTranslation();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("添加模组页重试翻译失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>行右键菜单里的「刷新译文」：忽略缓存与已有译名，本页候选全部强制重翻。</summary>
+    private void OnTranslationRefreshClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _viewModel.RefreshNameTranslation();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("添加模组页刷新译文失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 行右键菜单即将打开：翻译菜单项是页面级动作，挂载在行模板上绑不到页面 ViewModel，
+    /// 就在这里按当前状态统一设 IsEnabled。
+    /// </summary>
+    private void OnTranslationMenuOpening(object sender, object e)
+    {
+        if (sender is not MenuFlyout flyout)
+        {
+            return;
+        }
+
+        var retryEnabled = _viewModel.CanRetryTranslation;
+        var refreshEnabled = AppServices.Translation.IsEnabled;
+        foreach (var item in flyout.Items)
+        {
+            if (item is not MenuFlyoutItem menuItem)
+            {
+                continue;
+            }
+
+            menuItem.IsEnabled = AutomationProperties.GetAutomationId(menuItem) switch
+            {
+                "menuAddModsTranslationRetry" => retryEnabled,
+                "menuAddModsTranslationRefresh" => refreshEnabled,
+                _ => menuItem.IsEnabled,
+            };
+        }
     }
 
     /// <summary>确认添加：把勾选的 mod 交回播放集页。</summary>

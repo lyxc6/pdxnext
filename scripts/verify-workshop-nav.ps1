@@ -7,10 +7,10 @@ Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
 
 $rootDir = Split-Path -Parent $PSScriptRoot
-$exe = Join-Path $rootDir 'src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe'
+$exe = Join-Path $rootDir 'src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe'
 if (-not (Test-Path $exe)) { "NO_EXE $exe"; exit 1 }
 
-Get-Process PdxLauncher.App -ErrorAction SilentlyContinue | Stop-Process -Force
+& (Join-Path $PSScriptRoot "pdx-app-process.ps1") -Action stop -Exe $exe | Out-Null
 Start-Sleep -Milliseconds 800
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo

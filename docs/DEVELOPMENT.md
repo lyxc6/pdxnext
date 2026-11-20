@@ -22,10 +22,10 @@
 
 ### 前置条件
 
-- **.NET SDK 10**（实测 10.0.402，`dotnet --version` 可查）。不需要 Visual Studio，不需要装
+- **.NET SDK 11**（仓库根 `global.json` 锁 `11.0.100`，实测 `dotnet --version` = 11.0.100）。不需要 Visual Studio，不需要装
   Windows App SDK Runtime，也不需要联网——`NuGet.config` 里用 `<packageSources><clear /></packageSources>`，
-  全部包走本机缓存 `%USERPROFILE%\.nuget\packages`（含 `Microsoft.WindowsAppSDK 2.5.1` /
-  `Microsoft.WindowsAppSDK.WinUI 2.3.9` / `CommunityToolkit.Mvvm 8.4.2` /
+  全部包走本机缓存 `%USERPROFILE%\.nuget\packages`（含 `Microsoft.WindowsAppSDK 2.7.0` /
+  `Microsoft.WindowsAppSDK.WinUI 2.7.0` / `CommunityToolkit.Mvvm 8.4.2` /
   `CommunityToolkit.WinUI.Controls.SettingsControls 8.2.251219` 及其 4 个传递依赖）。缓存里缺包时构建直接失败。
 - **运行端什么都不用装**，见下面「自包含」。
 
@@ -34,8 +34,8 @@
 `NuGet.config` 里是 `<clear />`（一个包源都没有），所以包必须**事先躺在本机缓存里**。克隆后先确认：
 
 ```bat
-dir "%USERPROFILE%\.nuget\packages\microsoft.windowsappsdk"      :: 应有 2.5.1
-dir "%USERPROFILE%\.nuget\packages\microsoft.windowsappsdk.winui" :: 应有 2.3.9
+dir "%USERPROFILE%\.nuget\packages\microsoft.windowsappsdk"      :: 应有 2.7.0
+dir "%USERPROFILE%\.nuget\packages\microsoft.windowsappsdk.winui" :: 应有 2.7.0
 dir "%USERPROFILE%\.nuget\packages\communitytoolkit.mvvm"         :: 应有 8.4.2
 :: 官方设置项控件（设置页 SettingsCard）：
 dir "%USERPROFILE%\.nuget\packages\communitytoolkit.winui.controls.settingscontrols" :: 应有 8.2.251219
@@ -43,17 +43,28 @@ dir "%USERPROFILE%\.nuget\packages\communitytoolkit.winui.triggers"             
 dir "%USERPROFILE%\.nuget\packages\communitytoolkit.winui.helpers"                   :: 8.2.251219
 dir "%USERPROFILE%\.nuget\packages\communitytoolkit.winui.extensions"                :: 8.2.251219
 dir "%USERPROFILE%\.nuget\packages\communitytoolkit.common"                          :: 8.2.1
+:: 日志查看器（TextViewControl → Win2D → WASDK.WinUI 1.8 依赖链）：
+dir "%USERPROFILE%\.nuget\packages\textviewcontrol"                                 :: 应有 1.0.3
+dir "%USERPROFILE%\.nuget\packages\microsoft.graphics.win2d"                        :: 应有 1.4.0
+dir "%USERPROFILE%\.nuget\packages\microsoft.windowsappsdk.winui"                   :: 1.8.260204000 也要有
 build.cmd
 ```
 
 这 5 个包是 `PdxLauncher.App.csproj` 里 `CommunityToolkit.WinUI.Controls.SettingsControls` 的依赖链
 （SettingsControls → Triggers → Helpers → Extensions → Common）。换机器时把这 5 个目录一起复制过去即可，
-之后仍然完全离线。首次引入时联网 warm-up 一次：
+之后仍然完全离线。日志查看器的 3 个包也照此一起复制；注意 WASDK.WinUI 1.8.x 只是 Win2D 1.4 的
+依赖解析项，项目实际构建仍用 2.7.0（还原后 `project.assets.json` 里只有 2.7.0 被选中）。首次引入时联网 warm-up 一次：
 `dotnet restore src\PdxLauncher.App\PdxLauncher.App.csproj -s https://api.nuget.org/v3/index.json -p:Platform=x64`。
 
 缺包时构建会直接失败（没有联网还原的退路）。临时要联网还原的话，把 `NuGet.config` 里的
 `<clear />` 换成 `<add key="nuget.org" value="https://api.nuget.org/v3/index.json" />`，
 拿到包之后改回来——`<clear />` 是故意的，本项目构建期一次网络请求都不发。
+
+> **2026-11-19 升级到 .NET 11 + WindowsAppSDK 2.7 后**：新机器首次构建需要按上一段 warm-up 一次，
+> 会下载 .NET 11 运行时包（`Microsoft.NETCore.App.Runtime.win-x64 11.0.0` 等）、
+> `Microsoft.Windows.SDK.NET.Ref 10.0.26100.87` 以及 WindowsAppSDK 2.7 的全部子包
+> （Base / Foundation / WinUI / DWrite / Widgets / AI / ML / Search / Runtime + `Microsoft.Windows.SDK.BuildTools.MSIX`）。
+> 预热完成后仍可完全离线构建；CI 每次构建本来就临时把源换成 nuget.org（见 `.github/workflows/ci.yml`），不需要改。
 
 包缓存默认在 `%USERPROFILE%\.nuget\packages`，设了环境变量 `NUGET_PACKAGES` 时以环境变量为准
 （`tools\manual-build.py` 与 `tools\package-app.py` 读的是同一个变量，不写死路径）。
@@ -79,22 +90,36 @@ start.cmd /?     :: 打印用法
 开工先按根 `AGENTS.md` 开一个对话分支 —— **一个对话一个分支**，从当前活跃版本分支拉出：
 
 ```bat
-pwsh -File scripts/session.ps1 open <slug>              :: 建 sess/YYYYMMDD-<slug>（脏改动跟随并 wip 提交）
-pwsh -File scripts/session.ps1 list                     :: 看活跃版本分支与进行中的对话分支
+pwsh -File scripts/session.ps1 open <slug>              :: 建 sess/YYYYMMDD-<slug>
+pwsh -File scripts/session.ps1 open <slug> -Worktree    :: 同上，但另开 .agents\worktrees\<slug> 一棵树
+pwsh -File scripts/session.ps1 list                     :: 看活跃版本分支、进行中的对话分支、各自工作树与干净与否
 pwsh -File scripts/session.ps1 close -Message "中文说明"  :: 校验基线 → 构建 + 自检 → --no-ff 合回 → 删分支
 ```
 
-`open` 要求当前站在仓库根 `integration-branch` 清单里的某个活跃版本分支上（通常形如 `ver/x.y.z`）；
-不在就先 `git switch` 过去。清单为空、或从 `main` / 已冻结分支起时会被拒绝；`-Force` 只用于引导、
+`open` 要求**基线**是仓库根 `integration-branch` 清单里的某个活跃版本分支（通常形如 `ver/x.y.z`）；
+不在就先 `git switch` 过去。清单为空、或基线是 `main` / 已冻结分支时会被拒绝；`-Force` 只用于引导、
 发版或从 tag 起紧急修复。
+
+- **工作区有未提交改动时 `open` 直接拒绝（退出 3）**：先提交，或加 `-Worktree` 另开一棵树，
+  确需带走旧改动才加 `-CarryDirty`（会提交成 `wip(session)` 基线）。
+- **两条对话同时写代码不用互相等待**：每条对话 `open <slug> -Worktree`，各自一棵树、各自的
+  `bin\`/`obj\`；脚本会打印 `SESSION_WORKTREE=`，之后的 `dev.cmd` / `dev.cmd build` 都在那个目录里跑。
+- **合并串行**：同一时刻只跑一个 `close`。它会在「检出基线的那棵工作树」里 `--no-ff` 合并，
+  因此基线被别的对话占着也不耽误；但那棵树自己有未提交改动时 `close` 拒绝（退出 6）并指名路径。
+- 基线已冻结/未登记时 `close` 拒绝；`-Into <活跃分支>` 可重定向。纯 `*.md` 改动自动跳过构建。
+
+`open` / `close` 的机器可读标记：`SESSION_BRANCH=` / `SESSION_BASE=` / `SESSION_INTEGRATION=` /
+`SESSION_WIP=` / `SESSION_WORKTREE=` / `SESSION_BASE_OWNER=` / `SESSION_MERGED=`。
+退出码：`0` 通过、`1` 用法或环境错误、`2` 合并冲突、`3` 工作区脏、`4` 构建或自检失败、
+`5` 对话分支仍被别的 worktree 占用、`6` 基线所在树有未提交改动。
 
 其他对话或自动化脚本统一用 `dev.cmd`，不要用 `start.cmd`（它遇到已运行实例会直接退出，也不负责验收）：
 
 ```bat
-dev.cmd         :: 结束旧实例 → Release 构建 + 自检 → 启动，末尾输出 DEV_* 标记
+dev.cmd         :: 结束本目录旧实例 → Release 构建 + 自检 → 启动，末尾输出 DEV_* 标记
 dev.cmd logs    :: 同上，启动后在本终端跟随日志（Ctrl+C 只停跟随，程序继续运行）
 dev.cmd build   :: 只构建 + 自检，不启动（验收用）
-dev.cmd nobuild :: 不构建，结束旧实例后直接启动已构建的程序；加 logs 也跟随日志
+dev.cmd nobuild :: 不构建，结束本目录旧实例后直接启动已构建的程序；加 logs 也跟随日志
 ```
 
 查看当前改动（只读）：
@@ -105,9 +130,30 @@ status.cmd nopause  :: 同上，不停住（VS Code 任务用）
 ```
 
 `dev.cmd` 退出码：`0` 通过、`1` 构建失败、`2` 自检失败、`3` 没有可执行文件、`4` 启动后退出；
-末尾固定输出 `DEV_RESULT=` / `DEV_EXE=` / `DEV_DATA=` / `DEV_LOG=` / `DEV_PID=` 等行。
-它会**结束正在运行的 `PdxLauncher.App.exe`**（运行中的 exe 会锁 `PdxLauncher.Core.dll`），
-所以同一工作树同一时刻只允许一个 `dev.cmd`。更完整的约定见 `docs\AGENT-WORKFLOW.md` §10 与根 `AGENTS.md`。
+末尾固定输出 `DEV_RESULT=` / `DEV_EXE=` / `DEV_DATA=` / `DEV_LOG=` / `DEV_PID=` / `DEV_OTHER_PIDS=` 等行。
+它只会**结束本工作树 exe 路径**的实例（运行中的 exe 会锁 `PdxLauncher.Core.dll`），
+所以同一工作树同一时刻只允许一个 `dev.cmd`；同一台机器上装在别的盘（例如 `D:\app\PdxNext`）
+的那份**不会被结束**，只会在输出里以 `DEV_OTHER_PIDS=` 列出来。更完整的约定见 `docs\AGENT-WORKFLOW.md` §10 与根 `AGENTS.md`。
+
+单实例（`src/PdxLauncher.Core/PdxInstanceScope.cs` + `src/PdxLauncher.App/Services/SingleInstanceGuard.cs`）：
+
+- 锁名 = `Local\PdxNext.App.<FNV-1a 16 位>`，散列键是**程序目录**（`AppContext.BaseDirectory` 的
+  Windows 规范化大写形式）。同一目录内只允许一个实例（两个进程写同一个 `data\pdxnext.sqlite`
+  会互相踩），不同目录互不阻塞 —— 同一台机器上装在 C / D / E 盘的 PdxNext 可以同时开着。
+- 激活管道同规则：`PdxNext.App.Activate.<同一个键>`，`dev.cmd`/用户双击第二次时只会把**同目录**
+  那个窗口叫到前台。
+- 安装器仍然有效的秘密：`Local\PdxNext.App`（**没有后缀**）保留下来，由每个实例以
+  `initiallyOwned: false` 持有句柄 —— 它不再是互斥锁，只是「有副本在运行」的存在性标记。
+  `installer/PdxNext.iss` 的 `AppMutex` 读的就是它，所以安装/卸载前仍会要求关掉所有副本。
+  这条**不要改**：改名字就要同步改 `.iss`，而 `.iss` 里没有可用的散列函数。
+- 已知限制（本次不修）：
+  1. 作用域键是**exe 目录**，不是数据根。两份不同目录的实例如果把 `data-root.txt` 指到同一个目录，
+     仍会并发写同一个库。
+  2. 旧版（1.3.0 及以前，全局锁）与新版本在同一目录混跑时互不识别：旧版持有的是无后缀的全局名，
+     新版看的是带后缀的作用域名。正常路径上 `dev.cmd` 会先结束同目录进程，实际不构成风险。
+- 进程管理统一走 `scripts/pdx-app-process.ps1`（`-Action status|stop|wait`，按 `Path` 全等匹配）。
+  禁止再用 `taskkill /im PdxLauncher.App.exe` 或 `Get-Process PdxLauncher.App | Stop-Process`：
+  那会把用户装在别的盘、正在用的副本一起关掉。`StartScriptChecks` 已把这条钉成断言，写回去会红。
 
 单独构建（脚本化、CI、或只想跑某一步时用；只启动已构建的 Release 用 `dev.cmd nobuild`，
 要在终端看运行日志用 `dev.cmd nobuild logs`）：
@@ -149,7 +195,7 @@ publish.cmd D:\out\PdxNext  :: 输出到指定目录
 构建产物（直接双击可运行）：
 
 ```
-src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe
+src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe
 ```
 
 发布产物（要拷给别人时用这个目录，**不要只拷 exe**）：
@@ -590,17 +636,68 @@ Mod 库、播放集里的 mod 行、工坊详情页的简介与更新日志、�
 - **目标语言默认跟随界面语言**（界面中文→译成中文，界面英文→译成英文），也可以在设置里固定成中文或英文。
 - **原文与译文同时显示**：列表行在原标题下方多出一块**带描边框**的译文，详情页的简介 / 更新日志 / 评论在原文下方
   多出一块**带描边框**的译文正文——**不覆盖原文**，也**不加「译文」小标题**（框里就是译文本身）。框内是保留 Markdown 结构的渲染结果。
+  **行内译名框按内容取宽**（工坊列表 / 播放集右栏与左栏候选 / Mod 库 / 添加模组页 / 工坊详情页合集子项六处的译名
+  `Border` 都是 `HorizontalAlignment="Left"`），不会因为行容器里默认的 `Stretch` 被拉成通栏；译文过长时仍按可用宽度省略号收尾。
+  这条不变量由 `TranslationChecks.CheckTranslatedChipFitsContent` 扫描 XAML 钉住，改回 `Stretch` 会直接红。
+  1.3.0 里这六处还没有 `HorizontalAlignment="Left"`，装旧版的用户看到的就是「纹章王冠」占满整行。
+  译名框的 `AutomationProperties.AutomationId` 挂在里面那层 `TextBlock` 上——`Border` 没有 automation peer，
+  挂在 `Border` 上 UIA 树里查不到该节点，脚本与读屏都定位不到。
+  详情页的正文译文块（简介 / 更新日志 / 评论）故意保持整栏宽——那是成段的散文阅读区，逐段收窄会排成锯齿。
 - 四个范围开关可以分别关掉名称 / 简介 / 更新日志 / 评论的翻译。
 - **翻译在途有提示**：只要还有翻译请求没回来（含排队等并发的批次），窗口标题栏右侧显示一个小号环形进度 +
   「正在翻译…」，最后一批结束后约 0.4 秒消失；详情页在译文将来出现的位置先显示「正在翻译简介…／更新日志…／评论…」，
   译文到了原地替换。评论是逐条译的，一条译好就挂一条，整段译完提示才收。
 - 译文有本地缓存（`cache:translations` 库键，保留天数可配，默认 30 天），命中缓存就不再发请求；
   设置页「缓存」分类里多一行「译文缓存」，可单独清空。
+- **名称译名只有一条管道**：`Services/ModNameTranslator`（App 层，不引用 `AppServices` 静态与 WinUI 类型，
+  因此可以被检查工程原样链接）。Mod 库、播放集页（右栏与左栏候选）、添加模组页的行译名都由它读写同一张
+  `TranslationCache.Names` 表，键是「ModId + 目标语言」，回填时再校验 `SourceName` 与当前展示名逐字相等。
+  三处共用同一份字典与同一张表，所以同一个 mod 在三个页面显示的一定是同一句译文，且只译一次。
+  此前播放集页与添加模组页只调引擎、从不读写这张表，于是同一个 mod 在 Mod 库有译名、在别处没有或要重翻，
+  用户看到的就是「翻译不一致」。工坊列表 / 详情页按 Steam 工坊 item id 建行，与 `mods.id` 没有可靠映射，
+  **故意不接这张表**（只能靠名字撞库，反而制造新的不一致）。
 - 翻译是**弱依赖**：请求失败、限流、返回格式不对都只记日志并在界面上保留原文，绝不把内容清空；
   一条都没译出来时，页面顶部的提示会**逐条列出每个引擎各自的原因**（如「mymemory: 免费额度已用完，约 2 小时后恢复」），
   而不是只报第一个失败者。MyMemory 的免费额度用完（HTTP 429）后，本进程内**立刻停止再请求**并显示恢复时间，
   不会每段译文都白打一次；额度恢复后自动重新尝试。
+- **翻译失败可在 mod 行右键菜单里「重试翻译」/「刷新译文」**：整批失败的原因仍逐条显示在工坊列表底部状态条、
+  播放集页状态条、Mod 库状态条、添加模组页底栏与工坊详情页的失败提示条上；重试入口不再是状态条里的独立按钮
+  （此前的五个 `btn*TranslationRetry` 按钮已删除），而是每个 mod 行的右键菜单。工坊列表 / 播放集 / Mod 库 /
+  添加模组 / 工坊详情合集子项五种行的菜单都带「重试翻译」（`menuWorkshopTranslationRetry` /
+  `menuModsTranslationRetry` / `menuModLibraryTranslationRetry` / `menuAddModsTranslationRetry` /
+  `menuWorkshopDetailTranslationRetry`）与「刷新译文」（`menu*TranslationRefresh`，忽略缓存与已有译文强制重翻，
+  绕缓存由翻译链路的 force 参数负责）；工坊列表、Mod 库、工坊详情三处另带「刷新页面」
+  （`menuWorkshopPageRefresh` / `menuModLibraryPageRefresh` / `menuWorkshopDetailPageRefresh`），
+  播放集与添加模组的菜单没有这一项。
+  播放集页左栏候选行的右键是专属重试入口 `menuModsCandidateTranslationRetry`（门控跟候选栏自己的
+  `CanRetryCandidateTranslation`，点击也分流到候选栏的重试，与右栏的 `menuModsTranslationRetry` 互不影响）；
+  候选栏与右栏的失败标志各自独立，哪边失败就灰哪边的重试。
+  工坊详情页的正文根（`DetailContent`）另挂一组同款翻译菜单：普通（非合集）详情页没有合集子项行可右键，
+  它是这类页面唯一的翻译入口；合集页里子项行上有同款菜单，就近优先。两组菜单共用同一组 Click 处理器与
+  `Opening` 门控，AutomationId 各用一套——合集子项行的三项带 `Collection` 前缀
+  （`menuWorkshopDetailCollectionPageRefresh` / `menuWorkshopDetailCollectionTranslationRetry` /
+  `menuWorkshopDetailCollectionTranslationRefresh`），同页两份菜单不会按 ID 命中歧义。
+  「重试翻译」只重跑失败过的那一批（详情页按范围重跑简介 / 更新日志 / 评论 / 合集标题，不重拉详情），
+  不重读列表、不打乱页码与滚动位置。
+  菜单项挂载在行模板上绑不到页面 ViewModel，菜单 `Opening`（各页 `OnTranslationMenuOpening`）时按当前状态
+  统一设 `IsEnabled`：「重试翻译」跟 `CanRetryTranslation`（播放集候选行跟 `CanRetryCandidateTranslation`）、
+  「刷新译文」跟翻译功能开关走（详情页另要求详情已加载完），「刷新页面」恒可用。
+  重试还会调 `TranslationCoordinator.ResetRetryableFailures()` 清掉主机的临时冷却（连不上 5 分钟 / 429 60 秒），
+  否则重试会立刻拿到「暂时跳过」、用户以为点了没反应；MyMemory 的额度冷却**故意保留**——那是服务端事实。
+  详情页重试里的合集标题与评论范围带 force 绕开旧缓存（失败后旧缓存条目还在，不带 force 会把旧译文当
+  本轮结果填回，引擎根本不会被问到）；简介 / 更新日志的重试维持缓存语义（失败只在引擎真回了「与原文相同 /
+  结构没保住」时才记档，不存在会被误用的旧译文）。
+  Mod 库此前整批失败只写日志，现在与其他页一样给出可见提示（复用 `ModsTranslateUnavailable` 文案）与重试入口。
 - Markdown 结构在翻译后保持不变：标题层级、列表序号、链接地址、强调样式原样保留，代码块 / 图片 / 分隔线不翻译。
+- **模型不许把提示词吐进译文**：本地 Index-Translate 的提示词是「约束块在前、【源文】在最后」——
+  约束放在源文后面时，补全模型译完原文会顺着往下写，把「【约束要求】…只输出译文」原样吐出来
+  （中文原文、本来没什么可译时尤其容易触发；1.3.0 的实测缓存里留下过 6 条这种条目）。
+  所有走提示词的引擎（Index-Translate、自填 OpenAI 兼容接口）输出都会过
+  `Core/Online/Translation/TranslationEchoGuard`：剥掉 ChatML / think 记号，按行首标记截断；
+  只剩提示词就判「没译出来」（页面保留原文并给失败原因与「重试」，绝不写进缓存）。
+  截断后与原文逐字相同的，由 `TranslationService` 统一当「没翻」处理——不展示、不算失败、不写缓存，
+  免得中文简介 / 中文 mod 名多出一个和标题一样的译名框、或弹出一条假的翻译失败提示。
+  读盘时还会**自愈**：旧版本存下的、带提示词标记的条目直接删掉（下次用新提示词重译），只清这些条目、不整份作废缓存。
 
 域名口径：微软翻译、谷歌云翻译与谷歌免费翻译的域名都在白名单里；**自填接口的域名按用户填的地址精确授权**（只放行该主机本身，
 不放行子域），授权随设置保存，撤销后立刻失效。
@@ -657,7 +754,7 @@ src/
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
   PdxLauncher.Localization.Generator/ :: Roslyn 增量源生成器：编译期读 Strings/*/Resources.resw，生成 Localizer 属性与 Keys（不落盘）
 tests/
-  PdxLauncher.Checks/          :: 166 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 177 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
@@ -681,17 +778,17 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**743 个 .cs + 22 个 .xaml**（不含 `obj/` 生成物；2026-11-11 实测：Core 362 / App 198+22 / Imaging 10 / Checks 173；运行时打印的「检查类」是 **166**，其余文件是自检框架与替身）。
+**755 个 .cs + 22 个 .xaml**（不含 `obj/` 生成物；2026-11-15 实测：Core 367 / App 201+22 / Imaging 10 / Checks 177；运行时打印的「检查类」是 **177**（2026-11-21 实测），其余文件是自检框架与替身）。
 
 ---
 
 ## 4. 自检
 
 ```bat
-dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
+dotnet "tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 166，失败: 0，断言失败总数: 0` 即通过（2026-11-11 实测 166 类；真机段只锁结构——行数、启用态这类本机数据只打印 `info` 不作断言，Victoria 3 播放集那条写死的 `mod 行数 >= 22` 已按这个原则删掉，见 HANDOFF §0.85.5）。覆盖：Steam 探测与
+输出 `检查类: 177，失败: 0，断言失败总数: 0` 即通过（2026-11-21 实测 177 类；真机段只锁结构——行数、启用态这类本机数据只打印 `info` 不作断言，Victoria 3 播放集那条写死的 `mod 行数 >= 22` 已按这个原则删掉，见 HANDOFF §0.85.5；CK3 播放集条数同理从 `>= 3` 放宽到 `>= 1`，见 §0.99）。覆盖：Steam 探测与
 launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取、
 Mod 创建（legacy `.mod`/`descriptor.mod` 与 V3 `.metadata/metadata.json` 生成、非法输入拒绝、本地清单合并、发布记录与发布协议参数、
 工坊发布面：可见性四档映射、1 MB 与张数上限、五种 YouTube 链接解析、30 种语言码与归一化、请求 JSON 全字段往返、旧 `public` 记录回显、内嵌默认封面的 PNG 签名与落盘一致、
@@ -732,7 +829,8 @@ csproj 的 `<ApplicationIcon>` / MainWindow 的 `AppWindow.SetIcon` / publish.cm
 3 段文本只发一个请求且译文保序、20 段按每批 8 段切成不超过 3 个请求；
 首选主机 429 时换下一台并进 60 秒冷却、三台都 429 时返回 null 且原因里带主机名；
 以及 MyMemory 的 429：记额度耗尽与恢复时间、本进程内不再请求、恢复时间过后重新尝试，
-和「多个引擎都失败时提示里逐条列名」。
+和「多个引擎都失败时提示里逐条列名」；还有「重试」清冷却的口径：点名的主机冷却全部解除、额度冷却与恢复时间
+原样保留、清完之后仍然能重新标记冷却。
 以及界面规范：XAML / C# 里的 `Padding`、`Margin`、`Spacing`、`RowSpacing`、`ColumnSpacing` 每个分量都是 4 的倍数，`CornerRadius` 只用 0/4/8（`SpacingChecks`，规则见 §8）。
 
 ---

@@ -46,8 +46,8 @@ call "%ROOT%scripts\msg.cmd" S_USAGE4
 exit /b 0
 
 :argsdone
-set "EXE=src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
-if /i "%CONFIG%"=="Debug" set "EXE=src\PdxLauncher.App\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
+set "EXE=src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
+if /i "%CONFIG%"=="Debug" set "EXE=src\PdxLauncher.App\bin\x64\Debug\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe"
 
 echo ============================================
 call "%ROOT%scripts\msg.cmd" S_TITLE
@@ -55,15 +55,19 @@ echo ============================================
 echo.
 
 rem ---------------------------------------------------------------------------
-rem  Already running?  The app has no single-instance mutex, so match by name.
-rem  Skipped when "new" was passed, and when "check" asked for a self run.
+rem  Already running?  Only a process launched from THIS exe path counts: the app
+rem  may also be installed elsewhere on the same machine, and that copy running
+rem  must not block this one.  Skipped when "new" was passed, and when "check"
+rem  asked for a self run.
 rem ---------------------------------------------------------------------------
 if "%FORCENEW%"=="1" goto build
 if "%RUNCHECKS%"=="1" goto build
-rem findstr, not find: a Git-Bash-style PATH puts GNU find.exe ahead of the
-rem Windows one, and GNU find rejects /i and always exits non-zero.
-tasklist /fi "imagename eq PdxLauncher.App.exe" /nh 2>nul | findstr /i /c:"PdxLauncher.App.exe" >nul
-if errorlevel 1 goto build
+set "EXEABS=%ROOT%%EXE%"
+set "LOCAL=0"
+for /f "usebackq tokens=1,* delims==" %%a in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%scripts\pdx-app-process.ps1" -Action status -Exe "%EXEABS%"`) do (
+    if /i "%%a"=="LOCAL" set "LOCAL=%%b"
+)
+if not "%LOCAL%"=="1" goto build
 call "%ROOT%scripts\msg.cmd" S_ALREADY
 exit /b 0
 
@@ -91,7 +95,7 @@ if errorlevel 1 (
 if "%RUNCHECKS%"=="1" (
     echo.
     call "%ROOT%scripts\msg.cmd" S_STEPCHECK
-    dotnet "tests\PdxLauncher.Checks\bin\%CONFIG%\net10.0\PdxLauncher.Checks.dll"
+    dotnet "tests\PdxLauncher.Checks\bin\%CONFIG%\net11.0\PdxLauncher.Checks.dll"
     if errorlevel 1 (
         echo.
         call "%ROOT%scripts\msg.cmd" S_FAILCHECK

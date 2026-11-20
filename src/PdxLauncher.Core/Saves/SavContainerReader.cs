@@ -15,8 +15,8 @@ using PdxLauncher.Core.Games;
 /// <item><description><c>SAV0</c> 头最多读 <see cref="MaxHeaderBytes"/>；CK3 的文本 <c>meta_data</c> 按块续读，上限 <see cref="MaxTextMetaBytes"/>，<c>gamestate</c> 永远不读；</description></item>
 /// <item><description>zip 类只读 <c>meta</c>/<c>metadata</c> 条目，且条目解压后最多读 <see cref="MaxZipMetaBytes"/>；</description></item>
 /// <item><description>任何异常都在这里吞掉并降级为「文件名 + 文件时间 + ParseState=Degraded」，绝不上抛。</description></item>
-/// <item><description>zip 元数据只做结构校验：<see cref="ZipArchive"/> 不校验 CRC，stored meta 被静默改坏时仍可能解析出错误的版本/日期，
-/// 只有结构损坏才会落到 OpenFailed / EntryReadFailed。这里不自实现 CRC32，代价不值。</description></item>
+/// <item><description>zip 元数据只做结构校验：.NET 11 起 <see cref="ZipArchive"/> 读条目时会校验 CRC，
+/// stored meta 被改坏会抛 <see cref="InvalidDataException"/>，这里统一降级为 Degraded（不再解析出错误的版本/日期）；</description></item>
 /// </list>
 /// </para>
 /// </summary>

@@ -193,8 +193,26 @@ public sealed class AppSettings
     /// </summary>
     public bool DiagnosticsLogWrap { get; set; }
 
+    /// <summary>
+    /// 性能与日志页的日志尾部是否每 5 秒自动刷新。默认关；
+    /// 与 <see cref="DiagnosticsLogWrap"/> 一样跨页面重开保留。
+    /// </summary>
+    public bool DiagnosticsLogAutoRefresh { get; set; }
+
     /// <summary>启动后自动检查更新（默认开）。每机器安装仍会弹 UAC 才能升级。</summary>
     public bool AutoCheckUpdates { get; set; } = true;
+
+    /// <summary>
+    /// Mod 编辑页左栏是否显示（默认开）。关掉后左栏收起，改用右栏顶部的分节选择器，
+    /// 四个功能照常可达；设置页与本页开关双向即时生效，变化时立即落盘。
+    /// </summary>
+    public bool ModEditorLeftPaneVisible { get; set; } = true;
+
+    /// <summary>
+    /// 左栏菜单是否显示「Mod 编辑」入口（默认开）。关掉后该项从导航栏隐藏；
+    /// 若用户正停在该页，会被送回主页。设置页开关即时生效，变化时立即落盘。
+    /// </summary>
+    public bool ShowModEditorNav { get; set; } = true;
 
     /// <summary>上次成功读取更新清单的 UTC 时间；自动检查用它做 24 小时节流。</summary>
     public DateTimeOffset? LastUpdateCheckUtc { get; set; }

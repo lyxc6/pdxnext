@@ -2,10 +2,12 @@ namespace PdxLauncher.Checks;
 
 using System.Net;
 using System.Net.Http;
+using System.Text.Json;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Online.Translation;
+using PdxLauncher.Core.Online.Translation.Local;
 using PdxLauncher.Core.Storage;
 using PdxLauncher.Core.Text;
 
@@ -27,6 +29,11 @@ public static class TranslationChecks
             CheckMarkdownTranslatorBareLinks();
             CheckTranslationOptions();
             CheckTranslationCache();
+            CheckPromptEchoGuard();
+            CheckServiceIgnoresIdentityTranslation();
+            CheckCacheScrubsPromptEcho();
+            CheckIndexTranslatePromptOrder();
+            CheckTranslatedChipFitsContent(fs);
             CheckTranslationService();
             CheckEngineModes();
             CheckMicrosoftTranslatorEngine();
@@ -36,6 +43,7 @@ public static class TranslationChecks
             CheckFreeEngineBatching();
             CheckFreeEngineRateLimit();
             CheckMyMemoryQuota();
+            CheckEndpointHealthClearHostCooldowns();
             CheckTranslationFailureNote();
             CheckMultiEngineFailureNotes();
             CheckMultiEngineFallback();
@@ -397,6 +405,280 @@ public static class TranslationChecks
         var cleared = cache.TryGetAsync("engine", "zh-CN", "hello", 30, CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Check("清空后不再命中", cleared is null);
         ChecksContext.Check("清空后文档被删除", !documents.Exists(JsonDocumentKeys.Translations));
+    }
+
+    // ---------------------------------------------------------------- 提示词回吐
+
+    /// <summary>
+    /// 模型把提示词当译文吐回来时的闸门：截断提示词尾巴、只留提示词时判失败、正常译文不动。
+    /// 样本取自 2026-11-14 安装版缓存里的真实污染条目（`cache:translations`）。
+    /// </summary>
+    private static void CheckPromptEchoGuard()
+    {
+        const string polluted =
+            "《十字架的阴影》（SOTC）——基督教扩展模组\n\n" +
+            "【约束要求】\n" +
+            "1. 【硬性要求】专有名词/术语对照: mod→模组、mods→模组、workshop→创意工坊\n\n" +
+            "只输出译文，不要有任何额外说明。";
+
+        ChecksContext.Check("回吐: 认出提示词痕迹", TranslationEchoGuard.ContainsPromptMarkup(polluted));
+        ChecksContext.Equal(
+            "回吐: 只剩原文前缀时保留原文（由 TranslationService 当没翻处理）",
+            "《十字架的阴影》（SOTC）——基督教扩展模组",
+            TranslationEchoGuard.Trim(polluted) ?? string.Empty);
+        ChecksContext.Equal(
+            "回吐: 译文 + 约束块只留译文",
+            "纹章王冠",
+            TranslationEchoGuard.Trim("纹章王冠\n\n【约束要求】\n1. 【硬性要求】专名/术语对照: mod→模组\n\n只输出译文，不要有任何额外说明。") ?? string.Empty);
+
+        // 正常译文：术语词照留，句中出现「只输出译文」也不截（只认行首）。
+        const string normal = "Workshop 里的 mod 需要一个 DLC 才能开局。";
+        ChecksContext.Equal("回吐: 正常译文原样返回", normal, TranslationEchoGuard.Trim(normal) ?? string.Empty);
+        ChecksContext.Check("回吐: 正常译文没有标记", !TranslationEchoGuard.ContainsPromptMarkup(normal));
+        const string quoted = "他写道：只输出译文，不要解释。";
+        ChecksContext.Equal("回吐: 句中的提示词字样不截断", quoted, TranslationEchoGuard.Trim(quoted) ?? string.Empty);
+
+        ChecksContext.Check(
+            "回吐: ChatML 记号被剥掉",
+            TranslationEchoGuard.Trim("<|im_start|>assistant\n纹章王冠<|im_end|>") == "纹章王冠");
+
+        ChecksContext.Check(
+            "回吐: think 块被整段剥掉",
+            TranslationEchoGuard.Trim("\u003Cthink\u003E先想想用词\u003C/think\u003E纹章王冠") == "纹章王冠");
+
+        ChecksContext.Check("回吐: 空输出返回 null", TranslationEchoGuard.Trim("   ") is null);
+        ChecksContext.Check("回吐: 只有提示词时返回 null", TranslationEchoGuard.Trim("【约束要求】\n只输出译文。") is null);
+        ChecksContext.Check("回吐: 只输出 open think 也返回 null", TranslationEchoGuard.Trim("\u003Cthink\u003E我想想") is null);
+    }
+
+    /// <summary>
+    /// 与原文逐字相同的「译文」由服务层当成没翻：不返回、不算失败、不写缓存。
+    /// 这条保证中文简介 / 中文 mod 名不会因为「模型原样回一句」而在列表或详情页多出译名框与假失败提示。
+    /// </summary>
+    private static void CheckServiceIgnoresIdentityTranslation()
+    {
+        var logger = new RecordingLogger();
+        var documents = new MemoryDocumentStore();
+        var clock = new MutableClock(new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero));
+        var cache = new TranslationCache(documents, clock, logger);
+        var service = new TranslationService(new ITranslationEngine[] { new IdentityEngine() }, cache, logger);
+        var options = TranslationOptions.FromSettings(
+            new AppSettings { TranslateEnabled = true, TranslateEngineMode = TranslationEngineModes.Builtin },
+            "zh-CN");
+
+        var translated = new List<(int Index, string? Text)>();
+        var results = service
+            .TranslateAsync(["首都扩建", "Heraldic Crowns"], options, CancellationToken.None, (i, text) => translated.Add((i, text)))
+            .GetAwaiter()
+            .GetResult();
+
+        ChecksContext.Check("原样回吐: 与原文相同的条目不出译文", results[0] is null);
+        ChecksContext.Check("原样回吐: 整批都相同也不算失败", service.LastFailure is null, service.LastFailure ?? "null");
+        ChecksContext.Check("原样回吐: 进度回调不发同文条目", translated.All(item => item.Index != 0));
+        ChecksContext.Check(
+            "原样回吐: 同文结果不写缓存",
+            cache.TryGetAsync("identity", "zh-CN", "首都扩建", 30, CancellationToken.None).GetAwaiter().GetResult() is null);
+        ChecksContext.Check(
+            "原样回吐: 不同文的条目正常返回",
+            results[1] == "Heraldic Crowns（译）");
+    }
+
+    /// <summary>
+    /// 缓存自愈：旧版本存下的「原文 + 提示词」条目读盘时被清掉并落盘；正常条目与写入闸门不受影响。
+    /// </summary>
+    private static void CheckCacheScrubsPromptEcho()
+    {
+        var clock = new MutableClock(new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero));
+        var logger = new RecordingLogger();
+        var documents = new MemoryDocumentStore();
+
+        var polluted = "首都扩建\n\n【约束要求】\n1. 【硬性要求】专名/术语对照: mod→模组\n\n只输出译文，不要有任何额外说明。";
+        var pollutedName = "纹章王冠\n\n【约束要求】\n只输出译文。";
+        var cleanKey = TranslationCache.BuildKey("index-translate", "zh-CN", "Capital expansion");
+        var pollutedKey = TranslationCache.BuildKey("index-translate", "zh-CN", "首都扩建");
+        var modId = Guid.Parse("2a1f0f0e-9c3b-4f4f-9c4c-6c6f6e6d6e6f");
+        var nameKey = modId.ToString("N") + "\nzh-CN";
+
+        var document = new
+        {
+            version = 1,
+            entries = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [cleanKey] = new { text = "首都扩张", fetchedUtc = "2026-11-18T00:00:00Z" },
+                [pollutedKey] = new { text = polluted, fetchedUtc = "2026-11-14T14:36:15Z" },
+            },
+            names = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                [nameKey] = new
+                {
+                    modId = modId.ToString(),
+                    targetLanguage = "zh-CN",
+                    sourceName = "Heraldic Crowns",
+                    translation = pollutedName,
+                    updatedUtc = "2026-11-14T14:36:15Z",
+                },
+            },
+        };
+
+        documents.Write(JsonDocumentKeys.Translations, JsonSerializer.Serialize(document));
+
+        var cache = new TranslationCache(documents, clock, logger);
+        var cleanHit = cache
+            .TryGetAsync("index-translate", "zh-CN", "Capital expansion", 30, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Equal("缓存自愈: 正常条目仍在", "首都扩张", cleanHit ?? string.Empty);
+
+        var pollutedHit = cache
+            .TryGetAsync("index-translate", "zh-CN", "首都扩建", 30, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Check("缓存自愈: 回吐条目读不出来", pollutedHit is null);
+
+        var names = cache
+            .GetNameTranslationsAsync("zh-CN", CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Check("缓存自愈: 回吐的旧译名不回填", names.Count == 0, names.Count.ToString());
+
+        var persisted = documents.TryRead(JsonDocumentKeys.Translations, out var json) ? json : null;
+        ChecksContext.Check(
+            "缓存自愈: 清理结果落盘（不再含提示词标记）",
+            persisted is not null
+                && !persisted.Contains("【约束要求】", StringComparison.Ordinal)
+                && persisted.Contains("首都扩张", StringComparison.Ordinal),
+            persisted ?? "无文档");
+        ChecksContext.Check(
+            "缓存自愈: 打了一条清理日志",
+            logger.Warnings.Any(message => message.Contains("混入提示词", StringComparison.Ordinal)));
+
+        // 写入闸门：回吐内容拒写；干净译文按去空白后的内容存入。
+        var writeStore = new MemoryDocumentStore();
+        var writeCache = new TranslationCache(writeStore, clock, new RecordingLogger());
+        writeCache
+            .SetAsync("engine", "zh-CN", "hello", polluted, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        var refused = writeCache
+            .TryGetAsync("engine", "zh-CN", "hello", 30, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Check("缓存写入: 回吐内容拒写", refused is null);
+
+        writeCache
+            .SetAsync("engine", "zh-CN", "hello", "  你好  ", CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        var trimmedHit = writeCache
+            .TryGetAsync("engine", "zh-CN", "hello", 30, CancellationToken.None)
+            .GetAwaiter()
+            .GetResult();
+        ChecksContext.Equal("缓存写入: 译文去首尾空白后落盘", "你好", trimmedHit ?? string.Empty);
+    }
+
+    /// <summary>
+    /// 本地引擎提示词形状：约束块与术语表必须在【源文】之前，源文是最后一段。
+    /// 这是「模型顺着往下写、把约束当译文吐回来」的根因修复点，形状变了要立刻红。
+    /// </summary>
+    private static void CheckIndexTranslatePromptOrder()
+    {
+        var entries = new[]
+        {
+            new LocalGlossaryEntry("mod", "模组"),
+            new LocalGlossaryEntry("workshop", "创意工坊"),
+        };
+        var prompt = IndexTranslateEngine.BuildPromptText("Hello mod", "zh", entries);
+        var constraintIndex = prompt.IndexOf("【约束要求】", StringComparison.Ordinal);
+        var sourceIndex = prompt.IndexOf("【源文】", StringComparison.Ordinal);
+        var glossaryIndex = prompt.IndexOf("mod→模组", StringComparison.Ordinal);
+
+        ChecksContext.Check("本地提示词: 有约束块", constraintIndex >= 0, prompt);
+        ChecksContext.Check(
+            "本地提示词: 约束块在【源文】之前",
+            constraintIndex >= 0 && sourceIndex > constraintIndex,
+            "约束=" + constraintIndex + "，源文=" + sourceIndex);
+        ChecksContext.Check(
+            "本地提示词: 术语表也在【源文】之前",
+            glossaryIndex >= 0 && glossaryIndex < sourceIndex,
+            "术语=" + glossaryIndex + "，源文=" + sourceIndex);
+        ChecksContext.Check(
+            "本地提示词: 源文收尾（模型没有可续写的指令）",
+            prompt.TrimEnd().EndsWith("Hello mod", StringComparison.Ordinal),
+            prompt);
+
+        var bare = IndexTranslateEngine.BuildPromptText("Hello", "zh", Array.Empty<LocalGlossaryEntry>());
+        ChecksContext.Check(
+            "本地提示词: 无词条时同样把源文放最后",
+            bare.TrimEnd().EndsWith("Hello", StringComparison.Ordinal)
+                && !bare.Contains("【约束要求】", StringComparison.Ordinal),
+            bare);
+    }
+
+    /// <summary>
+    /// 行内译名框必须按内容取宽：纵向面板里默认 Stretch 会把描边框拉成通栏（1.3.0 的实机毛病）。
+    /// 正文译文块（简介 / 更新日志 / 评论）故意保持整栏宽，不在这里断言。
+    /// </summary>
+    private static void CheckTranslatedChipFitsContent(IFileSystem fs)
+    {
+        ArgumentNullException.ThrowIfNull(fs);
+        var root = FindWorkspaceRoot();
+        var files = new[]
+        {
+            Path.Combine("src", "PdxLauncher.App", "Views", "WorkshopPage.xaml"),
+            Path.Combine("src", "PdxLauncher.App", "Views", "ModLibraryPage.xaml"),
+            Path.Combine("src", "PdxLauncher.App", "Views", "ModsPage.xaml"),
+            Path.Combine("src", "PdxLauncher.App", "Views", "AddModsPage.xaml"),
+            Path.Combine("src", "PdxLauncher.App", "Views", "WorkshopDetailPage.xaml"),
+        };
+
+        var found = 0;
+        foreach (var relative in files)
+        {
+            var path = Path.Combine(root, relative);
+            if (!fs.FileExists(path))
+            {
+                ChecksContext.Check("译名框: 源文件存在（" + Path.GetFileName(relative) + "）", false, path);
+                continue;
+            }
+
+            var xaml = fs.ReadAllText(path);
+            var index = 0;
+            while ((index = xaml.IndexOf("Text=\"{x:Bind TranslatedName", index, StringComparison.Ordinal)) >= 0)
+            {
+                found++;
+                var borderStart = xaml.LastIndexOf("<Border", index, StringComparison.Ordinal);
+                var borderEnd = borderStart >= 0 ? xaml.IndexOf('>', borderStart) : -1;
+                var tag = borderStart >= 0 && borderEnd > borderStart
+                    ? xaml[borderStart..(borderEnd + 1)]
+                    : string.Empty;
+                ChecksContext.Check(
+                    "译名框: " + Path.GetFileName(relative) + " 按内容取宽（HorizontalAlignment=Left）",
+                    tag.Contains("HorizontalAlignment=\"Left\"", StringComparison.Ordinal),
+                    tag);
+                index += 10;
+            }
+        }
+
+        ChecksContext.Check(
+            "译名框: 覆盖 6 处行内译名（工坊列表 / Mod 库 / 播放集两处 / 添加模组 / 详情合集子项）",
+            found == 6,
+            found.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    private static string FindWorkspaceRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "PdxLauncher.sln")))
+            {
+                return dir.FullName;
+            }
+
+            dir = dir.Parent;
+        }
+
+        return Directory.GetCurrentDirectory();
     }
 
     // ---------------------------------------------------------------- 服务
@@ -826,6 +1108,46 @@ public static class TranslationChecks
         ChecksContext.Check("恢复后清掉额度标记", !health.IsQuotaExhausted);
     }
 
+    // ---------------------------------------------------------------- 重试时的冷却清理
+
+    /// <summary>
+    /// 用户点「重试」时清掉主机的临时冷却，但**不能**清掉额度冷却。
+    /// <para>
+    /// 清错了的后果只在真机上可见：要么重试按钮点了等于没点（「暂时跳过」立刻又失败），
+    /// 要么把服务端额度这个事实清掉，白打一串必然 429 的请求。编译器看不见，所以钉在这里。
+    /// </para>
+    /// </summary>
+    private static void CheckEndpointHealthClearHostCooldowns()
+    {
+        var clock = new MutableClock(new DateTimeOffset(2026, 11, 3, 15, 0, 0, TimeSpan.Zero));
+        var health = new TranslationEndpointHealth(() => clock.UtcNow);
+
+        foreach (var host in FreeTranslationEngine.Hosts)
+        {
+            health.MarkDead(host, TimeSpan.FromMinutes(10));
+        }
+
+        var resumeAt = clock.UtcNow.AddHours(2);
+        health.MarkQuotaExhaustedUntil(resumeAt);
+
+        ChecksContext.Check("清理前主机处于冷却", FreeTranslationEngine.Hosts.All(health.IsDead));
+        ChecksContext.Check("清理前额度已标记用完", health.IsQuotaExhausted);
+
+        health.ClearHostCooldowns();
+
+        ChecksContext.Check("清理后主机冷却全部解除", FreeTranslationEngine.Hosts.All(host => !health.IsDead(host)));
+        ChecksContext.Check("清理后额度冷却仍然保留", health.IsQuotaExhausted);
+        ChecksContext.Equal("清理不动额度恢复时间", resumeAt, health.QuotaResumeAt ?? DateTimeOffset.MinValue);
+
+        // 冷却能再次生效（不是把 MarkDead 一并废掉）。
+        health.MarkDead(FreeTranslationEngine.Hosts[0], TimeSpan.FromMinutes(5));
+        ChecksContext.Check("清理后还能重新标记冷却", health.IsDead(FreeTranslationEngine.Hosts[0]));
+
+        // 自检用的 Reset 仍然连额度一起清。
+        health.Reset();
+        ChecksContext.Check("Reset 同时清掉额度标记", !health.IsQuotaExhausted);
+    }
+
     // ---------------------------------------------------------------- 多引擎失败原因
 
     private static void CheckMultiEngineFailureNotes()
@@ -1023,6 +1345,28 @@ public static class TranslationChecks
 
             return Task.FromResult(new TranslationResponse(true, StatusCode, body, string.Empty));
         }
+    }
+
+    /// <summary>
+    /// 模拟本地模型「原样回一句」：中文原文按原样返回（等价于没翻），英文加个后缀（真译文）。
+    /// </summary>
+    private sealed class IdentityEngine : ITranslationEngine
+    {
+        public string Id => "identity";
+
+        public bool IsConfigured => true;
+
+        public Task<string?> TranslateAsync(string text, string targetLanguage, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(Translate(text));
+
+        public Task<IReadOnlyList<string?>> TranslateBatchAsync(
+            IReadOnlyList<string> texts,
+            string targetLanguage,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string?>>(texts.Select(text => (string?)Translate(text)).ToList());
+
+        private static string Translate(string text) =>
+            text.Any(ch => ch >= '\u2E80') ? text : text + "（译）";
     }
 
     private sealed class StubEngine : ITranslationEngine

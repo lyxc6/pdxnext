@@ -31,14 +31,18 @@
   pwsh -File scripts/session.ps1 open <slug>
   ```
 
-  得到 `sess/YYYYMMDD-<slug>`，基线是**对话开始时的当前分支**。
-  `open` 会硬校验当前分支在 `integration-branch` 清单里；从 `main`、已冻结分支或清单为空时直接
+  得到 `sess/YYYYMMDD-<slug>`，基线是**对话开始时所在的当前活跃版本分支**。
+  `open` 会硬校验基线在 `integration-branch` 清单里；基线是 `main`、已冻结分支或清单为空时直接
   拒绝。`-Force` 只用于引导、发版或从 tag 起紧急修复。
+  工作区有未提交改动时 `open` 直接拒绝（退出 3）：先提交，或加 `-Worktree` 另开一棵树（并行对话的
+  常态用法），确需带走旧改动才加 `-CarryDirty`（会提交成 `wip(session)` 基线）。
   对话期间所有提交都留在 sess 分支，不往起始分支写任何东西。
 - 对话结束、验收通过后跑 `pwsh -File scripts/session.ps1 close -Message "中文说明"`：
-  脚本校验基线仍是活跃版本分支，`--no-ff` 合回它，删除 sess 分支并切回。
+  脚本校验基线仍是活跃版本分支，在**检出该基线的那棵工作树**里 `--no-ff` 合回，删除 sess 分支。
   **一个对话只合并一次**；没做完就不合并，分支留着写进汇报。
   基线已冻结/未登记时 `close` 硬失败，用 `-Into <活跃分支>` 重定向或从活跃分支重开。
+  基线所在的那棵树自己有未提交改动时 `close` 也硬失败（退出 6，指名路径）：那是另一条对话还在写，
+  先把它的改动提交掉再合。并行对话的合并在时间上严格串行，同一时刻只跑一个 `close`。
 - 并行写任务仍在 worktree 里开 `feat/<task>`，但基线是**本对话的 sess 分支**，合回也是 sess 分支。
   `feat/<task>` 只是短命任务名，不要和长期 `ver/*` 混用。
 - **发版前先收尾**：`pwsh -File scripts/session.ps1 list` 必须为空。发版后该版本分支立即冻结，
@@ -68,8 +72,19 @@
 ## 4. 并发与隔离
 
 - **只读任务**（调研、定位、日志分析、评审）：可并行 ≤4，直接在本次对话的 sess 分支工作树上跑。
-- **写码任务**：默认串行 1 个，在本次对话的 sess 分支主工作树上做；子 agent 不建分支、不切分支。
-- 需要同时写代码时，每个任务一条 worktree，基线是**本对话的 sess 分支**：
+- **写码任务**：默认串行 1 个，在本次对话自己的工作树上做；子 agent 不建分支、不切分支。
+- **并行写（两条以上对话同时写代码）不需要互相等待**：每条对话各自
+  `pwsh -File scripts/session.ps1 open <slug> -Worktree`，在 `.agents\worktrees\<slug>` 里独立检出：
+
+  - 各自有自己的 `bin/`、`obj/`，天然不覆盖，不用等别的对话 `close`；
+  - 基线是本对话的 sess 分支，合回也是 sess 分支；一棵树同一时刻只有一个写入者；
+  - 写范围有重叠仍判为拆分错误，改依赖串行；
+  - 主工作树保持活跃版本分支检出（它是「基线属主」），合并就发生在它那里。
+- **合并始终串行**：同一时刻只跑一个 `close`。`close` 会自动定位「检出基线的那棵工作树」并在
+  那个目录里 `--no-ff` 合并，所以不必等占用基线的对话先收尾；但那棵树自己有未提交改动时
+  `close` 会拒绝（退出 6）并指名路径 —— 那说明那边还在写，先把它的改动提交到它自己的对话分支。
+  基线没有任何工作树检出时，`close` 才切回基线再合并。
+- 需要**在一条对话内**并行多个写任务时，每个任务一条 worktree，基线是**本对话的 sess 分支**：
 
   ```bat
   git worktree add .agents\worktrees\<task> -b feat/<task> <sess 分支>
@@ -77,9 +92,12 @@
 
   各自构建 + 自检，协调者按依赖顺序 `git merge --no-ff feat/<task>` 合回 sess 分支后 `git worktree remove`。
   这里的 `feat/<task>` 是短命任务分支；长期版本分支统一用 `ver/x.y.z`，两者不要混用。
+  **`feat/1.3` 已在 1.3.0 发布时冻结**，不得再作为任何对话或任务的基线。
 - **同一工作树同一时刻只允许一次 `dotnet build`**：`bin/`、`obj/` 会互相覆盖，构建还会锁
   `PdxLauncher.Core.dll`。
 - 一波最多 2 个写任务 + 1 个只读核对；写范围有重叠就判为拆分错误，改依赖串行。
+- 脏工作区不做基线：`open` 默认拒绝有未提交改动的工作区（那是别人的半成品，混进 `wip` 提交后很难拆），
+  要么先提交，要么 `-Worktree` 另开一棵树；确需带走才加 `-CarryDirty`。
 
 ### 4.1 用户机器的只读边界（2026-11-05 事故后新增，硬规则）
 
@@ -100,7 +118,7 @@
 
 ```bat
 dotnet build "PdxLauncher.sln" -c Release -m:1
-dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
+dotnet "tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll"
 :: 文案键集由 PdxLauncher.Localization.Generator 在编译期校验（缺键/占位符不一致直接报错）
 ```
 
@@ -185,14 +203,21 @@ DEV_EXE=<绝对路径>
 DEV_DATA=<exe目录>\data
 DEV_LOG=<exe目录>\data\logs\pdxnext.log
 DEV_PID=12345
+DEV_OTHER_PIDS=67890,11111
 ```
 
-退出码：`0` 通过、`1` 构建失败、`2` 自检失败、`3` 没有可执行文件、`4` 启动后 10 秒内退出。
+`DEV_PID` 只会是本目录 exe 的进程；`DEV_OTHER_PIDS` 是同名的**其它目录副本**（用户装在别的盘的
+那份），仅用于告知，`dev.cmd` 不会碰它们。
+
+退出码：`0` 通过、`1` 构建失败、`2` 自检失败、`3` 没有可执行文件、`4` 启动后 10 秒内没有等到
+**本目录**的实例（`V_CONFLICT`，多半是同目录已有实例抢走了锁）。
 
 ### 10.3 注意
 
-- `dev.cmd` 默认**结束正在运行的 `PdxLauncher.App.exe`**：运行中的 exe 会锁 `PdxLauncher.Core.dll`，
-  旧窗口也会让 UI 检查量到旧构建。
+- `dev.cmd` 默认**只结束本工作树 exe 路径**的实例：运行中的 exe 会锁 `PdxLauncher.Core.dll`，
+  旧窗口也会让 UI 检查量到旧构建。同一台机器上装在别的盘（例如 `D:\app\PdxNext`）的那份属于
+  用户实际在用的安装版，**不会被结束**，只会以 `DEV_OTHER_PIDS=` 列进输出；`DEV_PID` 只报本目录那个。
+  这套按路径过滤由 `scripts\pdx-app-process.ps1` 提供，禁止退回 `taskkill /im PdxLauncher.App.exe`。
 - 同一工作树同一时刻只允许一个 `dev.cmd` / `dotnet build`；两个对话同时跑会互相覆盖 `bin/`、`obj/`。
 - `status.cmd` 只读，不写任何文件。改动文件最多列 60 个，超出部分打印剩余项数；
   完整清单仍用 `git status`。

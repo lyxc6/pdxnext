@@ -50,6 +50,12 @@ public sealed partial class ModsPage : Page
     /// </summary>
     private CancellationTokenSource? _autoSortCts;
 
+    /// <summary>
+    /// 本次「工坊转本地」的取消源（链到 _lifetime）：取消按钮只中止在途转换，
+    /// 不取消页面生命周期；null 表示当前没有转换在跑。
+    /// </summary>
+    private CancellationTokenSource? _convertCts;
+
     /// <summary>重载协调器：连点游戏时取消旧重载，只应用最新那次的结果。</summary>
     private readonly ReloadCoordinator _reload = new();
 
@@ -152,6 +158,7 @@ public sealed partial class ModsPage : Page
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         _viewModel.RowRevealRequested -= OnRowRevealRequested;
 
+        _convertCts?.Cancel();
         _lifetime.Cancel();
     }
 
@@ -973,10 +980,168 @@ public sealed partial class ModsPage : Page
 
     // ------------------------------------------------------------ 行右键菜单
 
-    /// <summary>在资源管理器里打开 mod 的本地位置：目录型打开目录，压缩包型定位到压缩包。</summary>
-    private void OnRowOpenFolderClick(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// 行右键菜单里的「重试翻译」：按菜单来源分流——播放集行的菜单重翻右栏还没译名的行，
+    /// 候选行的菜单（menuModsCandidateTranslationRetry）重翻候选栏还没译名的行。
+    /// 只重翻译名，不重读播放集（重读会打断正在编辑的位次与滚动位置）。
+    /// </summary>
+    private void OnTranslationRetryClick(object sender, RoutedEventArgs e)
     {
         try
+        {
+            if (sender is MenuFlyoutItem item
+                && string.Equals(
+                    AutomationProperties.GetAutomationId(item),
+                    "menuModsCandidateTranslationRetry",
+                    StringComparison.Ordinal))
+            {
+                _viewModel.RetryCandidateNameTranslation();
+                return;
+            }
+
+            _viewModel.RetryNameTranslation(_lifetime.Token);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 翻译重试失败", ex);
+        }
+    }
+
+    /// <summary>行右键菜单里的「刷新译文」：忽略缓存与已有译名，整个播放集（含候选栏）强制重翻。</summary>
+    private void OnTranslationRefreshClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _viewModel.RefreshNameTranslation(_lifetime.Token);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 翻译刷新失败", ex);
+        }
+    }
+
+    /// <summary>
+    /// 行右键菜单即将打开：翻译菜单项是页面级动作，挂载在行模板上绑不到页面 ViewModel，
+    /// 就在这里按当前状态统一设 IsEnabled。
+    /// <para>
+    /// 播放集行与候选行共用本处理器，但重试的门控各管各的栏：播放集行按右栏的整轮失败标志
+    /// （<see cref="ModsViewModel.CanRetryTranslation"/>），候选行按候选栏自己的失败标志
+    /// （<see cref="ModsViewModel.CanRetryCandidateTranslation"/>）——两者互不影响，
+    /// 靠候选菜单专属的 AutomationId 区分来源。
+    /// </para>
+    /// </summary>
+    private void OnTranslationMenuOpening(object sender, object e)
+    {
+        if (sender is not MenuFlyout flyout)
+        {
+            return;
+        }
+
+        var refreshEnabled = AppServices.Translation.IsEnabled;
+        foreach (var item in flyout.Items)
+        {
+            if (item is not MenuFlyoutItem menuItem)
+            {
+                continue;
+            }
+
+            // 只在这里门控翻译项；其余菜单项（含 IsEnabled={x:Bind} 的行级动作：转为本地 mod 等）
+            // 必须保留 XAML 绑定值。旧写法 default 分支 `menuItem.IsEnabled = menuItem.IsEnabled`
+            // 会回写自身，切断 x:Bind 的 OneWay 更新，导致门控永远停在菜单首次打开那一刻。
+            switch (AutomationProperties.GetAutomationId(menuItem))
+            {
+                case "menuModsTranslationRetry":
+                    menuItem.IsEnabled = _viewModel.CanRetryTranslation;
+                    break;
+                case "menuModsCandidateTranslationRetry":
+                    menuItem.IsEnabled = _viewModel.CanRetryCandidateTranslation;
+                    break;
+                case "menuModsTranslationRefresh":
+                    menuItem.IsEnabled = refreshEnabled;
+                    break;
+                default:
+                    continue;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 行右键菜单「转为本地 mod」：二次校验门控后弹确认框（默认焦点在「取消」，
+    /// 因为转换会改写 mod 来源，属破坏性操作），确认后交给 ViewModel 异步执行；
+    /// 失败写状态栏并弹消息框，成功只由状态栏反馈。
+    /// </summary>
+    private async void OnConvertToLocalClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is not FrameworkElement { DataContext: ModRowViewModel row })
+            {
+                return;
+            }
+
+            if (_viewModel.IsConvertToLocalBusy)
+            {
+                return;
+            }
+
+            if (!row.CanConvertToLocal)
+            {
+                _viewModel.ReportNoLocalFiles();
+                return;
+            }
+
+            var confirmed = await ConfirmOverlay.ConfirmAsync(
+                title: L.CommonConvertToLocal,
+                content: L.T(Keys.ConvertToLocalConfirmDetail, row.Name),
+                confirmText: L.CommonConvertToLocal,
+                cancelText: L.CommonCancel,
+                initialFocus: InitialFocus.Cancel).ConfigureAwait(true);
+            if (!confirmed)
+            {
+                return;
+            }
+
+            _convertCts?.Dispose();
+            _convertCts = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+            await _viewModel.ConvertToLocalAsync(row, _convertCts.Token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException) when (_convertCts?.IsCancellationRequested == true
+            && !_lifetime.IsCancellationRequested)
+        {
+            // 用户主动取消在途转换：Core 已按当前进度回滚 staging 并补偿库，按普通提示反馈，不当失败弹窗。
+            _viewModel.SetStatus(L.ConvertToLocalCancelled);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面已关闭导致的取消，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModsPage 工坊转本地失败", ex);
+            _viewModel.SetStatus(L.T(Keys.ConvertToLocalFailedDetail, ex.Message));
+            await ConfirmOverlay.ShowMessage(
+                L.CommonFailed,
+                L.T(Keys.ConvertToLocalFailedDetail, ex.Message),
+                L.CommonClose).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>转换过程中工具条/状态栏的「取消」按钮：只取消本次转换，不取消页面生命周期。</summary>
+    private void OnCancelConvertToLocalClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _convertCts?.Cancel();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("ModsPage 取消工坊转本地失败：" + ex.Message);
+        }
+    }
+
+    /// <summary>在资源管理器里打开 mod 的本地位置：目录型打开目录，压缩包型定位到压缩包。</summary>
+    private void OnRowOpenFolderClick(object sender, RoutedEventArgs e)
+    {        try
         {
             if (sender is not FrameworkElement { DataContext: ModRowViewModel row })
             {

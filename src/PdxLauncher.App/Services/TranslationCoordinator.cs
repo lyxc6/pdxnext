@@ -119,6 +119,19 @@ public sealed class TranslationCoordinator : IDisposable
     public void ClearCache() => _cache?.Clear();
 
     /// <summary>
+    /// 用户点了「重试」之后重来一遍：清掉各翻译主机的临时冷却（连不上 5 分钟 / 429 60 秒）。
+    /// <para>
+    /// 引擎每批都按设置新建、默认共用 <see cref="TranslationEndpointHealth.Shared"/>，所以在协调器上
+    /// 收口就够了。MyMemory 的额度冷却故意保留：那是服务端事实，清了只会多打一串必然失败的请求。
+    /// </para>
+    /// </summary>
+    public void ResetRetryableFailures()
+    {
+        TranslationEndpointHealth.Shared.ClearHostCooldowns();
+        _logger.Info("用户重试翻译：已清掉翻译主机的临时冷却");
+    }
+
+    /// <summary>
     /// 读出按「ModId + 目标语言」持久化的名称译名；与引擎模式、缓存天数无关。
     /// 没有缓存时返回空表。
     /// </summary>
@@ -154,14 +167,19 @@ public sealed class TranslationCoordinator : IDisposable
     /// </summary>
     /// <param name="text">原文。</param>
     /// <param name="cancellationToken">取消令牌。</param>
-    public async Task<string?> TranslateAsync(string text, CancellationToken cancellationToken)
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
+    public async Task<string?> TranslateAsync(
+        string text,
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
             return null;
         }
 
-        var results = await TranslateBatchAsync([text], cancellationToken).ConfigureAwait(false);
+        var results = await TranslateBatchAsync((string[])[text], cancellationToken, forceRefresh: forceRefresh)
+            .ConfigureAwait(false);
         return results.Count > 0 ? results[0] : null;
     }
 
@@ -174,10 +192,12 @@ public sealed class TranslationCoordinator : IDisposable
     /// 每条译文就绪时的进度回调（索引与 <paramref name="texts"/> 对应）：缓存命中和引擎结果都会回调。
     /// 服务在线程池上跑，回调可能不在 UI 线程，调用方写界面属性前要自行切回 UI 线程。
     /// </param>
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
     public async Task<IReadOnlyList<string?>> TranslateBatchAsync(
         IReadOnlyList<string> texts,
         CancellationToken cancellationToken,
-        Action<int, string?>? onItemTranslated = null)
+        Action<int, string?>? onItemTranslated = null,
+        bool forceRefresh = false)
     {
         ArgumentNullException.ThrowIfNull(texts);
 
@@ -218,7 +238,7 @@ public sealed class TranslationCoordinator : IDisposable
             // 与推理都是同步 CPU 活，调用方（工坊列表 / Mod 库）就在 UI 线程上，
             // 在这里 await 它会直接把整个窗口冻住几十秒。
             var translated = await Task.Run(
-                    () => service.TranslateAsync(texts, options, linked.Token, onItemTranslated),
+                    () => service.TranslateAsync(texts, options, linked.Token, onItemTranslated, forceRefresh),
                     linked.Token)
                 .ConfigureAwait(false);
 
@@ -250,9 +270,11 @@ public sealed class TranslationCoordinator : IDisposable
     /// </summary>
     /// <param name="document">原文文档。</param>
     /// <param name="cancellationToken">取消令牌。</param>
+    /// <param name="forceRefresh">为 true 时跳过缓存直接请求引擎（「刷新译文」用），结果照常写回缓存覆盖旧值。</param>
     public async Task<MarkdownDocument> TranslateDocumentAsync(
         MarkdownDocument? document,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool forceRefresh = false)
     {
         if (document is null || document.IsEmpty)
         {
@@ -267,7 +289,8 @@ public sealed class TranslationCoordinator : IDisposable
 
         var translator = new MarkdownTranslator(async (text, token) =>
         {
-            var results = await TranslateBatchAsync([text], token).ConfigureAwait(false);
+            var results = await TranslateBatchAsync((string[])[text], token, forceRefresh: forceRefresh)
+                .ConfigureAwait(false);
             return results.Count > 0 ? results[0] : null;
         });
 
@@ -311,12 +334,12 @@ public sealed class TranslationCoordinator : IDisposable
                 break;
             }
 
-            var service = new TranslationService([engine], cache: null, _logger);
+            var service = new TranslationService((ITranslationEngine[])[engine], cache: null, _logger);
             string? text = null;
             _logger.Info("探测翻译引擎：" + engine.Id);
             try
             {
-                var translated = await service.TranslateAsync([ProbeText], options, cancellationToken)
+                var translated = await service.TranslateAsync((string[])[ProbeText], options, cancellationToken)
                     .ConfigureAwait(false);
                 text = translated.Count > 0 ? translated[0] : null;
                 _logger.Info("探测结果（" + engine.Id + "）：" + (text is null ? "无译文" : "有译文"));

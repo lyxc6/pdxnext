@@ -20,6 +20,13 @@ public static class ModCreator
         "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    /// <summary>
+    /// 目录名是否可作本地 mod 文件夹。与 <see cref="Create"/> 用的是同一条 <see cref="FolderPattern"/>，
+    /// 单独公开是为了让「工坊转本地」等调用方复用同一个校验口径，避免各处复制正则漂移。
+    /// </summary>
+    public static bool IsValidFolderName(string? folder) =>
+        !string.IsNullOrWhiteSpace(folder) && FolderPattern.IsMatch(folder);
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,

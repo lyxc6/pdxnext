@@ -1,11 +1,15 @@
 namespace PdxLauncher.App.Views;
 
+using System.ComponentModel;
+
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.App.ViewModels;
+using TextViewControl;
+using Windows.UI;
 
 /// <summary>
 /// 「性能与日志」页：概览（内存 / GC / 句柄 + 优化建议）、缓存占用、日志尾部、限流与代理、启动耗时。
@@ -23,6 +27,13 @@ public sealed partial class DiagnosticsPage : Page
 
     private bool _autoRefreshBusy;
 
+    /// <summary>概览实时刷新定时器（每秒采内存，每 5 拍采缓存/日志）。</summary>
+    private DispatcherTimer? _liveTimer;
+
+    private bool _liveBusy;
+
+    private int _liveTick;
+
     /// <summary>恢复分节时抑制 SelectionChanged 带来的第二次采样。</summary>
     private bool _restoringSection;
 
@@ -30,8 +41,82 @@ public sealed partial class DiagnosticsPage : Page
     {
         InitializeComponent();
 
+        ConfigureLogView();
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+    }
+
+    /// <summary>
+    /// 配置 TextViewControl：整条按级别着色（正则整行匹配，异常续行由解析层继承块级别），
+    /// 关闭行号与覆盖式滚动条；颜色明暗两套，与项目语义色（WARN 黄 / ERROR 红）一致。
+    /// </summary>
+    private void ConfigureLogView()
+    {
+        LogView.HighlightLanguage = new SyntaxHighlightLanguage
+        {
+            Name = "PdxNextLog",
+            Highlights =
+            {
+                new HighlightRule(@"^.*\[ERROR\].*$")
+                {
+                    ColorLight = Color.FromArgb(255, 179, 38, 38),
+                    ColorDark = Color.FromArgb(255, 255, 105, 105),
+                    Bold = true,
+                },
+                new HighlightRule(@"^.*\[WARN\].*$")
+                {
+                    ColorLight = Color.FromArgb(255, 138, 90, 0),
+                    ColorDark = Color.FromArgb(255, 231, 185, 107),
+                    Bold = true,
+                },
+                new HighlightRule(@"^.*\[INFO\].*$")
+                {
+                    ColorLight = Color.FromArgb(255, 95, 95, 102),
+                    ColorDark = Color.FromArgb(255, 154, 154, 162),
+                },
+            }
+        };
+        LogView.ShowLineNumbers = false;
+        LogView.OverlayScrollbars = true;
+        LogView.TextWrapEnabled = _viewModel.LogWrap;
+        LogView.MaxLines = DiagnosticsViewModel.LogTailLines;
+    }
+
+    /// <summary>VM 更新日志行/换行开关后，把内容灌进 TextControl；切语言时重建本地化高亮标题。</summary>
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        try
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(DiagnosticsViewModel.LogDisplayLines):
+                case nameof(DiagnosticsViewModel.LogFilter):
+                    PushLogLines();
+                    break;
+                case nameof(DiagnosticsViewModel.LogWrap):
+                    LogView.TextWrapEnabled = _viewModel.LogWrap;
+                    break;
+                case nameof(DiagnosticsViewModel.AutoRefresh):
+                    SyncAutoRefreshTimer();
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("DiagnosticsPage 同步日志视图失败", ex);
+        }
+    }
+
+    /// <summary>把 VM 的显示行灌入 TextControl；正序渲染时让最新一行可见。</summary>
+    private void PushLogLines()
+    {
+        var lines = _viewModel.LogDisplayLines;
+        LogView.SetLines(lines.Count == 0
+            ? new List<string>()
+            : lines.Select(line => line.Text).ToList());
+        LogTailEmptyText.Visibility = lines.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public DiagnosticsViewModel ViewModel => _viewModel;
@@ -61,6 +146,7 @@ public sealed partial class DiagnosticsPage : Page
             await _viewModel.LoadAsync(_lifetime.Token).ConfigureAwait(true);
 
             RestoreSection();
+            SyncLiveTimer();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -75,6 +161,8 @@ public sealed partial class DiagnosticsPage : Page
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         StopAutoRefresh();
+        StopLiveTimer();
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         PersistSection();
         _lifetime.Cancel();
     }
@@ -126,7 +214,9 @@ public sealed partial class DiagnosticsPage : Page
             }
         }
 
+        SyncAutoRefreshTimer();
         PersistSection(index);
+        SyncLiveTimer();
     }
 
     /// <summary>记住停在哪一节：下次进页面（含冷启动）直接回到这里。</summary>
@@ -258,12 +348,80 @@ public sealed partial class DiagnosticsPage : Page
                 await _viewModel.ClearAllCachesAsync(_lifetime.Token).ConfigureAwait(true);
             });
 
+    // ------------------------------------------------------------ 概览实时刷新
+
+    private void OnLiveToggled(object sender, RoutedEventArgs e) => SyncLiveTimer();
+
+    /// <summary>概览分节可见且开关打开时启动实时刷新；离开分节或暂停时停掉。</summary>
+    private void SyncLiveTimer()
+    {
+        var shouldRun = _viewModel.LiveEnabled
+                        && CurrentSectionIndex() == OverviewSectionIndex
+                        && !_lifetime.IsCancellationRequested
+                        && IsLoaded;
+
+        if (shouldRun)
+        {
+            if (_liveTimer is null)
+            {
+                _liveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                _liveTimer.Tick += OnLiveTick;
+            }
+
+            _liveTick = 0;
+            _liveTimer.Start();
+        }
+        else
+        {
+            StopLiveTimer();
+        }
+    }
+
+    private void StopLiveTimer()
+    {
+        _liveTimer?.Stop();
+    }
+
+    /// <summary>
+    /// 每秒采一次内存快照（纯进程计数）；每 5 拍顺带统计缓存与日志（文件属性读取），
+    /// 降低磁盘 IO。上一次还没跑完就跳过这一拍，避免叠加。
+    /// </summary>
+    private async void OnLiveTick(object? sender, object e)
+    {
+        if (_liveBusy || _lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+
+        _liveBusy = true;
+        try
+        {
+            _liveTick++;
+            await _viewModel.SampleAsync(_lifetime.Token).ConfigureAwait(true);
+            if (_liveTick % 5 == 0)
+            {
+                await _viewModel.RefreshCacheStatsAsync(_lifetime.Token).ConfigureAwait(true);
+                await _viewModel.RefreshLogAsync(_lifetime.Token).ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面已关闭，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("DiagnosticsPage 概览实时刷新失败", ex);
+        }
+        finally
+        {
+            _liveBusy = false;
+        }
+    }
+
     // ------------------------------------------------------------ 日志
 
     private async void OnRefreshLogClick(object sender, RoutedEventArgs e) =>
-        await RunGuardedAsync(
-            "DiagnosticsPage 读取日志失败",
-            () => _viewModel.RefreshLogAsync(_lifetime.Token));
+        await RefreshLogOnceAsync();
 
     /// <summary>打开日志目录（只读查看，不删不改）。</summary>
     private void OnOpenLogFolderClick(object sender, RoutedEventArgs e)
@@ -284,65 +442,49 @@ public sealed partial class DiagnosticsPage : Page
         }
     }
 
-    private void OnLogFilterChecked(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// 自动刷新定时器只在「开关打开 + 当前停在日志分区 + 页面可见」三个条件都满足时运行。
+    /// 由开关变更与分区切换共同驱动，对齐自动换行「状态跟着设置走」的行为。
+    /// </summary>
+    private void SyncAutoRefreshTimer()
     {
-        try
+        if (_viewModel.AutoRefresh && CurrentSectionIndex() == LogSectionIndex && !_lifetime.IsCancellationRequested)
         {
-            if (sender is not FrameworkElement { Tag: string tag })
-            {
-                return;
-            }
-
-            _viewModel.LogFilter = tag switch
-            {
-                "Warning" => LogLevelFilter.Warning,
-                "Error" => LogLevelFilter.Error,
-                _ => LogLevelFilter.All,
-            };
+            StartAutoRefresh();
         }
-        catch (Exception ex)
+        else
         {
-            AppServices.Logger.Error("DiagnosticsPage 切换日志级别失败", ex);
-        }
-    }
-
-    private void OnAutoRefreshToggled(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            if (sender is ToggleSwitch { IsOn: true })
-            {
-                StartAutoRefresh();
-            }
-            else
-            {
-                StopAutoRefresh();
-            }
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("DiagnosticsPage 切换日志自动刷新失败", ex);
+            StopAutoRefresh();
         }
     }
 
     private void StartAutoRefresh()
     {
-        if (_autoRefreshTimer is null)
+        if (_autoRefreshTimer is not null)
         {
-            _autoRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
-            _autoRefreshTimer.Tick += OnAutoRefreshTick;
+            if (_autoRefreshTimer.IsEnabled)
+            {
+                return;
+            }
+
+            _autoRefreshTimer.Start();
+            return;
         }
 
+        _autoRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        _autoRefreshTimer.Tick += OnAutoRefreshTick;
         _autoRefreshTimer.Start();
     }
 
-    private void StopAutoRefresh()
-    {
+    private void StopAutoRefresh() =>
         _autoRefreshTimer?.Stop();
-    }
 
     /// <summary>5 秒一次只重读日志；上一次还没读完就跳过这一拍，避免叠加。</summary>
-    private async void OnAutoRefreshTick(object? sender, object e)
+    private async void OnAutoRefreshTick(object? sender, object e) =>
+        await RefreshLogOnceAsync();
+
+    /// <summary>手动刷新与自动刷新共用：读完后 VM 的属性通知会把新行灌进 TextControl。</summary>
+    private async Task RefreshLogOnceAsync()
     {
         if (_autoRefreshBusy || _lifetime.IsCancellationRequested)
         {

@@ -3,8 +3,7 @@
     x:Class="PdxLauncher.App.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:PdxLauncher.App.Controls"
-    xmlns:svc="using:PdxLauncher.App.Services">
+    xmlns:controls="using:PdxLauncher.App.Controls">
 
     <!--
         外壳使用 WinUI 3 标准结构：系统标题栏 + NavigationView(Left) + Frame。
@@ -220,6 +219,15 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem
+                    x:Name="NavModEditor"
+                    AutomationProperties.AutomationId="navModEditor"
+                    Content="{x:Bind L.ShellNavModEditor, Mode=OneWay}"
+                    Tag="modeditor">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE9D2;" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem
                     x:Name="NavWorkshop"
                     AutomationProperties.AutomationId="navWorkshop"
                     Content="{x:Bind L.ShellNavWorkshop, Mode=OneWay}"
@@ -262,13 +270,6 @@
                     <NavigationViewItem.Icon>
                         <SymbolIcon Symbol="Library" />
                     </NavigationViewItem.Icon>
-                    <NavigationViewItem.InfoBadge>
-                        <InfoBadge
-                            AutomationProperties.AutomationId="badgeNavLibrary"
-                            AutomationProperties.Name="{x:Bind ViewModel.LibraryBadgeName, Mode=OneWay}"
-                            Value="{x:Bind ViewModel.GamesCount, Mode=OneWay}"
-                            Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(ViewModel.HasNoGames), Mode=OneWay}" />
-                    </NavigationViewItem.InfoBadge>
                 </NavigationViewItem>
             </NavigationView.MenuItems>
 

@@ -106,7 +106,7 @@ public sealed class TranslationCache
                 return null;
             }
 
-            return entry.Text;
+            return TranslationEchoGuard.Trim(entry.Text);
         }
         finally
         {
@@ -134,6 +134,14 @@ public sealed class TranslationCache
             return;
         }
 
+        // 提示词/对话模板混进译文的结果不许落盘；读盘自愈时也会清掉，
+        // 这里先拒写，免得同一份坏译文再活一个缓存周期。
+        var cleaned = TranslationEchoGuard.Trim(translation);
+        if (cleaned is null || TranslationEchoGuard.ContainsPromptMarkup(translation))
+        {
+            return;
+        }
+
         var key = BuildKey(engineId, targetLanguage, text);
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -141,7 +149,7 @@ public sealed class TranslationCache
             var document = EnsureLoaded();
             document.Entries[key] = new CacheEntry
             {
-                Text = translation,
+                Text = cleaned,
                 FetchedUtc = _clock.UtcNow,
             };
 
@@ -190,11 +198,20 @@ public sealed class TranslationCache
                     continue;
                 }
 
+                // 名称同样兜一层：回吐提示词的「译名」不参与回填，译文与原名一样的也不回填
+                //（否则行里会多出一个和标题一模一样的描边框）。
+                var cleaned = TranslationEchoGuard.Trim(entry.Translation);
+                if (cleaned is null
+                    || string.Equals(cleaned, entry.SourceName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
                 result[entry.ModId] = new NameTranslation(
                     entry.ModId,
                     entry.SourceName,
                     entry.TargetLanguage,
-                    entry.Translation);
+                    cleaned);
             }
         }
         finally
@@ -237,12 +254,20 @@ public sealed class TranslationCache
                     continue;
                 }
 
+                var cleaned = TranslationEchoGuard.Trim(translation.Translation);
+                if (cleaned is null
+                    || string.Equals(cleaned, translation.SourceName, StringComparison.Ordinal)
+                    || TranslationEchoGuard.ContainsPromptMarkup(translation.Translation))
+                {
+                    continue;
+                }
+
                 names[BuildNameKey(translation.ModId, targetLanguage)] = new NameCacheEntry
                 {
                     ModId = translation.ModId,
                     TargetLanguage = targetLanguage,
                     SourceName = translation.SourceName,
-                    Translation = translation.Translation,
+                    Translation = cleaned,
                     UpdatedUtc = _clock.UtcNow,
                 };
                 changed = true;
@@ -338,6 +363,7 @@ public sealed class TranslationCache
                     parsed.Entries ??= new Dictionary<string, CacheEntry>(StringComparer.Ordinal);
                     parsed.Names ??= new Dictionary<string, NameCacheEntry>(StringComparer.Ordinal);
                     _document = parsed;
+                    ScrubPromptEcho(parsed);
                     return parsed;
                 }
             }
@@ -349,6 +375,52 @@ public sealed class TranslationCache
 
         _document = new CacheDocument();
         return _document;
+    }
+
+    /// <summary>
+    /// 清掉旧版本把提示词回吐当译文存下的条目。
+    /// <para>
+    /// 缓存键是原文哈希、拿不回原文，所以只能按「带标记 / 带对话模板记号」判定：这类条目一定是
+    /// 模型吐出来的，删掉后下次翻译会用新提示词重来——比留着渲染成译文好。只在首次读盘时跑一次，
+    /// 两千条以内的字符串扫描可以忽略。
+    /// </para>
+    /// </summary>
+    private void ScrubPromptEcho(CacheDocument document)
+    {
+        var removed = 0;
+        foreach (var key in document.Entries
+                     .Where(pair => pair.Value is null
+                         || string.IsNullOrWhiteSpace(pair.Value.Text)
+                         || TranslationEchoGuard.ContainsPromptMarkup(pair.Value.Text))
+                     .Select(pair => pair.Key)
+                     .ToList())
+        {
+            document.Entries.Remove(key);
+            removed++;
+        }
+
+        var names = document.Names;
+        if (names is not null)
+        {
+            foreach (var key in names
+                         .Where(pair => pair.Value is null
+                             || string.IsNullOrWhiteSpace(pair.Value.Translation)
+                             || TranslationEchoGuard.ContainsPromptMarkup(pair.Value.Translation))
+                         .Select(pair => pair.Key)
+                         .ToList())
+            {
+                names.Remove(key);
+                removed++;
+            }
+        }
+
+        if (removed == 0)
+        {
+            return;
+        }
+
+        _logger.Warn("译文缓存：清理了 " + removed + " 条混入提示词的旧译文");
+        Persist(document);
     }
 
     /// <summary>条目超上限时按写入时间淘汰最旧的一批。</summary>

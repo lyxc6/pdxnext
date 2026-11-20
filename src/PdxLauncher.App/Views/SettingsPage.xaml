@@ -358,6 +358,20 @@
                                           IsOn="{x:Bind ViewModel.AlwaysOnTop, Mode=TwoWay}" />
                         </ct:SettingsCard>
 
+                        <ct:SettingsCard Header="{x:Bind L.SettingsInterfaceModEditorPane, Mode=OneWay}"
+                                         HorizontalAlignment="Stretch"
+                                         Background="{ThemeResource PdxCardBackgroundBrush}"
+                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                         BorderThickness="1"
+                                         CornerRadius="8"
+                                         MinHeight="56"
+                                         Padding="16,12"
+                                         IsClickEnabled="False">
+                            <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglModEditorLeftPane"
+                                          AutomationProperties.Name="{x:Bind L.SettingsInterfaceModEditorPaneName, Mode=OneWay}"
+                                          IsOn="{x:Bind ViewModel.ModEditorLeftPaneVisible, Mode=TwoWay}" />
+                        </ct:SettingsCard>
+
                         <TextBlock Text="{x:Bind L.SettingsInterfaceHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
                     </StackPanel>
 
@@ -1012,6 +1026,24 @@
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap" Margin="4,0,4,8" />
 
+                        <TextBlock Text="{x:Bind L.SettingsSectionModEditorNav, Mode=OneWay}"
+                                   Style="{StaticResource SettingsSubsectionTitleStyle}" />
+
+                        <ct:SettingsCard Header="{x:Bind L.SettingsAdvancedModEditorNav, Mode=OneWay}"
+                                         Description="{x:Bind L.SettingsAdvancedModEditorNavDesc, Mode=OneWay}"
+                                         HorizontalAlignment="Stretch"
+                                         Background="{ThemeResource PdxCardBackgroundBrush}"
+                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                         BorderThickness="1"
+                                         CornerRadius="8"
+                                         MinHeight="56"
+                                         Padding="16,12"
+                                         IsClickEnabled="False">
+                            <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglShowModEditorNav"
+                                          AutomationProperties.Name="{x:Bind L.SettingsAdvancedModEditorNavName, Mode=OneWay}"
+                                          IsOn="{x:Bind ViewModel.ShowModEditorNav, Mode=TwoWay}" />
+                        </ct:SettingsCard>
+
                         <TextBlock Text="{x:Bind L.SettingsSectionDanger, Mode=OneWay}"
                                    Style="{StaticResource SettingsSubsectionTitleStyle}"
                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}" />
@@ -1424,8 +1456,22 @@
                                                                Visibility="{x:Bind svc:XamlVisibility.FromString(OperationText), Mode=OneWay}"
                                                                Style="{StaticResource SettingsHintTextStyle}"
                                                                TextWrapping="Wrap" />
+                                                    <!--
+                                                        逐字节进度条：1.31 GB 的 Index-Translate 是单个文件，
+                                                        没有它就只能看到「下载中 0%」僵在原地。
+                                                    -->
+                                                    <ProgressBar Maximum="100"
+                                                                 Value="{x:Bind DownloadPercent, Mode=OneWay}"
+                                                                 Visibility="{x:Bind svc:XamlVisibility.FromBool(IsDownloading), Mode=OneWay}"
+                                                                 AutomationProperties.AutomationId="barLocalModelDownload"
+                                                                 HorizontalAlignment="Stretch" />
                                                 </StackPanel>
                                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                                    <Button Content="{x:Bind L.SettingsTranslateLocalModelPause, Mode=OneWay}"
+                                                            IsEnabled="{x:Bind CanPause, Mode=OneWay}"
+                                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(CanPause), Mode=OneWay}"
+                                                            Click="OnPauseLocalModelClick"
+                                                            AutomationProperties.AutomationId="btnPauseLocalModel" />
                                                     <Button Content="{x:Bind L.SettingsTranslateLocalModelDownload, Mode=OneWay}"
                                                             IsEnabled="{x:Bind CanDownload, Mode=OneWay}"
                                                             Click="OnDownloadLocalModelClick"

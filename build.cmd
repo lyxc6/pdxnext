@@ -37,7 +37,7 @@ if errorlevel 1 (
 
 echo.
 call "%~dp0scripts\msg.cmd" B_STEP2
-dotnet "tests\PdxLauncher.Checks\bin\Release\net10.0\PdxLauncher.Checks.dll"
+dotnet "tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll"
 if errorlevel 1 (
     echo.
     call "%~dp0scripts\msg.cmd" B_FAILCHECK
@@ -46,5 +46,5 @@ if errorlevel 1 (
 
 echo.
 call "%~dp0scripts\msg.cmd" B_STEP3
-call "%~dp0scripts\msg.cmd" B_EXE src\PdxLauncher.App\bin\x64\Release\net10.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe
+call "%~dp0scripts\msg.cmd" B_EXE src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\PdxLauncher.App.exe
 exit /b 0

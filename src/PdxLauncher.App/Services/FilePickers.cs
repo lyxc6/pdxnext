@@ -69,6 +69,58 @@ internal static class FilePickers
         return file?.Path;
     }
 
+    /// <summary>封面图片选择器允许的格式（静态图）。</summary>
+    private static readonly string[] ImageExtensions = [".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp"];
+
+    /// <summary>选一张本地图片；用户取消或窗口未就绪时返回 null。</summary>
+    public static async Task<string?> PickOpenImageAsync()
+    {
+        if (App.MainWindowInstance is null)
+        {
+            return null;
+        }
+
+        var picker = new FileOpenPicker
+        {
+            SuggestedStartLocation = PickerLocationId.PicturesLibrary,
+        };
+        foreach (var extension in ImageExtensions)
+        {
+            picker.FileTypeFilter.Add(extension);
+        }
+
+        InitializeWithWindow.Initialize(
+            picker,
+            WindowNative.GetWindowHandle(App.MainWindowInstance));
+
+        var file = await picker.PickSingleFileAsync();
+        return file?.Path;
+    }
+
+    /// <summary>选一个文件夹；用户取消或窗口未就绪时返回 null。</summary>
+    public static async Task<string?> PickFolderAsync()
+    {
+        if (App.MainWindowInstance is null)
+        {
+            return null;
+        }
+
+        var picker = new FolderPicker
+        {
+            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+        };
+
+        // FolderPicker 必须至少有一个 FileTypeFilter，否则 PickSingleFolderAsync 会抛异常。
+        picker.FileTypeFilter.Add("*");
+
+        InitializeWithWindow.Initialize(
+            picker,
+            WindowNative.GetWindowHandle(App.MainWindowInstance));
+
+        var folder = await picker.PickSingleFolderAsync();
+        return folder?.Path;
+    }
+
     /// <summary>
     /// 播放集名可能带 <c>/</c>、<c>:</c> 等文件系统非法字符，直接塞给保存对话框会被拒绝；
     /// 统一替换成下划线，并裁到 120 字符（Windows 的路径长度与对话框显示都更稳）。

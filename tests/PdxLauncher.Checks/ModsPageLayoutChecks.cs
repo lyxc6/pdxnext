@@ -76,6 +76,7 @@ public static class ModsPageLayoutChecks
         CheckSharedRowTemplate(xaml);
         CheckNumberBoxPositionEditor(xaml, rowViewModel);
         CheckRowContextMenu(xaml, rowViewModel);
+        CheckTranslationRetryScope(root);
         CheckCandidateIsCheckToAdd(xaml);
         CheckHeaderSearchFillsColumn(xaml);
         CheckSplitterKept(xaml);
@@ -211,7 +212,10 @@ public static class ModsPageLayoutChecks
     }
 
     /// <summary>
-    /// 行右键菜单：只放「打开本地文件夹 / 在 Steam 中打开 / 复制注册 ID」三项。
+    /// 行右键菜单：前四项是行内动作「打开本地文件夹 / 在 Steam 中打开 / 复制注册 ID / 转为本地 mod」，
+    /// 后两项是页面级翻译入口「重试翻译 / 刷新译文」（候选行的右键也有这两项，但重试只管候选栏，
+    /// 见 <see cref="CheckTranslationRetryScope"/>）。
+    /// 翻译项挂载在行模板上绑不到页面 ViewModel，由 <c>Opening</c> 处理器统一设 IsEnabled。
     /// 「移除」是即时自动保存、没有二次确认，误触即删，所以绝不允许出现在菜单里。
     /// </summary>
     private static void CheckRowContextMenu(string xaml, string rowViewModel)
@@ -228,12 +232,15 @@ public static class ModsPageLayoutChecks
             template.Contains("<Grid.ContextFlyout>", StringComparison.Ordinal));
         ChecksContext.Check(
             "播放集页: ContextFlyout 是 MenuFlyout",
-            template.Contains("<MenuFlyout>", StringComparison.Ordinal));
+            template.Contains("<MenuFlyout", StringComparison.Ordinal));
 
-        var start = template.IndexOf("<MenuFlyout>", StringComparison.Ordinal);
+        var start = template.IndexOf("<MenuFlyout", StringComparison.Ordinal);
         var end = start >= 0 ? template.IndexOf("</MenuFlyout>", start, StringComparison.Ordinal) : -1;
         var menu = start >= 0 && end > start ? template[start..end] : string.Empty;
-        ChecksContext.Equal("播放集页: 右键菜单恰好三项", 3, CountOccurrences(menu, "<MenuFlyoutItem"));
+        ChecksContext.Equal(
+            "播放集页: 右键菜单恰好六项（打开/Steam/复制ID/转本地 + 重试翻译/刷新译文）",
+            6,
+            CountOccurrences(menu, "<MenuFlyoutItem"));
 
         ChecksContext.Check(
             "播放集页: 菜单项一是打开本地文件夹（文案随目录/压缩包切换）",
@@ -250,22 +257,126 @@ public static class ModsPageLayoutChecks
                 && menu.Contains("Click=\"OnRowOpenSteamClick\"", StringComparison.Ordinal)
                 && menu.Contains("Click=\"OnRowCopyIdClick\"", StringComparison.Ordinal));
         ChecksContext.Check(
+            "播放集页: 新增「转为本地 mod」项（文案 / 门控 / Click / AutomationId 齐全）",
+            menu.Contains("{x:Bind L.CommonConvertToLocal, Mode=OneWay}", StringComparison.Ordinal)
+                && menu.Contains("{x:Bind CanConvertToLocal, Mode=OneWay}", StringComparison.Ordinal)
+                && menu.Contains("Click=\"OnConvertToLocalClick\"", StringComparison.Ordinal)
+                && menu.Contains("{x:Bind ConvertToLocalMenuAutomationId, Mode=OneTime}", StringComparison.Ordinal));
+        ChecksContext.Check(
             "播放集页: 菜单项 IsEnabled 绑 HasLocalFiles / CanMove",
             menu.Contains("{x:Bind HasLocalFiles, Mode=OneWay}", StringComparison.Ordinal)
                 && menu.Contains("{x:Bind CanMove, Mode=OneWay}", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 翻译项接 Opening 门控与重试/刷新处理器",
+            menu.Contains("Opening=\"OnTranslationMenuOpening\"", StringComparison.Ordinal)
+                && menu.Contains("Click=\"OnTranslationRetryClick\"", StringComparison.Ordinal)
+                && menu.Contains("Click=\"OnTranslationRefreshClick\"", StringComparison.Ordinal)
+                && menu.Contains("AutomationId=\"menuModsTranslationRetry\"", StringComparison.Ordinal)
+                && menu.Contains("AutomationId=\"menuModsTranslationRefresh\"", StringComparison.Ordinal));
         ChecksContext.Check(
             "播放集页: 右键菜单里没有「移除」",
             !menu.Contains("RemoveCommand", StringComparison.Ordinal)
                 && !menu.Contains("ModsRowRemove", StringComparison.Ordinal));
 
+        var candidate = SliceTemplate(xaml, "PlaysetCandidateRowTemplate");
+        ChecksContext.Check(
+            "播放集页: 候选行右键也有翻译重试/刷新（同一 Opening 门控）",
+            candidate.Contains("Opening=\"OnTranslationMenuOpening\"", StringComparison.Ordinal)
+                && candidate.Contains("Click=\"OnTranslationRetryClick\"", StringComparison.Ordinal)
+                && candidate.Contains("Click=\"OnTranslationRefreshClick\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 候选行重试用候选专属 AutomationId（与播放集行的重试区分来源）",
+            candidate.Contains("AutomationId=\"menuModsCandidateTranslationRetry\"", StringComparison.Ordinal)
+                && candidate.Contains("AutomationId=\"menuModsTranslationRefresh\"", StringComparison.Ordinal)
+                && !candidate.Contains("AutomationId=\"menuModsTranslationRetry\"", StringComparison.Ordinal));
+
         ChecksContext.Check(
             "播放集页: 行 VM 暴露 HasLocalFiles",
             rowViewModel.Contains("public bool HasLocalFiles", StringComparison.Ordinal));
         ChecksContext.Check(
+            "播放集页: 行 VM 暴露 CanConvertToLocal",
+            rowViewModel.Contains("public bool CanConvertToLocal", StringComparison.Ordinal));
+        ChecksContext.Check(
             "播放集页: 行 VM 菜单 AutomationId 前缀",
             rowViewModel.Contains("\"modOpenFolder_\"", StringComparison.Ordinal)
                 && rowViewModel.Contains("\"modOpenSteam_\"", StringComparison.Ordinal)
-                && rowViewModel.Contains("\"modCopyId_\"", StringComparison.Ordinal));
+                && rowViewModel.Contains("\"modCopyId_\"", StringComparison.Ordinal)
+                && rowViewModel.Contains("\"modConvertToLocal_\"", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// 翻译重试的作用域与门控（评审缺陷钉版）：
+    /// <para>
+    /// 四个 ViewModel 的「重试」都必须带 <c>forceRefresh</c> —— 失败后旧缓存条目还在
+    /// （缓存只有 TTL、没有失败标记），不带 force 会命中旧缓存把旧译文原样填回行并按成功路径
+    /// 清掉失败提示，引擎根本不会被问到；播放集 / Mod 库 / 工坊的「刷新译文」在途时，
+    /// 重建可见行必须按 force 重启批次（<c>forceRefresh || _nameRefreshInFlight</c>），
+    /// 否则旧缓存把刚要求重翻的旧译文填回新行，强制批次的结果全落在孤儿行上。
+    /// 候选行的右键重试走候选栏自己的标志与批次（<c>RetryCandidateNameTranslation</c>），
+    /// 不再借用播放集行的整轮失败标志。
+    /// </para>
+    /// </summary>
+    private static void CheckTranslationRetryScope(string root)
+    {
+        (string File, string Signature, string Label)[] retries =
+        [
+            ("ModsViewModel.cs", "public void RetryNameTranslation(CancellationToken cancellationToken)", "播放集"),
+            ("WorkshopViewModel.cs", "public void RetryNameTranslation()", "工坊"),
+            ("ModLibraryViewModel.cs", "public void RetryNameTranslation()", "Mod 库"),
+            ("AddModsViewModel.cs", "public void RetryNameTranslation()", "添加模组"),
+        ];
+
+        foreach (var (file, signature, label) in retries)
+        {
+            var path = Path.Combine(root, "src", "PdxLauncher.App", "ViewModels", file);
+            if (!ChecksContext.Check("播放集页: " + file + " 存在", File.Exists(path), path))
+            {
+                continue;
+            }
+
+            var body = SliceMethod(File.ReadAllText(path), signature);
+            ChecksContext.Check("播放集页: " + label + "重试取到方法体", body.Length > 0, signature);
+            ChecksContext.Check(
+                "播放集页: " + label + "重试带 forceRefresh（绕开旧缓存真正重翻）",
+                body.Contains("forceRefresh: true", StringComparison.Ordinal),
+                body.Trim());
+        }
+
+        (string File, string Label)[] guarded =
+        [
+            ("ModsViewModel.cs", "播放集"),
+            ("ModLibraryViewModel.cs", "Mod 库"),
+            ("WorkshopViewModel.cs", "工坊"),
+        ];
+
+        foreach (var (file, label) in guarded)
+        {
+            var path = Path.Combine(root, "src", "PdxLauncher.App", "ViewModels", file);
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+
+            var source = File.ReadAllText(path);
+            ChecksContext.Check(
+                "播放集页: " + label + "刷新在途时重建行仍按强制重翻",
+                source.Contains("private bool _nameRefreshInFlight", StringComparison.Ordinal)
+                    && source.Contains("forceRefresh || _nameRefreshInFlight", StringComparison.Ordinal));
+        }
+
+        var modsPath = Path.Combine(root, "src", "PdxLauncher.App", "ViewModels", "ModsViewModel.cs");
+        var mods = File.Exists(modsPath) ? File.ReadAllText(modsPath) : string.Empty;
+        ChecksContext.Check(
+            "播放集页: 候选栏有自己的重试入口与失败标志",
+            mods.Contains("public void RetryCandidateNameTranslation(", StringComparison.Ordinal)
+                && mods.Contains("public bool CanRetryCandidateTranslation", StringComparison.Ordinal));
+
+        var codePath = Path.Combine(root, "src", "PdxLauncher.App", "Views", "ModsPage.xaml.cs");
+        var code = File.Exists(codePath) ? File.ReadAllText(codePath) : string.Empty;
+        ChecksContext.Check(
+            "播放集页: 右键重试按候选专属 AutomationId 分流到候选栏",
+            code.Contains("\"menuModsCandidateTranslationRetry\"", StringComparison.Ordinal)
+                && code.Contains("RetryCandidateNameTranslation()", StringComparison.Ordinal));
     }
 
     /// <summary>切出某个 DataTemplate 的正文；找不到返回空串。</summary>
@@ -304,6 +415,19 @@ public static class ModsPageLayoutChecks
             "播放集页: 候选行 id 用 modCandidate 前缀",
             template.Contains("{x:Bind RowAutomationId, Mode=OneTime}", StringComparison.Ordinal)
                 && template.Contains("{x:Bind CheckAutomationId, Mode=OneTime}", StringComparison.Ordinal));
+
+        // 左栏候选行与「添加模组」子页共用同一个行 VM：译名与版本支持三角必须两边都在，
+        // 否则改一处漏一处，另一处界面静默丢功能。
+        ChecksContext.Check(
+            "播放集页: 候选行有译名框（与 Mod 库 / 添加模组页同一张表）",
+            template.Contains("{x:Bind TranslatedName", StringComparison.Ordinal)
+                && template.Contains("Visibility=\"{x:Bind svc:XamlVisibility.FromString(TranslatedName)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 候选行版本支持三角挂在可命中的容器上",
+            template.Contains("FromBool(HasVersionWarning)", StringComparison.Ordinal)
+                && template.Contains("{x:Bind WarningAutomationId, Mode=OneTime}", StringComparison.Ordinal)
+                && template.Contains("ToolTipService.ToolTip=\"{x:Bind VersionWarningText", StringComparison.Ordinal)
+                && template.Contains("Background=\"Transparent\"", StringComparison.Ordinal));
     }
 
     /// <summary>

@@ -24,6 +24,7 @@ public sealed class AddModRowViewModel : LocalizedObservableObject
     private readonly string _automationPrefix;
     private readonly string? _gameVersion;
     private bool _isSelected;
+    private string? _translatedName;
 
     /// <summary>创建一行候选 mod。</summary>
     /// <param name="entry">mod 库条目。</param>
@@ -56,6 +57,29 @@ public sealed class AddModRowViewModel : LocalizedObservableObject
 
     /// <summary>展示名。</summary>
     public string Name => Entry.Name;
+
+    /// <summary>
+    /// 译名：与 Mod 库 / 播放集页同一张表（<see cref="Services.ModNameTranslator"/>）里回填的译文。
+    /// 没开启名称翻译、原文已变、或还没译出来时为 null，界面上那一块描边框跟着消失。
+    /// </summary>
+    public string? TranslatedName
+    {
+        get => _translatedName;
+        set
+        {
+            if (string.Equals(_translatedName, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _translatedName = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasTranslatedName));
+        }
+    }
+
+    /// <summary>是否有可显示的译名。</summary>
+    public bool HasTranslatedName => !string.IsNullOrWhiteSpace(_translatedName);
 
     /// <summary>游戏注册 ID；可能为空串。</summary>
     public string RegistryId => Entry.GameRegistryId;
@@ -99,6 +123,15 @@ public sealed class AddModRowViewModel : LocalizedObservableObject
     public string ModVersionAutomationId => _automationPrefix + "ModVersion_" + ModId.ToString("N");
 
     /// <summary>
+    /// 版本支持三角的 AutomationId，挂在**三角的命中容器**上（不是字形本身）。
+    /// 攻略读屏与 UIA 脚本都靠它定位，所以容器必须始终存在、只切可见性。
+    /// </summary>
+    public string WarningAutomationId => _automationPrefix + "Warning_" + ModId.ToString("N");
+
+    /// <summary>译名框的 AutomationId；没有译名时这一块整个折叠。</summary>
+    public string TranslatedAutomationId => _automationPrefix + "Translated_" + ModId.ToString("N");
+
+    /// <summary>
     /// mod 作者自己写的版本（metadata.json 的 version / .mod 的 version）。
     /// 与支持的游戏版本分两行显示；作者没写时为空串，这一行不出现。
     /// </summary>
@@ -118,12 +151,17 @@ public sealed class AddModRowViewModel : LocalizedObservableObject
         : T(Keys.ModsAddPageVersion, Entry.RequiredVersion);
 
     /// <summary>
+    /// 声明的支持版本与当前游戏版本的对照结论：判定复用 <see cref="ModLibraryWarnings"/>，
+    /// 行上的警告图标与「添加模组」页的版本筛选都读这一份，口径不会分叉。
+    /// </summary>
+    public ModVersionSupport VersionSupport
+        => ModLibraryWarnings.ClassifyVersionSupport(Entry.RequiredVersion, _gameVersion);
+
+    /// <summary>
     /// 声明的支持版本是否低于当前游戏版本：判定复用 <see cref="ModLibraryWarnings"/>，
     /// 这里不自己做版本比较（版本号解析规则只该有一份）。
     /// </summary>
-    public bool HasVersionWarning
-        => ModLibraryWarnings.ClassifyVersionSupport(Entry.RequiredVersion, _gameVersion)
-            == ModVersionSupport.Below;
+    public bool HasVersionWarning => VersionSupport == ModVersionSupport.Below;
 
     /// <summary>版本列的提示文案：只在版本偏低时给一句解释，否则为空串。</summary>
     public string VersionWarningText => HasVersionWarning

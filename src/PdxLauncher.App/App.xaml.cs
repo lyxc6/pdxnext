@@ -12,6 +12,7 @@ using PdxLauncher.Core.Games;
 using PdxLauncher.Core.Infrastructure;
 using PdxLauncher.Core.Launching;
 using PdxLauncher.Core.LoadFiles;
+using PdxLauncher.Core.ModStudio;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Online.Translation;
 using PdxLauncher.Core.Online.Translation.Local;
@@ -67,7 +68,12 @@ public partial class App : Application
 
         // 单实例：第一个窗口起来后再开监听，第二个进程点开时能直接把这里叫到前台。
         SingleInstanceGuard.StartActivationServer(_window.DispatcherQueue, _window);
-        _window.Closed += (_, _) => SingleInstanceGuard.StopActivationServer();
+        _window.Closed += (_, _) =>
+        {
+            // 进程退出时干净取消在途的模型下载：.part 留在盘上，下次启动点「下载」继续。
+            AppServices.LocalModelDownloads?.Dispose();
+            SingleInstanceGuard.StopActivationServer();
+        };
 
         // UI 线程看门狗：任何页面上的同步长活（大文件加载、同步 IO/解码）都会在这里留下
         // 「停顿 N ms + 最近位置」，比窗口卡死后什么都抓不到要强。
@@ -172,6 +178,20 @@ public partial class App : Application
             logger,
             ownPlaySets,
             projector);
+
+        // 工坊 mod 转本地 mod：packager 负责 ContentLoadV1 目录源现场打包；
+        // mods（ModCatalogRouter）同时实现 IModCatalog 与 IScanCacheInvalidator，转换后失效扫描缓存靠它。
+        var modArchivePackager = new ModArchivePackager();
+        var workshopToLocal = new WorkshopToLocalConverter(
+            fileSystem,
+            playSets,
+            mods,
+            mods,
+            modArchivePackager,
+            new OwnModStore(database, clock, logger),
+            logger,
+            clock);
+
         var loadFiles = new LoadFileWriter(fileSystem, logger);
         var processLauncher = new ProcessLauncher(logger);
         var launcher = new GameLauncher(processLauncher, fileSystem, logger);
@@ -261,6 +281,7 @@ public partial class App : Application
             documents,
             updates,
             Array.Empty<GameInstallation>(),
+            workshopToLocal,
             new NetworkLink(network.Http, network.PdxHttp, network.TranslationTransport),
             localTranslation);
 

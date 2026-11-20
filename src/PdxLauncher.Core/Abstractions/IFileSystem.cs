@@ -42,6 +42,15 @@ public interface IFileSystem
 
     void Copy(string source, string destination, bool overwrite);
 
+    /// <summary>
+    /// 递归复制整个目录树（含以 <c>.</c> 开头的隐藏目录，如 <c>.metadata</c>）。
+    /// <para>目标目录不存在时自动创建；<paramref name="overwrite"/> 为 false 且目标文件已存在时抛 <see cref="IOException"/>。</para>
+    /// <para>与 <see cref="MoveDirectory"/> 成对：CopyDirectory 复制整棵树，<see cref="Copy"/> 只复制单个文件。</para>
+    /// <para><paramref name="cancellationToken"/> 在进入子目录前与复制每个文件前检查；取消时抛
+    /// <see cref="OperationCanceledException"/>，已复制的部分由调用方负责清理（staging 即为此设计）。</para>
+    /// </summary>
+    void CopyDirectory(string source, string destination, bool overwrite, CancellationToken cancellationToken = default);
+
     /// <summary>移动/改名（同卷为原子操作）；目标目录不存在时自动创建。
     /// <para>只对文件有效：目录请用 <see cref="MoveDirectory"/>。</para>
     /// </summary>
