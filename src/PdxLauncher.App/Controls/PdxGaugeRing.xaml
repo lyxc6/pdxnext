@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:PdxLauncher.App.Controls">
+
+    <!--
+        带值圆环仪表（性能概览的四个核心指标）。
+        画布固定 120×120，外层 Viewbox 按控件尺寸等比缩放；弧线由 PdxGaugeRing 代码按 Value 生成。
+        颜色三态走 VisualState + WinUI 内置语义画笔，跟随 Light / Dark / HighContrast；
+        圆心只放短数值，标题放在环下方，避免旋转时文字跟着动。
+    -->
+    <Style TargetType="local:PdxGaugeRing">
+        <Setter Property="Width" Value="132" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:PdxGaugeRing">
+                    <StackPanel Spacing="4" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="StatusStates">
+                                <VisualState x:Name="Normal">
+                                    <VisualState.Setters>
+                                        <Setter Target="ArcPath.Stroke" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                        <Setter Target="PercentText.Foreground" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Warning">
+                                    <VisualState.Setters>
+                                        <Setter Target="ArcPath.Stroke" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                                        <Setter Target="PercentText.Foreground" Value="{ThemeResource SystemFillColorCautionBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Critical">
+                                    <VisualState.Setters>
+                                        <Setter Target="ArcPath.Stroke" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                                        <Setter Target="PercentText.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+
+                        <Viewbox Width="104" Height="104" Stretch="Uniform">
+                            <Grid Width="120" Height="120">
+                                <!-- 底环：整圈淡描边，表示「预算 100%」。 -->
+                                <Ellipse Width="104" Height="104"
+                                         Stroke="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                         StrokeThickness="8" />
+                                <!-- 前景弧：Path.Data 由代码按 Value 生成，从正上方顺时针画出。 -->
+                                <Path x:Name="ArcPath"
+                                      StrokeThickness="8" />
+                                <!-- 圆心读数：短数值 + 占预算百分比，均不随弧线旋转。 -->
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
+                                    <TextBlock Text="{TemplateBinding ValueText}"
+                                               Style="{StaticResource SubtitleTextBlockStyle}"
+                                               FontSize="18"
+                                               TextAlignment="Center"
+                                               TextWrapping="NoWrap"
+                                               IsTextSelectionEnabled="False" />
+                                    <TextBlock x:Name="PercentText"
+                                               Text="{TemplateBinding DetailText}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               TextAlignment="Center"
+                                               TextWrapping="NoWrap"
+                                               IsTextSelectionEnabled="False" />
+                                </StackPanel>
+                            </Grid>
+                        </Viewbox>
+
+                        <TextBlock Text="{TemplateBinding Title}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                   TextAlignment="Center"
+                                   TextWrapping="NoWrap"
+                                   IsTextSelectionEnabled="False" />
+                    </StackPanel>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

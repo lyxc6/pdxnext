@@ -23,6 +23,13 @@ public sealed partial class DiagnosticsPage : Page
 
     private bool _autoRefreshBusy;
 
+    /// <summary>概览实时刷新定时器（每秒采内存，每 5 拍采缓存/日志）。</summary>
+    private DispatcherTimer? _liveTimer;
+
+    private bool _liveBusy;
+
+    private int _liveTick;
+
     /// <summary>恢复分节时抑制 SelectionChanged 带来的第二次采样。</summary>
     private bool _restoringSection;
 
@@ -61,6 +68,7 @@ public sealed partial class DiagnosticsPage : Page
             await _viewModel.LoadAsync(_lifetime.Token).ConfigureAwait(true);
 
             RestoreSection();
+            SyncLiveTimer();
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -75,6 +83,7 @@ public sealed partial class DiagnosticsPage : Page
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         StopAutoRefresh();
+        StopLiveTimer();
         PersistSection();
         _lifetime.Cancel();
     }
@@ -127,6 +136,7 @@ public sealed partial class DiagnosticsPage : Page
         }
 
         PersistSection(index);
+        SyncLiveTimer();
     }
 
     /// <summary>记住停在哪一节：下次进页面（含冷启动）直接回到这里。</summary>
@@ -257,6 +267,76 @@ public sealed partial class DiagnosticsPage : Page
 
                 await _viewModel.ClearAllCachesAsync(_lifetime.Token).ConfigureAwait(true);
             });
+
+    // ------------------------------------------------------------ 概览实时刷新
+
+    private void OnLiveToggled(object sender, RoutedEventArgs e) => SyncLiveTimer();
+
+    /// <summary>概览分节可见且开关打开时启动实时刷新；离开分节或暂停时停掉。</summary>
+    private void SyncLiveTimer()
+    {
+        var shouldRun = _viewModel.LiveEnabled
+                        && CurrentSectionIndex() == OverviewSectionIndex
+                        && !_lifetime.IsCancellationRequested
+                        && IsLoaded;
+
+        if (shouldRun)
+        {
+            if (_liveTimer is null)
+            {
+                _liveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                _liveTimer.Tick += OnLiveTick;
+            }
+
+            _liveTick = 0;
+            _liveTimer.Start();
+        }
+        else
+        {
+            StopLiveTimer();
+        }
+    }
+
+    private void StopLiveTimer()
+    {
+        _liveTimer?.Stop();
+    }
+
+    /// <summary>
+    /// 每秒采一次内存快照（纯进程计数）；每 5 拍顺带统计缓存与日志（文件属性读取），
+    /// 降低磁盘 IO。上一次还没跑完就跳过这一拍，避免叠加。
+    /// </summary>
+    private async void OnLiveTick(object? sender, object e)
+    {
+        if (_liveBusy || _lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+
+        _liveBusy = true;
+        try
+        {
+            _liveTick++;
+            await _viewModel.SampleAsync(_lifetime.Token).ConfigureAwait(true);
+            if (_liveTick % 5 == 0)
+            {
+                await _viewModel.RefreshCacheStatsAsync(_lifetime.Token).ConfigureAwait(true);
+                await _viewModel.RefreshLogAsync(_lifetime.Token).ConfigureAwait(true);
+            }
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // 页面已关闭，忽略。
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("DiagnosticsPage 概览实时刷新失败", ex);
+        }
+        finally
+        {
+            _liveBusy = false;
+        }
+    }
 
     // ------------------------------------------------------------ 日志
 

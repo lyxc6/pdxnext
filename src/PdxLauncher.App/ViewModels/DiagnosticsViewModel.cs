@@ -40,6 +40,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
     private bool _isBusy;
     private bool _isCacheBusy;
     private bool _isLogBusy;
+    private bool _live = true;
     private string? _statusKey;
     private object?[] _statusArgs = Array.Empty<object?>();
     private string _statusMessage = string.Empty;
@@ -49,6 +50,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
         _logWrap = AppServices.IsInitialized && AppServices.Settings.DiagnosticsLogWrap;
         CacheRows = new ObservableCollection<CacheRowViewModel>(CacheRowCatalog.Create());
         RebuildMetrics();
+        RebuildGauges();
         RebuildStartup();
         UpdateLogTexts();
         RebuildNetwork();
@@ -59,6 +61,9 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
 
     /// <summary>概览指标卡（工作集、托管堆、GC、句柄…）。</summary>
     public ObservableCollection<DiagnosticMetricViewModel> Metrics { get; } = new();
+
+    /// <summary>概览的四个核心仪表环（内存 / 缓存 / 日志 / 启动耗时）。</summary>
+    public ObservableCollection<GaugeViewModel> Gauges { get; } = new();
 
     /// <summary>按严重度排好的优化建议。</summary>
     public ObservableCollection<DiagnosticHintViewModel> Hints { get; } = new();
@@ -107,6 +112,22 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
     public string LastSampleText => _sampledAt is { } at
         ? T(Keys.DiagnosticsOverviewUpdated, at.ToLocalTime().ToString("g", CultureInfo.CurrentCulture))
         : string.Empty;
+
+    /// <summary>实时刷新开关（由页面读写，默认开；关掉后概览不再定时采样）。</summary>
+    public bool LiveEnabled
+    {
+        get => _live;
+        set
+        {
+            if (SetProperty(ref _live, value))
+            {
+                OnPropertyChanged(nameof(LiveStatusText));
+            }
+        }
+    }
+
+    /// <summary>实时状态文案（实时中 / 已暂停），供概览标题行显示。</summary>
+    public string LiveStatusText => T(LiveEnabled ? Keys.DiagnosticsGaugeLiveOn : Keys.DiagnosticsGaugeLiveOff);
 
     /// <summary>日志占用摘要：当前大小 / 归档个数 / 合计。</summary>
     public string LogSummaryText => _logSummaryText;
@@ -249,6 +270,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
         }
 
         RefreshHints();
+        RebuildGauges();
     }
 
     /// <summary>重新统计七类缓存占用；只读文件属性，不联网。</summary>
@@ -271,6 +293,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
             _workshopEntries = AppServices.WorkshopInfo.Count + AppServices.WorkshopItemPages.Count;
             OnPropertyChanged(nameof(CacheTotalText));
             RefreshHints();
+            RebuildGauges();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -352,6 +375,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
             _rawTail = tail;
             UpdateLogTexts();
             RefreshHints();
+            RebuildGauges();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -402,6 +426,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
 
         RebuildStartup();
         RefreshHints();
+        RebuildGauges();
     }
 
     /// <summary>回写状态栏文案（记住键与参数，切语言后按新语言重建）。</summary>
@@ -415,17 +440,61 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
     protected override void Relocalize()
     {
         RebuildMetrics();
+        RebuildGauges();
         RebuildNetwork();
         RebuildStartup();
         UpdateLogTexts();
         RefreshHints();
         OnPropertyChanged(nameof(CacheTotalText));
         OnPropertyChanged(nameof(LastSampleText));
+        OnPropertyChanged(nameof(LiveStatusText));
         if (_statusKey is not null)
         {
             StatusMessage = T(_statusKey, _statusArgs);
         }
     }
+
+    /// <summary>重建概览的四个核心仪表环（内存 / 缓存 / 日志 / 启动耗时）。</summary>
+    private void RebuildGauges()
+    {
+        Gauges.Clear();
+
+        var workingSet = _snapshot?.WorkingSetBytes ?? 0;
+        AddGauge(
+            "memory",
+            Keys.DiagnosticsGaugeMemory,
+            SizeFormatter.Format(workingSet),
+            PerformanceGaugeMath.ComputeMemory(workingSet));
+
+        AddGauge(
+            "cache",
+            Keys.DiagnosticsGaugeCache,
+            SizeFormatter.Format(_cacheBytes),
+            PerformanceGaugeMath.ComputeCache(_cacheBytes));
+
+        AddGauge(
+            "log",
+            Keys.DiagnosticsGaugeLog,
+            SizeFormatter.Format(_logMetrics.CurrentBytes),
+            PerformanceGaugeMath.ComputeLog(_logMetrics.CurrentBytes));
+
+        double startupMs = _marks.Count == 0 ? 0 : _marks[^1].ElapsedMilliseconds;
+        AddGauge(
+            "startup",
+            Keys.DiagnosticsGaugeStartup,
+            startupMs <= 0 ? T(Keys.DiagnosticsStartupEmpty) : FormatDuration(TimeSpan.FromMilliseconds(startupMs)),
+            PerformanceGaugeMath.ComputeStartup(startupMs));
+    }
+
+    private void AddGauge(string key, string titleKey, string valueText, GaugeReading reading) =>
+        Gauges.Add(new GaugeViewModel(
+            key,
+            T(titleKey),
+            valueText,
+            T(Keys.DiagnosticsGaugePercent, Math.Round(reading.Percent).ToString(CultureInfo.InvariantCulture)),
+            reading.Percent,
+            reading.Status,
+            "diagGauge" + Pascalize(key)));
 
     private void RebuildMetrics()
     {
