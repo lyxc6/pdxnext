@@ -241,6 +241,16 @@ public static class AppServices
     public static void NotifyModEditorPaneVisibilityChanged() =>
         ModEditorPaneVisibilityChanged?.Invoke(null, EventArgs.Empty);
 
+    /// <summary>
+    /// 设置页改了「Mod 编辑」菜单入口显隐后触发（sender 与参数都无意义）。
+    /// 订阅方必须自己 marshal 到 UI 线程（主窗口用 DispatcherQueue.TryEnqueue）。
+    /// </summary>
+    public static event EventHandler? ModEditorNavVisibilityChanged;
+
+    /// <summary>通知订阅方：Mod 编辑菜单入口显隐变了，需要重算导航项可见性。</summary>
+    public static void NotifyModEditorNavVisibilityChanged() =>
+        ModEditorNavVisibilityChanged?.Invoke(null, EventArgs.Empty);
+
     /// <summary>冷启动阶段已发现的所有游戏。</summary>
     public static IReadOnlyList<GameInstallation> Games { get; private set; } = Array.Empty<GameInstallation>();
 

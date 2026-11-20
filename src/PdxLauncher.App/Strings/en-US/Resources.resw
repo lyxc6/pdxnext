@@ -3942,6 +3942,24 @@ Continue?</value>
   <data name="SettingsInterfaceModEditorPaneOn" xml:space="preserve">
     <value>Left pane shown</value>
   </data>
+  <data name="SettingsAdvancedModEditorNav" xml:space="preserve">
+    <value>Show Mod Editor menu entry</value>
+  </data>
+  <data name="SettingsAdvancedModEditorNavDesc" xml:space="preserve">
+    <value>When off, the "Mod Editor" entry is hidden from the side menu; if you are on that page, you are returned home.</value>
+  </data>
+  <data name="SettingsAdvancedModEditorNavName" xml:space="preserve">
+    <value>Mod Editor menu entry</value>
+  </data>
+  <data name="SettingsAdvancedModEditorNavOff" xml:space="preserve">
+    <value>"Mod Editor" menu entry hidden</value>
+  </data>
+  <data name="SettingsAdvancedModEditorNavOn" xml:space="preserve">
+    <value>"Mod Editor" menu entry shown</value>
+  </data>
+  <data name="SettingsSectionModEditorNav" xml:space="preserve">
+    <value>Mod Editor</value>
+  </data>
   <data name="SettingsInterfaceModThumbnailSize" xml:space="preserve">
     <value>Mod image size</value>
   </data>

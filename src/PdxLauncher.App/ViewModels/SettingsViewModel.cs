@@ -968,6 +968,22 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// <summary>Mod 编辑页改了左栏显隐后，刷新设置页开关的绑定值。</summary>
     public void RefreshModEditorPane() => OnPropertyChanged(nameof(ModEditorLeftPaneVisible));
 
+    /// <summary>
+    /// 左栏菜单「Mod 编辑」入口显隐开关（高级分区）：赋值后立即落盘、广播，
+    /// 让主窗口重算导航项可见性；失败回滚。
+    /// </summary>
+    public bool ShowModEditorNav
+    {
+        get => AppServices.Settings.ShowModEditorNav;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.ShowModEditorNav,
+            v => AppServices.Settings.ShowModEditorNav = v,
+            Keys.SettingsAdvancedModEditorNavOn,
+            Keys.SettingsAdvancedModEditorNavOff,
+            afterSave: AppServices.NotifyModEditorNavVisibilityChanged);
+    }
+
     // ------------------------------------------------------------ 启动区
 
     /// <summary>实际启动的可执行文件（绝对路径，只读展示）。</summary>

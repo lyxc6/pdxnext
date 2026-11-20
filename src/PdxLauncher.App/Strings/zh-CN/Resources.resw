@@ -3942,6 +3942,24 @@
   <data name="SettingsInterfaceModEditorPaneOn" xml:space="preserve">
     <value>左栏已显示</value>
   </data>
+  <data name="SettingsAdvancedModEditorNav" xml:space="preserve">
+    <value>显示 Mod 编辑页菜单入口</value>
+  </data>
+  <data name="SettingsAdvancedModEditorNavDesc" xml:space="preserve">
+    <value>关掉后左侧菜单不显示「Mod 编辑」入口；正停在该页时会自动回到主页。</value>
+  </data>
+  <data name="SettingsAdvancedModEditorNavName" xml:space="preserve">
+    <value>Mod 编辑页菜单入口</value>
+  </data>
+  <data name="SettingsAdvancedModEditorNavOff" xml:space="preserve">
+    <value>「Mod 编辑」菜单入口已隐藏</value>
+  </data>
+  <data name="SettingsAdvancedModEditorNavOn" xml:space="preserve">
+    <value>「Mod 编辑」菜单入口已显示</value>
+  </data>
+  <data name="SettingsSectionModEditorNav" xml:space="preserve">
+    <value>Mod 编辑</value>
+  </data>
   <data name="SettingsInterfaceModThumbnailSize" xml:space="preserve">
     <value>Mod 图片大小</value>
   </data>

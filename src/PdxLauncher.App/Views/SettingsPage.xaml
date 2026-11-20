@@ -1026,6 +1026,24 @@
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    TextWrapping="Wrap" Margin="4,0,4,8" />
 
+                        <TextBlock Text="{x:Bind L.SettingsSectionModEditorNav, Mode=OneWay}"
+                                   Style="{StaticResource SettingsSubsectionTitleStyle}" />
+
+                        <ct:SettingsCard Header="{x:Bind L.SettingsAdvancedModEditorNav, Mode=OneWay}"
+                                         Description="{x:Bind L.SettingsAdvancedModEditorNavDesc, Mode=OneWay}"
+                                         HorizontalAlignment="Stretch"
+                                         Background="{ThemeResource PdxCardBackgroundBrush}"
+                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                         BorderThickness="1"
+                                         CornerRadius="8"
+                                         MinHeight="56"
+                                         Padding="16,12"
+                                         IsClickEnabled="False">
+                            <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglShowModEditorNav"
+                                          AutomationProperties.Name="{x:Bind L.SettingsAdvancedModEditorNavName, Mode=OneWay}"
+                                          IsOn="{x:Bind ViewModel.ShowModEditorNav, Mode=TwoWay}" />
+                        </ct:SettingsCard>
+
                         <TextBlock Text="{x:Bind L.SettingsSectionDanger, Mode=OneWay}"
                                    Style="{StaticResource SettingsSubsectionTitleStyle}"
                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}" />

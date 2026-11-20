@@ -208,6 +208,12 @@ public sealed class AppSettings
     /// </summary>
     public bool ModEditorLeftPaneVisible { get; set; } = true;
 
+    /// <summary>
+    /// 左栏菜单是否显示「Mod 编辑」入口（默认开）。关掉后该项从导航栏隐藏；
+    /// 若用户正停在该页，会被送回主页。设置页开关即时生效，变化时立即落盘。
+    /// </summary>
+    public bool ShowModEditorNav { get; set; } = true;
+
     /// <summary>上次成功读取更新清单的 UTC 时间；自动检查用它做 24 小时节流。</summary>
     public DateTimeOffset? LastUpdateCheckUtc { get; set; }
 

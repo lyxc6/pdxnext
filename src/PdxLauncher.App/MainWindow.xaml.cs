@@ -171,6 +171,7 @@ public sealed partial class MainWindow : Window
         ContentFrame.Navigated += OnContentFrameNavigated;
         AppServices.CurrentGameChanged += OnCurrentGameChanged;
         AppServices.BackgroundDisplayChanged += OnBackgroundDisplayChanged;
+        AppServices.ModEditorNavVisibilityChanged += OnModEditorNavVisibilityChanged;
         AlwaysOnTopService.Changed += OnAlwaysOnTopChanged;
         Localizer.Instance.LanguageChanged += OnLanguageChanged;
 
@@ -557,6 +558,7 @@ public sealed partial class MainWindow : Window
             _viewModel.NavigationRequested -= OnNavigationRequested;
             AppServices.CurrentGameChanged -= OnCurrentGameChanged;
             AppServices.BackgroundDisplayChanged -= OnBackgroundDisplayChanged;
+            AppServices.ModEditorNavVisibilityChanged -= OnModEditorNavVisibilityChanged;
             AlwaysOnTopService.Changed -= OnAlwaysOnTopChanged;
             Localizer.Instance.LanguageChanged -= OnLanguageChanged;
             RootGrid.ActualThemeChanged -= OnRootGridActualThemeChanged;
@@ -837,12 +839,23 @@ public sealed partial class MainWindow : Window
             NavPlaySets.Visibility = contentVisibility;
             NavModLibrary.Visibility = contentVisibility;
             NavModStudio.Visibility = contentVisibility;
-            NavModEditor.Visibility = contentVisibility;
             NavDlc.Visibility = contentVisibility;
             NavWorkshop.Visibility = workshopAvailable ? Visibility.Visible : Visibility.Collapsed;
 
+            // 「Mod 编辑」入口还受设置开关控制（高级分区）：默认开，关掉后整个隐藏。
+            var modEditorVisible = manageable && AppServices.Settings.ShowModEditorNav;
+            NavModEditor.Visibility = modEditorVisible ? Visibility.Visible : Visibility.Collapsed;
+
             if (manageable)
             {
+                // 入口被关且正停在该页：送回主页（可管理游戏也要处理）。
+                if (!AppServices.Settings.ShowModEditorNav
+                    && _navigation.CurrentTag is string currentTag
+                    && string.Equals(currentTag, NavigationService.ModEditorTag, StringComparison.OrdinalIgnoreCase))
+                {
+                    NavigateTo(NavigationService.HomeTag);
+                }
+
                 return;
             }
 
@@ -1452,6 +1465,18 @@ public sealed partial class MainWindow : Window
             if (AppServices.IsInitialized)
             {
                 AppServices.Logger.Warn("MainWindow 无法派发背景显示方式变更");
+            }
+        }
+    }
+
+    /// <summary>设置页改了「Mod 编辑」菜单入口显隐：派发到 UI 线程后重算导航项可见性。</summary>
+    private void OnModEditorNavVisibilityChanged(object? sender, EventArgs e)
+    {
+        if (!DispatcherQueue.TryEnqueue(UpdateContentNavState))
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Warn("MainWindow 无法派发 Mod 编辑菜单显隐变更");
             }
         }
     }
