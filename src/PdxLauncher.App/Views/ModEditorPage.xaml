@@ -194,7 +194,8 @@
                                        AutomationProperties.AutomationId="txtModEditorExportStatus"
                                        Style="{StaticResource CaptionTextBlockStyle}" />
                             <Button Content="{x:Bind L.ModEditorExportOpenFolder, Mode=OneWay}"
-                                    AutomationProperties.AutomationId="btnModEditorOpenExportFolder" />
+                                    AutomationProperties.AutomationId="btnModEditorOpenExportFolder"
+                                    Click="OnOpenExportFolderClick" />
                         </StackPanel>
                     </StackPanel>
 
@@ -226,6 +227,9 @@
                                         <TextBlock Text="{x:Bind FileName, Mode=OneWay}" MinWidth="160" />
                                         <TextBlock Text="{x:Bind LineNumber, Mode=OneWay}" MinWidth="48" />
                                         <TextBlock Text="{x:Bind Snippet, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                        <Button Content="{x:Bind OpenFileLabel, Mode=OneWay}"
+                                                AutomationProperties.AutomationId="btnModEditorOpenHitFile"
+                                                Click="OnOpenSearchFileClick" />
                                     </StackPanel>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
@@ -294,7 +298,8 @@
                                     AutomationProperties.AutomationId="btnModEditorRefreshLibrary"
                                     Command="{x:Bind ViewModel.RefreshLibraryCommand}" />
                             <Button Content="{x:Bind L.ModEditorLibraryOpenFolder, Mode=OneWay}"
-                                    AutomationProperties.AutomationId="btnModEditorOpenLibraryFolder" />
+                                    AutomationProperties.AutomationId="btnModEditorOpenLibraryFolder"
+                                    Click="OnOpenLibraryFolderClick" />
                             <TextBlock Text="{x:Bind ViewModel.LibraryCount, Mode=OneWay}"
                                        AutomationProperties.AutomationId="txtModEditorLibraryCount"
                                        Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />

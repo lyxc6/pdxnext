@@ -1688,10 +1688,10 @@
     <value>创建模板</value>
   </data>
   <data name="ModEditorTemplateSuccess" xml:space="preserve">
-    <value>模板已创建</value>
+    <value>模板已创建：{0}</value>
   </data>
   <data name="ModEditorTemplateFailed" xml:space="preserve">
-    <value>创建模板失败</value>
+    <value>创建模板失败：{0}</value>
   </data>
   <data name="ModEditorTemplateUnsupported" xml:space="preserve">
     <value>当前游戏不支持创建模板</value>

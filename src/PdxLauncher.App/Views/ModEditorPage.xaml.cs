@@ -1,5 +1,6 @@
 namespace PdxLauncher.App.Views;
 
+using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using PdxLauncher.App.Localization;
@@ -8,13 +9,13 @@ using PdxLauncher.App.ViewModels;
 using PdxLauncher.Core.Contracts;
 
 /// <summary>
-/// 「Mod 编辑」页骨架（第 2 部分）：只负责分节切换、左栏显隐联动与游戏信息同步。
-/// 四个分区的实际功能（导出 / 检索 / 建模板 / 清单）在第 3 部分接入；
-/// 全程只用本地数据，不构造 URL、不发网络请求。
+/// 「Mod 编辑」页：分节切换、左栏显隐联动、游戏信息同步，以及四个分区的 shell 动作
+/// （文件/文件夹选择、打开目录、导出轮询定时器）。四个功能的业务逻辑都在
+/// <see cref="ModEditorViewModel"/> 与其复用的服务类里。全程只用本地数据，不构造 URL、不发网络请求。
 /// </summary>
 public sealed partial class ModEditorPage : Page
 {
-    private readonly ModEditorViewModel _viewModel = new();
+    private readonly ModEditorViewModel _viewModel;
 
     /// <summary>左栏展开宽度（DIP），收起时写 0。</summary>
     private const double LeftPaneWidth = 216;
@@ -28,6 +29,9 @@ public sealed partial class ModEditorPage : Page
         "secModEditorLibrary",
     ];
 
+    /// <summary>导出目录轮询定时器（1 秒，导出开始才跑，页面卸载即停）。</summary>
+    private readonly DispatcherTimer _watchTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+
     private bool _restoringSection;
 
     /// <summary>x:Bind 在 InitializeComponent 期间就会改 SelectedIndex；那时先不切分区。</summary>
@@ -36,6 +40,13 @@ public sealed partial class ModEditorPage : Page
     public ModEditorPage()
     {
         InitializeComponent();
+
+        _viewModel = new ModEditorViewModel();
+        _watchTimer.Tick += OnWatchTick;
+        _viewModel.WatchStarted += OnWatchStarted;
+        _viewModel.WatchStopped += OnWatchStopped;
+        _viewModel.PickWatchDirectoryRequested += OnPickWatchDirectoryRequested;
+        _viewModel.PickPreviewImageRequested += OnPickPreviewImageRequested;
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -68,12 +79,19 @@ public sealed partial class ModEditorPage : Page
 
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         AppServices.ModEditorPaneVisibilityChanged -= OnModEditorPaneVisibilityChanged;
+
+        StopWatchTimer();
+        _viewModel.StopWatchCommand.Execute(null);
     }
 
-    /// <summary>当前游戏变化：只同步页头显示，功能数据第 3 部分再按游戏刷新。</summary>
+    /// <summary>当前游戏变化：同步页头、模板可用性，并清掉上一款游戏的导出监视。</summary>
     private void OnCurrentGameChanged(object? sender, GameInstallation? game)
     {
-        if (!DispatcherQueue.TryEnqueue(() => _viewModel.SetGame(game)))
+        if (!DispatcherQueue.TryEnqueue(() =>
+        {
+            _viewModel.StopWatchCommand.Execute(null);
+            _viewModel.SetGame(game);
+        }))
         {
             AppServices.Logger.Warn("ModEditorPage 无法派发游戏切换事件");
         }
@@ -98,6 +116,62 @@ public sealed partial class ModEditorPage : Page
     private void ApplyLeftPaneVisibility()
     {
         leftPaneColumn.Width = new GridLength(_viewModel.IsLeftPaneVisible ? LeftPaneWidth : 0);
+    }
+
+    // ------------------------------------------------------------ 导出轮询 / 选择器
+
+    private void OnWatchStarted() => _watchTimer.Start();
+
+    private void OnWatchStopped() => StopWatchTimer();
+
+    private void StopWatchTimer()
+    {
+        if (_watchTimer.IsEnabled)
+        {
+            _watchTimer.Stop();
+        }
+    }
+
+    private void OnWatchTick(object? sender, object e) => _viewModel.Tick();
+
+    private async void OnPickWatchDirectoryRequested()
+    {
+        var path = await FilePickers.PickFolderAsync();
+        _viewModel.SetWatchDirectory(path);
+    }
+
+    private async void OnPickPreviewImageRequested()
+    {
+        var path = await FilePickers.PickOpenImageAsync();
+        _viewModel.SetPreviewImage(path);
+    }
+
+    private void OnOpenExportFolderClick(object sender, RoutedEventArgs e)
+    {
+        var directory = _viewModel.ExportDestination;
+        if (string.IsNullOrWhiteSpace(directory) || !ShellLauncher.TryStart("explorer.exe", "\"" + directory + "\"", "ModEditorPage"))
+        {
+            _viewModel.SetStatusFromPage(Keys.ModEditorExportWatchDirInvalid);
+        }
+    }
+
+    private void OnOpenLibraryFolderClick(object sender, RoutedEventArgs e)
+    {
+        var directory = _viewModel.LibraryFolder;
+        if (string.IsNullOrWhiteSpace(directory) || !ShellLauncher.TryStart("explorer.exe", "\"" + directory + "\"", "ModEditorPage"))
+        {
+            _viewModel.SetStatusFromPage(Keys.ModEditorLibraryNoGame);
+        }
+    }
+
+    private void OnOpenSearchFileClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: ModEditorSearchRow row }
+            && !string.IsNullOrWhiteSpace(row.Path)
+            && !ShellLauncher.TryStart("explorer.exe", "/select,\"" + row.Path + "\"", "ModEditorPage"))
+        {
+            _viewModel.SetStatusFromPage(Keys.ModEditorSearchNoDocs);
+        }
     }
 
     // ------------------------------------------------------------ 分节切换

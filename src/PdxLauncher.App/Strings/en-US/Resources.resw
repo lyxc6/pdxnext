@@ -1688,10 +1688,10 @@
     <value>Create template</value>
   </data>
   <data name="ModEditorTemplateSuccess" xml:space="preserve">
-    <value>Template created</value>
+    <value>Template created: {0}</value>
   </data>
   <data name="ModEditorTemplateFailed" xml:space="preserve">
-    <value>Failed to create template</value>
+    <value>Failed to create template: {0}</value>
   </data>
   <data name="ModEditorTemplateUnsupported" xml:space="preserve">
     <value>The current game does not support template creation</value>
