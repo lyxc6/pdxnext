@@ -317,6 +317,151 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
         CancellationToken cancellationToken)
         => Task.FromResult(AppResult<bool>.Fail(ErrorKind.Unsupported, "unsupported-format:playsets-json"));
 
+    /// <inheritdoc />
+    public Task<AppResult<bool>> AdoptLocalModAsync(
+        GameInstallation game,
+        Guid oldModId,
+        string? oldDirPath,
+        string? oldArchivePath,
+        PlaySetMod localMod,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(localMod);
+
+        var newPath = NormalizeModPath(string.IsNullOrWhiteSpace(localMod.DirPath) ? localMod.ArchivePath : localMod.DirPath);
+        if (newPath.Length == 0)
+        {
+            return Task.FromResult(AppResult<bool>.Fail(ErrorKind.Invalid, "new-mod-path-empty"));
+        }
+
+        // 旧路径的查找键：完整路径 + 目录名兜底（库搬家后绝对路径会失效，工坊 id 目录名不变）。
+        var matchKeys = BuildPathMatchKeys(oldDirPath, oldArchivePath);
+        return WriteAsync(
+            "工坊转本地（EU5 重写播放集 mod 路径）",
+            game,
+            () =>
+            {
+                var document = LoadDocumentForWrite(game);
+                var rewritten = 0;
+                foreach (var playSet in document.PlaySets)
+                {
+                    foreach (var node in PlaysetsJsonDocument.EnsureArray(playSet, KeyOrderedListMods))
+                    {
+                        if (node is not JsonObject entry || !MatchesAny(entry, matchKeys))
+                        {
+                            continue;
+                        }
+
+                        // 只改 path：isEnabled 与数组顺序（顺序即加载顺序）一律不动。
+                        entry[KeyPath] = newPath;
+                        rewritten++;
+                    }
+                }
+
+                SaveDocument(game, document);
+                _logger.Info(
+                    "工坊转本地（EU5）：重写 orderedListMods.path " +
+                    rewritten.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                    " 处 → " + newPath + "（gameId=" + game.GameId + "）");
+                return OkBool;
+            },
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<AppResult<bool>> RevertLocalModAdoptionAsync(
+        GameInstallation game,
+        Guid newModId,
+        Guid oldModId,
+        string? oldDirPath,
+        string? oldArchivePath,
+        CancellationToken cancellationToken,
+        string? newDirPath = null,
+        string? newArchivePath = null)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+
+        var oldPath = NormalizeModPath(string.IsNullOrWhiteSpace(oldDirPath) ? oldArchivePath : oldDirPath);
+        var matchKeys = BuildPathMatchKeys(newDirPath, newArchivePath);
+        if (oldPath.Length == 0 || matchKeys.Count == 0)
+        {
+            return Task.FromResult(AppResult<bool>.Fail(ErrorKind.Invalid, "revert-path-empty"));
+        }
+
+        return WriteAsync(
+            "工坊转本地回滚（EU5 写回旧路径）",
+            game,
+            () =>
+            {
+                var document = LoadDocumentForWrite(game);
+                var rewritten = 0;
+                foreach (var playSet in document.PlaySets)
+                {
+                    foreach (var node in PlaysetsJsonDocument.EnsureArray(playSet, KeyOrderedListMods))
+                    {
+                        if (node is not JsonObject entry || !MatchesAny(entry, matchKeys))
+                        {
+                            continue;
+                        }
+
+                        entry[KeyPath] = oldPath;
+                        rewritten++;
+                    }
+                }
+
+                SaveDocument(game, document);
+                _logger.Info(
+                    "工坊转本地回滚（EU5）：写回 orderedListMods.path " +
+                    rewritten.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                    " 处 → " + oldPath + "（gameId=" + game.GameId + "）");
+                return OkBool;
+            },
+            cancellationToken);
+    }
+
+    /// <summary>为「按旧/新路径定位条目」构造查找键集合：完整规范化路径 + 目录名兜底。</summary>
+    private static HashSet<string> BuildPathMatchKeys(string? primary, string? secondary)
+    {
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in new[] { primary, secondary })
+        {
+            var key = NormalizeLookupKey(path);
+            if (key.Length == 0)
+            {
+                continue;
+            }
+
+            keys.Add(key);
+            var directory = GetDirectoryNameFromModPath(key);
+            if (directory.Length > 0)
+            {
+                keys.Add(directory);
+            }
+        }
+
+        return keys;
+    }
+
+    /// <summary>条目是否命中某个查找键（完整路径或目录名）。</summary>
+    private static bool MatchesAny(JsonObject entry, HashSet<string> keys)
+    {
+        if (keys.Count == 0)
+        {
+            return false;
+        }
+
+        var path = PlaysetsJsonDocument.GetString(entry, KeyPath);
+        var key = NormalizeLookupKey(path);
+        if (key.Length > 0 && keys.Contains(key))
+        {
+            return true;
+        }
+
+        var directory = GetDirectoryNameFromModPath(key);
+        return directory.Length > 0 && keys.Contains(directory);
+    }
+
     public async Task<AppResult<bool>> SavePlaySetModsAsync(
         GameInstallation game,
         Guid playSetId,

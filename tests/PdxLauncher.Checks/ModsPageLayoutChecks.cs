@@ -212,7 +212,7 @@ public static class ModsPageLayoutChecks
     }
 
     /// <summary>
-    /// 行右键菜单：前三项是行内动作「打开本地文件夹 / 在 Steam 中打开 / 复制注册 ID」，
+    /// 行右键菜单：前四项是行内动作「打开本地文件夹 / 在 Steam 中打开 / 复制注册 ID / 转为本地 mod」，
     /// 后两项是页面级翻译入口「重试翻译 / 刷新译文」（候选行的右键也有这两项，但重试只管候选栏，
     /// 见 <see cref="CheckTranslationRetryScope"/>）。
     /// 翻译项挂载在行模板上绑不到页面 ViewModel，由 <c>Opening</c> 处理器统一设 IsEnabled。
@@ -238,8 +238,8 @@ public static class ModsPageLayoutChecks
         var end = start >= 0 ? template.IndexOf("</MenuFlyout>", start, StringComparison.Ordinal) : -1;
         var menu = start >= 0 && end > start ? template[start..end] : string.Empty;
         ChecksContext.Equal(
-            "播放集页: 右键菜单恰好五项（打开/Steam/复制ID + 重试翻译/刷新译文）",
-            5,
+            "播放集页: 右键菜单恰好六项（打开/Steam/复制ID/转本地 + 重试翻译/刷新译文）",
+            6,
             CountOccurrences(menu, "<MenuFlyoutItem"));
 
         ChecksContext.Check(
@@ -256,6 +256,12 @@ public static class ModsPageLayoutChecks
             menu.Contains("Click=\"OnRowOpenFolderClick\"", StringComparison.Ordinal)
                 && menu.Contains("Click=\"OnRowOpenSteamClick\"", StringComparison.Ordinal)
                 && menu.Contains("Click=\"OnRowCopyIdClick\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "播放集页: 新增「转为本地 mod」项（文案 / 门控 / Click / AutomationId 齐全）",
+            menu.Contains("{x:Bind L.CommonConvertToLocal, Mode=OneWay}", StringComparison.Ordinal)
+                && menu.Contains("{x:Bind CanConvertToLocal, Mode=OneWay}", StringComparison.Ordinal)
+                && menu.Contains("Click=\"OnConvertToLocalClick\"", StringComparison.Ordinal)
+                && menu.Contains("{x:Bind ConvertToLocalMenuAutomationId, Mode=OneTime}", StringComparison.Ordinal));
         ChecksContext.Check(
             "播放集页: 菜单项 IsEnabled 绑 HasLocalFiles / CanMove",
             menu.Contains("{x:Bind HasLocalFiles, Mode=OneWay}", StringComparison.Ordinal)
@@ -288,10 +294,14 @@ public static class ModsPageLayoutChecks
             "播放集页: 行 VM 暴露 HasLocalFiles",
             rowViewModel.Contains("public bool HasLocalFiles", StringComparison.Ordinal));
         ChecksContext.Check(
+            "播放集页: 行 VM 暴露 CanConvertToLocal",
+            rowViewModel.Contains("public bool CanConvertToLocal", StringComparison.Ordinal));
+        ChecksContext.Check(
             "播放集页: 行 VM 菜单 AutomationId 前缀",
             rowViewModel.Contains("\"modOpenFolder_\"", StringComparison.Ordinal)
                 && rowViewModel.Contains("\"modOpenSteam_\"", StringComparison.Ordinal)
-                && rowViewModel.Contains("\"modCopyId_\"", StringComparison.Ordinal));
+                && rowViewModel.Contains("\"modCopyId_\"", StringComparison.Ordinal)
+                && rowViewModel.Contains("\"modConvertToLocal_\"", StringComparison.Ordinal));
     }
 
     /// <summary>

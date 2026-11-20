@@ -497,9 +497,14 @@ public sealed class PlaySetRepository : IPlaySetRepository
     }
 
     /// <summary>插入一行 <c>mods</c>；表结构里没有对应列时自动跳过该列，插入失败只记 Warn，不打断保存。</summary>
-    private bool InsertModRow(SqliteConnection connection, HashSet<string> columns, PlaySetMod mod)
+    /// <param name="forceLocal">
+    /// true：显式写 <c>steamId=NULL</c> / <c>source='local'</c>，不按 workshopId 推导
+    /// （工坊转本地时用，见 <see cref="AdoptLocalModAsync"/>）；false 保持原有按工坊 id 判定来源的行为。
+    /// </param>
+    private bool InsertModRow(SqliteConnection connection, HashSet<string> columns, PlaySetMod mod, bool forceLocal = false)
     {
-        var workshopId = SteamWorkshop.GetWorkshopId(mod.SteamId, mod.GameRegistryId);
+        // 转本地时不复用 :520 的 workshopId 推导：即使老 GameRegistryId 带 ugc_ 也不能带进新行。
+        var workshopId = forceLocal ? null : SteamWorkshop.GetWorkshopId(mod.SteamId, mod.GameRegistryId);
 
         // status 是 NOT NULL：磁盘上内容在、但库里记着 missing 的行要按可用状态写。
         var status = string.IsNullOrWhiteSpace(mod.Status) || string.Equals(mod.Status, "missing", StringComparison.OrdinalIgnoreCase)
@@ -517,7 +522,7 @@ public sealed class PlaySetRepository : IPlaySetRepository
             ["requiredVersion"] = NullIfBlank(mod.RequiredVersion),
             ["status"] = status,
             // 官方启动器的 source 就这两个取值：创意工坊订阅 vs 本地 mod 目录。
-            ["source"] = workshopId is null ? "local" : "steam",
+            ["source"] = forceLocal ? ModOrigins.LocalSource : (workshopId is null ? "local" : "steam"),
         };
 
         var names = new List<string>(values.Count);
@@ -819,6 +824,101 @@ public sealed class PlaySetRepository : IPlaySetRepository
                 }
 
                 return AppResult<bool>.Ok(affected > 0);
+            },
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<AppResult<bool>> AdoptLocalModAsync(
+        GameInstallation game,
+        Guid oldModId,
+        string? oldDirPath,
+        string? oldArchivePath,
+        PlaySetMod localMod,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(localMod);
+
+        if (oldModId == Guid.Empty || localMod.ModId == Guid.Empty || oldModId == localMod.ModId)
+        {
+            return Task.FromResult(AppResult<bool>.Fail(ErrorKind.Invalid, "mod-id-invalid"));
+        }
+
+        return WriteAsync<bool>(
+            game,
+            "工坊转本地（插入本地行并替换播放集引用）",
+            (connection, ct) =>
+            {
+                if (!connection.TableExists("mods") || !connection.TableExists("playsets_mods"))
+                {
+                    return AppResult<bool>.Fail(ErrorKind.NotFound, "table-not-found:mods-or-playsets_mods");
+                }
+
+                // 列交集 + 全 ? 绑定走已有的 InsertModRow；forceLocal=true 显式写 source=local/steamId=NULL，
+                // 不复用按 workshopId 推导来源的分支（Upsert 的 COALESCE 也清不掉旧 steamId）。
+                var columns = ReadTableColumns(connection, "mods");
+                if (!InsertModRow(connection, columns, localMod, forceLocal: true))
+                {
+                    return AppResult<bool>.Fail(ErrorKind.Io, "local-mod-row-insert-failed");
+                }
+
+                ct.ThrowIfCancellationRequested();
+
+                // 只换 modId：enabled / position 原样保留，用户播放集的启停与顺序不能被动。
+                var changed = connection.Execute(
+                    "UPDATE playsets_mods SET modId = ? WHERE modId = ?",
+                    localMod.ModId.ToString("D"),
+                    oldModId.ToString("D"));
+
+                _logger.Info(
+                    "工坊转本地：已插入本地行 " + localMod.ModId.ToString("N") +
+                    "，替换播放集引用 " + oldModId.ToString("N") +
+                    "（" + changed.ToString(System.Globalization.CultureInfo.InvariantCulture) + " 处，gameId=" + game.GameId + "）");
+                return AppResult<bool>.Ok(true);
+            },
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<AppResult<bool>> RevertLocalModAdoptionAsync(
+        GameInstallation game,
+        Guid newModId,
+        Guid oldModId,
+        string? oldDirPath,
+        string? oldArchivePath,
+        CancellationToken cancellationToken,
+        string? newDirPath = null,
+        string? newArchivePath = null)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+
+        if (newModId == Guid.Empty || oldModId == Guid.Empty || newModId == oldModId)
+        {
+            return Task.FromResult(AppResult<bool>.Fail(ErrorKind.Invalid, "mod-id-invalid"));
+        }
+
+        return WriteAsync<bool>(
+            game,
+            "工坊转本地回滚（先恢复引用再删新行）",
+            (connection, ct) =>
+            {
+                // 顺序不可颠倒：先把所有引用 new 的播放集行改回 old，确认引用恢复后再删新 mods 行。
+                // 绝不能先删 mods 行（会留下悬空 modId）或调用会删 playsets_mods 的 DeleteMods。
+                var restored = connection.Execute(
+                    "UPDATE playsets_mods SET modId = ? WHERE modId = ?",
+                    oldModId.ToString("D"),
+                    newModId.ToString("D"));
+
+                ct.ThrowIfCancellationRequested();
+
+                connection.Execute("DELETE FROM mods WHERE id = ?", newModId.ToString("D"));
+
+                _logger.Info(
+                    "工坊转本地回滚：引用 new→old " +
+                    restored.ToString(System.Globalization.CultureInfo.InvariantCulture) +
+                    " 处，已删本地行 " + newModId.ToString("N") + "（gameId=" + game.GameId + "）");
+                return AppResult<bool>.Ok(true);
             },
             cancellationToken);
     }

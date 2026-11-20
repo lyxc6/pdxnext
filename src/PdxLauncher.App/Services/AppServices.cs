@@ -6,6 +6,7 @@ using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.CrashAnalysis;
 using PdxLauncher.Core.Mods;
+using PdxLauncher.Core.ModStudio;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Online.Translation.Local;
 using PdxLauncher.Core.Patch;
@@ -42,6 +43,12 @@ public static class AppServices
     public static PlaySetShareService PlaySetShare { get; private set; } = null!;
 
     public static IModCatalog Mods { get; private set; } = null!;
+
+    /// <summary>
+    /// 工坊 mod 转本地 mod：把已订阅且有本地内容的 mod 复制成同内容的本地 mod，
+    /// 磁盘先行、写库在后、失败逆序补偿。由 App 启动时用 Core 实现装配（见 App.xaml.cs）。
+    /// </summary>
+    public static WorkshopToLocalConverter WorkshopToLocal { get; private set; } = null!;
 
     public static IDlcCatalog Dlcs { get; private set; } = null!;
 
@@ -297,6 +304,7 @@ public static class AppServices
         IJsonDocumentStore documents,
         UpdateService updates,
         IReadOnlyList<GameInstallation> games,
+        WorkshopToLocalConverter workshopToLocal,
         NetworkLink? networkLink = null,
         LocalTranslationRuntime? localTranslation = null)
     {
@@ -334,6 +342,7 @@ public static class AppServices
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(updates);
         ArgumentNullException.ThrowIfNull(games);
+        ArgumentNullException.ThrowIfNull(workshopToLocal);
 
         FileSystem = fileSystem;
         Logger = logger;
@@ -343,6 +352,7 @@ public static class AppServices
         PlaySets = playSets;
         PlaySetShare = new PlaySetShareService(playSets, fileSystem, logger);
         Mods = mods;
+        WorkshopToLocal = workshopToLocal;
         Dlcs = dlcs;
         LoadFiles = loadFiles;
         Launcher = launcher;
@@ -415,6 +425,24 @@ public static class AppServices
     {
         ArgumentNullException.ThrowIfNull(games);
         Games = games;
+
+        // 游戏发现完成（冷启动与刷新都会走这里）时顺手清一次工坊转本地遗留的过期暂存目录，
+        // 避免半成品被 LocalModInventory 当成 unregistered 显示。清理只读 <ModDir>/.pdxnext-staging，
+        // 失败只记日志，绝不影响游戏列表本身。
+        if (IsInitialized && WorkshopToLocal is not null)
+        {
+            foreach (var game in games)
+            {
+                try
+                {
+                    WorkshopToLocal.CleanupAbandonedStaging(game);
+                }
+                catch (Exception exception)
+                {
+                    Logger.Warn("清理工坊转本地暂存失败（gameId=" + game.GameId + "）：" + exception.Message);
+                }
+            }
+        }
 
         var next = ReconcileCurrentGame(games);
         var current = CurrentGame;

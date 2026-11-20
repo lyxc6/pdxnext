@@ -57,6 +57,11 @@
                             IsEnabled="{x:Bind CanMove, Mode=OneWay}"
                             Click="OnRowCopyIdClick"
                             AutomationProperties.AutomationId="{x:Bind CopyIdMenuAutomationId, Mode=OneTime}" />
+                        <MenuFlyoutItem
+                            Text="{x:Bind L.CommonConvertToLocal, Mode=OneWay}"
+                            IsEnabled="{x:Bind CanConvertToLocal, Mode=OneWay}"
+                            Click="OnConvertToLocalClick"
+                            AutomationProperties.AutomationId="{x:Bind ConvertToLocalMenuAutomationId, Mode=OneTime}" />
                         <MenuFlyoutSeparator />
                         <MenuFlyoutItem
                             Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"
@@ -829,6 +834,19 @@
                                   IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                                   AutomationProperties.AutomationId="ringModsBusy"
                                   AutomationProperties.Name="{x:Bind L.ModsHeaderBusy, Mode=OneWay}" />
+                    <!-- 转换专用进度 / 取消：只在本次转换在途时出现，不随 IsBusy 一起被禁用。 -->
+                    <ProgressRing Width="16"
+                                  Height="16"
+                                  VerticalAlignment="Center"
+                                  IsActive="{x:Bind ViewModel.IsConvertToLocalBusy, Mode=OneWay}"
+                                  AutomationProperties.AutomationId="ringConvertToLocalBusy"
+                                  AutomationProperties.Name="{x:Bind L.CommonConvertToLocal, Mode=OneWay}" />
+                    <Button Content="{x:Bind L.CommonCancel, Mode=OneWay}"
+                            Click="OnCancelConvertToLocalClick"
+                            Visibility="{x:Bind ViewModel.IsConvertToLocalBusy, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind L.CommonCancel, Mode=OneWay}"
+                            AutomationProperties.AutomationId="btnCancelConvertToLocal"
+                            AutomationProperties.Name="{x:Bind L.CommonCancel, Mode=OneWay}" />
                 </StackPanel>
             </Grid>
         </Border>

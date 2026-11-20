@@ -174,6 +174,30 @@ public sealed class FileSystem : Abstractions.IFileSystem
         File.Copy(source, destination, overwrite);
     }
 
+    /// <inheritdoc />
+    public void CopyDirectory(string source, string destination, bool overwrite, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(source);
+        ArgumentException.ThrowIfNullOrWhiteSpace(destination);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        Directory.CreateDirectory(destination);
+
+        // Directory.Enumerate* 默认包含以 '.' 开头的隐藏目录/文件（如 .metadata），
+        // 这里不能用 GetFiles("...", AllDirectories) 的搜索模式去筛，否则会漏掉隐藏项。
+        foreach (var file in Directory.EnumerateFiles(source))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite);
+        }
+
+        foreach (var child in Directory.EnumerateDirectories(source))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CopyDirectory(child, Path.Combine(destination, Path.GetFileName(child)), overwrite, cancellationToken);
+        }
+    }
+
     public void Move(string source, string destination, bool overwrite)
     {
         var directory = Path.GetDirectoryName(Path.GetFullPath(destination));

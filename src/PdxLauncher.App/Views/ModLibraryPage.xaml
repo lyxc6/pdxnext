@@ -76,13 +76,30 @@
                                  AutomationProperties.AutomationId="cmbModLibrarySource"
                                  AutomationProperties.Name="{x:Bind L.ModlibSourceFilterName, Mode=OneWay}" />
 
-            <ProgressRing Grid.Column="4"
-                          Width="20"
-                          Height="20"
-                          VerticalAlignment="Center"
-                          IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                          AutomationProperties.AutomationId="ringModLibraryBusy"
-                          AutomationProperties.Name="{x:Bind L.CommonLoading, Mode=OneWay}" />
+            <StackPanel Grid.Column="4"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        VerticalAlignment="Center">
+                <ProgressRing Width="20"
+                              Height="20"
+                              VerticalAlignment="Center"
+                              IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
+                              AutomationProperties.AutomationId="ringModLibraryBusy"
+                              AutomationProperties.Name="{x:Bind L.CommonLoading, Mode=OneWay}" />
+                <!-- 转换专用进度 / 取消：只在本次转换在途时出现；取消按钮不绑 IsEditorEnabled。 -->
+                <ProgressRing Width="20"
+                              Height="20"
+                              VerticalAlignment="Center"
+                              IsActive="{x:Bind ViewModel.IsConvertToLocalBusy, Mode=OneWay}"
+                              AutomationProperties.AutomationId="ringConvertToLocalBusy"
+                              AutomationProperties.Name="{x:Bind L.CommonConvertToLocal, Mode=OneWay}" />
+                <Button Content="{x:Bind L.CommonCancel, Mode=OneWay}"
+                        Click="OnCancelConvertToLocalClick"
+                        Visibility="{x:Bind ViewModel.IsConvertToLocalBusy, Mode=OneWay}"
+                        ToolTipService.ToolTip="{x:Bind L.CommonCancel, Mode=OneWay}"
+                        AutomationProperties.AutomationId="btnCancelConvertToLocal"
+                        AutomationProperties.Name="{x:Bind L.CommonCancel, Mode=OneWay}" />
+            </StackPanel>
 
             <Button Grid.Column="5"
                     VerticalAlignment="Center"
@@ -118,6 +135,12 @@
                                         Text="{x:Bind L.CommonPageRefresh, Mode=OneWay}"
                                         Click="OnRefreshClick"
                                         AutomationProperties.AutomationId="menuModLibraryPageRefresh" />
+                                    <MenuFlyoutSeparator />
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.CommonConvertToLocal, Mode=OneWay}"
+                                        Click="OnConvertToLocalClick"
+                                        AutomationProperties.AutomationId="menuModLibraryConvertToLocal"
+                                        IsEnabled="{x:Bind CanConvertToLocal, Mode=OneWay}" />
                                     <MenuFlyoutSeparator />
                                     <MenuFlyoutItem
                                         Text="{x:Bind L.CommonTranslationRetry, Mode=OneWay}"

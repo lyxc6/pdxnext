@@ -149,6 +149,16 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
     public bool HasLocalContent
         => !string.IsNullOrWhiteSpace(Entry.DirPath) || !string.IsNullOrWhiteSpace(Entry.ArchivePath);
 
+    /// <summary>
+    /// 右键菜单「转为本地 mod」是否可用：订阅来源、磁盘有可复制内容，且当前不在下载 / 排队中。
+    /// 下载中 / 排队中的条目内容还没完整落到本地，此时转换只会得到半成品，故禁用；
+    /// 下载状态由 <see cref="SteamStateBadgeText"/> 在界面上说明原因。
+    /// </summary>
+    public bool CanConvertToLocal => IsSubscribedOrigin
+        && HasLocalContent
+        && SteamState is not { IsDownloading: true }
+        && SteamState is not { IsDownloadPending: true };
+
     /// <summary>是否需要版本支持提示：登记情况、库里状态或声明的支持版本对不上。</summary>
     public bool HasWarning => WarningText.Length != 0;
 
