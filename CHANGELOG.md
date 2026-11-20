@@ -3,7 +3,7 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)；版本号遵循
 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
-## [Unreleased]
+## [1.4.0] - 2026-11-21
 
 ### Added
 
