@@ -30,6 +30,8 @@ public static class DiagnosticsPageChecks
         "rdoDiagLogError",
         "tglDiagAutoRefresh",
         "tglDiagLogWrap",
+        "tglDiagLive",
+        "diagGauges",
         "txtDiagLogTail",
         "txtDiagStatus",
     ];
@@ -100,6 +102,27 @@ public static class DiagnosticsPageChecks
             .ToArray();
         ChecksContext.Check("五个导航项按 0..4 排列",
             tagOrder.All(index => index >= 0) && tagOrder.SequenceEqual(tagOrder.Order()));
+
+        // 概览实时仪表：四个环 + 实时开关 + 每秒分级刷新定时器。
+        ChecksContext.Check("概览用 PdxGaugeRing 模板显示四个核心环",
+            xaml.Contains("GaugeRingTemplate", StringComparison.Ordinal) &&
+            xaml.Contains("controls:PdxGaugeRing", StringComparison.Ordinal));
+        ChecksContext.Check("概览仪表用 PdxWrapPanel 折行",
+            SliceBetween(xaml, "<ItemsControl x:Name=\"diagGauges\"", "</ItemsControl>")
+                .Contains("controls:PdxWrapPanel", StringComparison.Ordinal));
+        ChecksContext.Check("实时开关绑定 LiveEnabled 并接 Toggled",
+            xaml.Contains("IsOn=\"{x:Bind ViewModel.LiveEnabled, Mode=TwoWay}\"", StringComparison.Ordinal) &&
+            codeBehind.Contains("OnLiveToggled", StringComparison.Ordinal));
+        ChecksContext.Check("概览实时刷新用 DispatcherTimer 每秒采样",
+            codeBehind.Contains("Interval = TimeSpan.FromSeconds(1)", StringComparison.Ordinal) &&
+            codeBehind.Contains("_liveTick % 5 == 0", StringComparison.Ordinal));
+        ChecksContext.Check("离开概览或页面卸载时停掉实时定时器",
+            codeBehind.Contains("StopLiveTimer();", StringComparison.Ordinal) &&
+            codeBehind.Contains("CurrentSectionIndex() == OverviewSectionIndex", StringComparison.Ordinal));
+        ChecksContext.Check("ViewModel 暴露 Gauges 与 LiveStatusText",
+            viewModel.Contains("ObservableCollection<GaugeViewModel> Gauges", StringComparison.Ordinal) &&
+            viewModel.Contains("LiveStatusText", StringComparison.Ordinal) &&
+            viewModel.Contains("PerformanceGaugeMath.ComputeMemory", StringComparison.Ordinal));
 
         ChecksContext.Check("日志尾部只读", xaml.Contains("IsReadOnly=\"True\"", StringComparison.Ordinal));
         ChecksContext.Check("日志尾部折行由开关驱动",
@@ -187,6 +210,18 @@ public static class DiagnosticsPageChecks
         ChecksContext.Check("zh-CN 有折行开关文案", zhTable.ContainsKey("DiagnosticsLogWrap"));
         ChecksContext.Check("en-US 有折行开关文案", enTable.ContainsKey("DiagnosticsLogWrap"));
         ChecksContext.Check("生成表含折行开关键", zhTable.ContainsKey("DiagnosticsLogWrap"));
+
+        // 实时仪表的双语文案：两侧键集与占位符一致，切语言时标题/状态不会缺键。
+        foreach (var key in new[]
+                 {
+                     "DiagnosticsGaugeMemory", "DiagnosticsGaugeCache", "DiagnosticsGaugeLog", "DiagnosticsGaugeStartup",
+                     "DiagnosticsGaugePercent", "DiagnosticsGaugeLiveOn", "DiagnosticsGaugeLiveOff",
+                     "DiagnosticsGaugeLiveToggle", "DiagnosticsGaugeSubtitle",
+                 })
+        {
+            ChecksContext.Check("zh-CN 有实时仪表文案 " + key, zhTable.ContainsKey(key));
+            ChecksContext.Check("en-US 有实时仪表文案 " + key, enTable.ContainsKey(key));
+        }
 
         return ChecksContext.Failures == before ? 0 : 1;
     }

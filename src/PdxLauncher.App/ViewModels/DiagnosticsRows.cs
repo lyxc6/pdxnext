@@ -2,6 +2,46 @@ namespace PdxLauncher.App.ViewModels;
 
 using PdxLauncher.App.Services;
 
+/// <summary>性能概览里的一张环形仪表（标题、中心读数、占比、健康状态与自动化 id）。</summary>
+public sealed class GaugeViewModel
+{
+    public GaugeViewModel(
+        string key,
+        string title,
+        string valueText,
+        string detailText,
+        double percent,
+        GaugeStatus status,
+        string automationId)
+    {
+        Key = key;
+        Title = title;
+        ValueText = valueText;
+        DetailText = detailText;
+        Percent = percent;
+        Status = status;
+        AutomationId = automationId;
+    }
+
+    /// <summary>稳定键（内存 / 缓存 / 日志 / 启动），用于自动化与排错。</summary>
+    public string Key { get; }
+
+    public string Title { get; }
+
+    /// <summary>环中心的实测值（如 134 MB）。</summary>
+    public string ValueText { get; }
+
+    /// <summary>环中心的占比说明（如 24%）。</summary>
+    public string DetailText { get; }
+
+    /// <summary>占预算百分比（0 ~ 100），驱动弧长。</summary>
+    public double Percent { get; }
+
+    public GaugeStatus Status { get; }
+
+    public string AutomationId { get; }
+}
+
 /// <summary>
 /// 性能页概览里的一张只读指标卡片（标题、数值、说明与自动化 id）。
 /// 文案在 <see cref="DiagnosticsViewModel"/> 里按当前语言拼好；语言切换后整批重建。

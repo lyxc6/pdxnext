@@ -177,6 +177,12 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\PerformanceHints.cs" Link="Linked\PerformanceHints.cs" />
     <!--
+      性能仪表环映射：纯函数，只依赖 PerformanceHints / FileLogger 预算常量与 Math，
+      不碰 UI。映射错了环会显示错误颜色或满环时机不对，编译器看不见，
+      所以每个预算边界由 PerformanceGaugeMathChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\PerformanceGaugeMath.cs" Link="Linked\PerformanceGaugeMath.cs" />
+    <!--
       截图逐张结算计数器（顶部「正在下载截图…」的唯一数据源）。它只依赖 System.Math，
       不碰 UI 线程之外的东西，可以原样链接进来。漏结算会让提示永远转下去，多结算会让提示提前消失，
       两种都不崩、只在真机上表现为「一直转」或「看不见提示」，所以由 ScreenshotLoadTrackerChecks 钉住。

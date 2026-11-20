@@ -9,6 +9,8 @@
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <!-- 创意工坊筛选栏的三态胶囊（DefaultStyleKey = PdxTagChip）。 -->
                 <ResourceDictionary Source="Controls/PdxTagChip.xaml" />
+                <!-- 性能概览的带值圆环仪表（DefaultStyleKey = PdxGaugeRing）。 -->
+                <ResourceDictionary Source="Controls/PdxGaugeRing.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <!--

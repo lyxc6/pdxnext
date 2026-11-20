@@ -20,6 +20,16 @@
             <Setter Property="Margin" Value="0,8,0,0" />
         </Style>
 
+        <DataTemplate x:Key="GaugeRingTemplate" x:DataType="vm:GaugeViewModel">
+            <controls:PdxGaugeRing Value="{x:Bind Percent, Mode=OneWay}"
+                                   Title="{x:Bind Title, Mode=OneWay}"
+                                   ValueText="{x:Bind ValueText, Mode=OneWay}"
+                                   DetailText="{x:Bind DetailText, Mode=OneWay}"
+                                   Status="{x:Bind Status, Mode=OneWay}"
+                                   AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneWay}"
+                                   AutomationProperties.Name="{x:Bind Title, Mode=OneWay}" />
+        </DataTemplate>
+
         <DataTemplate x:Key="MetricRowTemplate" x:DataType="vm:DiagnosticMetricViewModel">
             <ct:SettingsCard Header="{x:Bind Title}"
                              Description="{x:Bind Detail}"
@@ -225,7 +235,13 @@
                                            Style="{StaticResource CaptionTextBlockStyle}"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                <ToggleSwitch x:Name="tglDiagLive"
+                                              AutomationProperties.AutomationId="tglDiagLive"
+                                              OnContent="{x:Bind L.DiagnosticsGaugeLiveOn, Mode=OneWay}"
+                                              OffContent="{x:Bind L.DiagnosticsGaugeLiveOff, Mode=OneWay}"
+                                              IsOn="{x:Bind ViewModel.LiveEnabled, Mode=TwoWay}"
+                                              Toggled="OnLiveToggled" />
                                 <ProgressRing Width="16" Height="16"
                                               IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsBusy), Mode=OneWay}" />
@@ -234,6 +250,20 @@
                                         Click="OnRefreshOverviewClick" />
                             </StackPanel>
                         </Grid>
+
+                        <!-- 实时预算仪表：内存 / 缓存 / 日志 / 启动，四个环每秒分级刷新。 -->
+                        <TextBlock Text="{x:Bind L.DiagnosticsGaugeSubtitle, Mode=OneWay}"
+                                   Style="{StaticResource DiagnosticsHintTextStyle}" />
+                        <ItemsControl x:Name="diagGauges"
+                                      AutomationProperties.AutomationId="diagGauges"
+                                      ItemsSource="{x:Bind ViewModel.Gauges, Mode=OneWay}"
+                                      ItemTemplate="{StaticResource GaugeRingTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <controls:PdxWrapPanel Spacing="16" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
 
                         <TextBlock Text="{x:Bind L.DiagnosticsOverviewMetricsTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
                         <ItemsControl ItemsSource="{x:Bind ViewModel.Metrics, Mode=OneWay}"
