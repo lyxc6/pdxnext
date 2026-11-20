@@ -32,6 +32,13 @@
       见 docs/SETTINGS-OFFICIAL-MIGRATION.md 与 docs/DEVELOPMENT.md 的「离线依赖」。
     -->
     <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
+    <!--
+      日志查看器：WinUI 3 无官方 LogViewer，引入社区 TextViewControl（MIT）。
+      它用 Win2D 绘制，必须配 Microsoft.Graphics.Win2D 1.4.0；两者首次引入需联网 warm-up，
+      之后照旧从本机缓存离线还原。换机器时把这两个包目录一起复制。
+    -->
+    <PackageReference Include="TextViewControl" Version="1.0.3" />
+    <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\PdxLauncher.Core\PdxLauncher.Core.csproj" />
