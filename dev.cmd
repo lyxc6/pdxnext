@@ -67,7 +67,7 @@ set "EXEDIR=%ROOT%src\PdxLauncher.App\bin\x64\Release\net11.0-windows10.0.26100.
 set "DATA=%EXEDIR%\data"
 set "LOG=%DATA%\logs\pdxnext.log"
 rem Match by exe path, not by process name: another PdxNext copy installed on a
-different drive must neither be killed nor mistaken for our own launch.
+rem different drive must neither be killed nor mistaken for our own launch.
 set "PROC=%ROOT%scripts\pdx-app-process.ps1"
 set "EXEABS=%ROOT%%EXE%"
 

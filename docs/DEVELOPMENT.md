@@ -778,7 +778,7 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**755 个 .cs + 22 个 .xaml**（不含 `obj/` 生成物；2026-11-15 实测：Core 367 / App 201+22 / Imaging 10 / Checks 177；运行时打印的「检查类」是 **170**，其余文件是自检框架与替身）。
+**755 个 .cs + 22 个 .xaml**（不含 `obj/` 生成物；2026-11-15 实测：Core 367 / App 201+22 / Imaging 10 / Checks 177；运行时打印的「检查类」是 **177**（2026-11-21 实测），其余文件是自检框架与替身）。
 
 ---
 
@@ -788,7 +788,7 @@ tools/
 dotnet "tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 170，失败: 0，断言失败总数: 0` 即通过（2026-11-15 实测 170 类；真机段只锁结构——行数、启用态这类本机数据只打印 `info` 不作断言，Victoria 3 播放集那条写死的 `mod 行数 >= 22` 已按这个原则删掉，见 HANDOFF §0.85.5；CK3 播放集条数同理从 `>= 3` 放宽到 `>= 1`，见 §0.99）。覆盖：Steam 探测与
+输出 `检查类: 177，失败: 0，断言失败总数: 0` 即通过（2026-11-21 实测 177 类；真机段只锁结构——行数、启用态这类本机数据只打印 `info` 不作断言，Victoria 3 播放集那条写死的 `mod 行数 >= 22` 已按这个原则删掉，见 HANDOFF §0.85.5；CK3 播放集条数同理从 `>= 3` 放宽到 `>= 1`，见 §0.99）。覆盖：Steam 探测与
 launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取、
 Mod 创建（legacy `.mod`/`descriptor.mod` 与 V3 `.metadata/metadata.json` 生成、非法输入拒绝、本地清单合并、发布记录与发布协议参数、
 工坊发布面：可见性四档映射、1 MB 与张数上限、五种 YouTube 链接解析、30 种语言码与归一化、请求 JSON 全字段往返、旧 `public` 记录回显、内嵌默认封面的 PNG 签名与落盘一致、
