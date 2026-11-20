@@ -25,9 +25,7 @@ public static class DiagnosticsPageChecks
         "btnDiagClearAllCaches",
         "btnDiagRefreshLog",
         "btnDiagOpenLogFolder",
-        "rdoDiagLogAll",
-        "rdoDiagLogWarn",
-        "rdoDiagLogError",
+        "cmbDiagLogFilter",
         "tglDiagAutoRefresh",
         "tglDiagLogWrap",
         "tglDiagLive",
@@ -106,6 +104,7 @@ public static class DiagnosticsPageChecks
         ChecksContext.Check("五个导航项按 0..4 排列",
             tagOrder.All(index => index >= 0) && tagOrder.SequenceEqual(tagOrder.Order()));
 
+
         // 概览实时仪表：四个环 + 实时开关 + 每秒分级刷新定时器。
         ChecksContext.Check("概览用 PdxGaugeRing 模板显示四个核心环",
             xaml.Contains("GaugeRingTemplate", StringComparison.Ordinal) &&
@@ -146,33 +145,44 @@ public static class DiagnosticsPageChecks
             !viewModel.Contains("Gauges.Clear();", StringComparison.Ordinal) &&
             rows.Contains("public bool Apply(double percent", StringComparison.Ordinal));
 
-        ChecksContext.Check("日志尾部只读", xaml.Contains("IsReadOnly=\"True\"", StringComparison.Ordinal));
-        ChecksContext.Check("日志尾部折行由开关驱动",
-            xaml.Contains("TextWrapping=\"{x:Bind svc:XamlTextWrapping.FromBool(ViewModel.LogWrap), Mode=OneWay}\"", StringComparison.Ordinal));
-        ChecksContext.Check("两个日志开关标签常显（不靠 OnContent）",
+        // 日志页改造：TextViewControl 整行着色 + 下拉筛选 + 两个开关对齐。
+        ChecksContext.Check("日志尾部用 TextViewControl（支持整行着色）",
+            xaml.Contains("xmlns:tv=\"using:TextViewControl\"", StringComparison.Ordinal)
+            && xaml.Contains("<tv:TextControl", StringComparison.Ordinal)
+            && xaml.Contains("x:Name=\"LogView\"", StringComparison.Ordinal));
+        ChecksContext.Check("日志级别筛选改为 PdxDropDown 下拉",
+            xaml.Contains("cmbDiagLogFilter", StringComparison.Ordinal)
+            && xaml.Contains("SelectedItem=\"{x:Bind ViewModel.SelectedLogFilterOption, Mode=TwoWay}\"", StringComparison.Ordinal)
+            && !xaml.Contains("rdoDiagLogAll", StringComparison.Ordinal));
+        ChecksContext.Check("自动换行与自动刷新开关对齐（同为常显标签 + TwoWay VM 绑定）",
+
             xaml.Contains("Text=\"{x:Bind L.DiagnosticsLogWrap, Mode=OneWay}\"", StringComparison.Ordinal) &&
             xaml.Contains("Text=\"{x:Bind L.DiagnosticsLogAutoRefresh, Mode=OneWay}\"", StringComparison.Ordinal) &&
-            !xaml.Contains("OnContent=\"{x:Bind L.DiagnosticsLogWrap", StringComparison.Ordinal) &&
-            !xaml.Contains("OnContent=\"{x:Bind L.DiagnosticsLogAutoRefresh", StringComparison.Ordinal));
+            xaml.Contains("IsOn=\"{x:Bind ViewModel.LogWrap, Mode=TwoWay}\"", StringComparison.Ordinal) &&
+            xaml.Contains("IsOn=\"{x:Bind ViewModel.AutoRefresh, Mode=TwoWay}\"", StringComparison.Ordinal) &&
+            !xaml.Contains("Toggled=\"OnAutoRefreshToggled\"", StringComparison.Ordinal));
         var filterRow = SliceBetween(xaml, "<controls:PdxWrapPanel Spacing=\"16\">", "</controls:PdxWrapPanel>");
         ChecksContext.Check("过滤行用 PdxWrapPanel（窄窗口折行，标签不会被裁成 0 宽）",
-            filterRow.Contains("rdoDiagLogAll", StringComparison.Ordinal) &&
+            filterRow.Contains("cmbDiagLogFilter", StringComparison.Ordinal) &&
             filterRow.Contains("tglDiagLogWrap", StringComparison.Ordinal) &&
             filterRow.Contains("tglDiagAutoRefresh", StringComparison.Ordinal));
-        var tailBox = SliceBetween(xaml, "<TextBox Grid.Row=\"1\"", "/>");
-        ChecksContext.Check("日志尾部高度跟随窗口（不再写死 340）",
-            !tailBox.Contains("Height=\"340\"", StringComparison.Ordinal) &&
-            tailBox.Contains("MinHeight=\"160\"", StringComparison.Ordinal) &&
-            tailBox.Contains("Grid.Row=\"1\"", StringComparison.Ordinal));
+        var logArea = SliceBetween(xaml, "<Grid Grid.Row=\"1\">", "</Grid>");
+        ChecksContext.Check("日志区高度跟随窗口（不再写死 340）",
+            !logArea.Contains("Height=\"340\"", StringComparison.Ordinal) &&
+            logArea.Contains("MinHeight=\"160\"", StringComparison.Ordinal) &&
+            xaml.Contains("x:Name=\"secLog\"", StringComparison.Ordinal));
+        ChecksContext.Check("日志视图代码里配置整行高亮与自动换行",
+            codeBehind.Contains("HighlightLanguage = new SyntaxHighlightLanguage", StringComparison.Ordinal)
+            && codeBehind.Contains("TextWrapEnabled =", StringComparison.Ordinal)
+            && codeBehind.Contains("HighlightRule(@\"^.*\\[ERROR\\].*$\")", StringComparison.Ordinal));
+        ChecksContext.Check("日志视图空占位与内容灌入",
+            xaml.Contains("x:Name=\"LogTailEmptyText\"", StringComparison.Ordinal)
+            && codeBehind.Contains("LogView.SetLines", StringComparison.Ordinal));
         ChecksContext.Check("日志分区移出滚动容器（独立 Grid）",
             xaml.Contains("x:Name=\"diagSectionScroller\"", StringComparison.Ordinal) &&
             Regex.IsMatch(xaml, @"<Grid x:Name=""secLog""[^>]*>\s*<Grid.RowDefinitions>", RegexOptions.Singleline) &&
             !SliceBetween(xaml, "<ScrollViewer x:Name=\"diagSectionScroller\"", "</ScrollViewer>")
                 .Contains("x:Name=\"secLog\"", StringComparison.Ordinal));
-        ChecksContext.Check("日志尾部滚动条用 ScrollViewer 附加属性",
-            tailBox.Contains("ScrollViewer.HorizontalScrollBarVisibility", StringComparison.Ordinal) &&
-            tailBox.Contains("ScrollViewer.VerticalScrollBarVisibility", StringComparison.Ordinal) &&
-            !Regex.IsMatch(tailBox, @"(?<!ScrollViewer\.)(Horizontal|Vertical)ScrollBarVisibility"));
         ChecksContext.Check("界面文案全部走 i18n（XAML 无硬编码中文）",
             !Regex.IsMatch(StripComments(xaml), @"[\p{IsCJKUnifiedIdeographs}]"));
 
@@ -185,6 +195,9 @@ public static class DiagnosticsPageChecks
             codeBehind.Contains("ShellLauncher.TryStart", StringComparison.Ordinal));
         ChecksContext.Check("自动刷新用 DispatcherTimer",
             codeBehind.Contains("DispatcherTimer", StringComparison.Ordinal));
+        ChecksContext.Check("自动刷新仅在日志分区且开关打开时运行",
+            codeBehind.Contains("SyncAutoRefreshTimer", StringComparison.Ordinal)
+            && codeBehind.Contains("LogSectionIndex", StringComparison.Ordinal));
 
         // 启动耗时埋点：五个里程碑都要有人打点，否则页面会缺段。
         ChecksContext.Check("进程入口打 app-start",
@@ -210,18 +223,20 @@ public static class DiagnosticsPageChecks
 
         ChecksContext.Check("AppSettings 记录性能页上次分节",
             settings.Contains("LastDiagnosticsSection", StringComparison.Ordinal));
-        ChecksContext.Check("AppSettings 记录日志折行开关",
-            settings.Contains("DiagnosticsLogWrap", StringComparison.Ordinal));
+        ChecksContext.Check("AppSettings 记录折行与自动刷新开关",
+            settings.Contains("DiagnosticsLogWrap", StringComparison.Ordinal)
+            && settings.Contains("DiagnosticsLogAutoRefresh", StringComparison.Ordinal));
 
-        var wrapHelper = Read(root, Path.Combine("src", "PdxLauncher.App", "Services", "XamlTextWrapping.cs"));
-        ChecksContext.Check("换行辅助同时支持折行与不折行",
-            wrapHelper.Contains("TextWrapping.Wrap", StringComparison.Ordinal) &&
-            wrapHelper.Contains("TextWrapping.NoWrap", StringComparison.Ordinal));
         ChecksContext.Check("视图模型暴露 LogWrap 开关",
             viewModel.Contains("public bool LogWrap", StringComparison.Ordinal));
-        ChecksContext.Check("折行开关写回设置",
+        ChecksContext.Check("视图模型暴露 AutoRefresh 开关",
+            viewModel.Contains("public bool AutoRefresh", StringComparison.Ordinal));
+        ChecksContext.Check("两个开关都写回设置",
             viewModel.Contains("DiagnosticsLogWrap = value", StringComparison.Ordinal) &&
+            viewModel.Contains("DiagnosticsLogAutoRefresh = value", StringComparison.Ordinal) &&
             viewModel.Contains("SaveSettings()", StringComparison.Ordinal));
+        ChecksContext.Check("日志显示行由解析函数生成",
+            viewModel.Contains("LogTailReader.ParseDisplayLines", StringComparison.Ordinal));
 
         // i18n：两种语言的资源都来自同一份 resw 契约，这里确认区域、生成结果与关键键都在。
         ChecksContext.Check("zh-CN 有 diagnostics 区域", CountKeys(zhTable) > 0);

@@ -22,6 +22,7 @@ public static class LogTailReaderChecks
         CheckTruncation();
         CheckSharedHandle();
         CheckFilter();
+        CheckParseDisplayLines();
         CheckMeasure();
 
         return ChecksContext.Failures == before ? 0 : 1;
@@ -146,6 +147,40 @@ public static class LogTailReaderChecks
             "日志过滤：错误视图保留自己的堆栈",
             errors.Contains("   at Boom.Baz()", StringComparison.Ordinal) && !errors.Contains("   at Foo.Bar()", StringComparison.Ordinal),
             errors);
+    }
+
+    private static void CheckParseDisplayLines()
+    {
+        const string Text =
+            "2026-11-04 12:00:00.000 [INFO] 启动\n" +
+            "2026-11-04 12:00:01.000 [WARN] 正文含 [ERROR] 字样但不是错误\n" +
+            "   at Foo.Bar()\n" +
+            "2026-11-04 12:00:02.000 [ERROR] 请求失败\n" +
+            "   at Boom.Baz()\n";
+
+        var all = LogTailReader.ParseDisplayLines(Text, LogLevelFilter.All, newestFirst: false);
+        ChecksContext.Equal("日志显示行：全部行数（含续行）", 5, all.Count);
+        ChecksContext.Equal("日志显示行：INFO 级别", "INFO", all[0].Level);
+        ChecksContext.Equal("日志显示行：WARN 级别", "WARN", all[1].Level);
+        ChecksContext.Equal("日志显示行：WARN 正文含 [ERROR] 不误判", "WARN", all[1].Level);
+        ChecksContext.Equal("日志显示行：续行继承块级别", "WARN", all[2].Level);
+        ChecksContext.Equal("日志显示行：ERROR 级别", "ERROR", all[3].Level);
+        ChecksContext.Equal("日志显示行：ERROR 续行级别", "ERROR", all[4].Level);
+
+        var newest = LogTailReader.ParseDisplayLines(Text, LogLevelFilter.All);
+        ChecksContext.Check(
+            "日志显示行：最新块排最前（含堆栈）",
+            newest.Count == 5 && newest[0].Level == "ERROR" && newest[1].Text.Contains("at Boom.Baz()", StringComparison.Ordinal),
+            string.Join(" | ", newest.Select(line => line.Level + ":" + line.Text)));
+
+        var warnings = LogTailReader.ParseDisplayLines(Text, LogLevelFilter.Warning, newestFirst: false);
+        ChecksContext.Equal("日志显示行：警告视图只保留 WARN+ERROR 块（含续行）", 4, warnings.Count);
+        ChecksContext.Check("日志显示行：警告视图不含 INFO 块", warnings.All(line => line.Level is "WARN" or "ERROR"), string.Join(" | ", warnings.Select(line => line.Level)));
+
+        var errors = LogTailReader.ParseDisplayLines(Text, LogLevelFilter.Error, newestFirst: false);
+        ChecksContext.Equal("日志显示行：错误视图只保留 ERROR 块（含续行）", 2, errors.Count);
+        ChecksContext.Check("日志显示行：错误视图不含 WARN 正文", errors.All(line => !line.Text.Contains("[WARN]", StringComparison.Ordinal)), string.Join(" | ", errors.Select(line => line.Text)));
+        ChecksContext.Equal("日志显示行：空文本返回空", 0, LogTailReader.ParseDisplayLines(null).Count);
     }
 
     private static void CheckMeasure()
