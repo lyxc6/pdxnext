@@ -454,47 +454,62 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>重建概览的四个核心仪表环（内存 / 缓存 / 日志 / 启动耗时）。</summary>
+    /// <summary>
+    /// 就地更新概览的四个核心仪表环（内存 / 缓存 / 日志 / 启动耗时）。
+    /// 不 Clear+重建：DataTemplate 里的 PdxGaugeRing 必须一直挂在视觉树上，补间动画才生效。
+    /// </summary>
     private void RebuildGauges()
     {
-        Gauges.Clear();
-
         var workingSet = _snapshot?.WorkingSetBytes ?? 0;
-        AddGauge(
+        ApplyGauge(
             "memory",
             Keys.DiagnosticsGaugeMemory,
             SizeFormatter.Format(workingSet),
             PerformanceGaugeMath.ComputeMemory(workingSet));
 
-        AddGauge(
+        ApplyGauge(
             "cache",
             Keys.DiagnosticsGaugeCache,
             SizeFormatter.Format(_cacheBytes),
             PerformanceGaugeMath.ComputeCache(_cacheBytes));
 
-        AddGauge(
+        ApplyGauge(
             "log",
             Keys.DiagnosticsGaugeLog,
             SizeFormatter.Format(_logMetrics.CurrentBytes),
             PerformanceGaugeMath.ComputeLog(_logMetrics.CurrentBytes));
 
         double startupMs = _marks.Count == 0 ? 0 : _marks[^1].ElapsedMilliseconds;
-        AddGauge(
+        ApplyGauge(
             "startup",
             Keys.DiagnosticsGaugeStartup,
             startupMs <= 0 ? T(Keys.DiagnosticsStartupEmpty) : FormatDuration(TimeSpan.FromMilliseconds(startupMs)),
             PerformanceGaugeMath.ComputeStartup(startupMs));
     }
 
-    private void AddGauge(string key, string titleKey, string valueText, GaugeReading reading) =>
-        Gauges.Add(new GaugeViewModel(
-            key,
-            T(titleKey),
-            valueText,
-            T(Keys.DiagnosticsGaugePercent, Math.Round(reading.Percent).ToString(CultureInfo.InvariantCulture)),
-            reading.Percent,
-            reading.Status,
-            "diagGauge" + Pascalize(key)));
+    private void ApplyGauge(string key, string titleKey, string valueText, GaugeReading reading)
+    {
+        var title = T(titleKey);
+        var detail = T(Keys.DiagnosticsGaugePercent, Math.Round(reading.Percent).ToString(CultureInfo.InvariantCulture));
+        var automationId = "diagGauge" + Pascalize(key);
+
+        var existing = Gauges.FirstOrDefault(gauge => gauge.Key == key);
+        if (existing is { } gauge)
+        {
+            gauge.Apply(reading.Percent, valueText, detail, reading.Status);
+        }
+        else
+        {
+            Gauges.Add(new GaugeViewModel(
+                key,
+                title,
+                valueText,
+                detail,
+                reading.Percent,
+                reading.Status,
+                automationId));
+        }
+    }
 
     private void RebuildMetrics()
     {

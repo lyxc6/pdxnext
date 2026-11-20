@@ -26,6 +26,7 @@
                                    ValueText="{x:Bind ValueText, Mode=OneWay}"
                                    DetailText="{x:Bind DetailText, Mode=OneWay}"
                                    Status="{x:Bind Status, Mode=OneWay}"
+                                   TrendPoints="{x:Bind TrendPoints, Mode=OneWay}"
                                    AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneWay}"
                                    AutomationProperties.Name="{x:Bind Title, Mode=OneWay}" />
         </DataTemplate>
