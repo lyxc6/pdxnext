@@ -1612,6 +1612,12 @@
   <data name="ModEditorExportFailed" xml:space="preserve">
     <value>导出失败</value>
   </data>
+  <data name="ModEditorSearchFailed" xml:space="preserve">
+    <value>检索失败</value>
+  </data>
+  <data name="ModEditorLibraryFailed" xml:space="preserve">
+    <value>加载 Mod 清单失败</value>
+  </data>
   <data name="ModEditorExportStop" xml:space="preserve">
     <value>停止</value>
   </data>

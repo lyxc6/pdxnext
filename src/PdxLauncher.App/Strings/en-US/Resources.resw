@@ -1612,6 +1612,12 @@
   <data name="ModEditorExportFailed" xml:space="preserve">
     <value>Export failed</value>
   </data>
+  <data name="ModEditorSearchFailed" xml:space="preserve">
+    <value>Search failed</value>
+  </data>
+  <data name="ModEditorLibraryFailed" xml:space="preserve">
+    <value>Failed to load the mod list</value>
+  </data>
   <data name="ModEditorExportStop" xml:space="preserve">
     <value>Stop</value>
   </data>

@@ -178,6 +178,11 @@ public sealed partial class ModEditorPage : Page
 
     private void OnSectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs e)
     {
+        if (_restoringSection)
+        {
+            return;
+        }
+
         var index = CurrentSectionIndex();
         ShowSection(index);
     }
@@ -195,7 +200,7 @@ public sealed partial class ModEditorPage : Page
         return 0;
     }
 
-    /// <summary>只显示选中的右栏分区；同步给隐藏左栏时用的 ComboBox。</summary>
+    /// <summary>只显示选中的右栏分区；同步给隐藏左栏时用的 ComboBox 与左栏高亮。</summary>
     private void ShowSection(int index)
     {
         foreach (var element in RightPaneSections())
@@ -216,7 +221,39 @@ public sealed partial class ModEditorPage : Page
             _restoringSection = false;
         }
 
+        // 左栏高亮也要跟上：隐藏左栏时用 ComboBox 切过分区后，再次显示左栏时
+        // SelectedItem 可能停在旧项（或无高亮）。不在这里同步，点旧高亮项时
+        // SelectedItem 不变、SelectionChanged 不触发，用户点它无法切回对应分区。
+        if (navModEditorSections.SelectedItem is not NavigationViewItem selected
+            || !int.TryParse(selected.Tag?.ToString(), out var selectedIndex)
+            || selectedIndex != index)
+        {
+            var target = SectionItem(index);
+            if (target is not null)
+            {
+                _restoringSection = true;
+                navModEditorSections.SelectedItem = target;
+                _restoringSection = false;
+            }
+        }
+
         _viewModel.SelectedSectionIndex = index;
+    }
+
+    /// <summary>按分区序号取左栏对应的 NavigationViewItem（Tag 与序号一致）。</summary>
+    private NavigationViewItem? SectionItem(int index)
+    {
+        foreach (var item in navModEditorSections.MenuItems)
+        {
+            if (item is NavigationViewItem navItem
+                && int.TryParse(navItem.Tag?.ToString(), out var tag)
+                && tag == index)
+            {
+                return navItem;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>隐藏左栏时 ComboBox 改选也要切分区。</summary>

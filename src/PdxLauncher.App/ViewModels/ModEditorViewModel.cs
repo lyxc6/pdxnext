@@ -504,7 +504,7 @@ public sealed partial class ModEditorViewModel : LocalizedObservableObject
         catch (Exception ex)
         {
             AppServices.Logger.Warn("ModEditorPage 检索失败: " + ex.Message);
-            SetStatus(Keys.ModEditorExportFailed);
+            SetStatus(Keys.ModEditorSearchFailed);
         }
     }
 
@@ -608,7 +608,7 @@ public sealed partial class ModEditorViewModel : LocalizedObservableObject
         catch (Exception ex)
         {
             AppServices.Logger.Warn("ModEditorPage 刷新清单失败: " + ex.Message);
-            SetStatus(Keys.ModEditorLibraryEmpty);
+            SetStatus(Keys.ModEditorLibraryFailed);
         }
     }
 
