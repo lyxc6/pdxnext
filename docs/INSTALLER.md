@@ -206,7 +206,9 @@ $env:GITHUB_TOKEN = "ghp_..."
 - 自动检查受 `AppSettings.AutoCheckUpdates`（默认开）和 24 小时节流约束；手动检查总是联网。
 - 发现新版本：`ConfirmOverlay` 显示当前/新版本、发布说明和“下载并更新 / 稍后”。
 - 下载：流式写入 `<数据目录>\update-cache\PdxNext-Setup-<version>.exe.part`，边下边算
-  SHA-256；长度和摘要都匹配后才改名为正式文件，失败清理 `.part`。
+  SHA-256；长度和摘要都匹配、写句柄关闭后才改名为正式文件。改名遇到文件被占用会重试
+  3 次（每次间隔 500 ms）；仍失败则保留已校验的 `.part` 并提示用户稍后重试，下次点击
+  下载时直接复用该 `.part` 落位，不会重新下载整包。校验失败（大小/摘要不符）仍清理 `.part`。
 - 安装：先保存设置，再启动安装器：
   - 每用户：`/SILENT /SUPPRESSMSGBOXES /CLOSEAPPLICATIONS /NORESTART /CURRENTUSER`；
   - 每机器：同上加 `/ALLUSERS`，并通过 ShellExecute `runas` 弹 UAC；
@@ -246,7 +248,7 @@ $env:GITHUB_TOKEN = "ghp_..."
 9. **模式切换**：已装每用户版本时尝试每机器安装 → 安装器提示先卸载；卸载后数据保留。
 10. **卸载**：控制面板卸载后程序目录移除，`data` / `%LOCALAPPDATA%\PdxNext-Data` 保留。
 11. **自检**：`dotnet "tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll"`
-    必须 `检查类: 166，失败: 0`。
+    必须 `检查类: 178，失败: 0`。
 
 ## 8. 排错
 
