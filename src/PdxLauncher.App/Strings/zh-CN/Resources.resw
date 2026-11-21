@@ -4313,6 +4313,9 @@
   <data name="SettingsProxyProbeBlocked" xml:space="preserve">
     <value>被白名单拦截</value>
   </data>
+  <data name="SettingsProxyProbeColumnHost" xml:space="preserve">
+    <value>主机</value>
+  </data>
   <data name="SettingsProxyProbeColumnCurrent" xml:space="preserve">
     <value>当前模式</value>
   </data>
