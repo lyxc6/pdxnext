@@ -73,6 +73,16 @@ public static class PlaySetAutoSortService
             cancellationToken.ThrowIfCancellationRequested();
             var mod = sortable[index];
             progress?.Report(new AutoSortProgress(AutoSortPhase.ScanningMods, index, sortable.Count, mod.Name));
+            IReadOnlyList<string>? replacePaths = null;
+            if (!string.IsNullOrWhiteSpace(mod.DirPath))
+            {
+                var descriptorText = ReadDescriptorText(fileSystem, game, mod, logger);
+                if (!string.IsNullOrEmpty(descriptorText))
+                {
+                    replacePaths = DescriptorDependencyParser.ParseReplacePaths(descriptorText);
+                }
+            }
+
             footprints.Add(ModFootprintScanner.Scan(
                 fileSystem,
                 mod.ModId,
@@ -80,6 +90,7 @@ public static class PlaySetAutoSortService
                 mod.DirPath,
                 mod.ArchivePath,
                 vanillaPaths,
+                replacePaths,
                 cancellationToken));
         }
 

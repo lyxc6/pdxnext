@@ -426,6 +426,9 @@
                 <StackPanel Spacing="8">
                     <TextBlock Text="{x:Bind L.DiagnosticsSectionLog, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
                     <TextBlock Text="{x:Bind L.DiagnosticsLogHint, Mode=OneWay}" Style="{StaticResource DiagnosticsHintTextStyle}" />
+                    <TextBlock Text="{x:Bind ViewModel.GameLogStatusText, Mode=OneWay}"
+                               TextWrapping="Wrap"
+                               AutomationProperties.AutomationId="txtGameLogStatus" />
 
                     <ct:SettingsCard Header="{x:Bind ViewModel.LogSummaryText, Mode=OneWay}"
                                            Description="{x:Bind ViewModel.LogRotationText, Mode=OneWay}"

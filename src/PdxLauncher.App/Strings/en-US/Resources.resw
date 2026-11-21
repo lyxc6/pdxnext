@@ -5087,6 +5087,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="UpdateDownloadFailed" xml:space="preserve">
     <value>Could not download the update: {0}</value>
   </data>
+  <data name="UpdateDownloadFileLocked" xml:space="preserve">
+    <value>The update was downloaded and verified, but the file is in use by another program. Please try again later; the downloaded data has been kept, so a retry will not download it again.</value>
+  </data>
   <data name="UpdateDownloading" xml:space="preserve">
     <value>Downloading update…</value>
   </data>
@@ -6133,5 +6136,179 @@ then call list_games to verify.</value>
   </data>
   <data name="ConvertToLocalCancelled" xml:space="preserve">
     <value>Conversion to local mod cancelled</value>
+  </data>
+  <data name="CrashExceptionC0000017" xml:space="preserve">
+    <value>内存不足：系统无法为游戏分配所需内存（关闭其他程序、检查页面文件，或减少大型 Mod）</value>
+  </data>
+  <data name="CrashFindingPcOutOfMemoryCrashTitle" xml:space="preserve">
+    <value>内存不足导致崩溃</value>
+  </data>
+  <data name="CrashFindingPcOutOfMemoryCrashDetail" xml:space="preserve">
+    <value>检测到 {0} 处内存不足证据：{1}。游戏申请内存失败时会直接退出。</value>
+  </data>
+  <data name="CrashFindingPcOutOfMemoryCrashFix" xml:space="preserve">
+    <value>关闭浏览器等占内存的程序，确认 Windows 页面文件设为自动，并减少大型模型/贴图 Mod。</value>
+  </data>
+  <data name="CrashFindingPcDiskReadCrashTitle" xml:space="preserve">
+    <value>磁盘读取失败导致崩溃</value>
+  </data>
+  <data name="CrashFindingPcDiskReadCrashDetail" xml:space="preserve">
+    <value>检测到 {0} 处磁盘读取失败证据：{1}。Windows 无法读取游戏需要的部分文件。</value>
+  </data>
+  <data name="CrashFindingPcDiskReadCrashFix" xml:space="preserve">
+    <value>检查游戏所在磁盘（右键 > 属性 > 工具 > 检查）、留出至少 10 GB 空间；若文档在 OneDrive，请对 Paradox 目录选“始终保留在此设备”。</value>
+  </data>
+  <data name="CrashFindingPcIllegalInstructionCrashTitle" xml:space="preserve">
+    <value>CPU 执行了非法指令</value>
+  </data>
+  <data name="CrashFindingPcIllegalInstructionCrashDetail" xml:space="preserve">
+    <value>检测到 {0} 处非法指令证据：{1}。正常游玩很少见，通常指向超频/过热或硬件不稳。</value>
+  </data>
+  <data name="CrashFindingPcIllegalInstructionCrashFix" xml:space="preserve">
+    <value>关闭 CPU/内存超频（含 XMP/EXPO）作测试，检查温度，并运行 Windows 内存诊断。</value>
+  </data>
+  <data name="CrashFindingPcGraphicsDriverCrashTitle" xml:space="preserve">
+    <value>显卡驱动崩溃</value>
+  </data>
+  <data name="CrashFindingPcGraphicsDriverCrashDetail" xml:space="preserve">
+    <value>检测到 {0} 处显卡驱动故障证据：{1}。崩溃发生在显卡驱动代码里，而不是游戏或 Mod。</value>
+  </data>
+  <data name="CrashFindingPcGraphicsDriverCrashFix" xml:space="preserve">
+    <value>更新（最好干净安装）显卡驱动；笔记本请确认游戏使用独立显卡，并关闭 GPU 超频。</value>
+  </data>
+  <data name="CrashFindingPcOverlayCrashTitle" xml:space="preserve">
+    <value>覆盖层程序注入导致崩溃</value>
+  </data>
+  <data name="CrashFindingPcOverlayCrashDetail" xml:space="preserve">
+    <value>检测到 {0} 处覆盖层注入证据：{1}。崩溃发生在注入游戏的第三方覆盖层代码里。</value>
+  </data>
+  <data name="CrashFindingPcOverlayCrashFix" xml:space="preserve">
+    <value>针对本游戏关闭该覆盖层：Steam/Discord 游戏内覆盖、RTSS/MSI Afterburner、OBS 捕获、ReShade、Overwolf 等。</value>
+  </data>
+  <data name="CrashFindingPcHardwareErrorCrashTitle" xml:space="preserve">
+    <value>Windows 记录了硬件错误</value>
+  </data>
+  <data name="CrashFindingPcHardwareErrorCrashDetail" xml:space="preserve">
+    <value>检测到 {0} 处硬件错误证据：{1}。这是处理器、内存或 PCI 设备层面的错误，游戏本身无法造成。</value>
+  </data>
+  <data name="CrashFindingPcHardwareErrorCrashFix" xml:space="preserve">
+    <value>关闭所有超频（含 XMP/EXPO）、检查温度并运行 Windows 内存诊断；必要时联系硬件厂商。</value>
+  </data>
+  <data name="CrashFindingPcPageFileDisabledTitle" xml:space="preserve">
+    <value>Windows 页面文件已关闭</value>
+  </data>
+  <data name="CrashFindingPcPageFileDisabledDetail" xml:space="preserve">
+    <value>检测到 {0} 处证据：页面文件关闭时，内存耗尽不会让程序变慢，而是直接崩溃。</value>
+  </data>
+  <data name="CrashFindingPcPageFileDisabledFix" xml:space="preserve">
+    <value>到 系统 > 高级系统设置 > 性能 > 高级 > 虚拟内存，设为“自动管理”。</value>
+  </data>
+  <data name="CrashFindingPcLowMemoryConfigTitle" xml:space="preserve">
+    <value>内存容量偏低</value>
+  </data>
+  <data name="CrashFindingPcLowMemoryConfigDetail" xml:space="preserve">
+    <value>当前内存约 {0} GB，Mod 模型文件数 {1}。CK3 等游戏至少需要 8 GB，大量 Mod 建议 16 GB 以上。</value>
+  </data>
+  <data name="CrashFindingPcLowMemoryConfigFix" xml:space="preserve">
+    <value>游玩时关闭其他程序，保持页面文件自动，并减少大型模型/贴图 Mod。</value>
+  </data>
+  <data name="CrashFindingPcLowVideoMemoryTitle" xml:space="preserve">
+    <value>显存可能不足</value>
+  </data>
+  <data name="CrashFindingPcLowVideoMemoryDetail" xml:space="preserve">
+    <value>显存约 {0} GB，Mod 模型文件数 {1}，大贴图包可能填满显存。</value>
+  </data>
+  <data name="CrashFindingPcLowVideoMemoryFix" xml:space="preserve">
+    <value>在游戏中降低贴图质量，或减少大型模型/贴图 Mod。</value>
+  </data>
+  <data name="CrashFindingPcLowDiskSpaceTitle" xml:space="preserve">
+    <value>磁盘可用空间不足</value>
+  </data>
+  <data name="CrashFindingPcLowDiskSpaceDetail" xml:space="preserve">
+    <value>游戏数据盘或安装盘只剩约 {0} GB 可用空间，游戏需要空间保存存档、缓存和崩溃文件。</value>
+  </data>
+  <data name="CrashFindingPcLowDiskSpaceFix" xml:space="preserve">
+    <value>至少腾出 10 GB 可用空间。</value>
+  </data>
+  <data name="CrashFindingPcOldGraphicsDriverTitle" xml:space="preserve">
+    <value>显卡驱动过旧</value>
+  </data>
+  <data name="CrashFindingPcOldGraphicsDriverDetail" xml:space="preserve">
+    <value>当前显卡驱动日期为 {0}，超过一年，老驱动是新游戏版本崩溃的常见原因。</value>
+  </data>
+  <data name="CrashFindingPcOldGraphicsDriverFix" xml:space="preserve">
+    <value>从 NVIDIA / AMD / Intel 官网（或对应驱动软件）更新显卡驱动。</value>
+  </data>
+  <data name="CrashFindingDatabaseOverrideTitle" xml:space="preserve">
+    <value>Mod 定义相互覆盖</value>
+  </data>
+  <data name="CrashFindingDatabaseOverrideDetail" xml:space="preserve">
+    <value>database_conflicts.log 记录了 {0} 处定义覆盖，例如 {1}（来自 {2}）。后加载的版本生效，其它版本被忽略。</value>
+  </data>
+  <data name="CrashFindingDatabaseOverrideFix" xml:space="preserve">
+    <value>如果这是你想要的就不必处理；若另一个 Mod 的功能失效，请找兼容性补丁或调整加载顺序，并告知相关作者。</value>
+  </data>
+  <data name="CrashSectionSession" xml:space="preserve">
+    <value>This game session</value>
+  </data>
+  <data name="CrashSessionHint" xml:space="preserve">
+    <value>Errors are counted from game logs while the game runs; review them here after it exits. Locked/read-only logs are flagged too.</value>
+  </data>
+  <data name="CrashSessionEmpty" xml:space="preserve">
+    <value>No session yet. Launch and close a game to see its error summary here.</value>
+  </data>
+  <data name="CrashSessionHeader" xml:space="preserve">
+    <value>Game: {0}  Started: {1}  Ended: {2}</value>
+  </data>
+  <data name="CrashSessionErrorCount" xml:space="preserve">
+    <value>{0} error(s) found this session (deduplicated across logs).</value>
+  </data>
+  <data name="CrashSessionGroupsHeader" xml:space="preserve">
+    <value>Error groups:</value>
+  </data>
+  <data name="CrashSessionGroupRow" xml:space="preserve">
+    <value>· {0}x: {1} (source: {2})</value>
+  </data>
+  <data name="CrashSessionLogsHeader" xml:space="preserve">
+    <value>Log file status:</value>
+  </data>
+  <data name="CrashSessionLogRow" xml:space="preserve">
+    <value>· {0}: {1}{2}</value>
+  </data>
+  <data name="CrashSessionReadOnlyFlag" xml:space="preserve">
+    <value> (read-only attribute)</value>
+  </data>
+  <data name="CrashSessionDegraded" xml:space="preserve">
+    <value>Some logs could not be read; the summary may be incomplete.</value>
+  </data>
+  <data name="CrashSessionLogReadable" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="CrashSessionLogLocked" xml:space="preserve">
+    <value>Locked / in use</value>
+  </data>
+  <data name="CrashSessionLogUnauthorized" xml:space="preserve">
+    <value>Permission denied</value>
+  </data>
+  <data name="CrashSessionLogReadOnly" xml:space="preserve">
+    <value>Read-only</value>
+  </data>
+  <data name="CrashSessionLogMissing" xml:space="preserve">
+    <value>Missing</value>
+  </data>
+  <data name="CrashSessionLogUnknown" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+  <data name="DiagnosticsGameLogNoGame" xml:space="preserve">
+    <value>No game selected; cannot check game log status.</value>
+  </data>
+  <data name="DiagnosticsGameLogStatus" xml:space="preserve">
+    <value>Game log {0}: {1}</value>
+  </data>
+  <data name="CrashSessionEndedTitle" xml:space="preserve">
+    <value>Game session ended</value>
+  </data>
+  <data name="CrashSessionEndedMessage" xml:space="preserve">
+    <value>This session had {0} error(s). See Crash Analysis → This game session.</value>
   </data>
 </root>

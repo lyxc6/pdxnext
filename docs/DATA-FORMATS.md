@@ -237,6 +237,7 @@ CK3 的 playsets_dlcs 为空 ⇒ disabled_dlcs: []，与真机文件一致。
 - .mod 键：name→displayName、version→modVersion、tags、picture、supported_version→requiredVersion、path→dirPath、archive→archivePath、remote_file_id→steamId。
 - 命名：ugc_<steamId>.mod / pdx_<pdxId>.mod / <dirname>.mod；本地目录 mod 目录内有 descriptor.mod。
 - V3 workshop mod 无 .mod：元数据在 <modDir>\.metadata\metadata.json，键 name, id, **version→modVersion**, supported_game_version→requiredVersion, short_description, **picture**（封面的相对路径，相对 `.metadata` 目录；历史写法 `thumbnail` 本项目仍兼容读取）, tags, relationships, game_custom_data。EU5 实测 22 个 mod 里 13 个带 `picture`，值多为 `thumbnail.png`，`thumbnail` 键一次都没出现。
+- CK3 / Stellaris / EU4 的 workshop 目录没有 `.metadata`：扫描在缺少 `metadata.json` 时回退读 `<modDir>\descriptor.mod`（Clausewitz 键 name/version/supported_version/picture），工坊 id 取工坊目录名。因此官方启动器尚未生成 `mod\ugc_<id>.mod` 指针时，已下载到本地的工坊 mod 也能进 Mod 库（标为未登记/订阅来源）。仅订阅未下载、本地没有任何文件的条目仍不显示。
 - **启动器新建 mod 的写法**（`ModCreator`，2026-10-31）：legacy 游戏写 `<modDir>/<folder>.mod`（带绝对 `path`，正斜杠）+ `<folder>/descriptor.mod`（同字段但**不带** `path`）+ `<folder>/thumbnail.png`；V3/EU5 写 `<folder>/.metadata/metadata.json`（`id` 为空串、`tags` 数组、`relationships: []`、`game_custom_data.multiplayer_synchronized = true`）+ `.metadata/thumbnail.png`，`picture` 固定 `thumbnail.png`。名称/文件夹名限制 ASCII `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`；V3 目标路径含非 ASCII 直接拒绝。
 - **启动器编辑 mod 的写法**（`ModDescriptorEditor`，2026-11-04）：只改 name / version / supported_version / tags（V3 另加 short_description），其余原样保留。
   - legacy：`.mod` 是行级替换 —— `LegacyDescriptorText` 解析出顶层 `key=value` 的**值区间**单独替换，注释、未知键、`path` 与缩进都不动；缺的键补在 `name` 所在行之后（没有 name 就补在文件头）。外层 `<folder>.mod` 与 `<folder>/descriptor.mod` 两份一起写（顺序：先内层后外层），内容没变的文件不重写；
@@ -1225,7 +1226,7 @@ Victoria 3 **无法加载任何路径里含非 ASCII 字符的 mod**（Vic3 wiki
 
 ## 22. 游戏崩溃与启动日志（崩溃分析页）
 
-崩溃分析页只读当前游戏 `<GameDataDir>` 下的崩溃包与日志，不启动游戏、不联网、不写游戏目录。
+崩溃分析页只读当前游戏 `<GameDataDir>` 下的崩溃包与日志，不启动游戏、不写游戏目录。分析主体是纯本地的；若将来要补充联网信息（例如读取 Mod 工坊页的作者说明），必须走项目统一的联网出口（`OnlineHosts` 白名单 + `HttpFetcher`），失败一律降级为空证据，不能影响页面打开。
 
 ### 22.1 崩溃包
 
@@ -1241,6 +1242,15 @@ Victoria 3 **无法加载任何路径里含非 ASCII 字符的 mod**（Vic3 wiki
 - 没有崩溃包时页面仍会读实时 `logs\`，并明确提示「没有找到崩溃转储」。
 - 崩溃时间优先用 `exception.txt`，而不是目录名：Paradox 的目录/`meta.yml` 年份字段并不可靠。
 
+### 22.1.1 PC 侧取证（只读）
+
+除游戏自身日志外，分析器还会读取本机证据来判断「是游戏 Mod 的问题，还是电脑本身的问题」：
+
+- 崩溃码：`C0000017` 内存不足、`C0000006` 磁盘读取失败、`C000001D` 非法指令（超频/硬件不稳）。
+- Windows 事件日志：通过 advapi32 的 `OpenEventLog`/`ReadEventLog` 只读崩溃前后 5 分钟内的 Application 1000（故障模块）、System 2004（低内存）、显卡 TDR、WHEA 硬件错误与磁盘错误；按提供程序/事件 ID 归类，消息截断到 400 字符。读不到（权限/服务未启动）一律当无证据，绝不让页面打不开。
+- 故障模块归因：`nvlddmkm`/`amd`/`igfx`/`d3d11`/`dxgi` 归为显卡驱动故障；`gameoverlayrenderer`/`discordhook`/`rtss`/`graphics-hook`/`reshade`/`overwolf` 归为覆盖层注入。强证据会抑制「原因未知」结论。
+- `meta.yml` 的 `SystemMemory`/`GPUDedicatedMemory` 与游戏数据盘/安装盘可用空间做阈值检查；页面文件与显卡驱动日期因项目不依赖 WMI，保持「未知」并由规则跳过。
+
 ### 22.2 日志格式
 
 ```
@@ -1251,6 +1261,7 @@ Victoria 3 **无法加载任何路径里含非 ASCII 字符的 mod**（Vic3 wiki
 
 - 时间只有时分秒；分析器用崩溃日期补齐，跨午夜时自动减一天。
 - 同一错误可能同时出现在 `error.log`、`game.log`、`debug.log`；计数按「时间 + 来源 + 正文」分文件取最大次数，避免复制三份算三倍。
+- `database_conflicts.log` 单独解析：`Overriding entry '<key>' for database '<db>' in 'file: <path> line <n>'` 归一成「定义键 → 提供覆盖的文件」，按 `(键, 库)` 去重；同名路径在启用 Mod 目录下命中即归属该 Mod，作为「定义覆盖」结论展示。
 
 ### 22.3 Mod 归属
 
@@ -1259,6 +1270,15 @@ Victoria 3 **无法加载任何路径里含非 ASCII 字符的 mod**（Vic3 wiki
 - 日志里的 `common/...` 路径会在每个启用 Mod 目录下做同名文件存在性检查，命中即归到该 Mod；压缩包 Mod 无法逐文件检查。
 - Victoria 3 另按 `GamePathRules.RequiresAsciiPaths` 检查非 ASCII 路径。
 
-### 22.4 规则边界
+### 22.4 本次游戏报错统计
+
+游戏运行期间，`GameSessionLogTracker` 从各日志当前末尾开始按字节偏移增量读取，只统计会话开始之后写入的错误块：
+- 跨 `error.log`/`game.log`/`debug.log` 按「时间 + 来源 + 正文」去重，同一错误只算一次；`CrashLogParser.Signature` 聚类，保留首个来源路径。
+- 只读取不写游戏目录；日志被轮转/截断时游标归零，读取失败只标记 `Degraded`，不抛到 UI。
+- 游戏进程退出（pid 轮询 + 进程名核对）后 `GameSessionMonitorService` 固化 `GameSessionSnapshot`，在「崩溃分析 → 本次游戏」显示，并通过 `ConfirmOverlay` 轻提示。
+
+`LogFileProbe` 是独立的只读状态探测（不改 `CrashLogReader`/`LogTailReader` 的容错读取）：用共享读句柄尝试打开，按 `IOException` 的 HResult 32/33 判定「被占用/锁定」，`UnauthorizedAccessException` 判定「无权限」，`FileAttributes.ReadOnly` 仅作信息位。结果同时显示在「本次游戏」分区与「性能与日志」诊断页。
+
+### 22.5 规则边界
 
 页面只给「可能的原因」：时间相邻写成高度相关，不写成因果；未解析 minidump、不做栈符号化；不提供一键禁用 Mod / 删缓存 / 改 `pdx_settings.json`。

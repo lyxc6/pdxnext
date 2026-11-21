@@ -243,6 +243,13 @@
                         <SymbolIcon Symbol="Play" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.AutomationId="navCrashSession"
+                                    Tag="4"
+                                    Content="{x:Bind L.CrashSectionSession, Mode=OneWay}">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Clock" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
         </NavigationView>
 
@@ -415,6 +422,16 @@
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                         </ItemsControl>
+                    </StackPanel>
+
+                    <!-- ============ 本次游戏 ============ -->
+                    <StackPanel x:Name="secSession" Spacing="8" Visibility="Collapsed">
+                        <TextBlock Text="{x:Bind L.CrashSectionSession, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
+                        <TextBlock Text="{x:Bind L.CrashSessionHint, Mode=OneWay}" Style="{StaticResource CrashHintTextStyle}" />
+                        <TextBlock Text="{x:Bind ViewModel.SessionText, Mode=OneWay}"
+                                   TextWrapping="Wrap"
+                                   IsTextSelectionEnabled="True"
+                                   AutomationProperties.AutomationId="txtCrashSession" />
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>

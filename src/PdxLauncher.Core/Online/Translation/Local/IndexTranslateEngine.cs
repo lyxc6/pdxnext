@@ -15,13 +15,34 @@ using PdxLauncher.Core.Online.Translation;
 /// 这是三个方向里质量最好的一档，代价是 1.31GB 模型 + 每次翻译几百毫秒。
 /// </para>
 /// </summary>
-public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
+public sealed class IndexTranslateEngine : IStreamingTranslationEngine, IDisposable
 {
     /// <summary>引擎标识。</summary>
     public const string EngineId = "index-translate";
 
-    /// <summary>单次生成的最大 token 数。</summary>
+    /// <summary>单次生成的最大 token 数（长文上限）。</summary>
     public const int MaxTokens = 512;
+
+    /// <summary>短文本（工坊标题这类）的生成上限：空转/回吐时最多白跑这么多步，不再固定 512。</summary>
+    public const int ShortTextMaxTokens = 128;
+
+    /// <summary>超过这个长度按长文上限生成；短文本用 <see cref="ShortTextMaxTokens"/>。</summary>
+    public const int ShortTextCharLimit = 120;
+
+    /// <summary>同一批连续多少条空译文后熔断剩余条目，避免 30 条标题各跑一遍满额生成。</summary>
+    public const int ConsecutiveEmptyBreaker = 3;
+
+    /// <summary>
+    /// ChatML 与 think 块的结束记号。llama.cpp 生成到这些记号就该停；
+    /// 不设停止序列时，回吐/空输出会一路跑满 <see cref="MaxTokens"/>。
+    /// </summary>
+    internal static readonly string[] GenerationStopMarkers =
+    [
+        "<|im_end|>",
+        "<|endoftext|>",
+        "<|im_start|>",
+        "</think>",
+    ];
 
     /// <summary>上下文窗口大小；2B 模型下 4096 的 KV 缓存约多占 60MB，2048 对逐段翻译够用。</summary>
     public const int ContextSize = 2048;
@@ -32,6 +53,19 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
     public const int MaxInputChars = 900;
 
     private const string NewLine = "\n";
+
+    /// <summary>
+    /// 按输入长度决定生成上限：短标题用小上限，长简介才用满 512。
+    /// 抽成纯函数供自检直接断言，避免上限改了却没人守。
+    /// </summary>
+    internal static int ResolveMaxTokens(string text) =>
+        text.Length <= ShortTextCharLimit ? ShortTextMaxTokens : MaxTokens;
+
+    /// <summary>
+    /// llama.cpp 默认按物理核心数开线程；在这台 16 核机器上会把 CPU 打满。
+    /// 本地翻译是后台活，限制到 1/4（2–8）足够用，配合停止序列整体更省。
+    /// </summary>
+    private static int ResolveThreadCount() => Math.Clamp(Environment.ProcessorCount / 4, 2, 8);
 
     private static readonly string[] SupportedTargets = { "zh", "en" };
 
@@ -106,7 +140,7 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
                     // 否则用户翻页后旧批次还会白占 CPU 几十秒。
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    var output = await InferAsync(BuildPrompt(chunk, target), cancellationToken)
+                    var output = await InferAsync(BuildPrompt(chunk, target), chunk, cancellationToken)
                         .ConfigureAwait(false);
                     if (string.IsNullOrWhiteSpace(output))
                     {
@@ -161,15 +195,50 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
         string targetLanguage,
         CancellationToken cancellationToken)
     {
-        var results = new List<string?>(texts.Count);
-        foreach (var text in texts)
+        var results = new string?[texts.Count];
+        await TranslateBatchStreamingAsync(texts, targetLanguage, cancellationToken, (i, text) => results[i] = text)
+            .ConfigureAwait(false);
+        return results;
+    }
+
+    /// <inheritdoc />
+    public async Task TranslateBatchStreamingAsync(
+        IReadOnlyList<string> texts,
+        string targetLanguage,
+        CancellationToken cancellationToken,
+        Action<int, string?> onItem)
+    {
+        var consecutiveEmpty = 0;
+        for (var i = 0; i < texts.Count; i++)
         {
             // 条目之间的取消点：上一页的 30 条还没翻完时用户已经翻到下一页了。
             cancellationToken.ThrowIfCancellationRequested();
-            results.Add(await TranslateAsync(text, targetLanguage, cancellationToken).ConfigureAwait(false));
-        }
 
-        return results;
+            // 连续 N 条空/回吐说明这个模型对当前内容不出译文：再逐条跑满生成只是白烧 CPU，
+            // 剩下几条直接按 null 上报，交给回落链或保留原文。熔断只作用于本批，下批仍会重试。
+            if (consecutiveEmpty >= ConsecutiveEmptyBreaker)
+            {
+                var skipped = texts.Count - i;
+                Volatile.Write(ref _lastFailure, $"本地模型连续 {ConsecutiveEmptyBreaker} 条无译文，本批停止（跳过 {skipped} 条）");
+                _logger.Warn(_lastFailure);
+                for (; i < texts.Count; i++)
+                {
+                    onItem(i, null);
+                }
+                return;
+            }
+
+            var translated = await TranslateAsync(texts[i], targetLanguage, cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(translated) || TranslationEchoGuard.Trim(translated) is null)
+            {
+                consecutiveEmpty++;
+            }
+            else
+            {
+                consecutiveEmpty = 0;
+            }
+            onItem(i, translated);
+        }
     }
 
     private static bool TryResolveTargetLanguage(string targetLanguage, out string target)
@@ -255,17 +324,20 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
         return builder.ToString();
     }
 
-    private async Task<string> InferAsync(string prompt, CancellationToken cancellationToken)
+    private async Task<string> InferAsync(string prompt, string sourceText, CancellationToken cancellationToken)
     {
         // 首次调用要把 1.3 GB 权重读进内存（LLamaWeights.LoadFromFile 是同步的）。
         // 调用方可能是 UI 线程：绝不能让这一步跑在它上面，否则整个窗口冻结十几秒。
         var weights = await Task.Run(GetWeights, cancellationToken).ConfigureAwait(false);
+        var threads = ResolveThreadCount();
         var modelParams = new ModelParams(ModelPath)
         {
             // 与 GetWeights 保持一致：CUDA / Vulkan 已关闭，全部层留在内存里，
             // 写 99 只会让 LLamaSharp 白算一遍「哪些层能上 GPU」。
             GpuLayerCount = 0,
             ContextSize = ContextSize,
+            Threads = threads,
+            BatchThreads = threads,
         };
 
         var sampling = new DefaultSamplingPipeline
@@ -278,7 +350,11 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
 
         var inferenceParams = new InferenceParams
         {
-            MaxTokens = MaxTokens,
+            // 短标题用 128、长文才用 512；配合停止序列，回吐时不再每条白跑满 512 步。
+            MaxTokens = ResolveMaxTokens(sourceText),
+            AntiPrompts = GenerationStopMarkers,
+            // 默认 false 会让特殊记号对解码器不可见，AntiPrompts 就匹配不到 ChatML 结束符。
+            DecodeSpecialTokens = true,
             SamplingPipeline = sampling,
         };
 
@@ -320,10 +396,13 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
 
             NativeLibraryConfig.All.WithCuda(false).WithVulkan(false).WithAutoFallback(true);
 
+            var threads = ResolveThreadCount();
             var modelParams = new ModelParams(ModelPath)
             {
                 GpuLayerCount = 0,
                 ContextSize = ContextSize,
+                Threads = threads,
+                BatchThreads = threads,
             };
 
             _weights = LLamaWeights.LoadFromFile(modelParams);

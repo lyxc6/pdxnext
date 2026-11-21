@@ -940,6 +940,20 @@ public static class OnlineChecks
         ChecksContext.Check(
             "白名单：未做子域通配",
             !OnlineHosts.IsAllowedHost("evil.akamai.steamstatic.com"));
+
+        // 安全出口：运行时请求前必须拒绝 localhost / 环回 / 私有 / 保留地址。
+        foreach (var unsafeHost in new[]
+        {
+            "localhost", "127.0.0.1", "127.1.2.3", "10.0.0.1", "172.16.0.1", "172.31.255.255",
+            "192.168.1.1", "169.254.1.1", "0.0.0.0", "224.0.0.1", "[::1]", "[fe80::1]"
+        })
+        {
+            ChecksContext.Check("白名单拒绝不安全主机 " + unsafeHost, !OnlineHosts.IsAllowedHost(unsafeHost));
+            ChecksContext.Check("授权拒绝不安全主机 " + unsafeHost, !OnlineHosts.AuthorizeBaseUrl("http://" + unsafeHost + "/api"));
+        }
+
+        ChecksContext.Check("白名单仍放行公网主机", OnlineHosts.IsAllowed(new Uri("https://" + OnlineHosts.ApiHost + "/v1"))
+            || OnlineHosts.IsAllowedHost(OnlineHosts.ApiHost));
     }
 
     /// <summary>

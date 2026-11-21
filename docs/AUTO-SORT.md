@@ -62,6 +62,8 @@ ModId + 位次 + 启用态）。确认对话框开着时列表若被自动保存
 
 玩法目录 = `common/events/history/gui/map_data/data_binding`；原版文件清单 = `<安装根>/game` 全部相对路径。
 
+`replace_path`（CK3 等旧式 descriptor 的 `replace_path = "common/landed_titles"`）：`DescriptorDependencyParser.ParseReplacePaths` 解析后传给足迹扫描器，落在该目录下的文件即使原版清单里不存在也计为「覆盖原版」（`replaceFiles` 也计入），因此能与其它 mod 的同目录改动在冲突图中正确相遇。这补充了原先只识别虚拟 `replace/` 路径段的盲点；压缩包 mod 仍无法读归档内的 descriptor。
+
 **只排启用的 mod**：禁用行不扫描、不建图、不移动，原地留在列表里（加载文件本来也只写启用行）。
 
 ### 2. 硬约束（SortEdge，压过层位）

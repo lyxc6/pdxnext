@@ -226,6 +226,14 @@ internal static class UpdateFlow
         {
             host.Close();
         }
+        catch (UpdatePackageLockedException)
+        {
+            host.Close();
+            AppServices.Logger.Warn("更新包已下载并校验，但改名时被占用，已保留 .part");
+            await ShowMessageAsync(
+                localizer.T(Keys.UpdateTitleAvailable, manifest.Version),
+                localizer.T(Keys.UpdateDownloadFileLocked)).ConfigureAwait(true);
+        }
         catch (Exception ex)
         {
             host.Close();

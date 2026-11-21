@@ -6,6 +6,7 @@ using System.Text.Json;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Infrastructure;
+using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Parsing;
 
 /// <summary>
@@ -18,6 +19,7 @@ using PdxLauncher.Core.Parsing;
 public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
 {
     private const string ModDescriptorPattern = "*.mod";
+    private const string DescriptorFileName = "descriptor.mod";
     private const string MetadataFileName = "metadata.json";
     private const string MetadataDirectoryName = ".metadata";
     private const string WorkshopSegment = "workshop";
@@ -84,6 +86,10 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
 
         ScanModDescriptors(game, discovered, cancellationToken);
         ScanMetadataFiles(game, discovered, cancellationToken);
+
+        // 同一个工坊 mod 可能同时被 mod\ugc_*.mod 指针与工坊目录里的 descriptor.mod / metadata.json
+        // 扫出来。指针先扫，信息更全（带 gameRegistryId / picture），去重时保留先出现的那条。
+        DeduplicateDiscovered(discovered);
 
         // 合并：先按 sqlite 行匹配，未匹配的 sqlite 行也纳入结果（例如目录已删但仍登记在库里）。
         var usedSqlite = new HashSet<int>();
@@ -231,6 +237,13 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
         var metadataPath = Path.Combine(modDirectory, MetadataDirectoryName, MetadataFileName);
         if (!_fileSystem.FileExists(metadataPath))
         {
+            // CK3/Stellaris/EU4 的工坊目录没有 .metadata，元数据在 descriptor.mod 里
+            // （docs/DATA-FORMATS.md:245）。只给工坊目录做回退，本地 mod 维持原行为。
+            if (isWorkshopRoot)
+            {
+                AddWorkshopDescriptorMod(modDirectory, discovered);
+            }
+
             return;
         }
 
@@ -290,6 +303,96 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
     }
 
     /// <summary>
+    /// 工坊目录缺少 .metadata/metadata.json 时，回退读 <c>descriptor.mod</c>（CK3/Stellaris/EU4 的实际布局）。
+    /// </summary>
+    /// <param name="modDirectory">工坊 content/&lt;appid&gt;/&lt;modId&gt; 目录。</param>
+    /// <param name="discovered">结果收集列表。</param>
+    private void AddWorkshopDescriptorMod(string modDirectory, List<ModRecord> discovered)
+    {
+        var descriptorPath = Path.Combine(modDirectory, DescriptorFileName);
+        if (!_fileSystem.FileExists(descriptorPath))
+        {
+            return;
+        }
+
+        try
+        {
+            var values = ClausewitzParser.Parse(_fileSystem.ReadAllText(descriptorPath));
+            var name = Read(values, "name");
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                name = _fileSystem.GetFileName(modDirectory);
+            }
+
+            discovered.Add(new ModRecord(
+                Name: name,
+                DirPath: modDirectory,
+                ArchivePath: null,
+                GameRegistryId: string.Empty,
+                // 工坊目录名是纯数字时就是工坊 id；descriptor.mod 里通常没有 remote_file_id。
+                SteamId: ResolveSteamId(null, modDirectory, isWorkshopRoot: true, descriptorPath),
+                RequiredVersion: Read(values, "supported_version"),
+                ModVersion: Read(values, "version"),
+                ThumbnailPath: null,
+                Status: null,
+                Picture: string.IsNullOrWhiteSpace(Read(values, "picture"))
+                    ? null
+                    : Read(values, "picture").Trim(),
+                Source: ModOrigins.SteamSource));
+        }
+        catch (IOException exception)
+        {
+            _logger.Warn("读取工坊 descriptor.mod 失败，已跳过：" + descriptorPath + "：" + exception.Message);
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            _logger.Warn("读取工坊 descriptor.mod 无权限，已跳过：" + descriptorPath + "：" + exception.Message);
+        }
+    }
+
+    /// <summary>
+    /// 磁盘扫描结果去重：同一 mod 可能同时来自 mod\ugc_*.mod 指针、metadata.json 与工坊 descriptor.mod。
+    /// 键优先级为数字 steamId → 绝对路径 → 注册 id；都不全时回退到名称。保留先出现的记录。
+    /// </summary>
+    private static void DeduplicateDiscovered(List<ModRecord> discovered)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var unique = new List<ModRecord>(discovered.Count);
+        foreach (var record in discovered)
+        {
+            if (seen.Add(DedupKeyFor(record)))
+            {
+                unique.Add(record);
+            }
+        }
+
+        discovered.Clear();
+        discovered.AddRange(unique);
+    }
+
+    private static string DedupKeyFor(ModRecord record)
+    {
+        if (DigitsOrNull(record.SteamId) is { } steamId)
+        {
+            return "steam:" + steamId;
+        }
+
+        var dirKey = PathHelper.NormalizeKey(record.DirPath);
+        if (dirKey.Length > 0)
+        {
+            return "dir:" + dirKey;
+        }
+
+        var registryKey = NormalizeRegistry(record.GameRegistryId);
+        if (registryKey.Length > 0)
+        {
+            return "reg:" + registryKey;
+        }
+
+        return "name:" + record.Name.ToUpperInvariant();
+    }
+
+    /// <summary>
     /// 解析 mod 的创意工坊 id（纯 ASCII 数字）。
     /// <para>
     /// metadata.json 的 <c>"id"</c> <b>不是</b>创意工坊 id：官方启动器把它写在 <c>mods.metadataId</c> 里，
@@ -342,7 +445,9 @@ public sealed class ModCatalog : IModCatalog, IScanCacheInvalidator
             {
                 var steamApps = Path.GetFullPath(Path.Combine(game.InstallRoot, "..", ".."));
                 var contentRoot = Path.Combine(steamApps, WorkshopSegment, ContentSegment);
-                if (game.SteamAppId is { } appId)
+                // 与工坊页/状态读取统一走 ResolveAppId：独立安装（SteamAppId=null）也能靠 gameId 兜底到
+                // CK3 的 1158310，避免只扫错误的 appid 目录。
+                if (WorkshopSourceChooser.ResolveAppId(game.SteamAppId, game.GameId) is { } appId)
                 {
                     candidates.Add(Path.Combine(contentRoot, appId.ToString(CultureInfo.InvariantCulture)));
                 }

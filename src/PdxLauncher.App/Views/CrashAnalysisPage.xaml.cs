@@ -10,7 +10,8 @@ using PdxLauncher.Core.Contracts;
 
 /// <summary>
 /// 「崩溃分析」页：诊断结论、崩溃记录、日志证据、启动链路。
-/// 只读页面：只读取游戏崩溃包/日志，打开目录与复制报告；不写游戏目录、不删文件、不联网。
+/// 只读页面：读取游戏崩溃包/日志、Windows 事件日志与 PC 状态，打开目录与复制报告；
+/// 不写游戏目录、不删文件。当前分析不发起网络请求；若将来补充，必须走 OnlineHosts 白名单出口。
 /// </summary>
 public sealed partial class CrashAnalysisPage : Page
 {
@@ -32,11 +33,12 @@ public sealed partial class CrashAnalysisPage : Page
     /// <summary>XAML 里取界面文案的入口（切语言时由 Localizer 的属性变更驱动）。</summary>
     public Localizer L => Localizer.Instance;
 
-    // 左侧四个分区的序号，与 XAML 里 secOverview / secCrashes / secLogs / secLaunch 的顺序一致。
+    // 左侧五个分区的序号，与 XAML 里 secOverview / secCrashes / secLogs / secLaunch / secSession 一致。
     private const int OverviewSectionIndex = 0;
     private const int CrashesSectionIndex = 1;
     private const int LogsSectionIndex = 2;
     private const int LaunchSectionIndex = 3;
+    private const int SessionSectionIndex = 4;
 
     // ------------------------------------------------------------ 生命周期
 
@@ -114,6 +116,7 @@ public sealed partial class CrashAnalysisPage : Page
             (OverviewSectionIndex, secOverview),
             (CrashesSectionIndex, secCrashes),
             (LaunchSectionIndex, secLaunch),
+            (SessionSectionIndex, secSession),
         };
 
         foreach (var (sectionIndex, element) in sections)

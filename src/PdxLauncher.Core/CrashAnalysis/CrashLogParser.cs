@@ -26,6 +26,13 @@ public sealed record ModMetadata(string? Name, string? Version, string? Supporte
     public static ModMetadata Empty { get; } = new(null, null, null);
 }
 
+/// <summary>database_conflicts.log 里的一条定义覆盖记录。</summary>
+/// <param name="Key">被覆盖的定义键。</param>
+/// <param name="Database">所属数据库（小写，如 common/landed_titles）。</param>
+/// <param name="FilePath">提供覆盖版本的脚本文件路径。</param>
+/// <param name="Line">脚本行号（能解析时）。</param>
+public sealed record DbOverrideRecord(string Key, string Database, string FilePath, int? Line);
+
 /// <summary>
 /// 一条以时间戳开头的日志记录；没有时间戳的续行跟随所属记录。
 /// <see cref="RawLines"/> 保留原始行，<see cref="Text"/> 是整块文本，供模式匹配与证据展示。
@@ -61,6 +68,10 @@ public static class CrashLogParser
     private static readonly Regex MetaLinePattern = new(
         @"^\s*(?<key>[A-Za-z0-9_]+)\s*:\s*(?<value>.*)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex DbOverridePattern = new(
+        @"Overriding entry '(?<key>[^']+)' for database '(?<database>[^']+)' in 'file: (?<file>[^']+?) line (?<line>\d+)'",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     /// <summary>解析 <c>exception.txt</c>；格式不认识时仍返回可用的标题/摘要。</summary>
     public static ExceptionInfo ParseException(string? text)
@@ -168,6 +179,35 @@ public static class CrashLogParser
         }
 
         return values;
+    }
+
+    /// <summary>解析 <c>database_conflicts.log</c> 的定义覆盖行；重复行去重，格式不认识的直接跳过。</summary>
+    public static IReadOnlyList<DbOverrideRecord> ParseDbConflicts(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return Array.Empty<DbOverrideRecord>();
+        }
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var records = new List<DbOverrideRecord>();
+        foreach (Match match in DbOverridePattern.Matches(Normalize(text)))
+        {
+            string key = match.Groups["key"].Value.Trim();
+            string database = match.Groups["database"].Value.Trim().ToLowerInvariant();
+            string file = match.Groups["file"].Value.Trim();
+            if (key.Length == 0 || file.Length == 0 || !seen.Add(key + "\u0001" + database + "\u0001" + file))
+            {
+                continue;
+            }
+
+            int? line = int.TryParse(match.Groups["line"].Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : null;
+            records.Add(new DbOverrideRecord(key, database, file, line));
+        }
+
+        return records;
     }
 
     /// <summary>解析 Mod 的 <c>.metadata/metadata.json</c>；字段缺失或损坏时返回空结果。</summary>

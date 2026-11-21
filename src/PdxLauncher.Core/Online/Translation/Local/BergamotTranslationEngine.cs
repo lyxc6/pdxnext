@@ -14,7 +14,7 @@ using PdxLauncher.Core.Online.Translation;
 /// 的术语表纠正。
 /// </para>
 /// </summary>
-public sealed class BergamotTranslationEngine : ITranslationEngine, IDisposable
+public sealed class BergamotTranslationEngine : IStreamingTranslationEngine, IDisposable
 {
     /// <summary>引擎标识。</summary>
     public const string EngineId = "bergamot";
@@ -95,13 +95,24 @@ public sealed class BergamotTranslationEngine : ITranslationEngine, IDisposable
         string targetLanguage,
         CancellationToken cancellationToken)
     {
-        var results = new List<string?>(texts.Count);
-        foreach (var text in texts)
-        {
-            results.Add(await TranslateAsync(text, targetLanguage, cancellationToken).ConfigureAwait(false));
-        }
-
+        var results = new string?[texts.Count];
+        await TranslateBatchStreamingAsync(texts, targetLanguage, cancellationToken, (i, text) => results[i] = text)
+            .ConfigureAwait(false);
         return results;
+    }
+
+    /// <inheritdoc />
+    public async Task TranslateBatchStreamingAsync(
+        IReadOnlyList<string> texts,
+        string targetLanguage,
+        CancellationToken cancellationToken,
+        Action<int, string?> onItem)
+    {
+        for (var i = 0; i < texts.Count; i++)
+        {
+            var translated = await TranslateAsync(texts[i], targetLanguage, cancellationToken).ConfigureAwait(false);
+            onItem(i, translated);
+        }
     }
 
     private static LocalTranslationModelKind? ResolveDirection(string targetLanguage)

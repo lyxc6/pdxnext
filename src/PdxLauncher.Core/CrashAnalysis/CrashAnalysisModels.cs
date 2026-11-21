@@ -1,5 +1,7 @@
 namespace PdxLauncher.Core.CrashAnalysis;
 
+using PdxLauncher.Core.Contracts;
+
 /// <summary>一条诊断结论的严重度。排序时 Critical 在最前，Info 在最后。</summary>
 public enum CrashSeverity
 {
@@ -35,6 +37,22 @@ public enum CrashFindingCode
     CrashCauseUnknown,
     CorruptGameSettings,
     MapLocatorIncomplete,
+
+    // PC 侧取证（来自崩溃码 / Windows 事件日志 / meta.yml / 系统快照）
+    PcOutOfMemoryCrash,
+    PcDiskReadCrash,
+    PcIllegalInstructionCrash,
+    PcGraphicsDriverCrash,
+    PcOverlayCrash,
+    PcHardwareErrorCrash,
+    PcPageFileDisabled,
+    PcLowMemoryConfig,
+    PcLowVideoMemory,
+    PcLowDiskSpace,
+    PcOldGraphicsDriver,
+
+    // database_conflicts.log：一个 mod 的定义覆盖了另一个
+    DatabaseOverride,
 }
 
 /// <summary>
@@ -152,7 +170,9 @@ public sealed record CrashAnalysisReport(
     IReadOnlyList<CrashLogGroup> Groups,
     CrashLaunchChain LaunchChain,
     bool ModListAvailable,
-    string? LoadFilePath)
+    string? LoadFilePath,
+    IReadOnlyList<WindowsEventEvidence> PcEvents,
+    PcSystemSnapshot PcSystem)
 {
     /// <summary>最近一个崩溃包；没有时为 null。</summary>
     public CrashBundleInfo? LatestCrash => Crashes.Count > 0 ? Crashes[0] : null;

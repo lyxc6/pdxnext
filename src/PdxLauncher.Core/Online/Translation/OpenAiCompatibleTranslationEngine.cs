@@ -13,7 +13,7 @@ using PdxLauncher.Core.Abstractions;
 /// 退化成逐条翻译，保证正确性优先。
 /// </para>
 /// </summary>
-public sealed class OpenAiCompatibleTranslationEngine : ITranslationEngine
+public sealed class OpenAiCompatibleTranslationEngine : IStreamingTranslationEngine
 {
     /// <summary>批量翻译的分隔符（模型必须原样回吐）。</summary>
     public const string BatchSeparator = "\n<<<PDX_SPLIT>>>\n";
@@ -74,36 +74,56 @@ public sealed class OpenAiCompatibleTranslationEngine : ITranslationEngine
         string targetLanguage,
         CancellationToken cancellationToken)
     {
+        var results = new string?[texts.Count];
+        await TranslateBatchStreamingAsync(texts, targetLanguage, cancellationToken, (i, text) => results[i] = text)
+            .ConfigureAwait(false);
+        return results;
+    }
+
+    /// <inheritdoc />
+    public async Task TranslateBatchStreamingAsync(
+        IReadOnlyList<string> texts,
+        string targetLanguage,
+        CancellationToken cancellationToken,
+        Action<int, string?> onItem)
+    {
         ArgumentNullException.ThrowIfNull(texts);
         if (texts.Count == 0)
         {
-            return [];
+            return;
         }
 
         if (!IsConfigured)
         {
-            return new string?[texts.Count];
+            for (var i = 0; i < texts.Count; i++)
+            {
+                onItem(i, null);
+            }
+            return;
         }
 
-        // 先试一次批量；模型不守规矩就逐条重来。
+        // 先试一次批量；模型不守规矩就逐条重来，每条一就绪就上报。
         var batched = await RequestBatchAsync(texts, targetLanguage, cancellationToken).ConfigureAwait(false);
         if (batched is not null)
         {
-            return batched;
+            for (var i = 0; i < batched.Count && i < texts.Count; i++)
+            {
+                onItem(i, batched[i]);
+            }
+            return;
         }
 
-        var results = new string?[texts.Count];
         for (var i = 0; i < texts.Count; i++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var single = await RequestBatchAsync([texts[i]], targetLanguage, cancellationToken).ConfigureAwait(false);
-            results[i] = single is { Count: 1 } ? single[0] : null;
-            if (results[i] is null && !cancellationToken.IsCancellationRequested)
+            var translated = single is { Count: 1 } ? single[0] : null;
+            if (translated is null && !cancellationToken.IsCancellationRequested)
             {
                 _logger.Warn("自填翻译 API 单条翻译失败（第 " + (i + 1) + " 条）");
             }
+            onItem(i, translated);
         }
-
-        return results;
     }
 
     /// <summary>

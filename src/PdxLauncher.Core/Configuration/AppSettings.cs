@@ -236,13 +236,13 @@ public sealed class AppSettings
     public bool TranslateEnabled { get; set; } = true;
 
     /// <summary>
-    /// 本地翻译模型是否常驻内存（默认常驻）。
+    /// 本地翻译模型是否常驻内存（默认不常驻，空闲 5 分钟卸载）。
     /// <para>
-    /// 开着时模型加载一次就一直留在内存里，翻译随点随出；关掉后空闲 5 分钟卸载，
-    /// 把约 1.3 GB 还给系统，下次翻译再重新加载（第一次会慢几秒）。
+    /// 2B GGUF 权重约 1.3 GB，常驻会把工作集长期顶在 2 GB 以上；
+    /// 默认关掉让它闲时自动卸载，第一次翻译会慢几秒。需要随点随出的用户可以手动打开。
     /// </para>
     /// </summary>
-    public bool KeepTranslationModelLoaded { get; set; } = true;
+    public bool KeepTranslationModelLoaded { get; set; } = false;
 
     /// <summary>
     /// 翻译引擎的选择方式，取值见 <see cref="TranslationEngineModes"/>；

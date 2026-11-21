@@ -16,6 +16,7 @@ using PdxLauncher.Core.Playsets;
 public static class ModCatalogChecks
 {
     private const string WorkshopAppId = "529340";
+    private const string Ck3AppId = "1158310";
 
     /// <summary>自检入口（由 Program.cs 反射发现）。</summary>
     public static int Run(IFileSystem fs)
@@ -30,6 +31,9 @@ public static class ModCatalogChecks
         CheckMetadataIdFallback(fs, logger);
         CheckLocalModDoesNotInventSteamId(fs, logger);
         CheckComposePrefersNumericSqliteId(fs, logger);
+        CheckCk3WorkshopDescriptorFallback(fs, logger);
+        CheckWorkshopDescriptorDoesNotDuplicatePointer(fs, logger);
+        CheckCk3AppIdFallbackForStandaloneInstall(fs, logger);
 
         return ChecksContext.Failures == before ? 0 : 1;
     }
@@ -189,13 +193,140 @@ public static class ModCatalogChecks
         }
     }
 
+    /// <summary>
+    /// CK3 工坊目录没有 .metadata，只有 descriptor.mod；扫描必须能回退读到它，
+    /// 否则订阅并下载后 Mod 库依然搜不到（用户实测「Mod Doctor」就是这个症状）。
+    /// </summary>
+    private static void CheckCk3WorkshopDescriptorFallback(IFileSystem fs, NullLogger logger)
+    {
+        Console.WriteLine("[ModCatalogChecks] CK3 工坊 descriptor.mod 回退");
+        var root = PlaysetChecks.CreateTempRoot(fs, "modcatalog-ck3-descriptor");
+        try
+        {
+            var game = CreateGame(fs, root, "ck3", Ck3AppId);
+            var modDirectory = Path.Combine(
+                root,
+                "library",
+                "steamapps",
+                "workshop",
+                "content",
+                Ck3AppId,
+                "3613769385");
+            fs.EnsureDirectory(modDirectory);
+            // 只写 descriptor.mod，刻意不写 .metadata/metadata.json。
+            fs.WriteAllTextAtomic(
+                Path.Combine(modDirectory, "descriptor.mod"),
+                "name=\"CK3 Mod Doctor\"\nversion=\"2.1.0\"\nsupported_version=\"1.19.*\"\n");
+
+            var mod = DiscoverSingle(fs, logger, game, "CK3 Mod Doctor");
+            ChecksContext.Equal("CK3 工坊 mod 的 steamId 来自工坊目录名", "3613769385", mod.SteamId ?? "<null>");
+            ChecksContext.Equal("CK3 工坊 mod 的 requiredVersion", "1.19.*", mod.RequiredVersion);
+            ChecksContext.Equal("CK3 工坊 mod 的 modVersion", "2.1.0", mod.ModVersion ?? "<null>");
+            ChecksContext.Check(
+                "CK3 工坊 mod 记为订阅来源",
+                ModOrigins.IsSubscribed(mod.Source, mod.SteamId),
+                mod.Source ?? "<null>");
+            ChecksContext.Equal(
+                "CK3 工坊 mod 能拼出详情页地址",
+                "https://steamcommunity.com/sharedfiles/filedetails/?id=3613769385",
+                SteamWorkshop.GetBrowserAddress(SteamWorkshop.GetWorkshopId(mod.SteamId, mod.GameRegistryId)) ?? "<null>");
+        }
+        finally
+        {
+            PlaysetChecks.TryDelete(fs, root);
+        }
+    }
+
+    /// <summary>
+    /// 官方启动器生成的 mod\ugc_*.mod 指针与工坊 descriptor.mod 指向同一 mod 时，
+    /// 扫描只应产生一条，且保留指针里更全的信息（gameRegistryId）。
+    /// </summary>
+    private static void CheckWorkshopDescriptorDoesNotDuplicatePointer(IFileSystem fs, NullLogger logger)
+    {
+        Console.WriteLine("[ModCatalogChecks] 工坊 descriptor 与 .mod 指针去重");
+        var root = PlaysetChecks.CreateTempRoot(fs, "modcatalog-ck3-dedup");
+        try
+        {
+            var game = CreateGame(fs, root, "ck3", Ck3AppId);
+            var modDirectory = Path.Combine(
+                root,
+                "library",
+                "steamapps",
+                "workshop",
+                "content",
+                Ck3AppId,
+                "3742679779");
+            fs.EnsureDirectory(modDirectory);
+            fs.WriteAllTextAtomic(
+                Path.Combine(modDirectory, "descriptor.mod"),
+                "name=\"Duplicate Mod\"\nversion=\"9.9\"\nsupported_version=\"1.20.*\"\n");
+            fs.WriteAllTextAtomic(
+                Path.Combine(game.ModDir, "ugc_3742679779.mod"),
+                "name=\"Duplicate Mod\"\nversion=\"1.0\"\nsupported_version=\"1.19.*\"\npath=\"" + modDirectory.Replace('\\', '/') + "\"\nremote_file_id=\"3742679779\"\n");
+
+            var mods = Discover(fs, logger, game)
+                .Where(static mod => string.Equals(mod.Name, "Duplicate Mod", StringComparison.Ordinal))
+                .ToList();
+            ChecksContext.Equal("同一工坊 mod 只出现一条", 1, mods.Count);
+            if (mods.Count == 1)
+            {
+                // ScanModDescriptors 先执行，保留指针记录（带 registryId）。
+                ChecksContext.Equal(
+                    "去重保留 .mod 指针的 gameRegistryId",
+                    "mod/ugc_3742679779.mod",
+                    mods[0].GameRegistryId);
+            }
+        }
+        finally
+        {
+            PlaysetChecks.TryDelete(fs, root);
+        }
+    }
+
+    /// <summary>
+    /// 独立安装（SteamAppId 为 null）时靠 gameId 兜底解析到 CK3 的 1158310，
+    /// 仍能扫到工坊目录里的 descriptor.mod。
+    /// </summary>
+    private static void CheckCk3AppIdFallbackForStandaloneInstall(IFileSystem fs, NullLogger logger)
+    {
+        Console.WriteLine("[ModCatalogChecks] CK3 独立安装 appid 兜底");
+        var root = PlaysetChecks.CreateTempRoot(fs, "modcatalog-ck3-appid");
+        try
+        {
+            var game = CreateGame(fs, root, "ck3", steamAppId: null);
+            var modDirectory = Path.Combine(
+                root,
+                "library",
+                "steamapps",
+                "workshop",
+                "content",
+                Ck3AppId,
+                "2879823725");
+            fs.EnsureDirectory(modDirectory);
+            fs.WriteAllTextAtomic(
+                Path.Combine(modDirectory, "descriptor.mod"),
+                "name=\"Standalone CK3 Mod\"\nversion=\"1.2\"\nsupported_version=\"1.19.*\"\n");
+
+            var mod = DiscoverSingle(fs, logger, game, "Standalone CK3 Mod");
+            ChecksContext.Equal("独立安装兜底后仍能解析工坊 id", "2879823725", mod.SteamId ?? "<null>");
+        }
+        finally
+        {
+            PlaysetChecks.TryDelete(fs, root);
+        }
+    }
+
     // ------------------------------------------------------------------
     // 辅助
     // ------------------------------------------------------------------
 
     private static GameInstallation CreateGame(IFileSystem fs, string root)
+        => CreateGame(fs, root, "victoria3", WorkshopAppId);
+
+    private static GameInstallation CreateGame(IFileSystem fs, string root, string gameId, string? steamAppId)
     {
-        // <root>/library/steamapps/common/Victoria 3 → workshop 从 ../../workshop/content/<appid> 推导。
+        // <root>/library/steamapps/common/<game> → workshop 从 ../../workshop/content/<appid> 推导。
+        // 目录名沿用 Victoria 3 不影响推导（只看相对层级），所以 CK3 用例也能复用。
         var installRoot = Path.Combine(root, "library", "steamapps", "common", "Victoria 3");
         var gameDataDir = Path.Combine(root, "documents", "Victoria 3");
         var modDir = Path.Combine(gameDataDir, "mod");
@@ -204,13 +335,15 @@ public static class ModCatalogChecks
         fs.EnsureDirectory(modDir);
 
         return PlaysetChecks.CreateGame(
-            "victoria3",
+            gameId,
             installRoot,
             LoadFileFormat.ContentLoadV1_1,
             gameDataDir,
             Path.Combine(installRoot, "game", "dlc"),
             modDir,
-            int.Parse(WorkshopAppId, System.Globalization.CultureInfo.InvariantCulture));
+            steamAppId is null
+                ? null
+                : int.Parse(steamAppId, System.Globalization.CultureInfo.InvariantCulture));
     }
 
     private static IReadOnlyList<PlaySetMod> Discover(IFileSystem fs, NullLogger logger, GameInstallation game)

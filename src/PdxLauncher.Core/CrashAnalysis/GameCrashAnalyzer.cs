@@ -10,8 +10,12 @@ using PdxLauncher.Core.LoadFiles;
 /// <summary>
 /// 崩溃分析编排器：只读扫描游戏自己的崩溃包与日志，解析 Mod 归属，最后交给 <see cref="CrashRules"/> 下结论。
 /// <para>
-/// 不启动游戏、不联网、不写游戏目录；单个文件读取失败只记 Warn 并跳过，
+/// 不启动游戏、不写游戏目录；单个文件读取失败只记 Warn 并跳过，
 /// 保证「分析失败」不会变成「页面打不开」。
+/// <para>
+/// 分析主体纯本地只读。若接入联网查询（如工坊作者说明），只允许经 <c>OnlineHosts</c>
+/// 白名单出口，失败降级为空证据，不能影响页面打开。
+/// </para>
 /// </para>
 /// </summary>
 public sealed class GameCrashAnalyzer
@@ -28,19 +32,24 @@ public sealed class GameCrashAnalyzer
         "system.log",
         "graphics.log",
         "warning.log",
+        "database_conflicts.log",
     ];
 
     private readonly IFileSystem _fileSystem;
     private readonly ILoadFileWriter _loadFiles;
     private readonly IAppLogger _logger;
     private readonly IClock _clock;
+    private readonly IWindowsEventLogReader _eventLog;
+    private readonly IPcSystemSnapshotReader _systemSnapshot;
 
     /// <summary>创建分析器。</summary>
     public GameCrashAnalyzer(
         IFileSystem fileSystem,
         ILoadFileWriter loadFiles,
         IAppLogger logger,
-        IClock clock)
+        IClock clock,
+        IWindowsEventLogReader? eventLog = null,
+        IPcSystemSnapshotReader? systemSnapshot = null)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(loadFiles);
@@ -51,6 +60,8 @@ public sealed class GameCrashAnalyzer
         _loadFiles = loadFiles;
         _logger = logger;
         _clock = clock;
+        _eventLog = eventLog ?? NullWindowsEventLogReader.Instance;
+        _systemSnapshot = systemSnapshot ?? NullPcSystemSnapshotReader.Instance;
     }
 
     /// <summary>分析一款游戏的崩溃与启动失败证据。</summary>
@@ -119,6 +130,12 @@ public sealed class GameCrashAnalyzer
         }
 
         bool logsExist = logInputs.Count > 0;
+
+        // PC 侧取证：事件日志和系统快照查询失败时一律当「无证据」，绝不影响崩溃页打开。
+        var pcEvents = ReadPcEvents(latestCrash?.Timestamp, cancellationToken);
+        var pcSystem = ReadPcSystem(game, cancellationToken);
+        var pcFindings = BuildPcFindings(latestCrash, pcEvents, pcSystem, modResult.Drafts, cancellationToken);
+
         var findings = CrashRules.Evaluate(
             game,
             gameDataExists,
@@ -133,7 +150,8 @@ public sealed class GameCrashAnalyzer
             settingsPath,
             logsDirectory,
             crashesDirectory,
-            startupDuration);
+            startupDuration,
+            pcFindings);
 
         var groups = signals.WithModNames(sourceToMod);
         var launchChain = new CrashLaunchChain(
@@ -158,7 +176,155 @@ public sealed class GameCrashAnalyzer
             groups,
             launchChain,
             modResult.ModListAvailable,
-            modResult.LoadFilePath);
+            modResult.LoadFilePath,
+            pcEvents,
+            pcSystem);
+    }
+
+    // ------------------------------------------------------------ PC 侧取证
+
+    private IReadOnlyList<WindowsEventEvidence> ReadPcEvents(
+        DateTimeOffset? crashTime,
+        CancellationToken cancellationToken)
+    {
+        if (crashTime is null)
+        {
+            return Array.Empty<WindowsEventEvidence>();
+        }
+
+        try
+        {
+            return _eventLog.ReadNear(crashTime.Value, 5, 40, cancellationToken) ?? Array.Empty<WindowsEventEvidence>();
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.Warn("读取 Windows 事件日志失败：" + exception.Message);
+            return Array.Empty<WindowsEventEvidence>();
+        }
+    }
+
+    private PcSystemSnapshot ReadPcSystem(GameInstallation game, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            return _systemSnapshot.Read(game.GameDataDir, game.InstallRoot)
+                ?? PcSystemSnapshot.Unknown;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.Warn("读取 PC 系统状态失败：" + exception.Message);
+            return PcSystemSnapshot.Unknown;
+        }
+    }
+
+    private IReadOnlyList<CrashFinding> BuildPcFindings(
+        CrashBundleInfo? latestCrash,
+        IReadOnlyList<WindowsEventEvidence> pcEvents,
+        PcSystemSnapshot pcSystem,
+        IReadOnlyList<ModDraft> drafts,
+        CancellationToken cancellationToken)
+    {
+        var findings = new List<CrashFinding>();
+
+        if (PcForensics.FromExceptionCode(latestCrash?.ExceptionCode) is { } codeFinding)
+        {
+            findings.Add(codeFinding);
+        }
+
+        findings.AddRange(PcForensics.FromEvents(pcEvents));
+
+        // 模型数量只在 meta 显示内存/显存偏低时才值得扫描（正常配置不需要）。
+        int modelCount = NeedsHeavyScan(latestCrash?.Meta)
+            ? CountModelFiles(drafts, cancellationToken)
+            : 0;
+        findings.AddRange(PcForensics.FromSystemState(latestCrash?.Meta, pcSystem, modelCount));
+        return findings;
+    }
+
+    private static bool NeedsHeavyScan(IReadOnlyDictionary<string, string>? meta)
+    {
+        static long? Bytes(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return null;
+            }
+
+            var match = System.Text.RegularExpressions.Regex.Match(
+                raw, @"(?<n>\d+(?:\.\d+)?)\s*(?<u>[KMGT]?B)?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (!match.Success || !double.TryParse(match.Groups["n"].Value, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var value))
+            {
+                return null;
+            }
+
+            double multiplier = match.Groups["u"].Value.ToUpperInvariant() switch
+            {
+                "GB" => 1024d * 1024d * 1024d,
+                "MB" => 1024d * 1024d,
+                _ => 1d,
+            };
+            return (long)(value * multiplier);
+        }
+
+        long? ram = meta is not null && meta.TryGetValue("SystemMemory", out var r) ? Bytes(r) : null;
+        long? vram = meta is not null && meta.TryGetValue("GPUDedicatedMemory", out var v) ? Bytes(v) : null;
+        return ram is { } r2 && r2 < 15L * 1024 * 1024 * 1024
+            || vram is { } v2 && v2 < 4L * 1024 * 1024 * 1024;
+    }
+
+    private int CountModelFiles(IReadOnlyList<ModDraft> drafts, CancellationToken cancellationToken)
+    {
+        const int cap = 4000;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int count = 0;
+        foreach (var draft in drafts)
+        {
+            if (count >= cap)
+            {
+                break;
+            }
+
+            if (!draft.Exists || draft.IsArchive)
+            {
+                continue;
+            }
+
+            string modelsDirectory = _fileSystem.Combine(draft.Path, "gfx", "models");
+            if (!_fileSystem.DirectoryExists(modelsDirectory))
+            {
+                continue;
+            }
+
+            try
+            {
+                foreach (string file in _fileSystem.EnumerateFiles(modelsDirectory, "*", true))
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (!seen.Add(_fileSystem.GetFullPath(file)))
+                    {
+                        continue;
+                    }
+
+                    if (file.EndsWith(".mesh", StringComparison.OrdinalIgnoreCase)
+                        || file.EndsWith(".dds", StringComparison.OrdinalIgnoreCase))
+                    {
+                        count++;
+                        if (count >= cap)
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                _logger.Warn("统计 Mod 模型文件失败：" + draft.Path + "：" + exception.Message);
+            }
+        }
+
+        return count;
     }
 
     // ------------------------------------------------------------ 崩溃包

@@ -9,6 +9,11 @@ using System.Text;
 /// <para>
 /// 翻译失败（引擎返回 null 或空串）时保留原文，绝不把内容改空。
 /// </para>
+/// <para>
+/// 批量委托一次收齐整篇文档的可译文本再统一翻译：详情页原本「每段一次批次」，
+/// 20 段简介就是 20 次排队 + 回落链，是长简介卡几分钟的直接原因。
+/// 两次同构遍历保证收集顺序与回填顺序一一对应，不改块结构与行内节点语义。
+/// </para>
 /// </summary>
 public sealed class MarkdownTranslator
 {
@@ -19,15 +24,30 @@ public sealed class MarkdownTranslator
     /// <param name="cancellationToken">取消令牌。</param>
     public delegate Task<string?> TextTranslator(string text, CancellationToken cancellationToken);
 
-    private readonly TextTranslator _translate;
+    /// <summary>
+    /// 一次翻译整篇文档里收集到的全部文本；返回数组与入参一一对应，null/空串表示保留原文。
+    /// </summary>
+    public delegate Task<IReadOnlyList<string?>> BatchTextTranslator(
+        IReadOnlyList<string> texts,
+        CancellationToken cancellationToken);
 
-    /// <summary>创建翻译器。</summary>
+    private readonly TextTranslator? _translate;
+    private readonly BatchTextTranslator? _translateBatch;
+
+    /// <summary>创建逐段翻译器（兼容旧调用方与自检）。</summary>
     /// <param name="translate">文本翻译委托。</param>
     public MarkdownTranslator(TextTranslator translate)
     {
         ArgumentNullException.ThrowIfNull(translate);
-
         _translate = translate;
+    }
+
+    /// <summary>创建批量翻译器：整篇文档只调用一次委托。</summary>
+    /// <param name="translateBatch">批量翻译委托。</param>
+    public MarkdownTranslator(BatchTextTranslator translateBatch)
+    {
+        ArgumentNullException.ThrowIfNull(translateBatch);
+        _translateBatch = translateBatch;
     }
 
     /// <summary>
@@ -42,6 +62,40 @@ public sealed class MarkdownTranslator
             return MarkdownDocument.Empty;
         }
 
+        if (_translate is not null)
+        {
+            return await TranslateSequentiallyAsync(document, cancellationToken).ConfigureAwait(false);
+        }
+
+        // 第一遍只收集：同构遍历保证顺序与第二遍回填一致。
+        var sources = new List<string>();
+        Transform(document, text =>
+        {
+            sources.Add(text);
+            return text;
+        });
+
+        if (sources.Count == 0)
+        {
+            return document;
+        }
+
+        var results = await _translateBatch!(sources, cancellationToken).ConfigureAwait(false);
+        var cursor = 0;
+        return Transform(document, _ =>
+        {
+            var translated = cursor < results.Count ? results[cursor] : null;
+            cursor++;
+            // 译不出来保留原文；这与逐段路径的 FlushBufferAsync 口径一致。
+            return string.IsNullOrWhiteSpace(translated) ? sources[Math.Min(cursor - 1, sources.Count - 1)] : translated.Trim();
+        });
+    }
+
+    /// <summary>旧的单段委托路径：逐段 await，保持原有行为。</summary>
+    private async Task<MarkdownDocument> TranslateSequentiallyAsync(
+        MarkdownDocument document,
+        CancellationToken cancellationToken)
+    {
         var blocks = new List<MarkdownBlock>(document.Blocks.Count);
         foreach (var block in document.Blocks)
         {
@@ -51,7 +105,7 @@ public sealed class MarkdownTranslator
         return new MarkdownDocument(blocks, document.IsTruncated);
     }
 
-    /// <summary>翻译一个块级节点。</summary>
+    /// <summary>翻译一个块级节点（仅逐段路径使用）。</summary>
     private async Task<MarkdownBlock> TranslateBlockAsync(MarkdownBlock block, CancellationToken cancellationToken)
     {
         switch (block)
@@ -90,7 +144,7 @@ public sealed class MarkdownTranslator
         }
     }
 
-    /// <summary>翻译一组行内节点：连续纯文本合并成一次翻译请求。</summary>
+    /// <summary>翻译一组行内节点：连续纯文本合并成一次翻译请求（仅逐段路径使用）。</summary>
     private async Task<IReadOnlyList<MarkdownInline>> TranslateInlinesAsync(
         IReadOnlyList<MarkdownInline> inlines,
         CancellationToken cancellationToken)
@@ -134,6 +188,118 @@ public sealed class MarkdownTranslator
 
         await FlushBufferAsync(buffer, result, cancellationToken).ConfigureAwait(false);
         return result;
+    }
+
+    /// <summary>
+    /// 同构遍历：按原结构走一遍文档，把每段连续纯文本交给 <paramref name="translateText"/>，
+    /// 用返回值替换该段文本。收集遍返回原文，回填遍返回译文（空则保留原文）。
+    /// </summary>
+    private static MarkdownDocument Transform(MarkdownDocument document, Func<string, string> translateText)
+    {
+        var blocks = new List<MarkdownBlock>(document.Blocks.Count);
+        foreach (var block in document.Blocks)
+        {
+            blocks.Add(TransformBlock(block, translateText));
+        }
+
+        return new MarkdownDocument(blocks, document.IsTruncated);
+    }
+
+    private static MarkdownBlock TransformBlock(MarkdownBlock block, Func<string, string> translateText)
+    {
+        switch (block)
+        {
+            case MarkdownHeading heading:
+                return heading with { Inlines = TransformInlines(heading.Inlines, translateText) };
+            case MarkdownParagraph paragraph:
+                return paragraph with { Inlines = TransformInlines(paragraph.Inlines, translateText) };
+            case MarkdownListItem item:
+                return item with { Inlines = TransformInlines(item.Inlines, translateText) };
+            case MarkdownQuote quote:
+            {
+                var inner = new List<MarkdownBlock>(quote.Blocks.Count);
+                foreach (var child in quote.Blocks)
+                {
+                    inner.Add(TransformBlock(child, translateText));
+                }
+
+                return quote with { Blocks = inner };
+            }
+
+            case MarkdownCodeBlock:
+            case MarkdownRule:
+            default:
+                return block;
+        }
+    }
+
+    private static IReadOnlyList<MarkdownInline> TransformInlines(
+        IReadOnlyList<MarkdownInline> inlines,
+        Func<string, string> translateText)
+    {
+        var result = new List<MarkdownInline>(inlines.Count);
+        var buffer = new List<MarkdownTextInline>();
+
+        foreach (var inline in inlines)
+        {
+            if (inline is MarkdownTextInline text)
+            {
+                buffer.Add(text);
+                continue;
+            }
+
+            FlushBuffer(buffer, result, translateText);
+
+            switch (inline)
+            {
+                case MarkdownLinkInline link when IsBareUrlLink(link):
+                    result.Add(link);
+                    break;
+                case MarkdownLinkInline link:
+                    result.Add(link with { Inlines = TransformInlines(link.Inlines, translateText) });
+                    break;
+                case MarkdownStyledInline styled:
+                    result.Add(styled with { Inlines = TransformInlines(styled.Inlines, translateText) });
+                    break;
+                default:
+                    result.Add(inline);
+                    break;
+            }
+        }
+
+        FlushBuffer(buffer, result, translateText);
+        return result;
+    }
+
+    /// <summary>把攒下的连续纯文本一次性交给委托并写回结果。</summary>
+    private static void FlushBuffer(
+        List<MarkdownTextInline> buffer,
+        List<MarkdownInline> result,
+        Func<string, string> translateText)
+    {
+        if (buffer.Count == 0)
+        {
+            return;
+        }
+
+        var joined = string.Concat(buffer.Select(item => item.Text));
+        var original = buffer.ToList();
+        var trimmed = joined.Trim();
+        buffer.Clear();
+
+        if (trimmed.Length == 0)
+        {
+            return;
+        }
+
+        var translated = translateText(trimmed);
+        if (string.IsNullOrWhiteSpace(translated))
+        {
+            result.AddRange(original);
+            return;
+        }
+
+        result.Add(new MarkdownTextInline(translated.Trim()));
     }
 
     /// <summary>
@@ -188,7 +354,7 @@ public sealed class MarkdownTranslator
         }
     }
 
-    /// <summary>把攒下的连续纯文本一次性翻译后写进结果。</summary>
+    /// <summary>把攒下的连续纯文本一次性翻译后写进结果（逐段路径）。</summary>
     private async Task FlushBufferAsync(
         List<MarkdownTextInline> buffer,
         List<MarkdownInline> result,
@@ -209,7 +375,7 @@ public sealed class MarkdownTranslator
             return;
         }
 
-        var translated = await _translate(trimmed, cancellationToken).ConfigureAwait(false);
+        var translated = await _translate!(trimmed, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(translated))
         {
             // 译不出来就保留原文。

@@ -251,6 +251,7 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
             {
                 AppServices.Logger.Info(
                     "已启动 " + game.DisplayName + "（pid=" + (result.ProcessId?.ToString() ?? "未知") + "）");
+                AppServices.GameSessionMonitor.Begin(game, result.ProcessId);
             }
 
             LaunchCompleted?.Invoke(this, result);

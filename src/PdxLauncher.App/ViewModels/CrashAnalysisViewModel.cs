@@ -30,6 +30,10 @@ public sealed class CrashAnalysisViewModel : LocalizedObservableObject
     private bool _hasClear;
     private string _modListHint = string.Empty;
 
+    private GameSessionSnapshot? _session;
+    private string _sessionText = string.Empty;
+    private bool _hasSession;
+
     /// <summary>概览摘要卡。</summary>
     public ObservableCollection<CrashSummaryRowViewModel> SummaryRows { get; } = new();
 
@@ -53,6 +57,20 @@ public sealed class CrashAnalysisViewModel : LocalizedObservableObject
 
     /// <summary>当前是否选中了游戏。</summary>
     public bool HasGame => _hasGame;
+
+    /// <summary>「本次游戏」分区文本（无数据时为空）。</summary>
+    public string SessionText
+    {
+        get => _sessionText;
+        private set => SetProperty(ref _sessionText, value);
+    }
+
+    /// <summary>是否有本次游戏会话快照。</summary>
+    public bool HasSession
+    {
+        get => _hasSession;
+        private set => SetProperty(ref _hasSession, value);
+    }
 
     /// <summary>没有选中游戏。</summary>
     public bool HasNoGame => !_hasGame;
@@ -184,6 +202,7 @@ public sealed class CrashAnalysisViewModel : LocalizedObservableObject
         IsBusy = true;
         try
         {
+            RefreshSession();
             var game = AppServices.CurrentGame;
             _hasGame = game is not null;
             if (game is null)
@@ -225,6 +244,70 @@ public sealed class CrashAnalysisViewModel : LocalizedObservableObject
             IsBusy = false;
         }
     }
+
+    /// <summary>从监听器读取最近一次会话并重建「本次游戏」文本。</summary>
+    public void RefreshSession()
+    {
+        _session = AppServices.GameSessionMonitor.LastSession;
+        HasSession = _session is not null;
+        SessionText = BuildSessionText(_session);
+    }
+
+    private string BuildSessionText(GameSessionSnapshot? session)
+    {
+        if (session is null)
+        {
+            return T(Keys.CrashSessionEmpty);
+        }
+
+        var builder = new System.Text.StringBuilder();
+        builder.AppendLine(T(
+            Keys.CrashSessionHeader,
+            string.IsNullOrWhiteSpace(session.GameName) ? session.GameId : session.GameName,
+            CrashAnalysisText.FormatTime(session.StartTime, L),
+            CrashAnalysisText.FormatTime(session.EndTime, L)));
+        builder.AppendLine(T(Keys.CrashSessionErrorCount, session.ErrorBlocks));
+
+        if (session.Groups.Count > 0)
+        {
+            builder.AppendLine(T(Keys.CrashSessionGroupsHeader));
+            foreach (var group in session.Groups)
+            {
+                string source = group.ModName ?? group.SourcePath ?? string.Empty;
+                builder.AppendLine(T(Keys.CrashSessionGroupRow, group.Count, group.Signature, source));
+            }
+        }
+
+        if (session.LogStates.Count > 0)
+        {
+            builder.AppendLine(T(Keys.CrashSessionLogsHeader));
+            foreach (var log in session.LogStates)
+            {
+                builder.AppendLine(T(
+                    Keys.CrashSessionLogRow,
+                    log.FileName,
+                    DescribeLogState(log.State),
+                    log.IsReadOnlyAttribute ? T(Keys.CrashSessionReadOnlyFlag) : string.Empty));
+            }
+        }
+
+        if (session.Degraded)
+        {
+            builder.AppendLine(T(Keys.CrashSessionDegraded));
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
+    private string DescribeLogState(LogFileProbeState state) => state switch
+    {
+        LogFileProbeState.Readable => T(Keys.CrashSessionLogReadable),
+        LogFileProbeState.Locked => T(Keys.CrashSessionLogLocked),
+        LogFileProbeState.Unauthorized => T(Keys.CrashSessionLogUnauthorized),
+        LogFileProbeState.ReadOnly => T(Keys.CrashSessionLogReadOnly),
+        LogFileProbeState.Missing => T(Keys.CrashSessionLogMissing),
+        _ => T(Keys.CrashSessionLogUnknown),
+    };
 
     /// <summary>切换日志文件。</summary>
     public void SelectLog(string? name)
@@ -268,6 +351,8 @@ public sealed class CrashAnalysisViewModel : LocalizedObservableObject
     /// <inheritdoc />
     protected override void Relocalize()
     {
+        RefreshSession();
+
         if (_report is not null)
         {
             RebuildAll();
