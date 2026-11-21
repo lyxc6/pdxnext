@@ -674,6 +674,18 @@ public static class CrashAnalysisText
             CrashFindingCode.CrashCauseUnknown => [finding.Detail ?? "-"],
             CrashFindingCode.CorruptGameSettings => [finding.Path ?? "-"],
             CrashFindingCode.MapLocatorIncomplete => [finding.Count],
+            CrashFindingCode.PcOutOfMemoryCrash => [finding.Count, finding.Detail ?? "-"],
+            CrashFindingCode.PcDiskReadCrash => [finding.Count, finding.Detail ?? "-"],
+            CrashFindingCode.PcIllegalInstructionCrash => [finding.Count, finding.Detail ?? "-"],
+            CrashFindingCode.PcGraphicsDriverCrash => [finding.Count, finding.Detail ?? "-"],
+            CrashFindingCode.PcOverlayCrash => [finding.Count, finding.Detail ?? "-"],
+            CrashFindingCode.PcHardwareErrorCrash => [finding.Count, finding.Detail ?? "-"],
+            CrashFindingCode.PcPageFileDisabled => [finding.Count],
+            CrashFindingCode.PcLowMemoryConfig => [finding.Detail ?? "-", finding.Count],
+            CrashFindingCode.PcLowVideoMemory => [finding.Detail ?? "-", finding.Count],
+            CrashFindingCode.PcLowDiskSpace => [finding.Detail ?? "-"],
+            CrashFindingCode.PcOldGraphicsDriver => [finding.Detail ?? "-"],
+            CrashFindingCode.DatabaseOverride => [finding.Count, finding.Detail ?? "-", finding.ModName ?? "-"],
             _ => [finding.Count],
         };
     }

@@ -72,6 +72,18 @@ public static class ModFootprintScanner
         string? dirPath,
         string? archivePath,
         IReadOnlySet<string> vanillaPaths,
+        CancellationToken cancellationToken = default) =>
+        Scan(fs, modId, name, dirPath, archivePath, vanillaPaths, null, cancellationToken);
+
+    /// <summary>带 <c>replace_path</c> 声明的扫描重载。</summary>
+    public static ModFootprint Scan(
+        IFileSystem fs,
+        Guid modId,
+        string name,
+        string? dirPath,
+        string? archivePath,
+        IReadOnlySet<string> vanillaPaths,
+        IReadOnlyList<string>? replacePaths,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(fs);
@@ -79,7 +91,7 @@ public static class ModFootprintScanner
         cancellationToken.ThrowIfCancellationRequested();
 
         var paths = CollectRelativePaths(fs, dirPath, archivePath, cancellationToken);
-        return Measure(modId, name, paths, vanillaPaths, cancellationToken);
+        return Measure(modId, name, paths, vanillaPaths, replacePaths, cancellationToken);
     }
 
     /// <summary>收集 mod 内容的相对路径（已剔除垃圾，未折叠 replace/；返回「原相对路径」）。</summary>
@@ -206,6 +218,7 @@ public static class ModFootprintScanner
         string name,
         List<string> relativePaths,
         IReadOnlySet<string> vanillaPaths,
+        IReadOnlyList<string>? replacePaths,
         CancellationToken cancellationToken)
     {
         var totalFiles = 0;
@@ -231,7 +244,7 @@ public static class ModFootprintScanner
             }
 
             totalFiles++;
-            if (hadReplaceSegment)
+            if (hadReplaceSegment || IsUnderReplacePath(normalized, replacePaths))
             {
                 replaceFiles++;
             }
@@ -246,7 +259,8 @@ public static class ModFootprintScanner
                 gfxFiles++;
             }
 
-            if (vanillaPaths.Contains(normalized))
+            bool replacesWholePath = IsUnderReplacePath(normalized, replacePaths);
+            if (vanillaPaths.Contains(normalized) || replacesWholePath)
             {
                 overridden.Add(normalized);
                 if (FootprintClassifier.IsGameplayPath(normalized))
@@ -270,6 +284,26 @@ public static class ModFootprintScanner
             replaceFiles,
             overridden,
             added);
+    }
+
+    /// <summary>规范化路径是否落在某个 <c>replace_path</c> 目录内。</summary>
+    private static bool IsUnderReplacePath(string normalized, IReadOnlyList<string>? replacePaths)
+    {
+        if (replacePaths is null || replacePaths.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (string path in replacePaths)
+        {
+            string prefix = path.TrimEnd('/') + "/";
+            if (normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

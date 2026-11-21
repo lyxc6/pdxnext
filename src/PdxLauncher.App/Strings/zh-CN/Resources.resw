@@ -6137,4 +6137,115 @@
   <data name="ConvertToLocalCancelled" xml:space="preserve">
     <value>已取消转为本地 mod</value>
   </data>
+  <data name="CrashExceptionC0000017" xml:space="preserve">
+    <value>Out of memory: the system could not allocate memory the game asked for (close other apps, check the page file, or drop heavy mods)</value>
+  </data>
+  <data name="CrashFindingPcOutOfMemoryCrashTitle" xml:space="preserve">
+    <value>Crash caused by low memory</value>
+  </data>
+  <data name="CrashFindingPcOutOfMemoryCrashDetail" xml:space="preserve">
+    <value>Found {0} sign(s) of low memory: {1}. The game exits when it cannot get the memory it needs.</value>
+  </data>
+  <data name="CrashFindingPcOutOfMemoryCrashFix" xml:space="preserve">
+    <value>Close memory-heavy apps, make sure the Windows page file is set to automatic, and drop model/texture-heavy mods.</value>
+  </data>
+  <data name="CrashFindingPcDiskReadCrashTitle" xml:space="preserve">
+    <value>Crash caused by a disk read failure</value>
+  </data>
+  <data name="CrashFindingPcDiskReadCrashDetail" xml:space="preserve">
+    <value>Found {0} disk-read failure sign(s): {1}. Windows could not read part of a file the game needed.</value>
+  </data>
+  <data name="CrashFindingPcDiskReadCrashFix" xml:space="preserve">
+    <value>Check the drive (right-click > Properties > Tools > Check), keep at least 10 GB free, and if Documents is in OneDrive choose "Always keep on this device" for the Paradox folder.</value>
+  </data>
+  <data name="CrashFindingPcIllegalInstructionCrashTitle" xml:space="preserve">
+    <value>Processor ran an invalid instruction</value>
+  </data>
+  <data name="CrashFindingPcIllegalInstructionCrashDetail" xml:space="preserve">
+    <value>Found {0} illegal-instruction sign(s): {1}. Rare in normal play; usually points to overclocking, overheating or unstable hardware.</value>
+  </data>
+  <data name="CrashFindingPcIllegalInstructionCrashFix" xml:space="preserve">
+    <value>Turn off CPU/memory overclocking (including XMP/EXPO) as a test, check temperatures, and run Windows Memory Diagnostic.</value>
+  </data>
+  <data name="CrashFindingPcGraphicsDriverCrashTitle" xml:space="preserve">
+    <value>Crash inside the graphics driver</value>
+  </data>
+  <data name="CrashFindingPcGraphicsDriverCrashDetail" xml:space="preserve">
+    <value>Found {0} graphics-driver sign(s): {1}. The crash happened inside the graphics driver, not in the game or a mod.</value>
+  </data>
+  <data name="CrashFindingPcGraphicsDriverCrashFix" xml:space="preserve">
+    <value>Update the graphics driver (clean install if possible); on laptops make sure the game uses the dedicated GPU, and turn off any GPU overclock.</value>
+  </data>
+  <data name="CrashFindingPcOverlayCrashTitle" xml:space="preserve">
+    <value>Crash caused by an injected overlay</value>
+  </data>
+  <data name="CrashFindingPcOverlayCrashDetail" xml:space="preserve">
+    <value>Found {0} overlay-injection sign(s): {1}. The crash happened inside third-party overlay code injected into the game.</value>
+  </data>
+  <data name="CrashFindingPcOverlayCrashFix" xml:space="preserve">
+    <value>Disable that overlay for this game: Steam/Discord in-game overlay, RTSS/MSI Afterburner, OBS capture, ReShade, Overwolf, etc.</value>
+  </data>
+  <data name="CrashFindingPcHardwareErrorCrashTitle" xml:space="preserve">
+    <value>Windows recorded a hardware error</value>
+  </data>
+  <data name="CrashFindingPcHardwareErrorCrashDetail" xml:space="preserve">
+    <value>Found {0} hardware-error sign(s): {1}. This is a processor, memory or PCI device error that a game itself cannot cause.</value>
+  </data>
+  <data name="CrashFindingPcHardwareErrorCrashFix" xml:space="preserve">
+    <value>Turn off all overclocking (including XMP/EXPO), check temperatures, run Windows Memory Diagnostic, and contact the hardware vendor if it persists.</value>
+  </data>
+  <data name="CrashFindingPcPageFileDisabledTitle" xml:space="preserve">
+    <value>The Windows page file is turned off</value>
+  </data>
+  <data name="CrashFindingPcPageFileDisabledDetail" xml:space="preserve">
+    <value>Found {0} sign(s): with the page file off, running out of memory crashes programs instead of slowing them down.</value>
+  </data>
+  <data name="CrashFindingPcPageFileDisabledFix" xml:space="preserve">
+    <value>Go to System > Advanced system settings > Performance > Advanced > Virtual memory and set it to automatically manage.</value>
+  </data>
+  <data name="CrashFindingPcLowMemoryConfigTitle" xml:space="preserve">
+    <value>Low system memory</value>
+  </data>
+  <data name="CrashFindingPcLowMemoryConfigDetail" xml:space="preserve">
+    <value>About {0} GB of memory and {1} mod model files detected. Paradox games need at least 8 GB; heavy mod lists prefer 16 GB or more.</value>
+  </data>
+  <data name="CrashFindingPcLowMemoryConfigFix" xml:space="preserve">
+    <value>Close other apps while playing, keep the page file automatic, and drop model/texture-heavy mods.</value>
+  </data>
+  <data name="CrashFindingPcLowVideoMemoryTitle" xml:space="preserve">
+    <value>Possibly low video memory</value>
+  </data>
+  <data name="CrashFindingPcLowVideoMemoryDetail" xml:space="preserve">
+    <value>About {0} GB of video memory and {1} mod model files; a big texture pack can fill the card.</value>
+  </data>
+  <data name="CrashFindingPcLowVideoMemoryFix" xml:space="preserve">
+    <value>Lower texture quality in game settings, or drop a model/texture-heavy mod.</value>
+  </data>
+  <data name="CrashFindingPcLowDiskSpaceTitle" xml:space="preserve">
+    <value>Low free disk space</value>
+  </data>
+  <data name="CrashFindingPcLowDiskSpaceDetail" xml:space="preserve">
+    <value>The game data or install drive has only about {0} GB free; the game needs room for saves, cache and crash files.</value>
+  </data>
+  <data name="CrashFindingPcLowDiskSpaceFix" xml:space="preserve">
+    <value>Free up at least 10 GB of space.</value>
+  </data>
+  <data name="CrashFindingPcOldGraphicsDriverTitle" xml:space="preserve">
+    <value>Graphics driver is old</value>
+  </data>
+  <data name="CrashFindingPcOldGraphicsDriverDetail" xml:space="preserve">
+    <value>The graphics driver dates from {0}, over a year old; old drivers are a common cause of crashes on newer game versions.</value>
+  </data>
+  <data name="CrashFindingPcOldGraphicsDriverFix" xml:space="preserve">
+    <value>Update the graphics driver from the NVIDIA/AMD/Intel website or their driver app.</value>
+  </data>
+  <data name="CrashFindingDatabaseOverrideTitle" xml:space="preserve">
+    <value>Mod definitions override each other</value>
+  </data>
+  <data name="CrashFindingDatabaseOverrideDetail" xml:space="preserve">
+    <value>database_conflicts.log records {0} definition override(s), e.g. {1} (from {2}). The version that loads last wins; the others are ignored.</value>
+  </data>
+  <data name="CrashFindingDatabaseOverrideFix" xml:space="preserve">
+    <value>If this is intended, do nothing; if another mod's feature stops working, look for a compatibility patch, adjust load order, and tell the authors.</value>
+  </data>
 </root>

@@ -11,7 +11,7 @@ using PdxLauncher.Core.Games;
 /// </summary>
 public static class CrashRules
 {
-    private const int MaxFindings = 12;
+    private const int MaxFindings = 18;
     private static readonly TimeSpan StartupWindow = TimeSpan.FromMinutes(3);
     private static readonly TimeSpan NearCrashWindow = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan RecurringWindow = TimeSpan.FromHours(24);
@@ -31,7 +31,8 @@ public static class CrashRules
         string settingsPath,
         string logsPath,
         string crashesPath,
-        TimeSpan? startupDuration)
+        TimeSpan? startupDuration,
+        IReadOnlyList<CrashFinding>? pcFindings = null)
     {
         ArgumentNullException.ThrowIfNull(game);
         ArgumentNullException.ThrowIfNull(crashes);
@@ -39,6 +40,11 @@ public static class CrashRules
         ArgumentNullException.ThrowIfNull(mods);
 
         var findings = new List<CrashFinding>();
+        if (pcFindings is { Count: > 0 })
+        {
+            findings.AddRange(pcFindings);
+        }
+
         var latest = crashes.Count > 0 ? crashes[0] : null;
         var crashTime = latest?.Timestamp;
 
@@ -236,6 +242,21 @@ public static class CrashRules
                     maxLines: 4)));
         }
 
+        if (signals.DbOverrides.Count > 0)
+        {
+            var top = signals.DbOverrides[0];
+            var mod = FindModForSource(mods, top.FilePath);
+            findings.Add(new CrashFinding(
+                CrashFindingCode.DatabaseOverride,
+                CrashSeverity.Warning,
+                signals.DbOverrides.Count,
+                ModName: mod?.DisplayName,
+                SourcePath: top.FilePath,
+                Detail: top.Key,
+                Evidence: signals.DbOverrides.Take(6).Select(static record =>
+                    $"{record.Key} ← {record.FilePath}" + (record.Line is { } line ? ":" + line : "")).ToArray()));
+        }
+
         if (signals.MapLocatorIssues > 0)
         {
             findings.Add(new CrashFinding(
@@ -324,15 +345,17 @@ public static class CrashRules
     }
 
     private static bool HasCauseFinding(IReadOnlyList<CrashFinding> findings) =>
-        findings.Any(static finding => finding.Code is
-            CrashFindingCode.ModScriptErrorsNearCrash
-            or CrashFindingCode.CreateBuildingAutoPlaced
-            or CrashFindingCode.UnsetScriptVariables
-            or CrashFindingCode.IncompatibleModifierType
-            or CrashFindingCode.MissingModPath
-            or CrashFindingCode.LauncherLaunchFailed
-            or CrashFindingCode.ExecutableMissing
-            or CrashFindingCode.CorruptGameSettings);
+        findings.Any(static finding =>
+            finding.Code is
+                CrashFindingCode.ModScriptErrorsNearCrash
+                or CrashFindingCode.CreateBuildingAutoPlaced
+                or CrashFindingCode.UnsetScriptVariables
+                or CrashFindingCode.IncompatibleModifierType
+                or CrashFindingCode.MissingModPath
+                or CrashFindingCode.LauncherLaunchFailed
+                or CrashFindingCode.ExecutableMissing
+                or CrashFindingCode.CorruptGameSettings
+            || PcForensics.HasStrongCause(finding.Code));
 
     private static string? TopSource(CrashSignals signals) =>
         signals.SourceCounts.Count == 0
@@ -365,9 +388,20 @@ public static class CrashRules
 
         foreach (var mod in mods)
         {
-            if (mod.SourceHits.Contains(source, StringComparer.OrdinalIgnoreCase))
+            foreach (var hit in mod.SourceHits)
             {
-                return mod;
+                if (string.Equals(hit, source, StringComparison.OrdinalIgnoreCase))
+                {
+                    return mod;
+                }
+
+                // database_conflicts.log 里可能是完整路径，取规范化后的尾部再比一次。
+                string normalized = source.Replace('\\', '/');
+                string hitNormalized = hit.Replace('\\', '/');
+                if (normalized.EndsWith('/' + hitNormalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    return mod;
+                }
             }
         }
 

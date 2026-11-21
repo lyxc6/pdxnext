@@ -649,7 +649,9 @@ public static class AppServices
         FileSystem,
         LoadFiles,
         Logger,
-        Clock);
+        Clock,
+        new WindowsEventLogReader(),
+        new PcSystemSnapshotReader());
 
     private static ThemeImageFlattener? _themeImages;
 
