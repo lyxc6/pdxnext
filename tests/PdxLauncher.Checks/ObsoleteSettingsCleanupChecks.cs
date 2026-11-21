@@ -49,6 +49,12 @@ public static class ObsoleteSettingsCleanupChecks
         var before = ChecksContext.Failures;
         var root = FindWorkspaceRoot();
 
+        foreach (var relativePath in SourceFiles)
+        {
+            var path = Path.Combine(root, Path.Combine(relativePath.Split('/')));
+            ChecksContext.Check("清理: 检查源文件存在 " + relativePath, File.Exists(path), path);
+        }
+
         var coreModes = Read(root, "src", "PdxLauncher.Core", "Configuration", "PlaySetPageDisplayModes.cs");
         var catalog = Read(root, "src", "PdxLauncher.App", "Services", "PlaySetPageDisplayModeCatalog.cs");
         var settingsView = Read(root, "src", "PdxLauncher.App", "ViewModels", "SettingsViewModel.cs");
@@ -89,6 +95,21 @@ public static class ObsoleteSettingsCleanupChecks
 
         return ChecksContext.Failures == before ? 0 : 1;
     }
+
+    private static readonly string[] SourceFiles =
+    [
+        "src/PdxLauncher.Core/Configuration/PlaySetPageDisplayModes.cs",
+        "src/PdxLauncher.App/Services/PlaySetPageDisplayModeCatalog.cs",
+        "src/PdxLauncher.App/ViewModels/SettingsViewModel.cs",
+        "src/PdxLauncher.App/ViewModels/ModsViewModel.cs",
+        "src/PdxLauncher.App/Views/ModsPage.xaml",
+        "src/PdxLauncher.App/Views/ModsPage.xaml.cs",
+        "src/PdxLauncher.App/Views/SettingsPage.xaml",
+        "src/PdxLauncher.App/Views/SettingsPage.xaml.cs",
+        "src/PdxLauncher.App/Strings/zh-CN/Resources.resw",
+        "src/PdxLauncher.App/Strings/en-US/Resources.resw",
+        "scripts/verify-settings-sections.ps1",
+    ];
 
     private static string Read(params string[] parts)
     {
