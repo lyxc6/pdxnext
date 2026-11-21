@@ -559,29 +559,6 @@
                                 </StackPanel>
                         </ct:SettingsCard>
 
-                        <ct:SettingsCard Header="{x:Bind L.SettingsAppDataLegacy, Mode=OneWay}"
-                                         HorizontalAlignment="Stretch"
-                                         Background="{ThemeResource PdxCardBackgroundBrush}"
-                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
-                                         BorderThickness="1"
-                                         CornerRadius="8"
-                                         MinHeight="56"
-                                         Padding="16,12"
-                                         IsClickEnabled="False">
-                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <TextBlock AutomationProperties.AutomationId="txtLegacyDataDirectory"
-                                               AutomationProperties.Name="{x:Bind L.SettingsAppDataLegacyName, Mode=OneWay}"
-                                               Text="{x:Bind ViewModel.LegacyDataDirectoryPath, Mode=OneWay}"
-                                               MaxWidth="380" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
-                                               VerticalAlignment="Center"
-                                               ToolTipService.ToolTip="{x:Bind ViewModel.LegacyDataDirectoryPath, Mode=OneWay}" />
-                                    <Button AutomationProperties.AutomationId="btnClearLegacyData"
-                                            AutomationProperties.Name="{x:Bind L.SettingsAppDataClearLegacyName, Mode=OneWay}"
-                                            Content="{x:Bind L.SettingsAppDataClearLegacy, Mode=OneWay}"
-                                            Click="OnClearLegacyDataClick" />
-                                </StackPanel>
-                        </ct:SettingsCard>
-
                         <TextBlock Text="{x:Bind L.SettingsAppDataHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
                     </StackPanel>
 

@@ -67,7 +67,7 @@ public static class InfrastructureChecks
                 WriteDlcSignature = true,
                 WindowWidth = 1280,
                 WindowHeight = 800,
-                PlaySetPageDisplayMode = PlaySetPageDisplayModes.Placeholder,
+                PlaySetPageDisplayMode = PlaySetPageDisplayModes.TwoColumn,
                 AlwaysOnTop = true,
                 BackgroundDisplayMode = BackgroundDisplayModes.FullBlur,
                 ModThumbnailSize = ModThumbnailSizes.Large,
@@ -83,7 +83,7 @@ public static class InfrastructureChecks
             ChecksContext.Check("置顶默认关闭", new AppSettings().AlwaysOnTop == false);
             ChecksContext.Equal(
                 "设置往返: 播放集页面显示方式",
-                PlaySetPageDisplayModes.Placeholder,
+                PlaySetPageDisplayModes.TwoColumn,
                 loaded.PlaySetPageDisplayMode ?? string.Empty);
             ChecksContext.Check(
                 "设置不持久化主题检查时间（改由 assets.json 的 lastCheckedUtc 记录）",
@@ -99,17 +99,13 @@ public static class InfrastructureChecks
                 PlaySetPageDisplayModes.OfficialLauncher,
                 PlaySetPageDisplayModes.Normalize("  "));
             ChecksContext.Equal(
-                "显示方式: placeholder 归一化（大小写 / 空白无关）",
-                PlaySetPageDisplayModes.Placeholder,
+                "显示方式: 历史 placeholder 回退原版启动器",
+                PlaySetPageDisplayModes.OfficialLauncher,
                 PlaySetPageDisplayModes.Normalize(" PLACEHOLDER "));
             ChecksContext.Equal(
                 "显示方式: 未知值回退原版启动器",
                 PlaySetPageDisplayModes.OfficialLauncher,
                 PlaySetPageDisplayModes.Normalize("unknown"));
-            ChecksContext.Check(
-                "显示方式: IsPlaceholder 只认 placeholder",
-                PlaySetPageDisplayModes.IsPlaceholder(PlaySetPageDisplayModes.Placeholder)
-                    && !PlaySetPageDisplayModes.IsPlaceholder(PlaySetPageDisplayModes.OfficialLauncher));
             ChecksContext.Equal(
                 "显示方式: twoColumn 归一化（大小写 / 空白无关）",
                 PlaySetPageDisplayModes.TwoColumn,
@@ -121,7 +117,7 @@ public static class InfrastructureChecks
             ChecksContext.Check(
                 "显示方式: IsTwoColumn 只认 twoColumn",
                 PlaySetPageDisplayModes.IsTwoColumn(PlaySetPageDisplayModes.TwoColumn)
-                    && !PlaySetPageDisplayModes.IsTwoColumn(PlaySetPageDisplayModes.Placeholder));
+                    && !PlaySetPageDisplayModes.IsTwoColumn("placeholder"));
 
             // --- 背景显示方式五档 + Mod 图片大小三档
             ChecksContext.Equal(

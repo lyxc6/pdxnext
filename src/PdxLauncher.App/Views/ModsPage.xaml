@@ -850,29 +850,5 @@
                 </StackPanel>
             </Grid>
         </Border>
-
-        <!-- ==================== 留空布局（铺满三行，盖住工具条与状态栏） ==================== -->
-        <Grid Grid.RowSpan="3"
-              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsPlaceholderLayout), Mode=OneWay}">
-            <StackPanel HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Spacing="8">
-                <FontIcon Glyph="&#xE8B7;"
-                          FontSize="32"
-                          HorizontalAlignment="Center"
-                          Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                <TextBlock Text="{x:Bind L.ModsPlaceholderTitle, Mode=OneWay}"
-                           HorizontalAlignment="Center"
-                           Style="{StaticResource BodyTextBlockStyle}"
-                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                           AutomationProperties.AutomationId="txtPlaySetPlaceholder"
-                           AutomationProperties.Name="{x:Bind L.ModsPlaceholderName, Mode=OneWay}" />
-                <TextBlock Text="{x:Bind L.ModsPlaceholderDescription, Mode=OneWay}"
-                           HorizontalAlignment="Center"
-                           Style="{StaticResource CaptionTextBlockStyle}"
-                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                           TextWrapping="Wrap" />
-            </StackPanel>
-        </Grid>
     </Grid>
 </Page>

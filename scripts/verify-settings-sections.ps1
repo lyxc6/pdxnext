@@ -66,7 +66,7 @@ if ($p.HasExited) { "CRASHED code=$($p.ExitCode)"; exit 1 }
 $sections = @(
   @{ id='navSettingsAppearance'; name='appearance'; want='txtThemeSource,txtThemeLastCheck,txtThemeNextCheck,tglOnlineThemeRefresh,btnCheckThemeNow,cmbUiLanguage,cmbPlaySetPageDisplayMode,cmbBackgroundDisplayMode,cmbModThumbnailSize,tglAlwaysOnTop' },
   @{ id='navSettingsLaunch';     name='launch';     want='txtExePath,txtExeArgs,cmbAlternativeExecutable' },
-  @{ id='navSettingsPaths';      name='paths';      want='txtGameDataPath,btnOpenDataDirectory,txtDlcPath,txtModDir,txtFormatVersion,txtLoadFilePath,txtAppDataDirectory,btnOpenAppDataDirectory,txtLegacyDataDirectory,btnClearLegacyData' },
+  @{ id='navSettingsPaths';      name='paths';      want='txtGameDataPath,btnOpenDataDirectory,txtDlcPath,txtModDir,txtFormatVersion,txtLoadFilePath,txtAppDataDirectory,btnOpenAppDataDirectory' },
   @{ id='navSettingsOnline';     name='online';     want='cmbProxyMode,txtProxyUrl,txtProxyStatus,btnNetworkProbe,txtProbeSummary' },
   @{ id='navSettingsCache';      name='cache';      want='btnRefreshCache,btnClearAllCaches,tglOnlineDlcDescription,cmbDlcDescriptionRetention,tglOnlineNewsFeed,tglOnlineModThumbnail,cmbModThumbnailRetention,txtModThumbnailCachePath' },
   @{ id='navSettingsAdvanced';   name='advanced';   want='tglWriteDlcSignature,btnRegenerateDlcSignature' },

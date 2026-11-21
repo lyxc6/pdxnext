@@ -457,8 +457,8 @@ normalizedMachineId = MachineGuid（HKLM\SOFTWARE\Microsoft\Cryptography\Machine
 - `settings.json` 里与游戏选择有关的两项（2026-10-28 新增，向后兼容，缺省即走默认规则）：`lastGameId`（如 `"ck3"`）、`lastGameInstallRoot`（安装根绝对路径，游戏搬库后仍能认回）。写入时机只有「用户切游戏」，由 `AppServices.SelectGame` 调 `SaveSettingsDeferred()`；启动时 `GameSelection.Select(games, lastGameId, lastGameInstallRoot)` 按「双命中 → 仅 gameId → 仅安装路径 → 可管理内容 → 可支持 → 第一项」的顺序挑。
 - 迁移：首次启动若目标 `data` 里既没有 `settings.json`（也没有库内 `settings` 键）也没有 `.migrated-from-localappdata`，
   就把旧 `%LOCALAPPDATA%\PdxNext` 的 settings / dlc-descriptions / theme-cache / news-cache / mod-cache
-  **复制**过来（不搬 logs、永不删源、已存在的文件跳过）。设置页「数据目录」卡片显示绝对路径、
-  提供「打开目录」与「清理旧 C 盘数据」（只删 `%LOCALAPPDATA%\PdxNext`）。
+  **复制**过来（不搬 logs、永不删源、已存在的文件跳过）。设置页「程序数据目录」卡片显示绝对路径并提供「打开目录」；
+  旧 C 盘数据的自动迁移仍保留，但手动清理入口已移除。
 - 复制落地后由 `LegacyJsonImporter` 把这些 JSON **入库**并把原文件改名成 `<名>.migrated.bak` 留档（见 §20.4）。
 - 发布：`publish.cmd` 覆盖 `dist\PdxNext` 与暂存目录前都会把 `data` 搬到 `*.__data__`，发布后搬回。
 

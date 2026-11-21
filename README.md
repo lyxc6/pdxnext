@@ -43,7 +43,6 @@ PdxNext 是一个用 **WinUI 3 / .NET 11** 写的原生 Paradox 游戏启动器�
 
 - **原版启动器**：单列当前播放集的 mod 列表，工具条右侧「添加模组」进入子页勾选添加。
 - **双列（原版启动器式）**：左栏是还没加入该播放集的 mod，右栏是已加入的 mod。左栏勾选即加入，行立刻移到右栏末尾；右栏照旧用开关启用 / 禁用、↑↓ 调序、行尾图标移出。两栏各有独立的搜索框；中间分隔条可左右拖动改宽度，双击复位到 400 DIP。窗口拉窄时左栏先让位，右栏始终保留够一行完整显示的宽度。
-- **留空**：页面不显示内容（预留给后续自定义布局）。
 
 ### Mod 库
 
@@ -137,7 +136,7 @@ start.cmd
 - 需要 .NET SDK 11 与 Windows 10/11 SDK；Windows App SDK 以自包含方式随包，无需单独安装。
 - 仓库的 `NuGet.config` 清空了默认源、按全离线构建，依赖必须已在本机 NuGet 缓存中，细节见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 - 产物在 `bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\`，**分发时要整个目录一起拷**，只拷 exe 会起不来。
-- 自检程序 `tests/PdxLauncher.Checks` 覆盖 180 个检查类；CI 见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
+- 自检程序 `tests/PdxLauncher.Checks` 覆盖 181 个检查类；CI 见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
 
 ## 兼容性
 

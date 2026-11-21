@@ -1813,9 +1813,6 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// <summary>本启动器数据根目录（settings.json / 日志 / 各缓存都在这里）。</summary>
     public string DataDirectoryPath => AppServices.DataRoot;
 
-    /// <summary>旧版本的 C 盘数据目录；迁移完成后可以手动清理。</summary>
-    public string LegacyDataDirectoryPath => DataRootMigrator.LegacyRoot;
-
     /// <summary>联网补全 Mod 缩略图开关；写入 AppSettings.OnlineModThumbnailEnabled 并登记延迟落盘。</summary>
     public bool ModThumbnailOnlineEnabled
     {
@@ -3202,7 +3199,6 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(IsManualProxy));
         OnPropertyChanged(nameof(ProxyStatusText));
         OnPropertyChanged(nameof(DataDirectoryPath));
-        OnPropertyChanged(nameof(LegacyDataDirectoryPath));
         OnPropertyChanged(nameof(ModThumbnailOnlineEnabled));
         OnPropertyChanged(nameof(SelectedModThumbnailRetention));
         OnPropertyChanged(nameof(ModThumbnailCachePath));

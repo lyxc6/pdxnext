@@ -76,7 +76,7 @@ public sealed class AppSettings
 
     /// <summary>
     /// 播放集页面的显示方式：<see cref="PlaySetPageDisplayModes.OfficialLauncher"/>（默认）或
-    /// <see cref="PlaySetPageDisplayModes.Placeholder"/>；null 视为原版启动器布局。
+    /// <see cref="PlaySetPageDisplayModes.TwoColumn"/>；null、历史 placeholder 值与未知值均视为原版启动器布局。
     /// 存字符串而不是枚举：未知枚举值会让整份设置反序列化失败并回退默认值。
     /// </summary>
     public string? PlaySetPageDisplayMode { get; set; }
