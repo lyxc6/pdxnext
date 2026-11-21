@@ -203,6 +203,17 @@ public sealed class AppSettings
     public bool AutoCheckUpdates { get; set; } = true;
 
     /// <summary>
+    /// 是否允许 AI 客户端通过 PdxLauncher.Mcp.exe 调用工具（默认开）。
+    /// MCP 是本机 stdio 服务；关闭后 MCP 进程仍可连接，但会拒绝全部 tools/list 与 tools/call。
+    /// </summary>
+    public bool McpEnabled { get; set; } = true;
+
+    /// <summary>
+    /// 是否允许 MCP 写入 Mod 上传草稿（默认关）。只读工具默认可用；写入草稿必须在设置页单独授权。
+    /// </summary>
+    public bool McpDraftWriteEnabled { get; set; }
+
+    /// <summary>
     /// Mod 编辑页左栏是否显示（默认开）。关掉后左栏收起，改用右栏顶部的分节选择器，
     /// 四个功能照常可达；设置页与本页开关双向即时生效，变化时立即落盘。
     /// </summary>

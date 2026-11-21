@@ -2,6 +2,7 @@ namespace PdxLauncher.App.Views;
 
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -33,6 +34,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     public bool IsAdvancedSection => _sectionIndex == 5;
     public bool IsTranslationSection => _sectionIndex == 6;
     public bool IsAboutSection => _sectionIndex == 7;
+    public bool IsMcpSection => _sectionIndex == 8;
 
     private void SetSectionIndex(int index)
     {
@@ -50,6 +52,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         OnPropertyChanged(nameof(IsAdvancedSection));
         OnPropertyChanged(nameof(IsTranslationSection));
         OnPropertyChanged(nameof(IsAboutSection));
+        OnPropertyChanged(nameof(IsMcpSection));
     }
 
     private void OnPropertyChanged(string name) =>
@@ -248,10 +251,46 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     /// <summary>「缓存」在左侧八个分节里的序号，与 XAML 里 secCache 的顺序一致。</summary>
     private const int CacheSectionIndex = 4;
 
+    /// <summary>「MCP」是左侧第九个分节，索引固定为 8，避免持久化分节错位。</summary>
+    private const int McpSectionIndex = 8;
+
     /// <summary>切换左侧分类：只显示选中的那一节，其余折叠（同一时刻只排版一类设置）。</summary>
     private void OnSectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs e)
     {
         ShowSection(CurrentSectionIndex());
+    }
+
+    /// <summary>
+    /// MCP 文档在首次加载时用当前 exe 目录与数据根填好提示词和 JSON；
+    /// 权限开关切换后由 McpDocsContent.RefreshPermissions 更新，不需要重建分节。
+    /// </summary>
+    private void OnMcpDocsContentLoaded(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _viewModel.PropertyChanged -= OnViewModelPropertyChangedForMcp;
+            _viewModel.PropertyChanged += OnViewModelPropertyChangedForMcp;
+            mcpDocsContent.InitializeContent(
+                Path.Combine(AppContext.BaseDirectory, "PdxLauncher.Mcp.exe"),
+                AppServices.DataRoot,
+                _viewModel.McpEnabled,
+                _viewModel.McpDraftWriteEnabled);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("SettingsPage 初始化 MCP 文档失败", ex);
+        }
+    }
+
+    private void OnViewModelPropertyChangedForMcp(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not (nameof(SettingsViewModel.McpEnabled)
+            or nameof(SettingsViewModel.McpDraftWriteEnabled)))
+        {
+            return;
+        }
+
+        mcpDocsContent.RefreshPermissions(_viewModel.McpEnabled, _viewModel.McpDraftWriteEnabled);
     }
 
     private async void OnCheckUpdatesClick(object sender, RoutedEventArgs e)
@@ -259,7 +298,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         await _viewModel.CheckForUpdatesAsync();
     }
 
-    /// <summary>左侧分类用 NavigationViewItem.Tag 携带序号（"0"–"7"），与 XAML 顺序一致。</summary>
+    /// <summary>左侧分类用 NavigationViewItem.Tag 携带序号（"0"–"8"），与 XAML 顺序一致。</summary>
     private int CurrentSectionIndex()
     {
         if (navSettingsSections.SelectedItem is NavigationViewItem item

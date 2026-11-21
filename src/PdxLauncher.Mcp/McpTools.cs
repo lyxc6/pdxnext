@@ -31,24 +31,36 @@ internal sealed class McpTools
     private readonly ModUploadDraftStore _drafts;
     private readonly GameCatalog _gameCatalog;
     private readonly ModCatalog _modCatalog;
+    private readonly bool _draftWriteEnabled;
 
     private IReadOnlyList<GameInstallation>? _gameCache;
     private readonly Dictionary<string, IReadOnlyList<ModCandidate>> _modCache =
         new(StringComparer.OrdinalIgnoreCase);
 
     public McpTools(IFileSystem fileSystem, IAppLogger logger, string dataRoot)
+        : this(fileSystem, logger, dataRoot, draftWriteEnabled: true)
+    {
+    }
+
+    /// <summary>按设置页授权构造工具集合：只读工具始终可用，写草稿需显式授权。</summary>
+    public McpTools(
+        IFileSystem fileSystem,
+        IAppLogger logger,
+        string dataRoot,
+        bool draftWriteEnabled)
     {
         _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _drafts = new ModUploadDraftStore(fileSystem, dataRoot);
         _gameCatalog = new GameCatalog(fileSystem, logger);
         _modCatalog = new ModCatalog(fileSystem, logger);
+        _draftWriteEnabled = draftWriteEnabled;
     }
 
     /// <summary>tools/list 的返回。</summary>
     public JsonArray ListTools()
     {
-        return new JsonArray
+        var tools = new JsonArray
         {
             Tool(
                 "list_games",
@@ -87,7 +99,11 @@ internal sealed class McpTools
                     "gameId",
                     "modPath")),
 
-            Tool(
+        };
+
+        if (_draftWriteEnabled)
+        {
+            tools.Add(Tool(
                 "save_upload_draft",
                 "写入（或部分更新）某个 mod 的上传草稿。只写草稿，不会发布；标题、描述、标签等会先按启动器的上传限制校验。",
                 Schema(
@@ -127,9 +143,8 @@ internal sealed class McpTools
                         },
                     },
                     "gameId",
-                    "modPath")),
-
-            Tool(
+                    "modPath")));
+            tools.Add(Tool(
                 "clear_upload_draft",
                 "删除某个 mod 的上传草稿。",
                 Schema(
@@ -139,8 +154,10 @@ internal sealed class McpTools
                         ["modPath"] = Property("string", "mod 目录全路径。"),
                     },
                     "gameId",
-                    "modPath")),
-        };
+                    "modPath")));
+        }
+
+        return tools;
     }
 
     /// <summary>tools/call 的分发。</summary>
@@ -151,6 +168,11 @@ internal sealed class McpTools
     {
         try
         {
+            if (!IsToolAllowed(name))
+            {
+                throw new McpToolException("工具 " + name + " 未在 MCP 权限中授权；可在设置 → MCP 里开启草稿写入");
+            }
+
             var result = name switch
             {
                 "list_games" => await ListGamesAsync(cancellationToken).ConfigureAwait(false),
@@ -178,6 +200,12 @@ internal sealed class McpTools
             return new McpToolResult(true, "内部错误：" + exception.Message);
         }
     }
+
+    private bool IsToolAllowed(string name) => name switch
+    {
+        "save_upload_draft" or "clear_upload_draft" => _draftWriteEnabled,
+        _ => true,
+    };
 
     private async Task<JsonNode> ListGamesAsync(CancellationToken cancellationToken)
     {

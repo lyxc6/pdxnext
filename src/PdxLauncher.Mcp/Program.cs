@@ -14,7 +14,7 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
-        if (!TryParseDataRoot(args, out var dataRoot, out var error))
+        if (!TryParseOptions(args, out var dataRoot, out var enabled, out var draftWriteEnabled, out var error))
         {
             Console.Error.WriteLine(error);
             return 2;
@@ -37,8 +37,8 @@ internal static class Program
                 NewLine = "\n",
             };
 
-            var tools = new McpTools(fileSystem, logger, dataRoot!);
-            var server = new McpServer(input, output, Console.Error, tools, logger);
+            var tools = new McpTools(fileSystem, logger, dataRoot!, draftWriteEnabled);
+            var server = new McpServer(input, output, Console.Error, tools, logger, enabled);
             server.RunAsync(CancellationToken.None).GetAwaiter().GetResult();
             return 0;
         }
@@ -50,9 +50,16 @@ internal static class Program
         }
     }
 
-    private static bool TryParseDataRoot(string[] args, out string? dataRoot, out string? error)
+    private static bool TryParseOptions(
+        string[] args,
+        out string? dataRoot,
+        out bool enabled,
+        out bool draftWriteEnabled,
+        out string? error)
     {
         dataRoot = null;
+        enabled = true;
+        draftWriteEnabled = false;
         error = null;
 
         for (var i = 0; i < args.Length; i++)
@@ -61,7 +68,7 @@ internal static class Program
             if (string.Equals(arg, "--help", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(arg, "-h", StringComparison.OrdinalIgnoreCase))
             {
-                error = "PdxLauncher.Mcp.exe [--data-root <data directory>]";
+                error = "PdxLauncher.Mcp.exe [--data-root <dir>] [--enabled true|false] [--draft-write true|false]";
                 return false;
             }
 
@@ -90,11 +97,63 @@ internal static class Program
                 continue;
             }
 
+            if (TryParseBoolOption(args, ref i, "--enabled", enabled, out var parsedEnabled, out error))
+            {
+                enabled = parsedEnabled;
+                continue;
+            }
+
+            if (TryParseBoolOption(args, ref i, "--draft-write", draftWriteEnabled, out var parsedDraft, out error))
+            {
+                draftWriteEnabled = parsedDraft;
+                continue;
+            }
+
             error = "不认识的参数：" + arg;
             return false;
         }
 
         dataRoot ??= PdxDataRoot.Directory;
         return true;
+    }
+
+    private static bool TryParseBoolOption(
+        string[] args,
+        ref int index,
+        string name,
+        bool current,
+        out bool value,
+        out string? error)
+    {
+        value = current;
+        error = null;
+        var arg = args[index];
+        string? raw;
+        if (string.Equals(arg, name, StringComparison.OrdinalIgnoreCase))
+        {
+            if (index + 1 >= args.Length)
+            {
+                error = name + " 需要 true 或 false";
+                return false;
+            }
+
+            raw = args[++index];
+        }
+        else if (arg.StartsWith(name + "=", StringComparison.OrdinalIgnoreCase))
+        {
+            raw = arg[(name.Length + 1)..];
+        }
+        else
+        {
+            return false;
+        }
+
+        if (bool.TryParse(raw, out value))
+        {
+            return true;
+        }
+
+        error = name + " 需要 true 或 false";
+        return false;
     }
 }

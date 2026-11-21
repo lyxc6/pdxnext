@@ -349,20 +349,6 @@ public sealed partial class ModStudioPage : Page
         _viewModel.ShowUpload();
     }
 
-    private async void OnMcpDocsClick(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            await McpDocsDialog.ShowAsync(XamlRoot).ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            AppServices.Logger.Error("打开 MCP 文档失败", ex);
-            _viewModel.SetStatus(L.T(Keys.ModstudioMcpDocsFailed, ex.Message));
-        }
-    }
-
-
     private void OnRefreshClick(object sender, RoutedEventArgs e)
     {
         _ = ReloadAsync(forceRefresh: true);

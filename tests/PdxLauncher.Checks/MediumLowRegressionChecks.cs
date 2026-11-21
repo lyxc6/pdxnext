@@ -91,8 +91,8 @@ public static class MediumLowRegressionChecks
             "性能: 设置页启用导航缓存",
             settingsXaml.Contains("NavigationCacheMode=\"Required\"", StringComparison.Ordinal));
         ChecksContext.Check(
-            "性能: 设置页八节均按需 x:Load",
-            CountOccurrences(settingsXaml, "x:Load=\"{x:Bind") >= 8
+            "性能: 设置页各分节均按需 x:Load",
+            CountOccurrences(settingsXaml, "x:Load=\"{x:Bind") >= 9
                 && settingsPage.Contains("SetSectionIndex", StringComparison.Ordinal)
                 && settingsPage.Contains("INotifyPropertyChanged", StringComparison.Ordinal));
 
