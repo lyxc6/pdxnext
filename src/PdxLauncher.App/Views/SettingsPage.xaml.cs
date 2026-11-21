@@ -3,6 +3,7 @@ namespace PdxLauncher.App.Views;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using PdxLauncher.Core.Mcp;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -275,6 +276,8 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
                 AppServices.DataRoot,
                 _viewModel.McpEnabled,
                 _viewModel.McpDraftWriteEnabled);
+        _viewModel.RefreshMcpAccessKeys();
+        mcpDocsContent.SetSelectedKey(mcpDocsContent.SelectedKey, _viewModel.McpAccessKeys);
         }
         catch (Exception ex)
         {
@@ -291,10 +294,79 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         }
 
         mcpDocsContent.RefreshPermissions(_viewModel.McpEnabled, _viewModel.McpDraftWriteEnabled);
+        mcpDocsContent.SetSelectedKey(mcpDocsContent.SelectedKey, _viewModel.McpAccessKeys);
     }
 
     private void OnRefreshMcpCallsClick(object sender, RoutedEventArgs e) =>
         _viewModel.RefreshMcpCalls();
+
+    public bool HasOneTimeMcpKey => !string.IsNullOrEmpty(OneTimeMcpKeyBox?.Text);
+
+    public bool HasNoMcpAccessKeys => _viewModel.McpAccessKeys.Count == 0;
+
+    private void OnPropertyChangedForMcpKeys()
+    {
+        OnPropertyChanged(nameof(HasOneTimeMcpKey));
+        OnPropertyChanged(nameof(HasNoMcpAccessKeys));
+    }
+
+    private void OnCreateMcpKeyClick(object sender, RoutedEventArgs e)
+    {
+        var created = _viewModel.CreateMcpAccessKey("AI Client");
+        if (created is null)
+        {
+            return;
+        }
+
+        OneTimeMcpKeyBox.Text = created.RawToken;
+        OnPropertyChangedForMcpKeys();
+        mcpDocsContent.SetSelectedKey(created, _viewModel.McpAccessKeys);
+    }
+
+    private void OnRotateMcpKeyClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string id })
+        {
+            var created = _viewModel.RotateMcpAccessKey(id);
+            if (created is not null)
+            {
+                OneTimeMcpKeyBox.Text = created.RawToken;
+                OnPropertyChangedForMcpKeys();
+                mcpDocsContent.SetSelectedKey(created, _viewModel.McpAccessKeys);
+            }
+        }
+    }
+
+    private void OnDeleteMcpKeyClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string id })
+        {
+            _viewModel.DeleteMcpAccessKey(id);
+        }
+    }
+
+    private void OnMcpCallsPreviousClick(object sender, RoutedEventArgs e)
+    {
+        _viewModel.McpCallPage = Math.Max(0, _viewModel.McpCallPage - 1);
+        _viewModel.RefreshMcpCalls();
+    }
+
+    private void OnMcpCallsNextClick(object sender, RoutedEventArgs e)
+    {
+        _viewModel.McpCallPage++;
+        _viewModel.RefreshMcpCalls();
+    }
+
+    private void OnClearMcpCallsClick(object sender, RoutedEventArgs e) => _viewModel.ClearMcpCalls();
+
+    private async void OnExportMcpCallsClick(object sender, RoutedEventArgs e)
+    {
+        var json = _viewModel.ExportMcpCalls();
+        var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+        package.SetText(json);
+        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+        await Task.CompletedTask;
+    }
 
     private async void OnCheckUpdatesClick(object sender, RoutedEventArgs e)
     {

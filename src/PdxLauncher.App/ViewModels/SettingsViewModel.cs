@@ -2,8 +2,10 @@ namespace PdxLauncher.App.ViewModels;
 
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using System.Text.Json;
 
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
@@ -30,7 +32,109 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// <summary>设置页 MCP 工具目录（与 MCP 进程共用同一份元数据）。</summary>
     public IReadOnlyList<McpToolDescriptor> McpTools { get; } = McpToolCatalog.Tools;
 
+    public ObservableCollection<McpAccessKey> McpAccessKeys { get; } = new();
+
     public ObservableCollection<McpCallHistoryEntry> McpRecentCalls { get; } = new();
+
+    public IReadOnlyList<string> McpClientKinds { get; } = (string[])[
+        "Claude Desktop", "Claude Code", "Codex", "Cursor", "VS Code",
+    ];
+
+    public int McpClientKindIndex { get; set; }
+
+    public string McpClientConfigText { get; private set; } = string.Empty;
+
+    public bool HasMcpAccessKeys => McpAccessKeys.Count > 0;
+
+    public void RefreshMcpAccessKeys()
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            var keys = new McpAccessKeyStore(AppServices.Database).List();
+            McpAccessKeys.Clear();
+            foreach (var key in keys)
+            {
+                McpAccessKeys.Add(key);
+            }
+
+            OnPropertyChanged(nameof(HasMcpAccessKeys));
+        }
+        catch (Exception exception)
+        {
+            AppServices.Logger.Warn("读取 MCP 访问密钥失败：" + exception.Message);
+        }
+    }
+
+    public McpCreatedAccessKey? CreateMcpAccessKey(string displayName) =>
+        MutateMcpAccessKey(store => store.Create(displayName, (string[])["*"], null));
+
+    public McpCreatedAccessKey? RotateMcpAccessKey(string id) =>
+        MutateMcpAccessKey(store => store.Rotate(id));
+
+    public bool DeleteMcpAccessKey(string id) =>
+        MutateMcpAccessKey(store => store.Delete(id));
+
+    public bool SetMcpAccessKeyEnabled(string id, bool enabled) =>
+        MutateMcpAccessKey(store => store.SetEnabled(id, enabled));
+
+    public void UpdateMcpClientConfig(McpCreatedAccessKey? selectedKey)
+    {
+        var client = (McpClientKind)Math.Clamp(McpClientKindIndex, 0, McpClientKinds.Count - 1);
+        McpClientConfigText = McpClientConfigGenerator.Create(
+            client,
+            Path.Combine(AppContext.BaseDirectory, "PdxLauncher.Mcp.exe"),
+            AppServices.DataRoot,
+            AppServices.Settings.McpEnabled,
+            AppServices.Settings.McpDraftWriteEnabled,
+            selectedKey?.Key,
+            selectedKey?.RawToken ?? string.Empty);
+        OnPropertyChanged(nameof(McpClientConfigText));
+    }
+
+    private T MutateMcpAccessKey<T>(Func<McpAccessKeyStore, T> action)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return default!;
+        }
+
+        try
+        {
+            var result = action(new McpAccessKeyStore(AppServices.Database));
+            RefreshMcpAccessKeys();
+            return result;
+        }
+        catch (Exception exception)
+        {
+            SetStatus(Keys.SettingsStatusSaveFailed, exception.Message);
+            return default!;
+        }
+    }
+
+    private bool MutateMcpAccessKey(Func<McpAccessKeyStore, bool> action)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return false;
+        }
+
+        try
+        {
+            var result = action(new McpAccessKeyStore(AppServices.Database));
+            RefreshMcpAccessKeys();
+            return result;
+        }
+        catch (Exception exception)
+        {
+            SetStatus(Keys.SettingsStatusSaveFailed, exception.Message);
+            return false;
+        }
+    }
 
     public string McpPermissionModeText =>
         !AppServices.Settings.McpEnabled
@@ -49,7 +153,17 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     public bool HasMcpRecentCalls => McpRecentCalls.Count > 0;
 
-    public void RefreshMcpCalls(string? toolName = null, McpCallOutcome? outcome = null)
+    public int McpCallPage { get; set; }
+
+    public int McpCallPageSize => 50;
+
+    public int McpCallPageCount => Math.Max(1, (McpCallTotal + McpCallPageSize - 1) / McpCallPageSize);
+
+    public bool CanMcpCallPreviousPage => McpCallPage > 0;
+
+    public bool CanMcpCallNextPage => McpCallPage + 1 < McpCallPageCount;
+
+    public void RefreshMcpCalls(string? toolName = null, McpCallOutcome? outcome = null, string? keyId = null)
     {
         if (!AppServices.IsInitialized)
         {
@@ -59,7 +173,8 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         try
         {
             var history = new McpCallHistoryStore(AppServices.Database);
-            var entries = history.Query(new McpCallHistoryQuery(toolName, outcome), limit: 100);
+            var query = new McpCallHistoryQuery(toolName, outcome, keyId, McpCallPage * McpCallPageSize, McpCallPageSize);
+            var entries = history.Query(query);
             var stats = history.GetStats();
 
             McpRecentCalls.Clear();
@@ -74,10 +189,52 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             OnPropertyChanged(nameof(McpCallSuccess));
             OnPropertyChanged(nameof(McpCallSuccessRate));
             OnPropertyChanged(nameof(HasMcpRecentCalls));
+            OnPropertyChanged(nameof(McpCallPageCount));
+            OnPropertyChanged(nameof(CanMcpCallPreviousPage));
+            OnPropertyChanged(nameof(CanMcpCallNextPage));
         }
         catch (Exception exception)
         {
             AppServices.Logger.Warn("读取 MCP 调用历史失败：" + exception.Message);
+        }
+    }
+
+    public void ClearMcpCalls()
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            new McpCallHistoryStore(AppServices.Database).Clear();
+            McpCallPage = 0;
+            RefreshMcpCalls();
+        }
+        catch (Exception exception)
+        {
+            SetStatus(Keys.SettingsStatusSaveFailed, exception.Message);
+        }
+    }
+
+    public string ExportMcpCalls(string? toolName = null, McpCallOutcome? outcome = null, string? keyId = null)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return "[]";
+        }
+
+        try
+        {
+            var entries = new McpCallHistoryStore(AppServices.Database).Query(
+                new McpCallHistoryQuery(toolName, outcome, keyId, 0, McpCallHistoryStore.Capacity));
+            return JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (Exception exception)
+        {
+            AppServices.Logger.Warn("导出 MCP 调用历史失败：" + exception.Message);
+            return "[]";
         }
     }
 
@@ -1029,6 +1186,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(McpEnabled));
         OnPropertyChanged(nameof(McpDraftWriteEnabled));
             OnPropertyChanged(nameof(McpPermissionModeText));
+            UpdateMcpClientConfig(null);
     }
 
     /// <summary>

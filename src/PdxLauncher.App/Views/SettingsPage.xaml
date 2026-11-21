@@ -1865,6 +1865,55 @@
                                                              Loaded="OnMcpDocsContentLoaded"
                                                              AutomationProperties.AutomationId="mcpDocsContent" />
                                 </Border>
+
+                                <TextBlock Text="{x:Bind L.SettingsMcpAccessKeys, Mode=OneWay}"
+                                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <Button Content="{x:Bind L.SettingsMcpNewKey, Mode=OneWay}"
+                                        Click="OnCreateMcpKeyClick"
+                                        AutomationProperties.AutomationId="btnCreateMcpKey" />
+                                <TextBlock Text="{x:Bind L.SettingsMcpKeyOnce, Mode=OneWay}"
+                                           Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                           TextWrapping="Wrap"
+                                           Visibility="{x:Bind svc:XamlVisibility.FromBool(HasOneTimeMcpKey), Mode=OneWay}" />
+                                <TextBox x:Name="OneTimeMcpKeyBox"
+                                         IsReadOnly="True"
+                                         TextWrapping="Wrap"
+                                         FontFamily="Consolas"
+                                         Visibility="{x:Bind svc:XamlVisibility.FromBool(HasOneTimeMcpKey), Mode=OneWay}"
+                                         AutomationProperties.AutomationId="txtOneTimeMcpKey" />
+                                <TextBlock Text="{x:Bind L.SettingsMcpNoKeys, Mode=OneWay}"
+                                           Visibility="{x:Bind svc:XamlVisibility.FromBool(HasNoMcpAccessKeys), Mode=OneWay}"
+                                           Style="{StaticResource SettingsHintTextStyle}" />
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.McpAccessKeys, Mode=OneWay}"
+                                              AutomationProperties.AutomationId="lstMcpAccessKeys">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Spacing="8" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="mcp:McpAccessKey">
+                                            <Grid Padding="12" CornerRadius="8" BorderThickness="1"
+                                                  BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                                  Background="{ThemeResource PdxCardBackgroundBrush}">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="{x:Bind DisplayName}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                                    <TextBlock Text="{x:Bind KeyPrefix}" FontFamily="Consolas" Style="{StaticResource CaptionTextBlockStyle}" />
+                                                    <TextBlock Text="{x:Bind StatusText}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                                    <TextBlock Text="{x:Bind AllowedTools}" FontFamily="Consolas" Style="{StaticResource CaptionTextBlockStyle}" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+                                                    <Button Content="轮换" Click="OnRotateMcpKeyClick" Tag="{x:Bind Id}" AutomationProperties.AutomationId="btnRotateMcpKey" />
+                                                    <Button Content="删除" Click="OnDeleteMcpKeyClick" Tag="{x:Bind Id}" AutomationProperties.AutomationId="btnDeleteMcpKey" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </StackPanel>
                         </Border>
 
@@ -1919,6 +1968,33 @@
                             <StackPanel Spacing="8">
                                 <TextBlock Text="{x:Bind L.SettingsMcpRecentCalls, Mode=OneWay}"
                                            Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <ComboBox Header="{x:Bind L.SettingsMcpFilterTool, Mode=OneWay}"
+                                              SelectedIndex="0"
+                                              AutomationProperties.AutomationId="cmbMcpFilterTool">
+                                        <ComboBoxItem Content="All" />
+                                        <ComboBoxItem Content="list_games" />
+                                        <ComboBoxItem Content="list_mods" />
+                                        <ComboBoxItem Content="list_tags" />
+                                        <ComboBoxItem Content="get_upload_draft" />
+                                        <ComboBoxItem Content="save_upload_draft" />
+                                        <ComboBoxItem Content="clear_upload_draft" />
+                                    </ComboBox>
+                                    <ComboBox Header="{x:Bind L.SettingsMcpFilterOutcome, Mode=OneWay}"
+                                              SelectedIndex="0"
+                                              AutomationProperties.AutomationId="cmbMcpFilterOutcome">
+                                        <ComboBoxItem Content="All" />
+                                        <ComboBoxItem Content="Success" />
+                                        <ComboBoxItem Content="ToolError" />
+                                        <ComboBoxItem Content="ProtocolError" />
+                                        <ComboBoxItem Content="InternalError" />
+                                    </ComboBox>
+                                    <ComboBox Header="{x:Bind L.SettingsMcpFilterKey, Mode=OneWay}"
+                                              ItemsSource="{x:Bind ViewModel.McpAccessKeys, Mode=OneWay}"
+                                              DisplayMemberPath="KeyPrefix"
+                                              SelectedIndex="0"
+                                              AutomationProperties.AutomationId="cmbMcpFilterKey" />
+                                </StackPanel>
                                 <Button Content="{x:Bind L.SettingsMcpRefreshCalls, Mode=OneWay}"
                                         Click="OnRefreshMcpCallsClick"
                                         AutomationProperties.AutomationId="btnRefreshMcpCalls" />
@@ -1941,6 +2017,22 @@
                                         </DataTemplate>
                                     </ListView.ItemTemplate>
                                 </ListView>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Content="{x:Bind L.SettingsMcpPreviousPage, Mode=OneWay}"
+                                            IsEnabled="{x:Bind ViewModel.CanMcpCallPreviousPage, Mode=OneWay}"
+                                            Click="OnMcpCallsPreviousClick"
+                                            AutomationProperties.AutomationId="btnMcpCallsPrevious" />
+                                    <Button Content="{x:Bind L.SettingsMcpNextPage, Mode=OneWay}"
+                                            IsEnabled="{x:Bind ViewModel.CanMcpCallNextPage, Mode=OneWay}"
+                                            Click="OnMcpCallsNextClick"
+                                            AutomationProperties.AutomationId="btnMcpCallsNext" />
+                                    <Button Content="{x:Bind L.SettingsMcpClearCalls, Mode=OneWay}"
+                                            Click="OnClearMcpCallsClick"
+                                            AutomationProperties.AutomationId="btnClearMcpCalls" />
+                                    <Button Content="{x:Bind L.SettingsMcpExportCalls, Mode=OneWay}"
+                                            Click="OnExportMcpCallsClick"
+                                            AutomationProperties.AutomationId="btnExportMcpCalls" />
+                                </StackPanel>
                             </StackPanel>
                         </Border>
 

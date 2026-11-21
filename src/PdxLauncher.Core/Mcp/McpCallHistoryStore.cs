@@ -25,14 +25,16 @@ public sealed class McpCallHistoryStore
         return _database.Write(connection =>
         {
             connection.Execute(
-                "INSERT INTO mcp_calls (started_utc, duration_ms, tool_name, outcome, error_code, permission_mode) "
-                    + "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO mcp_calls "
+                    + "(started_utc, duration_ms, tool_name, outcome, error_code, permission_mode, key_id) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 entry.StartedUtc.ToUnixTimeMilliseconds(),
                 entry.DurationMs,
                 entry.ToolName,
                 entry.Outcome.ToString(),
                 entry.ErrorCode,
-                entry.PermissionMode);
+                entry.PermissionMode,
+                entry.KeyId);
 
             connection.Execute(
                 "DELETE FROM mcp_calls WHERE id NOT IN "
@@ -43,7 +45,7 @@ public sealed class McpCallHistoryStore
         });
     }
 
-    /// <summary>读取最近调用（最新在前），可按时长与结果筛选。</summary>
+    /// <summary>读取最近调用（最新在前），可按工具、结果与密钥筛选并分页。</summary>
     public IReadOnlyList<McpCallHistoryEntry> Query(McpCallHistoryQuery? query = null, int limit = 100)
     {
         query ??= new McpCallHistoryQuery();
@@ -62,10 +64,18 @@ public sealed class McpCallHistoryStore
             parameters.Add(outcome.ToString());
         }
 
+        if (!string.IsNullOrWhiteSpace(query.KeyId))
+        {
+            clauses.Add("key_id = ?");
+            parameters.Add(query.KeyId);
+        }
+
         var where = clauses.Count == 0 ? string.Empty : " WHERE " + string.Join(" AND ", clauses);
-        var sql = "SELECT id, started_utc, duration_ms, tool_name, outcome, error_code, permission_mode "
-            + "FROM mcp_calls" + where + " ORDER BY started_utc DESC, id DESC LIMIT ?";
-        parameters.Add(Math.Clamp(limit, 1, Capacity));
+        var sql = "SELECT id, started_utc, duration_ms, tool_name, outcome, error_code, permission_mode, key_id "
+            + "FROM mcp_calls" + where + " ORDER BY started_utc DESC, id DESC LIMIT ? OFFSET ?";
+        var pageSize = limit > 0 ? limit : query.Limit;
+        parameters.Add(Math.Clamp(query.Limit > 0 && query.Limit != 100 ? query.Limit : pageSize, 1, Capacity));
+        parameters.Add(Math.Max(0, query.Offset));
 
         using var connection = _database.Open();
         return connection.Query(sql, Project, parameters.ToArray());
@@ -82,6 +92,41 @@ public sealed class McpCallHistoryStore
         return ((int)total, (int)success);
     }
 
+    /// <summary>按当前筛选条件统计条数，供分页使用。</summary>
+    public int Count(McpCallHistoryQuery? query = null)
+    {
+        query ??= new McpCallHistoryQuery();
+        var clauses = new List<string>();
+        var parameters = new List<object?>();
+        if (!string.IsNullOrWhiteSpace(query.ToolName))
+        {
+            clauses.Add("tool_name = ?");
+            parameters.Add(query.ToolName);
+        }
+
+        if (query.Outcome is { } outcome)
+        {
+            clauses.Add("outcome = ?");
+            parameters.Add(outcome.ToString());
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.KeyId))
+        {
+            clauses.Add("key_id = ?");
+            parameters.Add(query.KeyId);
+        }
+
+        var where = clauses.Count == 0 ? string.Empty : " WHERE " + string.Join(" AND ", clauses);
+        using var connection = _database.Open();
+        return (int)(connection.ExecuteScalar("SELECT COUNT(*) FROM mcp_calls" + where, parameters.ToArray()) as long? ?? 0L);
+    }
+
+    /// <summary>清空全部调用记录。</summary>
+    public void Clear()
+    {
+        _database.Write(connection => connection.Execute("DELETE FROM mcp_calls"));
+    }
+
     private static McpCallHistoryEntry Project(IReadOnlyDictionary<string, object?> row)
     {
         var id = ReadInt64(row, "id");
@@ -93,6 +138,7 @@ public sealed class McpCallHistoryStore
         var permission = row.TryGetValue("permission_mode", out var permissionValue)
             ? permissionValue as string ?? string.Empty
             : string.Empty;
+        var keyId = row.TryGetValue("key_id", out var keyValue) ? keyValue as string : null;
 
         return new McpCallHistoryEntry(
             id,
@@ -101,7 +147,8 @@ public sealed class McpCallHistoryStore
             tool,
             Enum.TryParse(outcomeText, out McpCallOutcome parsed) ? parsed : McpCallOutcome.InternalError,
             errorCode,
-            permission);
+            permission,
+            keyId);
     }
 
     private static long ReadInt64(IReadOnlyDictionary<string, object?> row, string key) =>

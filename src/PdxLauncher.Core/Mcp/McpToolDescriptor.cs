@@ -31,7 +31,13 @@ public sealed record McpCallHistoryEntry(
     string ToolName,
     McpCallOutcome Outcome,
     string? ErrorCode,
-    string PermissionMode);
+    string PermissionMode,
+    string? KeyId = null);
 
 /// <summary>MCP 调用历史的可选筛选条件。</summary>
-public sealed record McpCallHistoryQuery(string? ToolName = null, McpCallOutcome? Outcome = null);
+public sealed record McpCallHistoryQuery(
+    string? ToolName = null,
+    McpCallOutcome? Outcome = null,
+    string? KeyId = null,
+    int Offset = 0,
+    int Limit = 100);

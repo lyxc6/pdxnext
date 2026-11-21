@@ -13,6 +13,8 @@ PdxNext 附带一个独立的 stdio MCP 程序 `PdxLauncher.Mcp.exe`，让 Claud
 | `src/PdxLauncher.Core/ModStudio/ModUploadDraftStore.cs` | 草稿文件存储（原子写） |
 | `src/PdxLauncher.App/Controls/McpDocsContent.xaml(.cs)` | 设置页 MCP 分节里的文档与配置复制 |
 | `src/PdxLauncher.Core/Mcp/` | 工具目录、调用记录模型与 SQLite 存储 |
+| `src/PdxLauncher.Core/Mcp/McpAccessKeyStore.cs` | 本地访问密钥（只存哈希与前缀） |
+| `src/PdxLauncher.Core/Mcp/McpClientConfigGenerator.cs` | 多客户端连接配置生成 |
 | `docs/MCP.md` | 本文件 |
 
 `PdxLauncher.Mcp.exe` 由 App 的构建目标复制到 App 输出目录；`publish.cmd` 和安装包
@@ -151,6 +153,10 @@ MCP 程序与 `PdxLauncher.App.exe` 在同一目录。启动器会按本机实�
 
 - 每次 `tools/call` 只在 `data\pdxnext.sqlite` 的 `mcp_calls` 表记录元数据（时间、耗时、工具名、结果、权限模式），最多 500 条；不记录参数、路径、标题或描述
 - 调用历史写入失败只记日志，不改变工具响应；设置页“最近调用”只显示最近 100 条
+- 调用历史可按工具、结果和密钥筛选，分页浏览，清空或导出 JSON；导出只含元数据白名单
+- 访问密钥存于 `mcp_access_keys` 表：明文 `pdxmcp_<id>_<secret>` 只在创建/轮换时显示一次，SQLite 只存 SHA-256 哈希与前缀；校验使用固定时间比较
+- 无 `--access-key` 是兼容模式，沿用全局 `--enabled` / `--draft-write`；传密钥时该密钥的工具范围生效，过期/禁用/错误密钥被拒绝
+- Claude Desktop 配置内联密钥；Claude Code、Codex、Cursor、VS Code 配置用 `PDXNEXT_MCP_ACCESS_KEY` 占位，用户自行写入安全存储
 - 总开关由 `AppSettings.McpEnabled` 控制（默认开）：关闭后 MCP 进程返回空工具表并拒绝全部 `tools/call`
 - 工具权限按最小权限分层：只读工具（`list_games` / `list_mods` / `list_tags` / `get_upload_draft`）默认可用；
   写入工具（`save_upload_draft` / `clear_upload_draft`）必须由 `AppSettings.McpDraftWriteEnabled` 单独开启（默认关）

@@ -4419,6 +4419,48 @@
   <data name="SettingsMcpConnection" xml:space="preserve">
     <value>连接配置</value>
   </data>
+  <data name="SettingsMcpClient" xml:space="preserve">
+    <value>客户端</value>
+  </data>
+  <data name="SettingsMcpAccessKeys" xml:space="preserve">
+    <value>访问密钥</value>
+  </data>
+  <data name="SettingsMcpNewKey" xml:space="preserve">
+    <value>新建密钥</value>
+  </data>
+  <data name="SettingsMcpNoKeys" xml:space="preserve">
+    <value>还没有访问密钥</value>
+  </data>
+  <data name="SettingsMcpKeyOnce" xml:space="preserve">
+    <value>请立即复制并安全保存；这是唯一一次显示。</value>
+  </data>
+  <data name="SettingsMcpKeyScope" xml:space="preserve">
+    <value>工具范围</value>
+  </data>
+  <data name="SettingsMcpKeyLastUsed" xml:space="preserve">
+    <value>最后使用</value>
+  </data>
+  <data name="SettingsMcpFilterTool" xml:space="preserve">
+    <value>工具</value>
+  </data>
+  <data name="SettingsMcpFilterOutcome" xml:space="preserve">
+    <value>结果</value>
+  </data>
+  <data name="SettingsMcpFilterKey" xml:space="preserve">
+    <value>密钥</value>
+  </data>
+  <data name="SettingsMcpPreviousPage" xml:space="preserve">
+    <value>上一页</value>
+  </data>
+  <data name="SettingsMcpNextPage" xml:space="preserve">
+    <value>下一页</value>
+  </data>
+  <data name="SettingsMcpClearCalls" xml:space="preserve">
+    <value>清空记录</value>
+  </data>
+  <data name="SettingsMcpExportCalls" xml:space="preserve">
+    <value>导出 JSON</value>
+  </data>
   <data name="SettingsMcpRecentCalls" xml:space="preserve">
     <value>最近调用</value>
   </data>
