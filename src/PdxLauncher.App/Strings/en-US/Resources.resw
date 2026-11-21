@@ -6248,4 +6248,67 @@ then call list_games to verify.</value>
   <data name="CrashFindingDatabaseOverrideFix" xml:space="preserve">
     <value>如果这是你想要的就不必处理；若另一个 Mod 的功能失效，请找兼容性补丁或调整加载顺序，并告知相关作者。</value>
   </data>
+  <data name="CrashSectionSession" xml:space="preserve">
+    <value>This game session</value>
+  </data>
+  <data name="CrashSessionHint" xml:space="preserve">
+    <value>Errors are counted from game logs while the game runs; review them here after it exits. Locked/read-only logs are flagged too.</value>
+  </data>
+  <data name="CrashSessionEmpty" xml:space="preserve">
+    <value>No session yet. Launch and close a game to see its error summary here.</value>
+  </data>
+  <data name="CrashSessionHeader" xml:space="preserve">
+    <value>Game: {0}  Started: {1}  Ended: {2}</value>
+  </data>
+  <data name="CrashSessionErrorCount" xml:space="preserve">
+    <value>{0} error(s) found this session (deduplicated across logs).</value>
+  </data>
+  <data name="CrashSessionGroupsHeader" xml:space="preserve">
+    <value>Error groups:</value>
+  </data>
+  <data name="CrashSessionGroupRow" xml:space="preserve">
+    <value>· {0}x: {1} (source: {2})</value>
+  </data>
+  <data name="CrashSessionLogsHeader" xml:space="preserve">
+    <value>Log file status:</value>
+  </data>
+  <data name="CrashSessionLogRow" xml:space="preserve">
+    <value>· {0}: {1}{2}</value>
+  </data>
+  <data name="CrashSessionReadOnlyFlag" xml:space="preserve">
+    <value> (read-only attribute)</value>
+  </data>
+  <data name="CrashSessionDegraded" xml:space="preserve">
+    <value>Some logs could not be read; the summary may be incomplete.</value>
+  </data>
+  <data name="CrashSessionLogReadable" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="CrashSessionLogLocked" xml:space="preserve">
+    <value>Locked / in use</value>
+  </data>
+  <data name="CrashSessionLogUnauthorized" xml:space="preserve">
+    <value>Permission denied</value>
+  </data>
+  <data name="CrashSessionLogReadOnly" xml:space="preserve">
+    <value>Read-only</value>
+  </data>
+  <data name="CrashSessionLogMissing" xml:space="preserve">
+    <value>Missing</value>
+  </data>
+  <data name="CrashSessionLogUnknown" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+  <data name="DiagnosticsGameLogNoGame" xml:space="preserve">
+    <value>No game selected; cannot check game log status.</value>
+  </data>
+  <data name="DiagnosticsGameLogStatus" xml:space="preserve">
+    <value>Game log {0}: {1}</value>
+  </data>
+  <data name="CrashSessionEndedTitle" xml:space="preserve">
+    <value>Game session ended</value>
+  </data>
+  <data name="CrashSessionEndedMessage" xml:space="preserve">
+    <value>This session had {0} error(s). See Crash Analysis → This game session.</value>
+  </data>
 </root>

@@ -6248,4 +6248,67 @@
   <data name="CrashFindingDatabaseOverrideFix" xml:space="preserve">
     <value>If this is intended, do nothing; if another mod's feature stops working, look for a compatibility patch, adjust load order, and tell the authors.</value>
   </data>
+  <data name="CrashSectionSession" xml:space="preserve">
+    <value>本次游戏</value>
+  </data>
+  <data name="CrashSessionHint" xml:space="preserve">
+    <value>游戏运行时按日志统计本次报错，退出游戏后可在这里查看。日志被占用/只读也会标注。</value>
+  </data>
+  <data name="CrashSessionEmpty" xml:space="preserve">
+    <value>还没有本次游戏的记录。启动一款游戏并退出后，这里会显示该次会话的报错摘要。</value>
+  </data>
+  <data name="CrashSessionHeader" xml:space="preserve">
+    <value>游戏：{0}　开始：{1}　结束：{2}</value>
+  </data>
+  <data name="CrashSessionErrorCount" xml:space="preserve">
+    <value>本次共发现 {0} 条报错（已跨日志去重）。</value>
+  </data>
+  <data name="CrashSessionGroupsHeader" xml:space="preserve">
+    <value>错误聚类：</value>
+  </data>
+  <data name="CrashSessionGroupRow" xml:space="preserve">
+    <value>· {0} 次：{1}（来源：{2}）</value>
+  </data>
+  <data name="CrashSessionLogsHeader" xml:space="preserve">
+    <value>日志文件状态：</value>
+  </data>
+  <data name="CrashSessionLogRow" xml:space="preserve">
+    <value>· {0}：{1}{2}</value>
+  </data>
+  <data name="CrashSessionReadOnlyFlag" xml:space="preserve">
+    <value>（只读属性）</value>
+  </data>
+  <data name="CrashSessionDegraded" xml:space="preserve">
+    <value>部分日志读取失败，统计可能不完整。</value>
+  </data>
+  <data name="CrashSessionLogReadable" xml:space="preserve">
+    <value>正常</value>
+  </data>
+  <data name="CrashSessionLogLocked" xml:space="preserve">
+    <value>被占用/锁定</value>
+  </data>
+  <data name="CrashSessionLogUnauthorized" xml:space="preserve">
+    <value>无权限读取</value>
+  </data>
+  <data name="CrashSessionLogReadOnly" xml:space="preserve">
+    <value>只读</value>
+  </data>
+  <data name="CrashSessionLogMissing" xml:space="preserve">
+    <value>不存在</value>
+  </data>
+  <data name="CrashSessionLogUnknown" xml:space="preserve">
+    <value>状态未知</value>
+  </data>
+  <data name="DiagnosticsGameLogNoGame" xml:space="preserve">
+    <value>未选择游戏，无法检查游戏日志状态。</value>
+  </data>
+  <data name="DiagnosticsGameLogStatus" xml:space="preserve">
+    <value>游戏日志 {0}：{1}</value>
+  </data>
+  <data name="CrashSessionEndedTitle" xml:space="preserve">
+    <value>本次游戏已结束</value>
+  </data>
+  <data name="CrashSessionEndedMessage" xml:space="preserve">
+    <value>本次游戏发现 {0} 条报错，可在「崩溃分析 → 本次游戏」查看。</value>
+  </data>
 </root>

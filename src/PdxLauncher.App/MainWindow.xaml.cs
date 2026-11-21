@@ -170,6 +170,7 @@ public sealed partial class MainWindow : Window
         RootGrid.SizeChanged += OnRootGridSizeChanged;
         ContentFrame.Navigated += OnContentFrameNavigated;
         AppServices.CurrentGameChanged += OnCurrentGameChanged;
+        AppServices.GameSessionMonitor.SessionEnded += OnGameSessionEnded;
         AppServices.BackgroundDisplayChanged += OnBackgroundDisplayChanged;
         AppServices.ModEditorNavVisibilityChanged += OnModEditorNavVisibilityChanged;
         AlwaysOnTopService.Changed += OnAlwaysOnTopChanged;
@@ -550,6 +551,29 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void OnGameSessionEnded(object? sender, PdxLauncher.Core.CrashAnalysis.GameSessionSnapshot session)
+    {
+        // 监听在后台定时器上触发，必须 marshal 到 UI 线程再弹提示。
+        if (!DispatcherQueue.TryEnqueue(async () =>
+            {
+                try
+                {
+                    var localizer = Localizer.Instance;
+                    await Controls.ConfirmOverlay.ShowMessage(
+                        localizer.CrashSessionEndedTitle,
+                        localizer.T("CrashSessionEndedMessage", session.ErrorBlocks),
+                        localizer.CommonClose);
+                }
+                catch (Exception exception)
+                {
+                    AppServices.Logger.Warn("显示本次游戏报错提示失败：" + exception.Message);
+                }
+            }))
+        {
+            AppServices.Logger.Warn("MainWindow 无法派发本次游戏结束事件");
+        }
+    }
+
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
         try
@@ -557,6 +581,7 @@ public sealed partial class MainWindow : Window
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             _viewModel.NavigationRequested -= OnNavigationRequested;
             AppServices.CurrentGameChanged -= OnCurrentGameChanged;
+            AppServices.GameSessionMonitor.SessionEnded -= OnGameSessionEnded;
             AppServices.BackgroundDisplayChanged -= OnBackgroundDisplayChanged;
             AppServices.ModEditorNavVisibilityChanged -= OnModEditorNavVisibilityChanged;
             AlwaysOnTopService.Changed -= OnAlwaysOnTopChanged;

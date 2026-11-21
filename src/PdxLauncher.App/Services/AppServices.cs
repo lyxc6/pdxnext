@@ -653,6 +653,17 @@ public static class AppServices
         new WindowsEventLogReader(),
         new PcSystemSnapshotReader());
 
+    private static GameSessionMonitorService? _gameSessionMonitor;
+
+    /// <summary>
+    /// 本次游戏报错监听：游戏启动后增量采集日志错误，退出后固化摘要。
+    /// 只读取游戏日志、不写游戏目录、不联网。
+    /// </summary>
+    public static GameSessionMonitorService GameSessionMonitor => _gameSessionMonitor ??= new GameSessionMonitorService(
+        new GameSessionLogTracker(FileSystem, Clock),
+        new SystemAppServicesClock(),
+        static message => Logger.Info(message));
+
     private static ThemeImageFlattener? _themeImages;
 
     /// <summary>
