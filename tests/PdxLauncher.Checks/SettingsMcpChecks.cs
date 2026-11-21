@@ -26,13 +26,13 @@ public static class SettingsMcpChecks
         var appSettings = Read(root, "src", "PdxLauncher.Core", "Configuration", "AppSettings.cs");
 
         ChecksContext.Check(
-            "设置 MCP: 左侧有 MCP 导航（Tag=8）",
+            "设置 MCP: 左侧有 MCP 导航（Tag=7）",
             settingsXaml.Contains("AutomationProperties.AutomationId=\"navSettingsMcp\"", StringComparison.Ordinal)
-                && settingsXaml.Contains("Tag=\"8\"", StringComparison.Ordinal));
+                && settingsXaml.Contains("Tag=\"7\"", StringComparison.Ordinal));
         ChecksContext.Check(
             "设置 MCP: 内容列有按需加载的 MCP 分节",
             settingsXaml.Contains("x:Name=\"secMcp\"", StringComparison.Ordinal)
-                && settingsXaml.Contains("x:Load=\"{x:Bind IsMcpSection", StringComparison.Ordinal)
+                && settingsXaml.Contains("Visibility=\"{x:Bind svc:XamlVisibility.FromBool(IsMcpSection)", StringComparison.Ordinal)
                 && settingsXaml.Contains("controls:McpDocsContent", StringComparison.Ordinal));
         ChecksContext.Check(
             "设置 MCP: Halo 式四个分区齐全",
@@ -48,8 +48,8 @@ public static class SettingsMcpChecks
                 && settingsVm.Contains("McpCallHistoryStore", StringComparison.Ordinal));
         ChecksContext.Check(
             "设置 MCP: 分节索引与 XAML 顺序一致",
-            settingsCode.Contains("IsMcpSection => _sectionIndex == 8", StringComparison.Ordinal)
-                && settingsCode.Contains("McpSectionIndex = 8", StringComparison.Ordinal)
+            settingsCode.Contains("IsMcpSection => _sectionIndex == 7", StringComparison.Ordinal)
+                && settingsCode.Contains("McpSectionIndex = 7", StringComparison.Ordinal)
                 && settingsCode.Contains("OnPropertyChanged(nameof(IsMcpSection))", StringComparison.Ordinal));
         ChecksContext.Check(
             "设置 MCP: 文档按当前路径与权限初始化",
