@@ -48,6 +48,10 @@ public static class TranslationChecks
             CheckMultiEngineFailureNotes();
             CheckMultiEngineFallback();
             CheckTransportHostGate();
+            CheckMarkdownTranslatorBatch();
+            CheckStreamingTranslation();
+            CheckEngineActivityHooks();
+            CheckCoordinatorRemoteBeforeLocal();
         }
         finally
         {
@@ -211,6 +215,197 @@ public static class TranslationChecks
             "可见文本是 URL 时目标地址不变",
             "https://example.com/y",
             mismatchLink?.Url ?? string.Empty);
+    }
+
+    /// <summary>A：整篇文档只调用一次批量委托，块结构、图片、裸链接语义不变。</summary>
+    private static void CheckMarkdownTranslatorBatch()
+    {
+        var calls = new List<IReadOnlyList<string>>();
+        var translator = new MarkdownTranslator((batch, _) =>
+        {
+            calls.Add(batch);
+            return Task.FromResult<IReadOnlyList<string?>>(batch.Select(text => "译:" + text).ToArray());
+        });
+
+        var document = new MarkdownDocument(
+            new MarkdownBlock[]
+            {
+                new MarkdownHeading(1, new MarkdownInline[] { new MarkdownTextInline("Title") }),
+                new MarkdownParagraph(new MarkdownInline[] { new MarkdownTextInline("Hello"), new MarkdownTextInline(" world") }),
+                new MarkdownCodeBlock("var x = 1;", "cs"),
+                new MarkdownParagraph(new MarkdownInline[]
+                {
+                    new MarkdownLinkInline(new MarkdownInline[] { new MarkdownTextInline("https://example.com/a") }, "https://example.com/a"),
+                }),
+                new MarkdownListItem(0, false, 0, new MarkdownInline[] { new MarkdownTextInline("Item") }),
+            },
+            false);
+
+        var translated = translator.TranslateAsync(document, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("整篇文档只发一次批量请求", 1, calls.Count);
+        ChecksContext.Equal("批量收集三条可译文本", 3, calls[0].Count);
+        ChecksContext.Equal("连续纯文本合并为一条", "Hello world", calls[0][1]);
+        ChecksContext.Check("裸链接不送进批量", calls[0].All(text => !text.Contains("https://", StringComparison.Ordinal)));
+
+        var heading = translated.Blocks[0] as MarkdownHeading;
+        ChecksContext.Equal("批量翻译标题", "译:Title", (heading?.Inlines.FirstOrDefault() as MarkdownTextInline)?.Text ?? string.Empty);
+        var code = translated.Blocks[2] as MarkdownCodeBlock;
+        ChecksContext.Equal("批量翻译不动代码块", "var x = 1;", code?.Text ?? string.Empty);
+        var link = (translated.Blocks[3] as MarkdownParagraph)?.Inlines.FirstOrDefault() as MarkdownLinkInline;
+        ChecksContext.Equal("批量翻译不动裸链接", "https://example.com/a", link?.Url ?? string.Empty);
+
+        // 译不出来时保留原文（批量路径同样不能把内容改空）。
+        var failing = new MarkdownTranslator((batch, _) =>
+            Task.FromResult<IReadOnlyList<string?>>(new string?[batch.Count]));
+        var kept = failing.TranslateAsync(document, CancellationToken.None).GetAwaiter().GetResult();
+        var keptHeading = kept.Blocks[0] as MarkdownHeading;
+        ChecksContext.Equal("批量译文为空时保留原文", "Title", (keptHeading?.Inlines.FirstOrDefault() as MarkdownTextInline)?.Text ?? string.Empty);
+    }
+
+    /// <summary>B：流式引擎每翻出一条立刻回调，不等整批（离线 2B 兜底时译名逐条出现）。</summary>
+    private static void CheckStreamingTranslation()
+    {
+        var progress = new List<string>();
+        var engine = new StreamingStubEngine();
+        var service = new TranslationService(new ITranslationEngine[] { engine }, null, new RecordingLogger());
+        var options = TranslationOptions.FromSettings(
+            new AppSettings { TranslateEnabled = true, TranslateEngineMode = TranslationEngineModes.Builtin },
+            "zh-CN");
+
+        var results = service.TranslateAsync(
+            new[] { "a", "b", "c" },
+            options,
+            CancellationToken.None,
+            (_, text) => progress.Add(text ?? string.Empty)).GetAwaiter().GetResult();
+
+        ChecksContext.Check("流式引擎逐条回调", engine.Streamed.Count == 3);
+        ChecksContext.Equal("流式回调带原文顺序", "a", engine.Streamed[0]);
+        ChecksContext.Equal("流式回调带原文顺序（末条）", "c", engine.Streamed[2]);
+        ChecksContext.Equal("界面进度收到每条译文", 3, progress.Count);
+        ChecksContext.Equal("结果数组与入参一一对应", "stream:c", results[2] ?? string.Empty);
+
+        // 回落时 only 未命中的子集交给下一个引擎，进度必须回填到正确的原文下标（不能错位）。
+        var fallbackProgress = new Dictionary<int, string>();
+        var partial = new StreamingStubEngine();
+        var first = new PartialFailEngine();
+        var fallbackService = new TranslationService(
+            new ITranslationEngine[] { first, partial },
+            null,
+            new RecordingLogger());
+        var fallbackOptions = TranslationOptions.FromSettings(
+            new AppSettings { TranslateEnabled = true, TranslateEngineMode = TranslationEngineModes.Auto },
+            "zh-CN");
+        var fallbackResults = fallbackService.TranslateAsync(
+            new[] { "x", "y", "z" },
+            fallbackOptions,
+            CancellationToken.None,
+            (i, text) => fallbackProgress[i] = text ?? string.Empty).GetAwaiter().GetResult();
+        ChecksContext.Equal("回落成功后结果回到原文原位", "stream:y", fallbackResults[1] ?? string.Empty);
+        ChecksContext.Equal("回落后进度回调也对准原文下标", "stream:y", fallbackProgress[1]);
+        ChecksContext.Equal("首引擎成功的条目不被回落覆盖", "only:z", fallbackProgress[2]);
+        ChecksContext.Check("首引擎成功的条目不误报回落进度", fallbackProgress[0] == "only:x");
+    }
+
+    /// <summary>D：在途钩子只在真有未命中文本时成对触发；缓存全命中不登记在途。</summary>
+    private static void CheckEngineActivityHooks()
+    {
+        var logger = new RecordingLogger();
+        var documents = new MemoryDocumentStore();
+        var clock = new MutableClock(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+        var cache = new TranslationCache(documents, clock, logger);
+        var engine = new StubEngine("ok", configured: true, succeed: true);
+        var service = new TranslationService(new ITranslationEngine[] { engine }, cache, logger);
+        var options = TranslationOptions.FromSettings(
+            new AppSettings { TranslateEnabled = true, TranslateEngineMode = TranslationEngineModes.Builtin },
+            "zh-CN");
+
+        var started = 0;
+        var ended = 0;
+        service.OnEngineActivityStarted = () => started++;
+        service.OnEngineActivityEnded = () => ended++;
+
+        // 先翻一次把译文写进缓存（这次当然要在途）；之后才重置计数验证命中路径。
+        service.TranslateAsync(new[] { "cache-me" }, options, CancellationToken.None).GetAwaiter().GetResult();
+        engine.Calls = 0;
+        started = 0;
+        ended = 0;
+
+        service.TranslateAsync(new[] { "cache-me" }, options, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("缓存命中不登记在途", 0, started);
+        ChecksContext.Equal("缓存命中不请求引擎", 0, engine.Calls);
+
+        service.TranslateAsync(new[] { "fresh" }, options, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("未命中时登记一次在途", 1, started);
+        ChecksContext.Equal("未命中时在途收尾一次", 1, ended);
+    }
+
+    /// <summary>C：自动档远程引擎排在本地模型之前（静态读源码，Coordinator 依赖 WinUI 无法在自检里构造）。</summary>
+    private static void CheckCoordinatorRemoteBeforeLocal()
+    {
+        var root = FindWorkspaceRoot();
+        var path = Path.Combine(root, "src", "PdxLauncher.App", "Services", "TranslationCoordinator.cs");
+        var source = System.IO.File.ReadAllText(path);
+
+        var remoteFree = source.IndexOf("engines.Add(new FreeTranslationEngine", StringComparison.Ordinal);
+        var localFallback = source.LastIndexOf("engines.AddRange(_local.CreateEngines())", StringComparison.Ordinal);
+        ChecksContext.Check("源码里有远程免费引擎", remoteFree >= 0);
+        ChecksContext.Check("源码里有本地兜底引擎", localFallback >= 0);
+        ChecksContext.Check("自动档远程排在本地兜底之前", remoteFree >= 0 && localFallback > remoteFree);
+        ChecksContext.Check(
+            "本地兜底只在自动档追加",
+            source.Contains("mode == TranslationEngineModes.Auto && _local is not null", StringComparison.Ordinal));
+    }
+
+    // ---------------------------------------------------------------- 测试替身
+
+    /// <summary>首个引擎：除 "y" 外都成功，用来验证回落到流式引擎时进度下标不错位。</summary>
+    private sealed class PartialFailEngine : ITranslationEngine
+    {
+        public string Id => "partial";
+
+        public bool IsConfigured => true;
+
+        public Task<string?> TranslateAsync(string text, string targetLanguage, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>(text == "y" ? null : "only:" + text);
+
+        public Task<IReadOnlyList<string?>> TranslateBatchAsync(
+            IReadOnlyList<string> texts,
+            string targetLanguage,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string?>>(texts.Select(text => text == "y" ? null : "only:" + text).ToArray());
+    }
+
+    /// <summary>流式引擎替身：按条回调，记录已上报的原文。</summary>
+    private sealed class StreamingStubEngine : IStreamingTranslationEngine
+    {
+        public string Id => "stream";
+
+        public bool IsConfigured => true;
+
+        public List<string> Streamed { get; } = new();
+
+        public Task<string?> TranslateAsync(string text, string targetLanguage, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>("stream:" + text);
+
+        public Task<IReadOnlyList<string?>> TranslateBatchAsync(
+            IReadOnlyList<string> texts,
+            string targetLanguage,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string?>>(texts.Select(text => (string?)("stream:" + text)).ToArray());
+
+        public Task TranslateBatchStreamingAsync(
+            IReadOnlyList<string> texts,
+            string targetLanguage,
+            CancellationToken cancellationToken,
+            Action<int, string?> onItem)
+        {
+            for (var i = 0; i < texts.Count; i++)
+            {
+                Streamed.Add(texts[i]);
+                onItem(i, "stream:" + texts[i]);
+            }
+            return Task.CompletedTask;
+        }
     }
 
     /// <summary>按块拍平行内节点（含引用、链接与强调样式里的嵌套节点），供测试逐项比对。</summary>

@@ -216,9 +216,10 @@ public sealed class TranslationCoordinator : IDisposable
         // 自填 API 的主机每次都确认一遍授权：设置改了地址、或者协调器先于设置装配时都靠这一步兜住。
         AuthorizeCustomHost();
 
-        // 从这里到批次返回都算「在途」：排队等并发闸门的批次也计入，
-        // 否则并发 4 以外排队的那些批次会让界面的提示提前消失。
-        using var activity = Activity.Begin();
+        // 「正在翻译…」只在真有未命中文本、即将请求引擎时亮：缓存全命中的批次不再登记在途，
+        // 也不再因为排队等并发闸门而被误认为「早就翻过的还在翻」（D）。
+        // 租约的生命周期由服务在引擎调用开始/结束时回调，finally 里兜底归还。
+        TranslationActivityMonitor.Lease? activityLease = null;
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, SettingsToken());
         try
@@ -233,6 +234,11 @@ public sealed class TranslationCoordinator : IDisposable
         try
         {
             var service = CreateService(options);
+            service.OnEngineActivityStarted = () => activityLease ??= Activity.Begin();
+            service.OnEngineActivityEnded = () =>
+            {
+                Interlocked.Exchange(ref activityLease, null)?.Dispose();
+            };
 
             // 整段翻译从线程池起步：本地 GGUF 引擎的首次权重加载（1.3 GB 同步读盘）
             // 与推理都是同步 CPU 活，调用方（工坊列表 / Mod 库）就在 UI 线程上，
@@ -258,6 +264,10 @@ public sealed class TranslationCoordinator : IDisposable
         }
         finally
         {
+            // 兜底：引擎在抛异常路径没走到服务的 finally 时，这里保证租约一定归还，
+            // 否则标题栏「正在翻译…」会永远亮着。正常路径已被 Interlocked 置空，这里空转。
+            Interlocked.Exchange(ref activityLease, null)?.Dispose();
+
             _gate.Release();
 
             // 批次结束后开始计时：空闲够久就把本地模型权重卸掉，别让 1.2GB 常驻到退出。
@@ -287,12 +297,11 @@ public sealed class TranslationCoordinator : IDisposable
             return document;
         }
 
-        var translator = new MarkdownTranslator(async (text, token) =>
-        {
-            var results = await TranslateBatchAsync((string[])[text], token, forceRefresh: forceRefresh)
-                .ConfigureAwait(false);
-            return results.Count > 0 ? results[0] : null;
-        });
+        // 整篇文档一次批次：MarkdownTranslator 先收集全部可译文本，再一次回调到这里。
+        // 旧实现每段各调一次 TranslateBatchAsync（20 段 = 20 次排队 + 回落链），
+        // 是长简介卡几分钟的直接原因。
+        var translator = new MarkdownTranslator(async (batch, token) =>
+            await TranslateBatchAsync(batch, token, forceRefresh: forceRefresh).ConfigureAwait(false));
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, SettingsToken());
         try
@@ -399,10 +408,14 @@ public sealed class TranslationCoordinator : IDisposable
     }
 
     /// <summary>
-    /// 按当前设置临时构建翻译服务（引擎随设置变，不能提前烤好）。
+    /// 引擎列表的顺序即回落优先级。
     /// <para>
-    /// 引擎列表的顺序即回落优先级：「自动」按 本地离线 → 自填 API → 微软 → 谷歌云 → MyMemory → 内置免费 依次尝试；
-    /// 其余模式只放对应的引擎，失败不回落。
+    /// 「自动」档把**远程引擎排在本地模型前面**（自填 API → 微软 → 谷歌云 → MyMemory → 内置免费 → 本地兜底）：
+    /// 远程合批、响应快，装了本地 2B 模型也不该让它抢先逐条 CPU 推理——那是 Mod 库 / 详情页
+    /// 卡几分钟的直接原因。本地模型退到兜底：离线或所有远程引擎都失败时才逐条慢翻。
+    /// </para>
+    /// <para>
+    /// 专档（local / index / bergamot）仍只放对应本地引擎，失败不回落。
     /// MyMemory 排在谷歌免费前面，是因为谷歌那个公开端点在不少网络里根本连不上
     /// （TLS 握手失败），排在前面等于每页都先白等一次超时。
     /// </para>
@@ -412,7 +425,7 @@ public sealed class TranslationCoordinator : IDisposable
         var engines = new List<ITranslationEngine>();
         var mode = TranslationEngineModes.Normalize(options.EngineMode);
 
-        // 本地离线引擎排在最前：装好模型后不需要联网，也不需要任何凭据。
+        // 本地离线引擎：专档独占；「自动」档在方法末尾追加，排在远程之后兜底。
         if (_local is not null &&
             (mode == TranslationEngineModes.Auto ||
              mode == TranslationEngineModes.Local ||
@@ -428,10 +441,11 @@ public sealed class TranslationCoordinator : IDisposable
             {
                 engines.AddRange(local.Where(engine => engine.Id == BergamotTranslationEngine.EngineId));
             }
-            else
+            else if (mode == TranslationEngineModes.Local)
             {
                 engines.AddRange(local);
             }
+            // 「自动」档的本地引擎在末尾追加（远程之后）。
         }
 
         if (mode == TranslationEngineModes.Auto || mode == TranslationEngineModes.Custom)
@@ -478,6 +492,13 @@ public sealed class TranslationCoordinator : IDisposable
         if (mode == TranslationEngineModes.Auto || mode == TranslationEngineModes.Builtin)
         {
             engines.Add(new FreeTranslationEngine(_transport, _logger));
+        }
+
+        // 「自动」档本地兜底：远程都失败/离线时才轮到逐条 CPU 推理，
+        // 不再让装了模型的机器每次开 Mod 库都先走几十秒的本地批次。
+        if (mode == TranslationEngineModes.Auto && _local is not null)
+        {
+            engines.AddRange(_local.CreateEngines());
         }
 
         return new TranslationService(engines, _cache, _logger);

@@ -15,7 +15,7 @@ using PdxLauncher.Core.Online.Translation;
 /// 这是三个方向里质量最好的一档，代价是 1.31GB 模型 + 每次翻译几百毫秒。
 /// </para>
 /// </summary>
-public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
+public sealed class IndexTranslateEngine : IStreamingTranslationEngine, IDisposable
 {
     /// <summary>引擎标识。</summary>
     public const string EngineId = "index-translate";
@@ -161,15 +161,26 @@ public sealed class IndexTranslateEngine : ITranslationEngine, IDisposable
         string targetLanguage,
         CancellationToken cancellationToken)
     {
-        var results = new List<string?>(texts.Count);
-        foreach (var text in texts)
+        var results = new string?[texts.Count];
+        await TranslateBatchStreamingAsync(texts, targetLanguage, cancellationToken, (i, text) => results[i] = text)
+            .ConfigureAwait(false);
+        return results;
+    }
+
+    /// <inheritdoc />
+    public async Task TranslateBatchStreamingAsync(
+        IReadOnlyList<string> texts,
+        string targetLanguage,
+        CancellationToken cancellationToken,
+        Action<int, string?> onItem)
+    {
+        for (var i = 0; i < texts.Count; i++)
         {
             // 条目之间的取消点：上一页的 30 条还没翻完时用户已经翻到下一页了。
             cancellationToken.ThrowIfCancellationRequested();
-            results.Add(await TranslateAsync(text, targetLanguage, cancellationToken).ConfigureAwait(false));
+            var translated = await TranslateAsync(texts[i], targetLanguage, cancellationToken).ConfigureAwait(false);
+            onItem(i, translated);
         }
-
-        return results;
     }
 
     private static bool TryResolveTargetLanguage(string targetLanguage, out string target)
