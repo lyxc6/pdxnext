@@ -1270,6 +1270,15 @@ Victoria 3 **无法加载任何路径里含非 ASCII 字符的 mod**（Vic3 wiki
 - 日志里的 `common/...` 路径会在每个启用 Mod 目录下做同名文件存在性检查，命中即归到该 Mod；压缩包 Mod 无法逐文件检查。
 - Victoria 3 另按 `GamePathRules.RequiresAsciiPaths` 检查非 ASCII 路径。
 
-### 22.4 规则边界
+### 22.4 本次游戏报错统计
+
+游戏运行期间，`GameSessionLogTracker` 从各日志当前末尾开始按字节偏移增量读取，只统计会话开始之后写入的错误块：
+- 跨 `error.log`/`game.log`/`debug.log` 按「时间 + 来源 + 正文」去重，同一错误只算一次；`CrashLogParser.Signature` 聚类，保留首个来源路径。
+- 只读取不写游戏目录；日志被轮转/截断时游标归零，读取失败只标记 `Degraded`，不抛到 UI。
+- 游戏进程退出（pid 轮询 + 进程名核对）后 `GameSessionMonitorService` 固化 `GameSessionSnapshot`，在「崩溃分析 → 本次游戏」显示，并通过 `ConfirmOverlay` 轻提示。
+
+`LogFileProbe` 是独立的只读状态探测（不改 `CrashLogReader`/`LogTailReader` 的容错读取）：用共享读句柄尝试打开，按 `IOException` 的 HResult 32/33 判定「被占用/锁定」，`UnauthorizedAccessException` 判定「无权限」，`FileAttributes.ReadOnly` 仅作信息位。结果同时显示在「本次游戏」分区与「性能与日志」诊断页。
+
+### 22.5 规则边界
 
 页面只给「可能的原因」：时间相邻写成高度相关，不写成因果；未解析 minidump、不做栈符号化；不提供一键禁用 Mod / 删缓存 / 改 `pdx_settings.json`。

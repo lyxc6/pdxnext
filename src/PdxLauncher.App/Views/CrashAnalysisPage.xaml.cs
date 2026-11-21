@@ -33,11 +33,12 @@ public sealed partial class CrashAnalysisPage : Page
     /// <summary>XAML 里取界面文案的入口（切语言时由 Localizer 的属性变更驱动）。</summary>
     public Localizer L => Localizer.Instance;
 
-    // 左侧四个分区的序号，与 XAML 里 secOverview / secCrashes / secLogs / secLaunch 的顺序一致。
+    // 左侧五个分区的序号，与 XAML 里 secOverview / secCrashes / secLogs / secLaunch / secSession 一致。
     private const int OverviewSectionIndex = 0;
     private const int CrashesSectionIndex = 1;
     private const int LogsSectionIndex = 2;
     private const int LaunchSectionIndex = 3;
+    private const int SessionSectionIndex = 4;
 
     // ------------------------------------------------------------ 生命周期
 
@@ -115,6 +116,7 @@ public sealed partial class CrashAnalysisPage : Page
             (OverviewSectionIndex, secOverview),
             (CrashesSectionIndex, secCrashes),
             (LaunchSectionIndex, secLaunch),
+            (SessionSectionIndex, secSession),
         };
 
         foreach (var (sectionIndex, element) in sections)

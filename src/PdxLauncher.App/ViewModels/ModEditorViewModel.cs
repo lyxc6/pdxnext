@@ -342,6 +342,10 @@ public sealed partial class ModEditorViewModel : LocalizedObservableObject
             {
                 SetStatus(Keys.ModEditorExportFailed);
             }
+            else
+            {
+                AppServices.GameSessionMonitor.Begin(game, result.ProcessId);
+            }
         }
         catch (OperationCanceledException) when (_exportCts?.IsCancellationRequested == true)
         {

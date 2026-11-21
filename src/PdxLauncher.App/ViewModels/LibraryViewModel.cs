@@ -152,6 +152,7 @@ public sealed partial class LibraryViewModel : LocalizedObservableObject
             {
                 AppServices.Logger.Info(
                     "已启动 " + game.DisplayName + "（pid=" + (result.ProcessId?.ToString() ?? "未知") + "）");
+                AppServices.GameSessionMonitor.Begin(game, result.ProcessId);
             }
             else
             {

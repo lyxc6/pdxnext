@@ -22,7 +22,7 @@ PdxNext 是一个用 **WinUI 3 / .NET 11** 写的原生 Paradox 游戏启动器�
 
 - **零迁移**：直接复用你机器上已有的游戏、Mod 与订阅。不重装游戏，不迁移数据，不写官方启动器的目录。
 - **秒开**：原生界面，启动即用。不加载网页，不等账号校验。
-- **可离线**：默认全程离线可用。联网只用于可选的公告、主题图、DLC 简介与头图、创意工坊浏览。
+- **可离线**：核心功能（发现游戏、播放集、DLC 开关、启动、存档、成就）不依赖网络。联网只用于可选增强：公告、主题图、DLC 简介与头图、创意工坊浏览等；断网时自动降级到缓存或旧值。
 - **干净**：自己的数据全写在程序目录 `data\` 下，官方启动器目录全程只读。两者可共存，随便来回切。
 
 ## 功能
@@ -80,7 +80,7 @@ PdxNext 是一个用 **WinUI 3 / .NET 11** 写的原生 Paradox 游戏启动器�
 
 - 带解锁时间与全球解锁率；页头「已解锁 X / Y」始终按整份成就统计；可按「全部 / 已解锁 / 未解锁」筛选，也能直接搜关键词。
 - 成就名与描述按**游戏自己的语言**取自安装目录的 `localization\<lang>\*_l_<lang>.yml`（`ACHIEVEMENT_<apiName>` / `ACHIEVEMENT_DESC_<apiName>`）。Steamworks 的显示名跟的是每游戏语言、不跟客户端语言——否则会出现启动器英文、游戏里中文的分裂。语言先读游戏设置里的 `language`，再回落界面语言与 `english`。
-- 图标直接读安装目录的 `gfx\interface\icons\achievements`；未解锁优先用 `_notachieved` 版本；只有 DDS 的（如 CK3）先解码成 PNG 再显示。全程不联网。
+- 图标直接读安装目录的 `gfx\interface\icons\achievements`；未解锁优先用 `_notachieved` 版本；只有 DDS 的（如 CK3）先解码成 PNG 再显示。成就页当前不发起网络请求。
 
 ### 外观与体验
 
@@ -137,7 +137,7 @@ start.cmd
 - 需要 .NET SDK 11 与 Windows 10/11 SDK；Windows App SDK 以自包含方式随包，无需单独安装。
 - 仓库的 `NuGet.config` 清空了默认源、按全离线构建，依赖必须已在本机 NuGet 缓存中，细节见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 - 产物在 `bin\x64\Release\net11.0-windows10.0.26100.0\win-x64\`，**分发时要整个目录一起拷**，只拷 exe 会起不来。
-- 自检程序 `tests/PdxLauncher.Checks` 覆盖 179 个检查类；CI 见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
+- 自检程序 `tests/PdxLauncher.Checks` 覆盖 180 个检查类；CI 见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
 
 ## 兼容性
 

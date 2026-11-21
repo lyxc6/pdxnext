@@ -5,6 +5,7 @@ using System.Globalization;
 
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
+using PdxLauncher.Core.CrashAnalysis;
 using PdxLauncher.Core.Infrastructure;
 using PdxLauncher.Core.Online;
 
@@ -26,6 +27,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
     private IReadOnlyList<LogDisplayLine> _logDisplayLines = Array.Empty<LogDisplayLine>();
     private string _logTailEmptyText = string.Empty;
     private string _logSummaryText = string.Empty;
+    private string _gameLogStatusText = string.Empty;
     private string _logRotationText = string.Empty;
     private string _logLastWriteText = string.Empty;
     private string _proxyText = string.Empty;
@@ -135,6 +137,9 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
 
     /// <summary>日志占用摘要：当前大小 / 归档个数 / 合计。</summary>
     public string LogSummaryText => _logSummaryText;
+
+    /// <summary>当前游戏 error.log 的只读状态（正常 / 被占用 / 无权限 / 只读 / 不存在）。</summary>
+    public string GameLogStatusText => _gameLogStatusText;
 
     /// <summary>轮转规则说明（阈值取自 <see cref="FileLogger"/> 的公开常量）。</summary>
     public string LogRotationText => _logRotationText;
@@ -708,9 +713,44 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(HasStartupMarks));
     }
 
+    /// <summary>只读探测当前游戏 error.log 的状态；没有选中游戏时显示占位。</summary>
+    private void UpdateGameLogStatus()
+    {
+        var game = AppServices.CurrentGame;
+        if (game is null || string.IsNullOrWhiteSpace(game.GameDataDir))
+        {
+            _gameLogStatusText = T(Keys.DiagnosticsGameLogNoGame);
+            return;
+        }
+
+        try
+        {
+            var path = AppServices.FileSystem.Combine(game.GameDataDir, "logs", "error.log");
+            var result = LogFileProbe.Probe(AppServices.FileSystem, path, "error.log");
+            string state = result.State switch
+            {
+                LogFileProbeState.Readable => T(Keys.CrashSessionLogReadable),
+                LogFileProbeState.Locked => T(Keys.CrashSessionLogLocked),
+                LogFileProbeState.Unauthorized => T(Keys.CrashSessionLogUnauthorized),
+                LogFileProbeState.ReadOnly => T(Keys.CrashSessionLogReadOnly),
+                LogFileProbeState.Missing => T(Keys.CrashSessionLogMissing),
+                _ => T(Keys.CrashSessionLogUnknown),
+            };
+            _gameLogStatusText = T(Keys.DiagnosticsGameLogStatus, result.FileName, state);
+        }
+        catch (Exception exception)
+        {
+            AppServices.Logger.Warn("探测游戏日志状态失败：" + exception.Message);
+            _gameLogStatusText = T(Keys.CrashSessionLogUnknown);
+        }
+
+        OnPropertyChanged(nameof(GameLogStatusText));
+    }
+
     private void UpdateLogTexts()
     {
         var metrics = _logMetrics;
+        UpdateGameLogStatus();
         _logSummaryText = metrics.CurrentBytes == 0 && metrics.ArchiveCount == 0
             ? T(Keys.DiagnosticsLogSummaryEmpty)
             : T(
