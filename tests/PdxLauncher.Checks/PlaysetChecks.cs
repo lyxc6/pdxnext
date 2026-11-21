@@ -994,11 +994,25 @@ public static class PlaysetChecks
         var modCatalog = new ModCatalog(fs, logger);
         var allMods = modCatalog.DiscoverAllAsync(game, CancellationToken.None).GetAwaiter().GetResult();
         var ck3ModFiles = fs.EnumerateFiles(game.ModDir, "*.mod", recursive: false).Count();
-        ChecksContext.Equal("CK3 合并后 mod 总数（磁盘 .mod 数 = 合并结果）", ck3ModFiles, allMods.Count);
-        CheckModShape("CK3", allMods);
+        // 工坊目录里没有 .mod 指针、但有 descriptor.mod 的 mod 也会被扫描到（CK3 Mod Doctor 这类），
+        // 所以合并结果可以多于磁盘 .mod 数；只锁「不少于指针数」，并核对增量确实带工坊 id。
         ChecksContext.Check(
-            "CK3 全部 mod 的 GameRegistryId 形如 mod/*.mod",
-            allMods.All(mod => mod.GameRegistryId.StartsWith("mod/", StringComparison.Ordinal) && mod.GameRegistryId.EndsWith(".mod", StringComparison.Ordinal)));
+            "CK3 合并后 mod 总数不少于磁盘 .mod 数",
+            allMods.Count >= ck3ModFiles,
+            "磁盘 .mod " + ck3ModFiles.ToString(CultureInfo.InvariantCulture) + "，合并 " + allMods.Count.ToString(CultureInfo.InvariantCulture));
+        CheckModShape("CK3", allMods);
+        // 官方 .mod 指针扫出来的行 gameRegistryId 形如 mod/*.mod；工坊 descriptor.mod 回退的行没有指针，
+        // gameRegistryId 为空（靠目录名取工坊 id），两类都合法。
+        var fallbackMods = allMods.Where(mod => mod.GameRegistryId.Length == 0).ToList();
+        ChecksContext.Check(
+            "CK3 无指针的工坊回退行都带纯数字工坊 id",
+            fallbackMods.All(mod => mod.SteamId is not null && mod.SteamId.All(character => character is >= '0' and <= '9')),
+            string.Join(", ", fallbackMods.Select(mod => mod.Name + "=" + (mod.SteamId ?? "<null>"))));
+        ChecksContext.Check(
+            "CK3 有指针的 mod 的 GameRegistryId 形如 mod/*.mod",
+            allMods.Where(mod => mod.GameRegistryId.Length > 0)
+                .All(mod => mod.GameRegistryId.StartsWith("mod/", StringComparison.Ordinal) && mod.GameRegistryId.EndsWith(".mod", StringComparison.Ordinal)));
+        Console.WriteLine("  info CK3 工坊 descriptor.mod 回退行 " + fallbackMods.Count.ToString(CultureInfo.InvariantCulture) + " 个（无 .mod 指针，已下载到本地）");
         var ck3Thumbs = allMods.Count(mod => !string.IsNullOrEmpty(mod.ThumbnailPath));
         Console.WriteLine("  info CK3 mod 缩略图可解析 " + ck3Thumbs.ToString(CultureInfo.InvariantCulture) + "/" + allMods.Count.ToString(CultureInfo.InvariantCulture) + "（实测 373）");
         ChecksContext.Check("CK3 mod 缩略图可解析数 >= 350", ck3Thumbs >= 350, ck3Thumbs.ToString(CultureInfo.InvariantCulture));
