@@ -1512,6 +1512,7 @@ public sealed partial class MainWindow : Window
         {
             AppTitleBar.Title = _viewModel.HeaderText;
             AppTitleBar.Subtitle = _viewModel.SubtitleText;
+            ApplyWindowTitle();
         }
         catch (Exception ex)
         {
@@ -1520,6 +1521,18 @@ public sealed partial class MainWindow : Window
                 AppServices.Logger.Warn("更新标题栏失败: " + ex.Message);
             }
         }
+    }
+
+    private void ApplyWindowTitle()
+    {
+        if (_viewModel is null)
+        {
+            return;
+        }
+
+        var title = _viewModel.HeaderText.TrimEnd(' ', '·');
+        var version = _viewModel.SubtitleText;
+        Title = string.IsNullOrEmpty(version) ? title : title + " · " + version;
     }
 
     private void ApplyWindowSize()

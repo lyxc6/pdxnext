@@ -5085,7 +5085,7 @@ Applying still backs up the original file first, but the backup cannot be verifi
     <value>Translating…</value>
   </data>
   <data name="ShellVersion" xml:space="preserve">
-    <value>Version {0}</value>
+    <value>{0}</value>
   </data>
   <data name="UpdateAvailableBody" xml:space="preserve">
     <value>You are on {0}; version {1} is available. The installer will be downloaded, verified, and launched.</value>
