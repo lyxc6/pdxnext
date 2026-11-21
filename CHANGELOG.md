@@ -3,6 +3,25 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)；版本号遵循
 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
+## [1.4.2] - 2026-11-21
+
+### Added
+
+- Mod 创建页的 MCP 文档入口迁到「设置 → MCP」分节。MCP 服务加入本机访问密钥体系：创建/轮换后一次性显示，SQLite 只保存 SHA-256 哈希和前缀；密钥可禁用、设置有效期和工具范围，过期/禁用/错误密钥会被拒绝。
+- MCP 调用记录落入自有 SQLite（`mcp_calls`），可按工具、结果和密钥筛选，分页浏览，清空或导出 JSON；记录只含元数据，不保存参数、路径或表单内容。
+- MCP 连接配置支持 Claude Desktop、Claude Code、Codex、Cursor、VS Code 五类客户端；Claude Desktop 内联密钥，其余客户端使用 `PDXNEXT_MCP_ACCESS_KEY` 环境变量占位。
+
+### Changed
+
+- 设置页分节顺序调整为：外观、启动、路径、联网、缓存、翻译、MCP、高级、关于与更新；恢复上次分节时按分节标识解析，避免顺序变化后跳错页面。
+- 设置页分节切换从按需 `x:Load` 改为可见性切换，修复冷启动恢复到 MCP 时分节空白；修复 MCP 文档控件构造期事件导致设置页加载失败的问题。
+- 本地 stdio MCP 保留无访问密钥的兼容模式，继续按全局 `--enabled` / `--draft-write` 两档权限执行。
+
+### Fixed
+
+- 修复标题栏与原生窗口标题重复显示「版本」字样，统一只显示游戏版本号。
+- 清理过期设置入口与孤儿文案，历史 placeholder 回退原版布局；格式文档与自检同步。
+
 ## [1.4.1] - 2026-11-21
 
 ### Added
