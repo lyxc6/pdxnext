@@ -88,6 +88,9 @@ public sealed class CrashSignals
     /// <summary>非 UTF-8 BOM 编码警告的出现次数。</summary>
     public int Utf8BomWarnings { get; private set; }
 
+    /// <summary>database_conflicts.log 里的定义覆盖记录（已按文件去重）。</summary>
+    public IReadOnlyList<DbOverrideRecord> DbOverrides { get; private set; } = Array.Empty<DbOverrideRecord>();
+
     /// <summary>汇总输入日志。</summary>
     public static CrashSignals Collect(IReadOnlyList<CrashLogInput> inputs, DateTimeOffset? crashTime)
     {
@@ -99,6 +102,7 @@ public sealed class CrashSignals
         var groupDrafts = new Dictionary<string, GroupDraft>(StringComparer.Ordinal);
         var aggregates = new Dictionary<string, BlockAggregate>(StringComparer.Ordinal);
         var counters = new SignalCounters();
+        var dbOverrides = new Dictionary<string, DbOverrideRecord>(StringComparer.OrdinalIgnoreCase);
         DateTimeOffset? firstLogTime = null;
         DateTimeOffset? systemStart = null;
         DateTimeOffset? lastErrorTime = null;
@@ -106,6 +110,23 @@ public sealed class CrashSignals
 
         foreach (var input in inputs)
         {
+            if (string.Equals(input.Name, "database_conflicts.log", StringComparison.OrdinalIgnoreCase))
+            {
+                foreach (var record in CrashLogParser.ParseDbConflicts(input.Text))
+                {
+                    dbOverrides.TryAdd(record.Key + "\u0001" + record.Database, record);
+                }
+
+                logFiles.Add(new CrashLogFileInfo(
+                    input.Name,
+                    input.Path,
+                    input.SizeBytes,
+                    CountLines(input.Text),
+                    0,
+                    input.FromCrashBundle));
+                continue;
+            }
+
             var parsed = CrashLogParser.ParseLogBlocks(input.Text, crashTime ?? DateTimeOffset.Now);
             blocks.AddRange(parsed);
 
@@ -227,6 +248,9 @@ public sealed class CrashSignals
         signals.MissingLocalization = counters.MissingLocalization;
         signals.MissingExpectedDefinitions = counters.MissingExpectedDefinitions;
         signals.Utf8BomWarnings = counters.Utf8BomWarnings;
+        signals.DbOverrides = dbOverrides.Values
+            .OrderBy(static record => record.Key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         return signals;
     }

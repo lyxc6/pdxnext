@@ -1242,6 +1242,15 @@ Victoria 3 **无法加载任何路径里含非 ASCII 字符的 mod**（Vic3 wiki
 - 没有崩溃包时页面仍会读实时 `logs\`，并明确提示「没有找到崩溃转储」。
 - 崩溃时间优先用 `exception.txt`，而不是目录名：Paradox 的目录/`meta.yml` 年份字段并不可靠。
 
+### 22.1.1 PC 侧取证（只读）
+
+除游戏自身日志外，分析器还会读取本机证据来判断「是游戏 Mod 的问题，还是电脑本身的问题」：
+
+- 崩溃码：`C0000017` 内存不足、`C0000006` 磁盘读取失败、`C000001D` 非法指令（超频/硬件不稳）。
+- Windows 事件日志：通过 advapi32 的 `OpenEventLog`/`ReadEventLog` 只读崩溃前后 5 分钟内的 Application 1000（故障模块）、System 2004（低内存）、显卡 TDR、WHEA 硬件错误与磁盘错误；按提供程序/事件 ID 归类，消息截断到 400 字符。读不到（权限/服务未启动）一律当无证据，绝不让页面打不开。
+- 故障模块归因：`nvlddmkm`/`amd`/`igfx`/`d3d11`/`dxgi` 归为显卡驱动故障；`gameoverlayrenderer`/`discordhook`/`rtss`/`graphics-hook`/`reshade`/`overwolf` 归为覆盖层注入。强证据会抑制「原因未知」结论。
+- `meta.yml` 的 `SystemMemory`/`GPUDedicatedMemory` 与游戏数据盘/安装盘可用空间做阈值检查；页面文件与显卡驱动日期因项目不依赖 WMI，保持「未知」并由规则跳过。
+
 ### 22.2 日志格式
 
 ```
@@ -1252,6 +1261,7 @@ Victoria 3 **无法加载任何路径里含非 ASCII 字符的 mod**（Vic3 wiki
 
 - 时间只有时分秒；分析器用崩溃日期补齐，跨午夜时自动减一天。
 - 同一错误可能同时出现在 `error.log`、`game.log`、`debug.log`；计数按「时间 + 来源 + 正文」分文件取最大次数，避免复制三份算三倍。
+- `database_conflicts.log` 单独解析：`Overriding entry '<key>' for database '<db>' in 'file: <path> line <n>'` 归一成「定义键 → 提供覆盖的文件」，按 `(键, 库)` 去重；同名路径在启用 Mod 目录下命中即归属该 Mod，作为「定义覆盖」结论展示。
 
 ### 22.3 Mod 归属
 
