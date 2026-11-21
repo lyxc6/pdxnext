@@ -42,10 +42,6 @@ public static class PlaySetPageDisplayModeCatalog
             PlaySetPageDisplayModes.TwoColumn,
             Keys.SettingsInterfacePlaysetTwoColumnTitle,
             Keys.SettingsInterfacePlaysetTwoColumnDesc),
-        new PlaySetPageDisplayModeOption(
-            PlaySetPageDisplayModes.Placeholder,
-            Keys.SettingsInterfacePlaysetPlaceholderTitle,
-            Keys.SettingsInterfacePlaysetPlaceholderDesc),
     };
 
     /// <summary>按设置值找到目录中的同一实例；未知值回退第一项（原版启动器）。</summary>

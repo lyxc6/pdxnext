@@ -2251,15 +2251,6 @@
   <data name="ModsListName" xml:space="preserve">
     <value>Mods in This Play Set</value>
   </data>
-  <data name="ModsPlaceholderDescription" xml:space="preserve">
-    <value>You can switch back to the official launcher layout in Settings → Interface → Play Set Page Display Mode.</value>
-  </data>
-  <data name="ModsPlaceholderName" xml:space="preserve">
-    <value>Play Set Page Blank Placeholder</value>
-  </data>
-  <data name="ModsPlaceholderTitle" xml:space="preserve">
-    <value>(This page is intentionally left blank)</value>
-  </data>
   <data name="ModsPlaySetActiveBadge" xml:space="preserve">
     <value>● Active</value>
   </data>
@@ -3541,9 +3532,6 @@
   <data name="SettingsAboutNever" xml:space="preserve">
     <value>Never</value>
   </data>
-  <data name="SettingsAboutReleaseNotes" xml:space="preserve">
-    <value>View release notes</value>
-  </data>
   <data name="SettingsAboutStatusAvailable" xml:space="preserve">
     <value>Version {0} is available</value>
   </data>
@@ -3556,52 +3544,20 @@
   <data name="SettingsAboutTitle" xml:space="preserve">
     <value>About &amp; updates</value>
   </data>
-  <data name="SettingsAppDataClearLegacy" xml:space="preserve">
-    <value>Delete old C: data</value>
-  </data>
-  <data name="SettingsAppDataClearLegacyName" xml:space="preserve">
-    <value>Delete old C: data</value>
-  </data>
   <data name="SettingsAppDataCurrent" xml:space="preserve">
     <value>Current data folder</value>
   </data>
   <data name="SettingsAppDataCurrentName" xml:space="preserve">
     <value>App data folder</value>
   </data>
-  <data name="SettingsAppDataDialogClearContent" xml:space="preserve">
-    <value>Only the folder written by older versions on C: is deleted:
-{0}
-
-The data folder next to the program is untouched, and the official Paradox launcher data is never modified.
-
-Delete it?</value>
-  </data>
-  <data name="SettingsAppDataDialogClearFailedTitle" xml:space="preserve">
-    <value>Could not delete the old C: data</value>
-  </data>
-  <data name="SettingsAppDataDialogClearTitle" xml:space="preserve">
-    <value>Delete old C: data</value>
-  </data>
   <data name="SettingsAppDataHint" xml:space="preserve">
     <value>Settings, logs and every cache live in the data subfolder next to the program, so the whole folder can be moved with it.</value>
-  </data>
-  <data name="SettingsAppDataLegacy" xml:space="preserve">
-    <value>Old C: folder</value>
-  </data>
-  <data name="SettingsAppDataLegacyName" xml:space="preserve">
-    <value>Old C: data folder</value>
   </data>
   <data name="SettingsAppDataOpen" xml:space="preserve">
     <value>Open data folder</value>
   </data>
   <data name="SettingsAppDataOpenName" xml:space="preserve">
     <value>Open app data folder</value>
-  </data>
-  <data name="SettingsAppDataStatusCleared" xml:space="preserve">
-    <value>Old C: data folder deleted: {0}</value>
-  </data>
-  <data name="SettingsAppDataStatusMissing" xml:space="preserve">
-    <value>The old C: data folder does not exist: {0}</value>
   </data>
   <data name="SettingsCacheClearAll" xml:space="preserve">
     <value>Clear all</value>
@@ -3686,9 +3642,6 @@ Clear them?</value>
   <data name="SettingsCacheSummary" xml:space="preserve">
     <value>Cache total {0}</value>
   </data>
-  <data name="SettingsDangerAllowOff" xml:space="preserve">
-    <value>Block dlc_signature writes (recommended)</value>
-  </data>
   <data name="SettingsDangerAllowOn" xml:space="preserve">
     <value>Allow writing dlc_signature</value>
   </data>
@@ -3762,9 +3715,6 @@ Continue?</value>
   <data name="SettingsDataDlcHint" xml:space="preserve">
     <value>CK3 / Stellaris .dlc files carry no description; when enabled the launcher queries the Steam store by appid and caches the text. Victoria 3 uses the description from its .dlc.json.</value>
   </data>
-  <data name="SettingsDataDlcOnlineOff" xml:space="preserve">
-    <value>Local / cached only</value>
-  </data>
   <data name="SettingsDataDlcOnlineOn" xml:space="preserve">
     <value>Fetch DLC descriptions online</value>
   </data>
@@ -3828,9 +3778,6 @@ Continue?</value>
   <data name="SettingsDataNewsHint" xml:space="preserve">
     <value>News cards come from the official launcher content cards endpoint and are cached for 6 hours.</value>
   </data>
-  <data name="SettingsDataNewsOnlineOff" xml:space="preserve">
-    <value>Cached news only</value>
-  </data>
   <data name="SettingsDataNewsOnlineOn" xml:space="preserve">
     <value>Fetch official news online</value>
   </data>
@@ -3861,17 +3808,8 @@ Continue?</value>
   <data name="SettingsInterfaceAlwaysOnTop" xml:space="preserve">
     <value>Always on top</value>
   </data>
-  <data name="SettingsInterfaceAlwaysOnTopDesc" xml:space="preserve">
-    <value>When pinned the launcher stays above other windows; click the pin in the title bar or press Ctrl+Shift+T to unpin.</value>
-  </data>
   <data name="SettingsInterfaceAlwaysOnTopName" xml:space="preserve">
     <value>Always on top</value>
-  </data>
-  <data name="SettingsInterfaceAlwaysOnTopOff" xml:space="preserve">
-    <value>Normal window</value>
-  </data>
-  <data name="SettingsInterfaceAlwaysOnTopOn" xml:space="preserve">
-    <value>Pinned</value>
   </data>
   <data name="SettingsInterfaceBackgroundCenterDesc" xml:space="preserve">
     <value>Center at the original pixel size and crop what overflows</value>
@@ -3984,12 +3922,6 @@ Continue?</value>
   <data name="SettingsInterfacePlaysetOfficialTitle" xml:space="preserve">
     <value>Original launcher</value>
   </data>
-  <data name="SettingsInterfacePlaysetPlaceholderDesc" xml:space="preserve">
-    <value>Reserved layout: the playset page shows nothing</value>
-  </data>
-  <data name="SettingsInterfacePlaysetPlaceholderTitle" xml:space="preserve">
-    <value>Empty</value>
-  </data>
   <data name="SettingsInterfacePlaysetTwoColumnDesc" xml:space="preserve">
     <value>Left column lists addable mods, right column lists the current play set's mods; ticking a mod adds it, and changes are saved and written to the game load file</value>
   </data>
@@ -4088,9 +4020,6 @@ Continue?</value>
   </data>
   <data name="SettingsModThumbnailsHint" xml:space="preserve">
     <value>Online lookup only happens when no local thumbnail can be parsed; afterwards the local cache is used.</value>
-  </data>
-  <data name="SettingsModThumbnailsOnlineOff" xml:space="preserve">
-    <value>Local images and cache only</value>
   </data>
   <data name="SettingsModThumbnailsOnlineOn" xml:space="preserve">
     <value>Fetch thumbnails online</value>
@@ -4412,9 +4341,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="SettingsSectionName" xml:space="preserve">
     <value>Settings sections</value>
   </data>
-  <data name="SettingsSectionOnline" xml:space="preserve">
-    <value>Online content</value>
-  </data>
   <data name="SettingsSectionProxy" xml:space="preserve">
     <value>Network proxy</value>
   </data>
@@ -4484,9 +4410,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="SettingsThemeBackgroundFile" xml:space="preserve">
     <value>Current background file</value>
   </data>
-  <data name="SettingsThemeBusy" xml:space="preserve">
-    <value>Working</value>
-  </data>
   <data name="SettingsThemeCheckNow" xml:space="preserve">
     <value>Check now</value>
   </data>
@@ -4522,9 +4445,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="SettingsThemeNextOnStartup" xml:space="preserve">
     <value>On next launch</value>
-  </data>
-  <data name="SettingsThemeOnlineOff" xml:space="preserve">
-    <value>Local theme only</value>
   </data>
   <data name="SettingsThemeOnlineOn" xml:space="preserve">
     <value>Check theme online</value>
@@ -4667,9 +4587,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="SettingsTranslateGlossaryHint" xml:space="preserve">
     <value>The glossary feeds both local engines: Index-Translate uses it to force proper nouns into place, Bergamot uses it as a direct replacement table. It only affects the local engines.</value>
   </data>
-  <data name="SettingsTranslateGlossaryName" xml:space="preserve">
-    <value>Glossary for local translation</value>
-  </data>
   <data name="SettingsTranslateGlossaryRemove" xml:space="preserve">
     <value>Delete this term</value>
   </data>
@@ -4742,9 +4659,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="SettingsTranslateLanguageZhCNTitle" xml:space="preserve">
     <value>简体中文</value>
   </data>
-  <data name="SettingsTranslateLastFailure" xml:space="preserve">
-    <value>Translation failed: {0}</value>
-  </data>
   <data name="SettingsTranslateLocalModelBergamotEnZh" xml:space="preserve">
     <value>Bergamot English to Chinese (about 48 MB)</value>
   </data>
@@ -4808,9 +4722,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="SettingsTranslateLocalModelStatusMissingFiles" xml:space="preserve">
     <value>{0} file(s) missing: {1}</value>
   </data>
-  <data name="SettingsTranslateLocalModelStatusRemoveFailed" xml:space="preserve">
-    <value>Could not delete the local model: {0}</value>
-  </data>
   <data name="SettingsTranslateLocalModelStatusRemoveNotFound" xml:space="preserve">
     <value>The folder did not exist; nothing to delete</value>
   </data>
@@ -4861,9 +4772,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="SettingsTranslateLocalModelsHint" xml:space="preserve">
     <value>Once a model is downloaded the translation runs fully offline, using no network and no keys. The first Index-Translate-2B download is about 1.3 GB, so make sure there is enough free disk space.</value>
-  </data>
-  <data name="SettingsTranslateLocalModelsName" xml:space="preserve">
-    <value>Local offline model downloads</value>
   </data>
   <data name="SettingsTranslateMicrosoftHint" xml:space="preserve">
     <value>Microsoft Translator needs a Translator resource in your Azure subscription: Create a resource -&gt; search Translator -&gt; pick the F0 tier (2 million characters per month free) -&gt; after it is created copy KEY 1 from Keys and Endpoint, and set the region to the resource location (for example eastasia or global).</value>
@@ -4924,9 +4832,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="SettingsTranslateStatusEnabled" xml:space="preserve">
     <value>Translation enabled: workshop lists, details and comments show a translation next to the original</value>
-  </data>
-  <data name="SettingsTranslateStatusEndpoint" xml:space="preserve">
-    <value>Translation endpoint updated: {0}</value>
   </data>
   <data name="SettingsTranslateStatusEngine" xml:space="preserve">
     <value>Translation engine changed to {0}</value>

@@ -17,9 +17,6 @@ public static class PlaySetPageDisplayModes
     /// </summary>
     public const string TwoColumn = "twoColumn";
 
-    /// <summary>预留的留空布局：播放集页面暂不显示任何内容。</summary>
-    public const string Placeholder = "placeholder";
-
     /// <summary>把任意设置值归一化成合法取值；null / 空白 / 未知值一律回退 <see cref="OfficialLauncher"/>。</summary>
     public static string Normalize(string? value)
     {
@@ -34,14 +31,8 @@ public static class PlaySetPageDisplayModes
             return TwoColumn;
         }
 
-        return string.Equals(trimmed, Placeholder, StringComparison.OrdinalIgnoreCase)
-            ? Placeholder
-            : OfficialLauncher;
+        return OfficialLauncher;
     }
-
-    /// <summary>是否为留空布局。</summary>
-    public static bool IsPlaceholder(string? value) =>
-        string.Equals(Normalize(value), Placeholder, StringComparison.Ordinal);
 
     /// <summary>是否为双列布局。</summary>
     public static bool IsTwoColumn(string? value) =>

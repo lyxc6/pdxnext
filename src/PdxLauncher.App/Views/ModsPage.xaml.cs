@@ -192,7 +192,7 @@ public sealed partial class ModsPage : Page
 
             // 切换 / 自动保存过程中不接受新的选择，避免两次激活流程互相覆盖；
             // 把下拉框的选择回退到视图模型里的当前播放集。
-            if (_viewModel.IsBusy || _viewModel.IsPlaceholderLayout)
+            if (_viewModel.IsBusy)
             {
                 if (sender is PdxDropDown dropdown)
                 {

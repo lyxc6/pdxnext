@@ -2251,15 +2251,6 @@
   <data name="ModsListName" xml:space="preserve">
     <value>播放集内的 mod 列表</value>
   </data>
-  <data name="ModsPlaceholderDescription" xml:space="preserve">
-    <value>可在「设置 → 界面 → 播放集页面显示方式」切换回原版启动器布局。</value>
-  </data>
-  <data name="ModsPlaceholderName" xml:space="preserve">
-    <value>播放集页面留空占位</value>
-  </data>
-  <data name="ModsPlaceholderTitle" xml:space="preserve">
-    <value>（此处暂时留空）</value>
-  </data>
   <data name="ModsPlaySetActiveBadge" xml:space="preserve">
     <value>● 激活</value>
   </data>
@@ -3541,9 +3532,6 @@
   <data name="SettingsAboutNever" xml:space="preserve">
     <value>从未</value>
   </data>
-  <data name="SettingsAboutReleaseNotes" xml:space="preserve">
-    <value>查看发布说明</value>
-  </data>
   <data name="SettingsAboutStatusAvailable" xml:space="preserve">
     <value>发现新版本 {0}</value>
   </data>
@@ -3556,52 +3544,20 @@
   <data name="SettingsAboutTitle" xml:space="preserve">
     <value>关于与更新</value>
   </data>
-  <data name="SettingsAppDataClearLegacy" xml:space="preserve">
-    <value>清理旧 C 盘数据</value>
-  </data>
-  <data name="SettingsAppDataClearLegacyName" xml:space="preserve">
-    <value>清理旧 C 盘数据</value>
-  </data>
   <data name="SettingsAppDataCurrent" xml:space="preserve">
     <value>当前数据目录</value>
   </data>
   <data name="SettingsAppDataCurrentName" xml:space="preserve">
     <value>程序数据目录</value>
   </data>
-  <data name="SettingsAppDataDialogClearContent" xml:space="preserve">
-    <value>只删除旧版本写在 C 盘的目录：
-{0}
-
-程序目录下的 data 不受影响，官方 Paradox 启动器的数据也不会被动。
-
-确定要删除吗？</value>
-  </data>
-  <data name="SettingsAppDataDialogClearFailedTitle" xml:space="preserve">
-    <value>清理旧 C 盘数据失败</value>
-  </data>
-  <data name="SettingsAppDataDialogClearTitle" xml:space="preserve">
-    <value>清理旧 C 盘数据</value>
-  </data>
   <data name="SettingsAppDataHint" xml:space="preserve">
     <value>设置、日志与各类缓存都在程序目录的 data 子目录下，可随程序一起拷走。</value>
-  </data>
-  <data name="SettingsAppDataLegacy" xml:space="preserve">
-    <value>旧的 C 盘目录</value>
-  </data>
-  <data name="SettingsAppDataLegacyName" xml:space="preserve">
-    <value>旧的 C 盘数据目录</value>
   </data>
   <data name="SettingsAppDataOpen" xml:space="preserve">
     <value>打开数据目录</value>
   </data>
   <data name="SettingsAppDataOpenName" xml:space="preserve">
     <value>打开程序数据目录</value>
-  </data>
-  <data name="SettingsAppDataStatusCleared" xml:space="preserve">
-    <value>已清理旧 C 盘数据目录：{0}</value>
-  </data>
-  <data name="SettingsAppDataStatusMissing" xml:space="preserve">
-    <value>旧 C 盘数据目录不存在，无需清理：{0}</value>
   </data>
   <data name="SettingsCacheClearAll" xml:space="preserve">
     <value>清除全部</value>
@@ -3686,9 +3642,6 @@
   <data name="SettingsCacheSummary" xml:space="preserve">
     <value>缓存合计 {0}</value>
   </data>
-  <data name="SettingsDangerAllowOff" xml:space="preserve">
-    <value>禁止写入 dlc_signature（推荐）</value>
-  </data>
   <data name="SettingsDangerAllowOn" xml:space="preserve">
     <value>允许写入 dlc_signature</value>
   </data>
@@ -3762,9 +3715,6 @@
   <data name="SettingsDataDlcHint" xml:space="preserve">
     <value>CK3 / Stellaris 的 .dlc 没有简介字段，开启后按 Steam appid 查询并缓存；Victoria 3 用 .dlc.json 自带的文案。</value>
   </data>
-  <data name="SettingsDataDlcOnlineOff" xml:space="preserve">
-    <value>仅本地 / 缓存简介</value>
-  </data>
   <data name="SettingsDataDlcOnlineOn" xml:space="preserve">
     <value>联网获取 DLC 简介</value>
   </data>
@@ -3828,9 +3778,6 @@
   <data name="SettingsDataNewsHint" xml:space="preserve">
     <value>公告卡来自官方启动器的 content cards 接口，按游戏取图并缓存 6 小时。</value>
   </data>
-  <data name="SettingsDataNewsOnlineOff" xml:space="preserve">
-    <value>仅本地缓存公告</value>
-  </data>
   <data name="SettingsDataNewsOnlineOn" xml:space="preserve">
     <value>联网获取官方公告</value>
   </data>
@@ -3861,17 +3808,8 @@
   <data name="SettingsInterfaceAlwaysOnTop" xml:space="preserve">
     <value>窗口置顶</value>
   </data>
-  <data name="SettingsInterfaceAlwaysOnTopDesc" xml:space="preserve">
-    <value>置顶后启动器会停在其它窗口之上；点标题栏右上角的图钉或按 Ctrl+Shift+T 可随时取消。</value>
-  </data>
   <data name="SettingsInterfaceAlwaysOnTopName" xml:space="preserve">
     <value>窗口置顶</value>
-  </data>
-  <data name="SettingsInterfaceAlwaysOnTopOff" xml:space="preserve">
-    <value>普通窗口</value>
-  </data>
-  <data name="SettingsInterfaceAlwaysOnTopOn" xml:space="preserve">
-    <value>已置顶</value>
   </data>
   <data name="SettingsInterfaceBackgroundCenterDesc" xml:space="preserve">
     <value>按图片原始像素居中，超出窗口的部分裁掉</value>
@@ -3984,12 +3922,6 @@
   <data name="SettingsInterfacePlaysetOfficialTitle" xml:space="preserve">
     <value>原版启动器</value>
   </data>
-  <data name="SettingsInterfacePlaysetPlaceholderDesc" xml:space="preserve">
-    <value>预留显示方式：播放集页面暂不显示内容</value>
-  </data>
-  <data name="SettingsInterfacePlaysetPlaceholderTitle" xml:space="preserve">
-    <value>留空</value>
-  </data>
   <data name="SettingsInterfacePlaysetTwoColumnDesc" xml:space="preserve">
     <value>左栏是可添加的 mod，右栏是当前播放集的 mod；勾选左栏即加入，改动自动保存并写入游戏加载文件</value>
   </data>
@@ -4088,9 +4020,6 @@
   </data>
   <data name="SettingsModThumbnailsHint" xml:space="preserve">
     <value>本地解析不到 thumbnail 时才联网下载一次，之后一律读本地缓存。</value>
-  </data>
-  <data name="SettingsModThumbnailsOnlineOff" xml:space="preserve">
-    <value>只显示本地图片与缓存</value>
   </data>
   <data name="SettingsModThumbnailsOnlineOn" xml:space="preserve">
     <value>联网补全缩略图</value>
@@ -4412,9 +4341,6 @@
   <data name="SettingsSectionName" xml:space="preserve">
     <value>设置分类</value>
   </data>
-  <data name="SettingsSectionOnline" xml:space="preserve">
-    <value>联网内容</value>
-  </data>
   <data name="SettingsSectionProxy" xml:space="preserve">
     <value>网络代理</value>
   </data>
@@ -4484,9 +4410,6 @@
   <data name="SettingsThemeBackgroundFile" xml:space="preserve">
     <value>当前背景文件</value>
   </data>
-  <data name="SettingsThemeBusy" xml:space="preserve">
-    <value>处理中</value>
-  </data>
   <data name="SettingsThemeCheckNow" xml:space="preserve">
     <value>立即检查</value>
   </data>
@@ -4522,9 +4445,6 @@
   </data>
   <data name="SettingsThemeNextOnStartup" xml:space="preserve">
     <value>下次启动时</value>
-  </data>
-  <data name="SettingsThemeOnlineOff" xml:space="preserve">
-    <value>仅本地主题</value>
   </data>
   <data name="SettingsThemeOnlineOn" xml:space="preserve">
     <value>联网检查主题</value>
@@ -4667,9 +4587,6 @@
   <data name="SettingsTranslateGlossaryHint" xml:space="preserve">
     <value>词典会同时喂给两个本地引擎：Index-Translate 用它强制对齐专名，Bergamot 用它直接替换。只在本地引擎生效，联网引擎不受影响。</value>
   </data>
-  <data name="SettingsTranslateGlossaryName" xml:space="preserve">
-    <value>本地翻译术语词典</value>
-  </data>
   <data name="SettingsTranslateGlossaryRemove" xml:space="preserve">
     <value>删除此词条</value>
   </data>
@@ -4742,9 +4659,6 @@
   <data name="SettingsTranslateLanguageZhCNTitle" xml:space="preserve">
     <value>简体中文</value>
   </data>
-  <data name="SettingsTranslateLastFailure" xml:space="preserve">
-    <value>翻译失败：{0}</value>
-  </data>
   <data name="SettingsTranslateLocalModelBergamotEnZh" xml:space="preserve">
     <value>Bergamot 英译中（约 48 MB）</value>
   </data>
@@ -4808,9 +4722,6 @@
   <data name="SettingsTranslateLocalModelStatusMissingFiles" xml:space="preserve">
     <value>缺 {0} 个文件：{1}</value>
   </data>
-  <data name="SettingsTranslateLocalModelStatusRemoveFailed" xml:space="preserve">
-    <value>删除本地模型失败：{0}</value>
-  </data>
   <data name="SettingsTranslateLocalModelStatusRemoveNotFound" xml:space="preserve">
     <value>目录原本就不存在，无需删除</value>
   </data>
@@ -4861,9 +4772,6 @@
   </data>
   <data name="SettingsTranslateLocalModelsHint" xml:space="preserve">
     <value>模型下载到本机后完全离线翻译，不占用网络也不需要任何密钥。首次下载 Index-Translate-2B 约 1.3 GB，请确认磁盘空间充足。</value>
-  </data>
-  <data name="SettingsTranslateLocalModelsName" xml:space="preserve">
-    <value>本地离线模型下载</value>
   </data>
   <data name="SettingsTranslateMicrosoftHint" xml:space="preserve">
     <value>微软翻译要先在 Azure 订阅里创建「翻译器」资源：创建资源 → 搜索 Translator（翻译器）→ 定价层选 F0（每月 200 万字符免费）→ 创建完成后在「密钥和终结点」复制 KEY 1，区域填资源的位置（如 eastasia、global）。</value>
@@ -4924,9 +4832,6 @@
   </data>
   <data name="SettingsTranslateStatusEnabled" xml:space="preserve">
     <value>已开启翻译：工坊列表、详情页与评论区会在原文之外附带译文</value>
-  </data>
-  <data name="SettingsTranslateStatusEndpoint" xml:space="preserve">
-    <value>翻译接口已更新：{0}</value>
   </data>
   <data name="SettingsTranslateStatusEngine" xml:space="preserve">
     <value>翻译引擎已改为 {0}</value>

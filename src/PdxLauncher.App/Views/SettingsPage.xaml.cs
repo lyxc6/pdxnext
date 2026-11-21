@@ -554,33 +554,6 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             _viewModel.InstallModeDirectory,
             T(Keys.SettingsAboutInstallModeDirectory));
 
-    private async void OnClearLegacyDataClick(object sender, RoutedEventArgs e) =>
-        await RunGuardedAsync(
-            "SettingsPage 清理旧 C 盘数据失败",
-            async () =>
-            {
-                var legacyPath = DataRootMigrator.LegacyRoot;
-                if (!AppServices.FileSystem.DirectoryExists(legacyPath))
-                {
-                    _viewModel.SetStatus(Keys.SettingsAppDataStatusMissing, legacyPath);
-                    return;
-                }
-
-                if (!await ConfirmAsync(
-                        T(Keys.SettingsAppDataDialogClearTitle),
-                        T(Keys.SettingsAppDataDialogClearContent, legacyPath),
-                        T(Keys.CommonDelete),
-                        InitialFocus.Cancel).ConfigureAwait(true))
-                {
-                    return;
-                }
-
-                AppServices.FileSystem.Delete(legacyPath);
-                AppServices.Logger.Info("已清理旧 C 盘数据目录：" + legacyPath);
-                _viewModel.SetStatus(Keys.SettingsAppDataStatusCleared, legacyPath);
-            },
-            ex => ShowMessageAsync(T(Keys.SettingsAppDataDialogClearFailedTitle), ex.Message));
-
     /// <summary>
     /// 用资源管理器打开一个目录；失败时写状态栏并记日志。
     /// <paramref name="openedKey"/> 为空时用通用文案拼 label + path，
