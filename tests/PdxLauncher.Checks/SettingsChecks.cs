@@ -90,7 +90,7 @@ public static class SettingsChecks
             ChecksContext.Equal("设置：代理地址往返", "http://127.0.0.1:7890", loaded.ProxyUrl);
             ChecksContext.Check("设置：翻译开关往返", loaded.TranslateEnabled);
             ChecksContext.Check("设置：翻译模型常驻开关往返（关）", !loaded.KeepTranslationModelLoaded);
-            ChecksContext.Check("设置：翻译模型常驻默认开", new AppSettings().KeepTranslationModelLoaded);
+            ChecksContext.Check("设置：翻译模型常驻默认关（空闲可卸载约 1.3GB）", !new AppSettings().KeepTranslationModelLoaded);
             ChecksContext.Equal("设置：翻译引擎模式往返", TranslationEngineModes.Custom, loaded.TranslateEngineMode);
             ChecksContext.Equal("设置：翻译接口地址往返", "https://api.example.com/v1", loaded.TranslateBaseUrl);
             ChecksContext.Equal("设置：翻译密钥往返", "sk-test-key", loaded.TranslateApiKey);

@@ -32,6 +32,7 @@ public sealed class TranslationCoordinator : IDisposable
 
     private readonly ITranslationTransport _transport;
     private readonly TranslationCache? _cache;
+    private readonly TranslationNegativeCache _negativeCache = new();
     private readonly IAppLogger _logger;
     private readonly LocalTranslationRuntime? _local;
     private readonly SemaphoreSlim _gate = new(MaxConcurrency, MaxConcurrency);
@@ -86,6 +87,9 @@ public sealed class TranslationCoordinator : IDisposable
 
         AuthorizeCustomHost();
 
+        // 设置/语言变了：之前「翻不出来」的条目也要重新试，否则改了引擎仍不翻。
+        _negativeCache.Clear();
+
         // 刚关掉「常驻」时计时器可能还没启动过，这里补一次；开着常驻时到点会直接返回。
         ArmIdleUnload();
     }
@@ -116,7 +120,11 @@ public sealed class TranslationCoordinator : IDisposable
     public TranslationActivityMonitor Activity { get; } = new();
 
     /// <summary>清空译文缓存（设置页的「清理缓存」用）；没有缓存时什么都不做。</summary>
-    public void ClearCache() => _cache?.Clear();
+    public void ClearCache()
+    {
+        _cache?.Clear();
+        _negativeCache.Clear();
+    }
 
     /// <summary>
     /// 用户点了「重试」之后重来一遍：清掉各翻译主机的临时冷却（连不上 5 分钟 / 429 60 秒）。
@@ -128,7 +136,8 @@ public sealed class TranslationCoordinator : IDisposable
     public void ResetRetryableFailures()
     {
         TranslationEndpointHealth.Shared.ClearHostCooldowns();
-        _logger.Info("用户重试翻译：已清掉翻译主机的临时冷却");
+        _negativeCache.Clear();
+        _logger.Info("用户重试翻译：已清掉翻译主机的临时冷却与翻不出来标记");
     }
 
     /// <summary>
@@ -501,7 +510,7 @@ public sealed class TranslationCoordinator : IDisposable
             engines.AddRange(_local.CreateEngines());
         }
 
-        return new TranslationService(engines, _cache, _logger);
+        return new TranslationService(engines, _cache, _logger, _negativeCache);
     }
 
     /// <summary>把用户自填的 Base URL 主机加入精确白名单。</summary>

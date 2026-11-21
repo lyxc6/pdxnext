@@ -52,6 +52,8 @@ public static class TranslationChecks
             CheckStreamingTranslation();
             CheckEngineActivityHooks();
             CheckCoordinatorRemoteBeforeLocal();
+            CheckLocalInferenceBudget();
+            CheckNegativeCache();
         }
         finally
         {
@@ -1815,6 +1817,90 @@ public static class TranslationChecks
                 .Where(key => key.StartsWith(prefix, StringComparison.Ordinal))
                 .OrderBy(key => key, StringComparer.Ordinal)
                 .ToArray();
+    }
+
+    /// <summary>
+    /// 本地推理预算：短标题用小上限、长文用满额；停止序列含 ChatML/think 结束符且不含普通词。
+    /// 这几条是「本地模型空转把 CPU 打满」的防线，改回去要立刻红。
+    /// </summary>
+    private static void CheckLocalInferenceBudget()
+    {
+        var shortText = "A Workshop Title";
+        var longText = new string('a', IndexTranslateEngine.ShortTextCharLimit + 1);
+        ChecksContext.Equal(
+            "本地推理: 短标题用小生成上限",
+            IndexTranslateEngine.ShortTextMaxTokens,
+            IndexTranslateEngine.ResolveMaxTokens(shortText));
+        ChecksContext.Equal(
+            "本地推理: 长文保留满额上限",
+            IndexTranslateEngine.MaxTokens,
+            IndexTranslateEngine.ResolveMaxTokens(longText));
+
+        var stops = IndexTranslateEngine.GenerationStopMarkers;
+        ChecksContext.Check(
+            "本地推理: 停止序列含 ChatML 结束符",
+            stops.Contains("<|im_end|>", StringComparer.Ordinal)
+                && stops.Contains("<|im_start|>", StringComparer.Ordinal)
+                && stops.Contains("<|endoftext|>", StringComparer.Ordinal));
+        ChecksContext.Check(
+            "本地推理: 停止序列含 think 闭标签",
+            stops.Contains("</think>", StringComparer.Ordinal));
+        ChecksContext.Check(
+            "本地推理: 停止序列不误伤普通词",
+            !stops.Any(marker => marker.Length < 4 || marker.All(char.IsLetterOrDigit)));
+        ChecksContext.Check(
+            "本地推理: 连续空结果熔断阈值合理",
+            IndexTranslateEngine.ConsecutiveEmptyBreaker >= 2
+                && IndexTranslateEngine.ConsecutiveEmptyBreaker <= 5);
+    }
+
+    /// <summary>短 TTL 负缓存：命中/过期/清空与 forceRefresh 绕过。</summary>
+    private static void CheckNegativeCache()
+    {
+        var options = new TranslationOptions(
+            true,
+            TranslationEngineModes.IndexTranslate,
+            null,
+            null,
+            TranslationModels.Default,
+            null,
+            null,
+            null,
+            TranslationOptions.SimplifiedChinese,
+            30);
+        var cache = new TranslationNegativeCache();
+        var key = TranslationNegativeCache.BuildKey(options, "同一个标题");
+        var now = DateTimeOffset.UtcNow;
+        ChecksContext.Check("负缓存: 初始未命中", !cache.IsSuppressed(key, now));
+
+        cache.Add(key, now);
+        ChecksContext.Check("负缓存: 有效期内命中", cache.IsSuppressed(key, now));
+        ChecksContext.Check("负缓存: 不同键不串", !cache.IsSuppressed(TranslationNegativeCache.BuildKey(options, "另一个标题"), now));
+        ChecksContext.Check("负缓存: 过期后自动失效", !cache.IsSuppressed(key, now + TranslationNegativeCache.Ttl + TimeSpan.FromSeconds(1)));
+        ChecksContext.Check("负缓存: 访问后清理过期项", cache.Count == 0);
+
+        cache.Add(key, now);
+        cache.Clear();
+        ChecksContext.Check("负缓存: 清空后不再抑制", !cache.IsSuppressed(key, now));
+
+        // 接到服务上：第二次同一原文不再问引擎（这才是止住翻页重复烧 CPU 的关键）。
+        var engine = new StubEngine("local", configured: true, succeed: false);
+        var shared = new TranslationNegativeCache();
+        var service = new TranslationService(
+            new ITranslationEngine[] { engine },
+            null,
+            new RecordingLogger(),
+            shared);
+        var first = service.TranslateAsync(["翻不出来的标题"], options, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("负缓存: 首次请求仍走引擎", first[0] is null && engine.Calls == 1);
+        var second = service.TranslateAsync(["翻不出来的标题"], options, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("负缓存: 同批重来不再请求引擎", second[0] is null && engine.Calls == 1);
+        service.TranslateAsync(
+            ["翻不出来的标题"],
+            options,
+            CancellationToken.None,
+            bypassCache: true).GetAwaiter().GetResult();
+        ChecksContext.Check("负缓存: 刷新译文绕过抑制", engine.Calls == 2);
     }
 
     private sealed class MutableClock : IClock

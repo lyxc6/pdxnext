@@ -23,6 +23,7 @@ public sealed class TranslationService
 
     private readonly ITranslationEngine[] _engines;
     private readonly TranslationCache? _cache;
+    private readonly TranslationNegativeCache? _negativeCache;
     private readonly IAppLogger _logger;
     private readonly SemaphoreSlim _builtinGate = new(MaxBuiltinConcurrency, MaxBuiltinConcurrency);
 
@@ -46,15 +47,18 @@ public sealed class TranslationService
     /// <param name="engines">引擎列表，顺序即回落优先级；null 或空表示没有可用引擎。</param>
     /// <param name="cache">译文缓存；null 表示不缓存。</param>
     /// <param name="logger">日志。</param>
+    /// <param name="negativeCache">短 TTL 的翻不出来标记；null 表示不记。由调用方跨批次持有。</param>
     public TranslationService(
         IReadOnlyList<ITranslationEngine>? engines,
         TranslationCache? cache,
-        IAppLogger logger)
+        IAppLogger logger,
+        TranslationNegativeCache? negativeCache = null)
     {
         ArgumentNullException.ThrowIfNull(logger);
 
         _engines = engines is null ? [] : engines.Where(engine => engine is not null).ToArray();
         _cache = cache;
+        _negativeCache = negativeCache;
         _logger = logger;
     }
 
@@ -92,6 +96,16 @@ public sealed class TranslationService
             if (string.IsNullOrWhiteSpace(text))
             {
                 results[i] = text;
+                continue;
+            }
+
+            // 短 TTL 的翻不出来标记：本地模型对同一批短标题反复空转时，直接跳过引擎。
+            // 「刷新译文」必须绕过它，否则用户点了重试还是不翻。
+            var negativeKey = _negativeCache is null || bypassCache
+                ? string.Empty
+                : TranslationNegativeCache.BuildKey(options, text);
+            if (negativeKey.Length > 0 && _negativeCache!.IsSuppressed(negativeKey, DateTimeOffset.UtcNow))
+            {
                 continue;
             }
 
@@ -164,6 +178,13 @@ public sealed class TranslationService
                 results[pending[i]] = translated;
                 if (string.IsNullOrEmpty(translated))
                 {
+                    // 翻不出来也记一笔短 TTL，免得工坊每次翻页都把同一批标题再喂给本地模型。
+                    if (_negativeCache is not null)
+                    {
+                        _negativeCache.Add(
+                            TranslationNegativeCache.BuildKey(options, source),
+                            DateTimeOffset.UtcNow);
+                    }
                     continue;
                 }
 
