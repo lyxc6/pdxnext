@@ -53,15 +53,6 @@
                                 QuerySubmitted="OnSearchQuerySubmitted"
                                 AutomationProperties.AutomationId="modStudioSearch"
                                 AutomationProperties.Name="{x:Bind L.ModstudioSearchName, Mode=OneWay}" />
-                <Button VerticalAlignment="Center"
-                        Click="OnMcpDocsClick"
-                        AutomationProperties.AutomationId="btnModStudioMcpDocs"
-                        AutomationProperties.Name="{x:Bind L.ModstudioMcpDocsButton, Mode=OneWay}">
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon Glyph="&#xE8A5;" FontSize="14" />
-                        <TextBlock Text="{x:Bind L.ModstudioMcpDocsButton, Mode=OneWay}" />
-                    </StackPanel>
-                </Button>
             </StackPanel>
 
             <Button Grid.Column="2"

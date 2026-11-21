@@ -2,6 +2,8 @@ namespace PdxLauncher.App.Views;
 
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
+using PdxLauncher.Core.Mcp;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -32,7 +34,8 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     public bool IsCacheSection => _sectionIndex == 4;
     public bool IsAdvancedSection => _sectionIndex == 5;
     public bool IsTranslationSection => _sectionIndex == 6;
-    public bool IsAboutSection => _sectionIndex == 7;
+    public bool IsAboutSection => _sectionIndex == 8;
+    public bool IsMcpSection => _sectionIndex == 7;
 
     private void SetSectionIndex(int index)
     {
@@ -50,6 +53,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         OnPropertyChanged(nameof(IsAdvancedSection));
         OnPropertyChanged(nameof(IsTranslationSection));
         OnPropertyChanged(nameof(IsAboutSection));
+        OnPropertyChanged(nameof(IsMcpSection));
     }
 
     private void OnPropertyChanged(string name) =>
@@ -248,10 +252,120 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     /// <summary>「缓存」在左侧八个分节里的序号，与 XAML 里 secCache 的顺序一致。</summary>
     private const int CacheSectionIndex = 4;
 
+    /// <summary>「MCP」在「联网」之后、「关于与更新」之前，索引为 7。</summary>
+    private const int McpSectionIndex = 7;
+
     /// <summary>切换左侧分类：只显示选中的那一节，其余折叠（同一时刻只排版一类设置）。</summary>
     private void OnSectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs e)
     {
         ShowSection(CurrentSectionIndex());
+    }
+
+    /// <summary>
+    /// MCP 文档在首次加载时用当前 exe 目录与数据根填好提示词和 JSON；
+    /// 权限开关切换后由 McpDocsContent.RefreshPermissions 更新，不需要重建分节。
+    /// </summary>
+    private void OnMcpDocsContentLoaded(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _viewModel.PropertyChanged -= OnViewModelPropertyChangedForMcp;
+            _viewModel.PropertyChanged += OnViewModelPropertyChangedForMcp;
+            mcpDocsContent.InitializeContent(
+                Path.Combine(AppContext.BaseDirectory, "PdxLauncher.Mcp.exe"),
+                AppServices.DataRoot,
+                _viewModel.McpEnabled,
+                _viewModel.McpDraftWriteEnabled);
+        _viewModel.RefreshMcpAccessKeys();
+        mcpDocsContent.SetSelectedKey(mcpDocsContent.SelectedKey, _viewModel.McpAccessKeys);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("SettingsPage 初始化 MCP 文档失败", ex);
+        }
+    }
+
+    private void OnViewModelPropertyChangedForMcp(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not (nameof(SettingsViewModel.McpEnabled)
+            or nameof(SettingsViewModel.McpDraftWriteEnabled)))
+        {
+            return;
+        }
+
+        mcpDocsContent.RefreshPermissions(_viewModel.McpEnabled, _viewModel.McpDraftWriteEnabled);
+        mcpDocsContent.SetSelectedKey(mcpDocsContent.SelectedKey, _viewModel.McpAccessKeys);
+    }
+
+    private void OnRefreshMcpCallsClick(object sender, RoutedEventArgs e) =>
+        _viewModel.RefreshMcpCalls();
+
+    public bool HasOneTimeMcpKey => !string.IsNullOrEmpty(OneTimeMcpKeyBox?.Text);
+
+    public bool HasNoMcpAccessKeys => _viewModel.McpAccessKeys.Count == 0;
+
+    private void OnPropertyChangedForMcpKeys()
+    {
+        OnPropertyChanged(nameof(HasOneTimeMcpKey));
+        OnPropertyChanged(nameof(HasNoMcpAccessKeys));
+    }
+
+    private void OnCreateMcpKeyClick(object sender, RoutedEventArgs e)
+    {
+        var created = _viewModel.CreateMcpAccessKey("AI Client");
+        if (created is null)
+        {
+            return;
+        }
+
+        OneTimeMcpKeyBox.Text = created.RawToken;
+        OnPropertyChangedForMcpKeys();
+        mcpDocsContent.SetSelectedKey(created, _viewModel.McpAccessKeys);
+    }
+
+    private void OnRotateMcpKeyClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string id })
+        {
+            var created = _viewModel.RotateMcpAccessKey(id);
+            if (created is not null)
+            {
+                OneTimeMcpKeyBox.Text = created.RawToken;
+                OnPropertyChangedForMcpKeys();
+                mcpDocsContent.SetSelectedKey(created, _viewModel.McpAccessKeys);
+            }
+        }
+    }
+
+    private void OnDeleteMcpKeyClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string id })
+        {
+            _viewModel.DeleteMcpAccessKey(id);
+        }
+    }
+
+    private void OnMcpCallsPreviousClick(object sender, RoutedEventArgs e)
+    {
+        _viewModel.McpCallPage = Math.Max(0, _viewModel.McpCallPage - 1);
+        _viewModel.RefreshMcpCalls();
+    }
+
+    private void OnMcpCallsNextClick(object sender, RoutedEventArgs e)
+    {
+        _viewModel.McpCallPage++;
+        _viewModel.RefreshMcpCalls();
+    }
+
+    private void OnClearMcpCallsClick(object sender, RoutedEventArgs e) => _viewModel.ClearMcpCalls();
+
+    private async void OnExportMcpCallsClick(object sender, RoutedEventArgs e)
+    {
+        var json = _viewModel.ExportMcpCalls();
+        var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+        package.SetText(json);
+        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+        await Task.CompletedTask;
     }
 
     private async void OnCheckUpdatesClick(object sender, RoutedEventArgs e)
@@ -259,7 +373,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         await _viewModel.CheckForUpdatesAsync();
     }
 
-    /// <summary>左侧分类用 NavigationViewItem.Tag 携带序号（"0"–"7"），与 XAML 顺序一致。</summary>
+    /// <summary>左侧分类用 NavigationViewItem.Tag 携带序号（"0"–"8"），与 XAML 顺序一致。</summary>
     private int CurrentSectionIndex()
     {
         if (navSettingsSections.SelectedItem is NavigationViewItem item
@@ -292,6 +406,11 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         {
             RefreshCacheStatsInBackground();
         }
+
+        if (index == McpSectionIndex)
+        {
+            _viewModel.RefreshMcpCalls();
+        }
     }
 
     /// <summary>
@@ -301,10 +420,23 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private void RestoreSection()
     {
         var items = navSettingsSections.MenuItems.OfType<NavigationViewItem>().ToList();
-        var index = AppServices.IsInitialized ? AppServices.Settings.LastSettingsSection ?? 0 : 0;
+        var stored = AppServices.IsInitialized ? AppServices.Settings.LastSettingsSection ?? 0 : 0;
+        var index = stored;
         if (index < 0 || index >= items.Count)
         {
             index = 0;
+        }
+
+        // LastSettingsSection 是旧版按位置保存的索引；改序后按 Tag 找同一分节，
+        // 避免「高级」和「关于与更新」因为位置变化跳错。
+        if (stored >= 0 && stored < items.Count)
+        {
+            var storedTag = items[stored].Tag?.ToString();
+            var sameTag = items.FindIndex(item => string.Equals(item.Tag?.ToString(), storedTag, StringComparison.Ordinal));
+            if (sameTag >= 0)
+            {
+                index = sameTag;
+            }
         }
 
         if (index < items.Count)
@@ -553,33 +685,6 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         OpenPath(
             _viewModel.InstallModeDirectory,
             T(Keys.SettingsAboutInstallModeDirectory));
-
-    private async void OnClearLegacyDataClick(object sender, RoutedEventArgs e) =>
-        await RunGuardedAsync(
-            "SettingsPage 清理旧 C 盘数据失败",
-            async () =>
-            {
-                var legacyPath = DataRootMigrator.LegacyRoot;
-                if (!AppServices.FileSystem.DirectoryExists(legacyPath))
-                {
-                    _viewModel.SetStatus(Keys.SettingsAppDataStatusMissing, legacyPath);
-                    return;
-                }
-
-                if (!await ConfirmAsync(
-                        T(Keys.SettingsAppDataDialogClearTitle),
-                        T(Keys.SettingsAppDataDialogClearContent, legacyPath),
-                        T(Keys.CommonDelete),
-                        InitialFocus.Cancel).ConfigureAwait(true))
-                {
-                    return;
-                }
-
-                AppServices.FileSystem.Delete(legacyPath);
-                AppServices.Logger.Info("已清理旧 C 盘数据目录：" + legacyPath);
-                _viewModel.SetStatus(Keys.SettingsAppDataStatusCleared, legacyPath);
-            },
-            ex => ShowMessageAsync(T(Keys.SettingsAppDataDialogClearFailedTitle), ex.Message));
 
     /// <summary>
     /// 用资源管理器打开一个目录；失败时写状态栏并记日志。

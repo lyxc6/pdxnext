@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Mcp;
 
 /// <summary>
 /// MCP 的 stdio 传输层：按行读写 JSON-RPC 2.0，只暴露 tools 能力。
@@ -27,20 +28,30 @@ internal sealed class McpServer
     private readonly TextWriter _error;
     private readonly McpTools _tools;
     private readonly IAppLogger _logger;
+    private readonly McpCallHistoryStore? _history;
+    private readonly McpAuthorizedKey? _authorizedKey;
 
     public McpServer(
         TextReader input,
         TextWriter output,
         TextWriter error,
         McpTools tools,
-        IAppLogger logger)
+        IAppLogger logger,
+        bool enabled = true,
+        McpCallHistoryStore? history = null,
+        McpAuthorizedKey? authorizedKey = null)
     {
         _input = input ?? throw new ArgumentNullException(nameof(input));
         _output = output ?? throw new ArgumentNullException(nameof(output));
         _error = error ?? throw new ArgumentNullException(nameof(error));
         _tools = tools ?? throw new ArgumentNullException(nameof(tools));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _enabled = enabled;
+        _history = history;
+        _authorizedKey = authorizedKey;
     }
+
+    private readonly bool _enabled;
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -141,9 +152,37 @@ internal sealed class McpServer
                 return new JsonObject();
 
             case "tools/list":
-                return new JsonObject { ["tools"] = _tools.ListTools() };
+                if (!IsConnected())
+                {
+                    return new JsonObject { ["tools"] = new JsonArray() };
+                }
+
+                return new JsonObject { ["tools"] = FilterTools(_tools.ListTools()) };
 
             case "tools/call":
+                if (!IsConnected())
+                {
+                    try
+                    {
+                        _history?.Record(new McpCallHistoryEntry(
+                            0,
+                            DateTimeOffset.UtcNow,
+                            0,
+                            ReadToolName(parameters),
+                            McpCallOutcome.ProtocolError,
+                            "DISABLED",
+                            "已关闭"));
+                    }
+                    catch (Exception exception)
+                    {
+                        _logger.Warn("记录 MCP 调用历史失败：" + exception.Message);
+                    }
+
+                    throw new McpProtocolException(
+                        -32001,
+                        _enabled ? "MCP 访问密钥无效、已禁用或已过期" : "MCP 工具已在 PdxNext 设置中关闭");
+                }
+
                 return await CallToolAsync(parameters, cancellationToken).ConfigureAwait(false);
 
             // 只声明 tools 能力；有的客户端仍会先问资源/提示，回空表比报错更兼容。
@@ -191,29 +230,99 @@ internal sealed class McpServer
 
     private async Task<JsonNode> CallToolAsync(JsonObject? parameters, CancellationToken cancellationToken)
     {
+        var started = DateTimeOffset.UtcNow;
+        var startedTicks = Environment.TickCount64;
+        string toolName = "<invalid>";
+        var outcome = McpCallOutcome.InternalError;
+        string? errorCode = null;
+
         if (parameters?["name"] is not JsonValue nameValue
             || !nameValue.TryGetValue<string>(out var name)
             || string.IsNullOrWhiteSpace(name))
         {
+            errorCode = "INVALID_NAME";
             throw new McpProtocolException(-32602, "tools/call 缺少 name");
         }
 
+        toolName = name;
         var arguments = parameters["arguments"] as JsonObject ?? new JsonObject();
-        var result = await _tools.CallAsync(name, arguments, cancellationToken).ConfigureAwait(false);
-        var content = new JsonArray
+        try
         {
-            new JsonObject
+            if (!IsToolAuthorized(name))
             {
-                ["type"] = "text",
-                ["text"] = result.Text,
-            },
-        };
+                errorCode = "FORBIDDEN";
+                throw new McpProtocolException(-32003, "访问密钥未授权调用 " + name);
+            }
 
-        return new JsonObject
+            McpToolResult result;
+            try
+            {
+                result = await _tools.CallAsync(name, arguments, cancellationToken).ConfigureAwait(false);
+                outcome = result.IsError ? McpCallOutcome.ToolError : McpCallOutcome.Success;
+            }
+            catch (McpProtocolException)
+            {
+                outcome = McpCallOutcome.ProtocolError;
+                errorCode = "PROTOCOL";
+                throw;
+            }
+            catch (Exception)
+            {
+                outcome = McpCallOutcome.InternalError;
+                errorCode = "INTERNAL";
+                throw;
+            }
+
+            var content = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["type"] = "text",
+                    ["text"] = result.Text,
+                },
+            };
+
+            return new JsonObject
+            {
+                ["content"] = content,
+                ["isError"] = result.IsError,
+            };
+        }
+        finally
         {
-            ["content"] = content,
-            ["isError"] = result.IsError,
-        };
+            RecordCall(toolName, started, startedTicks, outcome, errorCode);
+        }
+    }
+
+    private void RecordCall(
+        string toolName,
+        DateTimeOffset started,
+        long startedTicks,
+        McpCallOutcome outcome,
+        string? errorCode)
+    {
+        if (_history is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var duration = Math.Max(0, Environment.TickCount64 - startedTicks);
+            _history.Record(new McpCallHistoryEntry(
+                0,
+                started,
+                duration,
+                toolName,
+                outcome,
+                errorCode,
+                PermissionModeText,
+                _authorizedKey?.KeyId));
+        }
+        catch (Exception exception)
+        {
+            _logger.Warn("记录 MCP 调用历史失败：" + exception.Message);
+        }
     }
 
     private static bool TryReadMethod(JsonObject message, out string method)
@@ -227,6 +336,47 @@ internal sealed class McpServer
         method = text;
         return method.Length > 0;
     }
+
+    private static string ReadToolName(JsonObject? parameters) =>
+        parameters?["name"] is JsonValue value
+            && value.TryGetValue<string>(out var text)
+            && !string.IsNullOrWhiteSpace(text)
+                ? text
+                : "<invalid>";
+
+    private bool IsConnected() => _enabled && (_authorizedKey is null || _authorizedKey.AllowedTools.Count > 0);
+
+    private string PermissionModeText => !_enabled
+        ? "已关闭"
+        : _authorizedKey is not null
+            ? _authorizedKey.AllowsAllTools
+                ? "全部工具"
+                : string.Join('|', _authorizedKey.AllowedTools)
+            : _tools.IsDraftWriteEnabled ? "可写" : "只读";
+
+    private JsonArray FilterTools(JsonArray tools)
+    {
+        if (_authorizedKey is null)
+        {
+            return tools;
+        }
+
+        var filtered = new JsonArray();
+        foreach (var node in tools)
+        {
+            if (node is JsonObject tool
+                && tool["name"] is JsonValue value
+                && value.TryGetValue<string>(out var name)
+                && IsToolAuthorized(name))
+            {
+                filtered.Add(tool.DeepClone());
+            }
+        }
+
+        return filtered;
+    }
+
+    private bool IsToolAuthorized(string name) => _authorizedKey is null || _authorizedKey.Allows(name);
 
     private void WriteResult(JsonNode? id, JsonNode result)
     {

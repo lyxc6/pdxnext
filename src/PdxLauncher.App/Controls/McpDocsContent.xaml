@@ -5,7 +5,27 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ctl="using:PdxLauncher.App.Controls">
 
-    <StackPanel MinWidth="600" MaxWidth="720" Spacing="12">
+    <StackPanel MinWidth="0" MaxWidth="1000" HorizontalAlignment="Stretch" Spacing="12">
+        <Border Padding="12"
+                CornerRadius="8"
+                BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="8">
+                <TextBlock Text="{x:Bind L.McpPermissionTitle, Mode=OneWay}"
+                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <TextBlock Text="{x:Bind PermissionText, Mode=OneWay}"
+                           TextWrapping="Wrap"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           AutomationProperties.AutomationId="txtMcpPermission" />
+                <TextBlock Text="{x:Bind L.McpPermissionHint, Mode=OneWay}"
+                           TextWrapping="Wrap"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+        </Border>
+
         <TextBlock Text="{x:Bind L.ModstudioMcpDocsIntro, Mode=OneWay}"
                    TextWrapping="Wrap"
                    Style="{StaticResource BodyTextBlockStyle}"
@@ -18,7 +38,7 @@
             </Grid.ColumnDefinitions>
             <FontIcon Grid.Column="0" Glyph="&#xE72E;" FontSize="14" Foreground="{ThemeResource SystemFillColorCautionBrush}" />
             <TextBlock Grid.Column="1"
-                       MaxWidth="680"
+                       MaxWidth="920"
                        Text="{x:Bind L.ModstudioMcpDocsSafety, Mode=OneWay}"
                        TextWrapping="Wrap"
                        Style="{StaticResource CaptionTextBlockStyle}"
@@ -32,6 +52,18 @@
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
             <StackPanel Spacing="8">
+                <ComboBox x:Name="ClientKindSelector"
+                          Header="{x:Bind L.SettingsMcpClient, Mode=OneWay}"
+                          SelectionChanged="OnClientKindChanged"
+                          SelectedIndex="0"
+                          MinWidth="200"
+                          AutomationProperties.AutomationId="cmbMcpClientKind">
+                    <ComboBoxItem Content="Claude Desktop" />
+                    <ComboBoxItem Content="Claude Code" />
+                    <ComboBoxItem Content="Codex" />
+                    <ComboBoxItem Content="Cursor" />
+                    <ComboBoxItem Content="VS Code" />
+                </ComboBox>
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <FontIcon Glyph="&#xE945;" FontSize="16" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" />
                     <TextBlock Text="{x:Bind L.ModstudioMcpQuickInstallTitle, Mode=OneWay}"
@@ -74,7 +106,7 @@
             <StackPanel Spacing="8">
                 <TextBlock Text="{x:Bind L.ModstudioMcpFlowTitle, Mode=OneWay}"
                            Style="{StaticResource BodyStrongTextBlockStyle}" />
-                <TextBlock Text="{x:Bind L.ModstudioMcpFlowBody, Mode=OneWay}" TextWrapping="Wrap" />
+                <TextBlock x:Name="FlowTextBlock" TextWrapping="Wrap" />
             </StackPanel>
         </Border>
 

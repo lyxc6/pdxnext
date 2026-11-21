@@ -49,7 +49,6 @@ public static class ModsPageLayoutChecks
         "txtModListEmpty",
         "txtModsStatus",
         "ringModsBusy",
-        "txtPlaySetPlaceholder",
     ];
 
     public static int Run(IFileSystem fs)
@@ -115,7 +114,6 @@ public static class ModsPageLayoutChecks
         [
             "ViewModel.IsOfficialLayout",
             "ViewModel.IsTwoColumnLayout",
-            "ViewModel.IsPlaceholderLayout",
             "ViewModel.ShowsPlaysetChrome",
         ];
 
@@ -701,7 +699,7 @@ public static class ModsPageLayoutChecks
         ChecksContext.Check(
             "显示方式: IsTwoColumn 只认 twoColumn",
             PlaySetPageDisplayModes.IsTwoColumn(PlaySetPageDisplayModes.TwoColumn)
-                && !PlaySetPageDisplayModes.IsTwoColumn(PlaySetPageDisplayModes.Placeholder)
+                && !PlaySetPageDisplayModes.IsTwoColumn("placeholder")
                 && !PlaySetPageDisplayModes.IsTwoColumn(PlaySetPageDisplayModes.OfficialLauncher));
 
         // 目录在 App 层（引用不到），读源码文本钉住「下拉里确实多了这一项」。

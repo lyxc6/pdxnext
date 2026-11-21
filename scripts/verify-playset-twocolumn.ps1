@@ -234,7 +234,7 @@ if ($now -ne 1) { $failed++ }
 
 # Back to the playset page: the layout is picked up when the page (re)loads.
 if (-not (Navigate 'navPlaySets')) { 'NO_NAV_PLAYSETS'; $failed++ }
-WaitAnyOf -ids @('cmbPlaySets', 'lstModCandidates', 'lstMods', 'txtPlaySetPlaceholder') -tries 30 | Out-Null
+WaitAnyOf -ids @('cmbPlaySets', 'lstModCandidates', 'lstMods') -tries 30 | Out-Null
 Start-Sleep -Milliseconds 1200
 if ($p.HasExited) { "CRASHED code=$($p.ExitCode)"; exit 1 }
 
@@ -250,7 +250,7 @@ OpenAppearance | Out-Null
 SelectDropDownIndex $modeId 0 | Out-Null
 "RESTORED_INDEX=$(DropDownIndex $modeId)"
 Navigate 'navPlaySets' | Out-Null
-WaitAnyOf -ids @('cmbPlaySets', 'lstMods', 'lstModCandidates', 'txtPlaySetPlaceholder') -tries 30 | Out-Null
+WaitAnyOf -ids @('cmbPlaySets', 'lstMods', 'lstModCandidates') -tries 30 | Out-Null
 Start-Sleep -Milliseconds 1200
 Check-Missing 'original layout chrome' @('cmbPlaySets', 'btnAddMods', 'txtModSearch', 'txtModsStatus')
 Check-AnyOf 'original playset surface' @('lstMods', 'txtModListEmpty')

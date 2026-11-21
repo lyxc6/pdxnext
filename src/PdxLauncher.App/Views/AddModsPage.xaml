@@ -106,11 +106,12 @@
         </Grid>
 
         <!--
-            搜索行：搜索框定宽 320，右侧依次是排序、来源、版本兼容性三个下拉。
+            搜索行：搜索框定宽 320，右侧依次是排序、排序方向、来源、版本兼容性三个下拉。
             下拉框与搜索框同高（PdxDropDown 的 DropDownButton 是 32），不额外占行。
         -->
         <Grid Grid.Row="1" ColumnSpacing="8">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
@@ -140,7 +141,18 @@
                                   AutomationProperties.AutomationId="cmbAddModsSort"
                                   AutomationProperties.Name="{x:Bind ViewModel.SortName, Mode=OneWay}" />
 
-            <controls:PdxDropDown Grid.Column="2"
+            <!-- 排序方向切换：正序 / 倒序共用一个按钮，图标与提示随方向换（code-behind 里维护）。 -->
+            <Button Grid.Column="2"
+                    x:Name="SortDirectionButton"
+                    VerticalAlignment="Center"
+                    Click="OnSortDirectionClick"
+                    ToolTipService.ToolTip="{x:Bind L.ModsAddPageSortDirectionName, Mode=OneWay}"
+                    AutomationProperties.AutomationId="btnAddModsSortDirection"
+                    AutomationProperties.Name="{x:Bind L.ModsAddPageSortDirectionName, Mode=OneWay}">
+                <FontIcon x:Name="SortDirectionGlyph" Glyph="&#xE8DD;" FontSize="16" />
+            </Button>
+
+            <controls:PdxDropDown Grid.Column="3"
                                   x:Name="SourceFilterBox"
                                   MinWidth="120"
                                   VerticalAlignment="Center"
@@ -150,7 +162,7 @@
                                   AutomationProperties.AutomationId="cmbAddModsSourceFilter"
                                   AutomationProperties.Name="{x:Bind ViewModel.SourceFilterName, Mode=OneWay}" />
 
-            <controls:PdxDropDown Grid.Column="3"
+            <controls:PdxDropDown Grid.Column="4"
                                   x:Name="VersionFilterBox"
                                   MinWidth="120"
                                   VerticalAlignment="Center"

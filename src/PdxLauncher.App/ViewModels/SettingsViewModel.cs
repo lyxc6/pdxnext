@@ -2,13 +2,16 @@ namespace PdxLauncher.App.ViewModels;
 
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
+using System.Text.Json;
 
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Mcp;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Online.Translation.Local;
 using PdxLauncher.Core.Patch;
@@ -26,6 +29,215 @@ using PdxLauncher.Core.Updates;
 /// </summary>
 public sealed class SettingsViewModel : LocalizedObservableObject
 {
+    /// <summary>设置页 MCP 工具目录（与 MCP 进程共用同一份元数据）。</summary>
+    public IReadOnlyList<McpToolDescriptor> McpTools { get; } = McpToolCatalog.Tools;
+
+    public ObservableCollection<McpAccessKey> McpAccessKeys { get; } = new();
+
+    public ObservableCollection<McpCallHistoryEntry> McpRecentCalls { get; } = new();
+
+    public IReadOnlyList<string> McpClientKinds { get; } = (string[])[
+        "Claude Desktop", "Claude Code", "Codex", "Cursor", "VS Code",
+    ];
+
+    public int McpClientKindIndex { get; set; }
+
+    public string McpClientConfigText { get; private set; } = string.Empty;
+
+    public bool HasMcpAccessKeys => McpAccessKeys.Count > 0;
+
+    public void RefreshMcpAccessKeys()
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            var keys = new McpAccessKeyStore(AppServices.Database).List();
+            McpAccessKeys.Clear();
+            foreach (var key in keys)
+            {
+                McpAccessKeys.Add(key);
+            }
+
+            OnPropertyChanged(nameof(HasMcpAccessKeys));
+        }
+        catch (Exception exception)
+        {
+            AppServices.Logger.Warn("读取 MCP 访问密钥失败：" + exception.Message);
+        }
+    }
+
+    public McpCreatedAccessKey? CreateMcpAccessKey(string displayName) =>
+        MutateMcpAccessKey(store => store.Create(displayName, (string[])["*"], null));
+
+    public McpCreatedAccessKey? RotateMcpAccessKey(string id) =>
+        MutateMcpAccessKey(store => store.Rotate(id));
+
+    public bool DeleteMcpAccessKey(string id) =>
+        MutateMcpAccessKey(store => store.Delete(id));
+
+    public bool SetMcpAccessKeyEnabled(string id, bool enabled) =>
+        MutateMcpAccessKey(store => store.SetEnabled(id, enabled));
+
+    public void UpdateMcpClientConfig(McpCreatedAccessKey? selectedKey)
+    {
+        var client = (McpClientKind)Math.Clamp(McpClientKindIndex, 0, McpClientKinds.Count - 1);
+        McpClientConfigText = McpClientConfigGenerator.Create(
+            client,
+            Path.Combine(AppContext.BaseDirectory, "PdxLauncher.Mcp.exe"),
+            AppServices.DataRoot,
+            AppServices.Settings.McpEnabled,
+            AppServices.Settings.McpDraftWriteEnabled,
+            selectedKey?.Key,
+            selectedKey?.RawToken ?? string.Empty);
+        OnPropertyChanged(nameof(McpClientConfigText));
+    }
+
+    private T MutateMcpAccessKey<T>(Func<McpAccessKeyStore, T> action)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return default!;
+        }
+
+        try
+        {
+            var result = action(new McpAccessKeyStore(AppServices.Database));
+            RefreshMcpAccessKeys();
+            return result;
+        }
+        catch (Exception exception)
+        {
+            SetStatus(Keys.SettingsStatusSaveFailed, exception.Message);
+            return default!;
+        }
+    }
+
+    private bool MutateMcpAccessKey(Func<McpAccessKeyStore, bool> action)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return false;
+        }
+
+        try
+        {
+            var result = action(new McpAccessKeyStore(AppServices.Database));
+            RefreshMcpAccessKeys();
+            return result;
+        }
+        catch (Exception exception)
+        {
+            SetStatus(Keys.SettingsStatusSaveFailed, exception.Message);
+            return false;
+        }
+    }
+
+    public string McpPermissionModeText =>
+        !AppServices.Settings.McpEnabled
+            ? T(Keys.McpPermissionOff)
+            : AppServices.Settings.McpDraftWriteEnabled
+                ? T(Keys.McpPermissionReadWrite)
+                : T(Keys.McpPermissionReadOnly);
+
+    public int McpCallTotal { get; private set; }
+
+    public int McpCallSuccess { get; private set; }
+
+    public string McpCallSuccessRate => McpCallTotal == 0
+        ? "0%"
+        : (McpCallSuccess * 100 / McpCallTotal).ToString(CultureInfo.InvariantCulture) + "%";
+
+    public bool HasMcpRecentCalls => McpRecentCalls.Count > 0;
+
+    public int McpCallPage { get; set; }
+
+    public int McpCallPageSize => 50;
+
+    public int McpCallPageCount => Math.Max(1, (McpCallTotal + McpCallPageSize - 1) / McpCallPageSize);
+
+    public bool CanMcpCallPreviousPage => McpCallPage > 0;
+
+    public bool CanMcpCallNextPage => McpCallPage + 1 < McpCallPageCount;
+
+    public void RefreshMcpCalls(string? toolName = null, McpCallOutcome? outcome = null, string? keyId = null)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            var history = new McpCallHistoryStore(AppServices.Database);
+            var query = new McpCallHistoryQuery(toolName, outcome, keyId, McpCallPage * McpCallPageSize, McpCallPageSize);
+            var entries = history.Query(query);
+            var stats = history.GetStats();
+
+            McpRecentCalls.Clear();
+            foreach (var entry in entries)
+            {
+                McpRecentCalls.Add(entry);
+            }
+
+            McpCallTotal = stats.Total;
+            McpCallSuccess = stats.Success;
+            OnPropertyChanged(nameof(McpCallTotal));
+            OnPropertyChanged(nameof(McpCallSuccess));
+            OnPropertyChanged(nameof(McpCallSuccessRate));
+            OnPropertyChanged(nameof(HasMcpRecentCalls));
+            OnPropertyChanged(nameof(McpCallPageCount));
+            OnPropertyChanged(nameof(CanMcpCallPreviousPage));
+            OnPropertyChanged(nameof(CanMcpCallNextPage));
+        }
+        catch (Exception exception)
+        {
+            AppServices.Logger.Warn("读取 MCP 调用历史失败：" + exception.Message);
+        }
+    }
+
+    public void ClearMcpCalls()
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            new McpCallHistoryStore(AppServices.Database).Clear();
+            McpCallPage = 0;
+            RefreshMcpCalls();
+        }
+        catch (Exception exception)
+        {
+            SetStatus(Keys.SettingsStatusSaveFailed, exception.Message);
+        }
+    }
+
+    public string ExportMcpCalls(string? toolName = null, McpCallOutcome? outcome = null, string? keyId = null)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return "[]";
+        }
+
+        try
+        {
+            var entries = new McpCallHistoryStore(AppServices.Database).Query(
+                new McpCallHistoryQuery(toolName, outcome, keyId, 0, McpCallHistoryStore.Capacity));
+            return JsonSerializer.Serialize(entries, new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (Exception exception)
+        {
+            AppServices.Logger.Warn("导出 MCP 调用历史失败：" + exception.Message);
+            return "[]";
+        }
+    }
+
     /// <summary>
     /// 主题缓存 TTL：24 小时。索引最后检查时间 + TTL 只用来展示「下次检查」；
     /// 真正的刷新判定在 ThemeResolver/ThemeRefreshDecision，退避与 force 都优先于 TTL。
@@ -968,6 +1180,15 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// <summary>Mod 编辑页改了左栏显隐后，刷新设置页开关的绑定值。</summary>
     public void RefreshModEditorPane() => OnPropertyChanged(nameof(ModEditorLeftPaneVisible));
 
+    /// <summary>刷新 MCP 开关绑定，供设置页订阅 VM 属性变化时更新文档区。</summary>
+    public void RefreshMcpPermissions()
+    {
+        OnPropertyChanged(nameof(McpEnabled));
+        OnPropertyChanged(nameof(McpDraftWriteEnabled));
+            OnPropertyChanged(nameof(McpPermissionModeText));
+            UpdateMcpClientConfig(null);
+    }
+
     /// <summary>
     /// 左栏菜单「Mod 编辑」入口显隐开关（高级分区）：赋值后立即落盘、广播，
     /// 让主窗口重算导航项可见性；失败回滚。
@@ -982,6 +1203,34 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             Keys.SettingsAdvancedModEditorNavOn,
             Keys.SettingsAdvancedModEditorNavOff,
             afterSave: AppServices.NotifyModEditorNavVisibilityChanged);
+    }
+
+    /// <summary>
+    /// MCP 总开关：写入 AppSettings.McpEnabled；关闭后客户端连接 MCP 会看到空工具表，调用被拒绝。
+    /// </summary>
+    public bool McpEnabled
+    {
+        get => AppServices.Settings.McpEnabled;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.McpEnabled,
+            v => AppServices.Settings.McpEnabled = v,
+            Keys.SettingsMcpStatusEnabled,
+            Keys.SettingsMcpStatusDisabled);
+    }
+
+    /// <summary>
+    /// MCP 草稿写入开关（默认关）：开启后 AI 才能保存/删除上传草稿，发布仍需用户确认。
+    /// </summary>
+    public bool McpDraftWriteEnabled
+    {
+        get => AppServices.Settings.McpDraftWriteEnabled;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.McpDraftWriteEnabled,
+            v => AppServices.Settings.McpDraftWriteEnabled = v,
+            Keys.SettingsMcpStatusWriteOn,
+            Keys.SettingsMcpStatusWriteOff);
     }
 
     // ------------------------------------------------------------ 启动区
@@ -1812,9 +2061,6 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     /// <summary>本启动器数据根目录（settings.json / 日志 / 各缓存都在这里）。</summary>
     public string DataDirectoryPath => AppServices.DataRoot;
-
-    /// <summary>旧版本的 C 盘数据目录；迁移完成后可以手动清理。</summary>
-    public string LegacyDataDirectoryPath => DataRootMigrator.LegacyRoot;
 
     /// <summary>联网补全 Mod 缩略图开关；写入 AppSettings.OnlineModThumbnailEnabled 并登记延迟落盘。</summary>
     public bool ModThumbnailOnlineEnabled
@@ -3202,7 +3448,6 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(IsManualProxy));
         OnPropertyChanged(nameof(ProxyStatusText));
         OnPropertyChanged(nameof(DataDirectoryPath));
-        OnPropertyChanged(nameof(LegacyDataDirectoryPath));
         OnPropertyChanged(nameof(ModThumbnailOnlineEnabled));
         OnPropertyChanged(nameof(SelectedModThumbnailRetention));
         OnPropertyChanged(nameof(ModThumbnailCachePath));

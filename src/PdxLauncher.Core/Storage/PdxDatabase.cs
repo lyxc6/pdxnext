@@ -24,7 +24,7 @@ public sealed class PdxDatabase
     public const string FileName = "pdxnext.sqlite";
 
     /// <summary>当前 schema 版本；加表/加列时递增，并在 <see cref="Migrate"/> 里补一段迁移。</summary>
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 5;
 
     /// <summary>schema 版本号所在的 meta 键。</summary>
     public const string SchemaVersionKey = "schema_version";
@@ -58,6 +58,42 @@ public sealed class PdxDatabase
         DELETE FROM workshop_items
         WHERE cover_file IS NOT NULL AND game_id IS NULL AND name IS NULL
         """;
+
+    /// <summary>v4 迁移：MCP 工具调用历史表。</summary>
+    private const string CreateMcpCallsSql =
+        """
+        CREATE TABLE IF NOT EXISTS mcp_calls (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_utc INTEGER NOT NULL,
+            duration_ms INTEGER NOT NULL,
+            tool_name TEXT NOT NULL,
+            outcome TEXT NOT NULL,
+            error_code TEXT,
+            permission_mode TEXT NOT NULL)
+        """;
+
+    private const string CreateMcpCallsIndexSql =
+        "CREATE INDEX IF NOT EXISTS ix_mcp_calls_started ON mcp_calls (started_utc DESC)";
+
+    /// <summary>v5 迁移：MCP 访问密钥。</summary>
+    private const string CreateMcpAccessKeysSql =
+        """
+        CREATE TABLE IF NOT EXISTS mcp_access_keys (
+            id TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL,
+            key_hash TEXT NOT NULL,
+            key_prefix TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            allowed_tools TEXT NOT NULL DEFAULT '*',
+            expires_utc INTEGER,
+            created_utc INTEGER NOT NULL,
+            last_used_utc INTEGER)
+        """;
+
+    private const string AddMcpCallsKeyIdSql =
+        "ALTER TABLE mcp_calls ADD COLUMN key_id TEXT";
+
+    private const string McpCallColumnsSql = "PRAGMA table_info(mcp_calls)";
 
     /// <summary>读 workshop_items 表结构；表名固定，不拼接外部输入。</summary>
     private const string WorkshopItemColumnsSql = "PRAGMA table_info(workshop_items)";
@@ -448,13 +484,38 @@ public sealed class PdxDatabase
             connection.Execute(MoveCoverOnlyRowsSql);
             connection.Execute(DeleteCoverOnlyRowsSql);
         }
+
+        // v4：MCP 调用历史。只记录元数据，不记录参数、路径或表单内容。
+        if (fromVersion < 4)
+        {
+            connection.Execute(CreateMcpCallsSql);
+            connection.Execute(CreateMcpCallsIndexSql);
+        }
+
+        // v5：访问密钥 + 调用记录关联到密钥。
+        if (fromVersion < 5)
+        {
+            connection.Execute(CreateMcpAccessKeysSql);
+            if (!ReadColumnNames(connection, McpCallColumnsSql).Contains("key_id"))
+            {
+                connection.Execute(AddMcpCallsKeyIdSql);
+            }
+
+            connection.Execute("CREATE INDEX IF NOT EXISTS ix_mcp_access_keys_prefix ON mcp_access_keys (key_prefix)");
+            connection.Execute("CREATE INDEX IF NOT EXISTS ix_mcp_calls_key ON mcp_calls (key_id, started_utc DESC)");
+        }
     }
 
     /// <summary>读 workshop_items 的实际列名（表名固定）。</summary>
     private static HashSet<string> ReadWorkshopItemColumns(SqliteConnection connection)
     {
+        return ReadColumnNames(connection, WorkshopItemColumnsSql);
+    }
+
+    private static HashSet<string> ReadColumnNames(SqliteConnection connection, string sql)
+    {
         var columns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var row in connection.Query(WorkshopItemColumnsSql))
+        foreach (var row in connection.Query(sql))
         {
             if (row.TryGetValue("name", out var value) && value is string name && name.Length > 0)
             {

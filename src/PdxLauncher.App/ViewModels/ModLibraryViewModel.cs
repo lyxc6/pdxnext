@@ -82,6 +82,9 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     /// <summary>语言切换时重建排序下拉框：此时改选中项不算用户操作，不重建列表。</summary>
     private bool _isRelocalizing;
 
+    /// <summary>切换排序键自动重置方向时为 true：方向变化由排序键自己的重建负责，不重复重建。</summary>
+    private bool _isSwitchingSortKey;
+
     /// <summary>当前游戏；null 表示还没在游戏库里选游戏。</summary>
     [ObservableProperty]
     private GameInstallation? _game;
@@ -126,6 +129,13 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     /// <summary>当前排序方式，取值来自 <see cref="SortModes"/>。</summary>
     [ObservableProperty]
     private string _selectedSortMode = string.Empty;
+
+    /// <summary>
+    /// 当前排序方向：false 正序（名称 A-Z / 大小小到大 / 订阅旧到新），true 倒序。
+    /// 切排序键时重置成该键的默认方向，只有点切换按钮才改变它。
+    /// </summary>
+    [ObservableProperty]
+    private bool _sortDescending;
 
     /// <summary>排序下拉框的选项（按当前语言生成，语言切换时整体替换）。</summary>
     [ObservableProperty]
@@ -541,7 +551,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         RebuildRows();
     }
 
-    /// <summary>排序方式变化：重新排序。</summary>
+    /// <summary>排序方式变化：按新键重置方向并重新排序。</summary>
     partial void OnSelectedSortModeChanged(string value)
     {
         if (_isRelocalizing)
@@ -549,7 +559,37 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
             return;
         }
 
+        _isSwitchingSortKey = true;
+        try
+        {
+            // 换排序键时回到该键的默认方向（名称正序 / 大小、订阅时间倒序），与旧行为一致；
+            // 赋值会触发 OnSortDescendingChanged，用标记防止它在这里再重建一次行。
+            SortDescending = ResolveSortKey() is not Keys.ModlibSortByName;
+        }
+        finally
+        {
+            _isSwitchingSortKey = false;
+        }
+
         RebuildRows();
+    }
+
+    /// <summary>排序方向变化：重新排序（换排序键时的自动重置不算用户操作）。</summary>
+    partial void OnSortDescendingChanged(bool value)
+    {
+        if (_isRelocalizing || _isSwitchingSortKey)
+        {
+            return;
+        }
+
+        RebuildRows();
+    }
+
+    /// <summary>点切换按钮：翻转方向并重排；返回翻转后的方向供按钮换图标。</summary>
+    public bool ToggleSortDirection()
+    {
+        SortDescending = !SortDescending;
+        return SortDescending;
     }
 
     /// <summary>来源筛选变化：只需重建行，不用重新加载。</summary>
@@ -665,7 +705,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         var gameVersion = Game?.Version;
         var targetLanguage = GetNameTranslationTargetLanguage();
         Mods.Clear();
-        foreach (var entry in ApplySort(filtered))
+        foreach (var entry in ApplySort(filtered, SortDescending))
         {
             var row = new ModLibraryRowViewModel(
                 entry,
@@ -1057,26 +1097,64 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
             && entry.DirPath.Contains(query, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// 排序：名称 A-Z（默认，忽略大小写）；大小降序与订阅时间降序时未知值排最后，
-    /// 名称始终作为次级键，保证顺序稳定。
+    /// 排序：主键方向由 <paramref name="descending"/> 决定（默认方向见 <see cref="SortDescending"/>），
+    /// 名称始终作为次级键（A-Z），保证同主键时顺序稳定；未知值（大小 / 订阅时间为 null）始终排最后。
+    /// 订阅时间排序里，已订阅但官方库还没登记的行（IsUnregistered，没有 subscribedDate）视为「最新」：
+    /// 倒序时排最前，正序时排在全部有时间的行之后——刚订阅的 mod 官方启动器还没扫描到时不应垫底。
     /// </summary>
-    private IEnumerable<ModLibraryEntry> ApplySort(IReadOnlyList<ModLibraryEntry> rows) =>
+    private IEnumerable<ModLibraryEntry> ApplySort(IReadOnlyList<ModLibraryEntry> rows, bool descending) =>
         ResolveSortKey() switch
         {
             Keys.ModlibSortBySize => rows
-                .OrderByDescending(static entry => entry.SizeBytes.HasValue)
-                .ThenByDescending(static entry => entry.SizeBytes ?? long.MinValue)
-                .ThenBy(static entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static entry => !entry.SizeBytes.HasValue)
+                .ThenBy(static entry => entry.SizeBytes ?? long.MinValue, Directed<long>(descending))
+                .ThenBy(static entry => entry.Name, NameComparer)
                 .ThenBy(static entry => entry.ModId),
             Keys.ModlibSortBySubscribed => rows
-                .OrderByDescending(static entry => entry.SubscribedOn.HasValue)
-                .ThenByDescending(static entry => entry.SubscribedOn ?? DateTimeOffset.MinValue)
-                .ThenBy(static entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(entry => SubscribedFreshness(entry, descending))
+                .ThenBy(
+                    static entry => entry.SubscribedOn ?? DateTimeOffset.MinValue,
+                    Directed<DateTimeOffset>(descending))
+                .ThenBy(static entry => entry.Name, NameComparer)
                 .ThenBy(static entry => entry.ModId),
             _ => rows
-                .OrderBy(static entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static entry => entry.Name, DirectedNameComparer(descending))
                 .ThenBy(static entry => entry.ModId),
         };
+
+    /// <summary>名称次级键：始终 A-Z（忽略大小写），不随主键方向翻转，保证顺序稳定。</summary>
+    private static readonly IComparer<string> NameComparer = StringComparer.OrdinalIgnoreCase;
+
+    /// <summary>按方向取数值比较器：正序升、倒序降。</summary>
+    private static IComparer<T> Directed<T>(bool descending)
+        where T : IComparable<T> =>
+        descending
+            ? Comparer<T>.Create(static (left, right) => right.CompareTo(left))
+            : Comparer<T>.Create(static (left, right) => left.CompareTo(right));
+
+    /// <summary>名称主键比较器：正序 A-Z，倒序 Z-A（都忽略大小写）。</summary>
+    private static IComparer<string> DirectedNameComparer(bool descending) =>
+        descending
+            ? Comparer<string>.Create(static (left, right) =>
+                string.Compare(right, left, StringComparison.OrdinalIgnoreCase))
+            : StringComparer.OrdinalIgnoreCase;
+
+    /// <param name="entry">要分层的行。</param>
+    /// <param name="descending">当前是否倒序。</param>
+    /// <returns>
+    /// 订阅时间排序的层级：刚订阅未登记的行、有订阅时间的行、其余（本地未登记等）依次 0/1/2。
+    /// 倒序（新到旧）时刚订阅的排最前；正序（旧到新）时排在全部有时间的行之后；未知值都排最后。
+    /// </returns>
+    private static int SubscribedFreshness(ModLibraryEntry entry, bool descending)
+    {
+        if (entry.IsUnregistered && entry.IsSubscribed)
+        {
+            // 刚订阅、官方库还没登记：位置上等价于「刚刚订阅」。
+            return descending ? 0 : 1;
+        }
+
+        return entry.SubscribedOn.HasValue ? (descending ? 1 : 0) : 2;
+    }
 
     /// <summary>状态栏文案：加载结果 + 搜索命中情况。</summary>
     private string BuildStatusMessage(string query)

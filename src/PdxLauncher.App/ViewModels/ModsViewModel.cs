@@ -87,7 +87,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
     private ModLibrarySnapshot _librarySnapshot = ModLibrarySnapshot.Empty;
     private Dictionary<Guid, ModLibraryEntry> _entryByModId = new();
 
-    /// <summary>播放集页面显示方式（原版启动器 / 留空），来自 AppSettings，页面加载时刷新。</summary>
+    /// <summary>播放集页面显示方式（原版启动器 / 双列），来自 AppSettings，页面加载时刷新。</summary>
     private string _displayMode = PlaySetPageDisplayModes.OfficialLauncher;
 
     /// <summary>是否有待执行的自动保存；连续快速改动会被合并成一次保存。</summary>
@@ -163,17 +163,13 @@ public sealed class ModsViewModel : LocalizedObservableObject
     public bool IsOfficialLayout =>
         string.Equals(_displayMode, PlaySetPageDisplayModes.OfficialLauncher, StringComparison.Ordinal);
 
-    /// <summary>当前显示方式是否为留空布局。</summary>
-    public bool IsPlaceholderLayout =>
-        string.Equals(_displayMode, PlaySetPageDisplayModes.Placeholder, StringComparison.Ordinal);
-
     /// <summary>当前显示方式是否为双列布局（左＝可添加，右＝已在播放集）。</summary>
     public bool IsTwoColumnLayout =>
         string.Equals(_displayMode, PlaySetPageDisplayModes.TwoColumn, StringComparison.Ordinal);
 
     /// <summary>
-    /// 工具条与状态栏是否显示：原版启动器与双列两种布局共用同一套播放集操作，
-    /// 留空布局什么都不显示。页面根层用它控制这两块，避免把工具条复制两份。
+    /// 工具条与状态栏是否显示：原版启动器与双列两种布局共用同一套播放集操作。
+    /// 页面根层用它控制这两块，避免把工具条复制两份。
     /// </summary>
     public bool ShowsPlaysetChrome => IsOfficialLayout || IsTwoColumnLayout;
 
@@ -498,7 +494,6 @@ public sealed class ModsViewModel : LocalizedObservableObject
 
         _displayMode = mode;
         OnPropertyChanged(nameof(IsOfficialLayout));
-        OnPropertyChanged(nameof(IsPlaceholderLayout));
         OnPropertyChanged(nameof(IsTwoColumnLayout));
         OnPropertyChanged(nameof(ShowsPlaysetChrome));
         // 切到双列时左栏要立刻有内容；切走时把候选清空，避免下次进来先闪一帧旧数据。

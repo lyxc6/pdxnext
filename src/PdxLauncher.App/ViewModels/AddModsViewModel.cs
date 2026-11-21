@@ -87,6 +87,7 @@ public sealed class AddModsViewModel : LocalizedObservableObject
     private string _playSetName = string.Empty;
     private string _statusMessage = string.Empty;
     private string _selectedSortMode = string.Empty;
+    private bool _sortDescending;
     private IReadOnlyList<string> _sortModes = Array.Empty<string>();
     private string _selectedSourceFilter = string.Empty;
     private string _sourceFilterKey = Keys.ModsAddPageSourceFilterAll;
@@ -289,6 +290,8 @@ public sealed class AddModsViewModel : LocalizedObservableObject
 
             if (!_isRelocalizing)
             {
+                // 换排序键时回到该键的默认方向（名称正序 / 大小、订阅时间倒序），与旧行为一致。
+                SortDescending = ResolveSortKey() is not Keys.ModsAddPageSortByName;
                 RebuildVisibleRows();
             }
         }
@@ -296,6 +299,36 @@ public sealed class AddModsViewModel : LocalizedObservableObject
 
     /// <summary>排序下拉框的无障碍名称。</summary>
     public string SortName => T(Keys.ModsAddPageSortName);
+
+    /// <summary>
+    /// 当前排序方向：false 正序（名称 A-Z / 大小小到大 / 订阅旧到新），true 倒序。
+    /// 切排序键时由 <see cref="SelectedSortMode"/> 重置成该键的默认方向，只有点切换按钮才改变它。
+    /// </summary>
+    public bool SortDescending
+    {
+        get => _sortDescending;
+        private set
+        {
+            if (_sortDescending == value)
+            {
+                return;
+            }
+
+            _sortDescending = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>点切换按钮：翻转方向并重排；返回翻转后的方向供按钮换图标。</summary>
+    public bool ToggleSortDirection()
+    {
+        SortDescending = !SortDescending;
+        RebuildVisibleRows();
+        return SortDescending;
+    }
+
+    /// <summary>恢复页面状态时套回上次的方向；只赋值不重排（随后加载候选时会按它排）。</summary>
+    public void SetSortDescending(bool descending) => SortDescending = descending;
 
     /// <summary>来源筛选下拉框的选项（全部 / 本地 / 订阅；切语言时整体替换）。</summary>
     public IReadOnlyList<string> SourceFilterModes
@@ -884,27 +917,65 @@ public sealed class AddModsViewModel : LocalizedObservableObject
         return SortKeys[0];
     }
 
+    /// <summary>名称次级键：始终 A-Z（忽略大小写），不随主键方向翻转，保证顺序稳定。</summary>
+    private static readonly IComparer<string> NameComparer = StringComparer.OrdinalIgnoreCase;
+
+    /// <summary>按方向取数值比较器：正序升、倒序降。</summary>
+    private static IComparer<T> Directed<T>(bool descending)
+        where T : IComparable<T> =>
+        descending
+            ? Comparer<T>.Create(static (left, right) => right.CompareTo(left))
+            : Comparer<T>.Create(static (left, right) => left.CompareTo(right));
+
+    /// <summary>名称主键比较器：正序 A-Z，倒序 Z-A（都忽略大小写）。</summary>
+    private static IComparer<string> DirectedNameComparer(bool descending) =>
+        descending
+            ? Comparer<string>.Create(static (left, right) =>
+                string.Compare(right, left, StringComparison.OrdinalIgnoreCase))
+            : StringComparer.OrdinalIgnoreCase;
+
+    /// <param name="entry">要分层的行。</param>
+    /// <param name="descending">当前是否倒序。</param>
+    /// <returns>
+    /// 订阅时间排序的层级：刚订阅未登记的行、有订阅时间的行、其余（本地未登记等）依次 0/1/2。
+    /// 倒序（新到旧）时刚订阅的排最前；正序（旧到新）时排在全部有时间的行之后；未知值都排最后。
+    /// </returns>
+    private static int SubscribedFreshness(ModLibraryEntry entry, bool descending)
+    {
+        if (entry.IsUnregistered && entry.IsSubscribed)
+        {
+            // 刚订阅、官方库还没登记：位置上等价于「刚刚订阅」。
+            return descending ? 0 : 1;
+        }
+
+        return entry.SubscribedOn.HasValue ? (descending ? 1 : 0) : 2;
+    }
+
     /// <summary>
-    /// 排序：名称 A-Z（默认，忽略大小写）；大小降序与订阅时间降序时未知值排最后，
-    /// 名称始终作为次级键，保证顺序稳定。
+    /// 排序：主键方向由 <see cref="SortDescending"/> 决定，名称始终作为次级键（A-Z），
+    /// 保证同主键时顺序稳定；未知值（大小 / 订阅时间为 null）始终排最后。
+    /// 订阅时间排序里，已订阅但官方库还没登记的行视为「最新」，倒序排最前。
     /// </summary>
-    private IEnumerable<AddModRowViewModel> ApplySort(IEnumerable<AddModRowViewModel> rows) =>
-        ResolveSortKey() switch
+    private IEnumerable<AddModRowViewModel> ApplySort(IEnumerable<AddModRowViewModel> rows)
+    {
+        var descending = SortDescending;
+        return ResolveSortKey() switch
         {
             Keys.ModsAddPageSortBySize => rows
-                .OrderByDescending(static row => row.Entry.SizeBytes.HasValue)
-                .ThenByDescending(static row => row.Entry.SizeBytes ?? long.MinValue)
-                .ThenBy(static row => row.Entry.Name, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static row => !row.Entry.SizeBytes.HasValue)
+                .ThenBy(static row => row.Entry.SizeBytes ?? long.MinValue, Directed<long>(descending))
+                .ThenBy(static row => row.Entry.Name, NameComparer)
                 .ThenBy(static row => row.Entry.ModId),
             Keys.ModsAddPageSortBySubscribed => rows
-                .OrderByDescending(static row => row.Entry.SubscribedOn.HasValue)
-                .ThenByDescending(static row => row.Entry.SubscribedOn ?? DateTimeOffset.MinValue)
-                .ThenBy(static row => row.Entry.Name, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(row => SubscribedFreshness(row.Entry, descending))
+                .ThenBy(static row => row.Entry.SubscribedOn ?? DateTimeOffset.MinValue, Directed<DateTimeOffset>(descending))
+                .ThenBy(static row => row.Entry.Name, NameComparer)
                 .ThenBy(static row => row.Entry.ModId),
             _ => rows
-                .OrderBy(static row => row.Entry.Name, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(static row => row.Entry.Name, DirectedNameComparer(descending))
                 .ThenBy(static row => row.Entry.ModId),
         };
+    }
 
     /// <summary>行的勾选状态变化：只更新计数，勾选本身由行自己持有。</summary>
     private void OnRowSelectionChanged(AddModRowViewModel row, bool isSelected)

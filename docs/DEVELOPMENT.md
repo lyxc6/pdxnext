@@ -366,7 +366,6 @@ Cities: Skylines 则是**本体根本不读任何加载文件**——它的 mod 
     所有改动**自动保存到 sqlite**（`playsets_mods` / `playsets_dlcs`，写完回读比对）；**只有当前播放集是激活集时才写游戏加载文件**，
     编辑未激活集时状态栏会提示「未激活，游戏加载文件未改动」。**没有**「保存」「保存并启动」按钮。
     删除：删非激活集不改变游戏配置；删激活集时先激活接替者、再删除并写入接替者的加载文件；只剩一个激活集时拒绝删除。
-  - `placeholder`（留空）：整页只显示占位提示，回设置页切回即可恢复原版布局。
 - Mod 库页：只读展示 mod 全量（自有库的 `mods` 表，官方库在时由官方库导入），每行显示缩略图、名称、
   **来源徽标**（本地 / 订阅）、大小、订阅日期、mod **自己声明的支持版本**（`requiredVersion`，即 .mod 的 `supported_version` /
   metadata.json 的 `supported_game_version`，原样显示不做换算）、以及「在 N 个播放集中」（不在任何播放集时不占位）；
@@ -754,7 +753,7 @@ src/
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
   PdxLauncher.Localization.Generator/ :: Roslyn 增量源生成器：编译期读 Strings/*/Resources.resw，生成 Localizer 属性与 Keys（不落盘）
 tests/
-  PdxLauncher.Checks/          :: 180 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 184 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
@@ -778,7 +777,7 @@ tools/
 > 逐字节重读批处理文件，非 ASCII 字节在 cp936 等代码页下会把行边界撕开，导致偶发的
 > `'行文件:' is not recognized as an internal or external command` 之类假报错。
 
-**当前约 760 个 .cs + 22 个 .xaml**（不含 `obj/` 生成物；2026-11-15 实测：Core 367 / App 201+22 / Imaging 10 / Checks 177；之后新增 Core 的 `UpdatePackageLockedException`、Checks 的 `UpdateDownloadChecks`、`PcForensicsChecks` 与本次 `GameSessionChecks` 后 Checks 为 180；运行时打印的「检查类」是 **180**（2026-11-21 实测），其余文件是自检框架与替身）。
+**当前约 760 个 .cs + 22 个 .xaml**（不含 `obj/` 生成物；2026-11-15 实测：Core 367 / App 201+22 / Imaging 10 / Checks 177；之后新增 Core 的 `UpdatePackageLockedException`、Checks 的 `UpdateDownloadChecks`、`PcForensicsChecks` 与本次 `GameSessionChecks` 后 Checks 为 180；清理后新增 `ObsoleteSettingsCleanupChecks`，运行时打印的「检查类」是 **181**，其余文件是自检框架与替身）。
 
 ---
 
@@ -788,7 +787,7 @@ tools/
 dotnet "tests\PdxLauncher.Checks\bin\Release\net11.0\PdxLauncher.Checks.dll"
 ```
 
-输出 `检查类: 180，失败: 0，断言失败总数: 0` 即通过（2026-11-21 实测 180 类；真机段只锁结构——行数、启用态这类本机数据只打印 `info` 不作断言，Victoria 3 播放集那条写死的 `mod 行数 >= 22` 已按这个原则删掉，见 HANDOFF §0.85.5；CK3 播放集条数同理从 `>= 3` 放宽到 `>= 1`，见 §0.99）。覆盖：Steam 探测与
+输出 `检查类: 181，失败: 0，断言失败总数: 0` 即通过（2026-11-21 清理后实测 181 类；真机段只锁结构——行数、启用态这类本机数据只打印 `info` 不作断言，Victoria 3 播放集那条写死的 `mod 行数 >= 22` 已按这个原则删掉，见 HANDOFF §0.85.5；CK3 播放集条数同理从 `>= 3` 放宽到 `>= 1`，见 §0.99）。覆盖：Steam 探测与
 launcher-settings 解析、两套加载文件格式的写入/回读、播放集与 sqlite、Mod 库只读读取、
 Mod 创建（legacy `.mod`/`descriptor.mod` 与 V3 `.metadata/metadata.json` 生成、非法输入拒绝、本地清单合并、发布记录与发布协议参数、
 工坊发布面：可见性四档映射、1 MB 与张数上限、五种 YouTube 链接解析、30 种语言码与归一化、请求 JSON 全字段往返、旧 `public` 记录回显、内嵌默认封面的 PNG 签名与落盘一致、

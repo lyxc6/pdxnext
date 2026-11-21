@@ -363,7 +363,8 @@ public static class AddModsPageChecks
         ChecksContext.Check(
             "添加模组页: 来源 / 版本筛选随页面状态存取",
             page.Contains("_viewModel.SelectedSourceFilter,", StringComparison.Ordinal)
-                && page.Contains("_viewModel.SelectedVersionFilter);", StringComparison.Ordinal)
+                && page.Contains("_viewModel.SelectedVersionFilter,", StringComparison.Ordinal)
+                && page.Contains("_viewModel.SortDescending);", StringComparison.Ordinal)
                 && page.Contains("_viewModel.SourceFilterModes.Any", StringComparison.Ordinal)
                 && page.Contains("_viewModel.VersionFilterModes.Any", StringComparison.Ordinal)
                 && page.Contains("SourceFilterBox.SelectedItem = state.SourceFilter", StringComparison.Ordinal)

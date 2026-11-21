@@ -33,6 +33,10 @@ public sealed partial class ModLibraryPage : Page
     /// <summary>从 <see cref="PageStateStore"/> 取回的滚动位置；加载完列表后消费一次。</summary>
     private double _pendingOffset;
 
+    /// <summary>排序方向按钮的正序 / 倒序图标（Segoe MDL2：升序排列 / 降序排列）。</summary>
+    private const string SortAscendingGlyph = "\uE8DC";
+    private const string SortDescendingGlyph = "\uE8DD";
+
     public ModLibraryPage()
     {
         InitializeComponent();
@@ -185,6 +189,10 @@ public sealed partial class ModLibraryPage : Page
             SortBox.SelectedItem = state.SortMode;
         }
 
+        // 排序键的文案恢复会按新键重置方向，方向要在其后单独套回（bool，不受语言切换影响）。
+        _viewModel.SortDescending = state.SortDescending;
+        SortDirectionGlyph.Glyph = state.SortDescending ? SortDescendingGlyph : SortAscendingGlyph;
+
         if (!string.IsNullOrEmpty(state.SourceFilter))
         {
             _viewModel.SelectedSourceFilter = state.SourceFilter;
@@ -223,7 +231,8 @@ public sealed partial class ModLibraryPage : Page
                 _viewModel.SearchText,
                 _viewModel.SelectedSortMode,
                 _viewModel.SelectedSourceFilter,
-                ListViewScrollState.GetVerticalOffset(ModList));
+                ListViewScrollState.GetVerticalOffset(ModList),
+                _viewModel.SortDescending);
             PageStateStore.Persist();
         }
         catch (Exception ex)
@@ -455,6 +464,21 @@ public sealed partial class ModLibraryPage : Page
         catch (Exception ex)
         {
             AppServices.Logger.Error("ModLibraryPage 切换排序失败", ex);
+        }
+    }
+
+    /// <summary>排序方向切换按钮：翻转 ViewModel 方向并按新方向换图标。</summary>
+    private void OnSortDirectionClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            SortDirectionGlyph.Glyph = _viewModel.ToggleSortDirection()
+                ? SortDescendingGlyph
+                : SortAscendingGlyph;
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModLibraryPage 切换排序方向失败", ex);
         }
     }
 

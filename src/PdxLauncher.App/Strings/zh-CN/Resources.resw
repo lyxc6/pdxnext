@@ -1849,6 +1849,9 @@
   <data name="ModlibSortName" xml:space="preserve">
     <value>排序方式</value>
   </data>
+  <data name="ModlibSortDirectionName" xml:space="preserve">
+    <value>切换正序 / 倒序</value>
+  </data>
   <data name="ModlibSourceFilterAll" xml:space="preserve">
     <value>全部来源</value>
   </data>
@@ -2047,6 +2050,9 @@
   <data name="ModsAddPageSortName" xml:space="preserve">
     <value>排序方式</value>
   </data>
+  <data name="ModsAddPageSortDirectionName" xml:space="preserve">
+    <value>切换正序 / 倒序</value>
+  </data>
   <data name="ModsAddPageTarget" xml:space="preserve">
     <value>→ {0}</value>
   </data>
@@ -2244,15 +2250,6 @@
   </data>
   <data name="ModsListName" xml:space="preserve">
     <value>播放集内的 mod 列表</value>
-  </data>
-  <data name="ModsPlaceholderDescription" xml:space="preserve">
-    <value>可在「设置 → 界面 → 播放集页面显示方式」切换回原版启动器布局。</value>
-  </data>
-  <data name="ModsPlaceholderName" xml:space="preserve">
-    <value>播放集页面留空占位</value>
-  </data>
-  <data name="ModsPlaceholderTitle" xml:space="preserve">
-    <value>（此处暂时留空）</value>
   </data>
   <data name="ModsPlaySetActiveBadge" xml:space="preserve">
     <value>● 激活</value>
@@ -3535,9 +3532,6 @@
   <data name="SettingsAboutNever" xml:space="preserve">
     <value>从未</value>
   </data>
-  <data name="SettingsAboutReleaseNotes" xml:space="preserve">
-    <value>查看发布说明</value>
-  </data>
   <data name="SettingsAboutStatusAvailable" xml:space="preserve">
     <value>发现新版本 {0}</value>
   </data>
@@ -3550,52 +3544,20 @@
   <data name="SettingsAboutTitle" xml:space="preserve">
     <value>关于与更新</value>
   </data>
-  <data name="SettingsAppDataClearLegacy" xml:space="preserve">
-    <value>清理旧 C 盘数据</value>
-  </data>
-  <data name="SettingsAppDataClearLegacyName" xml:space="preserve">
-    <value>清理旧 C 盘数据</value>
-  </data>
   <data name="SettingsAppDataCurrent" xml:space="preserve">
     <value>当前数据目录</value>
   </data>
   <data name="SettingsAppDataCurrentName" xml:space="preserve">
     <value>程序数据目录</value>
   </data>
-  <data name="SettingsAppDataDialogClearContent" xml:space="preserve">
-    <value>只删除旧版本写在 C 盘的目录：
-{0}
-
-程序目录下的 data 不受影响，官方 Paradox 启动器的数据也不会被动。
-
-确定要删除吗？</value>
-  </data>
-  <data name="SettingsAppDataDialogClearFailedTitle" xml:space="preserve">
-    <value>清理旧 C 盘数据失败</value>
-  </data>
-  <data name="SettingsAppDataDialogClearTitle" xml:space="preserve">
-    <value>清理旧 C 盘数据</value>
-  </data>
   <data name="SettingsAppDataHint" xml:space="preserve">
     <value>设置、日志与各类缓存都在程序目录的 data 子目录下，可随程序一起拷走。</value>
-  </data>
-  <data name="SettingsAppDataLegacy" xml:space="preserve">
-    <value>旧的 C 盘目录</value>
-  </data>
-  <data name="SettingsAppDataLegacyName" xml:space="preserve">
-    <value>旧的 C 盘数据目录</value>
   </data>
   <data name="SettingsAppDataOpen" xml:space="preserve">
     <value>打开数据目录</value>
   </data>
   <data name="SettingsAppDataOpenName" xml:space="preserve">
     <value>打开程序数据目录</value>
-  </data>
-  <data name="SettingsAppDataStatusCleared" xml:space="preserve">
-    <value>已清理旧 C 盘数据目录：{0}</value>
-  </data>
-  <data name="SettingsAppDataStatusMissing" xml:space="preserve">
-    <value>旧 C 盘数据目录不存在，无需清理：{0}</value>
   </data>
   <data name="SettingsCacheClearAll" xml:space="preserve">
     <value>清除全部</value>
@@ -3680,9 +3642,6 @@
   <data name="SettingsCacheSummary" xml:space="preserve">
     <value>缓存合计 {0}</value>
   </data>
-  <data name="SettingsDangerAllowOff" xml:space="preserve">
-    <value>禁止写入 dlc_signature（推荐）</value>
-  </data>
   <data name="SettingsDangerAllowOn" xml:space="preserve">
     <value>允许写入 dlc_signature</value>
   </data>
@@ -3756,9 +3715,6 @@
   <data name="SettingsDataDlcHint" xml:space="preserve">
     <value>CK3 / Stellaris 的 .dlc 没有简介字段，开启后按 Steam appid 查询并缓存；Victoria 3 用 .dlc.json 自带的文案。</value>
   </data>
-  <data name="SettingsDataDlcOnlineOff" xml:space="preserve">
-    <value>仅本地 / 缓存简介</value>
-  </data>
   <data name="SettingsDataDlcOnlineOn" xml:space="preserve">
     <value>联网获取 DLC 简介</value>
   </data>
@@ -3822,9 +3778,6 @@
   <data name="SettingsDataNewsHint" xml:space="preserve">
     <value>公告卡来自官方启动器的 content cards 接口，按游戏取图并缓存 6 小时。</value>
   </data>
-  <data name="SettingsDataNewsOnlineOff" xml:space="preserve">
-    <value>仅本地缓存公告</value>
-  </data>
   <data name="SettingsDataNewsOnlineOn" xml:space="preserve">
     <value>联网获取官方公告</value>
   </data>
@@ -3855,17 +3808,8 @@
   <data name="SettingsInterfaceAlwaysOnTop" xml:space="preserve">
     <value>窗口置顶</value>
   </data>
-  <data name="SettingsInterfaceAlwaysOnTopDesc" xml:space="preserve">
-    <value>置顶后启动器会停在其它窗口之上；点标题栏右上角的图钉或按 Ctrl+Shift+T 可随时取消。</value>
-  </data>
   <data name="SettingsInterfaceAlwaysOnTopName" xml:space="preserve">
     <value>窗口置顶</value>
-  </data>
-  <data name="SettingsInterfaceAlwaysOnTopOff" xml:space="preserve">
-    <value>普通窗口</value>
-  </data>
-  <data name="SettingsInterfaceAlwaysOnTopOn" xml:space="preserve">
-    <value>已置顶</value>
   </data>
   <data name="SettingsInterfaceBackgroundCenterDesc" xml:space="preserve">
     <value>按图片原始像素居中，超出窗口的部分裁掉</value>
@@ -3978,12 +3922,6 @@
   <data name="SettingsInterfacePlaysetOfficialTitle" xml:space="preserve">
     <value>原版启动器</value>
   </data>
-  <data name="SettingsInterfacePlaysetPlaceholderDesc" xml:space="preserve">
-    <value>预留显示方式：播放集页面暂不显示内容</value>
-  </data>
-  <data name="SettingsInterfacePlaysetPlaceholderTitle" xml:space="preserve">
-    <value>留空</value>
-  </data>
   <data name="SettingsInterfacePlaysetTwoColumnDesc" xml:space="preserve">
     <value>左栏是可添加的 mod，右栏是当前播放集的 mod；勾选左栏即加入，改动自动保存并写入游戏加载文件</value>
   </data>
@@ -4083,9 +4021,6 @@
   <data name="SettingsModThumbnailsHint" xml:space="preserve">
     <value>本地解析不到 thumbnail 时才联网下载一次，之后一律读本地缓存。</value>
   </data>
-  <data name="SettingsModThumbnailsOnlineOff" xml:space="preserve">
-    <value>只显示本地图片与缓存</value>
-  </data>
   <data name="SettingsModThumbnailsOnlineOn" xml:space="preserve">
     <value>联网补全缩略图</value>
   </data>
@@ -4106,6 +4041,9 @@
   </data>
   <data name="SettingsNavAbout" xml:space="preserve">
     <value>关于与更新</value>
+  </data>
+  <data name="SettingsNavMcp" xml:space="preserve">
+    <value>MCP</value>
   </data>
   <data name="SettingsNavAdvanced" xml:space="preserve">
     <value>高级</value>
@@ -4307,6 +4245,9 @@
   <data name="SettingsProxyProbeBlocked" xml:space="preserve">
     <value>被白名单拦截</value>
   </data>
+  <data name="SettingsProxyProbeColumnHost" xml:space="preserve">
+    <value>主机</value>
+  </data>
   <data name="SettingsProxyProbeColumnCurrent" xml:space="preserve">
     <value>当前模式</value>
   </data>
@@ -4403,8 +4344,158 @@
   <data name="SettingsSectionName" xml:space="preserve">
     <value>设置分类</value>
   </data>
-  <data name="SettingsSectionOnline" xml:space="preserve">
-    <value>联网内容</value>
+  <data name="SettingsSectionMcp" xml:space="preserve">
+    <value>AI 助手（MCP）</value>
+  </data>
+  <data name="SettingsMcpEnabled" xml:space="preserve">
+    <value>启用 MCP 服务</value>
+  </data>
+  <data name="SettingsMcpEnabledName" xml:space="preserve">
+    <value>启用 MCP 服务开关</value>
+  </data>
+  <data name="SettingsMcpDraftWrite" xml:space="preserve">
+    <value>允许修改上传草稿</value>
+  </data>
+  <data name="SettingsMcpDraftWriteName" xml:space="preserve">
+    <value>允许修改上传草稿开关</value>
+  </data>
+  <data name="SettingsMcpTools" xml:space="preserve">
+    <value>可用工具与权限</value>
+  </data>
+  <data name="SettingsMcpToolSummary" xml:space="preserve">
+    <value>默认只读工具：list_games、list_mods、list_tags、get_upload_draft；开启写入开关后增加 save_upload_draft、clear_upload_draft。MCP 不会发布 Mod。</value>
+  </data>
+  <data name="SettingsMcpHint" xml:space="preserve">
+    <value>权限由本机 stdio 子进程执行；关闭总开关后客户端看到空工具表，调用会被拒绝。</value>
+  </data>
+  <data name="SettingsMcpStatusEnabled" xml:space="preserve">
+    <value>MCP 服务已启用</value>
+  </data>
+  <data name="SettingsMcpStatusDisabled" xml:space="preserve">
+    <value>MCP 服务已禁用</value>
+  </data>
+  <data name="SettingsMcpStatusWriteOn" xml:space="preserve">
+    <value>已允许 MCP 修改上传草稿</value>
+  </data>
+  <data name="SettingsMcpStatusWriteOff" xml:space="preserve">
+    <value>已禁止 MCP 修改上传草稿</value>
+  </data>
+  <data name="McpPermissionTitle" xml:space="preserve">
+    <value>当前权限</value>
+  </data>
+  <data name="McpPermissionHint" xml:space="preserve">
+    <value>遵循最小权限：只给 AI 当前任务需要的工具。权限写入客户端配置的参数，重启 AI 客户端后生效。</value>
+  </data>
+  <data name="McpPermissionOff" xml:space="preserve">
+    <value>已关闭：所有 MCP 工具调用都会被拒绝。</value>
+  </data>
+  <data name="McpPermissionReadOnly" xml:space="preserve">
+    <value>只读：可读取游戏、本地 Mod、标签与上传草稿，不能写入草稿。</value>
+  </data>
+  <data name="McpPermissionReadWrite" xml:space="preserve">
+    <value>可写：可读取并写入上传草稿；发布仍需用户在 Mod 创建页确认。</value>
+  </data>
+  <data name="McpFlowReadOnly" xml:space="preserve">
+    <value>list_games / list_mods → get_upload_draft → Mod 上传面板实时读取；写入工具未授权。</value>
+  </data>
+  <data name="McpFlowDisabled" xml:space="preserve">
+    <value>MCP 已关闭；先开启总开关，客户端才能看到工具。</value>
+  </data>
+  <data name="SettingsMcpOverview" xml:space="preserve">
+    <value>概览</value>
+  </data>
+  <data name="SettingsMcpServiceStatus" xml:space="preserve">
+    <value>服务状态</value>
+  </data>
+  <data name="SettingsMcpToolCount" xml:space="preserve">
+    <value>已注册工具</value>
+  </data>
+  <data name="SettingsMcpCallCount" xml:space="preserve">
+    <value>调用总数</value>
+  </data>
+  <data name="SettingsMcpSuccessRate" xml:space="preserve">
+    <value>成功率</value>
+  </data>
+  <data name="SettingsMcpConnection" xml:space="preserve">
+    <value>连接配置</value>
+  </data>
+  <data name="SettingsMcpClient" xml:space="preserve">
+    <value>客户端</value>
+  </data>
+  <data name="SettingsMcpAccessKeys" xml:space="preserve">
+    <value>访问密钥</value>
+  </data>
+  <data name="SettingsMcpNewKey" xml:space="preserve">
+    <value>新建密钥</value>
+  </data>
+  <data name="SettingsMcpNoKeys" xml:space="preserve">
+    <value>还没有访问密钥</value>
+  </data>
+  <data name="SettingsMcpKeyOnce" xml:space="preserve">
+    <value>请立即复制并安全保存；这是唯一一次显示。</value>
+  </data>
+  <data name="SettingsMcpKeyScope" xml:space="preserve">
+    <value>工具范围</value>
+  </data>
+  <data name="SettingsMcpKeyLastUsed" xml:space="preserve">
+    <value>最后使用</value>
+  </data>
+  <data name="SettingsMcpFilterTool" xml:space="preserve">
+    <value>工具</value>
+  </data>
+  <data name="SettingsMcpFilterOutcome" xml:space="preserve">
+    <value>结果</value>
+  </data>
+  <data name="SettingsMcpFilterKey" xml:space="preserve">
+    <value>密钥</value>
+  </data>
+  <data name="SettingsMcpPreviousPage" xml:space="preserve">
+    <value>上一页</value>
+  </data>
+  <data name="SettingsMcpNextPage" xml:space="preserve">
+    <value>下一页</value>
+  </data>
+  <data name="SettingsMcpClearCalls" xml:space="preserve">
+    <value>清空记录</value>
+  </data>
+  <data name="SettingsMcpExportCalls" xml:space="preserve">
+    <value>导出 JSON</value>
+  </data>
+  <data name="SettingsMcpRecentCalls" xml:space="preserve">
+    <value>最近调用</value>
+  </data>
+  <data name="SettingsMcpNoCalls" xml:space="preserve">
+    <value>暂无调用记录</value>
+  </data>
+  <data name="SettingsMcpCallDetail" xml:space="preserve">
+    <value>{0} · {1} ms · {2}</value>
+  </data>
+  <data name="SettingsMcpRefreshCalls" xml:space="preserve">
+    <value>刷新调用记录</value>
+  </data>
+  <data name="SettingsMcpCallSuccess" xml:space="preserve">
+    <value>成功</value>
+  </data>
+  <data name="SettingsMcpCallToolError" xml:space="preserve">
+    <value>工具错误</value>
+  </data>
+  <data name="SettingsMcpCallProtocolError" xml:space="preserve">
+    <value>协议错误</value>
+  </data>
+  <data name="SettingsMcpCallInternalError" xml:space="preserve">
+    <value>内部错误</value>
+  </data>
+  <data name="SettingsMcpToolReadOnly" xml:space="preserve">
+    <value>只读</value>
+  </data>
+  <data name="SettingsMcpToolWrite" xml:space="preserve">
+    <value>写入</value>
+  </data>
+  <data name="SettingsMcpToolAuthorized" xml:space="preserve">
+    <value>已授权</value>
+  </data>
+  <data name="SettingsMcpToolUnauthorized" xml:space="preserve">
+    <value>未授权</value>
   </data>
   <data name="SettingsSectionProxy" xml:space="preserve">
     <value>网络代理</value>
@@ -4475,9 +4566,6 @@
   <data name="SettingsThemeBackgroundFile" xml:space="preserve">
     <value>当前背景文件</value>
   </data>
-  <data name="SettingsThemeBusy" xml:space="preserve">
-    <value>处理中</value>
-  </data>
   <data name="SettingsThemeCheckNow" xml:space="preserve">
     <value>立即检查</value>
   </data>
@@ -4513,9 +4601,6 @@
   </data>
   <data name="SettingsThemeNextOnStartup" xml:space="preserve">
     <value>下次启动时</value>
-  </data>
-  <data name="SettingsThemeOnlineOff" xml:space="preserve">
-    <value>仅本地主题</value>
   </data>
   <data name="SettingsThemeOnlineOn" xml:space="preserve">
     <value>联网检查主题</value>
@@ -4658,9 +4743,6 @@
   <data name="SettingsTranslateGlossaryHint" xml:space="preserve">
     <value>词典会同时喂给两个本地引擎：Index-Translate 用它强制对齐专名，Bergamot 用它直接替换。只在本地引擎生效，联网引擎不受影响。</value>
   </data>
-  <data name="SettingsTranslateGlossaryName" xml:space="preserve">
-    <value>本地翻译术语词典</value>
-  </data>
   <data name="SettingsTranslateGlossaryRemove" xml:space="preserve">
     <value>删除此词条</value>
   </data>
@@ -4733,9 +4815,6 @@
   <data name="SettingsTranslateLanguageZhCNTitle" xml:space="preserve">
     <value>简体中文</value>
   </data>
-  <data name="SettingsTranslateLastFailure" xml:space="preserve">
-    <value>翻译失败：{0}</value>
-  </data>
   <data name="SettingsTranslateLocalModelBergamotEnZh" xml:space="preserve">
     <value>Bergamot 英译中（约 48 MB）</value>
   </data>
@@ -4799,9 +4878,6 @@
   <data name="SettingsTranslateLocalModelStatusMissingFiles" xml:space="preserve">
     <value>缺 {0} 个文件：{1}</value>
   </data>
-  <data name="SettingsTranslateLocalModelStatusRemoveFailed" xml:space="preserve">
-    <value>删除本地模型失败：{0}</value>
-  </data>
   <data name="SettingsTranslateLocalModelStatusRemoveNotFound" xml:space="preserve">
     <value>目录原本就不存在，无需删除</value>
   </data>
@@ -4852,9 +4928,6 @@
   </data>
   <data name="SettingsTranslateLocalModelsHint" xml:space="preserve">
     <value>模型下载到本机后完全离线翻译，不占用网络也不需要任何密钥。首次下载 Index-Translate-2B 约 1.3 GB，请确认磁盘空间充足。</value>
-  </data>
-  <data name="SettingsTranslateLocalModelsName" xml:space="preserve">
-    <value>本地离线模型下载</value>
   </data>
   <data name="SettingsTranslateMicrosoftHint" xml:space="preserve">
     <value>微软翻译要先在 Azure 订阅里创建「翻译器」资源：创建资源 → 搜索 Translator（翻译器）→ 定价层选 F0（每月 200 万字符免费）→ 创建完成后在「密钥和终结点」复制 KEY 1，区域填资源的位置（如 eastasia、global）。</value>
@@ -4915,9 +4988,6 @@
   </data>
   <data name="SettingsTranslateStatusEnabled" xml:space="preserve">
     <value>已开启翻译：工坊列表、详情页与评论区会在原文之外附带译文</value>
-  </data>
-  <data name="SettingsTranslateStatusEndpoint" xml:space="preserve">
-    <value>翻译接口已更新：{0}</value>
   </data>
   <data name="SettingsTranslateStatusEngine" xml:space="preserve">
     <value>翻译引擎已改为 {0}</value>
@@ -5076,7 +5146,7 @@
     <value>正在翻译…</value>
   </data>
   <data name="ShellVersion" xml:space="preserve">
-    <value>版本 {0}</value>
+    <value>{0}</value>
   </data>
   <data name="UpdateAvailableBody" xml:space="preserve">
     <value>当前版本 {0}，新版本 {1}。更新会下载安装包并在校验通过后启动安装器。</value>
@@ -6050,9 +6120,6 @@
   <data name="WorkshopUpdated" xml:space="preserve">
     <value>更新于 {0}</value>
   </data>
-  <data name="ModstudioMcpDocsButton" xml:space="preserve">
-    <value>AI 助手（MCP）</value>
-  </data>
   <data name="ModstudioMcpDraftApplied" xml:space="preserve">
     <value>已载入 AI 草稿（{0}）</value>
   </data>
@@ -6074,7 +6141,7 @@
   <data name="ModstudioMcpQuickInstallPrompt" xml:space="preserve">
     <value>请把 PdxNext 的 MCP 服务接入当前客户端：
 名称 pdxnext，命令 "{0}"，
-参数 "--data-root" "{1}"；
+参数 "--data-root" "{1}" "--enabled" "{2}" "--draft-write" "{3}"；
 接入后调用 list_games 验证。</value>
   </data>
   <data name="ModstudioMcpFlowTitle" xml:space="preserve">
@@ -6100,9 +6167,6 @@
   </data>
   <data name="ModstudioMcpDocsCopied" xml:space="preserve">
     <value>已复制</value>
-  </data>
-  <data name="ModstudioMcpDocsFailed" xml:space="preserve">
-    <value>打开 MCP 文档失败：{0}</value>
   </data>
   <data name="SingleInstanceAlreadyRunning" xml:space="preserve">
     <value>PdxNext 已在运行。请切换到已经打开的窗口。</value>

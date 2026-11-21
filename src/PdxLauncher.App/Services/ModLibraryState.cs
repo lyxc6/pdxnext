@@ -9,9 +9,11 @@ namespace PdxLauncher.App.Services;
 /// <param name="SortMode">排序方式（本地化后的显示文案）。</param>
 /// <param name="SourceFilter">来源筛选（本地化后的显示文案）。</param>
 /// <param name="VerticalOffset">列表滚动位置（像素）。</param>
+/// <param name="SortDescending">排序方向（true 倒序）；旧版本 JSON 没有时按默认方向处理。</param>
 public sealed record ModLibraryState(
     string? GameId,
     string SearchText,
     string SortMode,
     string SourceFilter,
-    double VerticalOffset);
+    double VerticalOffset,
+    bool SortDescending = false);

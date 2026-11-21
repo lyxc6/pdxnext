@@ -20,7 +20,6 @@ public static class I18nChecks
     /// <summary>三个必须含真实换行的对话框键。</summary>
     private static readonly string[] MultiLineDialogKeys =
     [
-        "settings.appData.dialogClearContent",
         "settings.cache.dialogClearAllContent",
         "settings.danger.dialogContent",
     ];

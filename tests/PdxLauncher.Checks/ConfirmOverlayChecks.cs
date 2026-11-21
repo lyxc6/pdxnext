@@ -38,7 +38,6 @@ public static class ConfirmOverlayChecks
     private static readonly (string RelativePath, string Anchor, string Method, bool Destructive)[] FocusCallSites =
     {
         (Path.Combine("Views", "SettingsPage.xaml.cs"), "SettingsTranslateLocalModelDialogRemoveTitle", "ConfirmAsync", true),
-        (Path.Combine("Views", "SettingsPage.xaml.cs"), "SettingsAppDataDialogClearTitle", "ConfirmAsync", true),
         (Path.Combine("Views", "SettingsPage.xaml.cs"), "SettingsCacheDialogClearAllTitle", "ConfirmAsync", true),
         (Path.Combine("Views", "SettingsPage.xaml.cs"), "SettingsPatchApplyDialogTitle", "ConfirmAsync", true),
         (Path.Combine("Views", "SettingsPage.xaml.cs"), "SettingsPatchRemoveDialogTitle", "ConfirmAsync", true),
