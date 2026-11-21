@@ -7,7 +7,7 @@ using PdxLauncher.Core.Contracts;
 
 /// <summary>
 /// PC 侧崩溃取证的纯逻辑：输入崩溃码、事件日志证据、meta.yml 键值与系统快照，
-/// 输出保守的 <see cref="CrashFinding"/>。不碰 IO、不联网、不写任何文件。
+/// 输出保守的 <see cref="CrashFinding"/>。这是纯计算：不碰 IO、不访问网络、不写文件。
 /// <para>
 /// 规则来自 Mod Doctor 的 system.ps1，但去掉了 CK3 专属假设，并对所有数值做防御性解析：
 /// 字段缺失或格式异常时跳过对应结论，绝不凭猜测下结论。
