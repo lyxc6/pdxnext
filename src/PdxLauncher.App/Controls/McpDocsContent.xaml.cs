@@ -22,6 +22,7 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
     public McpDocsContent()
     {
         InitializeComponent();
+        _isInitialized = true;
     }
 
     /// <summary>权限文本变化后刷新 XAML 绑定。</summary>
@@ -32,6 +33,7 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
     private McpCreatedAccessKey? _selectedKey;
     private bool _enabled = true;
     private bool _draftWriteEnabled;
+    private bool _isInitialized;
 
     /// <summary>XAML 里 <c>{x:Bind L.Foo}</c> 的入口。</summary>
     public Localizer L => Localizer.Instance;
@@ -135,6 +137,11 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
 
     private void OnClientKindChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (!_isInitialized)
+        {
+            return;
+        }
+
         UpdateConfiguration(
             AccessKeys,
             (McpClientKind)Math.Clamp(ClientKindSelector.SelectedIndex, 0, 4),

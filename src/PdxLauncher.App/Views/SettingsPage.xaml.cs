@@ -34,8 +34,8 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     public bool IsCacheSection => _sectionIndex == 4;
     public bool IsAdvancedSection => _sectionIndex == 5;
     public bool IsTranslationSection => _sectionIndex == 6;
-    public bool IsAboutSection => _sectionIndex == 7;
-    public bool IsMcpSection => _sectionIndex == 8;
+    public bool IsAboutSection => _sectionIndex == 8;
+    public bool IsMcpSection => _sectionIndex == 7;
 
     private void SetSectionIndex(int index)
     {
@@ -252,8 +252,8 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     /// <summary>「缓存」在左侧八个分节里的序号，与 XAML 里 secCache 的顺序一致。</summary>
     private const int CacheSectionIndex = 4;
 
-    /// <summary>「MCP」是左侧第九个分节，索引固定为 8，避免持久化分节错位。</summary>
-    private const int McpSectionIndex = 8;
+    /// <summary>「MCP」在「联网」之后、「关于与更新」之前，索引为 7。</summary>
+    private const int McpSectionIndex = 7;
 
     /// <summary>切换左侧分类：只显示选中的那一节，其余折叠（同一时刻只排版一类设置）。</summary>
     private void OnSectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs e)
@@ -424,6 +424,21 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         if (index < 0 || index >= items.Count)
         {
             index = 0;
+        }
+
+        // v1.4.2 曾把 MCP 放在「关于与更新」之后（index=8）。现在 MCP 在 index=7、
+        // 关于与更新在 index=8；旧存档里的 8 要顺延到关于，避免打开设置看不到原分节。
+        if (items.Count == 9
+            && index == 8
+            && string.Equals(items[index].Tag?.ToString(), "8", StringComparison.Ordinal)
+            && string.Equals(items[7].Tag?.ToString(), "7", StringComparison.Ordinal))
+        {
+            index = 7;
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Settings.LastSettingsSection = 8;
+                AppServices.SaveSettings();
+            }
         }
 
         if (index < items.Count)
