@@ -24,7 +24,7 @@ public sealed class PdxDatabase
     public const string FileName = "pdxnext.sqlite";
 
     /// <summary>当前 schema 版本；加表/加列时递增，并在 <see cref="Migrate"/> 里补一段迁移。</summary>
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
 
     /// <summary>schema 版本号所在的 meta 键。</summary>
     public const string SchemaVersionKey = "schema_version";
@@ -58,6 +58,22 @@ public sealed class PdxDatabase
         DELETE FROM workshop_items
         WHERE cover_file IS NOT NULL AND game_id IS NULL AND name IS NULL
         """;
+
+    /// <summary>v4 迁移：MCP 工具调用历史表。</summary>
+    private const string CreateMcpCallsSql =
+        """
+        CREATE TABLE IF NOT EXISTS mcp_calls (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_utc INTEGER NOT NULL,
+            duration_ms INTEGER NOT NULL,
+            tool_name TEXT NOT NULL,
+            outcome TEXT NOT NULL,
+            error_code TEXT,
+            permission_mode TEXT NOT NULL)
+        """;
+
+    private const string CreateMcpCallsIndexSql =
+        "CREATE INDEX IF NOT EXISTS ix_mcp_calls_started ON mcp_calls (started_utc DESC)";
 
     /// <summary>读 workshop_items 表结构；表名固定，不拼接外部输入。</summary>
     private const string WorkshopItemColumnsSql = "PRAGMA table_info(workshop_items)";
@@ -447,6 +463,13 @@ public sealed class PdxDatabase
             connection.Execute(CreateWorkshopCoversSql);
             connection.Execute(MoveCoverOnlyRowsSql);
             connection.Execute(DeleteCoverOnlyRowsSql);
+        }
+
+        // v4：MCP 调用历史。只记录元数据，不记录参数、路径或表单内容。
+        if (fromVersion < 4)
+        {
+            connection.Execute(CreateMcpCallsSql);
+            connection.Execute(CreateMcpCallsIndexSql);
         }
     }
 

@@ -4395,6 +4395,66 @@
   <data name="McpPermissionReadWrite" xml:space="preserve">
     <value>可写：可读取并写入上传草稿；发布仍需用户在 Mod 创建页确认。</value>
   </data>
+  <data name="McpFlowReadOnly" xml:space="preserve">
+    <value>list_games / list_mods → get_upload_draft → Mod 上传面板实时读取；写入工具未授权。</value>
+  </data>
+  <data name="McpFlowDisabled" xml:space="preserve">
+    <value>MCP 已关闭；先开启总开关，客户端才能看到工具。</value>
+  </data>
+  <data name="SettingsMcpOverview" xml:space="preserve">
+    <value>概览</value>
+  </data>
+  <data name="SettingsMcpServiceStatus" xml:space="preserve">
+    <value>服务状态</value>
+  </data>
+  <data name="SettingsMcpToolCount" xml:space="preserve">
+    <value>已注册工具</value>
+  </data>
+  <data name="SettingsMcpCallCount" xml:space="preserve">
+    <value>调用总数</value>
+  </data>
+  <data name="SettingsMcpSuccessRate" xml:space="preserve">
+    <value>成功率</value>
+  </data>
+  <data name="SettingsMcpConnection" xml:space="preserve">
+    <value>连接配置</value>
+  </data>
+  <data name="SettingsMcpRecentCalls" xml:space="preserve">
+    <value>最近调用</value>
+  </data>
+  <data name="SettingsMcpNoCalls" xml:space="preserve">
+    <value>暂无调用记录</value>
+  </data>
+  <data name="SettingsMcpCallDetail" xml:space="preserve">
+    <value>{0} · {1} ms · {2}</value>
+  </data>
+  <data name="SettingsMcpRefreshCalls" xml:space="preserve">
+    <value>刷新调用记录</value>
+  </data>
+  <data name="SettingsMcpCallSuccess" xml:space="preserve">
+    <value>成功</value>
+  </data>
+  <data name="SettingsMcpCallToolError" xml:space="preserve">
+    <value>工具错误</value>
+  </data>
+  <data name="SettingsMcpCallProtocolError" xml:space="preserve">
+    <value>协议错误</value>
+  </data>
+  <data name="SettingsMcpCallInternalError" xml:space="preserve">
+    <value>内部错误</value>
+  </data>
+  <data name="SettingsMcpToolReadOnly" xml:space="preserve">
+    <value>只读</value>
+  </data>
+  <data name="SettingsMcpToolWrite" xml:space="preserve">
+    <value>写入</value>
+  </data>
+  <data name="SettingsMcpToolAuthorized" xml:space="preserve">
+    <value>已授权</value>
+  </data>
+  <data name="SettingsMcpToolUnauthorized" xml:space="preserve">
+    <value>未授权</value>
+  </data>
   <data name="SettingsSectionProxy" xml:space="preserve">
     <value>网络代理</value>
   </data>
@@ -6039,7 +6099,7 @@
   <data name="ModstudioMcpQuickInstallPrompt" xml:space="preserve">
     <value>请把 PdxNext 的 MCP 服务接入当前客户端：
 名称 pdxnext，命令 "{0}"，
-参数 "--data-root" "{1}"；
+参数 "--data-root" "{1}" "--enabled" "{2}" "--draft-write" "{3}"；
 接入后调用 list_games 验证。</value>
   </data>
   <data name="ModstudioMcpFlowTitle" xml:space="preserve">

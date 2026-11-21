@@ -2,6 +2,8 @@ namespace PdxLauncher.Mcp;
 
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Infrastructure;
+using PdxLauncher.Core.Mcp;
+using PdxLauncher.Core.Storage;
 
 /// <summary>
 /// PdxNext MCP 服务入口。
@@ -38,7 +40,9 @@ internal static class Program
             };
 
             var tools = new McpTools(fileSystem, logger, dataRoot!, draftWriteEnabled);
-            var server = new McpServer(input, output, Console.Error, tools, logger, enabled);
+            var database = new PdxDatabase(fileSystem, logger, Path.Combine(dataRoot!, PdxDatabase.FileName));
+            var history = new McpCallHistoryStore(database);
+            var server = new McpServer(input, output, Console.Error, tools, logger, enabled, history);
             server.RunAsync(CancellationToken.None).GetAwaiter().GetResult();
             return 0;
         }

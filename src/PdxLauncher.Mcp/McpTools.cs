@@ -207,6 +207,9 @@ internal sealed class McpTools
         _ => true,
     };
 
+    /// <summary>供调用历史记录当前权限模式。</summary>
+    public bool IsDraftWriteEnabled => _draftWriteEnabled;
+
     private async Task<JsonNode> ListGamesAsync(CancellationToken cancellationToken)
     {
         var games = await GetGamesAsync(cancellationToken).ConfigureAwait(false);

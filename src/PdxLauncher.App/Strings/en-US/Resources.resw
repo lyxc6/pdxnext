@@ -4395,6 +4395,66 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="McpPermissionReadWrite" xml:space="preserve">
     <value>Read/write: upload drafts can be read and written; publishing still requires user confirmation on the Mod Studio page.</value>
   </data>
+  <data name="McpFlowReadOnly" xml:space="preserve">
+    <value>list_games / list_mods → get_upload_draft → live in the Mod upload panel; write tools are not authorized.</value>
+  </data>
+  <data name="McpFlowDisabled" xml:space="preserve">
+    <value>MCP is disabled. Enable the master switch before clients can see any tool.</value>
+  </data>
+  <data name="SettingsMcpOverview" xml:space="preserve">
+    <value>Overview</value>
+  </data>
+  <data name="SettingsMcpServiceStatus" xml:space="preserve">
+    <value>Service status</value>
+  </data>
+  <data name="SettingsMcpToolCount" xml:space="preserve">
+    <value>Registered tools</value>
+  </data>
+  <data name="SettingsMcpCallCount" xml:space="preserve">
+    <value>Total calls</value>
+  </data>
+  <data name="SettingsMcpSuccessRate" xml:space="preserve">
+    <value>Success rate</value>
+  </data>
+  <data name="SettingsMcpConnection" xml:space="preserve">
+    <value>Connection</value>
+  </data>
+  <data name="SettingsMcpRecentCalls" xml:space="preserve">
+    <value>Recent calls</value>
+  </data>
+  <data name="SettingsMcpNoCalls" xml:space="preserve">
+    <value>No calls recorded yet</value>
+  </data>
+  <data name="SettingsMcpCallDetail" xml:space="preserve">
+    <value>{0} · {1} ms · {2}</value>
+  </data>
+  <data name="SettingsMcpRefreshCalls" xml:space="preserve">
+    <value>Refresh call history</value>
+  </data>
+  <data name="SettingsMcpCallSuccess" xml:space="preserve">
+    <value>Success</value>
+  </data>
+  <data name="SettingsMcpCallToolError" xml:space="preserve">
+    <value>Tool error</value>
+  </data>
+  <data name="SettingsMcpCallProtocolError" xml:space="preserve">
+    <value>Protocol error</value>
+  </data>
+  <data name="SettingsMcpCallInternalError" xml:space="preserve">
+    <value>Internal error</value>
+  </data>
+  <data name="SettingsMcpToolReadOnly" xml:space="preserve">
+    <value>Read-only</value>
+  </data>
+  <data name="SettingsMcpToolWrite" xml:space="preserve">
+    <value>Write</value>
+  </data>
+  <data name="SettingsMcpToolAuthorized" xml:space="preserve">
+    <value>Authorized</value>
+  </data>
+  <data name="SettingsMcpToolUnauthorized" xml:space="preserve">
+    <value>Not authorized</value>
+  </data>
   <data name="SettingsSectionProxy" xml:space="preserve">
     <value>Network proxy</value>
   </data>
@@ -6039,7 +6099,7 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="ModstudioMcpQuickInstallPrompt" xml:space="preserve">
     <value>Add the PdxNext MCP server to this client:
 name pdxnext, command "{0}",
-args ["--data-root", "{1}"];
+args ["--data-root", "{1}", "--enabled", "{2}", "--draft-write", "{3}"];
 then call list_games to verify.</value>
   </data>
   <data name="ModstudioMcpFlowTitle" xml:space="preserve">

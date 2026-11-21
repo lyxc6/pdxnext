@@ -180,6 +180,7 @@ public static class PdxDatabaseChecks
         "playsets",
         "playsets_mods",
         "playsets_dlcs",
+        "mcp_calls",
     ];
 
     private sealed class NullLogger : IAppLogger

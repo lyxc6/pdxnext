@@ -9,6 +9,7 @@ using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Mcp;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Online.Translation.Local;
 using PdxLauncher.Core.Patch;
@@ -26,6 +27,60 @@ using PdxLauncher.Core.Updates;
 /// </summary>
 public sealed class SettingsViewModel : LocalizedObservableObject
 {
+    /// <summary>设置页 MCP 工具目录（与 MCP 进程共用同一份元数据）。</summary>
+    public IReadOnlyList<McpToolDescriptor> McpTools { get; } = McpToolCatalog.Tools;
+
+    public ObservableCollection<McpCallHistoryEntry> McpRecentCalls { get; } = new();
+
+    public string McpPermissionModeText =>
+        !AppServices.Settings.McpEnabled
+            ? T(Keys.McpPermissionOff)
+            : AppServices.Settings.McpDraftWriteEnabled
+                ? T(Keys.McpPermissionReadWrite)
+                : T(Keys.McpPermissionReadOnly);
+
+    public int McpCallTotal { get; private set; }
+
+    public int McpCallSuccess { get; private set; }
+
+    public string McpCallSuccessRate => McpCallTotal == 0
+        ? "0%"
+        : (McpCallSuccess * 100 / McpCallTotal).ToString(CultureInfo.InvariantCulture) + "%";
+
+    public bool HasMcpRecentCalls => McpRecentCalls.Count > 0;
+
+    public void RefreshMcpCalls(string? toolName = null, McpCallOutcome? outcome = null)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            var history = new McpCallHistoryStore(AppServices.Database);
+            var entries = history.Query(new McpCallHistoryQuery(toolName, outcome), limit: 100);
+            var stats = history.GetStats();
+
+            McpRecentCalls.Clear();
+            foreach (var entry in entries)
+            {
+                McpRecentCalls.Add(entry);
+            }
+
+            McpCallTotal = stats.Total;
+            McpCallSuccess = stats.Success;
+            OnPropertyChanged(nameof(McpCallTotal));
+            OnPropertyChanged(nameof(McpCallSuccess));
+            OnPropertyChanged(nameof(McpCallSuccessRate));
+            OnPropertyChanged(nameof(HasMcpRecentCalls));
+        }
+        catch (Exception exception)
+        {
+            AppServices.Logger.Warn("读取 MCP 调用历史失败：" + exception.Message);
+        }
+    }
+
     /// <summary>
     /// 主题缓存 TTL：24 小时。索引最后检查时间 + TTL 只用来展示「下次检查」；
     /// 真正的刷新判定在 ThemeResolver/ThemeRefreshDecision，退避与 force 都优先于 TTL。
@@ -973,6 +1028,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     {
         OnPropertyChanged(nameof(McpEnabled));
         OnPropertyChanged(nameof(McpDraftWriteEnabled));
+            OnPropertyChanged(nameof(McpPermissionModeText));
     }
 
     /// <summary>

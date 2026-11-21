@@ -68,7 +68,17 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
         };
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PermissionText)));
 
-        PromptTextBlock.Text = localizer.T(Keys.ModstudioMcpQuickInstallPrompt, _exePath, _dataRoot);
+        PromptTextBlock.Text = localizer.T(
+            Keys.ModstudioMcpQuickInstallPrompt,
+            _exePath,
+            _dataRoot,
+            enabled ? "true" : "false",
+            draftWriteEnabled ? "true" : "false");
+        FlowTextBlock.Text = enabled
+            ? draftWriteEnabled
+                ? localizer.ModstudioMcpFlowBody
+                : localizer.McpFlowReadOnly
+            : localizer.McpFlowDisabled;
         ExePathText.Text = _exePath;
         ConfigBox.Text = BuildConfig(_exePath, _dataRoot, enabled, draftWriteEnabled);
     }
