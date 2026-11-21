@@ -100,10 +100,24 @@ jobs:
             dist/installer/update.json
           if-no-files-found: error
 
+      - name: Extract release notes from CHANGELOG
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $changelog = Get-Content -LiteralPath CHANGELOG.md -Raw
+          $pattern = "(?ms)^## \[$env:Version\] - (?<date>\d{4}-\d{2}-\d{2})\r?\n(?<body>.*?)(?=^## \[|\z)"
+          if ($changelog -notmatch $pattern) {
+            throw "CHANGELOG.md has no section for [$env:Version]; cannot publish release without notes"
+          }
+          $notes = "PdxNext $env:Version ($($Matches.date))`n`n" + $Matches.body.TrimEnd()
+          Set-Content -LiteralPath release-notes.md -Value $notes -Encoding utf8
+          Write-Host "release-notes.md written ($($notes.Length) chars)"
+
       - name: Publish GitHub Release
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
+          body_path: release-notes.md
           files: |
             dist/installer/PdxNext-Setup-*.exe
             dist/installer/update.json

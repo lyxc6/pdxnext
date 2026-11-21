@@ -102,6 +102,7 @@ PdxNext 采用 [Semantic Versioning 2.0](https://semver.org/lang/zh-CN/)：`MAJO
    - 校验 tag 与 `version.props` 一致，并要求被 tag 的提交在 `main` 历史里；
    - 构建、跑自检；
    - 生成 Setup + `update.json`；
+   - 从 `CHANGELOG.md` 提取对应版本小节作为 Release 正文（小节缺失会让发布直接失败）；
    - 创建 Release 并上传两个资产。
 8. 下载一次 `releases/latest/download/update.json`，确认可访问、`version` 正确。
 9. 用旧版本安装一次，验证自动更新提示、下载、校验、安装、重启。
