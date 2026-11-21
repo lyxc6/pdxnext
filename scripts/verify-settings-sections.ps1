@@ -69,9 +69,9 @@ $sections = @(
   @{ id='navSettingsPaths';      name='paths';      want='txtGameDataPath,btnOpenDataDirectory,txtDlcPath,txtModDir,txtFormatVersion,txtLoadFilePath,txtAppDataDirectory,btnOpenAppDataDirectory' },
   @{ id='navSettingsOnline';     name='online';     want='cmbProxyMode,txtProxyUrl,txtProxyStatus,btnNetworkProbe,txtProbeSummary' },
   @{ id='navSettingsCache';      name='cache';      want='btnRefreshCache,btnClearAllCaches,tglOnlineDlcDescription,cmbDlcDescriptionRetention,tglOnlineNewsFeed,tglOnlineModThumbnail,cmbModThumbnailRetention,txtModThumbnailCachePath' },
-  @{ id='navSettingsAdvanced';   name='advanced';   want='tglWriteDlcSignature,btnRegenerateDlcSignature' },
   @{ id='navSettingsTranslation'; name='translation'; want='tglTranslateEnabled,cmbTranslateEngineMode,txtTranslateBaseUrl,pwdTranslateApiKey,txtTranslateModel,cmbTranslateTargetLanguage,tglTranslateNames,tglTranslateDescription,tglTranslateChangelog,tglTranslateComments,txtTranslateCacheDays,pwdTranslateMicrosoftKey,txtTranslateMicrosoftRegion,pwdTranslateGoogleKey,btnTranslateTest,txtTranslateTestResult' },
   @{ id='navSettingsMcp';       name='mcp';       want='txtMcpOverviewStatus,txtMcpOverviewToolCount,txtMcpOverviewCallCount,txtMcpOverviewSuccessRate,tglMcpEnabled,tglMcpDraftWrite,cmbMcpClientKind,txtMcpPermission,btnCreateMcpKey,lstMcpAccessKeys,cmbMcpFilterTool,cmbMcpFilterOutcome,cmbMcpFilterKey,btnRefreshMcpCalls,lstMcpRecentCalls,btnMcpCallsPrevious,btnMcpCallsNext,btnClearMcpCalls,btnExportMcpCalls' },
+  @{ id='navSettingsAdvanced';   name='advanced';   want='tglWriteDlcSignature,btnRegenerateDlcSignature' },
   @{ id='navSettingsAbout';     name='about';     want='txtLauncherVersion,txtInstallMode,tglAutoCheckUpdates,btnCheckUpdates,txtLastUpdateCheck,txtUpdateStatus' }
 )
 

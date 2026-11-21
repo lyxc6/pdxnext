@@ -109,13 +109,6 @@
                         <SymbolIcon Symbol="Save" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem AutomationProperties.AutomationId="navSettingsAdvanced"
-                                    Tag="5"
-                                    Content="{x:Bind L.SettingsNavAdvanced, Mode=OneWay}">
-                    <NavigationViewItem.Icon>
-                        <SymbolIcon Symbol="Setting" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
                 <NavigationViewItem AutomationProperties.AutomationId="navSettingsTranslation"
                                     Tag="6"
                                     Content="{x:Bind L.SettingsNavTranslation, Mode=OneWay}">
@@ -128,6 +121,13 @@
                                     Content="{x:Bind L.SettingsNavMcp, Mode=OneWay}">
                     <NavigationViewItem.Icon>
                         <FontIcon FontFamily="Segoe MDL2 Assets" Glyph="&#xE8A5;" FontSize="14" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem AutomationProperties.AutomationId="navSettingsAdvanced"
+                                    Tag="5"
+                                    Content="{x:Bind L.SettingsNavAdvanced, Mode=OneWay}">
+                    <NavigationViewItem.Icon>
+                        <SymbolIcon Symbol="Setting" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
                 <NavigationViewItem AutomationProperties.AutomationId="navSettingsAbout"

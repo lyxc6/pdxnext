@@ -420,24 +420,22 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private void RestoreSection()
     {
         var items = navSettingsSections.MenuItems.OfType<NavigationViewItem>().ToList();
-        var index = AppServices.IsInitialized ? AppServices.Settings.LastSettingsSection ?? 0 : 0;
+        var stored = AppServices.IsInitialized ? AppServices.Settings.LastSettingsSection ?? 0 : 0;
+        var index = stored;
         if (index < 0 || index >= items.Count)
         {
             index = 0;
         }
 
-        // v1.4.2 曾把 MCP 放在「关于与更新」之后（index=8）。现在 MCP 在 index=7、
-        // 关于与更新在 index=8；旧存档里的 8 要顺延到关于，避免打开设置看不到原分节。
-        if (items.Count == 9
-            && index == 8
-            && string.Equals(items[index].Tag?.ToString(), "8", StringComparison.Ordinal)
-            && string.Equals(items[7].Tag?.ToString(), "7", StringComparison.Ordinal))
+        // LastSettingsSection 是旧版按位置保存的索引；改序后按 Tag 找同一分节，
+        // 避免「高级」和「关于与更新」因为位置变化跳错。
+        if (stored >= 0 && stored < items.Count)
         {
-            index = 7;
-            if (AppServices.IsInitialized)
+            var storedTag = items[stored].Tag?.ToString();
+            var sameTag = items.FindIndex(item => string.Equals(item.Tag?.ToString(), storedTag, StringComparison.Ordinal));
+            if (sameTag >= 0)
             {
-                AppServices.Settings.LastSettingsSection = 8;
-                AppServices.SaveSettings();
+                index = sameTag;
             }
         }
 
