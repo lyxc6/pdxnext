@@ -4313,6 +4313,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="SettingsProxyProbeBlocked" xml:space="preserve">
     <value>Blocked by host allow-list</value>
   </data>
+  <data name="SettingsProxyProbeColumnHost" xml:space="preserve">
+    <value>Host</value>
+  </data>
   <data name="SettingsProxyProbeColumnCurrent" xml:space="preserve">
     <value>Current mode</value>
   </data>

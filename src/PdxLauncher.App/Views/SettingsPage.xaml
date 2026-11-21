@@ -26,6 +26,11 @@
             <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             <Setter Property="Margin" Value="0,12,0,0" />
         </Style>
+        <!-- 同一容器里与正文叠放的说明行（如本地模型行的操作进度）：不带 SettingsHintTextStyle
+             的左右 4 DIP 缩进，左缘与上面的正文行对齐。 -->
+        <Style x:Key="SettingsInlineHintTextStyle" TargetType="TextBlock" BasedOn="{StaticResource SettingsHintTextStyle}">
+            <Setter Property="Margin" Value="0" />
+        </Style>
     </Page.Resources>
 
     <Grid Padding="20" RowSpacing="12" ColumnSpacing="16">
@@ -450,6 +455,7 @@
                                                AutomationProperties.Name="{x:Bind L.SettingsDataGameDataName, Mode=OneWay}"
                                                Text="{x:Bind ViewModel.GameDataPath, Mode=OneWay}"
                                                MaxWidth="380" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center"
                                                ToolTipService.ToolTip="{x:Bind ViewModel.GameDataPath, Mode=OneWay}" />
                                     <Button AutomationProperties.AutomationId="btnOpenDataDirectory"
                                             AutomationProperties.Name="{x:Bind L.SettingsDataOpenName, Mode=OneWay}"
@@ -544,6 +550,7 @@
                                                AutomationProperties.Name="{x:Bind L.SettingsAppDataCurrentName, Mode=OneWay}"
                                                Text="{x:Bind ViewModel.DataDirectoryPath, Mode=OneWay}"
                                                MaxWidth="380" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center"
                                                ToolTipService.ToolTip="{x:Bind ViewModel.DataDirectoryPath, Mode=OneWay}" />
                                     <Button AutomationProperties.AutomationId="btnOpenAppDataDirectory"
                                             AutomationProperties.Name="{x:Bind L.SettingsAppDataOpenName, Mode=OneWay}"
@@ -566,6 +573,7 @@
                                                AutomationProperties.Name="{x:Bind L.SettingsAppDataLegacyName, Mode=OneWay}"
                                                Text="{x:Bind ViewModel.LegacyDataDirectoryPath, Mode=OneWay}"
                                                MaxWidth="380" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center"
                                                ToolTipService.ToolTip="{x:Bind ViewModel.LegacyDataDirectoryPath, Mode=OneWay}" />
                                     <Button AutomationProperties.AutomationId="btnClearLegacyData"
                                             AutomationProperties.Name="{x:Bind L.SettingsAppDataClearLegacyName, Mode=OneWay}"
@@ -668,21 +676,28 @@
                             </StackPanel>
                         </ct:SettingsCard>
 
-                        <Grid ColumnSpacing="8"
+                        <Grid ColumnSpacing="8" Margin="0,0,0,4"
                               Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasProbeRows), Mode=OneWay}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="200" />
                                 <ColumnDefinition Width="120" />
                                 <ColumnDefinition Width="120" />
                             </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="{x:Bind L.SettingsProxyProbeColumnHost, Mode=OneWay}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       VerticalAlignment="Center" />
                             <TextBlock Grid.Column="1"
                                        Text="{x:Bind L.SettingsProxyProbeColumnCurrent, Mode=OneWay}"
                                        Style="{StaticResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       VerticalAlignment="Center" />
                             <TextBlock Grid.Column="2"
                                        Text="{x:Bind L.SettingsProxyProbeColumnDirect, Mode=OneWay}"
                                        Style="{StaticResource CaptionTextBlockStyle}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       VerticalAlignment="Center"
                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasDirectProbeColumn), Mode=OneWay}" />
                         </Grid>
 
@@ -975,11 +990,10 @@
                                          MinHeight="56"
                                          Padding="16,12"
                                          IsClickEnabled="False">
-                                <StackPanel Spacing="4" MaxWidth="440" HorizontalAlignment="Right">
+                                <StackPanel Spacing="4" MaxWidth="420">
                                     <TextBlock AutomationProperties.AutomationId="txtPatchStatus"
                                                AutomationProperties.Name="{x:Bind L.SettingsPatchStatusTitle, Mode=OneWay}"
                                                Text="{x:Bind ViewModel.PatchStatusText, Mode=OneWay}"
-                                               HorizontalAlignment="Right"
                                                TextWrapping="Wrap" />
                                     <TextBlock AutomationProperties.AutomationId="txtPatchDetail"
                                                AutomationProperties.Name="{x:Bind L.SettingsPatchStatusTitle, Mode=OneWay}"
@@ -987,7 +1001,6 @@
                                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasPatchDetail), Mode=OneWay}"
                                                Style="{StaticResource CaptionTextBlockStyle}"
                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                               HorizontalAlignment="Right"
                                                TextWrapping="Wrap"
                                                IsTextSelectionEnabled="True" />
                                 </StackPanel>
@@ -1002,7 +1015,7 @@
                                          MinHeight="56"
                                          Padding="16,12"
                                          IsClickEnabled="False">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                     <Button AutomationProperties.AutomationId="btnApplyPatch"
                                             AutomationProperties.Name="{x:Bind L.SettingsPatchApplyName, Mode=OneWay}"
                                             Content="{x:Bind L.SettingsPatchApply, Mode=OneWay}"
@@ -1022,9 +1035,7 @@
                         </ct:SettingsCard>
 
                         <TextBlock Text="{x:Bind L.SettingsPatchHint, Mode=OneWay}"
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   TextWrapping="Wrap" Margin="4,0,4,8" />
+                                   Style="{StaticResource SettingsHintTextStyle}" />
 
                         <TextBlock Text="{x:Bind L.SettingsSectionModEditorNav, Mode=OneWay}"
                                    Style="{StaticResource SettingsSubsectionTitleStyle}" />
@@ -1454,7 +1465,7 @@
                                                                TextWrapping="Wrap" />
                                                     <TextBlock Text="{x:Bind OperationText, Mode=OneWay}"
                                                                Visibility="{x:Bind svc:XamlVisibility.FromString(OperationText), Mode=OneWay}"
-                                                               Style="{StaticResource SettingsHintTextStyle}"
+                                                               Style="{StaticResource SettingsInlineHintTextStyle}"
                                                                TextWrapping="Wrap" />
                                                     <!--
                                                         逐字节进度条：1.31 GB 的 Index-Translate 是单个文件，
