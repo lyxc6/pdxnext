@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ctl="using:PdxLauncher.App.Controls">
 
-    <StackPanel MinWidth="600" MaxWidth="720" Spacing="12">
+    <StackPanel MinWidth="0" MaxWidth="1000" HorizontalAlignment="Stretch" Spacing="12">
         <Border Padding="12"
                 CornerRadius="8"
                 BorderThickness="1"
@@ -38,7 +38,7 @@
             </Grid.ColumnDefinitions>
             <FontIcon Grid.Column="0" Glyph="&#xE72E;" FontSize="14" Foreground="{ThemeResource SystemFillColorCautionBrush}" />
             <TextBlock Grid.Column="1"
-                       MaxWidth="680"
+                       MaxWidth="920"
                        Text="{x:Bind L.ModstudioMcpDocsSafety, Mode=OneWay}"
                        TextWrapping="Wrap"
                        Style="{StaticResource CaptionTextBlockStyle}"
@@ -94,7 +94,7 @@
             <StackPanel Spacing="8">
                 <TextBlock Text="{x:Bind L.ModstudioMcpFlowTitle, Mode=OneWay}"
                            Style="{StaticResource BodyStrongTextBlockStyle}" />
-                <TextBlock Text="{x:Bind L.ModstudioMcpFlowBody, Mode=OneWay}" TextWrapping="Wrap" />
+                <TextBlock x:Name="FlowTextBlock" TextWrapping="Wrap" />
             </StackPanel>
         </Border>
 

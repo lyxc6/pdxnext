@@ -293,6 +293,9 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         mcpDocsContent.RefreshPermissions(_viewModel.McpEnabled, _viewModel.McpDraftWriteEnabled);
     }
 
+    private void OnRefreshMcpCallsClick(object sender, RoutedEventArgs e) =>
+        _viewModel.RefreshMcpCalls();
+
     private async void OnCheckUpdatesClick(object sender, RoutedEventArgs e)
     {
         await _viewModel.CheckForUpdatesAsync();
@@ -330,6 +333,11 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         if (refreshCache && index == CacheSectionIndex && AppServices.IsInitialized)
         {
             RefreshCacheStatsInBackground();
+        }
+
+        if (index == McpSectionIndex)
+        {
+            _viewModel.RefreshMcpCalls();
         }
     }
 

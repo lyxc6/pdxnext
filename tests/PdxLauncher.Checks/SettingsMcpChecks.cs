@@ -35,6 +35,18 @@ public static class SettingsMcpChecks
                 && settingsXaml.Contains("x:Load=\"{x:Bind IsMcpSection", StringComparison.Ordinal)
                 && settingsXaml.Contains("controls:McpDocsContent", StringComparison.Ordinal));
         ChecksContext.Check(
+            "设置 MCP: Halo 式四个分区齐全",
+            settingsXaml.Contains("AutomationProperties.AutomationId=\"expMcpOverview\"", StringComparison.Ordinal)
+                && settingsXaml.Contains("AutomationProperties.AutomationId=\"expMcpConnection\"", StringComparison.Ordinal)
+                && settingsXaml.Contains("AutomationProperties.AutomationId=\"expMcpToolCatalog\"", StringComparison.Ordinal)
+                && settingsXaml.Contains("AutomationProperties.AutomationId=\"expMcpRecentCalls\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "设置 MCP: 工具目录和调用记录来自 VM",
+            settingsXaml.Contains("ViewModel.McpTools", StringComparison.Ordinal)
+                && settingsXaml.Contains("ViewModel.McpRecentCalls", StringComparison.Ordinal)
+                && settingsVm.Contains("RefreshMcpCalls", StringComparison.Ordinal)
+                && settingsVm.Contains("McpCallHistoryStore", StringComparison.Ordinal));
+        ChecksContext.Check(
             "设置 MCP: 分节索引与 XAML 顺序一致",
             settingsCode.Contains("IsMcpSection => _sectionIndex == 8", StringComparison.Ordinal)
                 && settingsCode.Contains("McpSectionIndex = 8", StringComparison.Ordinal)
@@ -83,6 +95,10 @@ public static class SettingsMcpChecks
             mcpProgram.Contains("--enabled", StringComparison.Ordinal)
                 && mcpProgram.Contains("--draft-write", StringComparison.Ordinal)
                 && mcpProgram.Contains("TryParseBoolOption", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "MCP 权限: 自然语言提示词带权限参数",
+            docsControlCode.Contains("Keys.ModstudioMcpQuickInstallPrompt", StringComparison.Ordinal)
+                && docsControlCode.Contains("draftWriteEnabled ? \"true\" : \"false\"", StringComparison.Ordinal));
 
         var zh = I18nResw.Read(root, "zh-CN");
         var en = I18nResw.Read(root, "en-US");

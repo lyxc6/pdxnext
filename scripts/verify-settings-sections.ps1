@@ -72,7 +72,7 @@ $sections = @(
   @{ id='navSettingsAdvanced';   name='advanced';   want='tglWriteDlcSignature,btnRegenerateDlcSignature' },
   @{ id='navSettingsTranslation'; name='translation'; want='tglTranslateEnabled,cmbTranslateEngineMode,txtTranslateBaseUrl,pwdTranslateApiKey,txtTranslateModel,cmbTranslateTargetLanguage,tglTranslateNames,tglTranslateDescription,tglTranslateChangelog,tglTranslateComments,txtTranslateCacheDays,pwdTranslateMicrosoftKey,txtTranslateMicrosoftRegion,pwdTranslateGoogleKey,btnTranslateTest,txtTranslateTestResult' },
   @{ id='navSettingsAbout';     name='about';     want='txtLauncherVersion,txtInstallMode,tglAutoCheckUpdates,btnCheckUpdates,txtLastUpdateCheck,txtUpdateStatus' },
-  @{ id='navSettingsMcp';       name='mcp';       want='tglMcpEnabled,tglMcpDraftWrite,txtMcpPermission,txtModStudioMcpPrompt,btnModStudioMcpCopyPrompt,expModStudioMcpManualConfig,txtModStudioMcpConfig' }
+  @{ id='navSettingsMcp';       name='mcp';       want='txtMcpOverviewStatus,txtMcpOverviewToolCount,txtMcpOverviewCallCount,txtMcpOverviewSuccessRate,tglMcpEnabled,tglMcpDraftWrite,txtMcpPermission,txtModStudioMcpPrompt,btnRefreshMcpCalls,lstMcpRecentCalls' }
 )
 
 $hwnd = $p.MainWindowHandle

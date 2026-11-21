@@ -5,6 +5,7 @@
     xmlns:contracts="using:PdxLauncher.Core.Contracts"
     xmlns:controls="using:PdxLauncher.App.Controls"
     xmlns:ct="using:CommunityToolkit.WinUI.Controls"
+    xmlns:mcp="using:PdxLauncher.Core.Mcp"
     xmlns:svc="using:PdxLauncher.App.Services"
     xmlns:vm="using:PdxLauncher.App.ViewModels"
     NavigationCacheMode="Required"
@@ -1775,59 +1776,172 @@
                         <TextBlock Text="{x:Bind L.SettingsSectionMcp, Mode=OneWay}"
                                    Style="{StaticResource SettingsSectionTitleStyle}" />
 
-                        <ct:SettingsCard Header="{x:Bind L.SettingsMcpEnabled, Mode=OneWay}"
-                                         HorizontalAlignment="Stretch"
-                                         Background="{ThemeResource PdxCardBackgroundBrush}"
-                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
-                                         AutomationProperties.AutomationId="cardMcpEnabled">
-                            <ToggleSwitch MinWidth="0"
-                                          AutomationProperties.AutomationId="tglMcpEnabled"
-                                          AutomationProperties.Name="{x:Bind L.SettingsMcpEnabledName, Mode=OneWay}"
-                                          IsOn="{x:Bind ViewModel.McpEnabled, Mode=TwoWay}" />
-                        </ct:SettingsCard>
-
-                        <ct:SettingsCard Header="{x:Bind L.SettingsMcpDraftWrite, Mode=OneWay}"
-                                         HorizontalAlignment="Stretch"
-                                         Background="{ThemeResource PdxCardBackgroundBrush}"
-                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
-                                         AutomationProperties.AutomationId="cardMcpDraftWrite">
-                            <ToggleSwitch MinWidth="0"
-                                          AutomationProperties.AutomationId="tglMcpDraftWrite"
-                                          AutomationProperties.Name="{x:Bind L.SettingsMcpDraftWriteName, Mode=OneWay}"
-                                          IsOn="{x:Bind ViewModel.McpDraftWriteEnabled, Mode=TwoWay}" />
-                        </ct:SettingsCard>
-
-                        <ct:SettingsCard Header="{x:Bind L.SettingsMcpTools, Mode=OneWay}"
-                                         HorizontalAlignment="Stretch"
-                                         ContentAlignment="Vertical"
-                                         Background="{ThemeResource PdxCardBackgroundBrush}"
-                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
-                                         AutomationProperties.AutomationId="cardMcpTools">
-                            <StackPanel Spacing="8" Padding="0,8,0,0">
-                                <TextBlock Text="{x:Bind L.McpPermissionTitle, Mode=OneWay}"
+                        <Border Padding="12"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                Background="{ThemeResource PdxCardBackgroundBrush}"
+                                AutomationProperties.AutomationId="expMcpOverview">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="{x:Bind L.SettingsMcpOverview, Mode=OneWay}"
                                            Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                <TextBlock Text="{x:Bind L.SettingsMcpToolSummary, Mode=OneWay}"
-                                           TextWrapping="Wrap"
-                                           Style="{StaticResource SettingsHintTextStyle}" />
-                                <Border Padding="8,4"
-                                        CornerRadius="4"
-                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}">
-                                    <TextBlock Text="list_games / list_mods / list_tags / get_upload_draft / save_upload_draft / clear_upload_draft"
-                                               FontFamily="Consolas"
-                                               TextWrapping="Wrap"
-                                               IsTextSelectionEnabled="True" />
-                                </Border>
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="2*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Spacing="4">
+                                        <TextBlock Text="{x:Bind L.SettingsMcpServiceStatus, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="{x:Bind ViewModel.McpPermissionModeText, Mode=OneWay}"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                   AutomationProperties.AutomationId="txtMcpOverviewStatus" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="4">
+                                        <TextBlock Text="{x:Bind L.SettingsMcpToolCount, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="{x:Bind ViewModel.McpTools.Count, Mode=OneWay}"
+                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                   AutomationProperties.AutomationId="txtMcpOverviewToolCount" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Spacing="4">
+                                        <TextBlock Text="{x:Bind L.SettingsMcpCallCount, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="{x:Bind ViewModel.McpCallTotal, Mode=OneWay}"
+                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                   AutomationProperties.AutomationId="txtMcpOverviewCallCount" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="3" Spacing="4">
+                                        <TextBlock Text="{x:Bind L.SettingsMcpSuccessRate, Mode=OneWay}"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                        <TextBlock Text="{x:Bind ViewModel.McpCallSuccessRate, Mode=OneWay}"
+                                                   Style="{StaticResource BodyStrongTextBlockStyle}"
+                                                   AutomationProperties.AutomationId="txtMcpOverviewSuccessRate" />
+                                    </StackPanel>
+                                </Grid>
                             </StackPanel>
-                        </ct:SettingsCard>
+                        </Border>
 
                         <Border Padding="12"
                                 CornerRadius="8"
                                 BorderThickness="1"
                                 BorderBrush="{ThemeResource PdxCardStrokeBrush}"
-                                Background="{ThemeResource PdxCardBackgroundBrush}">
-                            <controls:McpDocsContent x:Name="mcpDocsContent"
-                                                     Loaded="OnMcpDocsContentLoaded"
-                                                     AutomationProperties.AutomationId="mcpDocsContent" />
+                                Background="{ThemeResource PdxCardBackgroundBrush}"
+                                AutomationProperties.AutomationId="expMcpConnection">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="{x:Bind L.SettingsMcpConnection, Mode=OneWay}"
+                                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <ct:SettingsCard Header="{x:Bind L.SettingsMcpEnabled, Mode=OneWay}"
+                                                 ContentAlignment="Vertical"
+                                                 Background="Transparent" BorderThickness="0" Padding="0,8,0,8"
+                                                 HorizontalAlignment="Stretch"
+                                                 AutomationProperties.AutomationId="cardMcpEnabled">
+                                    <ToggleSwitch MinWidth="0"
+                                                  AutomationProperties.AutomationId="tglMcpEnabled"
+                                                  AutomationProperties.Name="{x:Bind L.SettingsMcpEnabledName, Mode=OneWay}"
+                                                  IsOn="{x:Bind ViewModel.McpEnabled, Mode=TwoWay}" />
+                                </ct:SettingsCard>
+                                <ct:SettingsCard Header="{x:Bind L.SettingsMcpDraftWrite, Mode=OneWay}"
+                                                 ContentAlignment="Vertical"
+                                                 Background="Transparent" BorderThickness="0" Padding="0,8,0,8"
+                                                 HorizontalAlignment="Stretch"
+                                                 AutomationProperties.AutomationId="cardMcpDraftWrite">
+                                    <ToggleSwitch MinWidth="0"
+                                                  AutomationProperties.AutomationId="tglMcpDraftWrite"
+                                                  AutomationProperties.Name="{x:Bind L.SettingsMcpDraftWriteName, Mode=OneWay}"
+                                                  IsOn="{x:Bind ViewModel.McpDraftWriteEnabled, Mode=TwoWay}" />
+                                </ct:SettingsCard>
+                                <Border Padding="12" CornerRadius="8" BorderThickness="1"
+                                        BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                        Background="{ThemeResource PdxCardBackgroundBrush}">
+                                    <controls:McpDocsContent x:Name="mcpDocsContent"
+                                                             Loaded="OnMcpDocsContentLoaded"
+                                                             AutomationProperties.AutomationId="mcpDocsContent" />
+                                </Border>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Padding="12"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                Background="{ThemeResource PdxCardBackgroundBrush}"
+                                AutomationProperties.AutomationId="expMcpToolCatalog">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="{x:Bind L.SettingsMcpTools, Mode=OneWay}"
+                                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <ItemsControl
+                                          ItemsSource="{x:Bind ViewModel.McpTools, Mode=OneWay}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Spacing="8" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="mcp:McpToolDescriptor">
+                                        <Grid Padding="12" CornerRadius="8" BorderThickness="1"
+                                              BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                              Background="{ThemeResource PdxCardBackgroundBrush}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" Spacing="4">
+                                                <TextBlock Text="{x:Bind DisplayName}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                                <TextBlock Text="{x:Bind Name}" FontFamily="Consolas" Style="{StaticResource CaptionTextBlockStyle}" />
+                                                <TextBlock Text="{x:Bind Description}" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Top"
+                                                       Text="{x:Bind svc:McpToolRiskText.FromRisk(Risk)}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                            <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Top"
+                                                       Text="{x:Bind svc:McpToolRiskText.Authorized(Risk)}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Padding="12"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                Background="{ThemeResource PdxCardBackgroundBrush}"
+                                AutomationProperties.AutomationId="expMcpRecentCalls">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="{x:Bind L.SettingsMcpRecentCalls, Mode=OneWay}"
+                                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <Button Content="{x:Bind L.SettingsMcpRefreshCalls, Mode=OneWay}"
+                                        Click="OnRefreshMcpCallsClick"
+                                        AutomationProperties.AutomationId="btnRefreshMcpCalls" />
+                                <TextBlock Text="{x:Bind L.SettingsMcpNoCalls, Mode=OneWay}"
+                                           Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasMcpRecentCalls), Mode=OneWay}"
+                                           Style="{StaticResource SettingsHintTextStyle}" />
+                                <ListView ItemsSource="{x:Bind ViewModel.McpRecentCalls, Mode=OneWay}"
+                                          SelectionMode="None"
+                                          AutomationProperties.AutomationId="lstMcpRecentCalls">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="mcp:McpCallHistoryEntry">
+                                            <Grid Padding="12,8" ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{x:Bind ToolName}" FontFamily="Consolas" />
+                                                <TextBlock Grid.Column="1" Text="{x:Bind svc:McpCallText.Format(StartedUtc, DurationMs, Outcome)}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </StackPanel>
                         </Border>
 
                         <TextBlock Text="{x:Bind L.SettingsMcpHint, Mode=OneWay}"
