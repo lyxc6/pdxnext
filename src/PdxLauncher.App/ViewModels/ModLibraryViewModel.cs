@@ -325,8 +325,18 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
         }
     }
 
-    /// <summary>刷新：丢掉 mod 扫描缓存后按当前游戏重新加载一次（沿用页面生命周期令牌）。</summary>
-    public Task RefreshAsync() => LoadAsync(Game, _pageToken, forceRefresh: true);
+    /// <summary>刷新：丢掉 mod 扫描缓存与 Steam 状态缓存后按当前游戏重新加载一次（沿用页面生命周期令牌）。</summary>
+    public async Task RefreshAsync()
+    {
+        // 订阅状态与 mod 列表一起刷新：只失效扫描缓存的话，工坊徽标在 60 秒 TTL 内仍是旧值。
+        if (Game is not null
+            && WorkshopSourceChooser.ResolveAppId(Game.SteamAppId, Game.GameId) is { } appId and > 0)
+        {
+            AppServices.WorkshopStates.Invalidate(appId);
+        }
+
+        await LoadAsync(Game, _pageToken, forceRefresh: true).ConfigureAwait(true);
+    }
 
     /// <summary>
     /// 重新问一次 Steam 的工坊状态（丢掉缓存后重载）。

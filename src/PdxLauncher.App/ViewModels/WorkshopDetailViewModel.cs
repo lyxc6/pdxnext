@@ -1024,6 +1024,14 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                 {
                     AppServices.WorkshopStates.Invalidate(appId);
                 }
+
+                // 订阅落地后工坊目录里会出现新内容；同时让 mod 扫描缓存过期，
+                // 返回 Mod 库点刷新时才能真正重扫到（否则扫描仍是 60 秒内的旧结果）。
+                if (AppServices.CurrentGame is { } game
+                    && AppServices.Mods is IScanCacheInvalidator invalidator)
+                {
+                    invalidator.InvalidateCache(game);
+                }
             }
 
             return result;
