@@ -33,14 +33,18 @@ internal sealed class McpServer
         TextWriter output,
         TextWriter error,
         McpTools tools,
-        IAppLogger logger)
+        IAppLogger logger,
+        bool enabled = true)
     {
         _input = input ?? throw new ArgumentNullException(nameof(input));
         _output = output ?? throw new ArgumentNullException(nameof(output));
         _error = error ?? throw new ArgumentNullException(nameof(error));
         _tools = tools ?? throw new ArgumentNullException(nameof(tools));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _enabled = enabled;
     }
+
+    private readonly bool _enabled;
 
     public async Task RunAsync(CancellationToken cancellationToken)
     {
@@ -141,9 +145,19 @@ internal sealed class McpServer
                 return new JsonObject();
 
             case "tools/list":
+                if (!_enabled)
+                {
+                    return new JsonObject { ["tools"] = new JsonArray() };
+                }
+
                 return new JsonObject { ["tools"] = _tools.ListTools() };
 
             case "tools/call":
+                if (!_enabled)
+                {
+                    throw new McpProtocolException(-32001, "MCP 工具已在 PdxNext 设置中关闭");
+                }
+
                 return await CallToolAsync(parameters, cancellationToken).ConfigureAwait(false);
 
             // 只声明 tools 能力；有的客户端仍会先问资源/提示，回空表比报错更兼容。

@@ -4042,6 +4042,9 @@
   <data name="SettingsNavAbout" xml:space="preserve">
     <value>关于与更新</value>
   </data>
+  <data name="SettingsNavMcp" xml:space="preserve">
+    <value>MCP</value>
+  </data>
   <data name="SettingsNavAdvanced" xml:space="preserve">
     <value>高级</value>
   </data>
@@ -4340,6 +4343,57 @@
   </data>
   <data name="SettingsSectionName" xml:space="preserve">
     <value>设置分类</value>
+  </data>
+  <data name="SettingsSectionMcp" xml:space="preserve">
+    <value>AI 助手（MCP）</value>
+  </data>
+  <data name="SettingsMcpEnabled" xml:space="preserve">
+    <value>启用 MCP 服务</value>
+  </data>
+  <data name="SettingsMcpEnabledName" xml:space="preserve">
+    <value>启用 MCP 服务开关</value>
+  </data>
+  <data name="SettingsMcpDraftWrite" xml:space="preserve">
+    <value>允许修改上传草稿</value>
+  </data>
+  <data name="SettingsMcpDraftWriteName" xml:space="preserve">
+    <value>允许修改上传草稿开关</value>
+  </data>
+  <data name="SettingsMcpTools" xml:space="preserve">
+    <value>可用工具与权限</value>
+  </data>
+  <data name="SettingsMcpToolSummary" xml:space="preserve">
+    <value>默认只读工具：list_games、list_mods、list_tags、get_upload_draft；开启写入开关后增加 save_upload_draft、clear_upload_draft。MCP 不会发布 Mod。</value>
+  </data>
+  <data name="SettingsMcpHint" xml:space="preserve">
+    <value>权限由本机 stdio 子进程执行；关闭总开关后客户端看到空工具表，调用会被拒绝。</value>
+  </data>
+  <data name="SettingsMcpStatusEnabled" xml:space="preserve">
+    <value>MCP 服务已启用</value>
+  </data>
+  <data name="SettingsMcpStatusDisabled" xml:space="preserve">
+    <value>MCP 服务已禁用</value>
+  </data>
+  <data name="SettingsMcpStatusWriteOn" xml:space="preserve">
+    <value>已允许 MCP 修改上传草稿</value>
+  </data>
+  <data name="SettingsMcpStatusWriteOff" xml:space="preserve">
+    <value>已禁止 MCP 修改上传草稿</value>
+  </data>
+  <data name="McpPermissionTitle" xml:space="preserve">
+    <value>当前权限</value>
+  </data>
+  <data name="McpPermissionHint" xml:space="preserve">
+    <value>遵循最小权限：只给 AI 当前任务需要的工具。权限写入客户端配置的参数，重启 AI 客户端后生效。</value>
+  </data>
+  <data name="McpPermissionOff" xml:space="preserve">
+    <value>已关闭：所有 MCP 工具调用都会被拒绝。</value>
+  </data>
+  <data name="McpPermissionReadOnly" xml:space="preserve">
+    <value>只读：可读取游戏、本地 Mod、标签与上传草稿，不能写入草稿。</value>
+  </data>
+  <data name="McpPermissionReadWrite" xml:space="preserve">
+    <value>可写：可读取并写入上传草稿；发布仍需用户在 Mod 创建页确认。</value>
   </data>
   <data name="SettingsSectionProxy" xml:space="preserve">
     <value>网络代理</value>
@@ -5964,9 +6018,6 @@
   <data name="WorkshopUpdated" xml:space="preserve">
     <value>更新于 {0}</value>
   </data>
-  <data name="ModstudioMcpDocsButton" xml:space="preserve">
-    <value>AI 助手（MCP）</value>
-  </data>
   <data name="ModstudioMcpDraftApplied" xml:space="preserve">
     <value>已载入 AI 草稿（{0}）</value>
   </data>
@@ -6014,9 +6065,6 @@
   </data>
   <data name="ModstudioMcpDocsCopied" xml:space="preserve">
     <value>已复制</value>
-  </data>
-  <data name="ModstudioMcpDocsFailed" xml:space="preserve">
-    <value>打开 MCP 文档失败：{0}</value>
   </data>
   <data name="SingleInstanceAlreadyRunning" xml:space="preserve">
     <value>PdxNext 已在运行。请切换到已经打开的窗口。</value>

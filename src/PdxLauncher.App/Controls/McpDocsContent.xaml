@@ -6,6 +6,26 @@
     xmlns:ctl="using:PdxLauncher.App.Controls">
 
     <StackPanel MinWidth="600" MaxWidth="720" Spacing="12">
+        <Border Padding="12"
+                CornerRadius="8"
+                BorderThickness="1"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="8">
+                <TextBlock Text="{x:Bind L.McpPermissionTitle, Mode=OneWay}"
+                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <TextBlock Text="{x:Bind PermissionText, Mode=OneWay}"
+                           TextWrapping="Wrap"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                           AutomationProperties.AutomationId="txtMcpPermission" />
+                <TextBlock Text="{x:Bind L.McpPermissionHint, Mode=OneWay}"
+                           TextWrapping="Wrap"
+                           Style="{StaticResource CaptionTextBlockStyle}"
+                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+        </Border>
+
         <TextBlock Text="{x:Bind L.ModstudioMcpDocsIntro, Mode=OneWay}"
                    TextWrapping="Wrap"
                    Style="{StaticResource BodyTextBlockStyle}"

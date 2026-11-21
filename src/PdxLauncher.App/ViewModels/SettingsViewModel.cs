@@ -968,6 +968,13 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// <summary>Mod 编辑页改了左栏显隐后，刷新设置页开关的绑定值。</summary>
     public void RefreshModEditorPane() => OnPropertyChanged(nameof(ModEditorLeftPaneVisible));
 
+    /// <summary>刷新 MCP 开关绑定，供设置页订阅 VM 属性变化时更新文档区。</summary>
+    public void RefreshMcpPermissions()
+    {
+        OnPropertyChanged(nameof(McpEnabled));
+        OnPropertyChanged(nameof(McpDraftWriteEnabled));
+    }
+
     /// <summary>
     /// 左栏菜单「Mod 编辑」入口显隐开关（高级分区）：赋值后立即落盘、广播，
     /// 让主窗口重算导航项可见性；失败回滚。
@@ -982,6 +989,34 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             Keys.SettingsAdvancedModEditorNavOn,
             Keys.SettingsAdvancedModEditorNavOff,
             afterSave: AppServices.NotifyModEditorNavVisibilityChanged);
+    }
+
+    /// <summary>
+    /// MCP 总开关：写入 AppSettings.McpEnabled；关闭后客户端连接 MCP 会看到空工具表，调用被拒绝。
+    /// </summary>
+    public bool McpEnabled
+    {
+        get => AppServices.Settings.McpEnabled;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.McpEnabled,
+            v => AppServices.Settings.McpEnabled = v,
+            Keys.SettingsMcpStatusEnabled,
+            Keys.SettingsMcpStatusDisabled);
+    }
+
+    /// <summary>
+    /// MCP 草稿写入开关（默认关）：开启后 AI 才能保存/删除上传草稿，发布仍需用户确认。
+    /// </summary>
+    public bool McpDraftWriteEnabled
+    {
+        get => AppServices.Settings.McpDraftWriteEnabled;
+        set => ApplyFlag(
+            value,
+            AppServices.Settings.McpDraftWriteEnabled,
+            v => AppServices.Settings.McpDraftWriteEnabled = v,
+            Keys.SettingsMcpStatusWriteOn,
+            Keys.SettingsMcpStatusWriteOff);
     }
 
     // ------------------------------------------------------------ 启动区

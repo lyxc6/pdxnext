@@ -4042,6 +4042,9 @@ Continue?</value>
   <data name="SettingsNavAbout" xml:space="preserve">
     <value>About &amp; updates</value>
   </data>
+  <data name="SettingsNavMcp" xml:space="preserve">
+    <value>MCP</value>
+  </data>
   <data name="SettingsNavAdvanced" xml:space="preserve">
     <value>Advanced</value>
   </data>
@@ -4340,6 +4343,57 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="SettingsSectionName" xml:space="preserve">
     <value>Settings sections</value>
+  </data>
+  <data name="SettingsSectionMcp" xml:space="preserve">
+    <value>AI assistant (MCP)</value>
+  </data>
+  <data name="SettingsMcpEnabled" xml:space="preserve">
+    <value>Enable MCP service</value>
+  </data>
+  <data name="SettingsMcpEnabledName" xml:space="preserve">
+    <value>Enable MCP service toggle</value>
+  </data>
+  <data name="SettingsMcpDraftWrite" xml:space="preserve">
+    <value>Allow editing upload drafts</value>
+  </data>
+  <data name="SettingsMcpDraftWriteName" xml:space="preserve">
+    <value>Allow editing upload drafts toggle</value>
+  </data>
+  <data name="SettingsMcpTools" xml:space="preserve">
+    <value>Available tools and permissions</value>
+  </data>
+  <data name="SettingsMcpToolSummary" xml:space="preserve">
+    <value>Read-only tools: list_games, list_mods, list_tags, get_upload_draft. Enable the write switch to add save_upload_draft and clear_upload_draft. MCP never publishes mods.</value>
+  </data>
+  <data name="SettingsMcpHint" xml:space="preserve">
+    <value>Permissions are enforced by the local stdio child process; with the master switch off, clients see no tools and every call is rejected.</value>
+  </data>
+  <data name="SettingsMcpStatusEnabled" xml:space="preserve">
+    <value>MCP service enabled</value>
+  </data>
+  <data name="SettingsMcpStatusDisabled" xml:space="preserve">
+    <value>MCP service disabled</value>
+  </data>
+  <data name="SettingsMcpStatusWriteOn" xml:space="preserve">
+    <value>MCP upload-draft editing allowed</value>
+  </data>
+  <data name="SettingsMcpStatusWriteOff" xml:space="preserve">
+    <value>MCP upload-draft editing blocked</value>
+  </data>
+  <data name="McpPermissionTitle" xml:space="preserve">
+    <value>Current permissions</value>
+  </data>
+  <data name="McpPermissionHint" xml:space="preserve">
+    <value>Use least privilege: grant only the tools needed for the task. Permissions are written into the client config arguments and take effect after restarting the AI client.</value>
+  </data>
+  <data name="McpPermissionOff" xml:space="preserve">
+    <value>Disabled: every MCP tool call is rejected.</value>
+  </data>
+  <data name="McpPermissionReadOnly" xml:space="preserve">
+    <value>Read only: games, local mods, tags and upload drafts can be read; drafts cannot be written.</value>
+  </data>
+  <data name="McpPermissionReadWrite" xml:space="preserve">
+    <value>Read/write: upload drafts can be read and written; publishing still requires user confirmation on the Mod Studio page.</value>
   </data>
   <data name="SettingsSectionProxy" xml:space="preserve">
     <value>Network proxy</value>
@@ -5964,9 +6018,6 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="WorkshopUpdated" xml:space="preserve">
     <value>Updated {0}</value>
   </data>
-  <data name="ModstudioMcpDocsButton" xml:space="preserve">
-    <value>AI assistant (MCP)</value>
-  </data>
   <data name="ModstudioMcpDraftApplied" xml:space="preserve">
     <value>AI draft loaded ({0})</value>
   </data>
@@ -6014,9 +6065,6 @@ then call list_games to verify.</value>
   </data>
   <data name="ModstudioMcpDocsCopied" xml:space="preserve">
     <value>Copied</value>
-  </data>
-  <data name="ModstudioMcpDocsFailed" xml:space="preserve">
-    <value>Failed to open MCP documentation: {0}</value>
   </data>
   <data name="SingleInstanceAlreadyRunning" xml:space="preserve">
     <value>PdxNext is already running. Please switch to the open window.</value>

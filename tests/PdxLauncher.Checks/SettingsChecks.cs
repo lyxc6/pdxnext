@@ -48,6 +48,8 @@ public static class SettingsChecks
             LastGameId = "ck3",
             LastGameInstallRoot = @"D:\Games\CK3",
             LastSettingsSection = 4,
+            McpEnabled = false,
+            McpDraftWriteEnabled = true,
             AlwaysOnTop = true,
             PdxRememberMe = true,
             ProxyMode = ProxyModes.Manual,
@@ -84,6 +86,8 @@ public static class SettingsChecks
             ChecksContext.Equal("设置：上次游戏往返", "ck3", loaded.LastGameId);
             ChecksContext.Equal("设置：上次安装目录往返", @"D:\Games\CK3", loaded.LastGameInstallRoot);
             ChecksContext.Equal("设置：设置页分节往返", 4, loaded.LastSettingsSection ?? -1);
+            ChecksContext.Check("设置：MCP 总开关往返（关）", !loaded.McpEnabled);
+            ChecksContext.Check("设置：MCP 草稿写入往返（开）", loaded.McpDraftWriteEnabled);
             ChecksContext.Check("设置：置顶往返", loaded.AlwaysOnTop);
             ChecksContext.Check("设置：保持登录往返", loaded.PdxRememberMe);
             ChecksContext.Equal("设置：代理模式往返", ProxyModes.Manual, loaded.ProxyMode);
