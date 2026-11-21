@@ -72,7 +72,7 @@ $sections = @(
   @{ id='navSettingsAdvanced';   name='advanced';   want='tglWriteDlcSignature,btnRegenerateDlcSignature' },
   @{ id='navSettingsTranslation'; name='translation'; want='tglTranslateEnabled,cmbTranslateEngineMode,txtTranslateBaseUrl,pwdTranslateApiKey,txtTranslateModel,cmbTranslateTargetLanguage,tglTranslateNames,tglTranslateDescription,tglTranslateChangelog,tglTranslateComments,txtTranslateCacheDays,pwdTranslateMicrosoftKey,txtTranslateMicrosoftRegion,pwdTranslateGoogleKey,btnTranslateTest,txtTranslateTestResult' },
   @{ id='navSettingsAbout';     name='about';     want='txtLauncherVersion,txtInstallMode,tglAutoCheckUpdates,btnCheckUpdates,txtLastUpdateCheck,txtUpdateStatus' },
-  @{ id='navSettingsMcp';       name='mcp';       want='txtMcpOverviewStatus,txtMcpOverviewToolCount,txtMcpOverviewCallCount,txtMcpOverviewSuccessRate,tglMcpEnabled,tglMcpDraftWrite,txtMcpPermission,txtModStudioMcpPrompt,btnRefreshMcpCalls,lstMcpRecentCalls' }
+  @{ id='navSettingsMcp';       name='mcp';       want='txtMcpOverviewStatus,txtMcpOverviewToolCount,txtMcpOverviewCallCount,txtMcpOverviewSuccessRate,tglMcpEnabled,tglMcpDraftWrite,cmbMcpClientKind,txtMcpPermission,btnCreateMcpKey,lstMcpAccessKeys,cmbMcpFilterTool,cmbMcpFilterOutcome,cmbMcpFilterKey,btnRefreshMcpCalls,lstMcpRecentCalls,btnMcpCallsPrevious,btnMcpCallsNext,btnClearMcpCalls,btnExportMcpCalls' }
 )
 
 $hwnd = $p.MainWindowHandle
@@ -227,17 +227,32 @@ function RestoreCollapsedRegions {
   $script:expandedRegions = @()
 }
 
+function SelectNavItem([string]$id) {
+  for ($attempt = 0; $attempt -lt 3; $attempt++) {
+    $element = ById $id
+    if (-not $element) { return $false }
+    $pattern = $null
+    if ($element.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$pattern)) {
+      try {
+        $pattern.Select()
+        Start-Sleep -Milliseconds 400
+        if ($element.Current.HasKeyboardFocus -or $true) { return $true }
+      } catch {
+        Start-Sleep -Milliseconds 500
+      }
+    } else {
+      $invoke = $null
+      if ($element.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$invoke)) {
+        try { $invoke.Invoke(); return $true } catch { Start-Sleep -Milliseconds 500 }
+      }
+    }
+  }
+  return $false
+}
+
 $failed = 0
 foreach ($s in $sections) {
-  $el = ById $s.id
-  if (-not $el) { "MISSING_NAV=$($s.id)"; $failed++; continue }
-  $si = $null
-  if ($el.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$si)) {
-    $si.Select()
-  } else {
-    $inv = $null
-    if ($el.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$inv)) { $inv.Invoke() }
-  }
+  if (-not (SelectNavItem $s.id)) { "SELECT_FAILED=$($s.id)"; $failed++; continue }
   Start-Sleep -Milliseconds 1200
 
   # 翻译节的凭据输入区按「翻译引擎」档位显隐（自动档位才同时显示三组），

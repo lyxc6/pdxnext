@@ -71,7 +71,7 @@ public static class SettingsMcpChecks
             "设置 MCP: 权限文本和配置跟随开关刷新",
             docsControlXaml.Contains("x:Bind PermissionText", StringComparison.Ordinal)
                 && docsControlCode.Contains("public void RefreshPermissions", StringComparison.Ordinal)
-                && docsControlCode.Contains("--draft-write", StringComparison.Ordinal));
+                && settingsVm.Contains("McpClientConfigGenerator.Create", StringComparison.Ordinal));
 
         ChecksContext.Check(
             "设置 MCP: Mod 创建页不再有 AI 助手按钮和弹窗调用",
@@ -82,7 +82,7 @@ public static class SettingsMcpChecks
 
         ChecksContext.Check(
             "MCP 权限: 总开关关闭时空工具表、调用被拒",
-            mcpServer.Contains("if (!_enabled)", StringComparison.Ordinal)
+            mcpServer.Contains("if (!IsConnected())", StringComparison.Ordinal)
                 && mcpServer.Contains("new JsonArray()", StringComparison.Ordinal)
                 && mcpServer.Contains("MCP 工具已在 PdxNext 设置中关闭", StringComparison.Ordinal));
         ChecksContext.Check(

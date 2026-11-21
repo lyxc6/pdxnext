@@ -4419,6 +4419,48 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="SettingsMcpConnection" xml:space="preserve">
     <value>Connection</value>
   </data>
+  <data name="SettingsMcpClient" xml:space="preserve">
+    <value>Client</value>
+  </data>
+  <data name="SettingsMcpAccessKeys" xml:space="preserve">
+    <value>Access keys</value>
+  </data>
+  <data name="SettingsMcpNewKey" xml:space="preserve">
+    <value>New key</value>
+  </data>
+  <data name="SettingsMcpNoKeys" xml:space="preserve">
+    <value>No access keys yet</value>
+  </data>
+  <data name="SettingsMcpKeyOnce" xml:space="preserve">
+    <value>Copy and store it now; this token will not be shown again.</value>
+  </data>
+  <data name="SettingsMcpKeyScope" xml:space="preserve">
+    <value>Tools</value>
+  </data>
+  <data name="SettingsMcpKeyLastUsed" xml:space="preserve">
+    <value>Last used</value>
+  </data>
+  <data name="SettingsMcpFilterTool" xml:space="preserve">
+    <value>Tool</value>
+  </data>
+  <data name="SettingsMcpFilterOutcome" xml:space="preserve">
+    <value>Outcome</value>
+  </data>
+  <data name="SettingsMcpFilterKey" xml:space="preserve">
+    <value>Key</value>
+  </data>
+  <data name="SettingsMcpPreviousPage" xml:space="preserve">
+    <value>Previous</value>
+  </data>
+  <data name="SettingsMcpNextPage" xml:space="preserve">
+    <value>Next</value>
+  </data>
+  <data name="SettingsMcpClearCalls" xml:space="preserve">
+    <value>Clear history</value>
+  </data>
+  <data name="SettingsMcpExportCalls" xml:space="preserve">
+    <value>Export JSON</value>
+  </data>
   <data name="SettingsMcpRecentCalls" xml:space="preserve">
     <value>Recent calls</value>
   </data>

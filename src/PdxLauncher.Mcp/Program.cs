@@ -16,7 +16,7 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
-        if (!TryParseOptions(args, out var dataRoot, out var enabled, out var draftWriteEnabled, out var error))
+        if (!TryParseOptions(args, out var dataRoot, out var enabled, out var draftWriteEnabled, out var accessKeyToken, out var error))
         {
             Console.Error.WriteLine(error);
             return 2;
@@ -42,7 +42,19 @@ internal static class Program
             var tools = new McpTools(fileSystem, logger, dataRoot!, draftWriteEnabled);
             var database = new PdxDatabase(fileSystem, logger, Path.Combine(dataRoot!, PdxDatabase.FileName));
             var history = new McpCallHistoryStore(database);
-            var server = new McpServer(input, output, Console.Error, tools, logger, enabled, history);
+            var keyStore = new McpAccessKeyStore(database);
+            var authorizedKey = string.IsNullOrWhiteSpace(accessKeyToken)
+                ? null
+                : keyStore.Authenticate(accessKeyToken);
+            var server = new McpServer(
+                input,
+                output,
+                Console.Error,
+                tools,
+                logger,
+                enabled,
+                history,
+                authorizedKey);
             server.RunAsync(CancellationToken.None).GetAwaiter().GetResult();
             return 0;
         }
@@ -59,11 +71,13 @@ internal static class Program
         out string? dataRoot,
         out bool enabled,
         out bool draftWriteEnabled,
+        out string? accessKeyToken,
         out string? error)
     {
         dataRoot = null;
         enabled = true;
         draftWriteEnabled = false;
+        accessKeyToken = null;
         error = null;
 
         for (var i = 0; i < args.Length; i++)
@@ -72,7 +86,8 @@ internal static class Program
             if (string.Equals(arg, "--help", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(arg, "-h", StringComparison.OrdinalIgnoreCase))
             {
-                error = "PdxLauncher.Mcp.exe [--data-root <dir>] [--enabled true|false] [--draft-write true|false]";
+                error = "PdxLauncher.Mcp.exe [--data-root <dir>] [--enabled true|false] "
+                    + "[--draft-write true|false] [--access-key <token>]";
                 return false;
             }
 
@@ -110,6 +125,30 @@ internal static class Program
             if (TryParseBoolOption(args, ref i, "--draft-write", draftWriteEnabled, out var parsedDraft, out error))
             {
                 draftWriteEnabled = parsedDraft;
+                continue;
+            }
+
+            if (string.Equals(arg, "--access-key", StringComparison.OrdinalIgnoreCase))
+            {
+                if (i + 1 >= args.Length || string.IsNullOrWhiteSpace(args[i + 1]))
+                {
+                    error = "--access-key 需要一个 token";
+                    return false;
+                }
+
+                accessKeyToken = args[++i];
+                continue;
+            }
+
+            if (arg.StartsWith("--access-key=", StringComparison.OrdinalIgnoreCase))
+            {
+                accessKeyToken = arg["--access-key=".Length..].Trim();
+                if (accessKeyToken.Length == 0)
+                {
+                    error = "--access-key 需要一个 token";
+                    return false;
+                }
+
                 continue;
             }
 

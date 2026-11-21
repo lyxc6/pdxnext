@@ -23,8 +23,8 @@ public static class McpCallHistoryChecks
             var store = new McpCallHistoryStore(database);
             var now = DateTimeOffset.UtcNow;
             store.Record(new McpCallHistoryEntry(0, now.AddMinutes(-3), 12, "list_games", McpCallOutcome.Success, null, "只读"));
-            store.Record(new McpCallHistoryEntry(0, now.AddMinutes(-2), 34, "save_upload_draft", McpCallOutcome.ToolError, "VALIDATION", "可写"));
-            store.Record(new McpCallHistoryEntry(0, now.AddMinutes(-1), 8, "list_mods", McpCallOutcome.Success, null, "只读"));
+            store.Record(new McpCallHistoryEntry(0, now.AddMinutes(-2), 34, "save_upload_draft", McpCallOutcome.ToolError, "VALIDATION", "可写", "key-a"));
+            store.Record(new McpCallHistoryEntry(0, now.AddMinutes(-1), 8, "list_mods", McpCallOutcome.Success, null, "只读", "key-a"));
 
             var all = store.Query();
             ChecksContext.Equal("调用历史按时间倒序", "list_mods", all[0].ToolName);
@@ -37,6 +37,11 @@ public static class McpCallHistoryChecks
             var failures = store.Query(new McpCallHistoryQuery(Outcome: McpCallOutcome.ToolError));
             ChecksContext.Equal("按结果筛选", 1, failures.Count);
             ChecksContext.Equal("错误码保留", "VALIDATION", failures[0].ErrorCode ?? "<null>");
+            var byKey = store.Query(new McpCallHistoryQuery(KeyId: "key-a"));
+            ChecksContext.Equal("按密钥筛选", 2, byKey.Count);
+            ChecksContext.Equal("筛选总数", 2, store.Count(new McpCallHistoryQuery(KeyId: "key-a")));
+            ChecksContext.Equal("分页只取一页", 1, store.Query(new McpCallHistoryQuery(KeyId: "key-a", Offset: 0, Limit: 1)).Count);
+            ChecksContext.Equal("分页第二页", "save_upload_draft", store.Query(new McpCallHistoryQuery(KeyId: "key-a", Offset: 1, Limit: 1))[0].ToolName);
 
             for (var index = 0; index < McpCallHistoryStore.Capacity + 10; index++)
             {
@@ -46,6 +51,9 @@ public static class McpCallHistoryChecks
             using var connection = database.Open();
             var count = connection.ExecuteScalar("SELECT COUNT(*) FROM mcp_calls") as long? ?? -1L;
             ChecksContext.Equal("调用历史容量裁剪到 500", (long)McpCallHistoryStore.Capacity, count);
+
+            store.Clear();
+            ChecksContext.Equal("清空调用历史", 0, store.Query().Count);
         }
         finally
         {
