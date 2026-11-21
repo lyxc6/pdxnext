@@ -10,8 +10,12 @@ using PdxLauncher.Core.LoadFiles;
 /// <summary>
 /// 崩溃分析编排器：只读扫描游戏自己的崩溃包与日志，解析 Mod 归属，最后交给 <see cref="CrashRules"/> 下结论。
 /// <para>
-/// 不启动游戏、不联网、不写游戏目录；单个文件读取失败只记 Warn 并跳过，
+/// 不启动游戏、不写游戏目录；单个文件读取失败只记 Warn 并跳过，
 /// 保证「分析失败」不会变成「页面打不开」。
+/// <para>
+/// 分析主体纯本地只读。若接入联网查询（如工坊作者说明），只允许经 <c>OnlineHosts</c>
+/// 白名单出口，失败降级为空证据，不能影响页面打开。
+/// </para>
 /// </para>
 /// </summary>
 public sealed class GameCrashAnalyzer

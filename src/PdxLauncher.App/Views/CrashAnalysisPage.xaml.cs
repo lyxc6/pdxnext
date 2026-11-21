@@ -10,7 +10,8 @@ using PdxLauncher.Core.Contracts;
 
 /// <summary>
 /// 「崩溃分析」页：诊断结论、崩溃记录、日志证据、启动链路。
-/// 只读页面：只读取游戏崩溃包/日志，打开目录与复制报告；不写游戏目录、不删文件、不联网。
+/// 只读页面：读取游戏崩溃包/日志、Windows 事件日志与 PC 状态，打开目录与复制报告；
+/// 不写游戏目录、不删文件。当前分析不发起网络请求；若将来补充，必须走 OnlineHosts 白名单出口。
 /// </summary>
 public sealed partial class CrashAnalysisPage : Page
 {

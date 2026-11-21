@@ -1,5 +1,8 @@
 namespace PdxLauncher.Core.Online;
 
+using System.Net;
+using System.Net.Sockets;
+
 /// <summary>
 /// 联网域名白名单。这是本产品相对官方启动器的安全加固：
 /// 只有 P 社元数据/素材域名与 Steam 商店域名允许被请求，其它一律拒绝。
@@ -163,8 +166,14 @@ public static class OnlineHosts
         new("https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/");
 
     /// <summary>主机名是否在白名单内（大小写不敏感，只允许精确匹配，不允许子域）。</summary>
-    public static bool IsAllowedHost(string? host) =>
-        string.Equals(host, MetadataAssetsHost, StringComparison.OrdinalIgnoreCase)
+    public static bool IsAllowedHost(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host) || IsUnsafeHost(host.Trim().TrimEnd('.')))
+        {
+            return false;
+        }
+
+        return string.Equals(host, MetadataAssetsHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, ApiHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamStoreHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, SteamSharedCdnHost, StringComparison.OrdinalIgnoreCase)
@@ -188,6 +197,7 @@ public static class OnlineHosts
         || string.Equals(host, MozillaTranslationsHost, StringComparison.OrdinalIgnoreCase)
         || string.Equals(host, GitHubHost, StringComparison.OrdinalIgnoreCase)
         || IsAuthorizedHost(host);
+    }
 
     /// <summary>
     /// 授权一个额外主机（用户在设置页自填翻译 API 时调用）。
@@ -266,7 +276,59 @@ public static class OnlineHosts
             return null;
         }
 
+        // 安全出口：localhost / 环回 / 私有 / 保留地址一律不授权（用户自填接口也不例外）。
+        if (IsUnsafeHost(trimmed))
+        {
+            return null;
+        }
+
         return trimmed;
+    }
+
+    /// <summary>主机名是否是 localhost、环回、私有或保留地址（解析不出 IP 时不算，按普通域名处理）。</summary>
+    private static bool IsUnsafeHost(string host)
+    {
+        if (string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
+            || host.EndsWith(".localhost", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // 纯 IP 字面量（IPv4/IPv6）直接判断。
+        if (IPAddress.TryParse(host, out var ip))
+        {
+            return IsUnsafeIp(ip);
+        }
+
+        return false;
+    }
+
+    private static bool IsUnsafeIp(IPAddress ip)
+    {
+        if (IPAddress.IsLoopback(ip) || IPAddress.Any.Equals(ip) || IPAddress.IPv6Any.Equals(ip))
+        {
+            return true;
+        }
+
+        if (ip.AddressFamily == AddressFamily.InterNetwork)
+        {
+            var bytes = ip.GetAddressBytes();
+            return bytes[0] == 10                                  // 10/8
+                || bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31  // 172.16/12
+                || bytes[0] == 192 && bytes[1] == 168              // 192.168/16
+                || bytes[0] == 169 && bytes[1] == 254              // link-local
+                || bytes[0] == 127                                  // loopback
+                || bytes[0] == 0                                    // "this network"
+                || bytes[0] >= 224;                                 // multicast / reserved
+        }
+
+        if (ip.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            return ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal || ip.IsIPv6Multicast
+                || ip.IsIPv4MappedToIPv6 && IsUnsafeIp(ip.MapToIPv4());
+        }
+
+        return false;
     }
 
     /// <summary>绝对 URI 是否可请求：必须是 http/https 且主机在白名单内。</summary>
