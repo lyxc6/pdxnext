@@ -1849,6 +1849,9 @@
   <data name="ModlibSortName" xml:space="preserve">
     <value>排序方式</value>
   </data>
+  <data name="ModlibSortDirectionName" xml:space="preserve">
+    <value>切换正序 / 倒序</value>
+  </data>
   <data name="ModlibSourceFilterAll" xml:space="preserve">
     <value>全部来源</value>
   </data>
@@ -2046,6 +2049,9 @@
   </data>
   <data name="ModsAddPageSortName" xml:space="preserve">
     <value>排序方式</value>
+  </data>
+  <data name="ModsAddPageSortDirectionName" xml:space="preserve">
+    <value>切换正序 / 倒序</value>
   </data>
   <data name="ModsAddPageTarget" xml:space="preserve">
     <value>→ {0}</value>

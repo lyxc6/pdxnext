@@ -28,6 +28,10 @@ public sealed partial class AddModsPage : Page
     /// <summary>上一次给建议框算过候选的查询文本；相同文本不重复刷新。</summary>
     private string? _lastSuggestQuery;
 
+    /// <summary>排序方向按钮的正序 / 倒序图标（Segoe MDL2：升序排列 / 降序排列）。</summary>
+    private const string SortAscendingGlyph = "\uE8DC";
+    private const string SortDescendingGlyph = "\uE8DD";
+
     /// <summary>创建页面。</summary>
     public AddModsPage()
     {
@@ -195,6 +199,22 @@ public sealed partial class AddModsPage : Page
         SaveSortState();
     }
 
+    /// <summary>排序方向切换按钮：翻转 ViewModel 方向、重排候选，并按新方向换图标。</summary>
+    private void OnSortDirectionClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            SortDirectionGlyph.Glyph = _viewModel.ToggleSortDirection()
+                ? SortDescendingGlyph
+                : SortAscendingGlyph;
+            SaveSortState();
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("添加模组页切换排序方向失败", ex);
+        }
+    }
+
     /// <summary>来源下拉选择变化：写回 ViewModel 触发重建（与搜索 / 版本 / 排序叠加）。</summary>
     private void OnSourceFilterSelectionChanged(object sender, PdxDropDownSelectionChangedEventArgs e)
     {
@@ -240,6 +260,10 @@ public sealed partial class AddModsPage : Page
             SortBox.SelectedItem = state.SortMode;
         }
 
+        // 排序键的文案恢复会按新键重置方向，方向要在其后单独套回（bool，不受语言切换影响）。
+        _viewModel.SetSortDescending(state.SortDescending);
+        SortDirectionGlyph.Glyph = state.SortDescending ? SortDescendingGlyph : SortAscendingGlyph;
+
         if (!string.IsNullOrEmpty(state.SourceFilter)
             && _viewModel.SourceFilterModes.Any(mode => string.Equals(mode, state.SourceFilter, StringComparison.Ordinal)))
         {
@@ -261,7 +285,8 @@ public sealed partial class AddModsPage : Page
         PageStateStore.AddMods = new AddModsState(
             _viewModel.SelectedSortMode,
             _viewModel.SelectedSourceFilter,
-            _viewModel.SelectedVersionFilter);
+            _viewModel.SelectedVersionFilter,
+            _viewModel.SortDescending);
     }
 
     /// <summary>返回播放集页（不添加任何 mod）。</summary>

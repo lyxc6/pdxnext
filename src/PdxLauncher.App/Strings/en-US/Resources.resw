@@ -1849,6 +1849,9 @@
   <data name="ModlibSortName" xml:space="preserve">
     <value>Sort by</value>
   </data>
+  <data name="ModlibSortDirectionName" xml:space="preserve">
+    <value>Toggle ascending / descending</value>
+  </data>
   <data name="ModlibSourceFilterAll" xml:space="preserve">
     <value>All sources</value>
   </data>
@@ -2046,6 +2049,9 @@
   </data>
   <data name="ModsAddPageSortName" xml:space="preserve">
     <value>Sort by</value>
+  </data>
+  <data name="ModsAddPageSortDirectionName" xml:space="preserve">
+    <value>Toggle ascending / descending</value>
   </data>
   <data name="ModsAddPageTarget" xml:space="preserve">
     <value>→ {0}</value>
