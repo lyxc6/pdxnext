@@ -3,6 +3,28 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)；版本号遵循
 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
+## [1.4.1] - 2026-11-21
+
+### Added
+
+- 崩溃分析「本次游戏」：游戏运行期间按字节偏移增量读取日志、跨日志去重并按签名聚类，进程退出后固化会话快照，在崩溃分析页新增「本次游戏」分区展示；新增只读 `LogFileProbe` 区分日志正常/锁定/无权限/只读/缺失，接入本次游戏分区与性能日志诊断页。全程只读、不联网。
+- 崩溃分析 PC 侧取证：按 CK3 Mod Doctor 思路新增只读取证——崩溃码语义、Windows 事件日志故障模块/TDR/WHEA/磁盘、`meta.yml` 内存显存与磁盘空间，强证据抑制「原因未知」；解析 `database_conflicts.log` 定义覆盖；足迹扫描识别 `replace_path` 整目录替换。事件日志走 advapi32 P/Invoke，零新增依赖，全部失败降级为空证据。
+- 翻译流式回调：新增 `IStreamingTranslationEngine`，本地/自填引擎逐条上报，Mod 库与详情页译名边翻边出。
+- Release 工程：发 tag 时 CI 从 `CHANGELOG.md` 提取对应版本小节作为 GitHub Release 正文（小节缺失直接失败），并回填了 8 个历史 Release 的更新日志。
+
+### Changed
+
+- 文档口径：`docs/AGENT-WORKFLOW.md` 新增 §4.2，明确「构建离线、运行时受控联网」——联网必须走 `OnlineHosts` 白名单与 `HttpFetcher` 唯一出口；`OnlineHosts` 加固为拒绝 localhost/环回/私有/保留地址（含用户自填接口），补对应自检。README 重写并按同一口径澄清联网能力。
+- 本地翻译模型默认不常驻：`KeepTranslationModelLoaded` 默认改 `false`，5 分钟空闲自动卸载，工作集不再长期顶在 2GB。
+- 工坊详情页与看图浮层恢复原生滚动/缩放：移除 `AnnotatedScrollBar` 固定步长滚轮接管与看图浮层固定 1.2 倍 `Ctrl+滚轮` 拦截，恢复系统滚轮速度；分区跳转由顶部 SelectorBar 保留。
+
+### Fixed
+
+- 本地翻译不再烧满 CPU：生成补 ChatML/think 停止序列并打开 `DecodeSpecialTokens`；短标题上限从 512 降到 128；CPU 线程限制到 1/4；同批连续 3 条空译文熔断剩余条目；新增 3 分钟 TTL 负缓存抑制跨批次重复空翻。
+- Mod 库与详情页翻译卡顿：auto 档远程优先、本地兜底；详情页整篇一次批量翻译；在途提示只在真有引擎请求时亮。
+- CK3/Stellaris/EU4 工坊目录缺 `metadata.json` 时回退读 `descriptor.mod`，修复官方启动器尚未生成指针时已下载的工坊 mod（含 CK3 Mod Doctor）在 Mod 库搜不到；扫描结果按 steamId/路径/注册 id 去重，订阅成功与 Mod 库刷新时失效扫描与 Steam 状态缓存。
+- 自动更新下载完成后改名被占用不再作废整包：先关 `.part` 写句柄再落位；改名按 3 次 × 500ms 重试；失败保留已校验 `.part` 并在下次复用。
+
 ## [1.4.0] - 2026-11-21
 
 ### Added
