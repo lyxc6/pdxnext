@@ -19,7 +19,7 @@
 | TreeView | 1.0（WinUI 2.2 引入） | ✅ | 可做，**需先补数据模型** |
 | NumberBox | 1.0（WinUI 2.3 引入） | ✅ | 可做，只有 1 个合理落点 |
 | InfoBadge | 1.0（WinUI 2.7 引入） | ✅ | 可做，最小一件 |
-| AnnotatedScrollBar | **1.4**（不是 1.6） | ✅ | 可做，但**要换滚动容器**，改动面最大 |
+| AnnotatedScrollBar | **1.4**（不是 1.6） | ✅ | 可做，但**要换滚动容器**，改动面最大；2026-11 工坊详情页试点后已按用户反馈移除，恢复原生滚动条 |
 
 三句话总结：
 
@@ -382,6 +382,8 @@ TableView 落地前必须先做：
 | 是否动 Core | 否 |
 | 风险 | **高**：列表容器换代 → 选中态、虚拟化、键盘导航、滚动条样式、滚动位置记忆（项目已有 `ListViewScrollState`）全部要回归；UIA 结构变化会动到现有检查类 |
 | 能否独立提交 | **不能作为第一批**：建议先 30 分钟 spike 确认 `ScrollView.ScrollPresenter.VerticalScrollController` 接线方式，再单开一提交只做工坊一页 |
+
+**2026-11 状态注**：`AnnotatedScrollBar` 已在 `WorkshopDetailPage`（工坊详情页正文，非原定 `WorkshopPage`）试点，随后按用户反馈移除——鼠标滚轮按 fixed amount 移动，不跟随系统滚轮速度。现已恢复 `ScrollView` 原生滚动条，底部由顶部 `SelectorBar` 承担分区跳转；自检契约见 `WorkshopDetailNativeScrollChecks`。以上原方案仅作历史可行性记录，不再按此落地。
 
 ---
 

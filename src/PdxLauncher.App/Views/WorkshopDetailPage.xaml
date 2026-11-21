@@ -124,18 +124,12 @@
                 <SelectorBarItem Text="{x:Bind L.WorkshopDetailComments, Mode=OneWay}" Tag="comments" />
             </SelectorBar>
 
-            <!-- 正文：整页纵向滚动；右侧注释滚动条按分区打点，点标签可直接跳。 -->
-            <Grid Grid.Row="2" ColumnSpacing="4">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <ScrollView x:Name="DetailScroll"
-                            Grid.Column="0"
-                            VerticalScrollBarVisibility="Hidden"
-                            HorizontalScrollMode="Disabled"
-                            AutomationProperties.AutomationId="scrollWorkshopDetail">
+            <!-- 正文：整页纵向滚动，使用 ScrollView 原生滚动条。 -->
+            <ScrollView x:Name="DetailScroll"
+                        Grid.Row="2"
+                        VerticalScrollBarVisibility="Auto"
+                        HorizontalScrollMode="Disabled"
+                        AutomationProperties.AutomationId="scrollWorkshopDetail">
                     <StackPanel x:Name="DetailContent" Spacing="12">
                         <!-- 翻译项是页面级动作：正文任意位置右键都能重试 / 刷新译文，
                              普通（非合集）详情页没有合集子项行可右键，这是它唯一的翻译入口。
@@ -1113,16 +1107,7 @@
                         </StackPanel>
                     </Border>
                 </StackPanel>
-                </ScrollView>
-
-                <AnnotatedScrollBar x:Name="DetailScrollBar"
-                                    Grid.Column="1"
-                                    Width="24"
-                                    Margin="4,0,0,0"
-                                    SmallChange="48"
-                                    VerticalAlignment="Stretch"
-                                    AutomationProperties.AutomationId="barWorkshopDetailScrollMarks" />
-            </Grid>
+            </ScrollView>
         </Grid>
 
         <!-- 图片查看器：整页浮层（FlipView 翻页 + 每页可缩放），点右上角或按 Esc 关闭 -->
@@ -1177,14 +1162,11 @@
                                           Padding="16"
                                           HorizontalScrollBarVisibility="Auto"
                                           VerticalScrollBarVisibility="Auto"
-                                          HorizontalScrollMode="Disabled"
-                                          VerticalScrollMode="Disabled"
-                                          DoubleTapped="OnViewerDoubleTapped"
-                                          PointerWheelChanged="OnViewerPointerWheelChanged">
+                                          DoubleTapped="OnViewerDoubleTapped">
                                 <!--
                                     缩放开启后 ScrollViewer 按内容自身尺寸测量，工坊画廊给的是 imw=5000 的原图，
                                     不限制就会被裁掉一大块（1x 也不能拖）。MaxWidth/MaxHeight 由页面按浮层尺寸算好，
-                                    1x 刚好整张放进窗口，放大后才滚动。
+                                    1x 刚好整张放进窗口，放大后才滚动。Ctrl+滚轮由 ScrollViewer 原生处理。
                                 -->
                                 <Image Source="{x:Bind svc:XamlImage.FromPath(Path, 1600), Mode=OneWay}"
                                        Stretch="Uniform"
