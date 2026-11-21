@@ -15,7 +15,9 @@ namespace PdxLauncher.App.Services;
 /// <param name="SortMode">排序方式（本地化后的显示文案）。</param>
 /// <param name="SourceFilter">来源筛选（本地化后的显示文案）。</param>
 /// <param name="VersionFilter">版本兼容性筛选（本地化后的显示文案）。</param>
+/// <param name="SortDescending">排序方向（true 倒序）；旧版本 JSON 没有时按默认方向处理。</param>
 public sealed record AddModsState(
     string SortMode,
     string SourceFilter = "",
-    string VersionFilter = "");
+    string VersionFilter = "",
+    bool SortDescending = false);

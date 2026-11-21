@@ -24,11 +24,12 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- 顶部工具条：标题 / 计数 / 搜索 / 排序 / 刷新 -->
+        <!-- 顶部工具条：标题 / 计数 / 搜索 / 排序 / 方向 / 刷新 -->
         <Grid Grid.Row="0" ColumnSpacing="12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
@@ -66,7 +67,18 @@
                                  AutomationProperties.AutomationId="cmbModLibrarySort"
                                  AutomationProperties.Name="{x:Bind L.ModlibSortName, Mode=OneWay}" />
 
-            <controls:PdxDropDown Grid.Column="3"
+            <!-- 排序方向切换：正序 / 倒序共用一个按钮，图标与提示随方向换（code-behind 里维护）。 -->
+            <Button Grid.Column="3"
+                    x:Name="SortDirectionButton"
+                    VerticalAlignment="Center"
+                    Click="OnSortDirectionClick"
+                    ToolTipService.ToolTip="{x:Bind L.ModlibSortDirectionName, Mode=OneWay}"
+                    AutomationProperties.AutomationId="btnModLibrarySortDirection"
+                    AutomationProperties.Name="{x:Bind L.ModlibSortDirectionName, Mode=OneWay}">
+                <FontIcon x:Name="SortDirectionGlyph" Glyph="&#xE8DD;" FontSize="16" />
+            </Button>
+
+            <controls:PdxDropDown Grid.Column="4"
                                  x:Name="SourceBox"
                                  MinWidth="130"
                                  VerticalAlignment="Center"
@@ -76,7 +88,7 @@
                                  AutomationProperties.AutomationId="cmbModLibrarySource"
                                  AutomationProperties.Name="{x:Bind L.ModlibSourceFilterName, Mode=OneWay}" />
 
-            <StackPanel Grid.Column="4"
+            <StackPanel Grid.Column="5"
                         Orientation="Horizontal"
                         Spacing="8"
                         VerticalAlignment="Center">
@@ -101,7 +113,7 @@
                         AutomationProperties.Name="{x:Bind L.CommonCancel, Mode=OneWay}" />
             </StackPanel>
 
-            <Button Grid.Column="5"
+            <Button Grid.Column="6"
                     VerticalAlignment="Center"
                     Click="OnRefreshClick"
                     AutomationProperties.AutomationId="btnRefreshModLibrary"
