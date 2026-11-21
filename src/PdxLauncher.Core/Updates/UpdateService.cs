@@ -57,7 +57,14 @@ public sealed class UpdateService
     /// <summary>清单最大长度，防止异常响应撑爆内存。</summary>
     public const int MaxManifestBytes = 128 * 1024;
 
-    private readonly HttpFetcher _http;
+    /// <summary>改名尝试次数（首次 + 2 次重试）。</summary>
+    public const int MoveAttempts = 3;
+
+    /// <summary>改名失败后的重试间隔；杀毒 / 索引器通常只短暂占用刚写完的文件。</summary>
+    public static readonly TimeSpan DefaultMoveRetryDelay = TimeSpan.FromMilliseconds(500);
+
+    private readonly IHttpFetcher _http;
+    private readonly IDownloadFetcher? _downloads;
     private readonly IAppLogger _logger;
     private readonly AppSettings _settings;
     private readonly AppSettingsStore? _settingsStore;
@@ -69,7 +76,7 @@ public sealed class UpdateService
     private InstallMode? _installMode;
 
     public UpdateService(
-        HttpFetcher http,
+        IHttpFetcher http,
         IAppLogger logger,
         AppSettings settings,
         string cacheDirectory,
@@ -87,6 +94,7 @@ public sealed class UpdateService
         ArgumentException.ThrowIfNullOrWhiteSpace(currentVersion);
 
         _http = http;
+        _downloads = http as IDownloadFetcher;
         _logger = logger;
         _settings = settings;
         _cacheDirectory = cacheDirectory;
@@ -98,6 +106,9 @@ public sealed class UpdateService
     }
 
     public string CurrentVersion => _currentVersion;
+
+    /// <summary>改名重试间隔；自检把它设成 zero 以免拖慢。</summary>
+    public TimeSpan MoveRetryDelay { get; init; } = DefaultMoveRetryDelay;
 
     /// <summary>构造时传入的设置实例；必须与 AppServices.Settings 是同一个对象。</summary>
     public AppSettings Settings => _settings;
@@ -232,7 +243,8 @@ public sealed class UpdateService
     }
 
     /// <summary>
-    /// 下载并校验安装包。已存在且校验通过的文件直接复用；下载失败不会留下半成品。
+    /// 下载并校验安装包。已存在且校验通过的文件直接复用；
+    /// 上次改名被占用时留下的完整 <c>.part</c> 也会复用，不必重下整包。
     /// </summary>
     public async Task<string> DownloadAsync(
         UpdateManifest manifest,
@@ -251,44 +263,61 @@ public sealed class UpdateService
         }
 
         var tempPath = finalPath + ".part";
-        TryDelete(tempPath);
 
+        // 上次改名时被占用：.part 里已是校验通过的完整包，直接落位。
+        if (File.Exists(tempPath) && await VerifyAsync(tempPath, manifest, cancellationToken).ConfigureAwait(false))
+        {
+            await MoveVerifiedPackageAsync(tempPath, finalPath, cancellationToken).ConfigureAwait(false);
+            progress?.Report(new UpdateProgress(manifest.Size, manifest.Size));
+            _logger.Info("复用已校验的更新安装包: " + finalPath);
+            return finalPath;
+        }
+
+        TryDelete(tempPath);
+        var downloads = _downloads
+            ?? throw new InvalidOperationException("当前网络层不支持文件下载");
+
+        var verified = false;
         try
         {
             // 更新包不做续传：失败会删掉 .part 整份重下，行为与上一版一致。
-            var download = await _http
+            var download = await downloads
                 .GetDownloadAsync(manifest.SetupUri, startOffset: null, cancellationToken)
                 .ConfigureAwait(false);
             using var content = download.Content;
             var total = download.ContentLength ?? manifest.Size;
-            await using var output = new FileStream(
-                tempPath,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                81920,
-                useAsync: true);
 
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             var buffer = new byte[81920];
             long received = 0;
             var lastReported = 0L;
-            int read;
-            while ((read = await content.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
+            await using (var output = new FileStream(
+                tempPath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None,
+                81920,
+                useAsync: true))
             {
-                await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-                hash.AppendData(buffer, 0, read);
-                received += read;
-
-                if (received - lastReported >= 256 * 1024)
+                int read;
+                while ((read = await content.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
                 {
-                    lastReported = received;
-                    progress?.Report(new UpdateProgress(received, total));
+                    await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                    hash.AppendData(buffer, 0, read);
+                    received += read;
+
+                    if (received - lastReported >= 256 * 1024)
+                    {
+                        lastReported = received;
+                        progress?.Report(new UpdateProgress(received, total));
+                    }
                 }
+
+                await output.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            await output.FlushAsync(cancellationToken).ConfigureAwait(false);
-
+            // 写句柄必须在这里已经关闭：Windows 改名要求源文件句柄共享 Delete，
+            // FileShare.None 下改名必然报 sharing violation（也就是「文件被另一进程占用」）。
             if (received != manifest.Size)
             {
                 throw new InvalidDataException("安装包大小不符：期望 " + manifest.Size + "，实际 " + received);
@@ -300,15 +329,57 @@ public sealed class UpdateService
                 throw new InvalidDataException("安装包 SHA-256 不符");
             }
 
-            File.Move(tempPath, finalPath, overwrite: true);
+            verified = true;
+            await MoveVerifiedPackageAsync(tempPath, finalPath, cancellationToken).ConfigureAwait(false);
             progress?.Report(new UpdateProgress(received, total));
             _logger.Info("更新安装包已下载并校验: " + finalPath);
             return finalPath;
         }
         catch
         {
-            TryDelete(tempPath);
+            // 已校验完整的包不能删：改名被占用时下次可直接复用，避免重下几十 MB。
+            if (!verified)
+            {
+                TryDelete(tempPath);
+            }
+
             throw;
+        }
+    }
+
+    /// <summary>
+    /// 把已校验的 <c>.part</c> 改名为正式安装包。Windows 上杀毒 / 索引器可能在文件刚写完时
+    /// 短暂持有句柄：锁住源文件时 <see cref="File.Move(string,string,bool)"/> 抛 <see cref="IOException"/>，
+    /// 锁住目标文件时抛 <see cref="UnauthorizedAccessException"/>，两种都要重试。
+    /// 失败按 <see cref="MoveAttempts"/> 次 × <see cref="MoveRetryDelay"/>；仍失败时抛
+    /// <see cref="UpdatePackageLockedException"/>，调用方应保留 <c>.part</c>。
+    /// </summary>
+    private async Task MoveVerifiedPackageAsync(string tempPath, string finalPath, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                File.Move(tempPath, finalPath, overwrite: true);
+                if (attempt > 1)
+                {
+                    _logger.Info("更新安装包改名在第 " + attempt + " 次尝试成功: " + finalPath);
+                }
+
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (attempt < MoveAttempts)
+                {
+                    _logger.Warn("更新安装包改名被占用，第 " + attempt + "/" + MoveAttempts + " 次尝试失败: " + ex.Message);
+                    await Task.Delay(MoveRetryDelay, cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
+
+                _logger.Error("更新安装包改名失败，已保留 .part: " + tempPath, ex);
+                throw new UpdatePackageLockedException(tempPath, finalPath, ex);
+            }
         }
     }
 

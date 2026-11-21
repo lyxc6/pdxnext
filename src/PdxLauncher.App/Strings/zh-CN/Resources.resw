@@ -5087,6 +5087,9 @@
   <data name="UpdateDownloadFailed" xml:space="preserve">
     <value>下载更新失败：{0}</value>
   </data>
+  <data name="UpdateDownloadFileLocked" xml:space="preserve">
+    <value>安装包已下载并校验完成，但文件正被其他程序占用，暂时无法完成更新。请稍后重试；已下载的数据已保留，重试时无需重新下载。</value>
+  </data>
   <data name="UpdateDownloading" xml:space="preserve">
     <value>正在下载更新…</value>
   </data>

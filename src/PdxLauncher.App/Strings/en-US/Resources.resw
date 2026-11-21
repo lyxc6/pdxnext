@@ -5087,6 +5087,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="UpdateDownloadFailed" xml:space="preserve">
     <value>Could not download the update: {0}</value>
   </data>
+  <data name="UpdateDownloadFileLocked" xml:space="preserve">
+    <value>The update was downloaded and verified, but the file is in use by another program. Please try again later; the downloaded data has been kept, so a retry will not download it again.</value>
+  </data>
   <data name="UpdateDownloading" xml:space="preserve">
     <value>Downloading update…</value>
   </data>
