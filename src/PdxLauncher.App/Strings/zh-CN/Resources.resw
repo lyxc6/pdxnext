@@ -5085,7 +5085,7 @@
     <value>正在翻译…</value>
   </data>
   <data name="ShellVersion" xml:space="preserve">
-    <value>版本 {0}</value>
+    <value>{0}</value>
   </data>
   <data name="UpdateAvailableBody" xml:space="preserve">
     <value>当前版本 {0}，新版本 {1}。更新会下载安装包并在校验通过后启动安装器。</value>
