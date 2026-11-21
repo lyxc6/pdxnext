@@ -23,6 +23,7 @@ public sealed class TranslationService
 
     private readonly ITranslationEngine[] _engines;
     private readonly TranslationCache? _cache;
+    private readonly TranslationNegativeCache? _negativeCache;
     private readonly IAppLogger _logger;
     private readonly SemaphoreSlim _builtinGate = new(MaxBuiltinConcurrency, MaxBuiltinConcurrency);
 
@@ -46,15 +47,18 @@ public sealed class TranslationService
     /// <param name="engines">引擎列表，顺序即回落优先级；null 或空表示没有可用引擎。</param>
     /// <param name="cache">译文缓存；null 表示不缓存。</param>
     /// <param name="logger">日志。</param>
+    /// <param name="negativeCache">短 TTL 的翻不出来标记；null 表示不记。由调用方跨批次持有。</param>
     public TranslationService(
         IReadOnlyList<ITranslationEngine>? engines,
         TranslationCache? cache,
-        IAppLogger logger)
+        IAppLogger logger,
+        TranslationNegativeCache? negativeCache = null)
     {
         ArgumentNullException.ThrowIfNull(logger);
 
         _engines = engines is null ? [] : engines.Where(engine => engine is not null).ToArray();
         _cache = cache;
+        _negativeCache = negativeCache;
         _logger = logger;
     }
 
@@ -95,6 +99,16 @@ public sealed class TranslationService
                 continue;
             }
 
+            // 短 TTL 的翻不出来标记：本地模型对同一批短标题反复空转时，直接跳过引擎。
+            // 「刷新译文」必须绕过它，否则用户点了重试还是不翻。
+            var negativeKey = _negativeCache is null || bypassCache
+                ? string.Empty
+                : TranslationNegativeCache.BuildKey(options, text);
+            if (negativeKey.Length > 0 && _negativeCache!.IsSuppressed(negativeKey, DateTimeOffset.UtcNow))
+            {
+                continue;
+            }
+
             var cached = bypassCache ? null : await TryGetCachedAsync(options, text, cancellationToken).ConfigureAwait(false);
             if (cached is not null)
             {
@@ -117,28 +131,95 @@ public sealed class TranslationService
             return results;
         }
 
-        var pendingTexts = pending.Select(index => texts[index]).ToList();
-        var outcomes = await TranslateUncachedAsync(pendingTexts, options, cancellationToken).ConfigureAwait(false);
-        for (var i = 0; i < pending.Count && i < outcomes.Length; i++)
+        // 只有真有未命中文本、要请求引擎时才登记在途（D）：
+        // 旧实现从「排队等协调器并发闸门」就开始亮，缓存全命中的批次也要等闸门 +
+        // 查完缓存才灭，让用户误以为早就翻过的内容又重翻了一遍。
+        var engineActivity = pending.Count > 0;
+        if (engineActivity)
         {
-            var outcome = outcomes[i];
-            var source = texts[pending[i]];
-            var translated = IsIdentityTranslation(source, outcome.Text) ? null : outcome.Text;
-            results[pending[i]] = translated;
-            if (!string.IsNullOrEmpty(translated) && outcome.EngineId is not null)
-            {
-                await TrySetCachedAsync(outcome.EngineId, options, source, translated, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-
-            if (!string.IsNullOrEmpty(translated))
-            {
-                NotifyItemTranslated(onItemTranslated, pending[i], translated);
-            }
+            OnEngineActivityStarted?.Invoke();
         }
 
-        return results;
+        try
+        {
+            var pendingTexts = pending.Select(index => texts[index]).ToList();
+
+            // 流式回调只负责「立刻让界面看到译文」：同步、去重，不在这里 await 写缓存
+            // （回调是 Action，异步写盘会是 fire-and-forget，还可能拿到已取消的 token）。
+            var reported = new bool[texts.Count];
+            var outcomes = await TranslateUncachedAsync(
+                pendingTexts,
+                options,
+                cancellationToken,
+                (position, outcome) =>
+                {
+                    if (position < 0 || position >= pending.Count)
+                    {
+                        return;
+                    }
+
+                    var index = pending[position];
+                    var translated = IsIdentityTranslation(texts[index], outcome.Text) ? null : outcome.Text;
+                    if (string.IsNullOrEmpty(translated) || reported[index])
+                    {
+                        return;
+                    }
+
+                    reported[index] = true;
+                    NotifyItemTranslated(onItemTranslated, index, translated);
+                }).ConfigureAwait(false);
+
+            // 缓存写入按最终结果统一收口：await 落盘，只写一次，失败只记日志。
+            for (var i = 0; i < pending.Count && i < outcomes.Length; i++)
+            {
+                var outcome = outcomes[i];
+                var source = texts[pending[i]];
+                var translated = IsIdentityTranslation(source, outcome.Text) ? null : outcome.Text;
+                results[pending[i]] = translated;
+                if (string.IsNullOrEmpty(translated))
+                {
+                    // 翻不出来也记一笔短 TTL，免得工坊每次翻页都把同一批标题再喂给本地模型。
+                    if (_negativeCache is not null)
+                    {
+                        _negativeCache.Add(
+                            TranslationNegativeCache.BuildKey(options, source),
+                            DateTimeOffset.UtcNow);
+                    }
+                    continue;
+                }
+
+                if (outcome.EngineId is not null)
+                {
+                    await TrySetCachedAsync(outcome.EngineId, options, source, translated!, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+
+                // 非流式路径没在过程中回调过，这里兜底补一次上报。
+                if (!reported[pending[i]])
+                {
+                    NotifyItemTranslated(onItemTranslated, pending[i], translated);
+                }
+            }
+
+            return results;
+        }
+        finally
+        {
+            if (engineActivity)
+            {
+                OnEngineActivityEnded?.Invoke();
+            }
+        }
     }
+
+    /// <summary>
+    /// 真有未命中文本、即将请求引擎时触发（应用层据此显示「正在翻译…」）；
+    /// 与 <see cref="OnEngineActivityEnded"/> 成对，默认无订阅。
+    /// </summary>
+    public Action? OnEngineActivityStarted { get; set; }
+
+    /// <summary>本批引擎请求全部结束时触发；与 <see cref="OnEngineActivityStarted"/> 成对。</summary>
+    public Action? OnEngineActivityEnded { get; set; }
 
     /// <summary>
     /// 译文与原文去掉首尾空白后逐字相同 = 没翻出来（本地模型遇到中文原文、或名字本来就不该译时
@@ -173,11 +254,16 @@ public sealed class TranslationService
         return results.Count > 0 ? results[0] : null;
     }
 
-    /// <summary>没命中缓存的一批文本交给引擎。</summary>
+    /// <summary>没命中缓存的一批文本交给引擎；每条译文就绪时立刻回调。</summary>
+    /// <param name="onOutcome">
+    /// 某引擎返回某条译文时触发（位置对应 <paramref name="texts"/> 索引）。
+    /// 只负责即时上报进度；写缓存在 TranslateAsync 的最终汇总里统一 await。
+    /// </param>
     private async Task<TranslationOutcome[]> TranslateUncachedAsync(
         IReadOnlyList<string> texts,
         TranslationOptions options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<int, TranslationOutcome>? onOutcome = null)
     {
         var mode = TranslationEngineModes.Normalize(options.EngineMode);
         var allowFallback = mode == TranslationEngineModes.Auto;
@@ -203,7 +289,20 @@ public sealed class TranslationService
             }
 
             var batch = remaining.Select(index => texts[index]).ToList();
-            var engineOutcomes = await RunEngineAsync(engine, batch, options, cancellationToken).ConfigureAwait(false);
+            var engineOutcomes = await RunEngineAsync(
+                engine,
+                batch,
+                options,
+                cancellationToken,
+                // 引擎回调给的是 batch 内位置（对齐 remaining），外层按原文在 texts 里的下标
+                // 记账；回落时 remaining 是子集，必须先把 batch 位置换回原始下标，否则译名填错行。
+                onOutcome is null ? null : (position, text) =>
+                {
+                    if (position >= 0 && position < remaining.Count)
+                    {
+                        onOutcome(remaining[position], new TranslationOutcome(text, engine.Id));
+                    }
+                }).ConfigureAwait(false);
             var stillMissing = new List<int>();
             var succeeded = 0;
             for (var i = 0; i < remaining.Count && i < engineOutcomes.Length; i++)
@@ -217,6 +316,12 @@ public sealed class TranslationService
 
                 outcomes[remaining[i]] = outcome;
                 succeeded++;
+                // RunEngineAsync 对流式引擎已逐条回调过；这里只补非流式引擎的进度，
+                // 位置必须用 pending 下标 remaining[i]（回落时 i 只是子集内的序号）。
+                if (engine is not IStreamingTranslationEngine)
+                {
+                    onOutcome?.Invoke(remaining[i], outcome);
+                }
             }
 
             // 没抛异常但一条都没翻出来（HTTP 非 2xx、或响应格式变了）也要留个话，
@@ -294,12 +399,13 @@ public sealed class TranslationService
         return text.Length <= MaxFailureNoteLength ? text : text[..MaxFailureNoteLength] + "…";
     }
 
-    /// <summary>走一个引擎（限并发）。</summary>
+    /// <summary>走一个引擎（限并发）；支持流式引擎逐条上报进度。</summary>
     private async Task<TranslationOutcome[]> RunEngineAsync(
         ITranslationEngine engine,
         IReadOnlyList<string> texts,
         TranslationOptions options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<int, string?>? onItem = null)
     {
         try
         {
@@ -312,6 +418,28 @@ public sealed class TranslationService
 
         try
         {
+            if (engine is IStreamingTranslationEngine streaming)
+            {
+                // 本地 2B / 自填 API 的逐条路径：每翻出一条就回调，界面立刻回填，
+                // 不再等整批（22 条 × 数百 ms~数秒）跑完才批量回调。
+                var streamed = new string?[texts.Count];
+                await streaming.TranslateBatchStreamingAsync(
+                    texts,
+                    options.TargetLanguage,
+                    cancellationToken,
+                    (index, text) =>
+                    {
+                        if (index >= 0 && index < streamed.Length)
+                        {
+                            streamed[index] = text;
+                        }
+                        onItem?.Invoke(index, text);
+                    }).ConfigureAwait(false);
+                return ToOutcomes(streamed, engine.Id);
+            }
+
+            // 非流式引擎等整批返回；逐条进度由 TranslateUncachedAsync 的汇总循环统一上报，
+            // 避免这里和那里重复回调同一条。
             var results = await engine.TranslateBatchAsync(texts, options.TargetLanguage, cancellationToken)
                 .ConfigureAwait(false);
             return ToOutcomes(results, engine.Id);
