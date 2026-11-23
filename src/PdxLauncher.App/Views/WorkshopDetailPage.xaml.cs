@@ -83,7 +83,8 @@ public sealed partial class WorkshopDetailPage : Page
             new WorkshopStateReader(
                 SteamWorkshopBackends.CreateForState,
                 AppServices.WorkshopStates,
-                AppServices.Logger));
+                AppServices.Logger),
+            AppServices.SubscribedModCleanup);
 
         // 正文里的行内图片与顶部图片墙共用同一份缓存文件：先把解析器接上，
         // 图片下载完成后再由 GalleryImageReady 原地刷新，不重建整页。
@@ -571,7 +572,9 @@ public sealed partial class WorkshopDetailPage : Page
 
             // 成功静默，理由同 PDX 分支。
             _viewModel.StatusText = result.Ok
-                ? string.Empty
+                ? string.IsNullOrWhiteSpace(result.WarningText)
+                    ? string.Empty
+                    : L.T(Keys.WorkshopDetailUnsubscribeCleanupWarning, result.WarningText)
                 : L.T(
                     subscribe ? Keys.WorkshopDetailSubscribeFailed : Keys.WorkshopDetailUnsubscribeFailed,
                     result.ErrorText ?? string.Empty);

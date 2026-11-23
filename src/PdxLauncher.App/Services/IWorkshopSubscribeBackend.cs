@@ -33,10 +33,15 @@ public interface IWorkshopSubscribeBackend
 /// <summary>一次订阅 / 退订操作的结果。</summary>
 /// <param name="Ok">是否成功。</param>
 /// <param name="ErrorText">失败原因（成功时为 null）。</param>
-public sealed record WorkshopSubscribeResult(bool Ok, string? ErrorText)
+/// <param name="WarningText">成功后的附加警告（例如本机内容清理失败）；正常为 null。</param>
+public sealed record WorkshopSubscribeResult(bool Ok, string? ErrorText, string? WarningText = null)
 {
     /// <summary>成功。</summary>
     public static WorkshopSubscribeResult Success { get; } = new(true, null);
+
+    /// <summary>操作成功但有清理警告。</summary>
+    public static WorkshopSubscribeResult SuccessWithWarning(string warningText) =>
+        new(true, null, warningText);
 
     /// <summary>失败。</summary>
     public static WorkshopSubscribeResult Fail(string errorText) => new(false, errorText);

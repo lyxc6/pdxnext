@@ -183,6 +183,16 @@ public sealed class PlaySetRepositoryRouter : IPlaySetRepository
         ReadAsync(game, store => store.GetModLibraryAsync(game, cancellationToken), cancellationToken);
 
     /// <inheritdoc />
+    public Task<AppResult<int>> RemoveWorkshopModAsync(
+        GameInstallation game,
+        string workshopId,
+        CancellationToken cancellationToken) =>
+        WriteAsync(
+            game,
+            store => store.RemoveWorkshopModAsync(game, workshopId, cancellationToken),
+            cancellationToken);
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<PlaySetDlc>> GetPlaySetDlcsAsync(
         GameInstallation game,
         Guid playSetId,

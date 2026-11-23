@@ -532,6 +532,9 @@ public static class WorkshopToLocalBehaviorChecks
         public Task<IReadOnlyList<ModLibraryEntry>> GetModLibraryAsync(GameInstallation game, CancellationToken cancellationToken) =>
             _inner.GetModLibraryAsync(game, cancellationToken);
 
+        public Task<AppResult<int>> RemoveWorkshopModAsync(GameInstallation game, string workshopId, CancellationToken cancellationToken) =>
+            _inner.RemoveWorkshopModAsync(game, workshopId, cancellationToken);
+
         public Task<IReadOnlyList<PlaySetDlc>> GetPlaySetDlcsAsync(GameInstallation game, Guid playSetId, CancellationToken cancellationToken) =>
             _inner.GetPlaySetDlcsAsync(game, playSetId, cancellationToken);
 
