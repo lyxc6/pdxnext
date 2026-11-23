@@ -1,8 +1,9 @@
-# MCP：把上传表单交给 AI 编辑
+# MCP：跨页只读与受控变更计划
 
 PdxNext 附带一个独立的 stdio MCP 程序 `PdxLauncher.Mcp.exe`，让 Claude Desktop、Cursor
-等 AI 客户端读写 **Mod 上传表单草稿**：标题、描述、标签、可见性、更新说明、内容描述词。
-启动器打开上传面板时会把最新草稿填入表单；**发布仍然只能由用户在界面上确认**。
+等 AI 客户端读写 **Mod 上传表单草稿**，并以最小权限读取播放集与设置页背后的业务数据。
+AI 对业务数据的写入只能提交 **变更计划**；用户必须在启动器「设置 → MCP → AI 变更计划」里
+核对并批准，实际写入由运行中的 App 执行。MCP 没有直接执行业务变更的工具，也不会发布 Mod。
 
 ## 1. 组成
 
@@ -15,6 +16,8 @@ PdxNext 附带一个独立的 stdio MCP 程序 `PdxLauncher.Mcp.exe`，让 Claud
 | `src/PdxLauncher.Core/Mcp/` | 工具目录、调用记录模型与 SQLite 存储 |
 | `src/PdxLauncher.Core/Mcp/McpAccessKeyStore.cs` | 本地访问密钥（只存哈希与前缀） |
 | `src/PdxLauncher.Core/Mcp/McpClientConfigGenerator.cs` | 多客户端连接配置生成 |
+| `src/PdxLauncher.Core/Mcp/McpChangePlan*.cs` | 变更计划模型、SQLite 存储、字段白名单与 App 执行器 |
+| `src/PdxLauncher.Core/Mcp/PlaySetStoreRouter.cs` | MCP 与页面共用的播放集仓储路由 |
 | `docs/MCP.md` | 本文件 |
 
 `PdxLauncher.Mcp.exe` 由 App 的构建目标复制到 App 输出目录；`publish.cmd` 和安装包
@@ -109,6 +112,29 @@ MCP 程序与 `PdxLauncher.App.exe` 在同一目录。启动器会按本机实�
 
 参数：`gameId`、`modPath`。删除草稿，返回 `{"ok":true,"deleted":true|false}`。
 
+### `mcp_describe_capabilities`
+
+无参数。返回当前 MCP 版本支持的作用域、页面映射和写入模式；不读取用户数据。
+
+### `get_playsets_page`
+
+参数：`gameId`（可选）、`offset`、`limit`。返回播放集页的业务快照：
+`id`、`name`、`isActive`、`expectedHash`，以及 `totalCount`、`hasMore`、`nextOffset`。
+读取路径复用启动器的播放集仓储路由，官方库、EU5 JSON、CS2 JSON 和自有库口径一致。
+
+### `get_settings_page`
+
+参数：`offset`、`limit`。只返回设置白名单字段（界面语言、播放集显示方式、置顶、翻译开关等）。
+MCP 权限、代理地址、翻译 API key、账号信息、窗口位置等字段永远不进入快照。
+
+### `create_change_plan`
+
+参数：`domain`、`operation`、`gameId`、`targetId`、`expectedHash`、`patch`。
+只创建计划并写入自有 SQLite，不经 App 批准不会改业务数据。首期支持：
+`playsets/rename_play_set`、`playsets/create_play_set`、`playsets/set_mod_enabled`、
+`settings/set_setting`；危险操作（删除、激活、发布、账号、补丁）不在白名单内。
+成功后返回 `status: "awaiting_ui_approval"` 与 `planId`。
+
 ## 4. 草稿文件
 
 路径：
@@ -165,6 +191,10 @@ MCP 程序与 `PdxLauncher.App.exe` 在同一目录。启动器会按本机实�
 - 写草稿前要求 mod 能被 `list_mods` 发现（本地目录、描述符可读、游戏可上传）
 - 没有发布工具，也不接受任意文件路径
 - 日志写 `<data>\logs\pdxnext-mcp.log` 和 stderr；stdout 只输出 JSON-RPC，避免污染协议
+- 变更计划表为 `mcp_change_plans`：MCP 只能推进到 `awaiting_ui_approval`；`approved` / `applied` / `failed` 只能由 App 写入
+- App 执行计划前重新检查字段白名单、过期时间和 `expectedHash`；当前值不一致时拒绝执行，避免覆盖用户后续修改
+- 设置写计划只接受白名单字段，MCP 权限、代理、Steam、翻译 API key、账号相关字段一律拒绝
+- MCP 进程没有 `apply_change_plan` 工具；用户点击批准后才由 WinUI App 调用现有仓储 / 设置存储落盘
 
 ## 7. 构建与排错
 

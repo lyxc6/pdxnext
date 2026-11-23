@@ -1964,7 +1964,8 @@
                                 BorderThickness="1"
                                 BorderBrush="{ThemeResource PdxCardStrokeBrush}"
                                 Background="{ThemeResource PdxCardBackgroundBrush}"
-                                AutomationProperties.AutomationId="expMcpChangePlans">
+                                AutomationProperties.AutomationId="expMcpChangePlans"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasMcpChangePlans), Mode=OneWay}">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="AI change plans" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                 <TextBlock Text="AI can only propose plans. Review before approving." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
@@ -1992,6 +1993,7 @@
                                 </ItemsControl>
                             </StackPanel>
                         </Border>
+
 
                         <Border Padding="12"
                                 CornerRadius="8"

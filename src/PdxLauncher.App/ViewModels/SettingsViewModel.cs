@@ -38,6 +38,8 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     public ObservableCollection<McpChangePlan> McpChangePlans { get; } = new();
 
+    public bool HasMcpChangePlans => McpChangePlans.Count > 0;
+
     public IReadOnlyList<string> McpClientKinds { get; } = (string[])[
         "Claude Desktop", "Claude Code", "Codex", "Cursor", "VS Code",
     ];
@@ -86,6 +88,8 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             {
                 McpChangePlans.Add(plan);
             }
+
+            OnPropertyChanged(nameof(HasMcpChangePlans));
         }
         catch (Exception exception)
         {

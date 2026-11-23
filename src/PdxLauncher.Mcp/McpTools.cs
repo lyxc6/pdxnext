@@ -380,9 +380,11 @@ internal sealed class McpTools
         }
 
         var plan = _changePlans.CreatePlan(request, "legacy", DateTimeOffset.UtcNow);
+        _changePlans.UpdateStatus(plan.Id, McpChangePlanStatus.Validated, "mcp");
+        _changePlans.UpdateStatus(plan.Id, McpChangePlanStatus.AwaitingApproval, "mcp");
         return new JsonObject
         {
-            ["status"] = "draft",
+            ["status"] = "awaiting_ui_approval",
             ["planId"] = plan.Id,
             ["hint"] = "在 PdxNext 设置 → MCP → 变更计划中查看并确认。",
         };
