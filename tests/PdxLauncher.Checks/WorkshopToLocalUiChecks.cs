@@ -60,15 +60,60 @@ public static class WorkshopToLocalUiChecks
         return ChecksContext.Failures - before;
     }
 
-    /// <summary>(a) Mod 库页行菜单：新项夹在「刷新页面」与「重试翻译」之间，四项属性齐全且 Opening 仍在。</summary>
+    /// <summary>(a) Mod 库页行菜单：六项行操作在「刷新页面」之前，转本地项夹在刷新与翻译之间，四项属性齐全且 Opening 仍在。</summary>
     private static void CheckModLibraryMenu(string xaml)
     {
         var start = xaml.IndexOf("menuModLibraryPageRefresh", StringComparison.Ordinal);
         var end = xaml.IndexOf("menuModLibraryTranslationRetry", StringComparison.Ordinal);
+        var rowActionsStart = start >= 0
+            ? xaml.LastIndexOf("<MenuFlyout Opening=\"OnTranslationMenuOpening\">", start, StringComparison.Ordinal)
+            : -1;
+        var rowActionsEnd = rowActionsStart >= 0
+            ? xaml.IndexOf("<MenuFlyoutSeparator />", rowActionsStart, StringComparison.Ordinal)
+            : -1;
         ChecksContext.Check(
             "工坊转本地: Mod 库页行菜单存在（刷新项在翻译项之前）",
             start >= 0 && end > start);
         var menu = start >= 0 && end > start ? xaml[start..end] : string.Empty;
+        var rowActions = rowActionsStart >= 0 && rowActionsEnd > rowActionsStart
+            ? xaml[rowActionsStart..rowActionsEnd]
+            : string.Empty;
+
+        var actions = new[]
+        {
+            ("menuModLibraryOpenDetail", "WorkshopDetailText", "HasWorkshopDetail", "OnOpenDetailClick"),
+            ("menuModLibraryOpenFolder", "L.ModlibOpenFolder", "HasLocalContent", "OnOpenFolderClick"),
+            ("menuModLibraryOpenSteam", "L.ModlibOpenSteam", "HasWorkshopPage", "OnOpenSteamClick"),
+            ("menuModLibraryOpenBrowser", "L.ModlibOpenBrowser", "HasWorkshopPage", "OnOpenBrowserClick"),
+            ("menuModLibrarySteamDownload", "L.ModlibSteamDownloadName", "CanTriggerSteamDownload", "OnSteamDownloadClick"),
+            ("menuModLibrarySteamDisable", "SteamDisableActionText", "HasWorkshopPage", "OnSteamDisableClick"),
+        };
+        foreach (var (automationId, text, enabled, click) in actions)
+        {
+            ChecksContext.Check(
+                "Mod 库右键: " + automationId + " 文案 / 门控 / Click / AutomationId 齐全",
+                rowActions.Contains("AutomationProperties.AutomationId=\"" + automationId + "\"", StringComparison.Ordinal)
+                    && rowActions.Contains("{x:Bind " + text + ", Mode=OneWay}", StringComparison.Ordinal)
+                    && rowActions.Contains("{x:Bind " + enabled + ", Mode=OneTime}", StringComparison.Ordinal)
+                    && rowActions.Contains("Click=\"" + click + "\"", StringComparison.Ordinal),
+                "ModLibraryPage.xaml");
+        }
+
+        ChecksContext.Equal(
+            "Mod 库右键: 六项行操作齐全",
+            6,
+            CountOccurrences(rowActions, "<MenuFlyoutItem"));
+        ChecksContext.Check(
+            "Mod 库右键: 六项行操作按截图顺序排列",
+            actions
+                .Select(action => rowActions.IndexOf(action.Item1, StringComparison.Ordinal))
+                .Aggregate(
+                    -1,
+                    (previous, current) => current > previous ? current : -1) >= 0);
+        ChecksContext.Check(
+            "Mod 库右键: 六项行操作后有分隔符与页面级动作隔开",
+            rowActionsEnd > rowActionsStart
+                && xaml.IndexOf("menuModLibraryPageRefresh", rowActionsEnd, StringComparison.Ordinal) > rowActionsEnd);
 
         ChecksContext.Check(
             "工坊转本地: Mod 库页菜单含 CommonConvertToLocal 文案绑定",
