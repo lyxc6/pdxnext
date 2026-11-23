@@ -112,6 +112,30 @@
   <data name="AchievementsCounts" xml:space="preserve">
     <value>Unlocked {0} / {1}</value>
   </data>
+  <data name="AchievementsConditionCollapse" xml:space="preserve">
+    <value>Hide conditions</value>
+  </data>
+  <data name="AchievementsConditionExpand" xml:space="preserve">
+    <value>Show conditions</value>
+  </data>
+  <data name="AchievementsConditionNoData" xml:space="preserve">
+    <value>No condition data available</value>
+  </data>
+  <data name="AchievementsConditionOfficialHint" xml:space="preserve">
+    <value>Official hint</value>
+  </data>
+  <data name="AchievementsConditionPossibleScript" xml:space="preserve">
+    <value>Requirements</value>
+  </data>
+  <data name="AchievementsConditionSource" xml:space="preserve">
+    <value>Source: {0}</value>
+  </data>
+  <data name="AchievementsConditionTitle" xml:space="preserve">
+    <value>Completion conditions</value>
+  </data>
+  <data name="AchievementsConditionUnlockScript" xml:space="preserve">
+    <value>Unlock trigger</value>
+  </data>
   <data name="AchievementsEmptyTitle" xml:space="preserve">
     <value>No achievements to show</value>
   </data>

@@ -235,6 +235,8 @@
     <Compile Include="..\..\src\PdxLauncher.App\Services\WorkshopStateReader.cs" Link="Linked\WorkshopStateReader.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\IWorkshopStateSource.cs" Link="Linked\IWorkshopStateSource.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementRowViewModel.cs" Link="Linked\AchievementRowViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementConditionPresentation.cs" Link="Linked\AchievementConditionPresentation.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementToggleCommand.cs" Link="Linked\AchievementToggleCommand.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementIconPresentation.cs" Link="Linked\AchievementIconPresentation.cs" />
     <!--
       拉起 Steam 宿主子进程的客户端与成就数据源。两者都只依赖 Core + System.*，

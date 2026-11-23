@@ -20,7 +20,7 @@ using PdxLauncher.Core.Contracts;
 public sealed class AchievementSnapshotCache
 {
     /// <summary>缓存格式版本；结构变化时加一，旧文件会被当成未命中。</summary>
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
 
     private const string FileExtension = ".json";
 

@@ -109,8 +109,8 @@ public static class AchievementFilterChecks
             xaml.Contains("Text=\"{x:Bind ViewModel.VisibleCountText, Mode=OneWay}\"", StringComparison.Ordinal)
                 && xaml.Contains("txtAchievementFilterCount", StringComparison.Ordinal));
         ChecksContext.Check(
-            "成就筛选: 工具条在列表上方（4 行布局，列表位于最后一行）",
-            Regex.Matches(xaml, "<RowDefinition", RegexOptions.CultureInvariant).Count == 4
+            "成就筛选: 工具条在列表上方（页面 4 行布局，列表位于最后一行）",
+            Regex.Matches(xaml, "<RowDefinition", RegexOptions.CultureInvariant).Count >= 4
                 && Regex.IsMatch(
                     xaml,
                     @"<ListView\s+Grid\.Row=""3""",

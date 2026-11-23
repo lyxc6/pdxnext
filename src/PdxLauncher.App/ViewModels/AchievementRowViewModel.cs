@@ -1,6 +1,7 @@
 namespace PdxLauncher.App.ViewModels;
 
 using System.Globalization;
+using System.Windows.Input;
 
 using PdxLauncher.App.Localization;
 using PdxLauncher.Core.Contracts;
@@ -24,6 +25,7 @@ public sealed class AchievementRowViewModel : LocalizedObservableObject
 
     private AchievementIconPresentation? _icon;
     private bool _iconSettled;
+    private bool _isExpanded;
 
     /// <summary>
     /// 构造。<paramref name="iconPath"/> 是游戏自带图标的本地路径（见
@@ -36,6 +38,8 @@ public sealed class AchievementRowViewModel : LocalizedObservableObject
         _entry = entry;
         _icon = string.IsNullOrWhiteSpace(iconPath) ? null : new AchievementIconPresentation(iconPath!, 1.0);
         _iconSettled = true;
+        Condition = new AchievementConditionPresentation(entry);
+        ToggleConditionCommand = new AchievementToggleCommand(ToggleCondition);
     }
 
     /// <summary>
@@ -48,6 +52,8 @@ public sealed class AchievementRowViewModel : LocalizedObservableObject
         ArgumentNullException.ThrowIfNull(iconFactory);
         _entry = entry;
         _iconFactory = iconFactory;
+        Condition = new AchievementConditionPresentation(entry);
+        ToggleConditionCommand = new AchievementToggleCommand(ToggleCondition);
     }
 
     public string Id => _entry.Id;
@@ -99,6 +105,66 @@ public sealed class AchievementRowViewModel : LocalizedObservableObject
 
     /// <summary>列表行的自动化 id：UI 走查按成就 id 定位。</summary>
     public string AutomationId => "achievement_" + Id;
+
+    /// <summary>条件详情是否展开；每行新建时都是收起状态。</summary>
+    public bool IsExpanded
+    {
+        get => _isExpanded;
+        private set => SetProperty(ref _isExpanded, value);
+    }
+
+    /// <summary>命中的成就脚本才有可展开的详情；隐藏成就同样可展开。</summary>
+    public bool HasConditionData => Condition.HasData;
+
+    /// <summary>行内折叠按钮入口：可点击区域跨越整行，不依赖 ListView 选中。</summary>
+    public ICommand ToggleConditionCommand { get; }
+
+    public AchievementConditionPresentation Condition { get; }
+
+    public bool ShowConditionDetails => IsExpanded && HasConditionData;
+
+    public string ConditionSummary => Condition.SummaryText;
+
+    public string ConditionUnlockText => Condition.UnlockText;
+
+    public string ConditionPossibleText => Condition.PossibleText;
+
+    public string ConditionSourceText => Condition.SourceText;
+
+    public bool ShowOfficialHint => Condition.ShowOfficialHint;
+
+    public bool ShowNoConditionData => IsExpanded && !HasConditionData;
+
+    public string ConditionToggleText => IsExpanded
+        ? T(Keys.AchievementsConditionCollapse)
+        : T(Keys.AchievementsConditionExpand);
+
+    /// <summary>来源行的可读文案（本地化键 + 路径），不把键暴露给用户。</summary>
+    public string ConditionSourceDisplay => Condition.SourceText.Length == 0
+        ? string.Empty
+        : T(Keys.AchievementsConditionSource, Condition.SourceText);
+
+    public string ConditionToggleAutomationId => Condition.ToggleAutomationId;
+
+    public string ConditionDetailsAutomationId => Condition.DetailsAutomationId;
+
+    public string ConditionSummaryAutomationId => Condition.SummaryAutomationId;
+
+    public string ConditionUnlockAutomationId => Condition.UnlockAutomationId;
+
+    public string ConditionPossibleAutomationId => Condition.PossibleAutomationId;
+
+    public string ConditionSourceAutomationId => Condition.SourceAutomationId;
+
+    public string ConditionNoDataAutomationId => Condition.NoDataAutomationId;
+
+    private void ToggleCondition()
+    {
+        IsExpanded = !IsExpanded;
+        OnPropertyChanged(nameof(ShowConditionDetails));
+        OnPropertyChanged(nameof(ShowNoConditionData));
+        OnPropertyChanged(nameof(ConditionToggleText));
+    }
 
     private AchievementIconPresentation ResolveIcon()
     {
