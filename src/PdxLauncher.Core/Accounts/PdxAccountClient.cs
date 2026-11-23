@@ -7,7 +7,8 @@ using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
 
 /// <summary>
-/// Paradox 账号客户端（纯 HTTP，不依赖闭源 <c>PDX.SDK.dll</c>）。
+/// Paradox 账号客户端（纯 HTTP）。登录 / 续期仍由它负责；登录后的 PDX Mods 写操作
+/// 与下载交给官方 SDK（见 <see cref="PdxLauncher.Core.PdxSdk.PdxSdkHost"/>）。
 /// <para>
 /// 协议全部来自官方 Electron 启动器的登录实现（本机逆向 app.asar 逐字核对）：
 /// </para>

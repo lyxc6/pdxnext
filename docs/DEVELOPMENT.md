@@ -752,8 +752,14 @@ src/
     Controls/                  :: 自绘控件：ConfirmOverlay（全局「确认 / 取消」浮层，取消在左、确认在右）、SettingsCard、SettingsValueCard、MarkdownView、PdxWrapPanel（排不下就自动换行，WinUI 没有 WrapPanel）
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
   PdxLauncher.Localization.Generator/ :: Roslyn 增量源生成器：编译期读 Strings/*/Resources.resw，生成 Localizer 属性与 Keys（不落盘）
+sdk/
+  pdx/                       :: 官方 PDX.SDK 四个 DLL（PDX.SDK / Contracts / Network / External），随仓提交；
+                                运行时由 Core 的 PdxSdkHost 直接加载，做登录态订阅、下载与 PGP 验签
+docs/PDX-SDK/                :: PDX.SDK 的反编译参考（只读，不参与编译）；
+                                ilspycmd -p --nested-directories -o docs/PDX-SDK/PDX.SDK sdk/pdx/PDX.SDK.dll
+                                （Contracts / Network 同理；生成后删掉各目录的 *.csproj）
 tests/
-  PdxLauncher.Checks/          :: 195 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 197 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步

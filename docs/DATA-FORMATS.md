@@ -582,7 +582,25 @@ byte[] png = DdsImage.EncodePng(r.Pixels);                          // PixelBuff
 
 ## 17. PDX Mods 平台 API 与 CS2 的 `playset_config.json`
 
-这套协议**没有公开文档**，来源只有两处：官方 Electron 启动器 `app.asar` 里 `modsApi` / `accountApi` 的逐字核对，以及本机 curl 实测（2026-10-27）。官方桌面端自带的 `PDX.SDK.dll`（Skyve CS-II 用的就是它）是闭源二进制，调用方照样能跑协议 —— 说明协议本身不是机密，只是没写出来。
+这套协议**没有公开文档**，来源有三处：官方 Electron 启动器 `app.asar` 里 `modsApi` / `accountApi` 的逐字核对、本机 curl 实测（2026-10-27），以及官方 `PDX.SDK.dll` 的反编译。
+
+**2026-11 起直接使用官方 SDK**：PdxNext 已把 `PDX.SDK.dll` 连同 `PDX.SDK.Contracts` / `PDX.SDK.Network` / `External` 一起随仓提交到 `sdk/pdx/`，运行时由 `PdxLauncher.Core.PdxSdk.PdxSdkHost` 直接调用（登录态订阅、下载、PGP 验签、播放集缓存都交给它）。反编译参考在 `docs/PDX-SDK/`。
+
+下文的 HTTP 表仍保留，因为它描述的是「匿名浏览」那一半：`PdxModsClient` 仍用纯 HTTP 做搜索/详情，不要求登录，也不依赖 SDK。
+
+SDK 的落点与关键配置（照 Skyve 的 `WorkshopService.Initialize()`）：
+
+| 项 | 值 |
+| --- | --- |
+| `DiskIORoot` | `<dataRoot>\pdxsdk\<Paradox userId>`（SDK 自己的 `database.json`、缓存） |
+| `Mods.RootPath` | `<gameDataDir>\.cache\Mods`（必须与游戏/Skyve 共用，否则播放集不互通） |
+| `Environment` / `Ecosystem` | `Live` / `Steam` |
+| `Mods.UsePatching` | `true` |
+| `DefaultHeaders.User-Agent` | `PdxNext/<version>` |
+| 会话复用 | 把 `PdxSession` 的 `SessionToken`/`RefreshToken` 写进 `<DiskIORoot>\database.json`，再 `Account.Startup()` |
+
+`database.json` 是 SDK 的明文会话缓存（字段 `SessionToken` / `RefreshToken` / `TrustLevel` / `Namespace` / `UserId` / `LoggedIn` 等）；本启动器自己的会话仍由 `PdxSessionStore` 用 DPAPI 保护，登出/切换账号时同步删除这份镜像。
+
 
 ### 17.1 端点与鉴权
 

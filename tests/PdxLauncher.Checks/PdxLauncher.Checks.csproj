@@ -9,6 +9,28 @@
     <ProjectReference Include="..\..\src\PdxLauncher.Core\PdxLauncher.Core.csproj" />
     <ProjectReference Include="..\..\src\PdxLauncher.Imaging\PdxLauncher.Imaging.csproj" />
   </ItemGroup>
+  <!--
+    官方 PDX.SDK（net48）由 Core 引用，但 ProjectReference 不会把它的类型再暴露给本工程；
+    PdxSdkChecks 要直接断言 Config 字段，所以这里显式引用同一组 DLL。
+  -->
+  <ItemGroup>
+    <Reference Include="PDX.SDK">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\sdk\pdx\PDX.SDK.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PDX.SDK.Contracts">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\sdk\pdx\PDX.SDK.Contracts.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PDX.SDK.Network">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\sdk\pdx\PDX.SDK.Network.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="External">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\sdk\pdx\External.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
   <ItemGroup>
     <!--
       链接 App 层的 PlaySetEditor 源码进来做自检。该文件通篇只用 Core 的类型

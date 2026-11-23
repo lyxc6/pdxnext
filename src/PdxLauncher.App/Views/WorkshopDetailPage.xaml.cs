@@ -541,8 +541,19 @@ public sealed partial class WorkshopDetailPage : Page
             ? string.Empty
             : L.T(
                 subscribe ? Keys.WorkshopDetailSubscribeFailed : Keys.WorkshopDetailUnsubscribeFailed,
-                result.ErrorMessage ?? string.Empty);
+                DescribeSubscribeFailure(result.ErrorMessage));
     }
+
+    /// <summary>
+    /// 把 PDX 订阅失败里的内部错误码换成用户可读的原因；其它码原样透出（便于排障）。
+    /// </summary>
+    private string DescribeSubscribeFailure(string? errorCode) =>
+        errorCode switch
+        {
+            "workshop-subscription:no-active-playset" => L.WorkshopDetailSubscribeNoPlayset,
+            "workshop-subscription:sdk-unavailable" => L.WorkshopDetailSubscribeSdkUnavailable,
+            _ => errorCode ?? string.Empty,
+        };
 
     /// <summary>Steam：订阅其实要在 Steam 客户端里完成，这里只负责把页面递过去。</summary>
     private async void OnSubscribeSteamClick(object sender, RoutedEventArgs e)

@@ -28,6 +28,30 @@
   </ItemGroup>
 
   <!--
+    官方 PDX.SDK（Paradox 的 Mods / 账号客户端，net48）：随仓提交在 sdk/pdx/。
+    运行时用 PdxSdkHost 直接调用它做登录态订阅与下载；反编译参考见 docs/PDX-SDK/。
+    这个程序集在 net11 下可正常加载（已用探针验证 Context.Create）。
+  -->
+  <ItemGroup>
+    <Reference Include="PDX.SDK">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\sdk\pdx\PDX.SDK.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PDX.SDK.Contracts">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\sdk\pdx\PDX.SDK.Contracts.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PDX.SDK.Network">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\sdk\pdx\PDX.SDK.Network.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="External">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\sdk\pdx\External.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!--
     补丁素材（DLC 解锁 loader + cream_api.ini 模板）内嵌进 PdxLauncher.Core.dll，
     发布时整个目录拷走即可用，不依赖外部文件。LogicalName 必须与
     Patch/PatchAssets.cs 里的常量、tools/manual-build.py 的 -resource: 参数一致。

@@ -69,6 +69,15 @@ NUGET_CORE_REFS = [
     os.path.join(NUGET, "system.numerics.tensors/10.0.13/lib/net10.0/System.Numerics.Tensors.dll"),
 ]
 
+# 官方 PDX.SDK（net48）随仓提交在 sdk/pdx/，Core 直接引用；手工构建同样要显式 -r:。
+PDX_SDK_DIR = os.path.join(WS, "sdk", "pdx")
+PDX_SDK_REFS = [
+    os.path.join(PDX_SDK_DIR, "PDX.SDK.dll"),
+    os.path.join(PDX_SDK_DIR, "PDX.SDK.Contracts.dll"),
+    os.path.join(PDX_SDK_DIR, "PDX.SDK.Network.dll"),
+    os.path.join(PDX_SDK_DIR, "External.dll"),
+]
+
 # 原生 payload：本地翻译引擎的 dll 必须随应用一起发布。
 #   BergamotTranslatorSharp -> runtimes/win-x64/native/bergamot.dll
 #   LLamaSharp.Backend.Cpu  -> LLamaSharpRuntimes/win-x64/native/{avx,avx2,avx512,noavx}/*.dll
@@ -191,6 +200,20 @@ def copy_native_payload(outdir):
     return total
 
 
+def copy_pdx_sdk_payload(outdir):
+    """把 sdk/pdx 的四个 DLL 复制到输出目录（运行时 PdxSdkHost 直接加载它们）。"""
+    os.makedirs(outdir, exist_ok=True)
+    n = 0
+    for src in PDX_SDK_REFS:
+        if not os.path.isfile(src):
+            fail("缺少 PDX.SDK payload: " + src)
+            continue
+        shutil.copy2(src, os.path.join(outdir, os.path.basename(src)))
+        n += 1
+    log("  PDX.SDK payload -> " + str(n) + " 个 dll")
+    return n
+
+
 # ---------------------------------------------------------------- Core
 def core_resources():
     """Core 的内嵌补丁素材；逻辑名必须与 Patch/PatchAssets.cs 的常量一致。"""
@@ -216,6 +239,11 @@ def build_core():
             fail("core: 缺少 NuGet 引用 " + r)
             return None
         refs.append(r)
+    for r in PDX_SDK_REFS:
+        if not os.path.exists(r):
+            fail("core: 缺少 PDX.SDK 引用 " + r)
+            return None
+        refs.append(r)
     dll = compile_library(
         "PdxLauncher.Core",
         srcs,
@@ -225,6 +253,7 @@ def build_core():
         resources=core_resources())
     if dll:
         copy_native_payload(BUILD)
+        copy_pdx_sdk_payload(BUILD)
         log("  OK  " + dll + "  (" + str(os.path.getsize(dll)) + " B, " + str(len(srcs)) + " 源文件)")
     return dll
 
