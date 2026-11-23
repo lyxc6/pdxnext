@@ -1,5 +1,7 @@
 namespace PdxLauncher.Core.Contracts;
 
+using PdxLauncher.Achievements;
+
 /// <summary>
 /// 一条成就的只读快照。数据源负责把平台字段（Steam / 本地缓存）翻译成这份契约，
 /// 展示层只认这里，不认任何平台 API。
@@ -16,6 +18,7 @@ namespace PdxLauncher.Core.Contracts;
 /// <param name="UnlockTimeUtc">解锁时间（UTC）；未解锁时为 null。</param>
 /// <param name="GlobalPercent">全球解锁率（0-100）；平台没有该数据时为 null。</param>
 /// <param name="IconUrl">图标地址或本地路径；没有图标时为 null，界面用占位方块。</param>
+/// <param name="Condition">游戏脚本里的完成条件；没有数据时为 null，行详情不显示。</param>
 public sealed record AchievementEntry(
     string Id,
     string Name,
@@ -24,4 +27,5 @@ public sealed record AchievementEntry(
     bool IsUnlocked,
     DateTimeOffset? UnlockTimeUtc,
     double? GlobalPercent,
-    string? IconUrl);
+    string? IconUrl,
+    AchievementConditionInfo? Condition = null);

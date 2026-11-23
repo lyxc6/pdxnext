@@ -112,6 +112,30 @@
   <data name="AchievementsCounts" xml:space="preserve">
     <value>已解锁 {0} / {1}</value>
   </data>
+  <data name="AchievementsConditionCollapse" xml:space="preserve">
+    <value>收起条件</value>
+  </data>
+  <data name="AchievementsConditionExpand" xml:space="preserve">
+    <value>展开条件</value>
+  </data>
+  <data name="AchievementsConditionNoData" xml:space="preserve">
+    <value>暂无条件数据</value>
+  </data>
+  <data name="AchievementsConditionOfficialHint" xml:space="preserve">
+    <value>官方提示</value>
+  </data>
+  <data name="AchievementsConditionPossibleScript" xml:space="preserve">
+    <value>前置限制</value>
+  </data>
+  <data name="AchievementsConditionSource" xml:space="preserve">
+    <value>来源：{0}</value>
+  </data>
+  <data name="AchievementsConditionTitle" xml:space="preserve">
+    <value>完成条件</value>
+  </data>
+  <data name="AchievementsConditionUnlockScript" xml:space="preserve">
+    <value>解锁判定</value>
+  </data>
   <data name="AchievementsEmptyTitle" xml:space="preserve">
     <value>没有可显示的成就</value>
   </data>

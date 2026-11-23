@@ -86,6 +86,14 @@ internal static class Keys
     public const string AchievementsUnavailableNoGame = "achievements.unavailable.noGame";
     public const string AchievementsUnavailableNotSupported = "achievements.unavailable.notSupported";
     public const string AchievementsUnavailableSteamUnavailable = "achievements.unavailable.steamUnavailable";
+    public const string AchievementsConditionTitle = "AchievementsConditionTitle";
+    public const string AchievementsConditionOfficialHint = "AchievementsConditionOfficialHint";
+    public const string AchievementsConditionUnlockScript = "AchievementsConditionUnlockScript";
+    public const string AchievementsConditionPossibleScript = "AchievementsConditionPossibleScript";
+    public const string AchievementsConditionSource = "AchievementsConditionSource";
+    public const string AchievementsConditionNoData = "AchievementsConditionNoData";
+    public const string AchievementsConditionExpand = "AchievementsConditionExpand";
+    public const string AchievementsConditionCollapse = "AchievementsConditionCollapse";
 
     // 添加模组页相关键（AddModsViewModel 被链接进自检时用；这里的字面值只是稳定的假译文）。
     public const string ModsAddPageSortByName = "ModsAddPageSortByName";

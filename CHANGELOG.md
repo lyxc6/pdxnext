@@ -3,6 +3,17 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)；版本号遵循
 [docs/VERSIONING.md](docs/VERSIONING.md)。
 
+## [Unreleased]
+
+### Added
+
+- 成就页新增「完成条件」详情：从游戏安装目录的明文成就脚本读取 `happened` / `possible` 判定，优先显示游戏本地化的官方提示词，缺失时展示原始判定文本与来源文件；隐藏成就同样可展开查看。
+
+### Changed
+
+- 成就条件只按成就 API 名、脚本块名与 `localization` 字段做确定性映射，不做名称相似度匹配；匹配不到时明确显示暂无条件数据。
+- 成就快照缓存 schema 升级到 2，旧缓存自动失效后重新读取。
+
 ## [1.4.2] - 2026-11-21
 
 ### Added

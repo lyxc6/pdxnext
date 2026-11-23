@@ -5,9 +5,11 @@ using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 
+using PdxLauncher.Achievements;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Games;
+using PdxLauncher.Core.Infrastructure;
 using PdxLauncher.Core.Online;
 using PdxLauncher.Core.Steam;
 
@@ -224,7 +226,8 @@ public sealed class SteamAchievementSource : IAchievementSource
                 }
 
                 var localization = result is { Ok: true } ? LoadLocalization(game, result, appId) : null;
-                return SteamAchievementMapping.FromHostResult(result, fetchedAt, localization);
+                var snapshot = SteamAchievementMapping.FromHostResult(result, fetchedAt, localization);
+                return WithConditions(snapshot, game, localization);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -349,5 +352,34 @@ public sealed class SteamAchievementSource : IAchievementSource
             _logger.Warn("读取成就本地化失败，保留 Steam 显示名（appid " + appId + "）：" + ex.GetType().Name + "：" + ex.Message);
             return null;
         }
+    }
+
+    /// <summary>
+    /// 只给已成功映射的成就附加游戏脚本里的条件；失败 / 空列表 / 找不到脚本时保持原快照不变。
+    /// 条件读取失败由 Reader 自行降级，这里不再多起任何 Steam 调用。
+    /// </summary>
+    private static AchievementSnapshot WithConditions(
+        AchievementSnapshot snapshot,
+        GameInstallation? game,
+        IReadOnlyDictionary<string, string>? localization)
+    {
+        if (snapshot.Availability != AchievementAvailability.Available
+            || game is null
+            || string.IsNullOrWhiteSpace(game.InstallRoot)
+            || snapshot.Entries.Count == 0)
+        {
+            return snapshot;
+        }
+
+        var reader = new AchievementConditionReader(new FileSystem());
+        var strings = localization ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var entries = new List<AchievementEntry>(snapshot.Entries.Count);
+        foreach (var entry in snapshot.Entries)
+        {
+            var condition = reader.Read(game.InstallRoot, entry.Id, strings);
+            entries.Add(condition.HasData ? entry with { Condition = condition } : entry);
+        }
+
+        return snapshot with { Entries = entries };
     }
 }
