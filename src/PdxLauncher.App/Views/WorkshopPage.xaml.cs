@@ -3,6 +3,7 @@ namespace PdxLauncher.App.Views;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using PdxLauncher.App.Controls;
 
 using PdxLauncher.App.Localization;
@@ -200,7 +201,20 @@ public sealed partial class WorkshopPage : Page
 
     // ------------------------------------------------------------ 控件事件
 
-    private async void OnRefreshClick(object sender, RoutedEventArgs e)
+    private async void OnPageRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (!PageRefreshGesture.ShouldRefresh(e.OriginalSource, LayoutRoot))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        await Refresh().ConfigureAwait(true);
+    }
+
+    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await Refresh().ConfigureAwait(true);
+
+    private async Task Refresh()
     {
         try
         {
@@ -307,7 +321,7 @@ public sealed partial class WorkshopPage : Page
     /// <summary>
     /// 提交搜索：回车、点放大镜、或从下拉里选一条最近搜索，都到这里。
     /// 打字过程中不查询 —— 每个字符都会排一次 1–3 MB 的工坊页请求，页面看起来就像卡死。
-    /// 提交成功后把关键词记进最近搜索；刷新按钮走 <see cref="OnRefreshClick"/>，不记历史。
+    /// 提交成功后把关键词记进最近搜索；右键刷新不记历史。
     /// </summary>
     private async void OnSearchQuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
     {

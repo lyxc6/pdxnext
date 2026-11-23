@@ -13,7 +13,11 @@
         Mod 创建页：左侧只列本游戏的本地 mod；右侧是详情 / 新建 / 上传三块面板。
         新建和上传都使用页内表单（不用 ContentDialog），上传进度和状态统一落在底栏。
     -->
-    <Grid Padding="16" RowSpacing="12">
+    <Grid x:Name="LayoutRoot"
+          Padding="16"
+          RowSpacing="12"
+          Background="Transparent"
+          RightTapped="OnPageRightTapped">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -84,13 +88,6 @@
                           IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                           AutomationProperties.AutomationId="modStudioBusy" />
 
-            <Button Grid.Column="5"
-                    VerticalAlignment="Center"
-                    Click="OnRefreshClick"
-                    AutomationProperties.AutomationId="modStudioRefresh"
-                    AutomationProperties.Name="{x:Bind L.ModstudioRefreshName, Mode=OneWay}">
-                <FontIcon Glyph="&#xE72C;" FontSize="16" />
-            </Button>
         </Grid>
 
         <!-- 主体：左列表 / 右面板 -->

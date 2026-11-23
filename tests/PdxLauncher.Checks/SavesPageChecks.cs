@@ -107,8 +107,9 @@ public static class SavesPageChecks
             "存档页: 列表绑定 ViewModel.Saves",
             xaml.Contains("ItemsSource=\"{x:Bind ViewModel.Saves", StringComparison.Ordinal));
         ChecksContext.Check(
-            "存档页: 刷新按钮接到 Click 处理器",
-            xaml.Contains("Click=\"OnRefreshClick\"", StringComparison.Ordinal));
+            "存档页: 页面内容区右键触发刷新",
+            xaml.Contains("RightTapped=\"OnPageRightTapped\"", StringComparison.Ordinal)
+                && !xaml.Contains("btnRefreshSaves", StringComparison.Ordinal));
         ChecksContext.Check(
             "存档页: 顶部有扫描状态文本",
             xaml.Contains("ViewModel.StatusText", StringComparison.Ordinal));

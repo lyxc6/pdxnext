@@ -20,7 +20,6 @@ public static class WorkshopPageChecks
         "cmbWorkshopSort",
         "cmbWorkshopTimeRange",
         "ringWorkshopBusy",
-        "btnWorkshopRefresh",
         "txtWorkshopGame",
         "txtWorkshopCount",
         "txtWorkshopSource",
@@ -151,7 +150,6 @@ public static class WorkshopPageChecks
             "x:Name=\"SortBox\"",
             "x:Name=\"TimeRangeBox\"",
             "ringWorkshopBusy",
-            "btnWorkshopRefresh",
             "txtWorkshopSource",
             "btnWorkshopOpenWeb",
         ];
@@ -214,7 +212,7 @@ public static class WorkshopPageChecks
     {
         if (!TryGetBlock(
                 xaml,
-                "<Grid Padding=\"16\"",
+                "<Grid x:Name=\"LayoutRoot\"",
                 "</Grid.RowDefinitions>",
                 "创意工坊页: 找到页面外层 Grid",
                 out var header))
