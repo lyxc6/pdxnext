@@ -5,8 +5,11 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using PdxLauncher.Core.Abstractions;
+using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Dlc;
 using PdxLauncher.Core.Games;
+using PdxLauncher.Core.Infrastructure;
 using PdxLauncher.Core.Mcp;
 using PdxLauncher.Core.ModStudio;
 using PdxLauncher.Core.Playsets;
@@ -35,6 +38,8 @@ internal sealed class McpTools
     private readonly ModCatalog _modCatalog;
     private readonly PdxDatabase _database;
     private readonly McpChangePlanStore _changePlans;
+    private readonly PlaySetStoreRouter _playSetRouter;
+    private readonly AppSettingsStore _settingsStore;
     private readonly bool _draftWriteEnabled;
 
     private IReadOnlyList<GameInstallation>? _gameCache;
@@ -61,6 +66,10 @@ internal sealed class McpTools
         _draftWriteEnabled = draftWriteEnabled;
         _database = new PdxDatabase(fileSystem, logger, Path.Combine(dataRoot, PdxDatabase.FileName));
         _changePlans = new McpChangePlanStore(_database);
+        var clock = new SystemClock();
+        var documents = new SqliteJsonDocumentStore(_database, logger, clock);
+        _settingsStore = new AppSettingsStore(documents, logger);
+        _playSetRouter = new PlaySetStoreRouter(fileSystem, logger, clock, _database, _modCatalog, new DlcCatalog(fileSystem, logger));
     }
 
     /// <summary>tools/list 的返回。</summary>
@@ -239,7 +248,7 @@ internal sealed class McpTools
                 "save_upload_draft" => await SaveUploadDraftAsync(arguments, cancellationToken).ConfigureAwait(false),
                 "clear_upload_draft" => await ClearUploadDraftAsync(arguments, cancellationToken).ConfigureAwait(false),
                 "mcp_describe_capabilities" => DescribeCapabilities(),
-                "get_playsets_page" => GetPlaysetsPage(arguments),
+                "get_playsets_page" => await GetPlaysetsPage(arguments, cancellationToken).ConfigureAwait(false),
                 "get_settings_page" => GetSettingsPage(arguments),
                 "create_change_plan" => CreateChangePlan(arguments),
                 _ => throw new McpToolException("未知工具：" + name),
@@ -301,19 +310,43 @@ internal sealed class McpTools
         };
     }
 
-    private JsonNode GetPlaysetsPage(JsonObject arguments)
+    private async Task<JsonNode> GetPlaysetsPage(JsonObject arguments, CancellationToken cancellationToken)
     {
         var gameId = ReadString(arguments, "gameId") ?? string.Empty;
         var offset = (int)ReadInt(arguments, "offset", 0);
         var limit = (int)ReadInt(arguments, "limit", McpPageSnapshotPaging.DefaultLimit);
-        return SnapshotJson(new McpPageSnapshot("playsets", "播放集", gameId, [], [], 0, offset, false, null));
+        var games = await GetGamesAsync(cancellationToken).ConfigureAwait(false);
+        var game = string.IsNullOrWhiteSpace(gameId)
+            ? games.FirstOrDefault()
+            : games.FirstOrDefault(candidate => string.Equals(candidate.GameId, gameId, StringComparison.OrdinalIgnoreCase));
+        IReadOnlyList<PlaySet> sets = game is null
+            ? []
+            : await _playSetRouter.GetPlaySetsAsync(game, cancellationToken).ConfigureAwait(false);
+        var rows = sets
+            .OrderBy(set => set.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(set => new McpPageRow(
+                set.Id.ToString("D"),
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["name"] = set.Name,
+                    ["isActive"] = set.IsActive ? "true" : "false",
+                },
+                set.Name))
+            .ToArray();
+        return SnapshotJson(McpPageSnapshotPaging.Slice(
+            "playsets",
+            "播放集",
+            game?.GameId ?? gameId,
+            rows,
+            offset,
+            limit));
     }
 
     private JsonNode GetSettingsPage(JsonObject arguments)
     {
         var offset = (int)ReadInt(arguments, "offset", 0);
         var limit = (int)ReadInt(arguments, "limit", McpPageSnapshotPaging.DefaultLimit);
-        return SnapshotJson(new McpPageSnapshot("settings", "设置", string.Empty, [], [], 0, offset, false, null));
+        return SnapshotJson(McpPageSnapshotSource.Settings(_settingsStore.Load(), offset, limit));
     }
 
     private JsonNode CreateChangePlan(JsonObject arguments)

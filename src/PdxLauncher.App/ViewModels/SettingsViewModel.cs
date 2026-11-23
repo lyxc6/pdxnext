@@ -93,17 +93,38 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         }
     }
 
-    public bool ApproveMcpChangePlan(string planId)
+    public async Task<bool> ApproveMcpChangePlanAsync(string planId)
     {
         if (!AppServices.IsInitialized)
         {
             return false;
         }
 
-        var result = new McpChangePlanStore(AppServices.Database)
-            .UpdateStatus(planId, McpChangePlanStatus.Approved, "app");
+        var store = new McpChangePlanStore(AppServices.Database);
+        var plan = store.Get(planId);
+        if (plan is null
+            || plan.Status != McpChangePlanStatus.AwaitingApproval
+            || McpChangePlanPolicy.IsExpired(plan, DateTimeOffset.UtcNow))
+        {
+            RefreshMcpChangePlans();
+            return false;
+        }
+
+        if (!store.UpdateStatus(planId, McpChangePlanStatus.Approved, "app"))
+        {
+            RefreshMcpChangePlans();
+            return false;
+        }
+
+        var applied = await McpChangePlanExecutor.ApplyAsync(
+            plan,
+            AppServices.GameCatalog,
+            AppServices.PlaySets,
+            AppServices.Settings,
+            AppServices.SettingsStore).ConfigureAwait(true);
+        store.UpdateStatus(planId, applied ? McpChangePlanStatus.Applied : McpChangePlanStatus.Failed, "app");
         RefreshMcpChangePlans();
-        return result;
+        return applied;
     }
 
     public bool RejectMcpChangePlan(string planId)

@@ -304,11 +304,19 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private void OnRefreshMcpPlansClick(object sender, RoutedEventArgs e) =>
         _viewModel.RefreshMcpChangePlans();
 
-    private void OnApproveMcpPlanClick(object sender, RoutedEventArgs e)
+    private async void OnApproveMcpPlanClick(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: string planId })
         {
-            _viewModel.ApproveMcpChangePlan(planId);
+            try
+            {
+                await _viewModel.ApproveMcpChangePlanAsync(planId);
+            }
+            catch (Exception ex)
+            {
+                AppServices.Logger.Error("执行 MCP 变更计划失败", ex);
+                _viewModel.RefreshMcpChangePlans();
+            }
         }
     }
 
