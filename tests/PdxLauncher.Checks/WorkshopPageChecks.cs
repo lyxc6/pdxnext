@@ -606,6 +606,15 @@ public static class WorkshopPageChecks
         ChecksContext.Check(
             "创意工坊页: 页面卸载取消筛选去抖",
             viewModel.Contains("CancelPendingFilterQuery()", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 筛选栏默认关闭",
+            viewModel.Contains("private bool _showFilterPanel;", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 筛选按钮绑定展开状态",
+            xaml.Contains("IsChecked=\"{x:Bind ViewModel.ShowFilterPanel, Mode=TwoWay}\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 侧栏可见性跟随展开状态",
+            viewModel.Contains("public bool ShowFilterSidebar => ShowFilterPanel && ShowFilters && Filters.HasGroups;", StringComparison.Ordinal));
 
         if (TryGetBlock(
                 viewModel,
