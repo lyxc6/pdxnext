@@ -102,49 +102,95 @@ public sealed class GaugeViewModel : ObservableObject
 
 /// <summary>
 /// 性能页概览里的一张只读指标卡片（标题、数值、说明与自动化 id）。
-/// 文案在 <see cref="DiagnosticsViewModel"/> 里按当前语言拼好；语言切换后整批重建。
+/// 文案在 <see cref="DiagnosticsViewModel"/> 里按当前语言拼好；切语言后仍整批重建。
 /// </summary>
-public sealed class DiagnosticMetricViewModel
+public sealed class DiagnosticMetricViewModel : ObservableObject
 {
+    private readonly string _key;
+    private readonly string _automationId;
+    private string _title;
+    private string _value;
+    private string _detail;
+
     public DiagnosticMetricViewModel(string key, string title, string value, string detail, string automationId)
     {
-        Key = key;
-        Title = title;
-        Value = value;
-        Detail = detail;
-        AutomationId = automationId;
+        _key = key;
+        _title = title;
+        _value = value;
+        _detail = detail;
+        _automationId = automationId;
     }
 
     /// <summary>稳定键（工作集 / GC …），用于自动化与排错。</summary>
-    public string Key { get; }
+    public string Key => _key;
 
-    public string Title { get; }
+    public string Title
+    {
+        get => _title;
+        private set => SetProperty(ref _title, value);
+    }
 
-    public string Value { get; }
+    public string Value
+    {
+        get => _value;
+        private set => SetProperty(ref _value, value);
+    }
 
-    public string Detail { get; }
+    public string Detail
+    {
+        get => _detail;
+        private set => SetProperty(ref _detail, value);
+    }
 
-    public string AutomationId { get; }
+    public string AutomationId => _automationId;
+
+    /// <summary>采样后就地更新同一行，避免 ItemsControl 重建卡片造成闪烁。</summary>
+    public void Apply(string title, string value, string detail)
+    {
+        Title = title;
+        Value = value;
+        Detail = detail;
+    }
 }
 
 /// <summary>一条优化建议：结论、数字与排查方向。</summary>
-public sealed class DiagnosticHintViewModel
+public sealed class DiagnosticHintViewModel : ObservableObject
 {
+    private readonly DiagnosticHintCode _code;
+    private readonly string _automationId;
+    private string _title;
+    private string _detail;
+
     public DiagnosticHintViewModel(DiagnosticHintCode code, string title, string detail, string automationId)
     {
-        Code = code;
-        Title = title;
-        Detail = detail;
-        AutomationId = automationId;
+        _code = code;
+        _title = title;
+        _detail = detail;
+        _automationId = automationId;
     }
 
-    public DiagnosticHintCode Code { get; }
+    public DiagnosticHintCode Code => _code;
 
-    public string Title { get; }
+    public string Title
+    {
+        get => _title;
+        private set => SetProperty(ref _title, value);
+    }
 
-    public string Detail { get; }
+    public string Detail
+    {
+        get => _detail;
+        private set => SetProperty(ref _detail, value);
+    }
 
-    public string AutomationId { get; }
+    public string AutomationId => _automationId;
+
+    /// <summary>建议内容变化时只改绑定属性，不把行从视觉树上摘下来。</summary>
+    public void Apply(string title, string detail)
+    {
+        Title = title;
+        Detail = detail;
+    }
 }
 
 /// <summary>网络分区里的一行：一个 host 的请求 / 限流 / 冷却状态。</summary>
