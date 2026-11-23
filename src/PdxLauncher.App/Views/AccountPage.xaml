@@ -19,7 +19,12 @@
         于是 Light / Dark / HighContrast 三套主题一起生效。
     -->
     <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Padding="24" Spacing="16" MaxWidth="880" HorizontalAlignment="Stretch">
+        <!--
+            内容列必须同时保留 MaxWidth 与实际宽度：MaxWidth 只限制大屏时的最大宽度，
+            MinWidth=0 允许 StackPanel 在 NavigationView 折叠、窗口变窄时跟容器收缩。
+            旧版只有 MaxWidth + Stretch，在窄屏下内容年被推到可视区右侧，按钮/开关被裁。
+        -->
+        <StackPanel Padding="24" Spacing="16" MaxWidth="880" MinWidth="0" HorizontalAlignment="Stretch">
 
             <!-- 页头 -->
             <StackPanel Spacing="4">
@@ -163,7 +168,7 @@
                         CornerRadius="8"
                         MinHeight="72"
                         Padding="16,12">
-                    <Grid ColumnSpacing="16">
+                    <Grid ColumnSpacing="16" RowSpacing="12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -198,6 +203,7 @@
 
                         <Button Grid.Column="2"
                                 VerticalAlignment="Center"
+                                MinWidth="96"
                                 AutomationProperties.AutomationId="btnAccountSignOut"
                                 AutomationProperties.Name="{x:Bind L.AccountSignOut, Mode=OneWay}"
                                 Content="{x:Bind L.AccountSignOut, Mode=OneWay}"
