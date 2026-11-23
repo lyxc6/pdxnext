@@ -214,10 +214,10 @@ public sealed class AppSettings
     public bool McpDraftWriteEnabled { get; set; }
 
     /// <summary>
-    /// Mod 编辑页左栏是否显示（默认开）。关掉后左栏收起，改用右栏顶部的分节选择器，
+    /// Mod 编辑页左栏是否显示（默认关）。关掉后左栏收起，改用右栏顶部的分节选择器，
     /// 四个功能照常可达；设置页与本页开关双向即时生效，变化时立即落盘。
     /// </summary>
-    public bool ModEditorLeftPaneVisible { get; set; } = true;
+    public bool ModEditorLeftPaneVisible { get; set; }
 
     /// <summary>
     /// 左栏菜单是否显示「Mod 编辑」入口（默认开）。关掉后该项从导航栏隐藏；
