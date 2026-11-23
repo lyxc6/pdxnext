@@ -252,6 +252,43 @@ public sealed class WorkshopInfoCache
         _store.SetCover(key, fileName, url, _clock.UtcNow);
     }
 
+    /// <summary>
+    /// 磁盘上的封面文件被删掉后清掉对应记账，让下一次列表面板能重新下载。
+    /// <para>
+    /// 只处理 <c>{source}/{id}.{ext}</c> 原图：截图、96/256 缩略图变体不参与封面记账。
+    /// 文件名必须与条目当前记录完全一致，避免旧文件删除误清新图。
+    /// </para>
+    /// </summary>
+    /// <param name="fullPath">已从磁盘删除的封面文件绝对路径。</param>
+    public void InvalidateCoverFile(string fullPath)
+    {
+        if (string.IsNullOrWhiteSpace(fullPath))
+        {
+            return;
+        }
+
+        var relative = Path.GetRelativePath(_cacheRoot, fullPath)
+            .Replace(Path.DirectorySeparatorChar, '/')
+            .Replace(Path.AltDirectorySeparatorChar, '/');
+        var parts = relative.Split('/');
+        if (parts.Length != 2
+            || parts[0] is not ("steam" or "pdx")
+            || string.IsNullOrWhiteSpace(parts[1])
+            || !Path.HasExtension(parts[1]))
+        {
+            return;
+        }
+
+        var name = Path.GetFileNameWithoutExtension(parts[1]);
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        var source = parts[0] == "steam" ? WorkshopSource.Steam : WorkshopSource.Pdx;
+        _store.ClearCoverFile(Key(source, name), relative);
+    }
+
     /// <summary>记录详情抓取结果。</summary>
     /// <param name="key">缓存键（<see cref="Key"/>）。</param>
     /// <param name="text">详情正文；null 表示这次没拿到正文。</param>

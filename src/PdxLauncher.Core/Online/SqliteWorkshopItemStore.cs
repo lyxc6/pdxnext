@@ -202,6 +202,44 @@ public sealed class SqliteWorkshopItemStore : IWorkshopItemStore
     }
 
     /// <inheritdoc />
+    public void ClearCoverFile(string key, string fileName)
+    {
+        if (!TrySplitKey(key, out var source, out var id) || string.IsNullOrWhiteSpace(fileName))
+        {
+            return;
+        }
+
+        try
+        {
+            _database.Write(connection =>
+            {
+                connection.Execute(
+                    """
+                    UPDATE workshop_items
+                    SET cover_file = NULL, cover_fetched_utc = NULL
+                    WHERE source = ? AND id = ? AND cover_file = ?
+                    """,
+                    source,
+                    id,
+                    fileName);
+                connection.Execute(
+                    """
+                    DELETE FROM workshop_covers
+                    WHERE source = ? AND id = ? AND cover_file = ?
+                    """,
+                    source,
+                    id,
+                    fileName);
+                return 0;
+            });
+        }
+        catch (Exception exception) when (IsExpected(exception))
+        {
+            _logger.Warn("清除创意工坊封面记账失败：" + exception.Message);
+        }
+    }
+
+    /// <inheritdoc />
     public void SetDetail(
         string key,
         string? text,

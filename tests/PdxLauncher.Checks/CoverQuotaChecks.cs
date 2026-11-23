@@ -20,6 +20,7 @@ public static class CoverQuotaChecks
 
         CheckSelectVictims();
         CheckEnforce(fileSystem);
+        CheckDeletedCallback(fileSystem);
 
         return ChecksContext.Failures == before ? 0 : 1;
     }
@@ -104,6 +105,53 @@ public static class CoverQuotaChecks
             catch (Exception)
             {
                 // 临时目录清理失败不影响断言结果。
+            }
+        }
+    }
+
+    private static void CheckDeletedCallback(IFileSystem fs)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pdx-cover-quota-callback-" + Guid.NewGuid().ToString("N"));
+        fs.EnsureDirectory(root);
+
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var oldPath = Path.Combine(root, "steam", "old.png");
+            var freshPath = Path.Combine(root, "steam", "fresh.png");
+            fs.EnsureDirectory(Path.GetDirectoryName(oldPath) ?? root);
+            fs.WriteAllBytesAtomic(oldPath, new byte[1024]);
+            fs.WriteAllBytesAtomic(freshPath, new byte[1024]);
+            File.SetLastWriteTimeUtc(oldPath, (now - TimeSpan.FromHours(2)).UtcDateTime);
+            File.SetLastWriteTimeUtc(freshPath, now.UtcDateTime);
+
+            var deleted = new List<string>();
+            var quota = new CoverDiskQuota(
+                fs,
+                new SilentLogger(),
+                new FixedClock(now),
+                root,
+                maxBytes: 1024,
+                targetBytes: 1024,
+                onFileDeleted: deleted.Add);
+
+            var result = quota.Enforce();
+
+            ChecksContext.Equal("封面配额回调：只删超限的旧文件", 1, result.DeletedFiles);
+            ChecksContext.Equal("封面配额回调：回调路径等于被删文件", oldPath, deleted.Single());
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(root))
+                {
+                    Directory.Delete(root, recursive: true);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // 临时目录删不掉不影响断言结果。
             }
         }
     }
