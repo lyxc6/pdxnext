@@ -6402,4 +6402,16 @@
   <data name="CrashSessionEndedMessage" xml:space="preserve">
     <value>本次游戏发现 {0} 条报错，可在「崩溃分析 → 本次游戏」查看。</value>
   </data>
+  <data name="SettingsMcpChangePlans" xml:space="preserve">
+    <value>AI 变更计划</value>
+  </data>
+  <data name="SettingsMcpChangePlanHint" xml:space="preserve">
+    <value>AI 只能提出计划。请核对操作、目标和字段后再批准；批准仅表示允许 App 执行，实际落盘仍由启动器完成。</value>
+  </data>
+  <data name="SettingsMcpApprovePlan" xml:space="preserve">
+    <value>批准</value>
+  </data>
+  <data name="SettingsMcpRejectPlan" xml:space="preserve">
+    <value>拒绝</value>
+  </data>
 </root>

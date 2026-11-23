@@ -36,6 +36,10 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     public ObservableCollection<McpCallHistoryEntry> McpRecentCalls { get; } = new();
 
+    public ObservableCollection<McpChangePlan> McpChangePlans { get; } = new();
+
+    public bool HasMcpChangePlans => McpChangePlans.Count > 0;
+
     public IReadOnlyList<string> McpClientKinds { get; } = (string[])[
         "Claude Desktop", "Claude Code", "Codex", "Cursor", "VS Code",
     ];
@@ -68,6 +72,76 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         {
             AppServices.Logger.Warn("读取 MCP 访问密钥失败：" + exception.Message);
         }
+    }
+
+    public void RefreshMcpChangePlans()
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            McpChangePlans.Clear();
+            foreach (var plan in new McpChangePlanStore(AppServices.Database).List())
+            {
+                McpChangePlans.Add(plan);
+            }
+
+            OnPropertyChanged(nameof(HasMcpChangePlans));
+        }
+        catch (Exception exception)
+        {
+            AppServices.Logger.Warn("读取 MCP 变更计划失败：" + exception.Message);
+        }
+    }
+
+    public async Task<bool> ApproveMcpChangePlanAsync(string planId)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return false;
+        }
+
+        var store = new McpChangePlanStore(AppServices.Database);
+        var plan = store.Get(planId);
+        if (plan is null
+            || plan.Status != McpChangePlanStatus.AwaitingApproval
+            || McpChangePlanPolicy.IsExpired(plan, DateTimeOffset.UtcNow))
+        {
+            RefreshMcpChangePlans();
+            return false;
+        }
+
+        if (!store.UpdateStatus(planId, McpChangePlanStatus.Approved, "app"))
+        {
+            RefreshMcpChangePlans();
+            return false;
+        }
+
+        var applied = await McpChangePlanExecutor.ApplyAsync(
+            plan,
+            AppServices.GameCatalog,
+            AppServices.PlaySets,
+            AppServices.Settings,
+            AppServices.SettingsStore).ConfigureAwait(true);
+        store.UpdateStatus(planId, applied ? McpChangePlanStatus.Applied : McpChangePlanStatus.Failed, "app");
+        RefreshMcpChangePlans();
+        return applied;
+    }
+
+    public bool RejectMcpChangePlan(string planId)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return false;
+        }
+
+        var result = new McpChangePlanStore(AppServices.Database)
+            .UpdateStatus(planId, McpChangePlanStatus.Rejected, "app");
+        RefreshMcpChangePlans();
+        return result;
     }
 
     public McpCreatedAccessKey? CreateMcpAccessKey(string displayName) =>
