@@ -753,7 +753,7 @@ src/
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
   PdxLauncher.Localization.Generator/ :: Roslyn 增量源生成器：编译期读 Strings/*/Resources.resw，生成 Localizer 属性与 Keys（不落盘）
 tests/
-  PdxLauncher.Checks/          :: 185 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 186 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
