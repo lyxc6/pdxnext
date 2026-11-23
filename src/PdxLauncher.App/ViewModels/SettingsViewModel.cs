@@ -36,6 +36,8 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     public ObservableCollection<McpCallHistoryEntry> McpRecentCalls { get; } = new();
 
+    public ObservableCollection<McpChangePlan> McpChangePlans { get; } = new();
+
     public IReadOnlyList<string> McpClientKinds { get; } = (string[])[
         "Claude Desktop", "Claude Code", "Codex", "Cursor", "VS Code",
     ];
@@ -68,6 +70,53 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         {
             AppServices.Logger.Warn("读取 MCP 访问密钥失败：" + exception.Message);
         }
+    }
+
+    public void RefreshMcpChangePlans()
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            McpChangePlans.Clear();
+            foreach (var plan in new McpChangePlanStore(AppServices.Database).List())
+            {
+                McpChangePlans.Add(plan);
+            }
+        }
+        catch (Exception exception)
+        {
+            AppServices.Logger.Warn("读取 MCP 变更计划失败：" + exception.Message);
+        }
+    }
+
+    public bool ApproveMcpChangePlan(string planId)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return false;
+        }
+
+        var result = new McpChangePlanStore(AppServices.Database)
+            .UpdateStatus(planId, McpChangePlanStatus.Approved, "app");
+        RefreshMcpChangePlans();
+        return result;
+    }
+
+    public bool RejectMcpChangePlan(string planId)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return false;
+        }
+
+        var result = new McpChangePlanStore(AppServices.Database)
+            .UpdateStatus(planId, McpChangePlanStatus.Rejected, "app");
+        RefreshMcpChangePlans();
+        return result;
     }
 
     public McpCreatedAccessKey? CreateMcpAccessKey(string displayName) =>

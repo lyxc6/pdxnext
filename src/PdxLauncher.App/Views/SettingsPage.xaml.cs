@@ -277,6 +277,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
                 _viewModel.McpEnabled,
                 _viewModel.McpDraftWriteEnabled);
         _viewModel.RefreshMcpAccessKeys();
+        _viewModel.RefreshMcpChangePlans();
         mcpDocsContent.SetSelectedKey(mcpDocsContent.SelectedKey, _viewModel.McpAccessKeys);
         }
         catch (Exception ex)
@@ -299,6 +300,25 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
     private void OnRefreshMcpCallsClick(object sender, RoutedEventArgs e) =>
         _viewModel.RefreshMcpCalls();
+
+    private void OnRefreshMcpPlansClick(object sender, RoutedEventArgs e) =>
+        _viewModel.RefreshMcpChangePlans();
+
+    private void OnApproveMcpPlanClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string planId })
+        {
+            _viewModel.ApproveMcpChangePlan(planId);
+        }
+    }
+
+    private void OnRejectMcpPlanClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button { Tag: string planId })
+        {
+            _viewModel.RejectMcpChangePlan(planId);
+        }
+    }
 
     public bool HasOneTimeMcpKey => !string.IsNullOrEmpty(OneTimeMcpKeyBox?.Text);
 

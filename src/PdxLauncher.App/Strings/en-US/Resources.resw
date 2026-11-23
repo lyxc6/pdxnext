@@ -6378,4 +6378,16 @@ then call list_games to verify.</value>
   <data name="CrashSessionEndedMessage" xml:space="preserve">
     <value>This session had {0} error(s). See Crash Analysis → This game session.</value>
   </data>
+  <data name="SettingsMcpChangePlans" xml:space="preserve">
+    <value>AI change plans</value>
+  </data>
+  <data name="SettingsMcpChangePlanHint" xml:space="preserve">
+    <value>AI can only propose plans. Review the operation, target, and fields before approving. Approval only authorizes the app to execute; the launcher performs the actual write.</value>
+  </data>
+  <data name="SettingsMcpApprovePlan" xml:space="preserve">
+    <value>Approve</value>
+  </data>
+  <data name="SettingsMcpRejectPlan" xml:space="preserve">
+    <value>Reject</value>
+  </data>
 </root>
