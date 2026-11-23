@@ -41,6 +41,7 @@ internal sealed class McpTools
     private readonly PlaySetStoreRouter _playSetRouter;
     private readonly AppSettingsStore _settingsStore;
     private readonly bool _draftWriteEnabled;
+    private McpAuthorizedKey? _authorizedKey;
 
     private IReadOnlyList<GameInstallation>? _gameCache;
     private readonly Dictionary<string, IReadOnlyList<ModCandidate>> _modCache =
@@ -281,6 +282,9 @@ internal sealed class McpTools
     /// <summary>供调用历史记录当前权限模式。</summary>
     public bool IsDraftWriteEnabled => _draftWriteEnabled;
 
+    /// <summary>由协议层在密钥认证成功后设置，用于记录计划的来源密钥。</summary>
+    public void SetAuthorizedKey(McpAuthorizedKey? authorizedKey) => _authorizedKey = authorizedKey;
+
     private JsonNode DescribeCapabilities()
     {
         var scopes = new JsonArray();
@@ -379,7 +383,7 @@ internal sealed class McpTools
             throw new McpToolException("变更计划未通过校验：" + validation.ErrorCode);
         }
 
-        var plan = _changePlans.CreatePlan(request, "legacy", DateTimeOffset.UtcNow);
+        var plan = _changePlans.CreatePlan(request, _authorizedKey?.KeyId ?? "legacy", DateTimeOffset.UtcNow);
         _changePlans.UpdateStatus(plan.Id, McpChangePlanStatus.Validated, "mcp");
         _changePlans.UpdateStatus(plan.Id, McpChangePlanStatus.AwaitingApproval, "mcp");
         return new JsonObject

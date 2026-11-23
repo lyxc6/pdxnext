@@ -54,6 +54,17 @@ public static class McpChangePlanExecutorChecks
         };
         ChecksContext.Check("MCP 总开关禁止通过计划修改", !McpChangePlanPolicy.Validate(unsafeRequest).IsValid);
 
+        var secretRequest = request with
+        {
+            TargetId = nameof(AppSettings.TranslateApiKey),
+            Patch = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["key"] = nameof(AppSettings.TranslateApiKey),
+                ["value"] = "attacker-key",
+            },
+        };
+        ChecksContext.Check("翻译 API key 禁止通过计划修改", !McpChangePlanPolicy.Validate(secretRequest).IsValid);
+
         var rename = new McpChangePlanRequest(
             "playsets",
             "rename_play_set",

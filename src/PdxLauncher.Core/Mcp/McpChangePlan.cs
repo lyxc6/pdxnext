@@ -99,6 +99,23 @@ public static class McpChangePlanPolicy
         "SteamApiDllPath",
     };
 
+    private static readonly HashSet<string> AllowedSettingKeys = new(StringComparer.Ordinal)
+    {
+        "UiLanguage",
+        "PlaySetPageDisplayMode",
+        "AlwaysOnTop",
+        "BackgroundDisplayMode",
+        "ModThumbnailSize",
+        "AutoCheckUpdates",
+        "TranslateEnabled",
+        "TranslateTargetLanguage",
+        "TranslateNamesEnabled",
+        "TranslateDescriptionEnabled",
+        "TranslateChangelogEnabled",
+        "TranslateCommentsEnabled",
+        "WorkshopPageSize",
+    };
+
     /// <summary>校验计划请求是否落在首期白名单里。</summary>
     public static McpChangePlanValidation Validate(McpChangePlanRequest request)
     {
@@ -131,7 +148,7 @@ public static class McpChangePlanPolicy
 
         if (request.Operation == "set_setting"
             && request.Patch.TryGetValue("key", out var settingKey)
-            && ForbiddenSettingKeys.Contains(settingKey))
+            && (!AllowedSettingKeys.Contains(settingKey) || ForbiddenSettingKeys.Contains(settingKey)))
         {
             return new McpChangePlanValidation(false, "SETTING_FIELD_FORBIDDEN");
         }
