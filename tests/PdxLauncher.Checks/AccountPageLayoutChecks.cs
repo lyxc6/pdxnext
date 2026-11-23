@@ -176,6 +176,10 @@ public static class AccountPageLayoutChecks
             "账号页: 内容列横向撑开（HorizontalAlignment=Stretch）",
             match.Value.Contains("HorizontalAlignment=\"Stretch\"", StringComparison.Ordinal),
             match.Value);
+        ChecksContext.Check(
+            "账号页: 内容列允许收缩（MinWidth=0）",
+            match.Value.Contains("MinWidth=\"0\"", StringComparison.Ordinal),
+            match.Value);
     }
 
     private static void CheckCardsShareBrushes(string xaml)
