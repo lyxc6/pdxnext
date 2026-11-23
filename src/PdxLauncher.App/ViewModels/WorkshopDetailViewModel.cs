@@ -39,6 +39,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     private readonly IWorkshopSubscribeBackend? _steamBackend;
     private readonly WorkshopSubscriptionReader? _steamReader;
     private readonly WorkshopStateReader? _steamStates;
+    private readonly ISubscribedModCleanup? _subscribedModCleanup;
     private readonly IAppLogger _logger;
 
     /// <summary>
@@ -88,7 +89,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         IAppLogger logger,
         IWorkshopSubscribeBackend? steamBackend = null,
         WorkshopSubscriptionReader? steamReader = null,
-        WorkshopStateReader? steamStates = null)
+        WorkshopStateReader? steamStates = null,
+        ISubscribedModCleanup? subscribedModCleanup = null)
     {
         _source = source;
         _images = images;
@@ -97,6 +99,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         _steamBackend = steamBackend;
         _steamReader = steamReader;
         _steamStates = steamStates;
+        _subscribedModCleanup = subscribedModCleanup;
         IsSteamDirectAvailable = steamBackend?.IsAvailable ?? false;
         SteamUnavailableReason = steamBackend?.UnavailableReason ?? string.Empty;
     }
@@ -1006,6 +1009,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
         IsSteamSubscribing = true;
         NotifyStateChanged();
+        string? cleanupWarning = null;
 
         try
         {
@@ -1017,6 +1021,17 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             {
                 IsSteamSubscribed = subscribe;
                 IsSteamStateKnown = true;
+
+                if (!subscribe && _subscribedModCleanup is not null)
+                {
+                    var cleanup = await _subscribedModCleanup
+                        .CleanupAsync(ResolveSteamAppId() ?? 0, row.Id, cancellationToken)
+                        .ConfigureAwait(true);
+                    if (!cleanup.IsClean && !string.IsNullOrWhiteSpace(cleanup.WarningText))
+                    {
+                        cleanupWarning = cleanup.WarningText;
+                    }
+                }
 
                 // 订阅变了，Mod 库页与工坊列表页那层 60 秒整库缓存立刻过期，
                 // 否则返回列表要等到 TTL 结束才看到新的订阅 / 下载状态。
@@ -1034,7 +1049,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                 }
             }
 
-            return result;
+            return cleanupWarning is null
+                ? result
+                : WorkshopSubscribeResult.SuccessWithWarning(cleanupWarning);
         }
         finally
         {

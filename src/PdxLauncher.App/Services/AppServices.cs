@@ -50,6 +50,9 @@ public static class AppServices
     /// </summary>
     public static WorkshopToLocalConverter WorkshopToLocal { get; private set; } = null!;
 
+    /// <summary>退订 Steam 工坊条目后的本机内容与 Mod 库记录清理。</summary>
+    public static ISubscribedModCleanup SubscribedModCleanup { get; private set; } = null!;
+
     public static IDlcCatalog Dlcs { get; private set; } = null!;
 
     public static ILoadFileWriter LoadFiles { get; private set; } = null!;
@@ -373,6 +376,13 @@ public static class AppServices
         PlaySetShare = new PlaySetShareService(playSets, fileSystem, logger);
         Mods = mods;
         WorkshopToLocal = workshopToLocal;
+        SubscribedModCleanup = new SubscribedModCleanupService(
+            fileSystem,
+            playSets,
+            new SteamLibraryLocator(fileSystem, logger),
+            mods as IScanCacheInvalidator,
+            WorkshopStates,
+            logger);
         Dlcs = dlcs;
         LoadFiles = loadFiles;
         Launcher = launcher;

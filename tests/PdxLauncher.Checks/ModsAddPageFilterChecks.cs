@@ -369,6 +369,10 @@ public static class ModsAddPageFilterChecks
         public Task<IReadOnlyList<ModLibraryEntry>> GetModLibraryAsync(
             GameInstallation game, CancellationToken cancellationToken) => Task.FromResult(mods);
 
+        public Task<AppResult<int>> RemoveWorkshopModAsync(
+            GameInstallation game, string workshopId, CancellationToken cancellationToken) =>
+            Task.FromResult(AppResult<int>.Ok(0));
+
         public Task<IReadOnlyList<PlaySetDlc>> GetPlaySetDlcsAsync(
             GameInstallation game, Guid playSetId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<PlaySetDlc>>([]);

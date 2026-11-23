@@ -5392,7 +5392,7 @@ Applying still backs up the original file first, but the backup cannot be verifi
     <value>The Steam client is not running or cannot be reached. Start Steam and sign in, then try again. You can also use the Steam icon at the top right to open this page in Steam.</value>
   </data>
   <data name="WorkshopDetailSteamUnsubscribeConfirm" xml:space="preserve">
-    <value>This unsubscribes from the Workshop item. Steam removes the downloaded content after the game quits. Continue?</value>
+    <value>This unsubscribes from the Workshop item and immediately removes the downloaded content and Mod Library record. If the files are locked by the game or Steam, the record is kept so you can retry. Continue?</value>
   </data>
   <data name="WorkshopDetailSubscribe" xml:space="preserve">
     <value>Subscribe</value>
@@ -5429,6 +5429,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="WorkshopDetailUnsubscribeFailed" xml:space="preserve">
     <value>Unsubscribe failed: {0}</value>
+  </data>
+  <data name="WorkshopDetailUnsubscribeCleanupWarning" xml:space="preserve">
+    <value>Unsubscribed, but local cleanup did not finish: {0}. Close the game and Steam, then retry; the Mod Library record is kept for now.</value>
   </data>
   <data name="WorkshopDetailViewImage" xml:space="preserve">
     <value>View image</value>

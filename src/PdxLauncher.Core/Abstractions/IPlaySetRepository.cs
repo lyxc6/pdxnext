@@ -23,6 +23,19 @@ public interface IPlaySetRepository
         GameInstallation game,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// 删除指定 Steam 创意工坊条目在当前游戏里的 mod 行与播放集引用。
+    /// <para>
+    /// <paramref name="workshopId"/> 必须是纯数字 publishedFileId。实现只匹配
+    /// <c>mods.steamId</c> 或 <c>mods.gameRegistryId</c> 里的同一个工坊 id；
+    /// 不按名字、目录前缀或 PdxId 猜。返回实际删除的 mod 行数。
+    /// </para>
+    /// </summary>
+    Task<AppResult<int>> RemoveWorkshopModAsync(
+        GameInstallation game,
+        string workshopId,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<PlaySetDlc>> GetPlaySetDlcsAsync(
         GameInstallation game,
         Guid playSetId,
