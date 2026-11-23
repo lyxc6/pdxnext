@@ -10,6 +10,7 @@ using PdxLauncher.Core.Games;
 using PdxLauncher.Core.Mcp;
 using PdxLauncher.Core.ModStudio;
 using PdxLauncher.Core.Playsets;
+using PdxLauncher.Core.Storage;
 using PdxLauncher.Core.Steam;
 
 /// <summary>一个 MCP 工具的调用结果：协议层只关心“是不是错误 + 给 AI 看的文本”。</summary>
@@ -32,6 +33,8 @@ internal sealed class McpTools
     private readonly ModUploadDraftStore _drafts;
     private readonly GameCatalog _gameCatalog;
     private readonly ModCatalog _modCatalog;
+    private readonly PdxDatabase _database;
+    private readonly McpChangePlanStore _changePlans;
     private readonly bool _draftWriteEnabled;
 
     private IReadOnlyList<GameInstallation>? _gameCache;
@@ -56,6 +59,8 @@ internal sealed class McpTools
         _gameCatalog = new GameCatalog(fileSystem, logger);
         _modCatalog = new ModCatalog(fileSystem, logger);
         _draftWriteEnabled = draftWriteEnabled;
+        _database = new PdxDatabase(fileSystem, logger, Path.Combine(dataRoot, PdxDatabase.FileName));
+        _changePlans = new McpChangePlanStore(_database);
     }
 
     /// <summary>tools/list 的返回。</summary>
@@ -301,28 +306,14 @@ internal sealed class McpTools
         var gameId = ReadString(arguments, "gameId") ?? string.Empty;
         var offset = (int)ReadInt(arguments, "offset", 0);
         var limit = (int)ReadInt(arguments, "limit", McpPageSnapshotPaging.DefaultLimit);
-        var snapshot = McpPageSnapshotPaging.Slice(
-            "playsets",
-            "播放集",
-            gameId,
-            [],
-            offset,
-            limit);
-        return SnapshotJson(snapshot);
+        return SnapshotJson(new McpPageSnapshot("playsets", "播放集", gameId, [], [], 0, offset, false, null));
     }
 
     private JsonNode GetSettingsPage(JsonObject arguments)
     {
         var offset = (int)ReadInt(arguments, "offset", 0);
         var limit = (int)ReadInt(arguments, "limit", McpPageSnapshotPaging.DefaultLimit);
-        var snapshot = McpPageSnapshotPaging.Slice(
-            "settings",
-            "设置",
-            string.Empty,
-            [],
-            offset,
-            limit);
-        return SnapshotJson(snapshot);
+        return SnapshotJson(new McpPageSnapshot("settings", "设置", string.Empty, [], [], 0, offset, false, null));
     }
 
     private JsonNode CreateChangePlan(JsonObject arguments)
@@ -355,20 +346,10 @@ internal sealed class McpTools
             throw new McpToolException("变更计划未通过校验：" + validation.ErrorCode);
         }
 
-        var plan = new McpChangePlan(
-            Guid.NewGuid().ToString("N"),
-            domain,
-            operation,
-            gameId,
-            targetId,
-            patch,
-            expectedHash,
-            "legacy",
-            McpChangePlanStatus.Draft,
-            DateTimeOffset.UtcNow);
+        var plan = _changePlans.CreatePlan(request, "legacy", DateTimeOffset.UtcNow);
         return new JsonObject
         {
-            ["status"] = "awaiting_ui_approval",
+            ["status"] = "draft",
             ["planId"] = plan.Id,
             ["hint"] = "在 PdxNext 设置 → MCP → 变更计划中查看并确认。",
         };
