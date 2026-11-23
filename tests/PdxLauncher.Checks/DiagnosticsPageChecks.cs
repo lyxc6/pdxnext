@@ -145,6 +145,16 @@ public static class DiagnosticsPageChecks
             !viewModel.Contains("Gauges.Clear();", StringComparison.Ordinal) &&
             rows.Contains("public bool Apply(double percent", StringComparison.Ordinal));
 
+        ChecksContext.Check("概览指标卡按稳定键就地更新，不再每次采样整批重建",
+            viewModel.Contains("existing = Metrics.FirstOrDefault(metric => metric.Key == key)", StringComparison.Ordinal) &&
+            !viewModel.Contains("AddMetric(", StringComparison.Ordinal) &&
+            rows.Contains("void Apply(string title, string value, string detail)", StringComparison.Ordinal));
+        ChecksContext.Check("优化建议按稳定键就地更新，消失的建议才移除",
+            viewModel.Contains("existing = Hints.FirstOrDefault(row => row.Code == hint.Code)", StringComparison.Ordinal) &&
+            viewModel.Contains("Hints.RemoveAt(index)", StringComparison.Ordinal) &&
+            !viewModel.Contains("Hints.Clear();", StringComparison.Ordinal) &&
+            rows.Contains("public void Apply(string title, string detail)", StringComparison.Ordinal));
+
         // 日志页改造：TextViewControl 整行着色 + 下拉筛选 + 两个开关对齐。
         ChecksContext.Check("日志尾部用 TextViewControl（支持整行着色）",
             xaml.Contains("xmlns:tv=\"using:TextViewControl\"", StringComparison.Ordinal)
