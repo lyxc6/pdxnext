@@ -1202,6 +1202,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
         ReplaceRows(rows);
         StartNameTranslation(rows, cancellationToken);
+        _ = FillCoversAsync(cancellationToken);
     }
 
     /// <summary>线程池上把页快照建成行模型；封面只看条目里的文件名，不再回查 SQLite。</summary>

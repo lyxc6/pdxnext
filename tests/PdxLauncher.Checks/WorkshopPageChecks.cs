@@ -412,6 +412,9 @@ public static class WorkshopPageChecks
             ChecksContext.Check(
                 "创意工坊页: 页缓存建行丢到线程池",
                 cachedPage.Contains(".Run(() => BuildCachedRows(", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 页缓存命中也补缺失封面",
+                cachedPage.Contains("_ = FillCoversAsync(cancellationToken)", StringComparison.Ordinal));
         }
 
         if (TryGetBlock(

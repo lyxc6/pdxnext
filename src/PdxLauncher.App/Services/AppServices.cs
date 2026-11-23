@@ -408,7 +408,12 @@ public static class AppServices
         WorkshopInfo = workshopInfo;
         WorkshopPages = workshopPages;
         WorkshopItemPages = workshopItemPages;
-        Covers = new CoverDiskQuota(fileSystem, logger, clock, WorkshopCacheRoot);
+        Covers = new CoverDiskQuota(
+            fileSystem,
+            logger,
+            clock,
+            WorkshopCacheRoot,
+            onFileDeleted: workshopInfo.InvalidateCoverFile);
         HttpThrottle = httpThrottle;
         Translation = translation;
         LocalTranslation = localTranslation;
