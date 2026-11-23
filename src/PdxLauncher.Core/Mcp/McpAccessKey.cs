@@ -28,5 +28,11 @@ public sealed record McpAuthorizedKey(
     public bool AllowsAllTools => AllowedTools.Contains("*", StringComparer.Ordinal);
 
     public bool Allows(string toolName) =>
-        AllowsAllTools || AllowedTools.Contains(toolName, StringComparer.Ordinal);
+        AllowsAllTools
+        || AllowedTools.Contains(toolName, StringComparer.Ordinal)
+        || (McpPermissionScopes.IsReadOnlyTool(toolName)
+            && (AllowsScope(McpPermissionScopes.PlaySetsRead) || AllowsScope(McpPermissionScopes.SettingsRead)));
+
+    public bool AllowsScope(string scope) =>
+        AllowsAllTools || AllowedTools.Contains(scope, StringComparer.Ordinal);
 }
