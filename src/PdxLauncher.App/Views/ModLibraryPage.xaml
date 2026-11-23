@@ -144,6 +144,37 @@
                             <Grid.ContextFlyout>
                                 <MenuFlyout Opening="OnTranslationMenuOpening">
                                     <MenuFlyoutItem
+                                        Text="{x:Bind WorkshopDetailText, Mode=OneWay}"
+                                        Click="OnOpenDetailClick"
+                                        IsEnabled="{x:Bind HasWorkshopDetail, Mode=OneTime}"
+                                        AutomationProperties.AutomationId="menuModLibraryOpenDetail" />
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.ModlibOpenFolder, Mode=OneWay}"
+                                        Click="OnOpenFolderClick"
+                                        IsEnabled="{x:Bind HasLocalContent, Mode=OneTime}"
+                                        AutomationProperties.AutomationId="menuModLibraryOpenFolder" />
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.ModlibOpenSteam, Mode=OneWay}"
+                                        Click="OnOpenSteamClick"
+                                        IsEnabled="{x:Bind HasWorkshopPage, Mode=OneTime}"
+                                        AutomationProperties.AutomationId="menuModLibraryOpenSteam" />
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.ModlibOpenBrowser, Mode=OneWay}"
+                                        Click="OnOpenBrowserClick"
+                                        IsEnabled="{x:Bind HasWorkshopPage, Mode=OneTime}"
+                                        AutomationProperties.AutomationId="menuModLibraryOpenBrowser" />
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind L.ModlibSteamDownloadName, Mode=OneWay}"
+                                        Click="OnSteamDownloadClick"
+                                        IsEnabled="{x:Bind CanTriggerSteamDownload, Mode=OneTime}"
+                                        AutomationProperties.AutomationId="menuModLibrarySteamDownload" />
+                                    <MenuFlyoutItem
+                                        Text="{x:Bind SteamDisableActionText, Mode=OneWay}"
+                                        Click="OnSteamDisableClick"
+                                        IsEnabled="{x:Bind HasWorkshopPage, Mode=OneTime}"
+                                        AutomationProperties.AutomationId="menuModLibrarySteamDisable" />
+                                    <MenuFlyoutSeparator />
+                                    <MenuFlyoutItem
                                         Text="{x:Bind L.CommonPageRefresh, Mode=OneWay}"
                                         Click="OnRefreshClick"
                                         AutomationProperties.AutomationId="menuModLibraryPageRefresh" />
