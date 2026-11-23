@@ -31,10 +31,36 @@ public static class PdxSdkChecks
         var before = ChecksContext.Failures;
 
         CheckConfigMapping();
+        CheckPathDerivation();
         CheckSessionBridge(fs);
         CheckSdkLoads();
 
         return ChecksContext.Failures - before;
+    }
+
+    /// <summary>SDK 状态目录必须落在数据根下的 <c>pdxsdk\&lt;账号 id&gt;</c>，不能把根目录本身当落点。</summary>
+    private static void CheckPathDerivation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pdxnext-checks", "data-root");
+
+        ChecksContext.Equal(
+            "路径: 账号 id 拼进 pdxsdk 子目录",
+            Path.Combine(root, "pdxsdk", "u-1"),
+            PdxSdkOptions.GetDiskIoRoot(root, "u-1"));
+
+        ChecksContext.Equal(
+            "路径: 账号 id 前后空白被裁掉",
+            Path.Combine(root, "pdxsdk", "u-1"),
+            PdxSdkOptions.GetDiskIoRoot(root, "  u-1  "));
+
+        ChecksContext.Equal(
+            "路径: 没有账号 id 时用 anonymous",
+            Path.Combine(root, "pdxsdk", "anonymous"),
+            PdxSdkOptions.GetDiskIoRoot(root, null));
+        ChecksContext.Equal(
+            "路径: 空白账号 id 也用 anonymous",
+            Path.Combine(root, "pdxsdk", "anonymous"),
+            PdxSdkOptions.GetDiskIoRoot(root, "   "));
     }
 
     /// <summary>

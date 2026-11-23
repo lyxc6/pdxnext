@@ -23,4 +23,19 @@ public sealed record PdxSdkOptions(
     string DiskIORoot,
     string UserId,
     PdxSession? Session,
-    string GameVersion = "");
+    string GameVersion = "")
+{
+    /// <summary>
+    /// 按「数据根 + 账号 id + 游戏目录」算出该游戏的 SDK 状态目录：
+    /// <c>&lt;dataRoot&gt;\pdxsdk\&lt;userId&gt;</c>。
+    /// 账号 id 为空时用 <c>anonymous</c>，避免拼出根目录本身。
+    /// </summary>
+    /// <param name="dataRoot">本启动器的数据根。</param>
+    /// <param name="userId">Paradox 账号 id。</param>
+    public static string GetDiskIoRoot(string dataRoot, string? userId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dataRoot);
+        var folder = string.IsNullOrWhiteSpace(userId) ? "anonymous" : userId.Trim();
+        return Path.Combine(dataRoot, "pdxsdk", folder);
+    }
+}

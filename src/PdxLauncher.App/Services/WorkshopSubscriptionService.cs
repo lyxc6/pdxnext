@@ -245,7 +245,9 @@ public sealed class WorkshopSubscriptionService
             var options = new PdxSdkOptions(
                 PlatformGameId: game.GameId,
                 ModsRootPath: PlaysetConfigPaths.GetDirectory(game),
-                DiskIORoot: Path.Combine(Path.GetDirectoryName(_cachePath) ?? PdxDataRoot.Directory, "pdxsdk", session.UserId),
+                DiskIORoot: PdxSdkOptions.GetDiskIoRoot(
+                    Path.GetDirectoryName(_cachePath) ?? PdxDataRoot.Directory,
+                    session.UserId),
                 UserId: session.UserId,
                 Session: session,
                 GameVersion: game.Version);
