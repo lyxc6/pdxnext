@@ -36,7 +36,8 @@ public sealed record McpChangePlan(
     string ExpectedHash,
     string KeyId,
     McpChangePlanStatus Status,
-    DateTimeOffset CreatedUtc);
+    DateTimeOffset CreatedUtc,
+    string? ApprovedBy = null);
 
 /// <summary>变更计划校验结果。</summary>
 public readonly record struct McpChangePlanValidation(bool IsValid, string? ErrorCode);
