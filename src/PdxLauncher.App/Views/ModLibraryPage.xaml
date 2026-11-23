@@ -17,7 +17,11 @@
         行尾三个图标按钮：打开本地文件夹 / 在 Steam 中打开 / 在浏览器中打开（不可用时置灰）。
         所有交互控件都带 AutomationProperties.AutomationId，便于 UI 自动化与无障碍。
     -->
-    <Grid Padding="16" RowSpacing="12">
+    <Grid x:Name="LayoutRoot"
+          Padding="16"
+          RowSpacing="12"
+          Background="Transparent"
+          RightTapped="OnPageRightTapped">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -113,13 +117,6 @@
                         AutomationProperties.Name="{x:Bind L.CommonCancel, Mode=OneWay}" />
             </StackPanel>
 
-            <Button Grid.Column="6"
-                    VerticalAlignment="Center"
-                    Click="OnRefreshClick"
-                    AutomationProperties.AutomationId="btnRefreshModLibrary"
-                    AutomationProperties.Name="{x:Bind L.ModlibRefreshName, Mode=OneWay}">
-                <FontIcon Glyph="&#xE72C;" FontSize="16" />
-            </Button>
         </Grid>
 
         <!-- 主体：mod 列表 + 空状态 -->

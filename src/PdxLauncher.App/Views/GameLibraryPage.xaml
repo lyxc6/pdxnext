@@ -20,7 +20,11 @@
         <CornerRadius x:Key="GridViewItemCornerRadius">8</CornerRadius>
     </Page.Resources>
 
-    <Grid Padding="24" RowSpacing="16">
+    <Grid x:Name="LayoutRoot"
+          Padding="24"
+          RowSpacing="16"
+          Background="Transparent"
+          RightTapped="OnPageRightTapped">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -54,12 +58,6 @@
                     Height="20"
                     AutomationProperties.AutomationId="ringLibraryBusy"
                     IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
-                <Button
-                    AutomationProperties.AutomationId="btnRefreshLibrary"
-                    AutomationProperties.Name="{x:Bind L.LibraryRefreshName, Mode=OneWay}"
-                    Click="OnRefreshClick"
-                    Content="{x:Bind L.CommonRefresh, Mode=OneWay}"
-                    IsEnabled="{x:Bind ViewModel.IsRefreshEnabled, Mode=OneWay}" />
             </StackPanel>
         </Grid>
 

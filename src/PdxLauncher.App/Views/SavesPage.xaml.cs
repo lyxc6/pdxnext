@@ -3,6 +3,7 @@ namespace PdxLauncher.App.Views;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
@@ -100,7 +101,18 @@ public sealed partial class SavesPage : Page
         }
     }
 
-    private void OnRefreshClick(object sender, RoutedEventArgs e)
+    private void OnPageRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (!PageRefreshGesture.ShouldRefresh(e.OriginalSource, LayoutRoot))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        Refresh();
+    }
+
+    private void Refresh()
     {
         if (_lifetime.IsCancellationRequested)
         {

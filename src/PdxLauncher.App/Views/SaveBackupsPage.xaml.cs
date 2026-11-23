@@ -3,6 +3,7 @@ namespace PdxLauncher.App.Views;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
 
 using PdxLauncher.App.Controls;
@@ -89,7 +90,18 @@ public sealed partial class SaveBackupsPage : Page
     private void OnBackClick(object sender, RoutedEventArgs e) =>
         NavigationRequested?.Invoke(this, _request?.ReturnTag ?? NavigationService.SavesTag);
 
-    private void OnRefreshClick(object sender, RoutedEventArgs e) => _ = ReloadAsync();
+    private void OnPageRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (!PageRefreshGesture.ShouldRefresh(e.OriginalSource, LayoutRoot))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        Refresh();
+    }
+
+    private void Refresh() => _ = ReloadAsync();
 
     /// <summary>在资源管理器里打开备份根目录；目录不存在时先创建，避免 explorer 报错。</summary>
     private void OnOpenBackupFolderClick(object sender, RoutedEventArgs e)

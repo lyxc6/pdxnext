@@ -15,7 +15,11 @@
         overwrite:true（先把同名存档移入回收站），确认框默认焦点在「取消」。
         空间上限以 GB 为单位调整，保存到 AppSettings；超限时服务会自动删除最旧备份。
     -->
-    <Grid Padding="24" RowSpacing="16">
+    <Grid x:Name="LayoutRoot"
+          Padding="24"
+          RowSpacing="16"
+          Background="Transparent"
+          RightTapped="OnPageRightTapped">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -70,11 +74,6 @@
                         Click="OnOpenBackupFolderClick"
                         AutomationProperties.AutomationId="btnOpenBackupFolder"
                         AutomationProperties.Name="{x:Bind L.SavesBackupOpenFolder, Mode=OneWay}" />
-                <Button Content="{x:Bind L.SavesRefresh, Mode=OneWay}"
-                        IsEnabled="{x:Bind ViewModel.CanRefresh, Mode=OneWay}"
-                        Click="OnRefreshClick"
-                        AutomationProperties.AutomationId="btnBackupsRefresh"
-                        AutomationProperties.Name="{x:Bind L.SavesRefresh, Mode=OneWay}" />
             </StackPanel>
         </Grid>
 

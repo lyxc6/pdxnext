@@ -16,7 +16,11 @@
         页面不提供来源切换页签：来源由 WorkshopViewModel 按当前游戏判定。
         页头只有一行工具条：页面标题交给左侧导航栏，游戏名与结果数放在下方状态栏。
     -->
-    <Grid Padding="16" RowSpacing="12">
+    <Grid x:Name="LayoutRoot"
+          Padding="16"
+          RowSpacing="12"
+          Background="Transparent"
+          RightTapped="OnPageRightTapped">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -95,14 +99,6 @@
                           VerticalAlignment="Center"
                           IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
                           AutomationProperties.AutomationId="ringWorkshopBusy" />
-
-            <Button Grid.Column="5"
-                    VerticalAlignment="Center"
-                    Click="OnRefreshClick"
-                    AutomationProperties.AutomationId="btnWorkshopRefresh"
-                    AutomationProperties.Name="{x:Bind L.WorkshopRefreshName, Mode=OneWay}">
-                <FontIcon Glyph="&#xE72C;" FontSize="16" />
-            </Button>
 
             <Border Grid.Column="6"
                     Width="1"
