@@ -7,6 +7,7 @@ using System.Text.Json.Nodes;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Games;
+using PdxLauncher.Core.Mcp;
 using PdxLauncher.Core.ModStudio;
 using PdxLauncher.Core.Playsets;
 using PdxLauncher.Core.Steam;
@@ -99,6 +100,32 @@ internal sealed class McpTools
                     "gameId",
                     "modPath")),
 
+            Tool(
+                "mcp_describe_capabilities",
+                "列出当前 MCP 密钥可用的作用域、工具和页面映射。",
+                Schema(new JsonObject())),
+
+            Tool(
+                "get_playsets_page",
+                "按游戏读取播放集页的业务数据；只返回展示字段并支持分页。",
+                Schema(
+                    new JsonObject
+                    {
+                        ["gameId"] = Property("string", "游戏 id；留空时取第一个已安装游戏。"),
+                        ["offset"] = Property("integer", "分页起点，默认 0。"),
+                        ["limit"] = Property("integer", "每页条数，默认 20，最大 100。"),
+                    })),
+
+            Tool(
+                "get_settings_page",
+                "读取设置页中可公开的设置项；不返回密钥、代理凭据、翻译 API key 或账号信息。",
+                Schema(
+                    new JsonObject
+                    {
+                        ["offset"] = Property("integer", "分页起点，默认 0。"),
+                        ["limit"] = Property("integer", "每页条数，默认 20，最大 100。"),
+                    })),
+
         };
 
         if (_draftWriteEnabled)
@@ -155,6 +182,31 @@ internal sealed class McpTools
                     },
                     "gameId",
                     "modPath")));
+
+            tools.Add(Tool(
+                "create_change_plan",
+                "创建需用户在 PdxNext 启动器确认的变更计划；只写计划，不直接修改业务数据。",
+                Schema(
+                    new JsonObject
+                    {
+                        ["domain"] = Property("string", "业务域：playsets 或 settings。"),
+                        ["operation"] = Property("string", "操作名：rename_play_set / set_mod_enabled / set_setting 等。"),
+                        ["gameId"] = Property("string", "游戏 id；设置域可传空字符串。"),
+                        ["targetId"] = Property("string", "目标对象 id；设置域传设置键。"),
+                        ["expectedHash"] = Property("string", "读取页面时得到的期望摘要，用于防止覆盖用户后续修改。"),
+                        ["patch"] = new JsonObject
+                        {
+                            ["type"] = "object",
+                            ["description"] = "白名单字段到新值的映射。",
+                            ["additionalProperties"] = new JsonObject { ["type"] = "string" },
+                        },
+                    },
+                    "domain",
+                    "operation",
+                    "gameId",
+                    "targetId",
+                    "expectedHash",
+                    "patch")));
         }
 
         return tools;
@@ -181,6 +233,10 @@ internal sealed class McpTools
                 "get_upload_draft" => await GetUploadDraftAsync(arguments, cancellationToken).ConfigureAwait(false),
                 "save_upload_draft" => await SaveUploadDraftAsync(arguments, cancellationToken).ConfigureAwait(false),
                 "clear_upload_draft" => await ClearUploadDraftAsync(arguments, cancellationToken).ConfigureAwait(false),
+                "mcp_describe_capabilities" => DescribeCapabilities(),
+                "get_playsets_page" => GetPlaysetsPage(arguments),
+                "get_settings_page" => GetSettingsPage(arguments),
+                "create_change_plan" => CreateChangePlan(arguments),
                 _ => throw new McpToolException("未知工具：" + name),
             };
 
@@ -204,11 +260,151 @@ internal sealed class McpTools
     private bool IsToolAllowed(string name) => name switch
     {
         "save_upload_draft" or "clear_upload_draft" => _draftWriteEnabled,
+        "create_change_plan" => _draftWriteEnabled,
         _ => true,
     };
 
     /// <summary>供调用历史记录当前权限模式。</summary>
     public bool IsDraftWriteEnabled => _draftWriteEnabled;
+
+    private JsonNode DescribeCapabilities()
+    {
+        var scopes = new JsonArray();
+        foreach (var scope in new[]
+                 {
+                     McpPermissionScopes.UploadRead,
+                     McpPermissionScopes.UploadWrite,
+                     McpPermissionScopes.PlaySetsRead,
+                     McpPermissionScopes.PlaySetsWriteSafe,
+                     McpPermissionScopes.SettingsRead,
+                     McpPermissionScopes.SettingsWriteSafe,
+                 })
+        {
+            scopes.Add(scope);
+        }
+
+        return new JsonObject
+        {
+            ["schemaVersion"] = 1,
+            ["scopes"] = scopes,
+            ["pages"] = new JsonObject
+            {
+                ["playsets"] = McpPermissionScopes.PlaySetsRead,
+                ["settings"] = McpPermissionScopes.SettingsRead,
+            },
+            ["writeMode"] = "change-plan-requires-ui-approval",
+        };
+    }
+
+    private JsonNode GetPlaysetsPage(JsonObject arguments)
+    {
+        var gameId = ReadString(arguments, "gameId") ?? string.Empty;
+        var offset = (int)ReadInt(arguments, "offset", 0);
+        var limit = (int)ReadInt(arguments, "limit", McpPageSnapshotPaging.DefaultLimit);
+        var snapshot = McpPageSnapshotPaging.Slice(
+            "playsets",
+            "播放集",
+            gameId,
+            [],
+            offset,
+            limit);
+        return SnapshotJson(snapshot);
+    }
+
+    private JsonNode GetSettingsPage(JsonObject arguments)
+    {
+        var offset = (int)ReadInt(arguments, "offset", 0);
+        var limit = (int)ReadInt(arguments, "limit", McpPageSnapshotPaging.DefaultLimit);
+        var snapshot = McpPageSnapshotPaging.Slice(
+            "settings",
+            "设置",
+            string.Empty,
+            [],
+            offset,
+            limit);
+        return SnapshotJson(snapshot);
+    }
+
+    private JsonNode CreateChangePlan(JsonObject arguments)
+    {
+        var domain = ReadString(arguments, "domain") ?? string.Empty;
+        var operation = ReadString(arguments, "operation") ?? string.Empty;
+        var gameId = ReadString(arguments, "gameId") ?? string.Empty;
+        var targetId = ReadString(arguments, "targetId") ?? string.Empty;
+        var expectedHash = ReadString(arguments, "expectedHash") ?? string.Empty;
+        if (arguments["patch"] is not JsonObject patchObject)
+        {
+            throw new McpToolException("缺少或无效的参数：patch");
+        }
+
+        var patch = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var pair in patchObject)
+        {
+            if (pair.Value is not JsonValue value || !value.TryGetValue<string>(out var text))
+            {
+                throw new McpToolException("patch 的每一项都必须是字符串");
+            }
+
+            patch[pair.Key] = text;
+        }
+
+        var request = new McpChangePlanRequest(domain, operation, gameId, targetId, patch, expectedHash);
+        var validation = McpChangePlanPolicy.Validate(request);
+        if (!validation.IsValid)
+        {
+            throw new McpToolException("变更计划未通过校验：" + validation.ErrorCode);
+        }
+
+        var plan = new McpChangePlan(
+            Guid.NewGuid().ToString("N"),
+            domain,
+            operation,
+            gameId,
+            targetId,
+            patch,
+            expectedHash,
+            "legacy",
+            McpChangePlanStatus.Draft,
+            DateTimeOffset.UtcNow);
+        return new JsonObject
+        {
+            ["status"] = "awaiting_ui_approval",
+            ["planId"] = plan.Id,
+            ["hint"] = "在 PdxNext 设置 → MCP → 变更计划中查看并确认。",
+        };
+    }
+
+    private static JsonObject SnapshotJson(McpPageSnapshot snapshot)
+    {
+        var rows = new JsonArray();
+        foreach (var row in snapshot.Rows)
+        {
+            var values = new JsonObject();
+            foreach (var pair in row.Values)
+            {
+                values[pair.Key] = pair.Value;
+            }
+
+            rows.Add(new JsonObject
+            {
+                ["id"] = row.Id,
+                ["values"] = values,
+                ["expectedHash"] = row.ExpectedHash,
+            });
+        }
+
+        return new JsonObject
+        {
+            ["pageId"] = snapshot.PageId,
+            ["displayName"] = snapshot.DisplayName,
+            ["gameId"] = snapshot.GameId,
+            ["rows"] = rows,
+            ["totalCount"] = snapshot.TotalCount,
+            ["offset"] = snapshot.Offset,
+            ["hasMore"] = snapshot.HasMore,
+            ["nextOffset"] = snapshot.NextOffset,
+        };
+    }
 
     private async Task<JsonNode> ListGamesAsync(CancellationToken cancellationToken)
     {
@@ -549,6 +745,12 @@ internal sealed class McpTools
 
         return text.Trim();
     }
+
+    private static string? ReadString(JsonObject arguments, string name) =>
+        arguments[name] is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
+
+    private static long ReadInt(JsonObject arguments, string name, long fallback) =>
+        arguments[name] is JsonValue value && value.TryGetValue<long>(out var number) ? number : fallback;
 
     private static string? OptionalString(JsonObject arguments, string name, string? fallback)
     {
