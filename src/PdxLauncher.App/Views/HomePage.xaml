@@ -221,16 +221,25 @@
                     Text="{x:Bind L.HomeSelectGameHint, Mode=OneWay}"
                     Visibility="{x:Bind svc:XamlVisibility.FromBoolInverse(ViewModel.HasGame), Mode=OneWay}" />
 
-                <TextBlock
-                    x:Name="txtHomeSupportNotice"
-                    HorizontalAlignment="Center"
-                    AutomationProperties.AutomationId="txtHomeSupportNotice"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="{x:Bind ViewModel.SupportNotice, Mode=OneWay}"
-                    TextAlignment="Center"
-                    TextWrapping="Wrap"
-                    Visibility="{x:Bind svc:XamlVisibility.FromString(ViewModel.SupportNotice), Mode=OneWay}" />
+                <Border
+                    x:Name="SupportNoticeHost"
+                    HorizontalAlignment="Stretch"
+                    Padding="0"
+                    Background="{ThemeResource PdxCardGlassBrush}"
+                    BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                    BorderThickness="0"
+                    CornerRadius="0"
+                    Visibility="{x:Bind svc:XamlVisibility.FromString(ViewModel.SupportNotice), Mode=OneWay}">
+                    <TextBlock
+                        x:Name="txtHomeSupportNotice"
+                        HorizontalAlignment="Center"
+                        AutomationProperties.AutomationId="txtHomeSupportNotice"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Style="{StaticResource CaptionTextBlockStyle}"
+                        Text="{x:Bind ViewModel.SupportNotice, Mode=OneWay}"
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                </Border>
             </StackPanel>
 
             <!-- 启动结果 -->

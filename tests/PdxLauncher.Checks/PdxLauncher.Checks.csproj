@@ -251,6 +251,7 @@
       或「没美术的游戏还画着幽灵按钮」，编译器看不见，因此必须由 HomeButtonStyleChecks 直接测。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\HomeButtonStylePolicy.cs" Link="Linked\HomeButtonStylePolicy.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\HomeThemePolicy.cs" Link="Linked\HomeThemePolicy.cs" />
     <!--
       随包自带素材的解析（Assets/themes/<gameId>/background.jpg + logo.png）。
       只依赖 Core 的 IBundledThemeSource / GameInstallation / ThemeSpec，可以原样链接进来；

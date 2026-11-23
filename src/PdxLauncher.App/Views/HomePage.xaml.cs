@@ -273,6 +273,7 @@ public sealed partial class HomePage : Page
             }
 
             var game = AppServices.CurrentGame;
+            ApplyGameChromePolicy(game);
 
             // 主题外观与页面数据互不依赖，并行跑：串行时「读继续存档 + 读播放集」和
             // 「主题素材解码」的耗时会相加，并行后取两者较大值（首帧前少等一段）。
@@ -291,6 +292,31 @@ public sealed partial class HomePage : Page
             }
         });
 
+    private void ApplyGameChromePolicy(GameInstallation? game)
+    {
+        var isCitiesSkylines = HomeThemePolicy.IsCitiesSkylines1(game?.GameId);
+        LogoImage.MaxWidth = HomeThemePolicy.LogoMaxWidth(game?.GameId);
+        LogoImage.MaxHeight = HomeThemePolicy.LogoMaxHeight(game?.GameId);
+
+        SupportNoticeHost.HorizontalAlignment = isCitiesSkylines
+            ? HorizontalAlignment.Center
+            : HorizontalAlignment.Stretch;
+        SupportNoticeHost.MaxWidth = isCitiesSkylines ? 720 : double.PositiveInfinity;
+        SupportNoticeHost.Padding = isCitiesSkylines ? new Thickness(12, 8, 12, 8) : new Thickness(0);
+        SupportNoticeHost.CornerRadius = isCitiesSkylines ? new CornerRadius(8) : new CornerRadius(0);
+        SupportNoticeHost.BorderThickness = isCitiesSkylines ? new Thickness(1) : new Thickness(0);
+        if (isCitiesSkylines)
+        {
+            SupportNoticeHost.ClearValue(Border.BackgroundProperty);
+            SupportNoticeHost.ClearValue(Border.BorderBrushProperty);
+        }
+        else
+        {
+            SupportNoticeHost.Background = null;
+            SupportNoticeHost.BorderBrush = null;
+        }
+    }
+
     /// <summary>
     /// 加载主题素材：先落地按钮字体（保证文字可读），再异步解码字标。
     /// 背景画不在这里加载——MainWindow 用同一份主题把图铺满整个窗口。
@@ -300,7 +326,9 @@ public sealed partial class HomePage : Page
     {
         try
         {
-            var spec = game?.Theme ?? ThemeApplier.CreatePlaceholderSpec();
+            var spec = HomeThemePolicy.ApplyOverrides(
+                game?.Theme ?? ThemeApplier.CreatePlaceholderSpec(),
+                game?.GameId);
 
             // 素材解码交给 ThemeApplier 的异步版：整窗背景/字标动辄 1900px，
             // 同步 new BitmapImage { UriSource } 会在 UI 线程上开文件读头，切游戏时就是一段卡顿。
@@ -324,7 +352,9 @@ public sealed partial class HomePage : Page
             // 改用 WinUI 原生样式。来源 → 外观的决策集中在 HomeButtonStylePolicy，页面只做接线。
             var continueKind = HomeButtonStylePolicy.ResolveStyle(spec.Source, isPrimary: false);
             var startKind = HomeButtonStylePolicy.ResolveStyle(spec.Source, isPrimary: true);
-            if (continueKind == HomeButtonStyleKind.Themed)
+            var keepThemedSkin = HomeThemePolicy.IsCitiesSkylines1(game?.GameId)
+                || continueKind == HomeButtonStyleKind.Themed;
+            if (keepThemedSkin)
             {
                 ShowThemedLayers(ContinueSurface, ContinueGlow, ContinueInnerRing, ContinueBottomLine);
                 ShowThemedLayers(StartSurface, StartGlow, StartInnerRing, StartBottomLine);
@@ -775,7 +805,7 @@ public sealed partial class HomePage : Page
         private const double PressedScale = 0.85;
 
         /// <summary>禁用时的整体不透明度（官方是 opacity .8 + grayscale，这里做整数倍近似）。</summary>
-        private const double DisabledOpacity = 0.55;
+        private const double DisabledOpacity = 0.72;
 
         private readonly Button _button;
         private readonly Grid _surface;
