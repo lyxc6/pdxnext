@@ -9,7 +9,12 @@ using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Online;
 
 /// <summary>
-/// PDX Mods 平台的只读客户端（不依赖闭源 <c>PDX.SDK.dll</c>）。
+/// PDX Mods 平台的**匿名只读**客户端（搜索 / 详情），不要求登录，也不依赖 <c>PDX.SDK.dll</c>。
+/// <para>
+/// 登录态下的写操作（订阅 / 退订 / 下载）已改走官方 SDK，见
+/// <see cref="PdxLauncher.Core.PdxSdk.PdxSdkHost"/>：它复用同一份 Paradox 会话，
+/// 并用 SDK 自带的下载器与 PGP 验签落地 mod。
+/// </para>
 /// <para>
 /// 协议来自官方 Electron 启动器（app.asar 的 <c>modsApi</c> 逐字核对）与本机实测：
 /// </para>

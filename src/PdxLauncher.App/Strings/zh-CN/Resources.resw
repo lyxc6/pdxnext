@@ -5425,7 +5425,13 @@
     <value>订阅失败：{0}</value>
   </data>
   <data name="WorkshopDetailSubscribePlaysetHint" xml:space="preserve">
-    <value>订阅会加入播放集 PdxNext，下次启动时生效</value>
+    <value>订阅会加入当前激活的播放集，并立即下载到本地；需要先在播放集页激活一个播放集</value>
+  </data>
+  <data name="WorkshopDetailSubscribeNoPlayset" xml:space="preserve">
+    <value>还没有激活的播放集。请先在「播放集」页激活一个，再回来订阅。</value>
+  </data>
+  <data name="WorkshopDetailSubscribeSdkUnavailable" xml:space="preserve">
+    <value>PDX 订阅组件不可用（缺少 PDX.SDK 或未安装到程序目录），请重装启动器后再试。</value>
   </data>
   <data name="WorkshopDetailSubscribeSignIn" xml:space="preserve">
     <value>登录 Paradox 账号后才能订阅</value>

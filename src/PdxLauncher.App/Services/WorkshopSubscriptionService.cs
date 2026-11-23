@@ -5,7 +5,11 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Accounts;
+using PdxLauncher.Core.Configuration;
+using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.Mods;
+using PdxLauncher.Core.PdxSdk;
+using PdxLauncher.Core.Playsets.PlaysetConfig;
 
 /// <summary>
 /// 创意工坊详情页的 PDX 订阅：把「某个 mod 是否已订阅 / 订阅 / 退订」翻译成平台接口调用。
@@ -32,8 +36,8 @@ public sealed class WorkshopSubscriptionService
     private readonly IFileSystem _fileSystem;
     private readonly string _cachePath;
     private readonly IAppLogger _logger;
-
-    private Dictionary<string, long>? _cache;
+    private readonly Func<GameInstallation, PdxSdkHost?> _hostFactory;
+    private readonly Dictionary<string, PdxSdkHost> _hosts = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>构造。</summary>
     /// <param name="pdx">PDX Mods 客户端（含订阅写接口）。</param>
@@ -41,12 +45,16 @@ public sealed class WorkshopSubscriptionService
     /// <param name="fileSystem">文件系统（读写播放集映射缓存）。</param>
     /// <param name="dataRoot">数据根目录。</param>
     /// <param name="logger">日志。</param>
+    /// <param name="hostFactory">
+    /// 按游戏造 <see cref="PdxSdkHost"/> 的工厂；默认用官方 SDK。自检可传 null 造出独立假件。
+    /// </param>
     public WorkshopSubscriptionService(
         PdxModsClient pdx,
         AccountService account,
         IFileSystem fileSystem,
         string dataRoot,
-        IAppLogger logger)
+        IAppLogger logger,
+        Func<GameInstallation, PdxSdkHost?>? hostFactory = null)
     {
         ArgumentNullException.ThrowIfNull(pdx);
         ArgumentNullException.ThrowIfNull(account);
@@ -59,6 +67,7 @@ public sealed class WorkshopSubscriptionService
         _fileSystem = fileSystem;
         _cachePath = Path.Combine(dataRoot, CacheFileName);
         _logger = logger;
+        _hostFactory = hostFactory ?? CreateDefaultHost;
     }
 
     /// <summary>当前是否已登录（未登录时只能看，不能订阅）。</summary>
@@ -82,28 +91,34 @@ public sealed class WorkshopSubscriptionService
 
         try
         {
-            var playSet = await ResolvePlaySetAsync(gameName, cancellationToken).ConfigureAwait(true);
-            if (playSet is null)
+            var host = ResolveHost(gameName);
+            if (host is null)
             {
                 return WorkshopSubscriptionState.Unknown;
             }
 
-            var mods = await _pdx
-                .GetPlaySetModsAsync(playSet.Id, _account.Session, cancellationToken)
-                .ConfigureAwait(true);
-
-            if (!mods.IsSuccess || mods.Value is null)
+            var playSet = await host.GetActivePlaySetAsync(cancellationToken).ConfigureAwait(true);
+            if (playSet.Status != PdxSdkPlaySetStatus.Active)
             {
-                return WorkshopSubscriptionState.Unknown with { ActivationSetId = playSet.Id };
+                _logger.Info("PDX 订阅状态查询：没有激活播放集（" + playSet.Status + "）");
+                return WorkshopSubscriptionState.Unknown;
             }
 
-            var subscribed = mods.Value.Any(mod =>
-                string.Equals(mod.ModId, modId, StringComparison.Ordinal));
+            // SDK 自己维护 mods_subscribed / playsets_metadata；这里直接问它“在不在当前播放集”。
+            var subscribed = await host
+                .IsModInPlaySetAsync(playSet.PlaySetId, modId, cancellationToken)
+                .ConfigureAwait(true);
+
+            if (subscribed is null)
+            {
+                return WorkshopSubscriptionState.Unknown with { ActivationSetId = playSet.PlaySetId };
+            }
+
             return new WorkshopSubscriptionState(
                 IsSignedIn: true,
                 IsKnown: true,
-                IsSubscribed: subscribed,
-                ActivationSetId: playSet.Id);
+                IsSubscribed: subscribed.Value,
+                ActivationSetId: playSet.PlaySetId);
         }
         catch (OperationCanceledException)
         {
@@ -138,30 +153,44 @@ public sealed class WorkshopSubscriptionService
 
         try
         {
-            var playSet = await ResolvePlaySetAsync(gameName, cancellationToken).ConfigureAwait(true);
-            if (playSet is null)
+            var host = ResolveHost(gameName);
+            if (host is null)
             {
                 return Core.Contracts.AppResult<bool>.Fail(
                     Core.Contracts.ErrorKind.Io,
-                    "workshop-subscription:no-playset");
+                    "workshop-subscription:sdk-unavailable");
+            }
+
+            var playSet = await host.GetActivePlaySetAsync(cancellationToken).ConfigureAwait(true);
+            if (playSet.Status == PdxSdkPlaySetStatus.NotActive)
+            {
+                return Core.Contracts.AppResult<bool>.Fail(
+                    Core.Contracts.ErrorKind.Invalid,
+                    "workshop-subscription:no-active-playset");
+            }
+
+            if (playSet.Status != PdxSdkPlaySetStatus.Active)
+            {
+                return Core.Contracts.AppResult<bool>.Fail(
+                    Core.Contracts.ErrorKind.Io,
+                    playSet.ErrorText ?? "workshop-subscription:playset-read-failed");
             }
 
             var result = subscribe
-                ? await _pdx
-                    .SubscribeAsync(playSet.Id, modId, version, _account.Session, cancellationToken)
-                    .ConfigureAwait(true)
-                : await _pdx
-                    .UnsubscribeAsync(playSet.Id, modId, _account.Session, cancellationToken)
-                    .ConfigureAwait(true);
+                ? await host.SubscribeAsync(playSet.PlaySetId, modId, version, cancellationToken).ConfigureAwait(true)
+                : await host.UnsubscribeAsync(playSet.PlaySetId, modId, cancellationToken).ConfigureAwait(true);
 
-            if (result.IsSuccess)
+            if (result.Ok)
             {
                 _logger.Info(
                     (subscribe ? "已订阅" : "已退订") + " PDX mod: " + modId +
-                    "（播放集 " + playSet.Id.ToString(CultureInfo.InvariantCulture) + "）");
+                    "（SDK 播放集 " + playSet.PlaySetId.ToString(CultureInfo.InvariantCulture) + "）");
+                return Core.Contracts.AppResult<bool>.Ok(true);
             }
 
-            return result;
+            return Core.Contracts.AppResult<bool>.Fail(
+                Core.Contracts.ErrorKind.Io,
+                result.ErrorText ?? "workshop-subscription:sdk-failed");
         }
         catch (OperationCanceledException)
         {
@@ -176,100 +205,57 @@ public sealed class WorkshopSubscriptionService
         }
     }
 
-    /// <summary>找到这个游戏的播放集；没有就建一个并写缓存。登录缺失或接口失败返回 null。</summary>
-    private async Task<PdxPlaySet?> ResolvePlaySetAsync(string gameName, CancellationToken cancellationToken)
+    /// <summary>
+    /// 找当前游戏对应的 <see cref="PdxSdkHost"/>：同一游戏复用同一个实例，
+    /// 因为 SDK 的 <c>Context</c> 初始化一次后要长期持有。
+    /// </summary>
+    private PdxSdkHost? ResolveHost(string gameName)
     {
-        var cache = LoadCache();
-        if (cache.TryGetValue(gameName, out var cached) && cached > 0)
+        if (_hosts.TryGetValue(gameName, out var existing))
         {
-            return new PdxPlaySet(cached, PlaySetName, gameName, null);
-        }
-
-        var sets = await _pdx
-            .GetPlaySetsAsync(gameName, _account.Session, cancellationToken)
-            .ConfigureAwait(true);
-
-        if (!sets.IsSuccess || sets.Value is null)
-        {
-            return null;
-        }
-
-        var existing = sets.Value.FirstOrDefault();
-        if (existing is not null)
-        {
-            cache[gameName] = existing.Id;
-            SaveCache(cache);
             return existing;
         }
 
-        var created = await _pdx
-            .CreatePlaySetAsync(gameName, PlaySetName, _account.Session, cancellationToken)
-            .ConfigureAwait(true);
-
-        if (!created.IsSuccess || created.Value is null)
+        var game = AppServices.CurrentGame;
+        if (game is null || !string.Equals(game.GameId, gameName, StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
 
-        _logger.Info(
-            "已在 PDX 账号里创建播放集 " + PlaySetName +
-            "（" + created.Value.Id.ToString(CultureInfo.InvariantCulture) + "）用于订阅");
-        cache[gameName] = created.Value.Id;
-        SaveCache(cache);
-        return created.Value;
+        var host = _hostFactory(game);
+        if (host is not null)
+        {
+            _hosts[gameName] = host;
+        }
+
+        return host;
     }
 
-    private Dictionary<string, long> LoadCache()
-    {
-        if (_cache is not null)
-        {
-            return _cache;
-        }
-
-        var cache = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
-        try
-        {
-            if (_fileSystem.FileExists(_cachePath))
-            {
-                var json = _fileSystem.ReadAllText(_cachePath);
-                if (JsonNode.Parse(json) is JsonObject root && root["games"] is JsonObject games)
-                {
-                    foreach (var pair in games)
-                    {
-                        if (pair.Value is JsonValue value && value.TryGetValue<long>(out var setId) && setId > 0)
-                        {
-                            cache[pair.Key] = setId;
-                        }
-                    }
-                }
-            }
-        }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
-        {
-            // 缓存坏了不影响功能：重新解析播放集即可。
-            _logger.Warn("读取播放集缓存失败，忽略: " + ex.Message);
-        }
-
-        _cache = cache;
-        return cache;
-    }
-
-    private void SaveCache(Dictionary<string, long> cache)
+    /// <summary>默认工厂：用当前会话 + 游戏的 <c>.cache\Mods</c> 造官方 SDK host。</summary>
+    private PdxSdkHost? CreateDefaultHost(GameInstallation game)
     {
         try
         {
-            var games = new JsonObject();
-            foreach (var pair in cache)
+            var session = _account.Session;
+            if (session is null)
             {
-                games[pair.Key] = pair.Value;
+                return null;
             }
 
-            var root = new JsonObject { ["games"] = games };
-            _fileSystem.WriteAllTextAtomic(_cachePath, root.ToJsonString());
+            var options = new PdxSdkOptions(
+                PlatformGameId: game.GameId,
+                ModsRootPath: PlaysetConfigPaths.GetDirectory(game),
+                DiskIORoot: Path.Combine(Path.GetDirectoryName(_cachePath) ?? PdxDataRoot.Directory, "pdxsdk", session.UserId),
+                UserId: session.UserId,
+                Session: session,
+                GameVersion: game.Version);
+
+            return new PdxSdkHost(options, _logger, appVersion: null, game: game);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex)
         {
-            _logger.Warn("写入播放集缓存失败: " + ex.Message);
+            _logger.Warn("初始化 PDX.SDK 失败: " + ex.Message);
+            return null;
         }
     }
 }

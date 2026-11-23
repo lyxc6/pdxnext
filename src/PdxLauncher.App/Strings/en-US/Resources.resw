@@ -5425,7 +5425,13 @@ Applying still backs up the original file first, but the backup cannot be verifi
     <value>Subscribe failed: {0}</value>
   </data>
   <data name="WorkshopDetailSubscribePlaysetHint" xml:space="preserve">
-    <value>Adds the mod to play set PdxNext; applies on next launch</value>
+    <value>Adds the mod to the active play set and downloads it now; activate a play set first</value>
+  </data>
+  <data name="WorkshopDetailSubscribeNoPlayset" xml:space="preserve">
+    <value>No play set is active. Activate one on the Play Sets page, then subscribe again.</value>
+  </data>
+  <data name="WorkshopDetailSubscribeSdkUnavailable" xml:space="preserve">
+    <value>The PDX subscribe component is unavailable (PDX.SDK missing from the program folder). Reinstall PdxNext and try again.</value>
   </data>
   <data name="WorkshopDetailSubscribeSignIn" xml:space="preserve">
     <value>Sign in to your Paradox account to subscribe</value>
