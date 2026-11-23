@@ -42,6 +42,11 @@ REQUIRED_PAYLOAD = [
     "Views/SettingsPage.xbf",
     "Controls/ConfirmOverlay.xbf",
     "Assets/AppIcon.ico",
+    # 官方 PDX.SDK：订阅/下载全靠它，缺一个都会让运行期初始化失败。
+    "PDX.SDK.dll",
+    "PDX.SDK.Contracts.dll",
+    "PDX.SDK.Network.dll",
+    "External.dll",
 ]
 
 
@@ -80,7 +85,7 @@ def validate_payload(payload: Path) -> None:
         raise SystemExit(f"payload directory not found: {payload}\nRun publish.cmd first.")
     missing = [name for name in REQUIRED_PAYLOAD if not (payload / name).is_file()]
     if missing:
-        raise SystemExit("payload is missing XAML artifacts: " + ", ".join(missing) + "\nRun publish.cmd again.")
+        raise SystemExit("payload is missing required files: " + ", ".join(missing) + "\nRun publish.cmd again.")
 
 
 def stage_payload(payload: Path, root: Path) -> Path:
