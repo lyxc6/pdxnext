@@ -7784,3 +7784,31 @@ mod 名和行尾三个按钮完全看不见，右栏也不能滚动到这些内�
 - `docs/DEVELOPMENT.md` 738/748 行的「170 个检查类」在 11/16 起已漂到 172（本轮 diff 之外，未动）。
 - `dev.cmd` 69–70 行的 `rem` 注释跨行，每次构建多出一行 `'different' is not recognized...` 噪声（既有缺陷，未动）。
 - `README.md` 的三张截图仍是旧图（左栏带徽标），本次未重截；需要时跑 `scripts/capture-readme.ps1`（会重写数 MB PNG）。
+
+## 0.102 2026-11-24：成就页显示完成条件
+
+对话分支：`sess/20261123-achievement-conditions` → `ver/1.4.3`（功能合并 `c336bf3`）。
+
+### 0.102.1 问题（用户讨论后确认）
+
+用户想在成就页看到“该如何完成”的条件，来源是游戏代码里的判断条件。讨论后定下的口径：官方提示词优先，原始脚本条件兜底；点击行展开详情；隐藏成就也显示；只做确定性映射，禁止相似度猜测。
+
+### 0.102.2 改法
+
+- 新增 `AchievementConditionReader`：在 CK3 / VIC3 / EU5 / EU4 / Stellaris / HOI4 等安装目录的成就脚本位置读取 `happened` / `possible`，正确跳过注释、引号和嵌套块；未闭合块不会污染后续解析。
+- 提示键来源覆盖 `custom_description.text`、`custom_trigger_tooltip.tooltip`、`custom_tooltip.text`，并按游戏本地化字典解析 `$KEY$` 别名、剥掉 Clausewitz 颜色/富文本标记；无提示词时显示原始解锁判定。
+- 匹配严格限定为 Steam API 名 == 脚本块名，或 == 脚本块 `localization` 字段值；不做模糊匹配。
+- `AchievementEntry` 增加可选 `Condition`，成就快照在 Steam 成功映射后附加本地条件，不新增 Steam 原生调用或常驻 worker；缓存 schema 升到 2。
+- 成就行支持展开/收起详情，条件详情含官方提示、解锁判定、前置限制和本地化来源文案；隐藏成就的名称说明仍防剧透，但条件详情可见。
+- 中英文 `.resw` 同步新增 8 个键；README/DEVELOPMENT 检查类计数同步到 186。
+
+### 0.102.3 验证
+
+- 新增 `AchievementConditionChecks` 与扩展的 `AchievementsPageChecks`：覆盖官方提示、别名、原始判定、精确 `localization` 映射、缺失、未闭合块、非模糊匹配、隐藏成就、超长截断、双语键与 XAML 契约。
+- `cmd /c dev.cmd build`：0 警告 0 错误，`检查类: 186，失败: 0，断言失败总数: 0`，`DEV_RESULT=PASS`。
+- 独立验收 subagent 确认写范围、双语文案、4px 网格、异常路径、Steam 边界与 protected files 均无问题；其指出的 Grid 行布局、来源文案绑定、文件末尾空行与 `localization` 回归已在合并前修复并复验通过。
+
+### 0.102.4 注意
+
+- 未做真机 UIA 视觉核对；行模板已补显式 `Grid.RowDefinitions`，但展开态的实际屏幕表现仍建议发版前人工点开一条成就确认。
+- 本机主工作树有另一条 `sess/20261123-mcp-page-scopes` 会话的未提交改动，本轮未触碰。
