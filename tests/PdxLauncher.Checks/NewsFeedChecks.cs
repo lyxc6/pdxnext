@@ -8,7 +8,7 @@ using PdxLauncher.Core.Online;
 
 /// <summary>
 /// 官方公告（Braze content cards）自检：JSON 解析、可见时间窗与权重、缺 slot 容错、
-/// 404 负缓存、离线不联网、6 小时 TTL、30 分钟失败退避、图片落盘与复用、
+/// 404 负缓存、离线不联网、15 分钟 TTL、30 分钟失败退避、图片落盘与复用、
 /// 图片域不可达时的短路 + 5 分钟重试、缓存往返。
 /// 全部 HTTP 与素材下载均通过 fake 注入，绝不真联网。
 /// </summary>
@@ -18,6 +18,7 @@ public static class NewsFeedChecks
     private const string ExpiredFixture = "online/contentcards-expired.json";
     private const string MinimalFixture = "online/contentcards-minimal.json";
     private const string BrokenFixture = "online/contentcards-broken.json";
+    private const string ModernFixture = "online/contentcards-modern.json";
 
     private static readonly DateTimeOffset Now = new(2026, 10, 26, 12, 0, 0, TimeSpan.Zero);
 
@@ -41,6 +42,7 @@ public static class NewsFeedChecks
             CheckImageFastFailure(fs, tempRoot);
             CheckCacheRoundTrip(fs, tempRoot);
             CheckGameIdAlias(fs, tempRoot);
+            CheckModernFormat(fs, tempRoot);
         }
         finally
         {
@@ -257,17 +259,103 @@ public static class NewsFeedChecks
             fs,
             secondHttp,
             new FakeAssetDownloader(fs),
-            new FakeClock(Now.AddHours(1)),
+            new FakeClock(Now.AddMinutes(5)),
             new RecordingLogger(),
             cacheRoot);
         var secondFeed = Fetch(second, "victoria3");
-        ChecksContext.Equal("负缓存 6 小时内不再请求", 0, secondHttp.GetCallCount);
+        ChecksContext.Equal("负缓存 15 分钟内不再请求", 0, secondHttp.GetCallCount);
         ChecksContext.Check("负缓存也返回空", secondFeed.IsEmpty);
     }
 
     // ------------------------------------------------------------ 关闭联网
 
     // ------------------------------------------------------------ gameId 归一
+
+    private static void CheckModernFormat(IFileSystem fs, string tempRoot)
+    {
+        var json = LoadJson(fs, ModernFixture);
+        ChecksContext.Check("新版公告 fixture 存在且非空", json.Length > 500, json.Length + " B");
+        var cacheRoot = Sub(fs, tempRoot, "modern");
+        var http = new FakeHttpFetcher(_ => JsonStream(json));
+        var service = new NewsFeedService(
+            fs,
+            http,
+            new FakeAssetDownloader(fs),
+            new FakeClock(Now),
+            new RecordingLogger(),
+            cacheRoot,
+            random: () => 0.01);
+        var owned = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "dlc001" };
+        var request = new NewsFeedRequest(
+            CreateGame("cities_skylines_2"),
+            "steam",
+            LaunchCount: 4,
+            OwnedDlcIds: owned,
+            AllowOnline: true);
+
+        var feed = service.GetAsync(request, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("新版公告按 slot 解析两张", 2, feed.Items.Count);
+        ChecksContext.Equal("主卡标题按过滤条件选中", "正确卡片", feed.Find(NewsFeedSlots.Main)?.Title);
+        ChecksContext.Equal("副卡支持 contentItems 对象", "副卡", feed.Find(NewsFeedSlots.Secondary1)?.Title);
+        ChecksContext.Check(
+            "请求 URL 带平台参数",
+            http.LastUri?.ToString().EndsWith("/cities_skylines_2?distributionPlatform=steam", StringComparison.Ordinal) == true,
+            http.LastUri?.ToString() ?? "null");
+        var cacheText = fs.ReadAllText(service.CachePath);
+        ChecksContext.Check("缓存键包含平台", cacheText.Contains("\"cities_skylines_2:steam\"", StringComparison.Ordinal));
+        ChecksContext.Check("缓存 schema 升到 2", cacheText.Contains("\"version\":2", StringComparison.Ordinal));
+
+        var pdxHttp = new FakeHttpFetcher(_ => JsonStream(json));
+        var pdxService = new NewsFeedService(
+            fs,
+            pdxHttp,
+            new FakeAssetDownloader(fs),
+            new FakeClock(Now),
+            new RecordingLogger(),
+            cacheRoot,
+            random: () => 0.01);
+        var pdxRequest = request with { DistributionPlatform = "pdx" };
+        pdxService.GetAsync(pdxRequest, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("不同平台缓存互不覆盖", fs.ReadAllText(service.CachePath).Contains("\"cities_skylines_2:pdx\"", StringComparison.Ordinal));
+
+        var weighted = new NewsFeedService(
+            fs,
+            new FakeHttpFetcher(_ => JsonStream(json)),
+            new FakeAssetDownloader(fs),
+            new FakeClock(Now),
+            new RecordingLogger(),
+            Sub(fs, tempRoot, "modern-weight"),
+            random: () => 0.99);
+        var weightedFeed = weighted.GetAsync(request, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("随机源命中低权重但可用的组", "正确卡片", weightedFeed.Find(NewsFeedSlots.Main)?.Title);
+
+        var withoutOwnership = new NewsFeedService(
+            fs,
+            new FakeHttpFetcher(_ => JsonStream(json)),
+            new FakeAssetDownloader(fs),
+            new FakeClock(Now),
+            new RecordingLogger(),
+            Sub(fs, tempRoot, "modern-no-dlc"));
+        var emptyFeed = withoutOwnership.GetAsync(request with { OwnedDlcIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase) }, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check("DLC 未拥有时主卡被过滤", emptyFeed.Find(NewsFeedSlots.Main) is null);
+
+        var forcedClock = new FakeClock(Now);
+        var forcedHttp = new FakeHttpFetcher(_ => JsonStream(json));
+        var forced = new NewsFeedService(
+            fs,
+            forcedHttp,
+            new FakeAssetDownloader(fs),
+            forcedClock,
+            new RecordingLogger(),
+            Sub(fs, tempRoot, "modern-force"),
+            random: () => 0.01);
+        forced.GetAsync(request, CancellationToken.None).GetAwaiter().GetResult();
+        forcedClock.Advance(TimeSpan.FromMinutes(2));
+        forced.GetAsync(request, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("15 分钟内命中缓存", 1, forcedHttp.GetCallCount);
+        forced.GetAsync(request with { ForceRefresh = true }, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("强制刷新越过 TTL", 2, forcedHttp.GetCallCount);
+    }
 
     /// <summary>
     /// Cities: Skylines 1 的公告接口只认官方启动器的原始 id（cities_v2），
@@ -292,14 +380,14 @@ public static class NewsFeedChecks
         ChecksContext.Equal("CS1 公告解析出 3 张", 3, feed.Items.Count);
         ChecksContext.Equal("CS1 公告请求 1 次", 1, http.GetCallCount);
         ChecksContext.Equal(
-            "CS1 公告 URL 用官方原始 id",
-            "https://api.paradox-interactive.com/communication/braze/contentcards/cities_v2",
+            "CS1 公告 URL 用官方原始 id 与平台参数",
+            "https://api.paradox-interactive.com/communication/braze/contentcards/cities_v2?distributionPlatform=pdx",
             http.LastUri?.ToString() ?? "<null>");
 
         var cacheText = fs.ReadAllText(Path.Combine(cacheRoot, "news-cards.json"));
         ChecksContext.Check(
-            "CS1 公告缓存键是原始 id",
-            cacheText.Contains("\"cities_v2\"", StringComparison.Ordinal),
+            "CS1 公告缓存键是原始 id + 平台",
+            cacheText.Contains("\"cities_v2:pdx\"", StringComparison.Ordinal),
             cacheText.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
         ChecksContext.Check(
             "CS1 公告缓存里不出现归一后的 id",
@@ -358,7 +446,7 @@ public static class NewsFeedChecks
         ChecksContext.Equal("关闭联网读缓存不联网", 0, offline2Http.GetCallCount);
     }
 
-    // ------------------------------------------------------------ 6 小时 TTL
+    // ------------------------------------------------------------ 15 分钟 TTL
 
     private static void CheckTtl(IFileSystem fs, string tempRoot)
     {
@@ -376,13 +464,13 @@ public static class NewsFeedChecks
         ChecksContext.Equal("首次获取 3 张", 3, Fetch(service, "ck3").Items.Count);
         ChecksContext.Equal("首次请求 1 次", 1, http.GetCallCount);
 
-        clock.Advance(TimeSpan.FromHours(1));
-        ChecksContext.Equal("1 小时内仍返回 3 张", 3, Fetch(service, "ck3").Items.Count);
-        ChecksContext.Equal("1 小时内不请求", 1, http.GetCallCount);
+        clock.Advance(TimeSpan.FromMinutes(5));
+        ChecksContext.Equal("15 分钟内仍返回 3 张", 3, Fetch(service, "ck3").Items.Count);
+        ChecksContext.Equal("15 分钟内不请求", 1, http.GetCallCount);
 
-        clock.Advance(TimeSpan.FromHours(6));
-        ChecksContext.Equal("7 小时后重新抓到 3 张", 3, Fetch(service, "ck3").Items.Count);
-        ChecksContext.Equal("7 小时后请求 2 次", 2, http.GetCallCount);
+        clock.Advance(TimeSpan.FromMinutes(20));
+        ChecksContext.Equal("TTL 过期后重新抓到 3 张", 3, Fetch(service, "ck3").Items.Count);
+        ChecksContext.Equal("TTL 过期后请求 2 次", 2, http.GetCallCount);
     }
 
     // ----------------------------------------------------- 30 分钟失败退避
@@ -403,7 +491,7 @@ public static class NewsFeedChecks
 
         ChecksContext.Equal("初始 3 张", 3, Fetch(service, "ck3").Items.Count);
 
-        clock.Advance(TimeSpan.FromHours(7));
+        clock.Advance(TimeSpan.FromMinutes(20));
         http.Handler = _ => throw new HttpRequestException("HTTP 500 boom");
         var afterFailure = Fetch(service, "ck3");
         ChecksContext.Equal("失败时沿用旧卡片", 3, afterFailure.Items.Count);
@@ -453,7 +541,7 @@ public static class NewsFeedChecks
             images.Urls.Count == 3 && images.Urls.All(url => url.Contains("braze-images.com", StringComparison.Ordinal)),
             string.Join(" | ", images.Urls));
 
-        clock.Advance(TimeSpan.FromHours(7));
+        clock.Advance(TimeSpan.FromMinutes(20));
         Fetch(service, "ck3");
         ChecksContext.Equal("再抓一次时复用已下载的图", 3, images.CallCount);
 
@@ -523,9 +611,8 @@ public static class NewsFeedChecks
         ChecksContext.Equal("图片域恢复后 3 张卡都有图", 3, recovered.Items.Count(item => item.HasImage));
         ChecksContext.Equal("恢复后补齐 3 张图", 5, images.CallCount);
 
-        clock.Advance(TimeSpan.FromHours(1));
         Fetch(service, "ck3");
-        ChecksContext.Equal("图片补齐后 1 小时内不联网", 3, http.GetCallCount);
+        ChecksContext.Equal("图片补齐后立即调用仍按缓存处理", 3, http.GetCallCount);
     }
 
     private static void CheckImageFastFailure(IFileSystem fs, string tempRoot)
@@ -553,7 +640,7 @@ public static class NewsFeedChecks
 
         clock.Advance(TimeSpan.FromMinutes(10));
         Fetch(service, "ck3");
-        ChecksContext.Equal("快速失败仍按成功缓存 6 小时", 1, http.GetCallCount);
+        ChecksContext.Equal("快速失败仍按成功缓存 15 分钟", 1, http.GetCallCount);
     }
 
     // ------------------------------------------------------------ 缓存往返
@@ -577,7 +664,7 @@ public static class NewsFeedChecks
             fs,
             readerHttp,
             new FakeAssetDownloader(fs),
-            new FakeClock(Now.AddHours(1)),
+            new FakeClock(Now.AddMinutes(5)),
             new RecordingLogger(),
             cacheRoot);
         var second = Fetch(reader, "ck3");
@@ -599,7 +686,7 @@ public static class NewsFeedChecks
         ChecksContext.Equal("坏缓存不抛异常并重新抓取 3 张", 3, brokenCacheFeed.Items.Count);
         ChecksContext.Check(
             "坏缓存记 warn",
-            brokenCacheLogger.Warnings.Any(message => message.Contains("缓存解析失败", StringComparison.Ordinal)),
+            brokenCacheLogger.Warnings.Any(message => message.Contains("缓存读取失败", StringComparison.Ordinal)),
             string.Join(" | ", brokenCacheLogger.Warnings));
 
         var brokenJsonLogger = new RecordingLogger();

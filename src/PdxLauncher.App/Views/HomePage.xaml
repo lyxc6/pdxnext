@@ -28,7 +28,11 @@
         悬停叠 50% #131724 遮罩，只有存在标题时才在左下角叠 24px 白字 + 底部渐变。
         这里用 Image(UniformToFill) 等价实现，不渲染正文（官方也不渲染）。
     -->
-    <ScrollViewer x:Name="HomeScrollViewer" VerticalScrollBarVisibility="Auto" VerticalScrollMode="Auto">
+    <ScrollViewer x:Name="HomeScrollViewer"
+                  VerticalScrollBarVisibility="Auto"
+                  VerticalScrollMode="Auto"
+                  Background="Transparent"
+                  RightTapped="OnPageRightTapped">
         <StackPanel
             MaxWidth="1120"
             Padding="24"

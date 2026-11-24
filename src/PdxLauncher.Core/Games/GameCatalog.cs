@@ -323,7 +323,8 @@ public sealed class GameCatalog : IGameCatalog
             BrowserDlcUrl: null,
             BrowserModUrl: null,
             manifest?.AppId,
-            support);
+            support,
+            "pdx");
     }
 
     private Dictionary<string, AppManifest> BuildManifestIndex(string library)    {
@@ -368,6 +369,7 @@ public sealed class GameCatalog : IGameCatalog
             settings.BrowserDlcUrl,
             settings.BrowserModUrl,
             manifest?.AppId,
-            support);
+            support,
+            settings.DistributionPlatform);
     }
 }

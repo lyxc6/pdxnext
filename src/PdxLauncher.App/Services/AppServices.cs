@@ -90,6 +90,9 @@ public static class AppServices
     /// <summary>官方启动器公告卡（Braze content cards；磁盘缓存 + 可选联网）。</summary>
     public static INewsFeedService NewsFeed { get; private set; } = null!;
 
+    /// <summary>官方公告的平台 / 启动次数 / DLC 上下文。</summary>
+    internal static NewsFeedContextProvider NewsFeedContext { get; private set; } = null!;
+
     public static IMetadataClient Metadata { get; private set; } = null!;
 
     public static IAssetDownloader Assets { get; private set; } = null!;
@@ -399,6 +402,7 @@ public static class AppServices
         DlcDescriptions = dlcDescriptions;
         DlcArtwork = dlcArtwork;
         NewsFeed = newsFeed;
+        NewsFeedContext = new NewsFeedContextProvider(logger, dlcs, dlcOwnership);
         Metadata = metadata;
         Assets = assets;
         ModThumbnails = modThumbnails;

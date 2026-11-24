@@ -11,33 +11,22 @@ using PdxLauncher.Core.Games;
 using PdxLauncher.Core.Storage;
 
 /// <summary>
-/// <see cref="INewsFeedService"/> 实现：官方启动器的 Braze content cards 接口 + 本地 JSON 缓存 + 图片落盘。
-/// <para>接口语义：<c>GET https://api.paradox-interactive.com/communication/braze/contentcards/&lt;gameId&gt;</c>，
-/// 返回按键名分 slot 的对象：<c>{ "main": { "contentGroups": [...] }, "secondary-1": {...}, "secondary-2": {...} }</c>。</para>
-/// <para>JSON 用 <see cref="JsonDocument"/> 手工遍历而不是 DTO：外部结构易变（slot 名带连字符），
-/// 反序列化失败会连带丢掉整批卡片。</para>
-/// <para>失败容忍（公告只是主页的装饰性内容，必须当成弱依赖）：接口 404 视为「该游戏没有公告」并负缓存 6 小时；
-/// 其它失败保留上次内容并 30 分钟内不再重试。公告图域名（braze-images.com）在部分网络下直连不可达，
-/// 所以「图没取到」不算本轮成功：不推进 6 小时 TTL，只记图片失败时间并 5 分钟后重试补图；
-/// 图确实没下回来的卡是纯图卡（title/text 多数为空），由 UI 判空隐藏。</para>
-/// <para>缓存文件：%LOCALAPPDATA%\PdxNext\news-cache\news-cards.json，图片在 news-cache\images\&lt;md5(url)&gt;.*。</para>
+/// <see cref="INewsFeedService"/> 实现：官方启动器的 Braze content cards 接口 + 本地缓存 + 图片落盘。
+/// <para>兼容两代数据：旧 slot/contentGroups/contentItems/content 结构按固定权重取第一条；
+/// 新扁平 Braze 卡片按 <c>extras.game</c> / 平台 / section / DLC / 启动次数过滤后按权重随机选组。</para>
+/// <para>缓存键含平台，TTL 15 分钟；失败退避 30 分钟；图片失败 5 分钟后补图，手动强刷可越过 TTL 与退避。</para>
 /// </summary>
 public sealed class NewsFeedService : INewsFeedService
 {
-    private const int CacheVersion = 1;
+    private const int CacheVersion = 2;
     private const string CacheFileName = "news-cards.json";
     private const string ImagesFolderName = "images";
-    private const string ContentCardsEndpointFormat = "https://api.paradox-interactive.com/communication/braze/contentcards/{0}";
+    private const string ContentCardsEndpointFormat =
+        "https://api.paradox-interactive.com/communication/braze/contentcards/{0}?distributionPlatform={1}";
 
-    /// <summary>公告时效性强于主题（24 小时）与 DLC 简介（7 天），只缓 6 小时。</summary>
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(6);
-
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan FailureBackoff = TimeSpan.FromMinutes(30);
-
-    /// <summary>单张公告图的下载上限。图片域不通时不能逐张干等 HttpClient 的 15 秒连接超时。</summary>
     private static readonly TimeSpan ImageDownloadTimeout = TimeSpan.FromSeconds(8);
-
-    /// <summary>公告图没取到时的重试间隔：远短于 6 小时 TTL，网络恢复后能自动补图。</summary>
     private static readonly TimeSpan ImageRetryBackoff = TimeSpan.FromMinutes(5);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -55,17 +44,11 @@ public sealed class NewsFeedService : INewsFeedService
     private readonly IAppLogger _logger;
     private readonly string _cacheRoot;
     private readonly IDocumentFile _cacheDocument;
+    private readonly Func<double> _random;
     private readonly SemaphoreSlim _batchLock = new(1, 1);
 
     private CacheDocument? _cache;
 
-    /// <summary>创建官方公告服务。</summary>
-    /// <param name="fileSystem">文件系统。</param>
-    /// <param name="http">HTTP 抓取器（只应请求 <see cref="OnlineHosts"/> 白名单内的域名）。</param>
-    /// <param name="assets">素材下载器（公告图复用主题素材的 .part 原子写与 magic 判型）。</param>
-    /// <param name="clock">时钟（缓存过期与失败退避判断）。</param>
-    /// <param name="logger">日志。</param>
-    /// <param name="cacheRoot">缓存目录（通常是 %LOCALAPPDATA%\PdxNext\news-cache）。</param>
     public NewsFeedService(
         IFileSystem fileSystem,
         IHttpFetcher http,
@@ -73,7 +56,8 @@ public sealed class NewsFeedService : INewsFeedService
         IClock clock,
         IAppLogger logger,
         string cacheRoot,
-        IDocumentFile? cacheDocument = null)
+        IDocumentFile? cacheDocument = null,
+        Func<double>? random = null)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(http);
@@ -89,19 +73,16 @@ public sealed class NewsFeedService : INewsFeedService
         _logger = logger;
         _cacheRoot = cacheRoot;
         _cacheDocument = cacheDocument ?? new FileDocumentFile(fileSystem, Path.Combine(cacheRoot, CacheFileName));
+        _random = random ?? Random.Shared.NextDouble;
         ImagesDirectory = Path.Combine(cacheRoot, ImagesFolderName);
     }
 
-    /// <summary>缓存索引的旧文件路径（索引已搬进自有库，图片仍在这里）。</summary>
     public string CachePath => Path.Combine(_cacheRoot, CacheFileName);
 
-    /// <summary>缓存索引落点（<c>db:cache:news-cards</c> 或旧文件），设置页展示用。</summary>
     public string CacheLocation => _cacheDocument.DisplayPath;
 
-    /// <summary>公告图缓存目录。</summary>
     private string ImagesDirectory { get; }
 
-    /// <inheritdoc />
     public void ClearCache()
     {
         _cache = null;
@@ -117,110 +98,102 @@ public sealed class NewsFeedService : INewsFeedService
     }
 
     /// <inheritdoc />
-    public async Task<NewsFeed> GetAsync(GameInstallation game, bool allowOnline, CancellationToken cancellationToken)
+    public Task<NewsFeed> GetAsync(GameInstallation game, bool allowOnline, CancellationToken cancellationToken) =>
+        GetAsync(NewsFeedRequest.FromGame(game, allowOnline), cancellationToken);
+
+    /// <summary>按完整上下文读取公告；强制刷新越过 TTL 与失败退避，但仍复用已下载图片。</summary>
+    public async Task<NewsFeed> GetAsync(NewsFeedRequest request, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(request);
+        var game = request.Game;
         if (string.IsNullOrWhiteSpace(game.GameId))
         {
             return NewsFeed.Empty;
         }
 
-        // 串行化整批：主页刷新连点时会并发进来，缓存文件只能有一个写入者。
         await _batchLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             var cache = LoadCache();
             var now = _clock.UtcNow;
-            cache.Entries.TryGetValue(NewsGameId(game), out var entry);
+            var cacheKey = CacheKey(game, request.DistributionPlatform);
+            cache.Entries.TryGetValue(cacheKey, out var entry);
             var cached = BuildFeed(entry);
 
-            if (!allowOnline)
+            if (!request.AllowOnline)
             {
-                _logger.Info("官方公告：已关闭联网，不发起请求（gameId=" + game.GameId + "，卡片 "
-                    + cached.Items.Count.ToString(CultureInfo.InvariantCulture) + " 张）。");
+                _logger.Info("官方公告：已关闭联网，不发起请求（gameId=" + game.GameId + "，平台="
+                    + request.DistributionPlatform + "，卡片 " + cached.Items.Count.ToString(CultureInfo.InvariantCulture) + " 张）。");
                 return cached;
             }
 
-            if (entry is { } fresh && now - fresh.FetchedUtc < CacheTtl)
+            if (!request.ForceRefresh)
             {
-                _logger.Info("官方公告：命中本地缓存（gameId=" + game.GameId + "，卡片 "
-                    + cached.Items.Count.ToString(CultureInfo.InvariantCulture) + " 张）。");
-                return cached;
-            }
+                if (entry is { } fresh && now - fresh.FetchedUtc < CacheTtl)
+                {
+                    _logger.Info("官方公告：命中本地缓存（gameId=" + game.GameId + "，平台="
+                        + request.DistributionPlatform + "，卡片 " + cached.Items.Count.ToString(CultureInfo.InvariantCulture) + " 张）。");
+                    return cached;
+                }
 
-            if (entry?.LastFailureUtc is { } lastFailure && now - lastFailure < FailureBackoff)
-            {
-                _logger.Info("官方公告：上次联网失败距今不足 "
-                    + ((int)FailureBackoff.TotalMinutes).ToString(CultureInfo.InvariantCulture)
-                    + " 分钟，本轮跳过联网（gameId=" + game.GameId + "）。");
-                return cached;
-            }
+                if (entry?.LastFailureUtc is { } lastFailure && now - lastFailure < FailureBackoff)
+                {
+                    _logger.Info("官方公告：上次联网失败距今不足 "
+                        + ((int)FailureBackoff.TotalMinutes).ToString(CultureInfo.InvariantCulture)
+                        + " 分钟，本轮跳过联网（gameId=" + game.GameId + "）。");
+                    return cached;
+                }
 
-            if (entry?.LastImageFailureUtc is { } lastImageFailure && now - lastImageFailure < ImageRetryBackoff)
-            {
-                _logger.Info("官方公告：公告图上次没取到，距今不足 "
-                    + ((int)ImageRetryBackoff.TotalMinutes).ToString(CultureInfo.InvariantCulture)
-                    + " 分钟，本轮跳过联网（gameId=" + game.GameId + "）。");
-                return cached;
+                if (entry?.LastImageFailureUtc is { } lastImageFailure && now - lastImageFailure < ImageRetryBackoff)
+                {
+                    _logger.Info("官方公告：公告图上次没取到，距今不足 "
+                        + ((int)ImageRetryBackoff.TotalMinutes).ToString(CultureInfo.InvariantCulture)
+                        + " 分钟，本轮跳过联网（gameId=" + game.GameId + "）。");
+                    return cached;
+                }
             }
 
             try
             {
-                var fetched = await FetchAsync(game, now, cancellationToken).ConfigureAwait(false);
-                if (fetched.ImagesIncomplete)
+                var fetched = await FetchAsync(game, request, now, cancellationToken).ConfigureAwait(false);
+                if (fetched.ImagesIncomplete && !request.ForceRefresh)
                 {
-                    // 图片域不可达：卡片解析本身是成功的，但这些都是纯图卡，没图等于没内容。
-                    // 不推进 FetchedUtc（否则 6 小时内不会再试），只记图片失败时间做 5 分钟退避。
-                    var partial = new CacheEntry
+                    cache.Entries[cacheKey] = new CacheEntry
                     {
                         FetchedUtc = entry?.FetchedUtc ?? default,
                         LastImageFailureUtc = now,
                         Items = fetched.Items,
                     };
-                    cache.Entries[NewsGameId(game)] = partial;
                     SaveCache(cache);
-                    _logger.Info("官方公告：图片未取到（" + fetched.Items.Count.ToString(CultureInfo.InvariantCulture)
-                        + " 张卡里 " + CountMissingImages(fetched.Items).ToString(CultureInfo.InvariantCulture)
-                        + " 张无图），" + ((int)ImageRetryBackoff.TotalMinutes).ToString(CultureInfo.InvariantCulture)
+                    _logger.Info("官方公告：图片未取到，"
+                        + ((int)ImageRetryBackoff.TotalMinutes).ToString(CultureInfo.InvariantCulture)
                         + " 分钟后重试（gameId=" + game.GameId + "）。");
-                    return BuildFeed(partial);
+                    return BuildFeed(cache.Entries[cacheKey]);
                 }
 
-                var updated = new CacheEntry
-                {
-                    FetchedUtc = now,
-                    Items = fetched.Items,
-                };
-                cache.Entries[NewsGameId(game)] = updated;
+                cache.Entries[cacheKey] = new CacheEntry { FetchedUtc = now, Items = fetched.Items };
                 SaveCache(cache);
-                return BuildFeed(updated);
+                return BuildFeed(cache.Entries[cacheKey]);
             }
             catch (HttpRequestException exception) when (IsNotFound(exception))
             {
-                // 404 = 该游戏确实没有投放公告（victoria3 / eu4 等实测如此）。按空结果负缓存，避免反复打接口。
                 _logger.Info("官方公告：该游戏没有官方公告（HTTP 404，gameId=" + game.GameId + "）。");
-                var empty = new CacheEntry
-                {
-                    FetchedUtc = now,
-                    Items = new List<CacheItem>(),
-                };
-                cache.Entries[NewsGameId(game)] = empty;
+                cache.Entries[cacheKey] = new CacheEntry { FetchedUtc = now, Items = new List<CacheItem>() };
                 SaveCache(cache);
                 return NewsFeed.Empty;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                // 页面卸载/切换游戏：不是错误，交给调用方。
                 throw;
             }
             catch (Exception exception) when (exception is HttpRequestException or IOException or JsonException
                 or UnauthorizedAccessException or OperationCanceledException)
             {
                 _logger.Warn("官方公告：联网获取失败，沿用上次内容（gameId=" + game.GameId + "）：" + exception.Message);
-                cache.Entries[NewsGameId(game)] = new CacheEntry
+                cache.Entries[cacheKey] = new CacheEntry
                 {
                     FetchedUtc = entry?.FetchedUtc ?? default,
-                    LastFailureUtc = _clock.UtcNow,
+                    LastFailureUtc = now,
                     Items = entry?.Items ?? new List<CacheItem>(),
                 };
                 SaveCache(cache);
@@ -233,12 +206,17 @@ public sealed class NewsFeedService : INewsFeedService
         }
     }
 
-    /// <summary>抓取并解析一门游戏的公告，同时把图片落到缓存目录。</summary>
-    /// <returns>解析出的条目，以及「是否因图片域不可达而中途放弃下载」。</returns>
-    private async Task<FetchResult> FetchAsync(GameInstallation game, DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task<FetchResult> FetchAsync(
+        GameInstallation game,
+        NewsFeedRequest request,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
-        var uri = new Uri(
-            string.Format(CultureInfo.InvariantCulture, ContentCardsEndpointFormat, NewsGameId(game)),
+        var uri = new Uri(string.Format(
+            CultureInfo.InvariantCulture,
+            ContentCardsEndpointFormat,
+            NewsGameId(game),
+            Uri.EscapeDataString(string.IsNullOrWhiteSpace(request.DistributionPlatform) ? "pdx" : request.DistributionPlatform)),
             UriKind.Absolute);
         if (!OnlineHosts.IsAllowed(uri))
         {
@@ -253,7 +231,7 @@ public sealed class NewsFeedService : INewsFeedService
             json = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        var items = ParseItems(json, now);
+        var items = ParseItems(json, request, now, _random);
         var imagesIncomplete = false;
         foreach (var item in items)
         {
@@ -271,38 +249,21 @@ public sealed class NewsFeedService : INewsFeedService
 
             if (!download.TimedOut)
             {
-                // 快速失败（404 / 白名单外 / magic 不识别）：只丢这一张图，继续下一张。
                 continue;
             }
 
-            // 超时通常意味着整个图片域不可达，剩下的图不再逐张等 8 秒。
             imagesIncomplete = true;
             _logger.Info("官方公告：公告图下载超时，本轮不再尝试剩余图片（gameId=" + game.GameId + "）。");
             break;
         }
 
         _logger.Info("官方公告：联网获取到 " + items.Count.ToString(CultureInfo.InvariantCulture)
-            + " 张卡片（gameId=" + game.GameId + "）。");
+            + " 张卡片（gameId=" + game.GameId + "，平台=" + request.DistributionPlatform + "）。");
         return new FetchResult(items, imagesIncomplete);
     }
 
-    /// <summary>统计「有图片地址但没有本地文件」的条目数（纯诊断日志用）。</summary>
-    private static int CountMissingImages(List<CacheItem> items)
-    {
-        var missing = 0;
-        foreach (var item in items)
-        {
-            if (!string.IsNullOrWhiteSpace(item.ImageUrl) && string.IsNullOrWhiteSpace(item.ImageFileName))
-            {
-                missing++;
-            }
-        }
-
-        return missing;
-    }
-
-    /// <summary>解析接口 JSON：每个 slot 取一张卡（时间窗内 weight 最大的组的第一条）。</summary>
-    private static List<CacheItem> ParseItems(string json, DateTimeOffset now)
+    /// <summary>自动识别新旧 JSON 格式；每个 slot 最多输出一张可显示卡片。</summary>
+    private static List<CacheItem> ParseItems(string json, NewsFeedRequest request, DateTimeOffset now, Func<double> random)
     {
         var items = new List<CacheItem>(NewsFeedSlots.Order.Count);
         using var document = JsonDocument.Parse(json);
@@ -312,6 +273,40 @@ public sealed class NewsFeedService : INewsFeedService
             return items;
         }
 
+        var modern = NewsFeedSlots.Order.Any(slot =>
+            root.TryGetProperty(slot, out var value)
+            && value.ValueKind == JsonValueKind.Object
+            && value.TryGetProperty("contentCards", out _));
+
+        if (!modern)
+        {
+            return ParseLegacyItems(root, now);
+        }
+
+        foreach (var slot in NewsFeedSlots.Order)
+        {
+            if (!root.TryGetProperty(slot, out var slotElement) || slotElement.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var candidates = ReadCandidateCards(slotElement, now, modern, slot);
+            var chosen = SelectCard(candidates, request, modern, random, slot);
+            var item = chosen is not { } selected
+                ? null
+                : modern ? ReadModernItem(slot, selected) : ReadItem(slot, selected);
+            if (item is not null)
+            {
+                items.Add(item);
+            }
+        }
+
+        return items;
+    }
+
+    private static List<CacheItem> ParseLegacyItems(JsonElement root, DateTimeOffset now)
+    {
+        var items = new List<CacheItem>(NewsFeedSlots.Order.Count);
         foreach (var slot in NewsFeedSlots.Order)
         {
             if (!root.TryGetProperty(slot, out var slotElement) || slotElement.ValueKind != JsonValueKind.Object)
@@ -324,7 +319,7 @@ public sealed class NewsFeedService : INewsFeedService
                 continue;
             }
 
-            JsonElement? chosen = null;
+            JsonElement? chosenGroup = null;
             var chosenWeight = int.MinValue;
             foreach (var group in groups.EnumerateArray())
             {
@@ -333,30 +328,23 @@ public sealed class NewsFeedService : INewsFeedService
                     continue;
                 }
 
-                // 同 weight 取先出现的那组：只有严格更大才替换。
                 var weight = ReadGroupWeight(group);
                 if (weight > chosenWeight)
                 {
                     chosenWeight = weight;
-                    chosen = group;
+                    chosenGroup = group;
                 }
             }
 
-            if (chosen is not { } selected)
+            if (chosenGroup is not { } groupElement
+                || !groupElement.TryGetProperty("contentItems", out var contentItems))
             {
                 continue;
             }
 
-            if (!selected.TryGetProperty("contentItems", out var contentItems) || contentItems.ValueKind != JsonValueKind.Array)
+            foreach (var entry in EnumerateValueElements(contentItems))
             {
-                continue;
-            }
-
-            foreach (var entry in contentItems.EnumerateArray())
-            {
-                // 官方每个 slot 最多 8 条，启动器版式只放一张：取第一条可显示的。
-                var item = ReadItem(slot, entry);
-                if (item is not null)
+                if (ReadItem(slot, entry) is { } item)
                 {
                     items.Add(item);
                     break;
@@ -367,97 +355,278 @@ public sealed class NewsFeedService : INewsFeedService
         return items;
     }
 
-    private static bool IsGroupVisible(JsonElement group, DateTimeOffset now)
+    private static List<JsonElement> ReadCandidateCards(JsonElement slotElement, DateTimeOffset now, bool modern, string slot)
     {
-        if (group.ValueKind != JsonValueKind.Object)
+        var result = new List<JsonElement>();
+        if (slotElement.TryGetProperty("contentCards", out var cards))
         {
-            return false;
+            foreach (var card in EnumerateValueElements(cards))
+            {
+                if (card.ValueKind == JsonValueKind.Object
+                    && IsModernVisible(card, now)
+                    && MatchesSection(card, slot, modern))
+                {
+                    result.Add(card);
+                }
+            }
+
+            return result;
         }
 
-        if (!group.TryGetProperty("settings", out var settings) || settings.ValueKind != JsonValueKind.Object)
+        if (!slotElement.TryGetProperty("contentGroups", out var groups) || groups.ValueKind != JsonValueKind.Array)
+        {
+            return result;
+        }
+
+        foreach (var group in groups.EnumerateArray())
+        {
+            if (IsGroupVisible(group, now) && group.TryGetProperty("contentItems", out var contentItems))
+            {
+                foreach (var _ in EnumerateValueElements(contentItems))
+                {
+                    if (MatchesSection(group, slot, modern))
+                    {
+                        result.Add(group);
+                    }
+                }
+            }
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<JsonElement> EnumerateValueElements(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                yield return item;
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var property in element.EnumerateObject())
+            {
+                yield return property.Value;
+            }
+        }
+    }
+
+    private static JsonElement? SelectCard(
+        List<JsonElement> cards,
+        NewsFeedRequest request,
+        bool modern,
+        Func<double> random,
+        string slot)
+    {
+        JsonElement? chosen = null;
+        var chosenWeight = modern ? 0 : double.NegativeInfinity;
+        foreach (var card in cards)
+        {
+            if (modern && !MatchesModernFilters(card, request, slot))
+            {
+                continue;
+            }
+
+            var weight = modern ? ReadDouble(card, "weight") ?? 1 : ReadGroupWeight(card);
+            if (!modern)
+            {
+                if (weight > chosenWeight)
+                {
+                    chosenWeight = weight;
+                    chosen = card;
+                }
+
+                continue;
+            }
+
+            chosenWeight += weight;
+            if (random() * chosenWeight < weight)
+            {
+                chosen = card;
+            }
+        }
+
+        return chosen;
+    }
+
+    private static bool MatchesModernFilters(JsonElement card, NewsFeedRequest request, string slot)
+    {
+        if (!card.TryGetProperty("extras", out var extras) || extras.ValueKind != JsonValueKind.Object)
         {
             return true;
         }
 
-        if (!settings.TryGetProperty("visible", out var visible) || visible.ValueKind != JsonValueKind.Object)
+        if (!MatchesCsv(extras, "game", request.Game.GameId)
+            || !MatchesCsv(extras, "distributionPlatforms", request.DistributionPlatform)
+            || !MatchesSection(card, slot, modern: true))
+        {
+            return false;
+        }
+
+        if (extras.TryGetProperty("numberOfLauncherStarts", out var exact)
+            && exact.ValueKind == JsonValueKind.Number
+            && exact.TryGetInt32(out var target)
+            && target != request.LaunchCount)
+        {
+            return false;
+        }
+
+        if (TryReadInt(extras, "minNumberOfLauncherStarts", out var min) && request.LaunchCount < min)
+        {
+            return false;
+        }
+
+        if (TryReadInt(extras, "maxNumberOfLauncherStarts", out var max) && request.LaunchCount > max)
+        {
+            return false;
+        }
+
+        return !card.TryGetProperty("filter", out var filter)
+            || filter.ValueKind != JsonValueKind.Object
+            || MatchesOwnership(filter, request.OwnedDlcIds);
+    }
+
+    private static bool MatchesSection(JsonElement card, string slot, bool modern)
+    {
+        if (!modern)
         {
             return true;
         }
 
-        if (TryReadTimestamp(visible, "from", out var from) && now < from)
+        if (!card.TryGetProperty("extras", out var extras) || extras.ValueKind != JsonValueKind.Object)
         {
-            return false;
+            return true;
         }
 
-        if (TryReadTimestamp(visible, "until", out var until) && now > until)
+        return MatchesCsv(extras, "sections", slot);
+    }
+
+    private static bool MatchesCsv(JsonElement extras, string name, string expected) =>
+        !extras.TryGetProperty(name, out var value)
+        || value.ValueKind != JsonValueKind.String
+        || string.IsNullOrWhiteSpace(value.GetString())
+        || value.GetString()!.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(item => string.Equals(item, expected, StringComparison.OrdinalIgnoreCase));
+
+    private static bool MatchesCsv(JsonElement extras, string name, IEnumerable<string> expected) =>
+        expected.Any(value => MatchesCsv(extras, name, value));
+
+    private static bool MatchesOwnership(JsonElement filter, IReadOnlySet<string> owned)
+    {
+        if (filter.TryGetProperty("owns", out var owns))
         {
-            return false;
+            return Owns(owns, owned);
+        }
+
+        if (filter.TryGetProperty("and", out var and) && and.ValueKind == JsonValueKind.Array)
+        {
+            return and.EnumerateArray().All(item => MatchesOwnership(item, owned));
+        }
+
+        if (filter.TryGetProperty("or", out var or) && or.ValueKind == JsonValueKind.Array)
+        {
+            return or.EnumerateArray().Any(item => MatchesOwnership(item, owned));
         }
 
         return true;
+    }
+
+    private static bool Owns(JsonElement value, IReadOnlySet<string> owned) => value.ValueKind switch
+    {
+        JsonValueKind.String => owned.Contains(value.GetString() ?? string.Empty),
+        JsonValueKind.Array => value.EnumerateArray().Any(item => item.ValueKind == JsonValueKind.String
+            && owned.Contains(item.GetString() ?? string.Empty)),
+        _ => true,
+    };
+
+    private static bool IsModernVisible(JsonElement card, DateTimeOffset now) =>
+        !(TryReadTimestamp(card, "from", out var from) && now < from)
+        && !(TryReadTimestamp(card, "until", out var until) && now > until);
+
+    private static bool IsGroupVisible(JsonElement group, DateTimeOffset now)
+    {
+        if (group.ValueKind != JsonValueKind.Object
+            || !group.TryGetProperty("settings", out var settings)
+            || settings.ValueKind != JsonValueKind.Object
+            || !settings.TryGetProperty("visible", out var visible)
+            || visible.ValueKind != JsonValueKind.Object)
+        {
+            return true;
+        }
+
+        return !(TryReadTimestamp(visible, "from", out var from) && now < from)
+            && !(TryReadTimestamp(visible, "until", out var until) && now > until);
     }
 
     private static bool TryReadTimestamp(JsonElement owner, string propertyName, out DateTimeOffset value)
     {
         value = default;
         var text = ReadString(owner, propertyName);
-        if (text is null)
-        {
-            return false;
-        }
-
-        return DateTimeOffset.TryParse(
+        return text is not null && DateTimeOffset.TryParse(
             text,
             CultureInfo.InvariantCulture,
             DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
             out value);
     }
 
-    private static int ReadGroupWeight(JsonElement group)
+    private static double? ReadDouble(JsonElement owner, string name) =>
+        owner.ValueKind == JsonValueKind.Object
+        && owner.TryGetProperty(name, out var value)
+        && value.ValueKind == JsonValueKind.Number
+        && value.TryGetDouble(out var result)
+            ? result
+            : null;
+
+    private static bool TryReadInt(JsonElement owner, string name, out int value)
     {
-        if (group.TryGetProperty("settings", out var settings)
-            && settings.ValueKind == JsonValueKind.Object
-            && settings.TryGetProperty("weight", out var weight)
-            && weight.ValueKind == JsonValueKind.Number
-            && weight.TryGetInt32(out var value))
+        value = 0;
+        return owner.ValueKind == JsonValueKind.Object
+            && owner.TryGetProperty(name, out var element)
+            && element.ValueKind == JsonValueKind.Number
+            && element.TryGetInt32(out value);
+    }
+
+    private static int ReadGroupWeight(JsonElement group) =>
+        group.ValueKind == JsonValueKind.Object
+        && group.TryGetProperty("settings", out var settings)
+        && TryReadInt(settings, "weight", out var value)
+            ? value
+            : 1;
+
+    private static CacheItem? ReadModernItem(string slot, JsonElement card)
+    {
+        var title = ReadString(card, "title");
+        var text = ReadString(card, "description");
+        var imageUrl = ReadString(card, "imageUrl");
+        var link = ReadString(card, "url");
+        if (card.TryGetProperty("extras", out var extras) && extras.ValueKind == JsonValueKind.Object)
         {
-            return value;
+            link = ReadString(extras, "launcherUrl") ?? link;
         }
 
-        return 1;
+        return title is null && text is null && imageUrl is null && link is null
+            ? null
+            : new CacheItem { Slot = slot, Title = title, Text = text, ImageUrl = imageUrl, Link = link };
     }
 
     private static CacheItem? ReadItem(string slot, JsonElement entry)
     {
-        if (entry.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
-
-        if (!entry.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Object)
+        if (entry.ValueKind != JsonValueKind.Object
+            || !entry.TryGetProperty("content", out var content)
+            || content.ValueKind != JsonValueKind.Object)
         {
             return null;
         }
 
         var title = ReadLocalizedText(content, "title") ?? ReadString(entry, "localizedTitle");
         var text = ReadLocalizedText(content, "text");
-        var imageUrl = ReadImageUrl(content);
-        var link = ReadLink(content);
-
-        if (title is null && text is null && imageUrl is null && link is null)
-        {
-            // 三个字段全空 = 这张卡没有任何可显示内容，该 slot 视为没有公告。
-            return null;
-        }
-
-        return new CacheItem
-        {
-            Slot = slot,
-            Title = title,
-            Text = text,
-            ImageUrl = imageUrl,
-            Link = link,
-        };
+        var imageUrl = ReadLegacyImageUrl(content);
+        var link = ReadLegacyLink(content);
+        return title is null && text is null && imageUrl is null && link is null
+            ? null
+            : new CacheItem { Slot = slot, Title = title, Text = text, ImageUrl = imageUrl, Link = link };
     }
 
     private static string? ReadLocalizedText(JsonElement content, string propertyName)
@@ -472,29 +641,13 @@ public sealed class NewsFeedService : INewsFeedService
             return NullIfEmpty(map.GetString());
         }
 
-        if (map.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
-
-        if (ReadString(map, "en") is { } english)
-        {
-            return english;
-        }
-
-        // 官方接口目前只给 en；这里兜底取任意一种语言，避免将来加语言后卡片直接消失。
-        foreach (var pair in map.EnumerateObject())
-        {
-            if (pair.Value.ValueKind == JsonValueKind.String && NullIfEmpty(pair.Value.GetString()) is { } other)
-            {
-                return other;
-            }
-        }
-
-        return null;
+        return ReadString(map, "en") ?? map.EnumerateObject()
+            .Where(property => property.Value.ValueKind == JsonValueKind.String)
+            .Select(property => NullIfEmpty(property.Value.GetString()))
+            .FirstOrDefault(value => value is not null);
     }
 
-    private static string? ReadImageUrl(JsonElement content)
+    private static string? ReadLegacyImageUrl(JsonElement content)
     {
         if (!content.TryGetProperty("image", out var image))
         {
@@ -511,38 +664,27 @@ public sealed class NewsFeedService : INewsFeedService
             return null;
         }
 
-        if (ReadString(image, "src") is { } source)
-        {
-            return source;
-        }
-
-        if (ReadString(image, "cacheSrc") is { } cachedSource)
-        {
-            return cachedSource;
-        }
-
-        // 兜底：background_image 是 css 的 url(...) 写法。
-        return ReadString(image, "backgroundImage") is { } css ? ExtractCssUrl(css) : null;
+        return ReadString(image, "src") ?? ReadString(image, "cacheSrc")
+            ?? (ReadString(image, "backgroundImage") is { } css ? ExtractCssUrl(css) : null);
     }
 
-    private static string? ReadLink(JsonElement content)
+    private static string? ReadLegacyLink(JsonElement content)
     {
         if (!content.TryGetProperty("link", out var link))
         {
             return null;
         }
 
-        if (link.ValueKind == JsonValueKind.String)
-        {
-            return NullIfEmpty(link.GetString());
-        }
-
-        return link.ValueKind == JsonValueKind.Object ? ReadString(link, "href") : null;
+        return link.ValueKind == JsonValueKind.String
+            ? NullIfEmpty(link.GetString())
+            : link.ValueKind == JsonValueKind.Object ? ReadString(link, "href") : null;
     }
 
     private static string? ReadString(JsonElement owner, string propertyName)
     {
-        if (!owner.TryGetProperty(propertyName, out var element) || element.ValueKind != JsonValueKind.String)
+        if (owner.ValueKind != JsonValueKind.Object
+            || !owner.TryGetProperty(propertyName, out var element)
+            || element.ValueKind != JsonValueKind.String)
         {
             return null;
         }
@@ -560,24 +702,16 @@ public sealed class NewsFeedService : INewsFeedService
 
         var start = open + 4;
         var close = css.IndexOf(')', start);
-        if (close <= start)
-        {
-            return null;
-        }
-
-        return NullIfEmpty(css.Substring(start, close - start).Trim('"', '\''));
+        return close <= start ? null : NullIfEmpty(css[start..close].Trim('"', '\''));
     }
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    /// <summary>
-    /// 公告接口与缓存键用的 gameId。CS1 是唯一需要反向归一的一款：
-    /// 本启动器内部用正名 <c>cities_skylines</c>，而 Braze 只认官方启动器写的 <c>cities_v2</c>。
-    /// </summary>
     private static string NewsGameId(GameInstallation game) => KnownGames.GetNewsFeedGameId(game.GameId);
 
-    /// <summary>下载一张公告图；失败只丢图，不影响卡片。</summary>
-    /// <returns>本地路径；以及是否因超时而失败（超时按「图片域不可达」处理）。</returns>
+    private static string CacheKey(GameInstallation game, string platform) =>
+        NewsGameId(game) + ":" + (string.IsNullOrWhiteSpace(platform) ? "pdx" : platform.ToLowerInvariant());
+
     private async Task<ImageDownload> DownloadImageAsync(string? url, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(url))
@@ -591,11 +725,9 @@ public sealed class NewsFeedService : INewsFeedService
             return new ImageDownload(null, TimedOut: false);
         }
 
-        // 文件名用 URL 的 MD5：接口里的 hash 段会随内容变，用整条 URL 才能稳定复用已下载的图。
         var hash = Convert.ToHexString(MD5.HashData(Encoding.UTF8.GetBytes(url))).ToLowerInvariant();
         try
         {
-            // 扩展名由 AssetDownloader 按 magic 决定，所以只能按「hash.*」探测已有文件。
             if (_fileSystem.DirectoryExists(ImagesDirectory))
             {
                 foreach (var existing in _fileSystem.EnumerateFiles(ImagesDirectory, hash + ".*", recursive: false))
@@ -608,8 +740,6 @@ public sealed class NewsFeedService : INewsFeedService
             }
 
             var targetWithoutExtension = Path.Combine(ImagesDirectory, hash);
-
-            // 单张图限时：图片域不通时不能占着公告的批次锁干等 HttpClient 的连接超时。
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(ImageDownloadTimeout);
             string? downloaded;
@@ -619,8 +749,7 @@ public sealed class NewsFeedService : INewsFeedService
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                _logger.Warn("官方公告图下载超时（" + ((int)ImageDownloadTimeout.TotalSeconds).ToString(CultureInfo.InvariantCulture)
-                    + " 秒），卡片将不显示图片：" + url);
+                _logger.Warn("官方公告图下载超时，卡片将不显示图片：" + url);
                 return new ImageDownload(null, TimedOut: true);
             }
 
@@ -643,7 +772,6 @@ public sealed class NewsFeedService : INewsFeedService
         }
     }
 
-    /// <summary>把缓存条目投影成契约对象（图片文件缺失时按「无图」处理）。</summary>
     private NewsFeed BuildFeed(CacheEntry? entry)
     {
         if (entry?.Items is null || entry.Items.Count == 0)
@@ -654,18 +782,16 @@ public sealed class NewsFeedService : INewsFeedService
         var items = new List<NewsFeedItem>(entry.Items.Count);
         foreach (var cached in entry.Items)
         {
-            if (string.IsNullOrWhiteSpace(cached.Slot))
+            if (!string.IsNullOrWhiteSpace(cached.Slot))
             {
-                continue;
+                items.Add(new NewsFeedItem(
+                    cached.Slot,
+                    cached.Title,
+                    cached.Text,
+                    ResolveImagePath(cached.ImageFileName),
+                    cached.ImageUrl,
+                    cached.Link));
             }
-
-            items.Add(new NewsFeedItem(
-                cached.Slot,
-                cached.Title,
-                cached.Text,
-                ResolveImagePath(cached.ImageFileName),
-                cached.ImageUrl,
-                cached.Link));
         }
 
         return items.Count == 0 ? NewsFeed.Empty : new NewsFeed(items);
@@ -707,17 +833,9 @@ public sealed class NewsFeedService : INewsFeedService
                 _logger.Warn("官方公告缓存版本不匹配，已忽略并重建：" + _cacheDocument.DisplayPath);
             }
         }
-        catch (JsonException exception)
-        {
-            _logger.Warn("官方公告缓存解析失败，已忽略并重建：" + exception.Message);
-        }
-        catch (IOException exception)
+        catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
         {
             _logger.Warn("官方公告缓存读取失败，已忽略并重建：" + exception.Message);
-        }
-        catch (UnauthorizedAccessException exception)
-        {
-            _logger.Warn("官方公告缓存无权限读取，已忽略并重建：" + exception.Message);
         }
 
         _cache = new CacheDocument();
@@ -734,13 +852,9 @@ public sealed class NewsFeedService : INewsFeedService
                 _logger.Warn("官方公告缓存写入失败：" + _cacheDocument.DisplayPath);
             }
         }
-        catch (IOException exception)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             _logger.Warn("官方公告缓存写入失败：" + exception.Message);
-        }
-        catch (UnauthorizedAccessException exception)
-        {
-            _logger.Warn("官方公告缓存无权限写入：" + exception.Message);
         }
     }
 
@@ -757,7 +871,6 @@ public sealed class NewsFeedService : INewsFeedService
 
         public DateTimeOffset? LastFailureUtc { get; set; }
 
-        /// <summary>上次「卡片拿到了、但图片没下载成功」的时间；只做 5 分钟重试退避，不推进 <see cref="FetchedUtc"/>。</summary>
         public DateTimeOffset? LastImageFailureUtc { get; set; }
 
         public List<CacheItem> Items { get; set; } = new();
@@ -778,9 +891,7 @@ public sealed class NewsFeedService : INewsFeedService
         public string? Link { get; set; }
     }
 
-    /// <summary>一次抓取的结果：解析出的条目 + 是否因为图片域不可达而放弃了剩余图片。</summary>
     private readonly record struct FetchResult(List<CacheItem> Items, bool ImagesIncomplete);
 
-    /// <summary>单张图的下载结果：本地路径（null = 没取到）+ 是否因超时失败。</summary>
     private readonly record struct ImageDownload(string? Path, bool TimedOut);
 }

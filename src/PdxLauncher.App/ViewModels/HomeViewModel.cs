@@ -502,7 +502,11 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
         try
         {
             var feed = await AppServices.NewsFeed
-                .GetAsync(game, AppServices.Settings.NewsFeedOnlineEnabled, cancellationToken)
+                .GetAsync(await AppServices.NewsFeedContext.CreateAsync(
+                    game,
+                    AppServices.Settings.NewsFeedOnlineEnabled,
+                    forceRefresh: false,
+                    cancellationToken).ConfigureAwait(true), cancellationToken)
                 .ConfigureAwait(true);
 
             NewsMain = NewsCardItem.FromFeedItem(feed.Find(NewsFeedSlots.Main))
@@ -542,6 +546,34 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
         catch (Exception ex)
         {
             AppServices.Logger.Warn("主页公告获取失败（只影响公告区）: " + ex.Message);
+        }
+    }
+
+    /// <summary>只刷新公告，不重载主题、播放集与存档；供主页右键刷新调用。</summary>
+    internal async Task RefreshNewsAsync(CancellationToken cancellationToken)
+    {
+        var game = Game;
+        if (game is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var request = await AppServices.NewsFeedContext
+                .CreateAsync(game, AppServices.Settings.NewsFeedOnlineEnabled, forceRefresh: true, cancellationToken)
+                .ConfigureAwait(true);
+            var feed = await AppServices.NewsFeed.GetAsync(request, cancellationToken).ConfigureAwait(true);
+            NewsMain = NewsCardItem.FromFeedItem(feed.Find(NewsFeedSlots.Main)) ?? NewsCardItem.Empty(NewsFeedSlots.Main);
+            NewsSecondary1 = NewsCardItem.FromFeedItem(feed.Find(NewsFeedSlots.Secondary1)) ?? NewsCardItem.Empty(NewsFeedSlots.Secondary1);
+            NewsSecondary2 = NewsCardItem.FromFeedItem(feed.Find(NewsFeedSlots.Secondary2)) ?? NewsCardItem.Empty(NewsFeedSlots.Secondary2);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            AppServices.Logger.Warn("手动刷新官方公告失败（只影响公告区）: " + exception.Message);
         }
     }
 
