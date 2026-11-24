@@ -364,6 +364,19 @@ public static partial class SteamAchievementLocalization
 
         ResolveAliases(raw, logger);
 
+        // 成就描述里会夹 [concept|E] 概念链接，也会用 `$trait_herald$` / `$activity_funeral$` 引用实体名。
+        // 概念名在 game_concepts_*.yml（键 game_concept_<concept>），实体名散在 traits / activities 等文件。
+        // 为了不再把 26 MB 全读一遍，这里只挑文件名命中这些实体的文件补扫。
+        var entities = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in remaining)
+        {
+            if (LooksLikeEntityLocalizationFile(file))
+            {
+                ParseFile(fileSystem, file, logger, entities);
+            }
+        }
+        AddConceptAliases(entities);
+
         // 文件名不按惯例起的本地化（旧版本、改过名的包）照样要能用：名键不够覆盖宿主条目数就补扫。
         // 没有宿主条目数时退化成「一条名键都没有才补扫」。
         var needed = expectedNames > 0 ? expectedNames : 1;
@@ -377,7 +390,7 @@ public static partial class SteamAchievementLocalization
             ResolveAliases(raw, logger);
         }
 
-        return Clean(raw);
+        return Clean(raw, entities);
     }
 
     /// <summary>
@@ -388,13 +401,41 @@ public static partial class SteamAchievementLocalization
     /// <see cref="DlcLocalization.CleanMarkup"/>。
     /// </para>
     /// </summary>
-    private static IReadOnlyDictionary<string, string> Clean(Dictionary<string, string> raw)
+    private static IReadOnlyDictionary<string, string> Clean(
+        Dictionary<string, string> raw,
+        IReadOnlyDictionary<string, string> entities)
     {
         var result = new Dictionary<string, string>(raw.Count, StringComparer.OrdinalIgnoreCase);
         foreach (var (key, value) in raw)
         {
-            var withoutVariables = VariableRef().Replace(value, string.Empty);
-            var cleaned = DlcLocalization.CleanMarkup(withoutVariables);
+            // 顺序很重要：先把 [概念|E] 与 $实体键$ 换成正式文案，再清理标记。
+            // 反过来做的话，链接里的概念键会先被剥掉，只剩「获得一套……里的」这种残句。
+            var resolved = ConceptLink().Replace(value, match =>
+            {
+                var body = match.Groups["body"].Value;
+                var separator = body.IndexOf('|');
+                if (separator <= 0)
+                {
+                    return string.Empty;
+                }
+
+                var concept = body[..separator].Trim();
+                // 概念链接优先用 game_concept_<key>：裸键常被脚本表达式占用
+                // （`legend_protagonist = [Legend.GetProtagonist.GetName]`），直接用会拿到脚本而不是名称。
+                if (ResolveConcept(raw, entities, concept) is { } display)
+                {
+                    return display;
+                }
+
+                var variable = ResolveVariable(raw, entities, concept);
+                return variable.Length > 0 ? variable : concept;
+            });
+
+            resolved = VariableRef().Replace(resolved, match => ResolveVariable(raw, entities, match.Groups["key"].Value));
+
+            var cleaned = DlcLocalization.CleanMarkup(resolved)
+                .Replace("#!", " ", StringComparison.Ordinal)
+                .Trim();
             if (cleaned.Length > 0)
             {
                 result[key] = cleaned;
@@ -403,6 +444,92 @@ public static partial class SteamAchievementLocalization
 
         return result;
     }
+
+    /// <summary>在成就字典与实体字典里按键查文案；查不到返回 <c>null</c>（绝不模糊匹配）。</summary>
+    private static string? LookupEntity(
+        Dictionary<string, string> raw,
+        IReadOnlyDictionary<string, string> entities,
+        string key)
+    {
+        if (raw.TryGetValue(key, out var direct) && IsDisplayValue(direct))
+        {
+            return direct;
+        }
+
+        if (entities.TryGetValue(key, out var entityValue) && IsDisplayValue(entityValue))
+        {
+            return entityValue;
+        }
+
+        foreach (var prefix in EntityKeyPrefixes)
+        {
+            if (key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (raw.TryGetValue(prefix + key, out var prefixed) && IsDisplayValue(prefixed))
+            {
+                return prefixed;
+            }
+
+            if (entities.TryGetValue(prefix + key, out var prefixedEntity) && IsDisplayValue(prefixedEntity))
+            {
+                return prefixedEntity;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 概念链接的解析顺序：<c>game_concept_&lt;key&gt;</c> → 裸键 → <c>game_concept_</c> 别名。
+    /// 裸键可能被脚本表达式占用，所以带前缀的那条优先。
+    /// </summary>
+    private static string? ResolveConcept(
+        Dictionary<string, string> raw,
+        IReadOnlyDictionary<string, string> entities,
+        string key)
+    {
+        if (!key.StartsWith("game_concept_", StringComparison.OrdinalIgnoreCase))
+        {
+            var prefixed = "game_concept_" + key;
+            if (raw.TryGetValue(prefixed, out var prefixedRaw) && IsDisplayValue(prefixedRaw))
+            {
+                return prefixedRaw;
+            }
+
+            if (entities.TryGetValue(prefixed, out var prefixedEntity) && IsDisplayValue(prefixedEntity))
+            {
+                return prefixedEntity;
+            }
+        }
+
+        return LookupEntity(raw, entities, key);
+    }
+
+    /// <summary>句子里 <c>$key$</c> 的替换：内部键（成就别名）剥成空，实体键换成实体名，查不到就剥掉。</summary>
+    private static string ResolveVariable(
+        Dictionary<string, string> raw,
+        IReadOnlyDictionary<string, string> entities,
+        string innerRaw)
+    {
+        var inner = innerRaw.Trim();
+        if (inner.Length == 0 || inner.StartsWith("ACHIEVEMENT_", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        return LookupEntity(raw, entities, inner) ?? string.Empty;
+    }
+
+    /// <summary>值是否已经是可显示的文案（非空、不是别名引用、不含未解析变量）。</summary>
+    private static bool IsDisplayValue(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && AliasTarget(value!) is null
+        && !value!.Contains('$', StringComparison.Ordinal)
+        // `[Legend.GetProtagonist.GetName]` 这类脚本表达式不是文案：后续清理会把整段剥掉。
+        && !value!.Contains('[', StringComparison.Ordinal);
 
     /// <summary>
     /// 还原 <c>"$ACHIEVEMENT_patronage_achievement$"</c> 这种整值别名。
@@ -485,6 +612,59 @@ public static partial class SteamAchievementLocalization
     /// <summary>文件名是否带 <c>achiev</c>（<c>achievements_l_xx.yml</c> / <c>dlc_ep1_achievements_l_xx.yml</c>）。</summary>
     private static bool LooksLikeAchievementFile(string path)
         => Path.GetFileName(path).Contains("achiev", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 成就描述会用 <c>$变量$</c> 引用其它实体名（特质、活动、文化组…）；
+    /// 这些键集中在 traits / activities / cultures / modifiers 这类文件里。
+    /// 只做文件名粗筛，命中后仍按完整 yml 解析。
+    /// </summary>
+    private static bool LooksLikeEntityLocalizationFile(string path)
+    {
+        // 只看文件名会漏掉整批实体名：CK3 把活动 / 传说的文案放在 localization/<lang>/activities/、
+        // ...子目录里，路径里带关键词才算命中。
+        var name = path.Replace('\\', '/');
+        return name.Contains("trait", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("activit", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("cultur", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("modifier", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("legend", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("interaction", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("opinion", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("government", StringComparison.OrdinalIgnoreCase)
+            || name.Contains("concept", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 给概念键补一条无前缀别名：<c>lifestyle</c> → 本地化里的 <c>game_concept_lifestyle</c>。
+    /// <para>
+    /// 只补概念文件里确实存在的键，不猜；已经存在的别名（例如 mod 提供的覆写）不覆盖。
+    /// </para>
+    /// </summary>
+    private static void AddConceptAliases(Dictionary<string, string> raw)
+    {
+        const string prefix = "game_concept_";
+        // 先收集再写入：在遍历字典的同时 TryAdd 会抛「集合已修改」。
+        var pairs = raw.ToArray();
+        foreach (var pair in pairs)
+        {
+            if (!pair.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                || pair.Value.Length == 0)
+            {
+                continue;
+            }
+
+            var alias = pair.Key[prefix.Length..];
+            // desc / possessive 等后缀是概念条目自己的变体，不作为概念名别名。
+            if (alias.Length == 0
+                || alias.EndsWith("_desc", StringComparison.OrdinalIgnoreCase)
+                || alias.EndsWith("_possessive", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            raw.TryAdd(alias, pair.Value);
+        }
+    }
 
     private static void ParseFile(
         IFileSystem fileSystem,
@@ -627,6 +807,26 @@ public static partial class SteamAchievementLocalization
     private static partial Regex AliasValue();
 
     /// <summary>句子里残留的变量引用（<c>$COUNTRY$</c> 之类），在成就文本里当占位符剥掉。</summary>
-    [GeneratedRegex("""\$[^$\r\n]*\$""")]
+    [GeneratedRegex("""\$(?<key>[^$\r\n]*)\$""")]
     private static partial Regex VariableRef();
+
+    /// <summary>概念链接 <c>[key|E]</c> / <c>[key|E|显示名]</c>；只在有竖线时才算链接。</summary>
+    [GeneratedRegex("""\[(?<body>[^\r\n\[\]]*\|[^\r\n\[\]]*)\]""")]
+    private static partial Regex ConceptLink();
+
+    /// <summary>
+    /// 成就描述里 <c>$变量$</c> 常省略实体前缀（<c>$innovations$</c> 指 <c>game_concept_innovations</c>）。
+    /// 只按这些固定前缀查，查得到才替换，绝不猜相似键。
+    /// </summary>
+    private static readonly string[] EntityKeyPrefixes =
+    [
+        "game_concept_",
+        "trait_",
+        "activity_",
+        "activity_group_",
+        "legend_",
+        "culture_",
+        "government_",
+        "modifier_",
+    ];
 }
