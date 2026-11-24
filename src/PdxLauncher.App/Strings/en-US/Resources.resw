@@ -6471,4 +6471,28 @@ then call list_games to verify.</value>
   <data name="SettingsMcpRejectPlan" xml:space="preserve">
     <value>Reject</value>
   </data>
+  <data name="ModlibQuickAddToActivePlaySet" xml:space="preserve">
+    <value>Add to current play set</value>
+  </data>
+  <data name="ModlibQuickAddAdded" xml:space="preserve">
+    <value>Added {0} to play set "{1}"</value>
+  </data>
+  <data name="ModlibQuickAddAlreadyInSet" xml:space="preserve">
+    <value>{0} is already in play set "{1}"</value>
+  </data>
+  <data name="ModlibQuickAddUnregistered" xml:space="preserve">
+    <value>{0} is not registered in the official library and cannot be added to a play set</value>
+  </data>
+  <data name="ModlibQuickAddNoGame" xml:space="preserve">
+    <value>Select a game before adding a mod to a play set</value>
+  </data>
+  <data name="ModlibQuickAddNoActivePlaySet" xml:space="preserve">
+    <value>The current game has no active play set</value>
+  </data>
+  <data name="ModlibQuickAddUnsupported" xml:space="preserve">
+    <value>The current game does not support play set content management</value>
+  </data>
+  <data name="ModlibQuickAddFailed" xml:space="preserve">
+    <value>Failed to add to the current play set: {0}</value>
+  </data>
 </root>

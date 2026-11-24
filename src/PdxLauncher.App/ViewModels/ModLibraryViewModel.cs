@@ -45,6 +45,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     private readonly ModLibraryService _service;
     private readonly IModThumbnailService _thumbnails;
     private readonly IAppLogger _logger;
+    private readonly QuickAddToActivePlaySetService _quickAdd;
 
     /// <summary>
     /// 本页用的名称译名管道：与播放集页、添加模组页共用同一个实现，也就共用同一张
@@ -149,15 +150,21 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     [ObservableProperty]
     private string _selectedSourceFilter = string.Empty;
 
-    public ModLibraryViewModel(ModLibraryService service, IModThumbnailService thumbnails, IAppLogger logger)
+    public ModLibraryViewModel(
+        ModLibraryService service,
+        IModThumbnailService thumbnails,
+        IAppLogger logger,
+        QuickAddToActivePlaySetService quickAdd)
     {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(thumbnails);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(quickAdd);
 
         _service = service;
         _thumbnails = thumbnails;
         _logger = logger;
+        _quickAdd = quickAdd;
 
         SortModes = BuildSortModes();
         _selectedSortMode = SortModes[0];
@@ -179,6 +186,12 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
 
     /// <summary>是否已选中游戏。</summary>
     public bool HasGame => Game is not null;
+
+    /// <summary>当前游戏是否支持播放集内容管理（仅启动的游戏不支持）。</summary>
+    public bool CanManagePlaySets => HasGame && Game!.SupportsContentManagement;
+
+    /// <summary>行右键「添加到当前播放集」是否可用：有游戏且游戏支持内容管理。</summary>
+    public bool CanQuickAddToPlaySet => CanManagePlaySets;
 
     /// <summary>当前可见行是否为空（搜索无结果时也为 true）。</summary>
     public bool IsEmpty => Mods.Count == 0;
@@ -367,6 +380,36 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
 
         await LoadAsync(Game, _pageToken).ConfigureAwait(true);
     }
+
+    /// <summary>
+    /// 行右键「添加到当前播放集」：未登记 / 重复 / 无目标只写状态栏；成功后就地更新这一行的归属。
+    /// 服务层串行化写入，页面层不额外加忙碌门，避免界面状态与服务状态两处漂移。
+    /// </summary>
+    public async Task QuickAddToActivePlaySetAsync(ModLibraryRowViewModel row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        var result = await _quickAdd.AddAsync(Game, row.Entry, _pageToken).ConfigureAwait(true);
+        SetStatus(BuildQuickAddStatus(result, row.Name));
+        if (result.IsSuccess)
+        {
+            row.MarkAddedToPlaySet();
+        }
+    }
+
+    private string BuildQuickAddStatus(QuickAddToActivePlaySetResult result, string name) => result.Status switch
+    {
+        QuickAddToActivePlaySetStatus.Added => T(Keys.ModlibQuickAddAdded, name, result.PlaySetName ?? string.Empty),
+        QuickAddToActivePlaySetStatus.AlreadyInPlaySet =>
+            T(Keys.ModlibQuickAddAlreadyInSet, name, result.PlaySetName ?? string.Empty),
+        QuickAddToActivePlaySetStatus.Unregistered => T(Keys.ModlibQuickAddUnregistered, name),
+        QuickAddToActivePlaySetStatus.NoGame => T(Keys.ModlibQuickAddNoGame),
+        QuickAddToActivePlaySetStatus.NoActivePlaySet => T(Keys.ModlibQuickAddNoActivePlaySet),
+        QuickAddToActivePlaySetStatus.Unsupported => T(Keys.ModlibQuickAddUnsupported),
+        QuickAddToActivePlaySetStatus.SaveFailed =>
+            T(Keys.ModlibQuickAddFailed, result.ErrorDetail ?? T(Keys.CommonUnknown)),
+        _ => T(Keys.ModlibQuickAddFailed, T(Keys.CommonUnknown)),
+    };
 
     /// <summary>
     /// 让 Steam 立刻下载这一条。写操作受「在启动器内订阅 / 退订 Steam 工坊」开关约束（默认关）。
@@ -1175,6 +1218,8 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     {
         OnPropertyChanged(nameof(GameTitle));
         OnPropertyChanged(nameof(HasGame));
+        OnPropertyChanged(nameof(CanManagePlaySets));
+        OnPropertyChanged(nameof(CanQuickAddToPlaySet));
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(ShowNoGameHint));
         OnPropertyChanged(nameof(ShowNoModsHint));

@@ -141,6 +141,10 @@
                             <Grid.ContextFlyout>
                                 <MenuFlyout Opening="OnTranslationMenuOpening">
                                     <MenuFlyoutItem
+                                        Text="{x:Bind L.ModlibQuickAddToActivePlaySet, Mode=OneWay}"
+                                        Click="OnQuickAddToActivePlaySetClick"
+                                        AutomationProperties.AutomationId="menuModLibraryAddToActivePlaySet" />
+                                    <MenuFlyoutItem
                                         Text="{x:Bind WorkshopDetailText, Mode=OneWay}"
                                         Click="OnOpenDetailClick"
                                         IsEnabled="{x:Bind HasWorkshopDetail, Mode=OneTime}"
