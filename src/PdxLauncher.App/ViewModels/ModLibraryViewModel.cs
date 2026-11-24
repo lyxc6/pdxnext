@@ -369,7 +369,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 让 Steam 立刻下载这一条。写操作受「Steam 工坊直连订阅」开关约束（默认关）。
+    /// 让 Steam 立刻下载这一条。写操作受「在启动器内订阅 / 退订 Steam 工坊」开关约束（默认关）。
     /// </summary>
     /// <param name="row">要下载的行。</param>
     /// <returns>异步任务。</returns>
@@ -396,7 +396,7 @@ public sealed partial class ModLibraryViewModel : LocalizedObservableObject
 
     /// <summary>
     /// 在 Steam 里把这一条设为本地禁用 / 解除禁用（订阅保留）。
-    /// 写操作同样受「Steam 工坊直连订阅」开关约束。
+    /// 写操作同样受「在启动器内订阅 / 退订 Steam 工坊」开关约束。
     /// </summary>
     /// <param name="row">目标行。</param>
     /// <returns>异步任务。</returns>

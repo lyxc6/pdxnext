@@ -111,7 +111,7 @@ if errorlevel 1 (
 )
 
 call "%ROOT%scripts\msg.cmd" V_BUILDING
-dotnet build "PdxLauncher.sln" -c %CONFIG% -m:1 --nologo -v:m
+dotnet build "PdxLauncher.sln" -c %CONFIG% -m:1 --nologo -v:m -p:UseSharedCompilation=false -nodeReuse:false
 if errorlevel 1 (
     echo.
     call "%ROOT%scripts\msg.cmd" V_FAILBUILD

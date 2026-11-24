@@ -4564,28 +4564,49 @@ Applying still backs up the original file first, but the backup cannot be verifi
     <value>steam_api64.dll not found: {0}</value>
   </data>
   <data name="SettingsSteamApiReady" xml:space="preserve">
-    <value>steam_api64.dll found</value>
+    <value>Found: {0}</value>
+  </data>
+  <data name="SettingsSteamSubscribeCardDescription" xml:space="preserve">
+    <value>Changes Steam Workshop subscriptions of your signed-in account directly (Steam must be running)</value>
+  </data>
+  <data name="SettingsSteamApiSourceGame" xml:space="preserve">
+    <value>game folder</value>
+  </data>
+  <data name="SettingsSteamApiSourceManual" xml:space="preserve">
+    <value>path set here</value>
+  </data>
+  <data name="SettingsSteamApiSourceApp" xml:space="preserve">
+    <value>launcher folder</value>
+  </data>
+  <data name="SettingsSteamApiSourceSdk" xml:space="preserve">
+    <value>repository sdk/</value>
+  </data>
+  <data name="SettingsSteamApiSourceSteam" xml:space="preserve">
+    <value>Steam client folder</value>
   </data>
   <data name="SettingsSteamStateHint" xml:space="preserve">
-    <value>Read real workshop item state (subscribed / installed / update available / downloading / disabled locally in Steam) and show it in the mod library and detail page. Read-only; each query starts a short-lived child process, during which Steam briefly lists this app as "in game".</value>
+    <value>Read the real state of Workshop items (subscribed / installed / update available / downloading / disabled locally in Steam) and show it in the mod library and detail page. Read-only; each query starts a short-lived child process, during which Steam briefly lists this app as "in game". Uses the same steam_api64.dll; if it is missing you just lose the badges — browsing still works.</value>
+  </data>
+  <data name="SettingsSteamIntro" xml:space="preserve">
+    <value>These options read and write Steam Workshop subscriptions in your Steam account directly, instead of opening a page for you to click. "Direct" here means native Steamworks calls; it has nothing to do with the "Direct (no proxy)" option under Network.</value>
   </data>
   <data name="SettingsSteamStateOff" xml:space="preserve">
     <value>Steam workshop state reading off</value>
   </data>
   <data name="SettingsSteamStateOn" xml:space="preserve">
-    <value>Read Steam workshop state</value>
+    <value>Read Steam Workshop state (read-only)</value>
   </data>
   <data name="SettingsSteamSubscribeHint" xml:space="preserve">
-    <value>When on, the Subscribe button on a Workshop detail page subscribes or unsubscribes through the Steam client. When off, it only opens the item in the Steam client. Requires steam_api64.dll next to the launcher or in the game folder.</value>
+    <value>When on, the Subscribe button on a Workshop detail page changes the subscription of the Steam account you are signed in with (and can trigger downloads or local disabling). When off, the button only opens the item in the Steam client. Requires steam_api64.dll: Valve's official interface file, shipped with every Steam game. PdxNext looks in the game folder first and only asks for a manual path when it cannot find one. Everything else keeps working without it — browsing, search, PDX Mods subscribe and download are unaffected; only these actions fall back to opening the Steam page.</value>
   </data>
   <data name="SettingsSteamSubscribeOn" xml:space="preserve">
-    <value>Direct Steam Workshop subscription (experimental)</value>
+    <value>Subscribe to Steam Workshop inside PdxNext (experimental)</value>
   </data>
   <data name="SettingsSteamSubscribeStatusOff" xml:space="preserve">
-    <value>Direct Steam Workshop subscription disabled</value>
+    <value>Read-only: turn on the switch above to change Steam subscriptions</value>
   </data>
   <data name="SettingsSteamSubscribeStatusOn" xml:space="preserve">
-    <value>Direct Steam Workshop subscription enabled</value>
+    <value>Steam subscription changes are now allowed</value>
   </data>
   <data name="SettingsThemeBackgroundFile" xml:space="preserve">
     <value>Current background file</value>
@@ -5404,13 +5425,13 @@ Applying still backs up the original file first, but the backup cannot be verifi
     <value>A newer version is on Steam; update it in the Steam client or the mod library.</value>
   </data>
   <data name="WorkshopDetailSteamReadOnlyHint" xml:space="preserve">
-    <value>Only reading Steam state right now: you can see subscription, install and download progress, but changing subscriptions needs "Steam Workshop direct" in Settings.</value>
+    <value>Only reading Steam state right now: you can see subscription, install and download progress, but changing subscriptions needs "Subscribe to Steam Workshop inside PdxNext" in Settings.</value>
   </data>
   <data name="WorkshopDetailSteamSubscribeConfirm" xml:space="preserve">
     <value>This subscribes to the Workshop item through the Steam client, and Steam starts downloading it immediately. Continue?</value>
   </data>
   <data name="WorkshopDetailSteamSubscribeHintOff" xml:space="preserve">
-    <value>Direct subscription is off: the button only opens this item in the Steam client. Turn it on in Settings.</value>
+    <value>You can only subscribe in the Steam client right now. To subscribe here, turn on "Subscribe to Steam Workshop inside PdxNext" in Settings.</value>
   </data>
   <data name="WorkshopDetailSteamUnavailable" xml:space="preserve">
     <value>The Steam client is not running or cannot be reached. Start Steam and sign in, then try again. You can also use the Steam icon at the top right to open this page in Steam.</value>

@@ -4564,28 +4564,49 @@
     <value>未找到 steam_api64.dll：{0}</value>
   </data>
   <data name="SettingsSteamApiReady" xml:space="preserve">
-    <value>已找到 steam_api64.dll</value>
+    <value>已找到：{0}</value>
+  </data>
+  <data name="SettingsSteamSubscribeCardDescription" xml:space="preserve">
+    <value>在启动器里直接改写 Steam 账号的订阅（需要 Steam 客户端在线）</value>
+  </data>
+  <data name="SettingsSteamApiSourceGame" xml:space="preserve">
+    <value>游戏目录</value>
+  </data>
+  <data name="SettingsSteamApiSourceManual" xml:space="preserve">
+    <value>设置里手填</value>
+  </data>
+  <data name="SettingsSteamApiSourceApp" xml:space="preserve">
+    <value>启动器程序目录</value>
+  </data>
+  <data name="SettingsSteamApiSourceSdk" xml:space="preserve">
+    <value>仓库 sdk/</value>
+  </data>
+  <data name="SettingsSteamApiSourceSteam" xml:space="preserve">
+    <value>Steam 客户端目录</value>
   </data>
   <data name="SettingsSteamStateHint" xml:space="preserve">
-    <value>读取工坊条目的真实状态（订阅 / 已安装 / 需要更新 / 下载中 / 在 Steam 里被本地禁用），Mod 库与详情页据此显示徽标。只读，不改任何东西；每次查询会拉起一个几秒的子进程，Steam 会在这几秒里把本程序登记成「游戏中」。</value>
+    <value>读取工坊条目的真实状态（订阅 / 已安装 / 需要更新 / 下载中 / 在 Steam 里被本地禁用），Mod 库与详情页据此显示徽标。只读，不改任何东西；每次查询会拉起一个几秒的子进程，Steam 会在这几秒里把本程序登记成「游戏中」。依赖同一份 steam_api64.dll；找不到时只是不显示徽标，工坊浏览照常。</value>
+  </data>
+  <data name="SettingsSteamIntro" xml:space="preserve">
+    <value>这里直接读写你 Steam 账号里的工坊订阅，不再是「打开页面让你自己点」。「直连」在本程序里专指这种 Steamworks 原生调用，与「网络」分区里的「直连（未使用代理）」无关。</value>
   </data>
   <data name="SettingsSteamStateOff" xml:space="preserve">
     <value>关闭 Steam 工坊状态读取</value>
   </data>
   <data name="SettingsSteamStateOn" xml:space="preserve">
-    <value>读取 Steam 工坊状态</value>
+    <value>读取 Steam 工坊状态（只读）</value>
   </data>
   <data name="SettingsSteamSubscribeHint" xml:space="preserve">
-    <value>开启后，创意工坊详情页的「在 Steam 中订阅」按钮会直接调用 Steam 客户端完成订阅 / 取消订阅；关闭时只会在 Steam 客户端里打开该 mod 页面。需要 steam_api64.dll（放在程序目录或游戏目录）。</value>
+    <value>打开后，详情页的订阅按钮会直接改写你 Steam 客户端里已登录账号的订阅（还能触发下载、在本地禁用）；关闭时按钮只会在 Steam 客户端里打开该 mod。需要 steam_api64.dll：那是 Valve 的官方接口文件，每款 Steam 游戏自带一份，启动器会先从游戏目录里找，找不到才需要在这里手填路径。没有它也能用 —— 浏览、搜索、PDX Mods 订阅与下载都不受影响，只是这些操作会降级成打开 Steam 页面。</value>
   </data>
   <data name="SettingsSteamSubscribeOn" xml:space="preserve">
-    <value>Steam 工坊直连订阅（实验）</value>
+    <value>在启动器内订阅 / 退订 Steam 工坊（实验）</value>
   </data>
   <data name="SettingsSteamSubscribeStatusOff" xml:space="preserve">
-    <value>已关闭 Steam 工坊直连订阅</value>
+    <value>只读：要修改 Steam 订阅，请打开上面的开关</value>
   </data>
   <data name="SettingsSteamSubscribeStatusOn" xml:space="preserve">
-    <value>已开启 Steam 工坊直连订阅</value>
+    <value>已允许在启动器内修改 Steam 订阅</value>
   </data>
   <data name="SettingsThemeBackgroundFile" xml:space="preserve">
     <value>当前背景文件</value>
@@ -5404,13 +5425,13 @@
     <value>Steam 上有新版本，可在 Steam 客户端或库里更新。</value>
   </data>
   <data name="WorkshopDetailSteamReadOnlyHint" xml:space="preserve">
-    <value>当前只读取 Steam 状态：能看到订阅 / 安装 / 下载进度，但改订阅要在设置页打开「Steam 工坊直连订阅」。</value>
+    <value>当前只读取 Steam 状态：能看到订阅 / 安装 / 下载进度，但改订阅要在设置页打开「在启动器内订阅 / 退订 Steam 工坊」。</value>
   </data>
   <data name="WorkshopDetailSteamSubscribeConfirm" xml:space="preserve">
     <value>将通过 Steam 客户端订阅这个工坊物品，Steam 会立刻开始下载。确定继续吗？</value>
   </data>
   <data name="WorkshopDetailSteamSubscribeHintOff" xml:space="preserve">
-    <value>未开启直连订阅：按钮只会在 Steam 客户端里打开该 mod。可在设置页的「Steam 工坊直连订阅」里打开。</value>
+    <value>当前只能在 Steam 客户端里订阅。要在这里直接订阅，请到设置页打开「在启动器内订阅 / 退订 Steam 工坊」。</value>
   </data>
   <data name="WorkshopDetailSteamUnavailable" xml:space="preserve">
     <value>Steam 客户端未运行或无法连接，请先启动并登录 Steam 后重试；也可以点页面右上角的 Steam 图标，在 Steam 中打开该页面。</value>

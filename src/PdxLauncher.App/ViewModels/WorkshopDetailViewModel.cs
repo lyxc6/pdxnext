@@ -79,7 +79,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <param name="images">图片缓存（封面/截图落地）。</param>
     /// <param name="subscription">PDX 订阅服务。</param>
     /// <param name="logger">日志。</param>
-    /// <param name="steamBackend">Steam 直连订阅后端；null 或不可用表示只能打开客户端。</param>
+    /// <param name="steamBackend">
+    /// Steam 直连订阅后端（= Steamworks 原生接口，与网络代理无关）；
+    /// null 或 <c>IsAvailable=false</c> 表示只能「打开 Steam 客户端」，这是设计内的降级。
+    /// </param>
     /// <param name="steamReader">acf 只读查询（后端不可用时用它显示「已订阅/已安装」）。</param>
     /// <param name="steamStates">整库订阅状态读取（合集子项状态用；null 表示不显示逐项状态）。</param>
     public WorkshopDetailViewModel(

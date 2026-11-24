@@ -548,7 +548,7 @@ function Invoke-Close {
         Write-Step '构建（-m:1）...'
         Push-Location $root
         try {
-            & dotnet build 'PdxLauncher.sln' -c Release -m:1
+            & dotnet build 'PdxLauncher.sln' -c Release -m:1 -p:UseSharedCompilation=false -nodeReuse:false
             $buildCode = $LASTEXITCODE
             if ($buildCode -ne 0) {
                 Write-Fail "[失败] 构建退出码 $buildCode。不合并，分支 $branchName 保留。"

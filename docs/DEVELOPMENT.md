@@ -378,7 +378,7 @@ Cities: Skylines 则是**本体根本不读任何加载文件**——它的 mod 
   打开本地文件夹、在 Steam 中打开、在浏览器中打开（拿不到目录或工坊编号时对应按钮置灰），
   后面还有两个按需出现的按钮：**让 Steam 下载**（`DownloadItem`，没装或需要更新时可用）与
   **在 Steam 中禁用 / 启用**（`SetItemsDisabledLocally`，工坊层的「订阅但本地禁用」，和退订是两件事，
-  要先用设置里打开「Steam 工坊直连订阅」）；支持搜索（名称 / 注册 ID / 目录）、
+  要先用设置里打开「在启动器内订阅 / 退订 Steam 工坊」）；支持搜索（名称 / 注册 ID / 目录）、
   **按来源筛选（全部 / 本地 / 订阅）**、按名称 / 大小 / 订阅时间排序、刷新；数量只显示在底部状态栏：
   未筛选时是全库总数，筛选后是「显示 X / N 个 mod」，页头不再重复计数。
   行操作的地址由 `SteamWorkshop` 拼装：创意工坊 id 优先取 `mods.steamId`，为空时回退从
@@ -895,7 +895,24 @@ settings.json / dlc-descriptions.json / theme-cache / news-cache / mod-cache，�
    `content_load.json` 里写得再对也不生效，且游戏日志不报任何错。启动器会在播放集页给出警告，
    并可用「修复 mod 路径」把本地 mod 目录改成 `mod_<id 前 8 位>`。父目录含非 ASCII（如 `C:\Users\张三\…`）时
    不自动改名，只提示——那种情况得改 `launcher-settings.json` 的 `gameDataPath`。CK3 / Stellaris / EU4 无此限制。
-9. **所有原生 Steamworks 调用都在一次性子进程里跑**：DLC 授权探测、创意工坊直连订阅、成就读取都需要以游戏 appId 调
+### 术语：两个「直连」不是一回事
+
+- **直连（Steamworks）**：启动器通过 `steam_api64.dll` 调用 `ISteamUGC`，直接读写 Steam 账号里的工坊订阅 / 安装 / 下载状态。界面上叫「在启动器内订阅 / 退订 Steam 工坊」。
+- **直连（网络）**：不走任何代理，直接连服务器。设置页「网络」分区里的「直连（未使用代理）」指的是它。
+
+两者毫无关系；搜索 `直连` 时先看上下文属于哪一类。
+
+`steam_api64.dll` 的查找顺序（见 `SteamApiLocator.Candidates`，设置页「Steam」分区会显示命中的来源）：
+
+1. 设置里手填的路径（dll 或所在目录）
+2. 启动器程序目录
+3. 开发期仓库 `sdk/redistributable_bin/win64/`（从程序目录往上最多 6 层）
+4. **当前游戏安装目录**及 `binaries` / `bin` / `steamworks` 子目录（CS2 额外含 `Cities2_Data\Plugins\x86_64`）
+5. Steam 客户端根目录（通常没有这份 DLL）
+
+第 4 档才是真正的兜底：Valve 不往 Steam 客户端目录放 `steam_api64.dll`，它由每款 Steam 游戏自带；本仓库不分发 Valve 的二进制。
+
+9. **所有原生 Steamworks 调用都在一次性子进程里跑**：DLC 授权探测、启动器内 Steam 工坊订阅（代码里叫「直连」）、成就读取都需要以游戏 appId 调
    `SteamAPI_Init`，而 Steam 会把「调过它的进程」登记成该游戏的 game process（`SteamAPI_Shutdown` 不撤销）。
    2026-10-31 之前启动器自己调，导致游戏退出后 Steam 仍显示「运行中」，点 Steam 的「退出游戏」还会把启动器杀掉；
    现在改成同一个 exe 的隐藏宿主模式（`PdxLauncher.App.exe --steam-host probe|achievements|workshop-…`），探测约 1 s、订阅最多 25 s、
@@ -904,7 +921,7 @@ settings.json / dlc-descriptions.json / theme-cache / news-cache / mod-cache，�
    **启动器不在启动 / 切游戏时预读成就，也不保留常驻 `serve` worker**：常驻进程会让 Steam 在两次读取之间一直把游戏显示成
    「运行中」（2026-11-07 修复，见 HANDOFF §0.95）。成就只在用户打开成就页时按需读取，每次一个一次性 `achievements` 子进程。
    所以偶尔在 Steam 库里闪一下「运行中」是子进程，属预期；主窗口不会被登记，也不会被连坐。
-   要完全零登记只能放弃这些 Steamworks 功能（成就页 / DLC 授权 / 工坊直连），启动器不做这个取舍。
+   要完全零登记只能放弃这些 Steamworks 功能（成就页 / DLC 授权 / 启动器内工坊订阅），启动器不做这个取舍。
    设置页把「读状态」和「改订阅」拆成两个开关：读状态（默认开）每次只起一个只读子进程；
    写动作（默认关）才允许订阅 / 退订 / 触发下载 / 本地禁用。
 

@@ -10,6 +10,14 @@ using PdxLauncher.Core.Steam;
 /// 视图模型只依赖本接口，这样 UI 逻辑可以在没有 Steam、没有原生库的机器上自检。
 /// </para>
 /// </summary>
+/// <summary>
+/// Steam 工坊「直连」写操作的抽象。
+/// <para>
+/// 「直连」= 通过 Steamworks 原生接口改 Steam 账号里的订阅，与网络代理无关。
+/// <see cref="IsAvailable"/> 为 false 只表示没有条件直连（缺 <c>steam_api64.dll</c>、
+/// 没有 appid 等），调用方应降级为打开 Steam 页面 —— 这不是功能损坏。
+/// </para>
+/// </summary>
 public interface IWorkshopSubscribeBackend
 {
     /// <summary>当前是否可用（宿主程序在、能找到 steam_api64.dll、知道 appid）。</summary>
