@@ -11,23 +11,18 @@ using PdxLauncher.Core.Contracts;
 /// 只统计会话开始之后写入的错误块，跨日志去重并按签名聚类；游戏结束后固化快照。
 /// <para>
 /// 不写任何文件、不联网、不启动进程。所有读取失败都吞掉并标记 Degraded，不抛到 UI。
+/// CS2 的 Unity/Coherent 日志与 P 社老游戏的 logs 清单共用同一套会话统计口径。
 /// </para>
 /// </summary>
 public sealed class GameSessionLogTracker
 {
-    /// <summary>与 GameCrashAnalyzer 相同的日志清单。</summary>
-    private static readonly string[] LogFileNames =
-    [
-        "error.log", "game.log", "debug.log", "system.log", "graphics.log", "warning.log", "database_conflicts.log",
-    ];
-
     private const int MaxReadBytesPerPoll = 2 * 1024 * 1024;
 
     private readonly IFileSystem _fileSystem;
     private readonly IClock _clock;
 
     private GameInstallation? _game;
-    private string? _logDirectory;
+    private IReadOnlyList<SessionLogSource> _sources = Array.Empty<SessionLogSource>();
     private int? _pid;
     private DateTimeOffset _startTime;
     private bool _started;
@@ -35,6 +30,8 @@ public sealed class GameSessionLogTracker
     private readonly Dictionary<string, LogCursor> _cursors = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, GroupAccumulator> _groups = new(StringComparer.Ordinal);
     private readonly HashSet<string> _seenErrors = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _seenFatals = new(StringComparer.Ordinal);
+    private SessionFatalInfo? _fatalInfo;
     private int _errorBlocks;
 
     /// <summary>仅用文件系统的构造（时间取默认时钟）。</summary>
@@ -57,31 +54,28 @@ public sealed class GameSessionLogTracker
         _game = game;
         _pid = processId;
         _startTime = startTime ?? _clock.UtcNow.ToLocalTime();
-        _logDirectory = string.IsNullOrWhiteSpace(game.GameDataDir)
-            ? string.Empty
-            : _fileSystem.Combine(game.GameDataDir, "logs");
+        _sources = SessionLogCatalog.Resolve(_fileSystem, game);
 
         _cursors.Clear();
         _groups.Clear();
         _seenErrors.Clear();
+        _seenFatals.Clear();
+        _fatalInfo = null;
         _errorBlocks = 0;
         _degraded = false;
         _started = true;
 
         // 从当前文件末尾开始，避免把上次会话遗留的日志算进来。
-        foreach (string name in LogFileNames)
+        foreach (var source in _sources)
         {
-            string path = string.IsNullOrWhiteSpace(_logDirectory)
-                ? string.Empty
-                : _fileSystem.Combine(_logDirectory, name);
-            if (string.IsNullOrWhiteSpace(path) || !_fileSystem.FileExists(path))
+            if (!_fileSystem.FileExists(source.Path))
             {
                 continue;
             }
 
             try
             {
-                _cursors[name] = new LogCursor(_fileSystem.GetFileSize(path));
+                _cursors[source.Name] = new LogCursor(_fileSystem.GetFileSize(source.Path));
             }
             catch (Exception)
             {
@@ -93,44 +87,50 @@ public sealed class GameSessionLogTracker
     /// <summary>增量读取一次；应在游戏运行期间定期调用。</summary>
     public void Poll()
     {
-        if (!_started || string.IsNullOrWhiteSpace(_logDirectory))
+        if (!_started)
         {
             return;
         }
 
-        foreach (string name in LogFileNames)
+        foreach (var source in _sources)
         {
-            string path = _fileSystem.Combine(_logDirectory, name);
-            if (!_fileSystem.FileExists(path))
+            if (!_fileSystem.FileExists(source.Path))
             {
                 continue;
             }
 
             try
             {
-                if (!_cursors.TryGetValue(name, out var cursor))
+                if (!_cursors.TryGetValue(source.Name, out var cursor))
                 {
                     // 会话期间新建的日志：从 0 开始读，但只统计会话时间之后的块。
                     cursor = new LogCursor(0);
-                    _cursors[name] = cursor;
+                    _cursors[source.Name] = cursor;
                 }
 
-                long length = _fileSystem.GetFileSize(path);
-                if (length <= cursor.Offset)
+                long length = _fileSystem.GetFileSize(source.Path);
+                if (length < cursor.Offset)
                 {
-                    if (length < cursor.Offset)
-                    {
-                        // 日志被轮转/截断：从头再来。
-                        cursor.Offset = 0;
-                        cursor.Pending = string.Empty;
-                    }
-                    else
-                    {
-                        continue;
-                    }
+                    // 日志被轮转/截断：从头再来。
+                    cursor.Offset = 0;
+                    cursor.Pending = string.Empty;
                 }
 
-                string text = ReadRange(path, cursor.Offset, length, out long nextOffset);
+                long available = length - cursor.Offset;
+                if (available <= 0)
+                {
+                    continue;
+                }
+
+                if (available > MaxReadBytesPerPoll)
+                {
+                    // 日志暴涨时优先追到尾部，不阻塞 UI；这段积压标记为读取降级。
+                    cursor.Offset = length - MaxReadBytesPerPoll;
+                    cursor.Pending = string.Empty;
+                    _degraded = true;
+                }
+
+                string text = ReadRange(source.Path, cursor.Offset, length, out long nextOffset);
                 cursor.Offset = nextOffset;
                 if (string.IsNullOrEmpty(text))
                 {
@@ -151,19 +151,20 @@ public sealed class GameSessionLogTracker
                 var blocks = CrashLogParser.ParseLogBlocks(complete, _startTime);
                 foreach (var block in blocks)
                 {
+                    RecordFatal(block, source.Name);
                     if (!CrashLogParser.IsErrorBlock(block))
                     {
                         continue;
                     }
 
-                    // 只统计会话开始之后写入的块（HH:mm:ss 已锚定到起始日）。
+                    // 只统计会话开始之后写入的块（时间戳已锚定到会话日期）。
                     if (block.Time is { } time && time < _startTime.AddSeconds(-2))
                     {
                         continue;
                     }
 
                     string key = block.Time?.UtcTicks.ToString(CultureInfo.InvariantCulture) + "|"
-                        + block.Origin + "|" + block.Message;
+                        + block.Origin + "|" + CrashLogParser.Signature(block);
                     if (!_seenErrors.Add(key))
                     {
                         continue; // 同一错误在 error/game/debug 里重复出现只算一次。
@@ -171,16 +172,16 @@ public sealed class GameSessionLogTracker
 
                     _errorBlocks++;
                     string signature = CrashLogParser.Signature(block);
-                    string? source = CrashLogParser.ExtractSourcePath(block.Text);
+                    string? sourcePath = CrashLogParser.ExtractSourcePath(block.Text);
                     if (!_groups.TryGetValue(signature, out var group))
                     {
-                        group = new GroupAccumulator(signature, source, Truncate(block.Message, 220));
+                        group = new GroupAccumulator(signature, sourcePath, Truncate(block.Message, 220));
                         _groups[signature] = group;
                     }
                     else
                     {
                         group.Count++;
-                        group.Source ??= source;
+                        group.Source ??= sourcePath;
                     }
                 }
             }
@@ -204,48 +205,30 @@ public sealed class GameSessionLogTracker
 
         // 探测各日志文件状态。
         var states = new List<LogFileProbeResult>();
-        if (!string.IsNullOrWhiteSpace(_logDirectory))
+        foreach (var source in _sources)
         {
-            foreach (string name in LogFileNames)
+            if (_fileSystem.FileExists(source.Path))
             {
-                string path = _fileSystem.Combine(_logDirectory, name);
-                if (_fileSystem.FileExists(path))
-                {
-                    states.Add(LogFileProbe.Probe(_fileSystem, path, name));
-                }
+                states.Add(LogFileProbe.Probe(_fileSystem, source.Path, source.Name));
             }
         }
 
-        var groups = _groups.Values
-            .OrderByDescending(static group => group.Count)
-            .ThenBy(static group => group.Signature, StringComparer.Ordinal)
-            .Take(12)
-            .Select(static group => new SessionErrorGroup(
-                group.Signature, group.Count, group.Source, ModName: null, group.Sample))
-            .ToArray();
-
-        var snapshot = new GameSessionSnapshot(
-            _game?.GameId ?? string.Empty,
-            _game?.DisplayName ?? string.Empty,
-            _pid,
-            _startTime,
-            _clock.UtcNow.ToLocalTime(),
-            _errorBlocks,
-            groups,
-            states,
-            _degraded);
-
+        var snapshot = CreateSnapshot(_clock.UtcNow.ToLocalTime(), states);
         _started = false;
         return snapshot;
     }
 
     /// <summary>当前会话的实时快照（不结束会话）。</summary>
-    public GameSessionSnapshot Snapshot() => new(
+    public GameSessionSnapshot Snapshot() => CreateSnapshot(null, Array.Empty<LogFileProbeResult>());
+
+    private GameSessionSnapshot CreateSnapshot(
+        DateTimeOffset? endTime,
+        IReadOnlyList<LogFileProbeResult> logStates) => new(
         _game?.GameId ?? string.Empty,
         _game?.DisplayName ?? string.Empty,
         _pid,
         _startTime,
-        null,
+        endTime,
         _errorBlocks,
         _groups.Values
             .OrderByDescending(static group => group.Count)
@@ -254,8 +237,9 @@ public sealed class GameSessionLogTracker
             .Select(static group => new SessionErrorGroup(
                 group.Signature, group.Count, group.Source, ModName: null, group.Sample))
             .ToArray(),
-        Array.Empty<LogFileProbeResult>(),
-        _degraded);
+        logStates,
+        _degraded,
+        _fatalInfo);
 
     private GameSessionSnapshot EmptySnapshot() => new(
         string.Empty,
@@ -267,6 +251,32 @@ public sealed class GameSessionLogTracker
         Array.Empty<SessionErrorGroup>(),
         Array.Empty<LogFileProbeResult>(),
         false);
+
+    private void RecordFatal(CrashLogBlock block, string logName)
+    {
+        if (_fatalInfo is not null)
+        {
+            return;
+        }
+
+        string? category = CrashLogParser.DetectFatalCategory(block.Text);
+        if (category is null)
+        {
+            return;
+        }
+
+        string signature = category + "|" + CrashLogParser.Signature(block);
+        if (!_seenFatals.Add(signature))
+        {
+            return;
+        }
+
+        _fatalInfo = new SessionFatalInfo(
+            category,
+            signature,
+            logName,
+            Truncate(block.Message, 240));
+    }
 
     /// <summary>从字节区间读取文本；处理 UTF-8 截断，返回实际读到的下一偏移。</summary>
     private string ReadRange(string path, long offset, long length, out long nextOffset)

@@ -171,6 +171,7 @@ public sealed partial class MainWindow : Window
         ContentFrame.Navigated += OnContentFrameNavigated;
         AppServices.CurrentGameChanged += OnCurrentGameChanged;
         AppServices.GameSessionMonitor.SessionEnded += OnGameSessionEnded;
+        AppServices.GameSessionMonitor.SessionAlert += OnGameSessionAlert;
         AppServices.BackgroundDisplayChanged += OnBackgroundDisplayChanged;
         AppServices.ModEditorNavVisibilityChanged += OnModEditorNavVisibilityChanged;
         AlwaysOnTopService.Changed += OnAlwaysOnTopChanged;
@@ -574,6 +575,36 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void OnGameSessionAlert(object? sender, PdxLauncher.Core.CrashAnalysis.GameSessionSnapshot session)
+    {
+        if (!DispatcherQueue.TryEnqueue(async () =>
+            {
+                try
+                {
+                    var localizer = Localizer.Instance;
+                    var category = session.FatalInfo?.Category switch
+                    {
+                        "platform-service" => localizer.CrashSessionFatalPlatformService,
+                        "asset-database" => localizer.CrashSessionFatalAssetDatabase,
+                        _ => localizer.CrashSessionFatalUnknown,
+                    };
+                    await Controls.ConfirmOverlay.ShowMessage(
+                        localizer.CrashSessionAlertTitle,
+                        localizer.T(Keys.CrashSessionAlertMessage,
+                            string.IsNullOrWhiteSpace(session.GameName) ? session.GameId : session.GameName,
+                            category),
+                        localizer.CommonClose);
+                }
+                catch (Exception exception)
+                {
+                    AppServices.Logger.Warn("显示游戏初始化失败提示失败：" + exception.Message);
+                }
+            }))
+        {
+            AppServices.Logger.Warn("MainWindow 无法派发游戏初始化失败提示");
+        }
+    }
+
     private void OnWindowClosed(object sender, WindowEventArgs args)
     {
         try
@@ -582,6 +613,7 @@ public sealed partial class MainWindow : Window
             _viewModel.NavigationRequested -= OnNavigationRequested;
             AppServices.CurrentGameChanged -= OnCurrentGameChanged;
             AppServices.GameSessionMonitor.SessionEnded -= OnGameSessionEnded;
+            AppServices.GameSessionMonitor.SessionAlert -= OnGameSessionAlert;
             AppServices.BackgroundDisplayChanged -= OnBackgroundDisplayChanged;
             AppServices.ModEditorNavVisibilityChanged -= OnModEditorNavVisibilityChanged;
             AlwaysOnTopService.Changed -= OnAlwaysOnTopChanged;

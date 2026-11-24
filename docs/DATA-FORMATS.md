@@ -1292,6 +1292,7 @@ Victoria 3 **无法加载任何路径里含非 ASCII 字符的 mod**（Vic3 wiki
 
 游戏运行期间，`GameSessionLogTracker` 从各日志当前末尾开始按字节偏移增量读取，只统计会话开始之后写入的错误块：
 - 跨 `error.log`/`game.log`/`debug.log` 按「时间 + 来源 + 正文」去重，同一错误只算一次；`CrashLogParser.Signature` 聚类，保留首个来源路径。
+- CS2 的日志来源改为 `<GameDataDir>\Player.log`、`Logs\SceneFlow.log`、`Logs\UI.log`；同时支持 Unity 的 `[yyyy-MM-dd HH:mm:ss,fff] [LEVEL]` 行格式，并把 `fatal://error` / `AssetDatabase.PopulateFromDataSource` 空引用等收敛为一条致命摘要，只提醒一次。
 - 只读取不写游戏目录；日志被轮转/截断时游标归零，读取失败只标记 `Degraded`，不抛到 UI。
 - 游戏进程退出（pid 轮询 + 进程名核对）后 `GameSessionMonitorService` 固化 `GameSessionSnapshot`，在「崩溃分析 → 本次游戏」显示，并通过 `ConfirmOverlay` 轻提示。
 

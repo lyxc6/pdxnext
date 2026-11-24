@@ -6351,6 +6351,9 @@
   <data name="CrashSessionHint" xml:space="preserve">
     <value>游戏运行时按日志统计本次报错，退出游戏后可在这里查看。日志被占用/只读也会标注。</value>
   </data>
+  <data name="CrashSessionStillRunning" xml:space="preserve">
+    <value>仍在运行</value>
+  </data>
   <data name="CrashSessionEmpty" xml:space="preserve">
     <value>还没有本次游戏的记录。启动一款游戏并退出后，这里会显示该次会话的报错摘要。</value>
   </data>
@@ -6378,6 +6381,27 @@
   <data name="CrashSessionDegraded" xml:space="preserve">
     <value>部分日志读取失败，统计可能不完整。</value>
   </data>
+  <data name="CrashSessionFatalTitle" xml:space="preserve">
+    <value>致命初始化错误：{0}</value>
+  </data>
+  <data name="CrashSessionFatalPlatformService" xml:space="preserve">
+    <value>平台服务初始化失败</value>
+  </data>
+  <data name="CrashSessionFatalAssetDatabase" xml:space="preserve">
+    <value>资产数据库初始化失败</value>
+  </data>
+  <data name="CrashSessionFatalUnknown" xml:space="preserve">
+    <value>游戏初始化失败</value>
+  </data>
+  <data name="CrashSessionFatalRow" xml:space="preserve">
+    <value>来源日志：{0}　样例：{1}</value>
+  </data>
+  <data name="CrashSessionAlertTitle" xml:space="preserve">
+    <value>游戏初始化失败</value>
+  </data>
+  <data name="CrashSessionAlertMessage" xml:space="preserve">
+    <value>{0} 的日志出现致命错误（{1}），进程可能仍显示黑屏。可在「崩溃分析 → 本次游戏」查看详情。</value>
+  </data>
   <data name="CrashSessionLogReadable" xml:space="preserve">
     <value>正常</value>
   </data>
@@ -6401,6 +6425,9 @@
   </data>
   <data name="DiagnosticsGameLogStatus" xml:space="preserve">
     <value>游戏日志 {0}：{1}</value>
+  </data>
+  <data name="DiagnosticsGameLogStatusMultiple" xml:space="preserve">
+    <value>游戏日志 {0}：{1}（共 {2} 份会话日志）</value>
   </data>
   <data name="CrashSessionEndedTitle" xml:space="preserve">
     <value>本次游戏已结束</value>

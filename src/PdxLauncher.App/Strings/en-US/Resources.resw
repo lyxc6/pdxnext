@@ -6351,6 +6351,9 @@ then call list_games to verify.</value>
   <data name="CrashSessionHint" xml:space="preserve">
     <value>Errors are counted from game logs while the game runs; review them here after it exits. Locked/read-only logs are flagged too.</value>
   </data>
+  <data name="CrashSessionStillRunning" xml:space="preserve">
+    <value>Still running</value>
+  </data>
   <data name="CrashSessionEmpty" xml:space="preserve">
     <value>No session yet. Launch and close a game to see its error summary here.</value>
   </data>
@@ -6378,6 +6381,27 @@ then call list_games to verify.</value>
   <data name="CrashSessionDegraded" xml:space="preserve">
     <value>Some logs could not be read; the summary may be incomplete.</value>
   </data>
+  <data name="CrashSessionFatalTitle" xml:space="preserve">
+    <value>Fatal initialization error: {0}</value>
+  </data>
+  <data name="CrashSessionFatalPlatformService" xml:space="preserve">
+    <value>Platform service initialization failed</value>
+  </data>
+  <data name="CrashSessionFatalAssetDatabase" xml:space="preserve">
+    <value>Asset database initialization failed</value>
+  </data>
+  <data name="CrashSessionFatalUnknown" xml:space="preserve">
+    <value>Game initialization failed</value>
+  </data>
+  <data name="CrashSessionFatalRow" xml:space="preserve">
+    <value>Source log: {0}    Sample: {1}</value>
+  </data>
+  <data name="CrashSessionAlertTitle" xml:space="preserve">
+    <value>Game initialization failed</value>
+  </data>
+  <data name="CrashSessionAlertMessage" xml:space="preserve">
+    <value>{0} logged a fatal error ({1}). The process may still show a black window. See Crash Analysis → Current Game for details.</value>
+  </data>
   <data name="CrashSessionLogReadable" xml:space="preserve">
     <value>OK</value>
   </data>
@@ -6401,6 +6425,9 @@ then call list_games to verify.</value>
   </data>
   <data name="DiagnosticsGameLogStatus" xml:space="preserve">
     <value>Game log {0}: {1}</value>
+  </data>
+  <data name="DiagnosticsGameLogStatusMultiple" xml:space="preserve">
+    <value>Game log {0}: {1} ({2} session logs)</value>
   </data>
   <data name="CrashSessionEndedTitle" xml:space="preserve">
     <value>Game session ended</value>

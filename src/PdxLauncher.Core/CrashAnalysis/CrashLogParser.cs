@@ -57,6 +57,10 @@ public static class CrashLogParser
         @"^\[(?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2})\]\[(?<origin>[^\]]+)\]:\s?(?<message>.*)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex UnityLogHeaderPattern = new(
+        @"^\[(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})[ T](?<hour>\d{2}):(?<minute>\d{2}):(?<second>\d{2})[.,]\d{3}\]\s*\[(?<level>[^\]]+)\]\s?(?<message>.*)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex ExceptionPattern = new(
         @"Unhandled Exception\s+(?<code>[0-9A-Fa-f]{8})\s*\((?<name>[^)]+)\)\s+at\s+address\s+(?<address>0x[0-9A-Fa-f]+)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -258,15 +262,19 @@ public static class CrashLogParser
         string currentOrigin = string.Empty;
         string currentMessage = string.Empty;
         List<string>? currentLines = null;
+        bool hasUnityHeader = false;
 
         void Flush()
         {
             if (currentLines is { Count: > 0 })
             {
-                blocks.Add(new CrashLogBlock(currentTime, currentOrigin, currentMessage, currentLines.ToArray()));
+                blocks.Add(hasUnityHeader
+                    ? new CrashLogBlock(currentTime, string.Empty, currentMessage, currentLines.ToArray())
+                    : new CrashLogBlock(currentTime, currentOrigin, currentMessage, currentLines.ToArray()));
             }
 
             currentLines = null;
+            hasUnityHeader = false;
         }
 
         foreach (string rawLine in Normalize(text).Split('\n'))
@@ -286,9 +294,41 @@ public static class CrashLogParser
                 continue;
             }
 
+            var unityMatch = UnityLogHeaderPattern.Match(rawLine);
+            if (unityMatch.Success)
+            {
+                Flush();
+                currentTime = new DateTimeOffset(
+                    int.Parse(unityMatch.Groups["year"].Value, CultureInfo.InvariantCulture),
+                    int.Parse(unityMatch.Groups["month"].Value, CultureInfo.InvariantCulture),
+                    int.Parse(unityMatch.Groups["day"].Value, CultureInfo.InvariantCulture),
+                    int.Parse(unityMatch.Groups["hour"].Value, CultureInfo.InvariantCulture),
+                    int.Parse(unityMatch.Groups["minute"].Value, CultureInfo.InvariantCulture),
+                    int.Parse(unityMatch.Groups["second"].Value, CultureInfo.InvariantCulture),
+                    anchor.Offset);
+                currentOrigin = unityMatch.Groups["level"].Value.Trim();
+                currentMessage = unityMatch.Groups["message"].Value;
+                currentLines = [rawLine];
+                hasUnityHeader = true;
+                continue;
+            }
+
+            if (currentLines is null && IsStandaloneFatalStart(rawLine))
+            {
+                currentTime = null;
+                currentOrigin = string.Empty;
+                currentMessage = rawLine.Trim();
+                currentLines = [rawLine];
+                continue;
+            }
+
             if (currentLines is not null)
             {
                 currentLines.Add(rawLine);
+                if (!hasUnityHeader && Contains(rawLine, "fatal://error"))
+                {
+                    currentMessage = "fatal://error";
+                }
             }
         }
 
@@ -404,6 +444,8 @@ public static class CrashLogParser
         return Contains(text, "error")
             || Contains(text, "exception")
             || Contains(text, "failed")
+            || Contains(text, "fatal")
+            || Contains(text, "curl error")
             || Contains(text, "cannot")
             || Contains(text, "missing")
             || Contains(text, "orphaned")
@@ -412,6 +454,39 @@ public static class CrashLogParser
             || Contains(text, "incomplete")
             || Contains(text, "crash");
     }
+
+    /// <summary>
+    /// 识别游戏初始化致命错误，并把海量重复堆栈收敛到少数稳定类别。返回 null 表示不是致命错误。
+    /// </summary>
+    public static string? DetectFatalCategory(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        if (Contains(text, "A platform service integration failed to initialize")
+            || (Contains(text, "Curl error") && Contains(text, "Cert verify failed")))
+        {
+            return "platform-service";
+        }
+
+        if (Contains(text, "fatal://error")
+            || (Contains(text, "NullReferenceException")
+                && Contains(text, "Colossal.IO.AssetDatabase")))
+        {
+            return "asset-database";
+        }
+
+        return null;
+    }
+
+    private static bool IsStandaloneFatalStart(string line) =>
+        Contains(line, "[FATAL]")
+        || Contains(line, "fatal://error")
+        || Contains(line, "Curl error")
+        || Contains(line, "A platform service integration failed to initialize")
+        || Contains(line, "NullReferenceException");
 
     private static string Normalize(string text) =>
         text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').TrimStart('\uFEFF');
