@@ -747,6 +747,10 @@
 
                         <TextBlock Text="{x:Bind L.SettingsSectionSteam, Mode=OneWay}" Style="{StaticResource SettingsSubsectionTitleStyle}" />
 
+                        <TextBlock Text="{x:Bind L.SettingsSteamIntro, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
+
+                        <TextBlock Text="{x:Bind L.SettingsSteamIntro, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
+
                         <ct:SettingsCard Header="{x:Bind L.SettingsSteamStateOn, Mode=OneWay}"
                                          HorizontalAlignment="Stretch"
                                          Background="{ThemeResource PdxCardBackgroundBrush}"
@@ -764,6 +768,7 @@
                         <TextBlock Text="{x:Bind L.SettingsSteamStateHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
 
                         <ct:SettingsCard Header="{x:Bind L.SettingsSteamSubscribeOn, Mode=OneWay}"
+                                         Description="{x:Bind L.SettingsSteamSubscribeCardDescription, Mode=OneWay}"
                                          HorizontalAlignment="Stretch"
                                          Background="{ThemeResource PdxCardBackgroundBrush}"
                                          BorderBrush="{ThemeResource PdxCardStrokeBrush}"

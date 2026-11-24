@@ -391,7 +391,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// Steam 工坊直连订阅开关（实验性，默认关）：写入 AppSettings.SteamWorkshopSubscribeEnabled 并登记延迟落盘。
+    /// 「在启动器内订阅 / 退订 Steam 工坊」开关（实验性，默认关）：
+    /// 写入 AppSettings.SteamWorkshopSubscribeEnabled 并登记延迟落盘。
+    /// 「直连」指 Steamworks 原生调用，与网络代理设置无关。
     /// 关掉时不碰任何 Steamworks 接口，详情页按钮退回「在 Steam 客户端里打开」。
     /// </summary>
     public bool SteamSubscribeEnabled
@@ -441,7 +443,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
             SetSteamApiStatus(resolved is null
                 ? T(Keys.SettingsSteamApiMissing, DescribeSteamApiCandidates(locator))
-                : T(Keys.SettingsSteamApiReady));
+                : T(Keys.SettingsSteamApiReady, DescribeSteamApiSource(resolved)));
         }
         catch (Exception ex)
         {
@@ -449,6 +451,54 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             SetSteamApiStatus(T(Keys.SettingsSteamApiMissing, ex.Message));
         }
     }
+
+    /// <summary>
+    /// 把命中的 DLL 归到「游戏目录 / 手填 / 程序目录 / 仓库 sdk / Steam 客户端」之一，
+    /// 让设置页能回答「这份是哪来的」。归类只按路径形态判断，不重新探测。
+    /// </summary>
+    private static string DescribeSteamApiSource(string resolved)
+    {
+        try
+        {
+            var configured = AppServices.Settings.SteamApiDllPath?.Trim();
+            if (!string.IsNullOrWhiteSpace(configured)
+                && string.Equals(resolved, configured, StringComparison.OrdinalIgnoreCase))
+            {
+                return T(Keys.SettingsSteamApiSourceManual);
+            }
+
+            if (AppServices.CurrentGame?.InstallRoot is { Length: > 0 } root
+                && IsUnder(resolved, root))
+            {
+                return T(Keys.SettingsSteamApiSourceGame);
+            }
+
+            if (string.Equals(
+                    resolved,
+                    Path.Combine(AppContext.BaseDirectory, SteamApiLocator.FileName),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return T(Keys.SettingsSteamApiSourceApp);
+            }
+
+            if (IsUnder(resolved, Path.Combine(AppContext.BaseDirectory, "sdk", "redistributable_bin", "win64")))
+            {
+                return T(Keys.SettingsSteamApiSourceSdk);
+            }
+
+            return T(Keys.SettingsSteamApiSourceSteam);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return T(Keys.CommonUnknown);
+        }
+    }
+
+    private static bool IsUnder(string path, string root) =>
+        root.Length > 0
+        && path.StartsWith(
+            root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+            StringComparison.OrdinalIgnoreCase);
 
     /// <summary>把候选路径压成一句短说明（只列前两条，避免状态栏过长）。</summary>
     private static string DescribeSteamApiCandidates(SteamApiLocator locator)

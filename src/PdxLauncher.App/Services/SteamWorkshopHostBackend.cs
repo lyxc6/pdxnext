@@ -14,6 +14,11 @@ using PdxLauncher.Core.Steam;
 /// 「Steam 工坊直连订阅」的宿主实现：每次操作拉起一个短命子进程（<c>--steam-host</c>），
 /// 原生 <c>ISteamUGC::SubscribeItem</c> 只在子进程里调。
 /// <para>
+/// <b>术语</b>：「直连」= 通过 Steamworks 原生接口操作 Steam，与网络代理无关。
+/// 本后端在缺少 <c>steam_api64.dll</c> 时 <see cref="IsAvailable"/> 为 false，
+/// 调用方据此把按钮降级成「在 Steam 客户端里打开」，而不是报错。
+/// </para>
+/// <para>
 /// 旧实现（<c>SteamWorkshopBridge</c>）在启动器进程内长期持有 Steamworks 会话，副作用是：
 /// Steam 会把启动器当成「vic3 正在运行」，并在用户点「退出游戏」时把启动器杀掉。
 /// 换成宿主后，登记只存在于几秒的子进程上，代价是每次操作多一次进程启动。

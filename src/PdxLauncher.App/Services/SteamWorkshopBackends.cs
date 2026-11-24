@@ -7,6 +7,12 @@ using PdxLauncher.Core.Steam;
 /// <summary>
 /// 按当前游戏造「Steam 工坊直连后端」的统一入口。
 /// <para>
+/// <b>术语</b>：这里的「直连」指<b>通过 Steamworks 原生接口</b>直接操作 Steam
+/// （<c>ISteamUGC</c> + <c>steam_api64.dll</c>），与设置页「网络」分区里的
+/// 「直连（未使用代理）」无关。找不到 DLL 时工厂返回 null，上层自动降级为
+/// 「打开 Steam 客户端页面」，不算功能故障。
+/// </para>
+/// <para>
 /// 直连后端有两个层级，对应两个设置开关：
 /// </para>
 /// <list type="bullet">
