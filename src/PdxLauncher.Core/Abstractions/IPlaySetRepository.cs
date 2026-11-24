@@ -63,6 +63,19 @@ public interface IPlaySetRepository
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// 就地修正一条 mod 的注册 ID（V0 加载文件写的是这一列）。
+    /// <para>
+    /// 真机场景：工坊内容目录存在，但官方库没写 <c>gameRegistryId</c>，V0 加载文件会静默丢行。
+    /// <paramref name="gameRegistryId"/> 为空串表示显式清空，供写入失败时回滚。
+    /// </para>
+    /// </summary>
+    Task<AppResult<bool>> UpdateModRegistryIdAsync(
+        GameInstallation game,
+        Guid modId,
+        string? gameRegistryId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// 「工坊 mod 转本地 mod」的正向库写入：单事务里插入一条新的本地 <c>mods</c> 行
     /// （显式 <c>source='local'</c>、<c>steamId=NULL</c>），再把所有引用 <paramref name="oldModId"/> 的
     /// <c>playsets_mods.modId</c> 改成 <paramref name="localMod"/> 的 ModId。

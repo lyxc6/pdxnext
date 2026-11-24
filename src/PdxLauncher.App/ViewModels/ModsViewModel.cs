@@ -2247,8 +2247,9 @@ public sealed class ModsViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// 扫一遍当前游戏的 Mod，找出能自动修的路径问题：订阅 mod 缺路径（按工坊目录补）、
-    /// 本地 mod 路径含非 ASCII（游戏加载不了，改成 mod_&lt;id 前 8 位&gt;）。
+    /// 扫一遍当前游戏的 Mod，找出能自动修的问题：订阅 mod 缺路径（按工坊目录补）、
+    /// 本地 mod 路径含非 ASCII（游戏加载不了，改成 mod_&lt;id 前 8 位&gt;）、
+    /// V0 工坊 mod 缺注册 ID（生成 <c>ugc_&lt;id&gt;.mod</c> 并回填）。
     /// 只诊断不落盘 —— 由界面确认后再调 <see cref="ApplyPathRepairsAsync"/>。
     /// </summary>
     public async Task<IReadOnlyList<ModPathRepair>> FindPathRepairsAsync(CancellationToken cancellationToken)
@@ -2261,7 +2262,7 @@ public sealed class ModsViewModel : LocalizedObservableObject
         IsBusy = true;
         try
         {
-            return await _pathRepairer.FindAsync(game, cancellationToken).ConfigureAwait(true);
+            return await _pathRepairer.FindAsync(game, _allMods, cancellationToken).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {

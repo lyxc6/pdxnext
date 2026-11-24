@@ -146,6 +146,8 @@ public static class McpChangePlanExecutorChecks
             Task.FromResult<IReadOnlyList<PlaySetDlc>>([]);
         public Task<AppResult<bool>> UpdateModPathsAsync(GameInstallation game, Guid modId, string? dirPath, string? archivePath, CancellationToken cancellationToken) =>
             Task.FromResult(AppResult<bool>.Fail(ErrorKind.Unsupported, "stub"));
+        public Task<AppResult<bool>> UpdateModRegistryIdAsync(GameInstallation game, Guid modId, string? gameRegistryId, CancellationToken cancellationToken) =>
+            Task.FromResult(AppResult<bool>.Fail(ErrorKind.Unsupported, "stub"));
         public Task<AppResult<bool>> AdoptLocalModAsync(GameInstallation game, Guid oldModId, string? oldDirPath, string? oldArchivePath, PlaySetMod localMod, CancellationToken cancellationToken) =>
             Task.FromResult(AppResult<bool>.Fail(ErrorKind.Unsupported, "stub"));
         public Task<AppResult<bool>> RevertLocalModAdoptionAsync(GameInstallation game, Guid newModId, Guid oldModId, string? oldDirPath, string? oldArchivePath, CancellationToken cancellationToken, string? newDirPath = null, string? newArchivePath = null) =>

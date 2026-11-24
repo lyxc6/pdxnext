@@ -2294,25 +2294,28 @@
     <value>Check mod paths</value>
   </data>
   <data name="ModsRepairDialogBody" xml:space="preserve">
-    <value>The following mods will not load in game. Confirming fills in missing paths, renames folders to ASCII, and writes the result back to the mod library.</value>
+    <value>The following mods will not load in game. Confirming fills in missing paths or registry IDs, renames folders to ASCII, and writes the result back to the mod library.</value>
   </data>
   <data name="ModsRepairDialogTitle" xml:space="preserve">
-    <value>Repair mod paths</value>
+    <value>Repair mod problems</value>
   </data>
   <data name="ModsRepairDone" xml:space="preserve">
-    <value>Repaired {0} mod path(s)</value>
+    <value>Repaired {0} mod problem(s)</value>
   </data>
   <data name="ModsRepairFailed" xml:space="preserve">
-    <value>Failed to repair mod paths: {0}</value>
+    <value>Failed to repair mod problems: {0}</value>
   </data>
   <data name="ModsRepairFillHint" xml:space="preserve">
     <value>Fill path</value>
+  </data>
+  <data name="ModsRepairRegistryHint" xml:space="preserve">
+    <value>Fill registry ID (create workshop pointer)</value>
   </data>
   <data name="ModsRepairInvalidName" xml:space="preserve">
     <value>Only ASCII letters, digits, underscore, dot and hyphen are allowed</value>
   </data>
   <data name="ModsRepairName" xml:space="preserve">
-    <value>Repair mod paths</value>
+    <value>Repair mod problems</value>
   </data>
   <data name="ModsRepairNothing" xml:space="preserve">
     <value>No mod paths need repairing</value>

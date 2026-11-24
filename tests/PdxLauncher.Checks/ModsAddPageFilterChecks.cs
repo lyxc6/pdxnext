@@ -381,6 +381,10 @@ public static class ModsAddPageFilterChecks
             GameInstallation game, Guid modId, string? dirPath, string? archivePath, CancellationToken cancellationToken) =>
             Task.FromResult(AppResult<bool>.Ok(true));
 
+        public Task<AppResult<bool>> UpdateModRegistryIdAsync(
+            GameInstallation game, Guid modId, string? gameRegistryId, CancellationToken cancellationToken) =>
+            Task.FromResult(AppResult<bool>.Ok(true));
+
         public Task<AppResult<bool>> AdoptLocalModAsync(
             GameInstallation game, Guid oldModId, string? oldDirPath, string? oldArchivePath,
             PlaySetMod localMod, CancellationToken cancellationToken) => Task.FromResult(AppResult<bool>.Ok(true));
