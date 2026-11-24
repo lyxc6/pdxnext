@@ -19,6 +19,7 @@ using PdxLauncher.Core.Contracts;
 public sealed partial class SavesPage : Page
 {
     private readonly SavesViewModel _viewModel;
+    private readonly GlobalBusyBinding _globalBusyBinding;
 
     /// <summary>页面生命周期令牌；页面不缓存（NavigationCacheMode=Disabled），每次进入都会重建。</summary>
     private CancellationTokenSource _lifetime = new();
@@ -37,6 +38,8 @@ public sealed partial class SavesPage : Page
         InitializeComponent();
 
         _viewModel = new SavesViewModel(AppServices.SaveGameFiles, AppServices.SaveBackups, AppServices.Logger);
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingSaves, nameof(SavesViewModel.IsBusy));
+        _globalBusyBinding.Refresh();
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -78,6 +81,7 @@ public sealed partial class SavesPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _globalBusyBinding.Dispose();
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
 
         _rowAutomation.Clear();

@@ -45,15 +45,6 @@
                        Text="{x:Bind L.AchievementsTitle, Mode=OneWay}"
                        Style="{StaticResource TitleTextBlockStyle}" />
 
-            <ProgressRing Grid.Column="1"
-                          Width="20"
-                          Height="20"
-                          VerticalAlignment="Center"
-                          IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                          Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsBusy), Mode=OneWay}"
-                          AutomationProperties.AutomationId="ringAchievementsBusy"
-                          AutomationProperties.Name="{x:Bind L.CommonLoading, Mode=OneWay}" />
-
             <StackPanel Grid.Column="2"
                         Orientation="Horizontal"
                         Spacing="12"

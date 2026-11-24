@@ -81,13 +81,6 @@
                 </StackPanel>
             </Button>
 
-            <ProgressRing Grid.Column="4"
-                          Width="20"
-                          Height="20"
-                          VerticalAlignment="Center"
-                          IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                          AutomationProperties.AutomationId="modStudioBusy" />
-
         </Grid>
 
         <!-- 主体：左列表 / 右面板 -->

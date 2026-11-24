@@ -282,8 +282,7 @@ try
     Start-Sleep -Seconds 2
     $count = WaitById $window 'txtLibraryCount' 40 250
     if (-not $count) { Fail 'NO_LIBRARY_COUNT' }
-    $busy = ById $window 'ringLibraryBusy'
-    if ($busy) { Start-Sleep -Seconds 2 }
+    Start-Sleep -Seconds 2
     ScrollPageToTop $window
     MovePointerAway $hwnd
     Start-Sleep -Milliseconds 1200

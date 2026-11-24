@@ -19,7 +19,6 @@ public static class WorkshopPageChecks
         "txtWorkshopSearch",
         "cmbWorkshopSort",
         "cmbWorkshopTimeRange",
-        "ringWorkshopBusy",
         "txtWorkshopGame",
         "txtWorkshopCount",
         "txtWorkshopSource",
@@ -149,7 +148,6 @@ public static class WorkshopPageChecks
             "x:Name=\"SearchBox\"",
             "x:Name=\"SortBox\"",
             "x:Name=\"TimeRangeBox\"",
-            "ringWorkshopBusy",
             "txtWorkshopSource",
             "btnWorkshopOpenWeb",
         ];

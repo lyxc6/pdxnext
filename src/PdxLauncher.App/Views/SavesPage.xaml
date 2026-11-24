@@ -79,13 +79,6 @@
                         Orientation="Horizontal"
                         Spacing="8"
                         VerticalAlignment="Top">
-                <ProgressRing Width="20"
-                              Height="20"
-                              VerticalAlignment="Center"
-                              IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsBusy), Mode=OneWay}"
-                              AutomationProperties.AutomationId="ringSavesBusy"
-                              AutomationProperties.Name="{x:Bind L.SavesStatusScanning, Mode=OneWay}" />
             </StackPanel>
         </Grid>
 

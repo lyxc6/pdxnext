@@ -5190,6 +5190,57 @@
   <data name="ShellTranslating" xml:space="preserve">
     <value>正在翻译…</value>
   </data>
+  <data name="ShellLoadingHome" xml:space="preserve">
+    <value>正在加载当前游戏…</value>
+  </data>
+  <data name="ShellLoadingLibrary" xml:space="preserve">
+    <value>正在加载游戏库…</value>
+  </data>
+  <data name="ShellLoadingPlaySets" xml:space="preserve">
+    <value>正在加载播放集…</value>
+  </data>
+  <data name="ShellLoadingModLibrary" xml:space="preserve">
+    <value>正在加载 Mod 库…</value>
+  </data>
+  <data name="ShellLoadingWorkshop" xml:space="preserve">
+    <value>正在加载创意工坊…</value>
+  </data>
+  <data name="ShellLoadingWorkshopDetail" xml:space="preserve">
+    <value>正在加载工坊详情…</value>
+  </data>
+  <data name="ShellLoadingDlc" xml:space="preserve">
+    <value>正在加载 DLC…</value>
+  </data>
+  <data name="ShellLoadingSaves" xml:space="preserve">
+    <value>正在加载存档…</value>
+  </data>
+  <data name="ShellLoadingAchievements" xml:space="preserve">
+    <value>正在加载成就…</value>
+  </data>
+  <data name="ShellLoadingAddMods" xml:space="preserve">
+    <value>正在加载模组列表…</value>
+  </data>
+  <data name="ShellLoadingModStudio" xml:space="preserve">
+    <value>正在加载 Mod 创建…</value>
+  </data>
+  <data name="ShellLoadingModEditor" xml:space="preserve">
+    <value>正在处理 Mod 编辑…</value>
+  </data>
+  <data name="ShellLoadingAccount" xml:space="preserve">
+    <value>正在处理账号请求…</value>
+  </data>
+  <data name="ShellLoadingSettings" xml:space="preserve">
+    <value>正在处理设置…</value>
+  </data>
+  <data name="ShellLoadingCrashAnalysis" xml:space="preserve">
+    <value>正在分析崩溃日志…</value>
+  </data>
+  <data name="ShellLoadingDiagnostics" xml:space="preserve">
+    <value>正在采集诊断数据…</value>
+  </data>
+  <data name="ShellConvertingToLocal" xml:space="preserve">
+    <value>正在转换为本地…</value>
+  </data>
   <data name="ShellVersion" xml:space="preserve">
     <value>{0}</value>
   </data>

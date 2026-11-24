@@ -27,6 +27,7 @@ namespace PdxLauncher.App.Views;
 public sealed partial class WorkshopDetailPage : Page
 {
     private readonly WorkshopDetailViewModel _viewModel;
+    private readonly GlobalBusyBinding _globalBusyBinding;
     private readonly SteamWorkshopHostBackend? _steamBackend;
     private readonly HashSet<MarkdownView> _commentMarkdownViews = [];
 
@@ -85,6 +86,8 @@ public sealed partial class WorkshopDetailPage : Page
                 AppServices.WorkshopStates,
                 AppServices.Logger),
             AppServices.SubscribedModCleanup);
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingWorkshopDetail, nameof(WorkshopDetailViewModel.IsLoading));
+        _globalBusyBinding.Refresh();
 
         // 正文里的行内图片与顶部图片墙共用同一份缓存文件：先把解析器接上，
         // 图片下载完成后再由 GalleryImageReady 原地刷新，不重建整页。
@@ -300,7 +303,8 @@ public sealed partial class WorkshopDetailPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        _viewModel.GalleryImageReady -= OnGalleryImageReady;
+        _globalBusyBinding.Dispose();
+_viewModel.GalleryImageReady -= OnGalleryImageReady;
         _viewModel.Screenshots.CollectionChanged -= OnScreenshotsChanged;
         _commentMarkdownViews.Clear();
         _lifetime?.Cancel();

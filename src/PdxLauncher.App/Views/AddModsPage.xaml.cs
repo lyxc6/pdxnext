@@ -21,6 +21,7 @@ using PdxLauncher.Core.Contracts;
 public sealed partial class AddModsPage : Page
 {
     private readonly AddModsViewModel _viewModel;
+    private readonly GlobalBusyBinding _globalBusyBinding;
     private CancellationTokenSource _lifetime = new();
 
     private AddModsNavigationRequest? _request;
@@ -41,6 +42,8 @@ public sealed partial class AddModsPage : Page
             AppServices.PlaySets,
             new ModLibraryService(AppServices.PlaySets, AppServices.Mods, AppServices.Logger),
             AppServices.Logger);
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingAddMods, nameof(AddModsViewModel.IsBusy));
+        _globalBusyBinding.Refresh();
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -118,7 +121,8 @@ public sealed partial class AddModsPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        _lifetime.Cancel();
+        _globalBusyBinding.Dispose();
+_lifetime.Cancel();
     }
 
     /// <summary>读取候选 mod。</summary>

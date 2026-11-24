@@ -16,6 +16,7 @@ using PdxLauncher.Core.Contracts;
 public sealed partial class ModEditorPage : Page
 {
     private readonly ModEditorViewModel _viewModel;
+    private readonly GlobalBusyBinding _globalBusyBinding;
 
     /// <summary>左栏展开宽度（DIP），收起时写 0。</summary>
     private const double LeftPaneWidth = 216;
@@ -42,6 +43,8 @@ public sealed partial class ModEditorPage : Page
         InitializeComponent();
 
         _viewModel = new ModEditorViewModel();
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingModEditor, nameof(ModEditorViewModel.IsBusy));
+        _globalBusyBinding.Refresh();
         _watchTimer.Tick += OnWatchTick;
         _viewModel.WatchStarted += OnWatchStarted;
         _viewModel.WatchStopped += OnWatchStopped;
@@ -75,7 +78,8 @@ public sealed partial class ModEditorPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        _isLoaded = false;
+        _globalBusyBinding.Dispose();
+_isLoaded = false;
 
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         AppServices.ModEditorPaneVisibilityChanged -= OnModEditorPaneVisibilityChanged;

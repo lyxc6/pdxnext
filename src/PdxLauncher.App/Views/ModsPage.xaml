@@ -823,24 +823,11 @@
                            AutomationProperties.AutomationId="txtModsStatus"
                            AutomationProperties.Name="{x:Bind L.ModsStatusName, Mode=OneWay}" />
 
-                <!-- 忙碌提示放状态栏，工具条只留交互控件，窄窗口时不会挤掉按钮；翻译重试 / 刷新在行右键菜单里 -->
+                <!-- 忙碌进度由标题栏统一显示；这里只保留转换取消入口，窄窗口时不会挤掉按钮。 -->
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
                             Spacing="8"
                             VerticalAlignment="Center">
-                    <ProgressRing Width="16"
-                                  Height="16"
-                                  VerticalAlignment="Center"
-                                  IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                                  AutomationProperties.AutomationId="ringModsBusy"
-                                  AutomationProperties.Name="{x:Bind L.ModsHeaderBusy, Mode=OneWay}" />
-                    <!-- 转换专用进度 / 取消：只在本次转换在途时出现，不随 IsBusy 一起被禁用。 -->
-                    <ProgressRing Width="16"
-                                  Height="16"
-                                  VerticalAlignment="Center"
-                                  IsActive="{x:Bind ViewModel.IsConvertToLocalBusy, Mode=OneWay}"
-                                  AutomationProperties.AutomationId="ringConvertToLocalBusy"
-                                  AutomationProperties.Name="{x:Bind L.CommonConvertToLocal, Mode=OneWay}" />
                     <Button Content="{x:Bind L.CommonCancel, Mode=OneWay}"
                             Click="OnCancelConvertToLocalClick"
                             Visibility="{x:Bind ViewModel.IsConvertToLocalBusy, Mode=OneWay}"

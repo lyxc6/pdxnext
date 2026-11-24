@@ -502,12 +502,8 @@
                             CornerRadius="8"
                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                             Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsLoading), Mode=OneWay}">
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <ProgressRing IsActive="{x:Bind ViewModel.IsLoading, Mode=OneWay}" Width="18" Height="18" />
-                            <TextBlock Text="{x:Bind L.WorkshopDetailLoading, Mode=OneWay}"
-                                       VerticalAlignment="Center"
-                                       Style="{StaticResource BodyTextBlockStyle}" />
-                        </StackPanel>
+                        <TextBlock Text="{x:Bind L.WorkshopDetailLoading, Mode=OneWay}"
+                                   Style="{StaticResource BodyTextBlockStyle}" />
                     </Border>
 
                     <Border Padding="16"

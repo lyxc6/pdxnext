@@ -96,19 +96,7 @@
                         Orientation="Horizontal"
                         Spacing="8"
                         VerticalAlignment="Center">
-                <ProgressRing Width="20"
-                              Height="20"
-                              VerticalAlignment="Center"
-                              IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                              AutomationProperties.AutomationId="ringModLibraryBusy"
-                              AutomationProperties.Name="{x:Bind L.CommonLoading, Mode=OneWay}" />
-                <!-- 转换专用进度 / 取消：只在本次转换在途时出现；取消按钮不绑 IsEditorEnabled。 -->
-                <ProgressRing Width="20"
-                              Height="20"
-                              VerticalAlignment="Center"
-                              IsActive="{x:Bind ViewModel.IsConvertToLocalBusy, Mode=OneWay}"
-                              AutomationProperties.AutomationId="ringConvertToLocalBusy"
-                              AutomationProperties.Name="{x:Bind L.CommonConvertToLocal, Mode=OneWay}" />
+                <!-- 转换取消：转换进度由标题栏统一显示，这里只保留取消入口。 -->
                 <Button Content="{x:Bind L.CommonCancel, Mode=OneWay}"
                         Click="OnCancelConvertToLocalClick"
                         Visibility="{x:Bind ViewModel.IsConvertToLocalBusy, Mode=OneWay}"
