@@ -100,11 +100,16 @@ public static class WorkshopToLocalUiChecks
         }
 
         ChecksContext.Equal(
-            "Mod 库右键: 六项行操作齐全",
-            6,
+            "Mod 库右键: 行操作含快速添加与原有六项",
+            7,
             CountOccurrences(rowActions, "<MenuFlyoutItem"));
         ChecksContext.Check(
-            "Mod 库右键: 六项行操作按截图顺序排列",
+            "Mod 库右键: 快速添加位于原有行操作之前",
+            rowActions.IndexOf("menuModLibraryAddToActivePlaySet", StringComparison.Ordinal) >= 0
+                && rowActions.IndexOf("menuModLibraryAddToActivePlaySet", StringComparison.Ordinal)
+                    < rowActions.IndexOf("menuModLibraryOpenDetail", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "Mod 库右键: 原有六项行操作按截图顺序排列",
             actions
                 .Select(action => rowActions.IndexOf(action.Item1, StringComparison.Ordinal))
                 .Aggregate(

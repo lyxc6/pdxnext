@@ -6471,4 +6471,28 @@
   <data name="SettingsMcpRejectPlan" xml:space="preserve">
     <value>拒绝</value>
   </data>
+  <data name="ModlibQuickAddToActivePlaySet" xml:space="preserve">
+    <value>添加到当前播放集</value>
+  </data>
+  <data name="ModlibQuickAddAdded" xml:space="preserve">
+    <value>已把 {0} 添加到播放集「{1}」</value>
+  </data>
+  <data name="ModlibQuickAddAlreadyInSet" xml:space="preserve">
+    <value>{0} 已在播放集「{1}」中</value>
+  </data>
+  <data name="ModlibQuickAddUnregistered" xml:space="preserve">
+    <value>{0} 尚未在官方库中登记，无法添加到播放集</value>
+  </data>
+  <data name="ModlibQuickAddNoGame" xml:space="preserve">
+    <value>请先选择游戏，再添加 mod 到播放集</value>
+  </data>
+  <data name="ModlibQuickAddNoActivePlaySet" xml:space="preserve">
+    <value>当前游戏没有激活的播放集</value>
+  </data>
+  <data name="ModlibQuickAddUnsupported" xml:space="preserve">
+    <value>当前游戏不支持播放集内容管理</value>
+  </data>
+  <data name="ModlibQuickAddFailed" xml:space="preserve">
+    <value>添加到当前播放集失败：{0}</value>
+  </data>
 </root>

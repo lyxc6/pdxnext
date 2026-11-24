@@ -50,7 +50,12 @@ public sealed partial class ModLibraryPage : Page
                 SteamWorkshopBackends.CreateForState,
                 AppServices.WorkshopStates),
             AppServices.ModThumbnails,
-            AppServices.Logger);
+            AppServices.Logger,
+            new QuickAddToActivePlaySetService(
+                AppServices.PlaySets,
+                AppServices.LoadFiles,
+                AppServices.Dlcs,
+                AppServices.Logger));
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -249,6 +254,23 @@ public sealed partial class ModLibraryPage : Page
 
     // ------------------------------------------------------------ 控件事件
 
+    /// <summary>行右键菜单「添加到当前播放集」：门控已在 Opening 统一设置，点击后只反馈状态栏。</summary>
+    private async void OnQuickAddToActivePlaySetClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is FrameworkElement { DataContext: ModLibraryRowViewModel row })
+            {
+                await _viewModel.QuickAddToActivePlaySetAsync(row).ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModLibraryPage 快速添加到当前播放集失败", ex);
+            _viewModel.SetStatus(L.T(Keys.ModlibQuickAddFailed, ex.Message));
+        }
+    }
+
     /// <summary>
     /// 行右键菜单里的「重试翻译」：把这一页还没译名的行重翻一遍。
     /// 只重翻译名，不重读 Mod 库（重读会把整页缩略图重新解码，列表会闪一下）。
@@ -291,6 +313,7 @@ public sealed partial class ModLibraryPage : Page
 
         var retryEnabled = _viewModel.CanRetryTranslation;
         var refreshEnabled = AppServices.Translation.IsEnabled;
+        var quickAddEnabled = _viewModel.CanQuickAddToPlaySet;
         foreach (var item in flyout.Items)
         {
             if (item is not MenuFlyoutItem menuItem)
@@ -302,6 +325,10 @@ public sealed partial class ModLibraryPage : Page
             // 旧 default 分支回写 menuItem.IsEnabled 会切断绑定，必须跳过。
             switch (AutomationProperties.GetAutomationId(menuItem))
             {
+                case "menuModLibraryAddToActivePlaySet":
+                    menuItem.IsEnabled = quickAddEnabled
+                        && menuItem.DataContext is ModLibraryRowViewModel { IsUnregistered: false };
+                    break;
                 case "menuModLibraryTranslationRetry":
                     menuItem.IsEnabled = retryEnabled;
                     break;
