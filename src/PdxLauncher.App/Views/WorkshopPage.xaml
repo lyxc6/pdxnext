@@ -93,13 +93,6 @@
                                  AutomationProperties.AutomationId="cmbWorkshopTimeRange"
                                  AutomationProperties.Name="{x:Bind L.WorkshopTimeRangeName, Mode=OneWay}" />
 
-            <ProgressRing Grid.Column="4"
-                          Width="20"
-                          Height="20"
-                          VerticalAlignment="Center"
-                          IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                          AutomationProperties.AutomationId="ringWorkshopBusy" />
-
             <Border Grid.Column="6"
                     Width="1"
                     Height="20"

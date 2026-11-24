@@ -60,6 +60,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 
     private readonly SettingsViewModel _viewModel = new();
+    private readonly GlobalBusyBinding _globalBusyBinding;
 
     /// <summary>
     /// 页面生命周期令牌：取消它等于「这一页不再接收结果」（缓存统计、校验、删除这些绑定页面的活）。
@@ -76,6 +77,8 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     public SettingsPage()
     {
         InitializeComponent();
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingSettings, nameof(SettingsViewModel.IsBusy));
+        _globalBusyBinding.Refresh();
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -155,6 +158,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _globalBusyBinding.Dispose();
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         AlwaysOnTopService.Changed -= OnAlwaysOnTopChanged;
         AppServices.ModEditorPaneVisibilityChanged -= OnModEditorPaneVisibilityChanged;

@@ -141,10 +141,9 @@
                 </ToggleButton>
             </TitleBar.RightHeader>
             <!--
-                翻译在途提示：翻译是几秒级的慢操作，标题栏全局可见、切页也不中断，
-                所以把 ProgressRing + 文字放在这里，而不是每个页面各放一份。
-                显隐由 MainWindow.xaml.cs 控制（150ms 显示去抖 / 400ms 隐藏去抖），
-                计数来自 TranslationCoordinator.Activity，切页不会漏掉在途批次。
+                全局忙态提示：页面级加载、转换、翻译都登记到 GlobalBusyMonitor，标题栏共用一个
+                ProgressRing + 文字并随来源切换文案，切页也不中断。显隐由 MainWindow.xaml.cs 控制
+                （150ms 显示去抖 / 400ms 隐藏去抖）。
             -->
             <TitleBar.Content>
                 <StackPanel
@@ -160,6 +159,7 @@
                         IsActive="False"
                         AutomationProperties.AutomationId="ringTranslating" />
                     <TextBlock
+                        x:Name="txtTranslating"
                         Text="{x:Bind L.ShellTranslating, Mode=OneWay}"
                         Style="{StaticResource CaptionTextBlockStyle}"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"

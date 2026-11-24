@@ -14,6 +14,7 @@ using PdxLauncher.Core.Contracts;
 public sealed partial class DlcPage : Page
 {
     private readonly DlcViewModel _viewModel;
+    private readonly GlobalBusyBinding _globalBusyBinding;
     /// <summary>页面生命周期令牌；页面不缓存（NavigationCacheMode=Disabled），每次进入都会重建。</summary>
     private CancellationTokenSource _lifetime = new();
 
@@ -28,6 +29,8 @@ public sealed partial class DlcPage : Page
             AppServices.PlaySets,
             AppServices.LoadFiles,
             AppServices.Logger));
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingDlc, nameof(DlcViewModel.IsBusy));
+        _globalBusyBinding.Refresh();
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -72,6 +75,7 @@ public sealed partial class DlcPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _globalBusyBinding.Dispose();
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
 
         _lifetime.Cancel();

@@ -229,6 +229,7 @@ public sealed class TranslationCoordinator : IDisposable
         // 也不再因为排队等并发闸门而被误认为「早就翻过的还在翻」（D）。
         // 租约的生命周期由服务在引擎调用开始/结束时回调，finally 里兜底归还。
         TranslationActivityMonitor.Lease? activityLease = null;
+        GlobalBusyMonitor.Lease? busyLease = null;
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, SettingsToken());
         try
@@ -243,10 +244,15 @@ public sealed class TranslationCoordinator : IDisposable
         try
         {
             var service = CreateService(options);
-            service.OnEngineActivityStarted = () => activityLease ??= Activity.Begin();
+            service.OnEngineActivityStarted = () =>
+            {
+                activityLease ??= Activity.Begin();
+                busyLease ??= AppServices.GlobalBusy.Begin(Keys.ShellTranslating);
+            };
             service.OnEngineActivityEnded = () =>
             {
                 Interlocked.Exchange(ref activityLease, null)?.Dispose();
+                Interlocked.Exchange(ref busyLease, null)?.Dispose();
             };
 
             // 整段翻译从线程池起步：本地 GGUF 引擎的首次权重加载（1.3 GB 同步读盘）
@@ -276,6 +282,7 @@ public sealed class TranslationCoordinator : IDisposable
             // 兜底：引擎在抛异常路径没走到服务的 finally 时，这里保证租约一定归还，
             // 否则标题栏「正在翻译…」会永远亮着。正常路径已被 Interlocked 置空，这里空转。
             Interlocked.Exchange(ref activityLease, null)?.Dispose();
+            Interlocked.Exchange(ref busyLease, null)?.Dispose();
 
             _gate.Release();
 

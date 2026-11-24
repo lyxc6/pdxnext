@@ -143,6 +143,12 @@ public static class AppServices
     public static TranslationCoordinator Translation { get; private set; } = null!;
 
     /// <summary>
+    /// 全局忙态登记处：页面级加载与转换进度在这里登记，标题栏统一显示最近开始的一项。
+    /// 与初始化顺序无关，因此直接创建，供 ViewModel / 自检在任何阶段使用。
+    /// </summary>
+    public static GlobalBusyMonitor GlobalBusy { get; } = new();
+
+    /// <summary>
     /// 本地离线翻译运行时：模型下载、术语词典与两个本地引擎的容器。
     /// <para>
     /// 没有它也能启动——只是设置页看不到「本地模型」入口，翻译全部走云端引擎。

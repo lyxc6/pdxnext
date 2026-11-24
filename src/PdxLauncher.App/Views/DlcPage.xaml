@@ -181,11 +181,6 @@
                             AutomationProperties.AutomationId="btnSaveDlcs"
                             AutomationProperties.Name="{x:Bind L.DlcSaveName, Mode=OneWay}" />
                 </StackPanel>
-                <ProgressRing Width="20"
-                              Height="20"
-                              IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                              AutomationProperties.AutomationId="ringDlcBusy"
-                              AutomationProperties.Name="{x:Bind L.CommonLoading, Mode=OneWay}" />
             </StackPanel>
         </Grid>
 

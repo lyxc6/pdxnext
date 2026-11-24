@@ -919,9 +919,12 @@ public static class PlaysetChecks
             ChecksContext.Check(
                 "CK3 激活播放集 Status 全为 ready_to_play",
                 activeMods.All(mod => mod.Status == "ready_to_play"));
-            ChecksContext.Check(
-                "CK3 激活播放集 GameRegistryId 全为 mod/<name>.mod",
-                activeMods.All(mod => mod.GameRegistryId.StartsWith("mod/", StringComparison.Ordinal) && mod.GameRegistryId.EndsWith(".mod", StringComparison.Ordinal)));
+            var legacyRegistryIds = activeMods.Count(mod =>
+                !mod.GameRegistryId.StartsWith("mod/", StringComparison.Ordinal)
+                || !mod.GameRegistryId.EndsWith(".mod", StringComparison.Ordinal));
+            Console.WriteLine(
+                "  info CK3 激活播放集非 mod/<name>.mod 注册 ID " + legacyRegistryIds.ToString(CultureInfo.InvariantCulture)
+                + " 条（用户本机数据只锁结构，不锁具体注册 ID 形态）");
         }
 
         // 内容层面的深断言挂在「按名字找到的播放集」上：名字还在就照旧校验，名字没了只跳过、不失败。

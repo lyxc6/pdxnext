@@ -23,6 +23,7 @@ using WinRT.Interop;
 public sealed partial class ModStudioPage : Page
 {
     private readonly ModStudioViewModel _viewModel;
+    private readonly GlobalBusyBinding _globalBusyBinding;
 
     /// <summary>页面生命周期令牌；NavigationCacheMode=Disabled 会在每次进入时重建。</summary>
     private CancellationTokenSource _lifetime = new();
@@ -57,6 +58,8 @@ public sealed partial class ModStudioPage : Page
                 new SteamApiLocator(AppServices.FileSystem, AppServices.Logger),
                 AppServices.Settings.SteamApiDllPath),
             AppServices.Logger);
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingModStudio, nameof(ModStudioViewModel.IsBusy));
+        _globalBusyBinding.Refresh();
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -102,6 +105,7 @@ public sealed partial class ModStudioPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _globalBusyBinding.Dispose();
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         _publishLifetime?.Cancel();
         _publishLifetime?.Dispose();

@@ -48,7 +48,6 @@ public static class ModsPageLayoutChecks
         "lstMods",
         "txtModListEmpty",
         "txtModsStatus",
-        "ringModsBusy",
     ];
 
     public static int Run(IFileSystem fs)

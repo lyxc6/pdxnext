@@ -99,6 +99,8 @@ public static class SavesPageChecks
         }
 
         var xaml = File.ReadAllText(xamlPath);
+        var codePath = Path.Combine(Path.GetDirectoryName(xamlPath)!, "SavesPage.xaml.cs");
+        var code = File.Exists(codePath) ? File.ReadAllText(codePath) : string.Empty;
 
         ChecksContext.Check(
             "存档页: x:Class 指向 SavesPage",
@@ -114,9 +116,9 @@ public static class SavesPageChecks
             "存档页: 顶部有扫描状态文本",
             xaml.Contains("ViewModel.StatusText", StringComparison.Ordinal));
         ChecksContext.Check(
-            "存档页: 扫描中进度环绑定 IsBusy",
-            xaml.Contains("ViewModel.IsBusy", StringComparison.Ordinal)
-                && xaml.Contains("XamlVisibility.FromBool(ViewModel.IsBusy)", StringComparison.Ordinal));
+            "存档页: 扫描忙态交给标题栏统一显示",
+            code.Contains("_globalBusyBinding", StringComparison.Ordinal)
+                && !xaml.Contains("ProgressRing", StringComparison.Ordinal));
         ChecksContext.Check(
             "存档页: 空状态同时绑定标题与说明",
             xaml.Contains("ViewModel.EmptyStateTitle", StringComparison.Ordinal)

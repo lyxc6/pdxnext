@@ -20,6 +20,7 @@ using PdxLauncher.Core.Online;
 public sealed partial class WorkshopPage : Page
 {
     private readonly WorkshopViewModel _viewModel;
+    private readonly GlobalBusyBinding _globalBusyBinding;
 
     /// <summary>页面生命周期令牌；NavigationCacheMode=Required 会在返回页面时重建。</summary>
     private CancellationTokenSource _lifetime = new();
@@ -49,6 +50,8 @@ public sealed partial class WorkshopPage : Page
                 SteamWorkshopBackends.CreateForState,
                 AppServices.WorkshopStates,
                 AppServices.Logger));
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingWorkshop, nameof(WorkshopViewModel.IsBusy));
+        _globalBusyBinding.Refresh();
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -143,6 +146,7 @@ public sealed partial class WorkshopPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _globalBusyBinding.Dispose();
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         _viewModel.CancelPendingQuery();
         _viewModel.CancelPendingFilterQuery();

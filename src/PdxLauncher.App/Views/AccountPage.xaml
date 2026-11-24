@@ -144,7 +144,6 @@
                                     Spacing="12"
                                     HorizontalAlignment="Right"
                                     Margin="0,4,0,0">
-                            <ProgressRing Width="20" Height="20" IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
                             <Button AutomationProperties.AutomationId="btnAccountSignIn"
                                     AutomationProperties.Name="{x:Bind L.AccountSignIn, Mode=OneWay}"
                                     Content="{x:Bind L.AccountSignIn, Mode=OneWay}"

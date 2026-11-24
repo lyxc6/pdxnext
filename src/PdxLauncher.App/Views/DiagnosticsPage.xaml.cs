@@ -18,6 +18,7 @@ using Windows.UI;
 public sealed partial class DiagnosticsPage : Page
 {
     private readonly DiagnosticsViewModel _viewModel = new();
+    private readonly GlobalBusyBinding _globalBusyBinding;
 
     /// <summary>页面生命周期令牌；页面不缓存（NavigationCacheMode=Disabled），每次进入都会重建。</summary>
     private CancellationTokenSource _lifetime = new();
@@ -40,6 +41,8 @@ public sealed partial class DiagnosticsPage : Page
     public DiagnosticsPage()
     {
         InitializeComponent();
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingDiagnostics, nameof(DiagnosticsViewModel.IsBusy));
+        _globalBusyBinding.Refresh();
 
         ConfigureLogView();
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
@@ -160,6 +163,7 @@ public sealed partial class DiagnosticsPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _globalBusyBinding.Dispose();
         StopAutoRefresh();
         StopLiveTimer();
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;

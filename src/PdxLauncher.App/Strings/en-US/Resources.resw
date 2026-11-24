@@ -5193,6 +5193,57 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="ShellTranslating" xml:space="preserve">
     <value>Translating…</value>
   </data>
+  <data name="ShellLoadingHome" xml:space="preserve">
+    <value>Loading current game…</value>
+  </data>
+  <data name="ShellLoadingLibrary" xml:space="preserve">
+    <value>Loading game library…</value>
+  </data>
+  <data name="ShellLoadingPlaySets" xml:space="preserve">
+    <value>Loading play sets…</value>
+  </data>
+  <data name="ShellLoadingModLibrary" xml:space="preserve">
+    <value>Loading mod library…</value>
+  </data>
+  <data name="ShellLoadingWorkshop" xml:space="preserve">
+    <value>Loading Steam Workshop…</value>
+  </data>
+  <data name="ShellLoadingWorkshopDetail" xml:space="preserve">
+    <value>Loading workshop details…</value>
+  </data>
+  <data name="ShellLoadingDlc" xml:space="preserve">
+    <value>Loading DLC…</value>
+  </data>
+  <data name="ShellLoadingSaves" xml:space="preserve">
+    <value>Loading saves…</value>
+  </data>
+  <data name="ShellLoadingAchievements" xml:space="preserve">
+    <value>Loading achievements…</value>
+  </data>
+  <data name="ShellLoadingAddMods" xml:space="preserve">
+    <value>Loading mod list…</value>
+  </data>
+  <data name="ShellLoadingModStudio" xml:space="preserve">
+    <value>Loading mod studio…</value>
+  </data>
+  <data name="ShellLoadingModEditor" xml:space="preserve">
+    <value>Processing mod editor…</value>
+  </data>
+  <data name="ShellLoadingAccount" xml:space="preserve">
+    <value>Processing account request…</value>
+  </data>
+  <data name="ShellLoadingSettings" xml:space="preserve">
+    <value>Processing settings…</value>
+  </data>
+  <data name="ShellLoadingCrashAnalysis" xml:space="preserve">
+    <value>Analyzing crash logs…</value>
+  </data>
+  <data name="ShellLoadingDiagnostics" xml:space="preserve">
+    <value>Collecting diagnostics…</value>
+  </data>
+  <data name="ShellConvertingToLocal" xml:space="preserve">
+    <value>Converting to local…</value>
+  </data>
   <data name="ShellVersion" xml:space="preserve">
     <value>{0}</value>
   </data>

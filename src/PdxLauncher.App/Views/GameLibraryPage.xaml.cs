@@ -12,6 +12,7 @@ using PdxLauncher.Core.Contracts;
 /// <summary>游戏库页：GridView 卡片列表，点卡片进当前游戏页，点"启动"直接拉起游戏。</summary>
 public sealed partial class GameLibraryPage : Page
 {
+    private readonly GlobalBusyBinding _globalBusyBinding;
     private readonly LibraryViewModel _viewModel;
     private CancellationTokenSource _lifetime = new();
     private ProcessStartResult? _lastLaunchResult;
@@ -21,6 +22,8 @@ public sealed partial class GameLibraryPage : Page
         InitializeComponent();
 
         _viewModel = new LibraryViewModel();
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingLibrary, nameof(LibraryViewModel.IsBusy));
+        _globalBusyBinding.Refresh();
         _viewModel.GameActivated += OnGameActivated;
         _viewModel.LaunchCompleted += OnLaunchCompleted;
 
@@ -73,6 +76,7 @@ public sealed partial class GameLibraryPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _globalBusyBinding.Dispose();
         _lifetime.Cancel();
         AppServices.ThemesChanged -= OnThemesChanged;
         Localizer.Instance.LanguageChanged -= OnLanguageChanged;

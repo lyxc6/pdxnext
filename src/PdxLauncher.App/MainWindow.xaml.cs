@@ -177,10 +177,10 @@ public sealed partial class MainWindow : Window
         AlwaysOnTopService.Changed += OnAlwaysOnTopChanged;
         Localizer.Instance.LanguageChanged += OnLanguageChanged;
 
-        // 翻译在途提示：计数点在 TranslationCoordinator.TranslateBatchAsync，这里只负责显示 / 隐藏。
+        // 全局忙态提示：计数点在 GlobalBusyMonitor / TranslationCoordinator，这里只负责显示 / 隐藏。
         if (AppServices.IsInitialized)
         {
-            AppServices.Translation.Activity.Changed += OnTranslationActivityChanged;
+            AppServices.GlobalBusy.Changed += OnGlobalBusyChanged;
         }
 
         CreateTranslationIndicatorTimers();
@@ -622,7 +622,7 @@ public sealed partial class MainWindow : Window
 
             if (AppServices.IsInitialized)
             {
-                AppServices.Translation.Activity.Changed -= OnTranslationActivityChanged;
+            AppServices.GlobalBusy.Changed -= OnGlobalBusyChanged;
             }
 
             StopTranslationIndicatorTimers();
@@ -806,25 +806,25 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>翻译在途计数变了：切回 UI 线程再动控件（计数可能来自翻译线程）。</summary>
-    private void OnTranslationActivityChanged(object? sender, EventArgs e)
+    private void OnGlobalBusyChanged(object? sender, EventArgs e)
     {
         if (DispatcherQueue is null)
         {
             return;
         }
 
-        DispatcherQueue.TryEnqueue(ApplyTranslationIndicator);
+        DispatcherQueue.TryEnqueue(ApplyGlobalBusyIndicator);
     }
 
     /// <summary>按当前在途状态安排显示 / 隐藏（都带延时，避免缓存命中和分段翻译时闪烁）。</summary>
-    private void ApplyTranslationIndicator()
+    private void ApplyGlobalBusyIndicator()
     {
         if (!AppServices.IsInitialized)
         {
             return;
         }
 
-        if (AppServices.Translation.Activity.IsActive)
+        if (AppServices.GlobalBusy.Current is not null)
         {
             _translationIndicatorHideTimer?.Stop();
 
@@ -860,11 +860,12 @@ public sealed partial class MainWindow : Window
     private void ShowTranslationIndicator()
     {
         // 显示延时到点时这一批可能已经结束，别再补一次提示。
-        if (!AppServices.IsInitialized || !AppServices.Translation.Activity.IsActive)
+        if (!AppServices.IsInitialized || AppServices.GlobalBusy.Current is null)
         {
             return;
         }
 
+        RefreshGlobalBusyText();
         ringTranslating.IsActive = true;
         TranslationIndicator.Visibility = Visibility.Visible;
     }
@@ -873,6 +874,15 @@ public sealed partial class MainWindow : Window
     {
         ringTranslating.IsActive = false;
         TranslationIndicator.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>切语言或忙态来源变化时刷新标题栏文案。</summary>
+    private void RefreshGlobalBusyText()
+    {
+        var current = AppServices.GlobalBusy.Current;
+        var text = current is null ? string.Empty : Localizer.Instance.T(current.LabelKey);
+        AutomationProperties.SetName(ringTranslating, text);
+        AutomationProperties.SetName(txtTranslating, text);
     }
 
     /// <summary>
@@ -1071,8 +1081,11 @@ public sealed partial class MainWindow : Window
     private void OnAlwaysOnTopChanged(object? sender, bool alwaysOnTop) => SyncAlwaysOnTopButton(alwaysOnTop);
 
     /// <summary>切语言后重写置顶按钮的名称与提示：两个变体都是缓存下来的字符串，不重算会停在旧语言。</summary>
-    private void OnLanguageChanged(object? sender, EventArgs e) =>
+    private void OnLanguageChanged(object? sender, EventArgs e)
+    {
         SyncAlwaysOnTopButton(AlwaysOnTopButton.IsChecked == true);
+        RefreshGlobalBusyText();
+    }
 
     private void SyncAlwaysOnTopButton(bool alwaysOnTop)
     {

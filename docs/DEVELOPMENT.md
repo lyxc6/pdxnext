@@ -761,7 +761,7 @@ docs/PDX-SDK/                :: PDX.SDK 的反编译参考（只读，不参与�
                                 ilspycmd -p --nested-directories -o docs/PDX-SDK/PDX.SDK sdk/pdx/PDX.SDK.dll
                                 （Contracts / Network 同理；生成后删掉各目录的 *.csproj）
 tests/
-  PdxLauncher.Checks/          :: 198 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 199 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步

@@ -19,6 +19,8 @@ using PdxLauncher.Core.Playsets;
 /// </summary>
 public sealed partial class ModLibraryPage : Page
 {
+    private readonly GlobalBusyBinding _globalBusyBinding;
+    private readonly GlobalBusyBinding _globalConvertBinding;
     private readonly ModLibraryViewModel _viewModel;
 
     /// <summary>页面生命周期令牌；NavigationCacheMode=Disabled 会在每次进入时重建。</summary>
@@ -56,6 +58,10 @@ public sealed partial class ModLibraryPage : Page
                 AppServices.LoadFiles,
                 AppServices.Dlcs,
                 AppServices.Logger));
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingModLibrary, nameof(ModLibraryViewModel.IsBusy));
+        _globalConvertBinding = new GlobalBusyBinding(_viewModel, Keys.ShellConvertingToLocal, nameof(ModLibraryViewModel.IsConvertToLocalBusy));
+        _globalBusyBinding.Refresh();
+        _globalConvertBinding.Refresh();
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -118,6 +124,8 @@ public sealed partial class ModLibraryPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _globalBusyBinding.Dispose();
+        _globalConvertBinding.Dispose();
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         _convertCts?.Cancel();
         _lifetime.Cancel();

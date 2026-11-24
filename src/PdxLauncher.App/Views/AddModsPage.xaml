@@ -81,14 +81,6 @@
                            AutomationProperties.Name="{x:Bind ViewModel.TargetText, Mode=OneWay}" />
             </Grid>
 
-            <ProgressRing Grid.Column="2"
-                          Width="16"
-                          Height="16"
-                          VerticalAlignment="Center"
-                          IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                          AutomationProperties.AutomationId="ringAddModsBusy"
-                          AutomationProperties.Name="{x:Bind L.CommonLoading, Mode=OneWay}" />
-
             <!--
                 计数列固定 96：数字位数变化（9 → 60 → 387）时不再把标题挤动，
                 文案也收短到「共 N 个可添加」，保证在 96 里不被裁成半截。

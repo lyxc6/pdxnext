@@ -266,10 +266,6 @@
                                          Padding="16,12"
                                          IsClickEnabled="False">
                             <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                                <ProgressRing AutomationProperties.AutomationId="ringSettingsBusy"
-                                              Width="20" Height="20"
-                                              IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}"
-                                              Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsBusy), Mode=OneWay}" />
                                 <ToggleSwitch MinWidth="0" AutomationProperties.AutomationId="tglOnlineThemeRefresh"
                                               AutomationProperties.Name="{x:Bind L.SettingsThemeOnlineOn, Mode=OneWay}"
                                               IsOn="{x:Bind ViewModel.OnlineRefreshEnabled, Mode=TwoWay}" />
