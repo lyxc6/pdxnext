@@ -13,22 +13,29 @@ public enum ModPathRepairKind
 
     /// <summary>目录名含非 ASCII，而游戏不吃这类路径，把目录改成 ASCII 名（路径跟着改）。</summary>
     RenameDirectory,
+
+    /// <summary>V0 的注册 ID 为空，生成指针文件并回填 <c>gameRegistryId</c>。</summary>
+    FillRegistryId,
 }
 
-/// <summary>一条待确认的路径修复建议。</summary>
+/// <summary>一条待确认的 Mod 修复建议。</summary>
 /// <param name="ModId">官方库 <c>mods.id</c>。</param>
 /// <param name="Name">展示用名字。</param>
 /// <param name="Kind">修复类型。</param>
 /// <param name="CurrentPath">当前路径（可能为空）。</param>
 /// <param name="SuggestedPath">建议改成什么；<c>null</c> 表示只提示、无法自动做。</param>
 /// <param name="ReasonKey">提示文案键；<c>null</c> 表示没触犯任何规则。</param>
+/// <param name="CurrentRegistryId">当前注册 ID；只有补注册 ID 类修复使用。</param>
+/// <param name="SuggestedRegistryId">建议注册 ID；只有补注册 ID 类修复使用。</param>
 public sealed record ModPathRepair(
     Guid ModId,
     string Name,
     ModPathRepairKind Kind,
     string? CurrentPath,
     string? SuggestedPath,
-    string? ReasonKey);
+    string? ReasonKey,
+    string? CurrentRegistryId = null,
+    string? SuggestedRegistryId = null);
 
 /// <summary>
 /// 找出并修正「加载文件里写不出／游戏读不到」的 mod 路径。
@@ -78,17 +85,19 @@ public sealed class ModPathRepairer
     public async Task<IReadOnlyList<ModPathRepair>> FindAsync(
         GameInstallation game,
         CancellationToken cancellationToken)
+        => await FindAsync(game, [], cancellationToken).ConfigureAwait(false);
+
+    /// <summary>找出当前游戏下所有值得修的路径与注册 ID 问题。</summary>
+    public async Task<IReadOnlyList<ModPathRepair>> FindAsync(
+        GameInstallation game,
+        IReadOnlyList<PlaySetMod> activeMods,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(activeMods);
 
         // EU5 playsets.json / CS2 playset_config.json 的 mod 不是「有路径的行」，没有这类问题。
         if (game.Format is LoadFileFormat.PlaysetsJsonV1 or LoadFileFormat.PlaysetConfigV1)
-        {
-            return Array.Empty<ModPathRepair>();
-        }
-
-        var library = await _playSets.GetModLibraryAsync(game, cancellationToken).ConfigureAwait(false);
-        if (library.Count == 0)
         {
             return Array.Empty<ModPathRepair>();
         }
@@ -111,6 +120,44 @@ public sealed class ModPathRepairer
 
         var repairs = new List<ModPathRepair>();
         var requiresAscii = GamePathRules.RequiresAsciiPaths(game.GameId);
+
+        foreach (var mod in activeMods)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (game.Format != LoadFileFormat.DlcLoadV0
+                || !mod.Enabled
+                || !string.IsNullOrWhiteSpace(mod.GameRegistryId)
+                || !SteamWorkshop.IsAllDigits(mod.SteamId?.Trim())
+                || string.IsNullOrWhiteSpace(mod.DirPath)
+                || !_fileSystem.DirectoryExists(mod.DirPath))
+            {
+                continue;
+            }
+
+            var workshopId = mod.SteamId!.Trim();
+            var descriptor = Combine(mod.DirPath, "descriptor.mod");
+            var pointer = Combine(game.ModDir, "ugc_" + workshopId + ".mod");
+            if (!_fileSystem.FileExists(descriptor) || _fileSystem.FileExists(pointer))
+            {
+                continue;
+            }
+
+            repairs.Add(new ModPathRepair(
+                mod.ModId,
+                mod.Name,
+                ModPathRepairKind.FillRegistryId,
+                mod.DirPath,
+                pointer,
+                ModLoadRules.WarnNoRegistryId,
+                string.Empty,
+                "mod/ugc_" + workshopId + ".mod"));
+        }
+
+        var library = await _playSets.GetModLibraryAsync(game, cancellationToken).ConfigureAwait(false);
+        if (library.Count == 0)
+        {
+            return repairs;
+        }
 
         foreach (var entry in library)
         {
@@ -205,15 +252,17 @@ public sealed class ModPathRepairer
         ArgumentNullException.ThrowIfNull(repairs);
 
         var actionable = repairs
-            .Where(static repair => !string.IsNullOrWhiteSpace(repair.SuggestedPath))
+            .Where(static repair => repair.Kind == ModPathRepairKind.FillRegistryId
+                || !string.IsNullOrWhiteSpace(repair.SuggestedPath))
             .ToList();
         if (actionable.Count == 0)
         {
             return AppResult<int>.Ok(0);
         }
 
-        // 第一步：目录改名。先全做完再写库，避免「库指向新名、磁盘还是旧名」的半成品状态。
+        // 第一步：目录改名 / 生成注册指针。先做完磁盘动作再写库，避免库指向不存在的目标。
         var moved = new List<(string From, string To)>();
+        var createdPointers = new List<string>();
         foreach (var repair in actionable)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -241,23 +290,62 @@ public sealed class ModPathRepairer
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                Rollback(moved);
+                await RollbackAsync(game, [], moved, []).ConfigureAwait(false);
                 return AppResult<int>.Fail(ErrorKind.Io, "rename:" + from + " -> " + to + ":" + ex.Message);
             }
         }
 
-        // 第二步：把新路径写进库（官方库在就写官方库，不在就写自有库，由仓储路由器决定）。
+        foreach (var repair in actionable.Where(static repair => repair.Kind == ModPathRepairKind.FillRegistryId))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var pointer = repair.SuggestedPath!;
+            var descriptor = Combine(repair.CurrentPath ?? string.Empty, "descriptor.mod");
+            if (_fileSystem.FileExists(pointer) || !_fileSystem.FileExists(descriptor))
+            {
+                continue;
+            }
+
+            var text = BuildRegistryPointer(repair, descriptor);
+            try
+            {
+                _fileSystem.WriteAllTextAtomic(pointer, text);
+                createdPointers.Add(pointer);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                await RollbackAsync(game, createdPointers, moved, []).ConfigureAwait(false);
+                return AppResult<int>.Fail(ErrorKind.Io, "pointer:" + pointer + ":" + ex.Message);
+            }
+        }
+
+        // 第二步：把新路径 / 注册 ID 写进库（官方库在就写官方库，不在就写自有库，由仓储路由器决定）。
+        var registryUpdates = new List<ModPathRepair>();
         var fixedCount = 0;
         foreach (var repair in actionable)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var result = await _playSets
-                .UpdateModPathsAsync(game, repair.ModId, repair.SuggestedPath, null, cancellationToken)
-                .ConfigureAwait(false);
+            AppResult<bool> result;
+            if (repair.Kind == ModPathRepairKind.FillRegistryId)
+            {
+                result = await _playSets
+                    .UpdateModRegistryIdAsync(game, repair.ModId, repair.SuggestedRegistryId, cancellationToken)
+                    .ConfigureAwait(false);
+                if (result.IsSuccess)
+                {
+                    registryUpdates.Add(repair);
+                }
+            }
+            else
+            {
+                result = await _playSets
+                    .UpdateModPathsAsync(game, repair.ModId, repair.SuggestedPath, null, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             if (!result.IsSuccess)
             {
-                Rollback(moved);
-                _logger.Error("修复 mod 路径失败（modId=" + repair.ModId.ToString("N") + "）：" + result.ErrorMessage);
+                await RollbackAsync(game, createdPointers, moved, registryUpdates).ConfigureAwait(false);
+                _logger.Error("修复 mod 失败（modId=" + repair.ModId.ToString("N") + "）：" + result.ErrorMessage);
                 return AppResult<int>.Fail(result.Kind, "update:" + repair.ModId.ToString("N") + ":" + result.ErrorMessage);
             }
 
@@ -270,12 +358,43 @@ public sealed class ModPathRepairer
             invalidator.InvalidateCache(game);
         }
 
-        _logger.Info("修复 " + fixedCount + " 个 mod 路径（gameId=" + game.GameId + "）");
+        _logger.Info("修复 " + fixedCount + " 个 mod（gameId=" + game.GameId + "）");
         return AppResult<int>.Ok(fixedCount);
     }
 
-    private void Rollback(List<(string From, string To)> moved)
+    private async Task RollbackAsync(
+        GameInstallation game,
+        IReadOnlyList<string> createdPointers,
+        IReadOnlyList<(string From, string To)> moved,
+        IReadOnlyList<ModPathRepair> registryUpdates)
     {
+        for (var i = createdPointers.Count - 1; i >= 0; i--)
+        {
+            var pointer = createdPointers[i];
+            try
+            {
+                if (_fileSystem.FileExists(pointer))
+                {
+                    _fileSystem.Delete(pointer);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.Error("回滚注册指针失败：" + pointer, ex);
+            }
+        }
+
+        foreach (var repair in registryUpdates)
+        {
+            var rollback = await _playSets
+                .UpdateModRegistryIdAsync(game, repair.ModId, repair.CurrentRegistryId ?? string.Empty, CancellationToken.None)
+                .ConfigureAwait(false);
+            if (!rollback.IsSuccess)
+            {
+                _logger.Error("回滚 mod 注册 ID 失败（modId=" + repair.ModId.ToString("N") + "）：" + rollback.ErrorMessage);
+            }
+        }
+
         for (var i = moved.Count - 1; i >= 0; i--)
         {
             var (from, to) = moved[i];
@@ -358,4 +477,34 @@ public sealed class ModPathRepairer
 
     private string Combine(string parent, string name) =>
         string.IsNullOrEmpty(parent) ? name : _fileSystem.Combine(parent, name);
+
+    /// <summary>
+    /// 用原描述符的非空键生成规范指针；丢弃旧的 path / remote_file_id，避免两处路径打架。
+    /// </summary>
+    private string BuildRegistryPointer(ModPathRepair repair, string descriptorPath)
+    {
+        var kept = new List<string>();
+        foreach (var line in _fileSystem.ReadAllText(descriptorPath).Split('\n'))
+        {
+            var text = line.Trim('\r');
+            var trimmed = text.TrimStart();
+            if (trimmed.StartsWith("path=", StringComparison.OrdinalIgnoreCase)
+                || trimmed.StartsWith("remote_file_id=", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            kept.Add(text);
+        }
+
+        var workshopId = SteamWorkshop.GetWorkshopId(null, repair.SuggestedRegistryId);
+        var path = (repair.CurrentPath ?? string.Empty).Replace('\\', '/');
+        kept.Add("path=\"" + path + "\"");
+        if (!string.IsNullOrWhiteSpace(workshopId))
+        {
+            kept.Add("remote_file_id=\"" + workshopId + "\"");
+        }
+
+        return string.Join("\n", kept) + "\n";
+    }
 }

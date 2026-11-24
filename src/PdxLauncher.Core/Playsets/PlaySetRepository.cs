@@ -910,6 +910,45 @@ public sealed class PlaySetRepository : IPlaySetRepository
     }
 
     /// <inheritdoc />
+    public Task<AppResult<bool>> UpdateModRegistryIdAsync(
+        GameInstallation game,
+        Guid modId,
+        string? gameRegistryId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+
+        if (modId == Guid.Empty)
+        {
+            return Task.FromResult(AppResult<bool>.Fail(ErrorKind.Invalid, "mod-id-empty"));
+        }
+
+        return WriteAsync<bool>(
+            game,
+            "修正 mod 注册 ID",
+            (connection, ct) =>
+            {
+                if (!connection.TableExists("mods") || !ReadTableColumns(connection, "mods").Contains("gameRegistryId"))
+                {
+                    return AppResult<bool>.Fail(ErrorKind.NotFound, "column-not-found:gameRegistryId");
+                }
+
+                ct.ThrowIfCancellationRequested();
+                var affected = connection.Execute(
+                    "UPDATE mods SET gameRegistryId = ? WHERE id = ?",
+                    gameRegistryId ?? string.Empty,
+                    modId.ToString("D"));
+                if (affected > 0)
+                {
+                    _logger.Info("修正官方 mod 库注册 ID（gameId=" + game.GameId + "，modId=" + modId.ToString("N") + "）");
+                }
+
+                return AppResult<bool>.Ok(affected > 0);
+            },
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
     public Task<AppResult<bool>> AdoptLocalModAsync(
         GameInstallation game,
         Guid oldModId,

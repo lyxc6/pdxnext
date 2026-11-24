@@ -541,6 +541,9 @@ public static class WorkshopToLocalBehaviorChecks
         public Task<AppResult<bool>> UpdateModPathsAsync(GameInstallation game, Guid modId, string? dirPath, string? archivePath, CancellationToken cancellationToken) =>
             _inner.UpdateModPathsAsync(game, modId, dirPath, archivePath, cancellationToken);
 
+        public Task<AppResult<bool>> UpdateModRegistryIdAsync(GameInstallation game, Guid modId, string? gameRegistryId, CancellationToken cancellationToken) =>
+            _inner.UpdateModRegistryIdAsync(game, modId, gameRegistryId, cancellationToken);
+
         public Task<AppResult<bool>> AdoptLocalModAsync(GameInstallation game, Guid oldModId, string? oldDirPath, string? oldArchivePath, PlaySetMod localMod, CancellationToken cancellationToken) =>
             FailAdopt
                 ? Task.FromResult(AppResult<bool>.Fail(ErrorKind.Io, "injected-adopt-failure"))

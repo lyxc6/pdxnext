@@ -108,6 +108,9 @@ public sealed class PlaySetStoreRouter : IPlaySetRepository
     public Task<AppResult<bool>> UpdateModPathsAsync(GameInstallation game, Guid modId, string? dirPath, string? archivePath, CancellationToken cancellationToken) =>
         For(game).UpdateModPathsAsync(game, modId, dirPath, archivePath, cancellationToken);
 
+    public Task<AppResult<bool>> UpdateModRegistryIdAsync(GameInstallation game, Guid modId, string? gameRegistryId, CancellationToken cancellationToken) =>
+        For(game).UpdateModRegistryIdAsync(game, modId, gameRegistryId, cancellationToken);
+
     public Task<AppResult<bool>> AdoptLocalModAsync(GameInstallation game, Guid oldModId, string? oldDirPath, string? oldArchivePath, PlaySetMod localMod, CancellationToken cancellationToken) =>
         For(game).AdoptLocalModAsync(game, oldModId, oldDirPath, oldArchivePath, localMod, cancellationToken);
 

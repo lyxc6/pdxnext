@@ -352,6 +352,40 @@ public sealed class OwnDatabasePlaySetRepository : IPlaySetRepository
     }
 
     /// <inheritdoc />
+    public Task<AppResult<bool>> UpdateModRegistryIdAsync(
+        GameInstallation game,
+        Guid modId,
+        string? gameRegistryId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+
+        if (modId == Guid.Empty)
+        {
+            return Task.FromResult(AppResult<bool>.Fail(ErrorKind.Invalid, "mod-id-empty"));
+        }
+
+        var id = modId.ToString("D");
+        var updatedAt = _clock.UtcNow.ToUnixTimeMilliseconds();
+        return WriteAsync(
+            game,
+            "修正 mod 注册 ID",
+            connection =>
+            {
+                var affected = connection.Execute(
+                    "UPDATE mods SET gameRegistryId = ?, updatedAt = ? WHERE gameId = ? AND id = ?",
+                    gameRegistryId ?? string.Empty,
+                    updatedAt,
+                    game.GameId,
+                    id);
+                return affected > 0
+                    ? AppResult<bool>.Ok(true)
+                    : AppResult<bool>.Fail(ErrorKind.NotFound, "mod-not-found:" + id);
+            },
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
     public Task<AppResult<bool>> AdoptLocalModAsync(
         GameInstallation game,
         Guid oldModId,
