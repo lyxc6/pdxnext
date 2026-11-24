@@ -1,3 +1,2 @@
 # 活跃版本分支清单（每行一个 ver/x.y.z；冻结后移除，空行与 # 注释忽略）
 # 权威副本在 main；scripts/session.ps1 读 main:integration-branch。
-ver/1.4.3
