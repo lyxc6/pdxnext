@@ -1501,6 +1501,9 @@
   <data name="HomeStatusNoGameSelected" xml:space="preserve">
     <value>请先在游戏库里选择一款游戏</value>
   </data>
+  <data name="LaunchStatusParadoxLoginRequired" xml:space="preserve">
+    <value>请先在「账号」页登录 Paradox 账号后再启动游戏。</value>
+  </data>
   <data name="HomeStatusPlaySetSwitchFailed" xml:space="preserve">
     <value>切换播放集失败：{0}</value>
   </data>

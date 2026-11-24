@@ -20,10 +20,12 @@ public sealed class AccountService
     private readonly PdxSessionStore _store;
     private readonly IClock _clock;
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly object _restoreLock = new();
 
     private PdxAccountClient? _client;
     private PdxSession? _session;
     private bool _signingIn;
+    private Task? _restoreTask;
 
     /// <summary>创建服务。</summary>
     /// <param name="logger">日志。</param>
@@ -63,37 +65,67 @@ public sealed class AccountService
     }
 
     /// <summary>启动时读回上次的会话并尽力续期；任何失败都静默降级为未登录。</summary>
-    public async Task RestoreAsync(CancellationToken cancellationToken)
+    public Task RestoreAsync(CancellationToken cancellationToken) => EnsureRestoredAsync(cancellationToken);
+
+    /// <summary>
+    /// 等到会话恢复完成。启动页和启动按钮同时调用时只执行一次恢复；失败不抛给界面。
+    /// </summary>
+    public async Task EnsureRestoredAsync(CancellationToken cancellationToken)
     {
-        var stored = _store.Load();
-        if (stored is null)
+        Task restore;
+        lock (_restoreLock)
         {
-            return;
+            if (_restoreTask is null || _restoreTask.IsFaulted || _restoreTask.IsCanceled)
+            {
+                _restoreTask = RestoreCoreAsync();
+            }
+
+            restore = _restoreTask;
         }
 
-        if (!stored.NeedsRefresh(_clock.UtcNow) || !stored.CanRefresh)
+        await restore.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task RestoreCoreAsync()
+    {
+        try
         {
-            _session = stored;
+            var stored = _store.Load();
+            if (stored is null)
+            {
+                return;
+            }
+
+            if (!stored.NeedsRefresh(_clock.UtcNow) || !stored.CanRefresh)
+            {
+                _session = stored;
+                RaiseChanged();
+                _logger.Info("已恢复 Paradox 会话（" + stored.Email + "）。");
+                return;
+            }
+
+            var refreshed = await _client!.RefreshAsync(stored, CancellationToken.None).ConfigureAwait(false);
+            if (refreshed.IsSuccess && refreshed.Value is { } fresh)
+            {
+                _session = fresh;
+                _store.Save(fresh);
+                RaiseChanged();
+                _logger.Info("Paradox 会话已续期（" + fresh.Email + "）。");
+                return;
+            }
+
+            // 续期失败的原因只记日志：用户可能是离线启动，不该在启动时弹错误。
+            _logger.Warn("Paradox 会话续期失败，按未登录处理：" + refreshed.ErrorMessage);
+            _session = null;
+            _store.Clear();
             RaiseChanged();
-            _logger.Info("已恢复 Paradox 会话（" + stored.Email + "）。");
-            return;
         }
-
-        var refreshed = await _client!.RefreshAsync(stored, cancellationToken).ConfigureAwait(false);
-        if (refreshed.IsSuccess && refreshed.Value is { } fresh)
+        catch (Exception exception) when (exception is not OutOfMemoryException)
         {
-            _session = fresh;
-            _store.Save(fresh);
+            _logger.Warn("启动时恢复 Paradox 会话失败: " + exception.Message);
+            _session = null;
             RaiseChanged();
-            _logger.Info("Paradox 会话已续期（" + fresh.Email + "）。");
-            return;
         }
-
-        // 续期失败的原因只记日志：用户可能是离线启动，不该在启动时弹错误。
-        _logger.Warn("Paradox 会话续期失败，按未登录处理：" + refreshed.ErrorMessage);
-        _session = null;
-        _store.Clear();
-        RaiseChanged();
     }
 
     /// <summary>邮箱 + 密码登录。</summary>

@@ -499,6 +499,17 @@ public static class LoadFileChecks
                 "-debug_mode --continuelastsave -gdpr-compliant",
                 string.Join(" ", launcher.BuildArguments(game, custom)));
 
+            var auth = new LaunchAuth("TOKEN", "USER-ID");
+            var credentialed = new LaunchRequest(null, null, ContinueLastSave: true, auth);
+            var credentialedArgs = launcher.BuildArguments(game, credentialed);
+            ChecksContext.Equal(
+                "GameLauncher 参数顺序：凭据 → 继续 → exeArgs",
+                "--pdx-launcher-session-token TOKEN --paradox-account-userid USER-ID --continuelastsave -gdpr-compliant",
+                string.Join(" ", credentialedArgs));
+            ChecksContext.Check(
+                "LaunchAuth 不泄露 token",
+                !auth.ToString().Contains("TOKEN", StringComparison.Ordinal));
+
             var result = launcher
                 .LaunchAsync(game, LaunchRequest.Default, CancellationToken.None)
                 .GetAwaiter()

@@ -1501,6 +1501,9 @@
   <data name="HomeStatusNoGameSelected" xml:space="preserve">
     <value>Select a game in the library first</value>
   </data>
+  <data name="LaunchStatusParadoxLoginRequired" xml:space="preserve">
+    <value>Sign in to your Paradox account on the Account page before launching a game.</value>
+  </data>
   <data name="HomeStatusPlaySetSwitchFailed" xml:space="preserve">
     <value>Failed to switch playset: {0}</value>
   </data>

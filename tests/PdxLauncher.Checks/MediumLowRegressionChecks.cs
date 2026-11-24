@@ -19,6 +19,7 @@ public static class MediumLowRegressionChecks
         var appServices = Read(root, "src", "PdxLauncher.App", "Services", "AppServices.cs");
         var home = Read(root, "src", "PdxLauncher.App", "ViewModels", "HomeViewModel.cs");
         var library = Read(root, "src", "PdxLauncher.App", "ViewModels", "LibraryViewModel.cs");
+        var modEditor = Read(root, "src", "PdxLauncher.App", "ViewModels", "ModEditorViewModel.cs");
         var mods = Read(root, "src", "PdxLauncher.App", "ViewModels", "ModsViewModel.cs");
         var saves = Read(root, "src", "PdxLauncher.App", "ViewModels", "SavesViewModel.cs");
         var workshop = Read(root, "src", "PdxLauncher.App", "ViewModels", "WorkshopViewModel.cs");
@@ -53,9 +54,10 @@ public static class MediumLowRegressionChecks
                 && settingsVm.Contains("PreferredLaunchExePaths", StringComparison.Ordinal));
         ChecksContext.Check(
             "中低危: 启动请求读取其它可执行文件",
-            appServices.Contains("CreateLaunchRequest", StringComparison.Ordinal)
-                && home.Contains("AppServices.CreateLaunchRequest", StringComparison.Ordinal)
-                && library.Contains("AppServices.CreateLaunchRequest", StringComparison.Ordinal));
+            appServices.Contains("CreateLaunchRequestAsync", StringComparison.Ordinal)
+                && home.Contains("CreateLaunchRequestAsync", StringComparison.Ordinal)
+                && library.Contains("CreateLaunchRequestAsync", StringComparison.Ordinal)
+                && modEditor.Contains("CreateLaunchRequestAsync", StringComparison.Ordinal));
 
         ChecksContext.Check(
             "中低危: 设置保存失败不再显示成功",

@@ -187,6 +187,14 @@ public static class AccountChecks
             ChecksContext.Check("账号: 登录后重新打开保持登录 → 会话重新落盘", fs.FileExists(path));
             ChecksContext.Equal("账号: 重新落盘后仍能读回 token", "TK", store.Load()?.SessionToken);
 
+            var restored = new AccountService(
+                new SilentLogger(),
+                store,
+                new FixedClock(),
+                NewClient(new FakeTransport(200, body)));
+            restored.EnsureRestoredAsync(CancellationToken.None).GetAwaiter().GetResult();
+            ChecksContext.Equal("账号: 启动等待恢复拿到 token", "TK", restored.Session?.SessionToken);
+
             // 再以「不勾」登录一次，应把上一次的会话文件清掉。
             var clearService = new AccountService(new SilentLogger(), store, new FixedClock(), NewClient(new FakeTransport(200, body)));
             clearService.SignInAsync("a@b.c", "secret", rememberMe: false, CancellationToken.None).GetAwaiter().GetResult();
