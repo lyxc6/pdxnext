@@ -350,10 +350,11 @@ UI：DLC 列表左侧固定 208×117 缩略图（尺寸写死在 Border 上，�
 
 官方启动器底部那几张公告卡不是本地资源，而是 Braze content cards：
 
-    GET https://api.paradox-interactive.com/communication/braze/contentcards/<gameId>
+    GET https://api.paradox-interactive.com/communication/braze/contentcards/<gameId>?distributionPlatform=<platform>
       → 顶层按 slot 分组：{ "main": {...}, "secondary-1": {...}, "secondary-2": {...} }
 
-- slot 名与顺序固定为 `main` → `secondary-1` → `secondary-2`（对应官方渲染常量 `MAIN` / `SECONDARY1` / `SECONDARY2`）；每个 slot 下是 `contentGroups[]`。
+- `distributionPlatform` 来自 `launcher-settings.json` 的 `distPlatform`（缺省 `pdx`；Steam 版通常为 `steam`）。不同平台必须使用不同缓存，避免把官方给独立版的卡片显示给 Steam 版。
+- slot 名与顺序固定为 `main` → `secondary-1` → `secondary-2`（对应官方渲染常量 `MAIN` / `SECONDARY1` / `SECONDARY2`）。旧格式 slot 下是 `contentGroups[]`；官方 2026 新版返回 `contentCards[]`，卡片字段为 `title` / `description` / `imageUrl` / `url` / `weight` / `extras` / `filter`，`contentItems` 也可能是对象而非数组（`Object.values` 语义）。
 - 每组 `settings.visible.from` / `visible.until`（ISO 8601）限制时间窗，`settings.weight`（缺省 1）决定同 slot 内优先级：**取当前时间可见且 weight 最大的组，同 weight 取先出现的**；组内按顺序取第一条有内容的 `contentItems[]`（官方每 slot 上限 8 条）。
 - 条目内容在 `contentItems[0].content`：`title` / `text` 可能是字符串，也可能是 `{en, zhhans, ...}` 的多语言对象（**优先 `en`，没有 en 就取任意语言**；实测官方标题/正文均为空串，卡片只有图）；`image.src`（也接受 `cacheSrc`、`backgroundImage` 里的 css `url(...)`）；`link` 可能是字符串或 `{href}`。
 - 四个字段（title / text / image / link）全空的条目视为不存在 —— 该 slot 等于没有公告。
@@ -362,13 +363,16 @@ UI：DLC 列表左侧固定 208×117 缩略图（尺寸写死在 Border 上，�
 
 主页渲染对齐官方 `.news`：三块固定尺寸的**纯图块** —— main 451×230、两个 secondary 各 246×230，间距 21；圆角 4、外圈 1px 黑 40%（`#66000000`）+ 内圈 1px 白 10%，**没有内层卡片、没有内边距**；悬停叠 50% `#131724` 遮罩；只有 `title` 非空时才在左下角叠 24px 白字 + 180° 底部渐变（正文不渲染，官方也不渲染）。图用 WinUI `Image` + `UniformToFill` 等价实现 CSS `background-size:cover`。
 
-缓存（数据目录，`PdxDataRoot`）`news-cache\news-cards.json`：`{version, entries: {<gameId>: {fetchedUtc, lastFailureUtc, lastImageFailureUtc, items: [{slot, title, text, imageFileName, imageUrl, link}]}}}`；图片落在同目录 `images\<md5(url) 小写十六进制>.<ext>`（**用整条 URL 的 MD5，不用接口里那个会随内容变的 hash 段**，命中即复用，不重下）。`lastImageFailureUtc` 是后加的可空字段，旧缓存文件没有它也能读。
+新版扁平卡片的 `extras` 过滤口径与官方一致：`game`（逗号分隔 gameId）、`distributionPlatforms`、`sections`、`numberOfLauncherStarts` / `minNumberOfLauncherStarts` / `maxNumberOfLauncherStarts`，以及 `filter.owns` / `filter.and` / `filter.or`（DLC id 同时认 PopsId 与 Steam appid）。可见卡片按 `weight` 做加权随机选组，随机源可注入自检；旧格式仍按最大 weight 选组。
 
-- TTL **6 小时**；HTTP 404 视为「该游戏没有公告」并写空条目做**负缓存**（同样 6 小时），不算错误、不告警。
+缓存（数据目录，`PdxDataRoot`）`news-cache\news-cards.json`：`{version: 2, entries: {<gameId>:<platform>: {fetchedUtc, lastFailureUtc, lastImageFailureUtc, items: [...]}}}`；图片落在同目录 `images\<md5(url) 小写十六进制>.<ext>`（**用整条 URL 的 MD5，不用接口里那个会随内容变的 hash 段**，命中即复用，不重下）。旧 version 1 缓存直接丢弃重建。
+
+- TTL **15 分钟**；HTTP 404 视为「该游戏没有公告」并写空条目做**负缓存**（同样 15 分钟），不算错误、不告警。
 - 失败（网络 / JSON / IO）保留上次内容并记 `lastFailureUtc`，**30 分钟内不再重试**；失败只影响公告区，主页其余部分照常。
-- 公告图（`braze-images.com`）在部分网络下直连不可达，所以单张图限时 **8 秒**：超时即视为图片域不可用，本轮**不再尝试剩余图片**（避免每张都干等）；此时**不推进 `fetchedUtc`**（6 小时 TTL 不生效），只写 `lastImageFailureUtc`，**5 分钟后自动重试**补图。图没取到的卡都是纯图卡（标题/正文为空）→ 主页按空卡隐藏，图补齐后自动出现。
-- 图片快速失败（404 / 域名不在白名单 / magic 不识别）只丢那一张图，其余照常，仍按成功缓存 6 小时。
+- 公告图（`braze-images.com`）在部分网络下直连不可达，所以单张图限时 **8 秒**：超时即视为图片域不可用，本轮**不再尝试剩余图片**（避免每张都干等）；此时**不推进 `fetchedUtc`**（15 分钟 TTL 不生效），只写 `lastImageFailureUtc`，**5 分钟后自动重试**补图。图没取到的卡都是纯图卡（标题/正文为空）→ 主页按空卡隐藏，图补齐后自动出现。
+- 图片快速失败（404 / 域名不在白名单 / magic 不识别）只丢那一张图，其余照常，仍按成功缓存 15 分钟。
 - 设置页「联网获取官方公告」关闭后**绝不发起任何请求**，只读本地缓存；没有缓存就整块隐藏公告区。
+- 主页内容区右键为公告专用强刷：越过 TTL 与失败退避重新请求，仍复用已下载图片；不重载主题、播放集与存档。
 - 深链 `pdxlaun://` 不交给浏览器（不是 http/https）：卡片**不置灰**（官方卡也没有禁用态），点击时在公告区下方弹一行「当前版本暂不支持跳转」的提示。
 - 已知限制：GIF（main 图是 .gif）只显示首帧 —— `BitmapImage` 不播放动画。
 
@@ -376,12 +380,13 @@ UI：DLC 列表左侧固定 208×117 缩略图（尺寸写死在 Border 上，�
 
     exePath 绝对化 = Path.GetFullPath(Combine(InstallRoot, launcherSettings.exePath))
     cwd          = Path.GetDirectoryName(exePath)          // exe 自己所在目录
-    args         = launchRequest 的额外参数（无登录时为空） + launcherSettings.exeArgs
+    args         = --pdx-launcher-session-token <token> --paradox-account-userid <userId>
+                   + launchRequest 的额外参数 + launcherSettings.exeArgs
     启动方式     = detached，stdio 全部不重定向（stdin/stdout/stderr 都不捕获）
 
 官方启动前会先写加载文件（我们改为 UI 里显式保存时写，启动时读当前状态）。
 
---continuelastsave 只在 isGameContinued 时加。
+--continuelastsave 只在 isGameContinued 时加；官方启动日志实测上述凭据必须位于最前。
 
 ## 9. dlc_signature（默认不写）
 
@@ -582,7 +587,25 @@ byte[] png = DdsImage.EncodePng(r.Pixels);                          // PixelBuff
 
 ## 17. PDX Mods 平台 API 与 CS2 的 `playset_config.json`
 
-这套协议**没有公开文档**，来源只有两处：官方 Electron 启动器 `app.asar` 里 `modsApi` / `accountApi` 的逐字核对，以及本机 curl 实测（2026-10-27）。官方桌面端自带的 `PDX.SDK.dll`（Skyve CS-II 用的就是它）是闭源二进制，调用方照样能跑协议 —— 说明协议本身不是机密，只是没写出来。
+这套协议**没有公开文档**，来源有三处：官方 Electron 启动器 `app.asar` 里 `modsApi` / `accountApi` 的逐字核对、本机 curl 实测（2026-10-27），以及官方 `PDX.SDK.dll` 的反编译。
+
+**2026-11 起直接使用官方 SDK**：PdxNext 已把 `PDX.SDK.dll` 连同 `PDX.SDK.Contracts` / `PDX.SDK.Network` / `External` 一起随仓提交到 `sdk/pdx/`，运行时由 `PdxLauncher.Core.PdxSdk.PdxSdkHost` 直接调用（登录态订阅、下载、PGP 验签、播放集缓存都交给它）。反编译参考在 `docs/PDX-SDK/`。
+
+下文的 HTTP 表仍保留，因为它描述的是「匿名浏览」那一半：`PdxModsClient` 仍用纯 HTTP 做搜索/详情，不要求登录，也不依赖 SDK。
+
+SDK 的落点与关键配置（照 Skyve 的 `WorkshopService.Initialize()`）：
+
+| 项 | 值 |
+| --- | --- |
+| `DiskIORoot` | `<dataRoot>\pdxsdk\<Paradox userId>`（SDK 自己的 `database.json`、缓存） |
+| `Mods.RootPath` | `<gameDataDir>\.cache\Mods`（必须与游戏/Skyve 共用，否则播放集不互通） |
+| `Environment` / `Ecosystem` | `Live` / `Steam` |
+| `Mods.UsePatching` | `true` |
+| `DefaultHeaders.User-Agent` | `PdxNext/<version>` |
+| 会话复用 | 把 `PdxSession` 的 `SessionToken`/`RefreshToken` 写进 `<DiskIORoot>\database.json`，再 `Account.Startup()` |
+
+`database.json` 是 SDK 的明文会话缓存（字段 `SessionToken` / `RefreshToken` / `TrustLevel` / `Namespace` / `UserId` / `LoggedIn` 等）；本启动器自己的会话仍由 `PdxSessionStore` 用 DPAPI 保护，登出/切换账号时同步删除这份镜像。
+
 
 ### 17.1 端点与鉴权
 
@@ -1274,6 +1297,7 @@ Victoria 3 **无法加载任何路径里含非 ASCII 字符的 mod**（Vic3 wiki
 
 游戏运行期间，`GameSessionLogTracker` 从各日志当前末尾开始按字节偏移增量读取，只统计会话开始之后写入的错误块：
 - 跨 `error.log`/`game.log`/`debug.log` 按「时间 + 来源 + 正文」去重，同一错误只算一次；`CrashLogParser.Signature` 聚类，保留首个来源路径。
+- CS2 的日志来源改为 `<GameDataDir>\Player.log`、`Logs\SceneFlow.log`、`Logs\UI.log`；同时支持 Unity 的 `[yyyy-MM-dd HH:mm:ss,fff] [LEVEL]` 行格式，并把 `fatal://error` / `AssetDatabase.PopulateFromDataSource` 空引用等收敛为一条致命摘要，只提醒一次。
 - 只读取不写游戏目录；日志被轮转/截断时游标归零，读取失败只标记 `Degraded`，不抛到 UI。
 - 游戏进程退出（pid 轮询 + 进程名核对）后 `GameSessionMonitorService` 固化 `GameSessionSnapshot`，在「崩溃分析 → 本次游戏」显示，并通过 `ConfirmOverlay` 轻提示。
 

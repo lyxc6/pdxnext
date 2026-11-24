@@ -10,6 +10,14 @@ using PdxLauncher.Core.Steam;
 /// 视图模型只依赖本接口，这样 UI 逻辑可以在没有 Steam、没有原生库的机器上自检。
 /// </para>
 /// </summary>
+/// <summary>
+/// Steam 工坊「直连」写操作的抽象。
+/// <para>
+/// 「直连」= 通过 Steamworks 原生接口改 Steam 账号里的订阅，与网络代理无关。
+/// <see cref="IsAvailable"/> 为 false 只表示没有条件直连（缺 <c>steam_api64.dll</c>、
+/// 没有 appid 等），调用方应降级为打开 Steam 页面 —— 这不是功能损坏。
+/// </para>
+/// </summary>
 public interface IWorkshopSubscribeBackend
 {
     /// <summary>当前是否可用（宿主程序在、能找到 steam_api64.dll、知道 appid）。</summary>
@@ -33,10 +41,15 @@ public interface IWorkshopSubscribeBackend
 /// <summary>一次订阅 / 退订操作的结果。</summary>
 /// <param name="Ok">是否成功。</param>
 /// <param name="ErrorText">失败原因（成功时为 null）。</param>
-public sealed record WorkshopSubscribeResult(bool Ok, string? ErrorText)
+/// <param name="WarningText">成功后的附加警告（例如本机内容清理失败）；正常为 null。</param>
+public sealed record WorkshopSubscribeResult(bool Ok, string? ErrorText, string? WarningText = null)
 {
     /// <summary>成功。</summary>
     public static WorkshopSubscribeResult Success { get; } = new(true, null);
+
+    /// <summary>操作成功但有清理警告。</summary>
+    public static WorkshopSubscribeResult SuccessWithWarning(string warningText) =>
+        new(true, null, warningText);
 
     /// <summary>失败。</summary>
     public static WorkshopSubscribeResult Fail(string errorText) => new(false, errorText);

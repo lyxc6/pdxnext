@@ -20,7 +20,6 @@ public static class WorkshopPageChecks
         "cmbWorkshopSort",
         "cmbWorkshopTimeRange",
         "ringWorkshopBusy",
-        "btnWorkshopRefresh",
         "txtWorkshopGame",
         "txtWorkshopCount",
         "txtWorkshopSource",
@@ -151,7 +150,6 @@ public static class WorkshopPageChecks
             "x:Name=\"SortBox\"",
             "x:Name=\"TimeRangeBox\"",
             "ringWorkshopBusy",
-            "btnWorkshopRefresh",
             "txtWorkshopSource",
             "btnWorkshopOpenWeb",
         ];
@@ -214,7 +212,7 @@ public static class WorkshopPageChecks
     {
         if (!TryGetBlock(
                 xaml,
-                "<Grid Padding=\"16\"",
+                "<Grid x:Name=\"LayoutRoot\"",
                 "</Grid.RowDefinitions>",
                 "创意工坊页: 找到页面外层 Grid",
                 out var header))
@@ -412,6 +410,9 @@ public static class WorkshopPageChecks
             ChecksContext.Check(
                 "创意工坊页: 页缓存建行丢到线程池",
                 cachedPage.Contains(".Run(() => BuildCachedRows(", StringComparison.Ordinal));
+            ChecksContext.Check(
+                "创意工坊页: 页缓存命中也补缺失封面",
+                cachedPage.Contains("_ = FillCoversAsync(cancellationToken)", StringComparison.Ordinal));
         }
 
         if (TryGetBlock(
@@ -603,6 +604,15 @@ public static class WorkshopPageChecks
         ChecksContext.Check(
             "创意工坊页: 页面卸载取消筛选去抖",
             viewModel.Contains("CancelPendingFilterQuery()", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 筛选栏默认关闭",
+            viewModel.Contains("private bool _showFilterPanel;", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 筛选按钮绑定展开状态",
+            xaml.Contains("IsChecked=\"{x:Bind ViewModel.ShowFilterPanel, Mode=TwoWay}\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "创意工坊页: 侧栏可见性跟随展开状态",
+            viewModel.Contains("public bool ShowFilterSidebar => ShowFilterPanel && ShowFilters && Filters.HasGroups;", StringComparison.Ordinal));
 
         if (TryGetBlock(
                 viewModel,

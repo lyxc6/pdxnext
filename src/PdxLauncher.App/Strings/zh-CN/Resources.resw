@@ -112,6 +112,30 @@
   <data name="AchievementsCounts" xml:space="preserve">
     <value>已解锁 {0} / {1}</value>
   </data>
+  <data name="AchievementsConditionCollapse" xml:space="preserve">
+    <value>收起条件</value>
+  </data>
+  <data name="AchievementsConditionExpand" xml:space="preserve">
+    <value>展开条件</value>
+  </data>
+  <data name="AchievementsConditionNoData" xml:space="preserve">
+    <value>暂无条件数据</value>
+  </data>
+  <data name="AchievementsConditionOfficialHint" xml:space="preserve">
+    <value>官方提示</value>
+  </data>
+  <data name="AchievementsConditionPossibleScript" xml:space="preserve">
+    <value>前置限制</value>
+  </data>
+  <data name="AchievementsConditionSource" xml:space="preserve">
+    <value>来源：{0}</value>
+  </data>
+  <data name="AchievementsConditionTitle" xml:space="preserve">
+    <value>完成条件</value>
+  </data>
+  <data name="AchievementsConditionUnlockScript" xml:space="preserve">
+    <value>解锁判定</value>
+  </data>
   <data name="AchievementsEmptyTitle" xml:space="preserve">
     <value>没有可显示的成就</value>
   </data>
@@ -1476,6 +1500,9 @@
   </data>
   <data name="HomeStatusNoGameSelected" xml:space="preserve">
     <value>请先在游戏库里选择一款游戏</value>
+  </data>
+  <data name="LaunchStatusParadoxLoginRequired" xml:space="preserve">
+    <value>请先在「账号」页登录 Paradox 账号后再启动游戏。</value>
   </data>
   <data name="HomeStatusPlaySetSwitchFailed" xml:space="preserve">
     <value>切换播放集失败：{0}</value>
@@ -4540,28 +4567,49 @@
     <value>未找到 steam_api64.dll：{0}</value>
   </data>
   <data name="SettingsSteamApiReady" xml:space="preserve">
-    <value>已找到 steam_api64.dll</value>
+    <value>已找到：{0}</value>
+  </data>
+  <data name="SettingsSteamSubscribeCardDescription" xml:space="preserve">
+    <value>在启动器里直接改写 Steam 账号的订阅（需要 Steam 客户端在线）</value>
+  </data>
+  <data name="SettingsSteamApiSourceGame" xml:space="preserve">
+    <value>游戏目录</value>
+  </data>
+  <data name="SettingsSteamApiSourceManual" xml:space="preserve">
+    <value>设置里手填</value>
+  </data>
+  <data name="SettingsSteamApiSourceApp" xml:space="preserve">
+    <value>启动器程序目录</value>
+  </data>
+  <data name="SettingsSteamApiSourceSdk" xml:space="preserve">
+    <value>仓库 sdk/</value>
+  </data>
+  <data name="SettingsSteamApiSourceSteam" xml:space="preserve">
+    <value>Steam 客户端目录</value>
   </data>
   <data name="SettingsSteamStateHint" xml:space="preserve">
-    <value>读取工坊条目的真实状态（订阅 / 已安装 / 需要更新 / 下载中 / 在 Steam 里被本地禁用），Mod 库与详情页据此显示徽标。只读，不改任何东西；每次查询会拉起一个几秒的子进程，Steam 会在这几秒里把本程序登记成「游戏中」。</value>
+    <value>读取工坊条目的真实状态（订阅 / 已安装 / 需要更新 / 下载中 / 在 Steam 里被本地禁用），Mod 库与详情页据此显示徽标。只读，不改任何东西；每次查询会拉起一个几秒的子进程，Steam 会在这几秒里把本程序登记成「游戏中」。依赖同一份 steam_api64.dll；找不到时只是不显示徽标，工坊浏览照常。</value>
+  </data>
+  <data name="SettingsSteamIntro" xml:space="preserve">
+    <value>这里直接读写你 Steam 账号里的工坊订阅，不再是「打开页面让你自己点」。「直连」在本程序里专指这种 Steamworks 原生调用，与「网络」分区里的「直连（未使用代理）」无关。</value>
   </data>
   <data name="SettingsSteamStateOff" xml:space="preserve">
     <value>关闭 Steam 工坊状态读取</value>
   </data>
   <data name="SettingsSteamStateOn" xml:space="preserve">
-    <value>读取 Steam 工坊状态</value>
+    <value>读取 Steam 工坊状态（只读）</value>
   </data>
   <data name="SettingsSteamSubscribeHint" xml:space="preserve">
-    <value>开启后，创意工坊详情页的「在 Steam 中订阅」按钮会直接调用 Steam 客户端完成订阅 / 取消订阅；关闭时只会在 Steam 客户端里打开该 mod 页面。需要 steam_api64.dll（放在程序目录或游戏目录）。</value>
+    <value>打开后，详情页的订阅按钮会直接改写你 Steam 客户端里已登录账号的订阅（还能触发下载、在本地禁用）；关闭时按钮只会在 Steam 客户端里打开该 mod。需要 steam_api64.dll：那是 Valve 的官方接口文件，每款 Steam 游戏自带一份，启动器会先从游戏目录里找，找不到才需要在这里手填路径。没有它也能用 —— 浏览、搜索、PDX Mods 订阅与下载都不受影响，只是这些操作会降级成打开 Steam 页面。</value>
   </data>
   <data name="SettingsSteamSubscribeOn" xml:space="preserve">
-    <value>Steam 工坊直连订阅（实验）</value>
+    <value>在启动器内订阅 / 退订 Steam 工坊（实验）</value>
   </data>
   <data name="SettingsSteamSubscribeStatusOff" xml:space="preserve">
-    <value>已关闭 Steam 工坊直连订阅</value>
+    <value>只读：要修改 Steam 订阅，请打开上面的开关</value>
   </data>
   <data name="SettingsSteamSubscribeStatusOn" xml:space="preserve">
-    <value>已开启 Steam 工坊直连订阅</value>
+    <value>已允许在启动器内修改 Steam 订阅</value>
   </data>
   <data name="SettingsThemeBackgroundFile" xml:space="preserve">
     <value>当前背景文件</value>
@@ -5380,19 +5428,19 @@
     <value>Steam 上有新版本，可在 Steam 客户端或库里更新。</value>
   </data>
   <data name="WorkshopDetailSteamReadOnlyHint" xml:space="preserve">
-    <value>当前只读取 Steam 状态：能看到订阅 / 安装 / 下载进度，但改订阅要在设置页打开「Steam 工坊直连订阅」。</value>
+    <value>当前只读取 Steam 状态：能看到订阅 / 安装 / 下载进度，但改订阅要在设置页打开「在启动器内订阅 / 退订 Steam 工坊」。</value>
   </data>
   <data name="WorkshopDetailSteamSubscribeConfirm" xml:space="preserve">
     <value>将通过 Steam 客户端订阅这个工坊物品，Steam 会立刻开始下载。确定继续吗？</value>
   </data>
   <data name="WorkshopDetailSteamSubscribeHintOff" xml:space="preserve">
-    <value>未开启直连订阅：按钮只会在 Steam 客户端里打开该 mod。可在设置页的「Steam 工坊直连订阅」里打开。</value>
+    <value>当前只能在 Steam 客户端里订阅。要在这里直接订阅，请到设置页打开「在启动器内订阅 / 退订 Steam 工坊」。</value>
   </data>
   <data name="WorkshopDetailSteamUnavailable" xml:space="preserve">
     <value>Steam 客户端未运行或无法连接，请先启动并登录 Steam 后重试；也可以点页面右上角的 Steam 图标，在 Steam 中打开该页面。</value>
   </data>
   <data name="WorkshopDetailSteamUnsubscribeConfirm" xml:space="preserve">
-    <value>将取消订阅这个工坊物品。Steam 会在游戏退出后移除已下载的内容。确定继续吗？</value>
+    <value>将取消订阅这个工坊物品，并立即清理已下载的内容与 Mod 库记录。若文件正被游戏或 Steam 占用，会保留记录并提示重试。确定继续吗？</value>
   </data>
   <data name="WorkshopDetailSubscribe" xml:space="preserve">
     <value>订阅</value>
@@ -5401,7 +5449,13 @@
     <value>订阅失败：{0}</value>
   </data>
   <data name="WorkshopDetailSubscribePlaysetHint" xml:space="preserve">
-    <value>订阅会加入播放集 PdxNext，下次启动时生效</value>
+    <value>订阅会加入当前激活的播放集，并立即下载到本地；需要先在播放集页激活一个播放集</value>
+  </data>
+  <data name="WorkshopDetailSubscribeNoPlayset" xml:space="preserve">
+    <value>还没有激活的播放集。请先在「播放集」页激活一个，再回来订阅。</value>
+  </data>
+  <data name="WorkshopDetailSubscribeSdkUnavailable" xml:space="preserve">
+    <value>PDX 订阅组件不可用（缺少 PDX.SDK 或未安装到程序目录），请重装启动器后再试。</value>
   </data>
   <data name="WorkshopDetailSubscribeSignIn" xml:space="preserve">
     <value>登录 Paradox 账号后才能订阅</value>
@@ -5429,6 +5483,9 @@
   </data>
   <data name="WorkshopDetailUnsubscribeFailed" xml:space="preserve">
     <value>取消订阅失败：{0}</value>
+  </data>
+  <data name="WorkshopDetailUnsubscribeCleanupWarning" xml:space="preserve">
+    <value>已取消订阅，但本机清理未完成：{0}。请关闭游戏和 Steam 后重试，Mod 库记录会暂时保留。</value>
   </data>
   <data name="WorkshopDetailViewImage" xml:space="preserve">
     <value>查看大图</value>
@@ -6318,6 +6375,9 @@
   <data name="CrashSessionHint" xml:space="preserve">
     <value>游戏运行时按日志统计本次报错，退出游戏后可在这里查看。日志被占用/只读也会标注。</value>
   </data>
+  <data name="CrashSessionStillRunning" xml:space="preserve">
+    <value>仍在运行</value>
+  </data>
   <data name="CrashSessionEmpty" xml:space="preserve">
     <value>还没有本次游戏的记录。启动一款游戏并退出后，这里会显示该次会话的报错摘要。</value>
   </data>
@@ -6345,6 +6405,27 @@
   <data name="CrashSessionDegraded" xml:space="preserve">
     <value>部分日志读取失败，统计可能不完整。</value>
   </data>
+  <data name="CrashSessionFatalTitle" xml:space="preserve">
+    <value>致命初始化错误：{0}</value>
+  </data>
+  <data name="CrashSessionFatalPlatformService" xml:space="preserve">
+    <value>平台服务初始化失败</value>
+  </data>
+  <data name="CrashSessionFatalAssetDatabase" xml:space="preserve">
+    <value>资产数据库初始化失败</value>
+  </data>
+  <data name="CrashSessionFatalUnknown" xml:space="preserve">
+    <value>游戏初始化失败</value>
+  </data>
+  <data name="CrashSessionFatalRow" xml:space="preserve">
+    <value>来源日志：{0}　样例：{1}</value>
+  </data>
+  <data name="CrashSessionAlertTitle" xml:space="preserve">
+    <value>游戏初始化失败</value>
+  </data>
+  <data name="CrashSessionAlertMessage" xml:space="preserve">
+    <value>{0} 的日志出现致命错误（{1}），进程可能仍显示黑屏。可在「崩溃分析 → 本次游戏」查看详情。</value>
+  </data>
   <data name="CrashSessionLogReadable" xml:space="preserve">
     <value>正常</value>
   </data>
@@ -6369,10 +6450,25 @@
   <data name="DiagnosticsGameLogStatus" xml:space="preserve">
     <value>游戏日志 {0}：{1}</value>
   </data>
+  <data name="DiagnosticsGameLogStatusMultiple" xml:space="preserve">
+    <value>游戏日志 {0}：{1}（共 {2} 份会话日志）</value>
+  </data>
   <data name="CrashSessionEndedTitle" xml:space="preserve">
     <value>本次游戏已结束</value>
   </data>
   <data name="CrashSessionEndedMessage" xml:space="preserve">
     <value>本次游戏发现 {0} 条报错，可在「崩溃分析 → 本次游戏」查看。</value>
+  </data>
+  <data name="SettingsMcpChangePlans" xml:space="preserve">
+    <value>AI 变更计划</value>
+  </data>
+  <data name="SettingsMcpChangePlanHint" xml:space="preserve">
+    <value>AI 只能提出计划。请核对操作、目标和字段后再批准；批准仅表示允许 App 执行，实际落盘仍由启动器完成。</value>
+  </data>
+  <data name="SettingsMcpApprovePlan" xml:space="preserve">
+    <value>批准</value>
+  </data>
+  <data name="SettingsMcpRejectPlan" xml:space="preserve">
+    <value>拒绝</value>
   </data>
 </root>

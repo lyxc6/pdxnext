@@ -696,7 +696,6 @@ public static class SavesActionsChecks
                      "btnDeleteBackup",
                      "btnPruneBackups",
                      "btnOpenBackupFolder",
-                     "btnBackupsRefresh",
                      "listSaveBackups",
                      "panelSaveBackups",
                      "numBackupQuota",

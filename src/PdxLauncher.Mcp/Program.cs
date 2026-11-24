@@ -46,6 +46,7 @@ internal static class Program
             var authorizedKey = string.IsNullOrWhiteSpace(accessKeyToken)
                 ? null
                 : keyStore.Authenticate(accessKeyToken);
+            tools.SetAuthorizedKey(authorizedKey);
             var server = new McpServer(
                 input,
                 output,

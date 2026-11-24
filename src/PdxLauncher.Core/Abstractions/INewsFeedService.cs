@@ -20,8 +20,11 @@ public interface INewsFeedService
     /// <summary>
     /// 取一门游戏的官方公告卡。
     /// <para><paramref name="allowOnline"/> 为 false 时绝不发起任何网络请求，只返回本地缓存。</para>
-    /// <para>缓存 6 小时过期；过期但仍有内容的旧缓存会先返回，联网失败时继续沿用。</para>
-    /// <para>卡片拿到了但公告图没下载成功时不算过期成功：不推进 6 小时 TTL，5 分钟后自动重试补图。</para>
+    /// <para>缓存 15 分钟过期；过期但仍有内容的旧缓存会先返回，联网失败时继续沿用。</para>
+    /// <para>卡片拿到了但公告图没下载成功时不算过期成功：不推进 15 分钟 TTL，5 分钟后自动重试补图。</para>
     /// </summary>
     Task<NewsFeed> GetAsync(GameInstallation game, bool allowOnline, CancellationToken cancellationToken);
+
+    /// <summary>按平台、启动次数与 DLC 拥有情况取公告；<see cref="NewsFeedRequest.ForceRefresh"/> 可越过缓存 TTL。</summary>
+    Task<NewsFeed> GetAsync(NewsFeedRequest request, CancellationToken cancellationToken);
 }

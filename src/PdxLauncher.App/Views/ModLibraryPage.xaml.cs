@@ -4,6 +4,7 @@ using System.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Navigation;
 using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
@@ -386,8 +387,22 @@ public sealed partial class ModLibraryPage : Page
         }
     }
 
-    private async void OnRefreshClick(object sender, RoutedEventArgs e)
-    {        try
+    private async void OnPageRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (!PageRefreshGesture.ShouldRefresh(e.OriginalSource, LayoutRoot))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        await Refresh().ConfigureAwait(true);
+    }
+
+    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await Refresh().ConfigureAwait(true);
+
+    private async Task Refresh()
+    {
+        try
         {
             await _viewModel.RefreshAsync().ConfigureAwait(true);
         }

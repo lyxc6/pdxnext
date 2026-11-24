@@ -51,6 +51,7 @@ public static class SettingsChecks
             McpEnabled = false,
             McpDraftWriteEnabled = true,
             AlwaysOnTop = true,
+            ModEditorLeftPaneVisible = true,
             PdxRememberMe = true,
             ProxyMode = ProxyModes.Manual,
             ProxyUrl = "http://127.0.0.1:7890",
@@ -89,6 +90,7 @@ public static class SettingsChecks
             ChecksContext.Check("设置：MCP 总开关往返（关）", !loaded.McpEnabled);
             ChecksContext.Check("设置：MCP 草稿写入往返（开）", loaded.McpDraftWriteEnabled);
             ChecksContext.Check("设置：置顶往返", loaded.AlwaysOnTop);
+            ChecksContext.Check("设置：Mod 编辑页左栏显示往返（开）", loaded.ModEditorLeftPaneVisible);
             ChecksContext.Check("设置：保持登录往返", loaded.PdxRememberMe);
             ChecksContext.Equal("设置：代理模式往返", ProxyModes.Manual, loaded.ProxyMode);
             ChecksContext.Equal("设置：代理地址往返", "http://127.0.0.1:7890", loaded.ProxyUrl);
@@ -128,6 +130,7 @@ public static class SettingsChecks
         ChecksContext.Equal("设置：缺文件时窗口 X 默认 -1", -1, loaded.WindowX);
         ChecksContext.Equal("设置：缺文件时窗口 Y 默认 -1", -1, loaded.WindowY);
         ChecksContext.Check("设置：缺文件时没有记住的分节", loaded.LastSettingsSection is null);
+        ChecksContext.Check("设置：缺文件时 Mod 编辑页左栏默认关闭", !loaded.ModEditorLeftPaneVisible);
         ChecksContext.Check("设置：缺文件时工坊搜索历史是空列表", loaded.WorkshopSearchHistory is { Count: 0 });
         ChecksContext.Check("设置：缺文件时不崩溃（默认语言）", loaded.UiLanguage is null or "zh-CN" or "en-US");
     }

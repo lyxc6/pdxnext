@@ -179,7 +179,11 @@
             </ListView.ItemContainerStyle>
             <ListView.ItemTemplate>
                 <DataTemplate x:DataType="vm:AchievementRowViewModel">
-                    <Grid Padding="0,8,16,8" ColumnSpacing="16">
+                    <Grid Padding="0,8,16,8" RowSpacing="8" ColumnSpacing="16">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
@@ -239,6 +243,85 @@
                                        HorizontalAlignment="Right"
                                        Visibility="{x:Bind svc:XamlVisibility.FromBool(HasRarity), Mode=OneWay}" />
                         </StackPanel>
+
+                        <Button Grid.Column="2"
+                                Grid.Row="0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Bottom"
+                                Padding="4"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Command="{x:Bind ToggleConditionCommand, Mode=OneTime}"
+                                Content="{x:Bind ConditionToggleText, Mode=OneWay}"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(HasConditionData), Mode=OneWay}"
+                                ToolTipService.ToolTip="{x:Bind ConditionToggleText, Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind ConditionToggleAutomationId, Mode=OneTime}"
+                                AutomationProperties.Name="{x:Bind ConditionToggleText, Mode=OneWay}" />
+
+                        <Border Grid.Column="0" Grid.ColumnSpan="3"
+                                Grid.Row="1"
+                                Padding="12"
+                                CornerRadius="4"
+                                Background="{ThemeResource PdxCardGlassBrush}"
+                                BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                BorderThickness="1"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowConditionDetails), Mode=OneWay}"
+                                AutomationProperties.AutomationId="{x:Bind ConditionDetailsAutomationId, Mode=OneTime}">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="{x:Bind L.AchievementsConditionTitle, Mode=OneWay}"
+                                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="{x:Bind ConditionSummary, Mode=OneWay}"
+                                           Style="{StaticResource BodyTextBlockStyle}"
+                                           TextWrapping="Wrap"
+                                           Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowOfficialHint), Mode=OneWay}"
+                                           AutomationProperties.AutomationId="{x:Bind ConditionSummaryAutomationId, Mode=OneTime}" />
+                                <StackPanel Orientation="Horizontal" Spacing="4"
+                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowOfficialHint), Mode=OneWay}">
+                                    <TextBlock Text="{x:Bind L.AchievementsConditionOfficialHint, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </StackPanel>
+                                <TextBlock Text="{x:Bind L.AchievementsConditionUnlockScript, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                <ScrollViewer MaxHeight="160"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled">
+                                    <TextBlock Text="{x:Bind ConditionUnlockText, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               FontFamily="Consolas"
+                                               TextWrapping="Wrap"
+                                               AutomationProperties.AutomationId="{x:Bind ConditionUnlockAutomationId, Mode=OneTime}" />
+                                </ScrollViewer>
+                                <TextBlock Text="{x:Bind L.AchievementsConditionPossibleScript, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                           Visibility="{x:Bind svc:XamlVisibility.FromString(ConditionPossibleText), Mode=OneWay}" />
+                                <ScrollViewer MaxHeight="160"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              Visibility="{x:Bind svc:XamlVisibility.FromString(ConditionPossibleText), Mode=OneWay}">
+                                    <TextBlock Text="{x:Bind ConditionPossibleText, Mode=OneWay}"
+                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                               FontFamily="Consolas"
+                                               TextWrapping="Wrap"
+                                               AutomationProperties.AutomationId="{x:Bind ConditionPossibleAutomationId, Mode=OneTime}" />
+                                </ScrollViewer>
+                                <TextBlock Text="{x:Bind ConditionSourceDisplay, Mode=OneWay}"
+                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                           TextWrapping="Wrap"
+                                           AutomationProperties.AutomationId="{x:Bind ConditionSourceAutomationId, Mode=OneTime}" />
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Grid.Column="0" Grid.ColumnSpan="3"
+                                   Grid.Row="1"
+                                   Text="{x:Bind L.AchievementsConditionNoData, Mode=OneWay}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                   Visibility="{x:Bind svc:XamlVisibility.FromBool(ShowNoConditionData), Mode=OneWay}"
+                                   AutomationProperties.AutomationId="{x:Bind ConditionNoDataAutomationId, Mode=OneTime}" />
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>

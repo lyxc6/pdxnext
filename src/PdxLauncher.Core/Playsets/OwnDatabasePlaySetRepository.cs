@@ -199,6 +199,64 @@ public sealed class OwnDatabasePlaySetRepository : IPlaySetRepository
     }
 
     /// <inheritdoc />
+    public Task<AppResult<int>> RemoveWorkshopModAsync(
+        GameInstallation game,
+        string workshopId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(game);
+        if (!SteamWorkshop.IsAllDigits(workshopId?.Trim()))
+        {
+            return Task.FromResult(AppResult<int>.Fail(ErrorKind.Invalid, "workshop-id-invalid"));
+        }
+
+        var id = workshopId!.Trim();
+        var registry = "mod/ugc_" + id + ".mod";
+        var keys = new[] { id, registry };
+        return WriteReturningAsync(
+            game,
+            "删除已退订的工坊 mod",
+            connection =>
+            {
+                var matches = connection.Query(
+                    "SELECT id FROM mods WHERE gameId = ? AND (steamId IN (?, ?) OR lower(gameRegistryId) IN (lower(?), lower(?)))",
+                    game.GameId, id, id, id, registry);
+                var modIds = matches
+                    .Select(row => PlaySetRepository.ReadNullableString(row, "id"))
+                    .Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Select(value => Guid.TryParse(value, out var parsed)
+                        ? parsed.ToString("D")
+                        : string.Empty)
+                    .Where(value => value.Length > 0)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                if (modIds.Length == 0)
+                {
+                    return AppResult<int>.Ok(0);
+                }
+
+                var modPlaceholders = string.Join(", ", modIds.Select(_ => "?"));
+                var referenceParameters = new List<object?>(modIds.Length + 1) { game.GameId };
+                referenceParameters.AddRange(modIds);
+                connection.Execute(
+                    "DELETE FROM playsets_mods WHERE gameId = ? AND modId IN (" + modPlaceholders + ")",
+                    referenceParameters.ToArray());
+
+                var deleteParameters = new List<object?>(modIds.Length + 1) { game.GameId };
+                deleteParameters.AddRange(modIds);
+                var deleted = connection.Execute(
+                    "DELETE FROM mods WHERE gameId = ? AND id IN (" + modPlaceholders + ")",
+                    deleteParameters.ToArray());
+                _logger.Info(
+                    "删除已退订工坊 mod（自有库）：workshopId=" + id
+                    + "，mod 行 " + deleted.ToString(System.Globalization.CultureInfo.InvariantCulture) + " 条"
+                    + "（" + game.GameId + "）");
+                return AppResult<int>.Ok(deleted);
+            },
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<PlaySetDlc>> GetPlaySetDlcsAsync(
         GameInstallation game,
         Guid playSetId,

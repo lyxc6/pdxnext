@@ -2,8 +2,12 @@ namespace PdxLauncher.Checks;
 
 using System.Text.Json;
 
+using PdxLauncher.Achievements;
+using PdxLauncher.App.ViewModels;
+using PdxLauncher.Core.Achievements;
 using PdxLauncher.Core.Abstractions;
 using PdxLauncher.Core.Contracts;
+using PdxLauncher.Core.Infrastructure;
 
 /// <summary>
 /// 成就页自检：这条需求是「先立骨架与契约」，最容易悄悄退化的不是编译错误，而是
@@ -37,8 +41,35 @@ public static class AchievementsPageChecks
     {
         ArgumentNullException.ThrowIfNull(fs);
         var before = ChecksContext.Failures;
-
         var root = FindWorkspaceRoot();
+        var conditionRoot = Path.Combine(Path.GetTempPath(), "pdxnext-achievement-page-checks-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            CheckPathsAndMapping(conditionRoot);
+            CheckTruncation(conditionRoot);
+            CheckHiddenPresentation();
+            CheckSchema();
+            CheckUiContract(root);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(conditionRoot))
+                {
+                    Directory.Delete(conditionRoot, recursive: true);
+                }
+            }
+            catch (IOException)
+            {
+                // 临时目录清理失败不影响断言。
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // 同上。
+            }
+        }
+
         var appRoot = Path.Combine(root, "src", "PdxLauncher.App");
         var xamlPath = Path.Combine(appRoot, "Views", "AchievementsPage.xaml");
         var pagePath = Path.Combine(appRoot, "Views", "AchievementsPage.xaml.cs");
@@ -233,6 +264,216 @@ public static class AchievementsPageChecks
             string.Join(" | ", values));
     }
 
+    private static void CheckPathsAndMapping(string root)
+    {
+        var reader = new AchievementConditionReader(new FileSystem());
+        var strings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["HINT_TITLE"] = "§Y征服世界§! #bold必读#!指南",
+            ["HINT_ALIAS"] = "$HINT_TITLE$",
+        };
+
+        var eu4 = Path.Combine(root, "eu4");
+        Write(Path.Combine(eu4, "game", "common", "achievements", "achievements.txt"),
+            """
+            ACH_EU4 = {
+                localization = ACH_EU4
+                happened = {
+                    custom_tooltip = {
+                        tooltip = HINT_ALIAS
+                    }
+                    owns = 1
+                }
+            }
+            """);
+        var fromField = reader.Read(eu4, "ACH_EU4", strings);
+        ChecksContext.Check("成就条件: EU4 localization 字段精确映射", fromField.HasData && fromField.IsOfficialHint, fromField.Summary);
+        ChecksContext.Equal("成就条件: §Y/#bold 标记被清理", "征服世界 必读 指南", fromField.Summary);
+        ChecksContext.Check("成就条件: 别名链最多跟随一次即可命中", fromField.Summary.Contains("征服世界", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "成就条件: 近似名不能映射",
+            !reader.Read(eu4, "ACH_EU", strings).HasData);
+
+        var hoi4 = Path.Combine(root, "hoi4");
+        Write(Path.Combine(hoi4, "game", "main_menu", "common", "achievements", "achievements.txt"),
+            """
+            hoi4_exact = {
+                happened = {
+                    has_war = yes
+                }
+            }
+            """);
+        var fromMainMenu = reader.Read(hoi4, "hoi4_exact", strings);
+        ChecksContext.Check(
+            "成就条件: HOI4 main_menu 布局可见",
+            fromMainMenu.UnlockScript.Contains("has_war = yes", StringComparison.Ordinal),
+            fromMainMenu.SourceFile);
+
+        var stellaris = Path.Combine(root, "stellaris");
+        Write(Path.Combine(stellaris, "common", "achievements.txt"),
+            """
+            stellaris_exact = {
+                possible = {
+                    difficulty = grand_council
+                }
+                happened = {
+                    custom_description = {
+                        text = HINT_TITLE
+                    }
+                    is_ironman = yes
+                }
+            }
+            """);
+        var fromRoot = reader.Read(stellaris, "stellaris_exact", strings);
+        ChecksContext.Check(
+            "成就条件: Stellaris 安装根布局可见",
+            fromRoot.PossibleScript.Contains("grand_council", StringComparison.Ordinal),
+            fromRoot.SourceFile);
+
+        var cycle = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["LOOP_A"] = "$LOOP_B$",
+            ["LOOP_B"] = "$LOOP_A$",
+        };
+        Write(Path.Combine(stellaris, "game", "common", "achievements", "other.txt"),
+            """
+            loop_achievement = {
+                happened = {
+                    custom_tooltip = {
+                        tooltip = LOOP_A
+                    }
+                    flag = loop
+                }
+            }
+            """);
+        var loop = reader.Read(stellaris, "loop_achievement", cycle);
+        ChecksContext.Check(
+            "成就条件: 本地化别名成环不挂起，退回原始判定",
+            !loop.IsOfficialHint && loop.UnlockScript.Contains("flag = loop", StringComparison.Ordinal),
+            loop.Summary);
+
+        var missing = reader.Read(Path.Combine(root, "missing"), "anything", strings);
+        ChecksContext.Check("成就条件: 找不到目录时为空", !missing.HasData && missing.SourceFile.Length == 0);
+    }
+
+    private static void CheckTruncation(string root)
+    {
+        var reader = new AchievementConditionReader(new FileSystem());
+        var install = Path.Combine(root, "truncate-game");
+        var longToken = new string('x', AchievementConditionReader.MaxScriptLength + 500);
+        Write(Path.Combine(install, "game", "common", "achievements", "long.txt"),
+            "long_achievement = {\n  happened = {\n    flag = " + longToken + "\n  }\n}\n");
+        var info = reader.Read(install, "long_achievement", new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+        ChecksContext.Check(
+            "成就条件: 超长脚本被截断并标注",
+            info.UnlockScript.Length > AchievementConditionReader.MaxScriptLength
+                && info.UnlockScript.EndsWith("[truncated]", StringComparison.Ordinal),
+            info.UnlockScript.Length.ToString(System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    private static void CheckHiddenPresentation()
+    {
+        var hidden = new AchievementEntry(
+            "HIDDEN_ACH",
+            "隐藏成就",
+            "说明",
+            IsHidden: true,
+            IsUnlocked: false,
+            UnlockTimeUtc: null,
+            GlobalPercent: null,
+            IconUrl: null,
+            new AchievementConditionInfo("条件提示", "has_flag = yes", "ironman = yes", "C:\\game\\achievements.txt", true));
+        var row = new AchievementRowViewModel(hidden);
+        ChecksContext.Check("成就条件: 隐藏成就也带条件数据", row.HasConditionData);
+        row.ToggleConditionCommand.Execute(null);
+        ChecksContext.Check("成就条件: 点击后展开详情", row.IsExpanded && row.ShowConditionDetails);
+        ChecksContext.Equal("成就条件: 官方提示显示", "条件提示", row.ConditionSummary);
+        ChecksContext.Check("成就条件: 解锁判定显示", row.ConditionUnlockText.Contains("has_flag", StringComparison.Ordinal));
+        ChecksContext.Check("成就条件: 前置限制显示", row.ConditionPossibleText.Contains("ironman", StringComparison.Ordinal));
+        ChecksContext.Check("成就条件: 来源显示", row.ConditionSourceText.Length > 0);
+        row.ToggleConditionCommand.Execute(null);
+        ChecksContext.Check("成就条件: 再次点击收起", !row.IsExpanded && !row.ShowConditionDetails);
+
+        var noData = new AchievementRowViewModel(new AchievementEntry("NO_DATA", "无数据", "说明", false, false, null, null, null));
+        ChecksContext.Check("成就条件: 无数据时不可展开详情", !noData.HasConditionData && !noData.ShowConditionDetails);
+    }
+
+    private static void CheckSchema()
+    {
+        ChecksContext.Equal("成就条件: 快照缓存版本已升级", 2, AchievementSnapshotCache.SchemaVersion);
+    }
+
+    private static void CheckUiContract(string root)
+    {
+        var app = Path.Combine(root, "src", "PdxLauncher.App");
+        var xaml = File.ReadAllText(Path.Combine(app, "Views", "AchievementsPage.xaml"));
+        foreach (var token in new[]
+                 {
+                     "ToggleConditionCommand",
+                     "ShowConditionDetails",
+                     "ConditionSummary",
+                     "ConditionUnlockText",
+                     "ConditionPossibleText",
+                      "ConditionSourceDisplay",
+                     "ConditionTitle",
+                     "ConditionOfficialHint",
+                     "ConditionUnlockScript",
+                     "ConditionPossibleScript",
+                     "ConditionSource",
+                     "ConditionNoData",
+                     "ConditionToggleAutomationId",
+                     "ConditionDetailsAutomationId",
+                 })
+        {
+            ChecksContext.Check("成就条件: XAML 含 " + token, xaml.Contains(token, StringComparison.Ordinal));
+        }
+
+        var zh = I18nResw.Read(root, "zh-CN");
+        var en = I18nResw.Read(root, "en-US");
+        foreach (var key in new[]
+                 {
+                     "AchievementsConditionTitle",
+                     "AchievementsConditionOfficialHint",
+                     "AchievementsConditionUnlockScript",
+                     "AchievementsConditionPossibleScript",
+                     "AchievementsConditionSource",
+                     "AchievementsConditionNoData",
+                     "AchievementsConditionExpand",
+                     "AchievementsConditionCollapse",
+                 })
+        {
+            ChecksContext.Check("成就条件: zh-CN 有 " + key, !string.IsNullOrWhiteSpace(I18nResw.Get(zh, key)));
+            ChecksContext.Check("成就条件: en-US 有 " + key, !string.IsNullOrWhiteSpace(I18nResw.Get(en, key)));
+        }
+    }
+
+    private static void Write(string path, string content)
+    {
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        File.WriteAllText(path, content);
+    }
+
+    private static string FindWorkspaceRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, "tests", "fixtures")))
+            {
+                return dir.FullName;
+            }
+
+            dir = dir.Parent;
+        }
+
+        return Directory.GetCurrentDirectory();
+    }
+
     private static bool HasNonEmptyString(JsonElement root, string key) =>
         root.TryGetProperty(key, out var value)
         && value.ValueKind == JsonValueKind.String
@@ -275,19 +516,4 @@ public static class AchievementsPageChecks
 
     // ------------------------------------------------------------ 路径
 
-    private static string FindWorkspaceRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            if (Directory.Exists(Path.Combine(dir.FullName, "tests", "fixtures")))
-            {
-                return dir.FullName;
-            }
-
-            dir = dir.Parent;
-        }
-
-        return Directory.GetCurrentDirectory();
-    }
 }

@@ -289,7 +289,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
     /// <summary>是否展开左侧筛选栏（工具条上的「筛选」按钮切换）。</summary>
     [ObservableProperty]
-    private bool _showFilterPanel = true;
+    private bool _showFilterPanel;
 
     public WorkshopViewModel(
         SteamWorkshopClient steam,
@@ -1202,6 +1202,7 @@ public sealed partial class WorkshopViewModel : LocalizedObservableObject
 
         ReplaceRows(rows);
         StartNameTranslation(rows, cancellationToken);
+        _ = FillCoversAsync(cancellationToken);
     }
 
     /// <summary>线程池上把页快照建成行模型；封面只看条目里的文件名，不再回查 SQLite。</summary>

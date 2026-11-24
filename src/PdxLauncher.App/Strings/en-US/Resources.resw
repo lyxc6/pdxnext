@@ -112,6 +112,30 @@
   <data name="AchievementsCounts" xml:space="preserve">
     <value>Unlocked {0} / {1}</value>
   </data>
+  <data name="AchievementsConditionCollapse" xml:space="preserve">
+    <value>Hide conditions</value>
+  </data>
+  <data name="AchievementsConditionExpand" xml:space="preserve">
+    <value>Show conditions</value>
+  </data>
+  <data name="AchievementsConditionNoData" xml:space="preserve">
+    <value>No condition data available</value>
+  </data>
+  <data name="AchievementsConditionOfficialHint" xml:space="preserve">
+    <value>Official hint</value>
+  </data>
+  <data name="AchievementsConditionPossibleScript" xml:space="preserve">
+    <value>Requirements</value>
+  </data>
+  <data name="AchievementsConditionSource" xml:space="preserve">
+    <value>Source: {0}</value>
+  </data>
+  <data name="AchievementsConditionTitle" xml:space="preserve">
+    <value>Completion conditions</value>
+  </data>
+  <data name="AchievementsConditionUnlockScript" xml:space="preserve">
+    <value>Unlock trigger</value>
+  </data>
   <data name="AchievementsEmptyTitle" xml:space="preserve">
     <value>No achievements to show</value>
   </data>
@@ -1476,6 +1500,9 @@
   </data>
   <data name="HomeStatusNoGameSelected" xml:space="preserve">
     <value>Select a game in the library first</value>
+  </data>
+  <data name="LaunchStatusParadoxLoginRequired" xml:space="preserve">
+    <value>Sign in to your Paradox account on the Account page before launching a game.</value>
   </data>
   <data name="HomeStatusPlaySetSwitchFailed" xml:space="preserve">
     <value>Failed to switch playset: {0}</value>
@@ -4540,28 +4567,49 @@ Applying still backs up the original file first, but the backup cannot be verifi
     <value>steam_api64.dll not found: {0}</value>
   </data>
   <data name="SettingsSteamApiReady" xml:space="preserve">
-    <value>steam_api64.dll found</value>
+    <value>Found: {0}</value>
+  </data>
+  <data name="SettingsSteamSubscribeCardDescription" xml:space="preserve">
+    <value>Changes Steam Workshop subscriptions of your signed-in account directly (Steam must be running)</value>
+  </data>
+  <data name="SettingsSteamApiSourceGame" xml:space="preserve">
+    <value>game folder</value>
+  </data>
+  <data name="SettingsSteamApiSourceManual" xml:space="preserve">
+    <value>path set here</value>
+  </data>
+  <data name="SettingsSteamApiSourceApp" xml:space="preserve">
+    <value>launcher folder</value>
+  </data>
+  <data name="SettingsSteamApiSourceSdk" xml:space="preserve">
+    <value>repository sdk/</value>
+  </data>
+  <data name="SettingsSteamApiSourceSteam" xml:space="preserve">
+    <value>Steam client folder</value>
   </data>
   <data name="SettingsSteamStateHint" xml:space="preserve">
-    <value>Read real workshop item state (subscribed / installed / update available / downloading / disabled locally in Steam) and show it in the mod library and detail page. Read-only; each query starts a short-lived child process, during which Steam briefly lists this app as "in game".</value>
+    <value>Read the real state of Workshop items (subscribed / installed / update available / downloading / disabled locally in Steam) and show it in the mod library and detail page. Read-only; each query starts a short-lived child process, during which Steam briefly lists this app as "in game". Uses the same steam_api64.dll; if it is missing you just lose the badges — browsing still works.</value>
+  </data>
+  <data name="SettingsSteamIntro" xml:space="preserve">
+    <value>These options read and write Steam Workshop subscriptions in your Steam account directly, instead of opening a page for you to click. "Direct" here means native Steamworks calls; it has nothing to do with the "Direct (no proxy)" option under Network.</value>
   </data>
   <data name="SettingsSteamStateOff" xml:space="preserve">
     <value>Steam workshop state reading off</value>
   </data>
   <data name="SettingsSteamStateOn" xml:space="preserve">
-    <value>Read Steam workshop state</value>
+    <value>Read Steam Workshop state (read-only)</value>
   </data>
   <data name="SettingsSteamSubscribeHint" xml:space="preserve">
-    <value>When on, the Subscribe button on a Workshop detail page subscribes or unsubscribes through the Steam client. When off, it only opens the item in the Steam client. Requires steam_api64.dll next to the launcher or in the game folder.</value>
+    <value>When on, the Subscribe button on a Workshop detail page changes the subscription of the Steam account you are signed in with (and can trigger downloads or local disabling). When off, the button only opens the item in the Steam client. Requires steam_api64.dll: Valve's official interface file, shipped with every Steam game. PdxNext looks in the game folder first and only asks for a manual path when it cannot find one. Everything else keeps working without it — browsing, search, PDX Mods subscribe and download are unaffected; only these actions fall back to opening the Steam page.</value>
   </data>
   <data name="SettingsSteamSubscribeOn" xml:space="preserve">
-    <value>Direct Steam Workshop subscription (experimental)</value>
+    <value>Subscribe to Steam Workshop inside PdxNext (experimental)</value>
   </data>
   <data name="SettingsSteamSubscribeStatusOff" xml:space="preserve">
-    <value>Direct Steam Workshop subscription disabled</value>
+    <value>Read-only: turn on the switch above to change Steam subscriptions</value>
   </data>
   <data name="SettingsSteamSubscribeStatusOn" xml:space="preserve">
-    <value>Direct Steam Workshop subscription enabled</value>
+    <value>Steam subscription changes are now allowed</value>
   </data>
   <data name="SettingsThemeBackgroundFile" xml:space="preserve">
     <value>Current background file</value>
@@ -5380,19 +5428,19 @@ Applying still backs up the original file first, but the backup cannot be verifi
     <value>A newer version is on Steam; update it in the Steam client or the mod library.</value>
   </data>
   <data name="WorkshopDetailSteamReadOnlyHint" xml:space="preserve">
-    <value>Only reading Steam state right now: you can see subscription, install and download progress, but changing subscriptions needs "Steam Workshop direct" in Settings.</value>
+    <value>Only reading Steam state right now: you can see subscription, install and download progress, but changing subscriptions needs "Subscribe to Steam Workshop inside PdxNext" in Settings.</value>
   </data>
   <data name="WorkshopDetailSteamSubscribeConfirm" xml:space="preserve">
     <value>This subscribes to the Workshop item through the Steam client, and Steam starts downloading it immediately. Continue?</value>
   </data>
   <data name="WorkshopDetailSteamSubscribeHintOff" xml:space="preserve">
-    <value>Direct subscription is off: the button only opens this item in the Steam client. Turn it on in Settings.</value>
+    <value>You can only subscribe in the Steam client right now. To subscribe here, turn on "Subscribe to Steam Workshop inside PdxNext" in Settings.</value>
   </data>
   <data name="WorkshopDetailSteamUnavailable" xml:space="preserve">
     <value>The Steam client is not running or cannot be reached. Start Steam and sign in, then try again. You can also use the Steam icon at the top right to open this page in Steam.</value>
   </data>
   <data name="WorkshopDetailSteamUnsubscribeConfirm" xml:space="preserve">
-    <value>This unsubscribes from the Workshop item. Steam removes the downloaded content after the game quits. Continue?</value>
+    <value>This unsubscribes from the Workshop item and immediately removes the downloaded content and Mod Library record. If the files are locked by the game or Steam, the record is kept so you can retry. Continue?</value>
   </data>
   <data name="WorkshopDetailSubscribe" xml:space="preserve">
     <value>Subscribe</value>
@@ -5401,7 +5449,13 @@ Applying still backs up the original file first, but the backup cannot be verifi
     <value>Subscribe failed: {0}</value>
   </data>
   <data name="WorkshopDetailSubscribePlaysetHint" xml:space="preserve">
-    <value>Adds the mod to play set PdxNext; applies on next launch</value>
+    <value>Adds the mod to the active play set and downloads it now; activate a play set first</value>
+  </data>
+  <data name="WorkshopDetailSubscribeNoPlayset" xml:space="preserve">
+    <value>No play set is active. Activate one on the Play Sets page, then subscribe again.</value>
+  </data>
+  <data name="WorkshopDetailSubscribeSdkUnavailable" xml:space="preserve">
+    <value>The PDX subscribe component is unavailable (PDX.SDK missing from the program folder). Reinstall PdxNext and try again.</value>
   </data>
   <data name="WorkshopDetailSubscribeSignIn" xml:space="preserve">
     <value>Sign in to your Paradox account to subscribe</value>
@@ -5429,6 +5483,9 @@ Applying still backs up the original file first, but the backup cannot be verifi
   </data>
   <data name="WorkshopDetailUnsubscribeFailed" xml:space="preserve">
     <value>Unsubscribe failed: {0}</value>
+  </data>
+  <data name="WorkshopDetailUnsubscribeCleanupWarning" xml:space="preserve">
+    <value>Unsubscribed, but local cleanup did not finish: {0}. Close the game and Steam, then retry; the Mod Library record is kept for now.</value>
   </data>
   <data name="WorkshopDetailViewImage" xml:space="preserve">
     <value>View image</value>
@@ -6318,6 +6375,9 @@ then call list_games to verify.</value>
   <data name="CrashSessionHint" xml:space="preserve">
     <value>Errors are counted from game logs while the game runs; review them here after it exits. Locked/read-only logs are flagged too.</value>
   </data>
+  <data name="CrashSessionStillRunning" xml:space="preserve">
+    <value>Still running</value>
+  </data>
   <data name="CrashSessionEmpty" xml:space="preserve">
     <value>No session yet. Launch and close a game to see its error summary here.</value>
   </data>
@@ -6345,6 +6405,27 @@ then call list_games to verify.</value>
   <data name="CrashSessionDegraded" xml:space="preserve">
     <value>Some logs could not be read; the summary may be incomplete.</value>
   </data>
+  <data name="CrashSessionFatalTitle" xml:space="preserve">
+    <value>Fatal initialization error: {0}</value>
+  </data>
+  <data name="CrashSessionFatalPlatformService" xml:space="preserve">
+    <value>Platform service initialization failed</value>
+  </data>
+  <data name="CrashSessionFatalAssetDatabase" xml:space="preserve">
+    <value>Asset database initialization failed</value>
+  </data>
+  <data name="CrashSessionFatalUnknown" xml:space="preserve">
+    <value>Game initialization failed</value>
+  </data>
+  <data name="CrashSessionFatalRow" xml:space="preserve">
+    <value>Source log: {0}    Sample: {1}</value>
+  </data>
+  <data name="CrashSessionAlertTitle" xml:space="preserve">
+    <value>Game initialization failed</value>
+  </data>
+  <data name="CrashSessionAlertMessage" xml:space="preserve">
+    <value>{0} logged a fatal error ({1}). The process may still show a black window. See Crash Analysis → Current Game for details.</value>
+  </data>
   <data name="CrashSessionLogReadable" xml:space="preserve">
     <value>OK</value>
   </data>
@@ -6369,10 +6450,25 @@ then call list_games to verify.</value>
   <data name="DiagnosticsGameLogStatus" xml:space="preserve">
     <value>Game log {0}: {1}</value>
   </data>
+  <data name="DiagnosticsGameLogStatusMultiple" xml:space="preserve">
+    <value>Game log {0}: {1} ({2} session logs)</value>
+  </data>
   <data name="CrashSessionEndedTitle" xml:space="preserve">
     <value>Game session ended</value>
   </data>
   <data name="CrashSessionEndedMessage" xml:space="preserve">
     <value>This session had {0} error(s). See Crash Analysis → This game session.</value>
+  </data>
+  <data name="SettingsMcpChangePlans" xml:space="preserve">
+    <value>AI change plans</value>
+  </data>
+  <data name="SettingsMcpChangePlanHint" xml:space="preserve">
+    <value>AI can only propose plans. Review the operation, target, and fields before approving. Approval only authorizes the app to execute; the launcher performs the actual write.</value>
+  </data>
+  <data name="SettingsMcpApprovePlan" xml:space="preserve">
+    <value>Approve</value>
+  </data>
+  <data name="SettingsMcpRejectPlan" xml:space="preserve">
+    <value>Reject</value>
   </data>
 </root>

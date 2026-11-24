@@ -5,6 +5,7 @@ using PdxLauncher.Core.Accounts;
 using PdxLauncher.Core.Configuration;
 using PdxLauncher.Core.Contracts;
 using PdxLauncher.Core.CrashAnalysis;
+using PdxLauncher.Core.Games;
 using PdxLauncher.Core.Mods;
 using PdxLauncher.Core.ModStudio;
 using PdxLauncher.Core.Online;
@@ -50,6 +51,9 @@ public static class AppServices
     /// </summary>
     public static WorkshopToLocalConverter WorkshopToLocal { get; private set; } = null!;
 
+    /// <summary>退订 Steam 工坊条目后的本机内容与 Mod 库记录清理。</summary>
+    public static ISubscribedModCleanup SubscribedModCleanup { get; private set; } = null!;
+
     public static IDlcCatalog Dlcs { get; private set; } = null!;
 
     public static ILoadFileWriter LoadFiles { get; private set; } = null!;
@@ -86,6 +90,9 @@ public static class AppServices
 
     /// <summary>官方启动器公告卡（Braze content cards；磁盘缓存 + 可选联网）。</summary>
     public static INewsFeedService NewsFeed { get; private set; } = null!;
+
+    /// <summary>官方公告的平台 / 启动次数 / DLC 上下文。</summary>
+    internal static NewsFeedContextProvider NewsFeedContext { get; private set; } = null!;
 
     public static IMetadataClient Metadata { get; private set; } = null!;
 
@@ -177,16 +184,38 @@ public static class AppServices
     public static AppSettings Settings { get; private set; } = new();
 
     /// <summary>
-    /// 按设置页里为该游戏选择的「其它可执行文件」构造启动请求；
-    /// 没选或选的是标准 exe 时返回默认请求（让 <see cref="IGameLauncher"/> 读 launcher-settings 的参数）。
+    /// 构造启动请求。已识别的 PDS 游戏会先等待 Paradox 会话恢复，并附带官方启动参数；
+    /// 没有可用会话时返回失败，不创建游戏进程。
     /// </summary>
     /// <param name="game">要启动的游戏。</param>
     /// <param name="continueLastSave">是否追加 --continuelastsave。</param>
-    public static LaunchRequest CreateLaunchRequest(GameInstallation game, bool continueLastSave)
+    /// <param name="cancellationToken">取消令牌。</param>
+    /// <param name="customExeArgs">调试启动时覆盖的自定义参数。</param>
+    public static async Task<AppResult<LaunchRequest>> CreateLaunchRequestAsync(
+        GameInstallation game,
+        bool continueLastSave,
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<string>? customExeArgs = null)
     {
         ArgumentNullException.ThrowIfNull(game);
 
+        LaunchAuth? auth = null;
+        if (KnownGames.IsKnown(game.GameId))
+        {
+            await Account.EnsureRestoredAsync(cancellationToken).ConfigureAwait(false);
+            var session = Account.Session;
+            if (session is null
+                || string.IsNullOrWhiteSpace(session.SessionToken)
+                || string.IsNullOrWhiteSpace(session.UserId))
+            {
+                return AppResult<LaunchRequest>.Fail(ErrorKind.Unauthorized, "pdx-login-required");
+            }
+
+            auth = new LaunchAuth(session.SessionToken, session.UserId);
+        }
+
         string? customPath = null;
+        IReadOnlyList<string>? customArgs = customExeArgs;
         if (Settings.PreferredLaunchExePaths.TryGetValue(game.GameId, out var preferred)
             && !string.IsNullOrWhiteSpace(preferred)
             && !string.Equals(preferred, game.ExePath, StringComparison.OrdinalIgnoreCase))
@@ -194,15 +223,14 @@ public static class AppServices
             customPath = preferred;
         }
 
-        IReadOnlyList<string>? customArgs = null;
-        if (customPath is not null)
+        if (customArgs is null && customPath is not null)
         {
             var alternative = game.Alternatives.FirstOrDefault(
                 item => string.Equals(item.ExePath, customPath, StringComparison.OrdinalIgnoreCase));
             customArgs = alternative?.Args;
         }
 
-        return new LaunchRequest(customPath, customArgs, continueLastSave);
+        return AppResult<LaunchRequest>.Ok(new LaunchRequest(customPath, customArgs, continueLastSave, auth));
     }
 
     /// <summary>当前选中的游戏；由游戏库页/外壳页设置，其它页面只读。</summary>
@@ -373,6 +401,13 @@ public static class AppServices
         PlaySetShare = new PlaySetShareService(playSets, fileSystem, logger);
         Mods = mods;
         WorkshopToLocal = workshopToLocal;
+        SubscribedModCleanup = new SubscribedModCleanupService(
+            fileSystem,
+            playSets,
+            new SteamLibraryLocator(fileSystem, logger),
+            mods as IScanCacheInvalidator,
+            WorkshopStates,
+            logger);
         Dlcs = dlcs;
         LoadFiles = loadFiles;
         Launcher = launcher;
@@ -389,6 +424,7 @@ public static class AppServices
         DlcDescriptions = dlcDescriptions;
         DlcArtwork = dlcArtwork;
         NewsFeed = newsFeed;
+        NewsFeedContext = new NewsFeedContextProvider(logger, dlcs, dlcOwnership);
         Metadata = metadata;
         Assets = assets;
         ModThumbnails = modThumbnails;
@@ -398,7 +434,12 @@ public static class AppServices
         WorkshopInfo = workshopInfo;
         WorkshopPages = workshopPages;
         WorkshopItemPages = workshopItemPages;
-        Covers = new CoverDiskQuota(fileSystem, logger, clock, WorkshopCacheRoot);
+        Covers = new CoverDiskQuota(
+            fileSystem,
+            logger,
+            clock,
+            WorkshopCacheRoot,
+            onFileDeleted: workshopInfo.InvalidateCoverFile);
         HttpThrottle = httpThrottle;
         Translation = translation;
         LocalTranslation = localTranslation;

@@ -13,6 +13,17 @@ public sealed record SessionErrorGroup(
     string? ModName,
     string Sample);
 
+/// <summary>本次会话里首次发现的致命初始化错误。</summary>
+/// <param name="Category">面向用户的分类键，如平台服务或资产数据库。</param>
+/// <param name="Signature">稳定签名，用于整次会话去重。</param>
+/// <param name="LogName">来源日志文件名。</param>
+/// <param name="Sample">原文样例。</param>
+public sealed record SessionFatalInfo(
+    string Category,
+    string Signature,
+    string LogName,
+    string Sample);
+
 /// <summary>一次游戏会话的只读报错快照，在游戏结束时固化。</summary>
 /// <param name="GameId">游戏 ID。</param>
 /// <param name="GameName">游戏显示名。</param>
@@ -23,6 +34,7 @@ public sealed record SessionErrorGroup(
 /// <param name="Groups">错误聚类，按次数倒序。</param>
 /// <param name="LogStates">日志文件状态探测结果。</param>
 /// <param name="Degraded">是否有读取失败（部分日志可能未计入）。</param>
+/// <param name="FatalInfo">致命初始化错误；没有时为 null。</param>
 public sealed record GameSessionSnapshot(
     string GameId,
     string GameName,
@@ -32,11 +44,15 @@ public sealed record GameSessionSnapshot(
     int ErrorBlocks,
     IReadOnlyList<SessionErrorGroup> Groups,
     IReadOnlyList<LogFileProbeResult> LogStates,
-    bool Degraded)
+    bool Degraded,
+    SessionFatalInfo? FatalInfo = null)
 {
     /// <summary>会话持续时长；未结束为 null。</summary>
     public TimeSpan? Duration => EndTime is { } end && end >= StartTime ? end - StartTime : null;
 
     /// <summary>是否统计到任何错误。</summary>
     public bool HasErrors => ErrorBlocks > 0;
+
+    /// <summary>是否发现了游戏初始化失败。</summary>
+    public bool HasFatal => FatalInfo is not null;
 }

@@ -597,49 +597,62 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
 
     private void RebuildMetrics()
     {
-        Metrics.Clear();
         var snapshot = _snapshot;
         if (snapshot is null)
         {
+            Metrics.Clear();
             OnPropertyChanged(nameof(HasMetrics));
             return;
         }
 
-        AddMetric("workingSet", Keys.DiagnosticsMetricWorkingSet, Keys.DiagnosticsMetricWorkingSetDetail, SizeFormatter.Format(snapshot.WorkingSetBytes));
-        AddMetric("private", Keys.DiagnosticsMetricPrivate, Keys.DiagnosticsMetricPrivateDetail, SizeFormatter.Format(snapshot.PrivateBytes));
-        AddMetric("managed", Keys.DiagnosticsMetricManaged, Keys.DiagnosticsMetricManagedDetail, SizeFormatter.Format(snapshot.ManagedBytes));
-        AddMetric("peak", Keys.DiagnosticsMetricPeak, Keys.DiagnosticsMetricPeakDetail, SizeFormatter.Format(snapshot.PeakWorkingSetBytes));
-        AddMetric(
+        ApplyMetric("workingSet", Keys.DiagnosticsMetricWorkingSet, Keys.DiagnosticsMetricWorkingSetDetail, SizeFormatter.Format(snapshot.WorkingSetBytes));
+        ApplyMetric("private", Keys.DiagnosticsMetricPrivate, Keys.DiagnosticsMetricPrivateDetail, SizeFormatter.Format(snapshot.PrivateBytes));
+        ApplyMetric("managed", Keys.DiagnosticsMetricManaged, Keys.DiagnosticsMetricManagedDetail, SizeFormatter.Format(snapshot.ManagedBytes));
+        ApplyMetric("peak", Keys.DiagnosticsMetricPeak, Keys.DiagnosticsMetricPeakDetail, SizeFormatter.Format(snapshot.PeakWorkingSetBytes));
+        ApplyMetric(
             "gc",
             Keys.DiagnosticsMetricGc,
             Keys.DiagnosticsMetricGcDetail,
             snapshot.Gen0.ToString(CultureInfo.InvariantCulture) + " / "
                 + snapshot.Gen1.ToString(CultureInfo.InvariantCulture) + " / "
                 + snapshot.Gen2.ToString(CultureInfo.InvariantCulture));
-        AddMetric(
+        ApplyMetric(
             "threads",
             Keys.DiagnosticsMetricThreads,
             Keys.DiagnosticsMetricThreadsDetail,
             snapshot.ThreadCount.ToString(CultureInfo.InvariantCulture) + " / "
                 + snapshot.HandleCount.ToString(CultureInfo.InvariantCulture));
-        AddMetric("uptime", Keys.DiagnosticsMetricUptime, Keys.DiagnosticsMetricUptimeDetail, FormatDuration(snapshot.Uptime));
-        AddMetric(
+        ApplyMetric("uptime", Keys.DiagnosticsMetricUptime, Keys.DiagnosticsMetricUptimeDetail, FormatDuration(snapshot.Uptime));
+        ApplyMetric(
             "workshop",
             Keys.DiagnosticsMetricWorkshop,
             Keys.DiagnosticsMetricWorkshopDetail,
             snapshot.WorkshopItems.ToString(CultureInfo.InvariantCulture) + " / "
                 + snapshot.WorkshopPages.ToString(CultureInfo.InvariantCulture));
-        AddMetric(
+        ApplyMetric(
             "thumbnails",
             Keys.DiagnosticsMetricThumbnails,
             Keys.DiagnosticsMetricThumbnailsDetail,
             snapshot.ModThumbnails.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private void ApplyMetric(string key, string titleKey, string detailKey, string value)
+    {
+        var title = T(titleKey);
+        var detail = T(detailKey);
+        var automationId = "diagMetric" + Pascalize(key);
+        var existing = Metrics.FirstOrDefault(metric => metric.Key == key);
+        if (existing is { } metric)
+        {
+            metric.Apply(title, value, detail);
+        }
+        else
+        {
+            Metrics.Add(new DiagnosticMetricViewModel(key, title, value, detail, automationId));
+        }
 
         OnPropertyChanged(nameof(HasMetrics));
     }
-
-    private void AddMetric(string key, string titleKey, string detailKey, string value) =>
-        Metrics.Add(new DiagnosticMetricViewModel(key, T(titleKey), value, T(detailKey), "diagMetric" + Pascalize(key)));
 
     private void RebuildNetwork()
     {
@@ -725,18 +738,20 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
 
         try
         {
-            var path = AppServices.FileSystem.Combine(game.GameDataDir, "logs", "error.log");
-            var result = LogFileProbe.Probe(AppServices.FileSystem, path, "error.log");
-            string state = result.State switch
+            var sources = SessionLogCatalog.Resolve(AppServices.FileSystem, game);
+            if (sources.Count == 0)
             {
-                LogFileProbeState.Readable => T(Keys.CrashSessionLogReadable),
-                LogFileProbeState.Locked => T(Keys.CrashSessionLogLocked),
-                LogFileProbeState.Unauthorized => T(Keys.CrashSessionLogUnauthorized),
-                LogFileProbeState.ReadOnly => T(Keys.CrashSessionLogReadOnly),
-                LogFileProbeState.Missing => T(Keys.CrashSessionLogMissing),
-                _ => T(Keys.CrashSessionLogUnknown),
-            };
-            _gameLogStatusText = T(Keys.DiagnosticsGameLogStatus, result.FileName, state);
+                _gameLogStatusText = T(Keys.CrashSessionLogUnknown);
+            }
+            else
+            {
+                var first = sources[0];
+                var result = LogFileProbe.Probe(AppServices.FileSystem, first.Path, first.Name);
+                string state = DescribeLogState(result.State);
+                _gameLogStatusText = sources.Count == 1
+                    ? T(Keys.DiagnosticsGameLogStatus, result.FileName, state)
+                    : T(Keys.DiagnosticsGameLogStatusMultiple, result.FileName, state, sources.Count);
+            }
         }
         catch (Exception exception)
         {
@@ -746,6 +761,16 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
 
         OnPropertyChanged(nameof(GameLogStatusText));
     }
+
+    private string DescribeLogState(LogFileProbeState state) => state switch
+    {
+        LogFileProbeState.Readable => T(Keys.CrashSessionLogReadable),
+        LogFileProbeState.Locked => T(Keys.CrashSessionLogLocked),
+        LogFileProbeState.Unauthorized => T(Keys.CrashSessionLogUnauthorized),
+        LogFileProbeState.ReadOnly => T(Keys.CrashSessionLogReadOnly),
+        LogFileProbeState.Missing => T(Keys.CrashSessionLogMissing),
+        _ => T(Keys.CrashSessionLogUnknown),
+    };
 
     private void UpdateLogTexts()
     {
@@ -811,14 +836,31 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
             BusiestRejectedCount: busiest.Value?.Rejected ?? 0,
             StartupElapsedMilliseconds: _marks.Count == 0 ? null : _marks[^1].ElapsedMilliseconds);
 
-        Hints.Clear();
-        foreach (var hint in PerformanceHints.Evaluate(input))
+        var evaluated = PerformanceHints.Evaluate(input);
+        var activeCodes = new HashSet<DiagnosticHintCode>();
+        foreach (var hint in evaluated)
         {
-            Hints.Add(new DiagnosticHintViewModel(
-                hint.Code,
-                T(TitleKeyFor(hint.Code)),
-                FormatHintDetail(hint),
-                "diagHint" + Pascalize(hint.Code.ToString())));
+            activeCodes.Add(hint.Code);
+            var title = T(TitleKeyFor(hint.Code));
+            var detail = FormatHintDetail(hint);
+            var automationId = "diagHint" + Pascalize(hint.Code.ToString());
+            var existing = Hints.FirstOrDefault(row => row.Code == hint.Code);
+            if (existing is { } row)
+            {
+                row.Apply(title, detail);
+            }
+            else
+            {
+                Hints.Add(new DiagnosticHintViewModel(hint.Code, title, detail, automationId));
+            }
+        }
+
+        for (var index = Hints.Count - 1; index >= 0; index--)
+        {
+            if (!activeCodes.Contains(Hints[index].Code))
+            {
+                Hints.RemoveAt(index);
+            }
         }
 
         OnPropertyChanged(nameof(HasHints));

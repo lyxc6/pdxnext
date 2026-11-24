@@ -39,6 +39,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     private readonly IWorkshopSubscribeBackend? _steamBackend;
     private readonly WorkshopSubscriptionReader? _steamReader;
     private readonly WorkshopStateReader? _steamStates;
+    private readonly ISubscribedModCleanup? _subscribedModCleanup;
     private readonly IAppLogger _logger;
 
     /// <summary>
@@ -78,7 +79,10 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
     /// <param name="images">图片缓存（封面/截图落地）。</param>
     /// <param name="subscription">PDX 订阅服务。</param>
     /// <param name="logger">日志。</param>
-    /// <param name="steamBackend">Steam 直连订阅后端；null 或不可用表示只能打开客户端。</param>
+    /// <param name="steamBackend">
+    /// Steam 直连订阅后端（= Steamworks 原生接口，与网络代理无关）；
+    /// null 或 <c>IsAvailable=false</c> 表示只能「打开 Steam 客户端」，这是设计内的降级。
+    /// </param>
     /// <param name="steamReader">acf 只读查询（后端不可用时用它显示「已订阅/已安装」）。</param>
     /// <param name="steamStates">整库订阅状态读取（合集子项状态用；null 表示不显示逐项状态）。</param>
     public WorkshopDetailViewModel(
@@ -88,7 +92,8 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         IAppLogger logger,
         IWorkshopSubscribeBackend? steamBackend = null,
         WorkshopSubscriptionReader? steamReader = null,
-        WorkshopStateReader? steamStates = null)
+        WorkshopStateReader? steamStates = null,
+        ISubscribedModCleanup? subscribedModCleanup = null)
     {
         _source = source;
         _images = images;
@@ -97,6 +102,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
         _steamBackend = steamBackend;
         _steamReader = steamReader;
         _steamStates = steamStates;
+        _subscribedModCleanup = subscribedModCleanup;
         IsSteamDirectAvailable = steamBackend?.IsAvailable ?? false;
         SteamUnavailableReason = steamBackend?.UnavailableReason ?? string.Empty;
     }
@@ -1006,6 +1012,7 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
 
         IsSteamSubscribing = true;
         NotifyStateChanged();
+        string? cleanupWarning = null;
 
         try
         {
@@ -1017,6 +1024,17 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
             {
                 IsSteamSubscribed = subscribe;
                 IsSteamStateKnown = true;
+
+                if (!subscribe && _subscribedModCleanup is not null)
+                {
+                    var cleanup = await _subscribedModCleanup
+                        .CleanupAsync(ResolveSteamAppId() ?? 0, row.Id, cancellationToken)
+                        .ConfigureAwait(true);
+                    if (!cleanup.IsClean && !string.IsNullOrWhiteSpace(cleanup.WarningText))
+                    {
+                        cleanupWarning = cleanup.WarningText;
+                    }
+                }
 
                 // 订阅变了，Mod 库页与工坊列表页那层 60 秒整库缓存立刻过期，
                 // 否则返回列表要等到 TTL 结束才看到新的订阅 / 下载状态。
@@ -1034,7 +1052,9 @@ public sealed partial class WorkshopDetailViewModel : LocalizedObservableObject
                 }
             }
 
-            return result;
+            return cleanupWarning is null
+                ? result
+                : WorkshopSubscribeResult.SuccessWithWarning(cleanupWarning);
         }
         finally
         {

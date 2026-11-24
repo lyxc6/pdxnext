@@ -33,6 +33,7 @@ public sealed class CoverDiskQuota
     private readonly string _root;
     private readonly long _maxBytes;
     private readonly long _targetBytes;
+    private readonly Action<string>? _onFileDeleted;
     private readonly object _sync = new();
 
     private Timer? _timer;
@@ -41,13 +42,15 @@ public sealed class CoverDiskQuota
     /// <summary>绑定封面根目录（<see cref="WorkshopInfoCache.CoverRoot"/> 那一层）。</summary>
     /// <param name="maxBytes">超过这个总量开始清理；默认 <see cref="MaxBytes"/>。</param>
     /// <param name="targetBytes">清理到不超过这个总量；默认 <see cref="TargetBytes"/>。</param>
+    /// <param name="onFileDeleted">文件确实删除后的回调；参数为绝对路径。</param>
     public CoverDiskQuota(
         IFileSystem files,
         IAppLogger logger,
         IClock clock,
         string root,
         long maxBytes = MaxBytes,
-        long targetBytes = TargetBytes)
+        long targetBytes = TargetBytes,
+        Action<string>? onFileDeleted = null)
     {
         ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(logger);
@@ -65,6 +68,7 @@ public sealed class CoverDiskQuota
         _root = root;
         _maxBytes = maxBytes;
         _targetBytes = targetBytes;
+        _onFileDeleted = onFileDeleted;
     }
 
     /// <summary>目录当前占用的字节数（不存在按 0）。</summary>
@@ -126,6 +130,7 @@ public sealed class CoverDiskQuota
                     _files.Delete(victim.Path);
                     deleted++;
                     freed += victim.Bytes;
+                    _onFileDeleted?.Invoke(victim.Path);
                 }
                 catch (Exception ex)
                 {

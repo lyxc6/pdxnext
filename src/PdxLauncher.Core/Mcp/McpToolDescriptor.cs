@@ -12,7 +12,8 @@ public sealed record McpToolDescriptor(
     string Name,
     string DisplayName,
     string Description,
-    McpToolRisk Risk);
+    McpToolRisk Risk,
+    string? RequiredScope = null);
 
 /// <summary>MCP 工具调用结果分类。</summary>
 public enum McpCallOutcome

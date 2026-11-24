@@ -28,7 +28,7 @@ rem configuration is Any CPU; a parallel MSBuild fails silently (0 errors) in
 rem _GetProjectReferenceTargetFrameworkProperties. Single node build is fine.
 rem See docs/DEVELOPMENT.md.
 call "%~dp0scripts\msg.cmd" B_STEP1
-dotnet build "PdxLauncher.sln" -c Release -m:1
+dotnet build "PdxLauncher.sln" -c Release -m:1 -p:UseSharedCompilation=false -nodeReuse:false
 if errorlevel 1 (
     echo.
     call "%~dp0scripts\msg.cmd" B_FAILBUILD

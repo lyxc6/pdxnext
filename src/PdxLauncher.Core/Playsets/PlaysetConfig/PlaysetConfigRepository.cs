@@ -249,6 +249,14 @@ public sealed class PlaysetConfigRepository : IPlaySetRepository
     }
 
     /// <inheritdoc />
+    /// <remarks>CS2 的 mod 以 PDX Mods sourceId 标识，没有 Steam 工坊 id；拒绝删除，避免误伤 PDX 订阅。</remarks>
+    public Task<AppResult<int>> RemoveWorkshopModAsync(
+        GameInstallation game,
+        string workshopId,
+        CancellationToken cancellationToken)
+        => Task.FromResult(AppResult<int>.Fail(ErrorKind.Unsupported, "unsupported-format:playset-config"));
+
+    /// <inheritdoc />
     /// <remarks>CS2 的播放集里没有 DLC 条目，也读不到 DLC 清单，因此恒为空。</remarks>
     public Task<IReadOnlyList<PlaySetDlc>> GetPlaySetDlcsAsync(
         GameInstallation game,

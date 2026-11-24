@@ -6,7 +6,8 @@ using PdxLauncher.Core.Contracts;
 /// <summary>
 /// <see cref="IGameLauncher"/> 实现：把 <see cref="GameInstallation"/> + <see cref="LaunchRequest"/>
 /// 翻译成绝对可执行文件路径、工作目录与参数列表，再交给 <see cref="IProcessLauncher"/> 分离启动。
-/// <para>参数顺序固定为：请求里的自定义参数 → <c>--continuelastsave</c>（仅继续游戏时）→ launcher-settings 的 exeArgs。</para>
+/// <para>参数顺序固定为：Paradox 启动凭据 → 请求里的自定义参数 → <c>--continuelastsave</c>（仅继续游戏时）
+/// → launcher-settings 的 exeArgs。</para>
 /// </summary>
 public sealed class GameLauncher : IGameLauncher
 {
@@ -83,6 +84,14 @@ public sealed class GameLauncher : IGameLauncher
     {
         ArgumentNullException.ThrowIfNull(game);
         var args = new List<string>();
+
+        if (request?.Auth is { } auth)
+        {
+            args.Add("--pdx-launcher-session-token");
+            args.Add(auth.SessionToken);
+            args.Add("--paradox-account-userid");
+            args.Add(auth.ParadoxUserId);
+        }
 
         if (request?.CustomExeArgs is not null)
         {

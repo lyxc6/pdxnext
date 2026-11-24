@@ -23,6 +23,11 @@ public static class GameSessionChecks
             CheckCrossLogDedupe(fs, root);
             CheckSessionBoundary(fs, root);
             CheckLogProbe(fs, root);
+            CheckSessionLogCatalog(fs, root);
+            CheckUnityLogParsing(fs, root);
+            CheckCs2FatalDedupe(fs, root);
+            CheckFatalAlertOnce(fs, root);
+            CheckLargeLogCatchUp(fs, root);
         }
         finally
         {
@@ -140,10 +145,121 @@ public static class GameSessionChecks
         }
     }
 
-    private static GameInstallation MakeGame(string dataDir) =>
+    private static void CheckSessionLogCatalog(IFileSystem fs, string root)
+    {
+        var cs2 = MakeGame(Path.Combine(root, "cs2"), "cities_skylines_2");
+        var cs2Sources = SessionLogCatalog.Resolve(fs, cs2).Select(static item => item.Name).ToArray();
+        ChecksContext.Check("CS2 会话日志含 Player.log", cs2Sources.Contains("Player.log"));
+        ChecksContext.Check("CS2 会话日志含 SceneFlow.log", cs2Sources.Contains("SceneFlow.log"));
+        ChecksContext.Check("CS2 会话日志含 UI.log", cs2Sources.Contains("UI.log"));
+        ChecksContext.Check("CS2 不扫描旧 error.log", !cs2Sources.Contains("error.log"));
+
+        var ck3Sources = SessionLogCatalog.Resolve(fs, MakeGame(Path.Combine(root, "ck3-db"), "ck3"));
+        ChecksContext.Check("P 社老游戏仍扫描 error.log", ck3Sources.Any(static item => item.Name == "error.log"));
+    }
+
+    private static void CheckUnityLogParsing(IFileSystem fs, string root)
+    {
+        var text = "[2026-11-24 14:51:31,334] [ERROR] A platform service integration failed to initialize\n"
+            + "  at Game.SceneFlow.GameManager.InitializePlatformManager()\n";
+        var blocks = CrashLogParser.ParseLogBlocks(text, new DateTimeOffset(2026, 11, 24, 14, 51, 0, TimeSpan.Zero));
+        ChecksContext.Equal("Unity 时间戳解析成一块", 1, blocks.Count);
+        var block = blocks.FirstOrDefault();
+        ChecksContext.Check("Unity 错误块可识别", block is not null && CrashLogParser.IsErrorBlock(block));
+        if (block is null)
+        {
+            return;
+        }
+
+        ChecksContext.Equal("平台服务致命分类",
+            "platform-service",
+            CrashLogParser.DetectFatalCategory(block.Text));
+    }
+
+    private static void CheckCs2FatalDedupe(IFileSystem fs, string root)
+    {
+        var dataDir = Path.Combine(root, "cs2-fatal");
+        fs.EnsureDirectory(Path.Combine(dataDir, "Logs"));
+        var playerLog = Path.Combine(dataDir, "Player.log");
+        var sceneFlowLog = Path.Combine(dataDir, "Logs", "SceneFlow.log");
+        fs.WriteAllTextAtomic(playerLog, string.Empty);
+        fs.WriteAllTextAtomic(sceneFlowLog, string.Empty);
+
+        var clock = new FakeClock(new DateTimeOffset(2026, 11, 24, 14, 51, 0, TimeSpan.Zero));
+        var tracker = new GameSessionLogTracker(fs, clock);
+        tracker.Begin(MakeGame(dataDir, "cities_skylines_2"), 4242, clock.UtcNow);
+
+        fs.WriteAllTextAtomic(playerLog,
+            "Persistent folder version is outdated 1.6.2f1 (Game: 1.6.4f1)\n"
+            + "Curl error 35: Cert verify failed. Certificate could not be verified\n"
+            + "[SceneFlow] [FATAL]  Object reference not set to an instance of an object\n"
+            + "  at Colossal.IO.AssetDatabase.AssetDatabase`1[T].PopulateFromDataSource (Boolean priorityData)\n"
+            + "\nUIView 0 url set to fatal://error\n");
+
+        tracker.Poll();
+        var snapshot = tracker.Snapshot();
+        ChecksContext.Check("CS2 FATAL 被识别", snapshot.HasFatal, "category=" + snapshot.FatalInfo?.Category);
+        ChecksContext.Equal("FATAL 文件保留来源", "Player.log", snapshot.FatalInfo?.LogName);
+        ChecksContext.Equal("平台服务失败优先归类", "platform-service", snapshot.FatalInfo?.Category);
+        ChecksContext.Check("FATAL 会话错误数受控", snapshot.ErrorBlocks > 0 && snapshot.ErrorBlocks < 100,
+            "blocks=" + snapshot.ErrorBlocks);
+
+        fs.WriteAllTextAtomic(sceneFlowLog,
+            "[2026-11-24 14:51:31,334] [FATAL]  Object reference not set to an instance of an object\n"
+            + "  at Colossal.IO.AssetDatabase.AssetDatabase`1[T].PopulateFromDataSource (Boolean priorityData)\n");
+        tracker.Poll();
+        ChecksContext.Equal("同一 FATAL 只保留一条摘要", 1,
+            tracker.Snapshot().FatalInfo is null ? 0 : 1);
+    }
+
+    private static void CheckFatalAlertOnce(IFileSystem fs, string root)
+    {
+        var fatal = new SessionFatalInfo(
+            "asset-database", "asset-database|sig", "Player.log", "fatal://error");
+        var snapshot = new GameSessionSnapshot(
+            "cities_skylines_2",
+            "Cities: Skylines II",
+            4242,
+            new DateTimeOffset(2026, 11, 24, 14, 51, 0, TimeSpan.Zero),
+            null,
+            1,
+            Array.Empty<SessionErrorGroup>(),
+            Array.Empty<LogFileProbeResult>(),
+            false,
+            fatal);
+        var alert = new SessionFatalAlert();
+        ChecksContext.Check("首次发现 FATAL 需要提醒", alert.ShouldAnnounce(snapshot));
+        ChecksContext.Check("同一 FATAL 不重复提醒", !alert.ShouldAnnounce(snapshot));
+        alert.Reset();
+        ChecksContext.Check("新会话可再次提醒", alert.ShouldAnnounce(snapshot));
+    }
+
+    private static void CheckLargeLogCatchUp(IFileSystem fs, string root)
+    {
+        var dataDir = Path.Combine(root, "cs2-large");
+        fs.EnsureDirectory(Path.Combine(dataDir, "Logs"));
+        var playerLog = Path.Combine(dataDir, "Player.log");
+        fs.WriteAllTextAtomic(playerLog, string.Empty);
+
+        var clock = new FakeClock(new DateTimeOffset(2026, 11, 24, 15, 0, 0, TimeSpan.Zero));
+        var tracker = new GameSessionLogTracker(fs, clock);
+        tracker.Begin(MakeGame(dataDir, "cities_skylines_2"), 5000, clock.UtcNow);
+
+        fs.WriteAllTextAtomic(playerLog,
+            new string('x', 2 * 1024 * 1024 + 512)
+            + "\nNullReferenceException: Object reference not set to an instance of an object\n"
+            + "  at Colossal.IO.AssetDatabase.AssetDatabase`1[T].PopulateFromDataSource (Boolean priorityData)\n");
+
+        tracker.Poll();
+        var snapshot = tracker.Snapshot();
+        ChecksContext.Check("超大日志标记读取降级", snapshot.Degraded);
+        ChecksContext.Check("超大日志仍能从尾部抓到 FATAL", snapshot.HasFatal);
+    }
+
+    private static GameInstallation MakeGame(string dataDir, string gameId = "ck3") =>
         new(
-            GameId: "ck3",
-            DisplayName: "Crusader Kings III",
+            GameId: gameId,
+            DisplayName: gameId == "cities_skylines_2" ? "Cities: Skylines II" : "Crusader Kings III",
             Version: "1.19.0",
             InstallRoot: Path.Combine(dataDir, "game"),
             LauncherSettingsPath: Path.Combine(dataDir, "game", "launcher", "launcher-settings.json"),

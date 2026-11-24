@@ -37,6 +37,16 @@ public interface IWorkshopItemStore
     /// <param name="fetchedUtc">下载时间。</param>
     void SetCover(string key, string fileName, string? url, DateTimeOffset fetchedUtc);
 
+    /// <summary>
+    /// 精确清除封面文件记账；保留 <c>cover_url</c> 与列表元数据。
+    /// <para>
+    /// 调用方必须先确认磁盘上的封面文件已不存在；条目不存在或文件名不一致时什么也不做。
+    /// </para>
+    /// </summary>
+    /// <param name="key">缓存键。</param>
+    /// <param name="fileName">被删除的相对封面文件名。</param>
+    void ClearCoverFile(string key, string fileName);
+
     /// <summary>记录详情抓取结果；条目不存在时新建一行。</summary>
     /// <param name="key">缓存键。</param>
     /// <param name="text">详情正文；null 表示这次没拿到。</param>

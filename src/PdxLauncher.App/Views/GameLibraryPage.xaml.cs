@@ -214,7 +214,20 @@ public sealed partial class GameLibraryPage : Page
         return null;
     }
 
-    private async void OnRefreshClick(object sender, RoutedEventArgs e)
+    private async void OnPageRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (!PageRefreshGesture.ShouldRefresh(e.OriginalSource, LayoutRoot))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        await Refresh().ConfigureAwait(true);
+    }
+
+    private async void OnRefreshClick(object sender, RoutedEventArgs e) => await Refresh().ConfigureAwait(true);
+
+    private async Task Refresh()
     {
         if (_viewModel.IsBusy)
         {

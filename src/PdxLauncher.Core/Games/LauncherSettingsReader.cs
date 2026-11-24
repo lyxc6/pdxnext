@@ -174,7 +174,8 @@ public sealed class LauncherSettingsReader
                 ResolveOptional(_fileSystem, settingsDirectory, GetString(root, "themeFile")),
                 settingsPath,
                 installRoot,
-                GetBool(root, "isLooseFilesModSupported"));
+                GetBool(root, "isLooseFilesModSupported"),
+                NullIfEmpty(GetString(root, "distPlatform")) ?? "pdx");
         }
         catch (JsonException ex)
         {

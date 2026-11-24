@@ -16,6 +16,7 @@ using PdxLauncher.Core.CrashAnalysis;
 public sealed class GameSessionMonitorService : IDisposable
 {
     private readonly GameSessionLogTracker _tracker;
+    private readonly SessionFatalAlert _alert = new();
     private readonly IAppServicesClock _clock;
     private readonly Action<string> _log;
     private readonly System.Timers.Timer _timer;
@@ -29,8 +30,23 @@ public sealed class GameSessionMonitorService : IDisposable
     /// <summary>本次会话结束时触发（参数为固化后的快照）。订阅方负责 marshal 到 UI 线程。</summary>
     public event EventHandler<GameSessionSnapshot>? SessionEnded;
 
+    /// <summary>发现新的致命初始化错误时触发一次（游戏可能仍在运行）。订阅方负责 marshal 到 UI 线程。</summary>
+    public event EventHandler<GameSessionSnapshot>? SessionAlert;
+
     /// <summary>最近一次结束的会话快照；尚无时为 null。</summary>
     public GameSessionSnapshot? LastSession { get; private set; }
+
+    /// <summary>当前可展示的会话快照：运行中取实时数据，结束后取固化快照。</summary>
+    public GameSessionSnapshot? CurrentSnapshot
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return IsRunning ? _tracker.Snapshot() : LastSession;
+            }
+        }
+    }
 
     /// <summary>是否有正在监听的游戏会话。</summary>
     public bool IsRunning { get; private set; }
@@ -74,6 +90,7 @@ public sealed class GameSessionMonitorService : IDisposable
                 ? null
                 : Path.GetFileNameWithoutExtension(game.ExePath);
             _tracker.Begin(game, processId, _clock.Now);
+            _alert.Reset();
             IsRunning = true;
             _timer.Start();
             _log("开始监听本次游戏报错：" + game.DisplayName + "（pid=" + (processId?.ToString() ?? "未知") + "）");
@@ -115,6 +132,7 @@ public sealed class GameSessionMonitorService : IDisposable
                 if (IsGameAlive(_pid, _exeName))
                 {
                     _tracker.Poll();
+                    RaiseAlertIfNeeded(_tracker.Snapshot());
                     return;
                 }
 
@@ -143,6 +161,7 @@ public sealed class GameSessionMonitorService : IDisposable
         {
             var snapshot = _tracker.End();
             LastSession = snapshot with { EndTime = endTime };
+            RaiseAlertIfNeeded(snapshot);
             IsRunning = false;
             _game = null;
             _pid = null;
@@ -155,6 +174,21 @@ public sealed class GameSessionMonitorService : IDisposable
             _log("固化本次游戏报错摘要失败：" + exception.Message);
             IsRunning = false;
         }
+    }
+
+    private void RaiseAlertIfNeeded(GameSessionSnapshot snapshot)
+    {
+        if (!IsRunning)
+        {
+            return;
+        }
+
+        if (!_alert.ShouldAnnounce(snapshot))
+        {
+            return;
+        }
+
+        SessionAlert?.Invoke(this, snapshot);
     }
 
     private static bool IsGameAlive(int? pid, string? exeName)

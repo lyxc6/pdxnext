@@ -747,6 +747,10 @@
 
                         <TextBlock Text="{x:Bind L.SettingsSectionSteam, Mode=OneWay}" Style="{StaticResource SettingsSubsectionTitleStyle}" />
 
+                        <TextBlock Text="{x:Bind L.SettingsSteamIntro, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
+
+                        <TextBlock Text="{x:Bind L.SettingsSteamIntro, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
+
                         <ct:SettingsCard Header="{x:Bind L.SettingsSteamStateOn, Mode=OneWay}"
                                          HorizontalAlignment="Stretch"
                                          Background="{ThemeResource PdxCardBackgroundBrush}"
@@ -764,6 +768,7 @@
                         <TextBlock Text="{x:Bind L.SettingsSteamStateHint, Mode=OneWay}" Style="{StaticResource SettingsHintTextStyle}" />
 
                         <ct:SettingsCard Header="{x:Bind L.SettingsSteamSubscribeOn, Mode=OneWay}"
+                                         Description="{x:Bind L.SettingsSteamSubscribeCardDescription, Mode=OneWay}"
                                          HorizontalAlignment="Stretch"
                                          Background="{ThemeResource PdxCardBackgroundBrush}"
                                          BorderBrush="{ThemeResource PdxCardStrokeBrush}"
@@ -1958,6 +1963,42 @@
                             </ItemsControl>
                             </StackPanel>
                         </Border>
+
+                        <Border Padding="12"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                Background="{ThemeResource PdxCardBackgroundBrush}"
+                                AutomationProperties.AutomationId="expMcpChangePlans"
+                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasMcpChangePlans), Mode=OneWay}">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="AI change plans" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                <TextBlock Text="AI can only propose plans. Review before approving." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                                <ItemsControl ItemsSource="{x:Bind ViewModel.McpChangePlans, Mode=OneWay}"
+                                              AutomationProperties.AutomationId="lstMcpChangePlans">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="mcp:McpChangePlan">
+                                            <Grid Padding="12,8" ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Spacing="4">
+                                                    <TextBlock Text="{x:Bind Operation}" FontFamily="Consolas" />
+                                                    <TextBlock Text="{x:Bind TargetId}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                                    <TextBlock Text="{x:Bind Status}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                                    <Button Content="Approve" Click="OnApproveMcpPlanClick" Tag="{x:Bind Id}" AutomationProperties.AutomationId="btnApproveMcpPlan" />
+                                                    <Button Content="Reject" Click="OnRejectMcpPlanClick" Tag="{x:Bind Id}" AutomationProperties.AutomationId="btnRejectMcpPlan" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+
 
                         <Border Padding="12"
                                 CornerRadius="8"

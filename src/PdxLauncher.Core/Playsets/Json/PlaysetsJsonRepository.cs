@@ -269,6 +269,14 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
     }
 
     /// <inheritdoc />
+    /// <remarks>EU5 的 mod 只以目录路径存在，没有可安全匹配的 Steam 工坊 id；拒绝删除，避免误伤本地 mod。</remarks>
+    public Task<AppResult<int>> RemoveWorkshopModAsync(
+        GameInstallation game,
+        string workshopId,
+        CancellationToken cancellationToken)
+        => Task.FromResult(AppResult<int>.Fail(ErrorKind.Unsupported, "unsupported-format:playsets-json"));
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<PlaySetDlc>> GetPlaySetDlcsAsync(
         GameInstallation game,
         Guid playSetId,

@@ -29,6 +29,7 @@ public static class WorkshopInfoCacheChecks
             CheckUpsertAndMerge(fileSystem, root, clock, logger);
             CheckPersistence(fileSystem, root, clock, logger);
             CheckCover(fileSystem, root, clock, logger);
+            CheckCoverInvalidation(fileSystem, root, clock, logger);
             CheckDetailTtl(fileSystem, root, clock, logger);
             CheckDetailMeta(fileSystem, root, clock, logger);
             CheckSnapshot(fileSystem, root, clock, logger);
@@ -222,6 +223,49 @@ public static class WorkshopInfoCacheChecks
         ChecksContext.Check(
             "缓存：可自定义 TTL",
             cache.IsDetailFresh(stale, TimeSpan.FromDays(30)));
+    }
+
+    private static void CheckCoverInvalidation(
+        IFileSystem fileSystem,
+        string root,
+        IClock clock,
+        IAppLogger logger)
+    {
+        var cache = CreateCache(fileSystem, logger, clock, root);
+        var relative = Path.Combine("steam", "301.jpg");
+        var absolute = Path.Combine(root, relative);
+        var variant = Path.Combine(root, "steam", "301.96.png");
+        var shot = Path.Combine(root, "shots", "steam_301", "shot_1.jpg");
+        fileSystem.EnsureDirectory(Path.Combine(root, "steam"));
+        fileSystem.EnsureDirectory(Path.GetDirectoryName(shot) ?? root);
+        fileSystem.WriteAllTextAtomic(absolute, "fake-image");
+        fileSystem.WriteAllTextAtomic(variant, "fake-variant");
+        fileSystem.WriteAllTextAtomic(shot, "fake-shot");
+
+        cache.Upsert(new WorkshopInfoCacheEntry
+        {
+            Source = "steam",
+            Id = "301",
+            Name = "Invalidate",
+            CoverUrl = "https://images.steamusercontent.com/301.jpg",
+        });
+        cache.SetCover("steam:301", relative.Replace('\\', '/'), "https://images.steamusercontent.com/301.jpg");
+
+        cache.InvalidateCoverFile(variant);
+        cache.InvalidateCoverFile(shot);
+        ChecksContext.Check(
+            "缓存失效: 缩略图变体与截图不误清封面记录",
+            cache.TryGet("steam:301", out var kept) &&
+            string.Equals(kept.CoverFileName, relative.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase));
+
+        cache.InvalidateCoverFile(absolute);
+        ChecksContext.Check(
+            "缓存失效: 封面文件删除后清空记账但保留 URL",
+            cache.TryGet("steam:301", out var cleared) &&
+            cleared.CoverFileName is null &&
+            cleared.CoverFetchedUtc is null &&
+            cleared.CoverUrl == "https://images.steamusercontent.com/301.jpg");
+        ChecksContext.Check("缓存失效: 文件缺失后不再命中", !cache.TryGetCachedCover("steam:301", out _));
     }
 
     /// <summary>详情元数据（作者 SteamID / 标签 / 浏览数 / 累计订阅）要能落盘再读回，缺字段的写入不能把旧值洗掉。</summary>

@@ -349,7 +349,7 @@ Cities: Skylines 则是**本体根本不读任何加载文件**——它的 mod 
   - `officialLauncher`（原版启动器布局）：顶部一条工具条（左侧按钮簇放不下时**自动折行**，搜索框与「添加模组」始终完整可见）——播放集下拉（**只切换查看/编辑目标，不改变激活状态**，
     选中项显示集名与「● 激活」标记）+ 新建 / 重命名 / 删除 ｜ 分隔线 ｜「激活播放集」（把当前选中的播放集写成游戏激活集，
     激活后按钮变「已激活」并置灰）+「启用全部」「禁用全部」｜ 中＝搜索框（`AutoSuggestBox`，`QueryIcon="Find"` 带放大镜与清除按钮；
-    打字过程只更新下拉里的「最近搜索」建议，**按回车 / 点放大镜 / 点右侧刷新按钮才真正查询**），右＝「添加模组」（打开独立子页，候选来自 Mod 库）；
+    打字过程只更新下拉里的「最近搜索」建议，**按回车 / 点放大镜 / 在页面内容区右键才真正查询**），右＝「添加模组」（打开独立子页，候选来自 Mod 库）；
     原先第二行的「当前播放集名 / 计数 / 已激活：X」摘要已删除，这些信息改由下拉框选中项与状态栏承载；
     下方**只显示该播放集的 mod**：逐项启用禁用、上下移动排序（上移/下移一位）、**点行首序号直接输入目标位次**（回车生效，
     Esc 或点别处取消，其余行依次顺移而非互换；**输入的数字大于总行数时视为置底**，不会报错；
@@ -378,7 +378,7 @@ Cities: Skylines 则是**本体根本不读任何加载文件**——它的 mod 
   打开本地文件夹、在 Steam 中打开、在浏览器中打开（拿不到目录或工坊编号时对应按钮置灰），
   后面还有两个按需出现的按钮：**让 Steam 下载**（`DownloadItem`，没装或需要更新时可用）与
   **在 Steam 中禁用 / 启用**（`SetItemsDisabledLocally`，工坊层的「订阅但本地禁用」，和退订是两件事，
-  要先用设置里打开「Steam 工坊直连订阅」）；支持搜索（名称 / 注册 ID / 目录）、
+  要先用设置里打开「在启动器内订阅 / 退订 Steam 工坊」）；支持搜索（名称 / 注册 ID / 目录）、
   **按来源筛选（全部 / 本地 / 订阅）**、按名称 / 大小 / 订阅时间排序、刷新；数量只显示在底部状态栏：
   未筛选时是全库总数，筛选后是「显示 X / N 个 mod」，页头不再重复计数。
   行操作的地址由 `SteamWorkshop` 拼装：创意工坊 id 优先取 `mods.steamId`，为空时回退从
@@ -441,10 +441,12 @@ Cities: Skylines 则是**本体根本不读任何加载文件**——它的 mod 
 `Process.Start` 直接拉 `exePath`，**cwd = 游戏 exe 所在目录**，`UseShellExecute=false`，
 `CreateNoWindow=true`，stdout/stdin 不重定向（stderr 重定向到日志）。
 
-参数只传 `launcher-settings.json` 里的 `exeArgs`（CK3 / Victoria 3 / Stellaris 是 `-gdpr-compliant`，Prison Architect 是 `--launched-from-launcher`）；
-勾了"继续游戏"再加 `--continuelastsave`；设置页里手填的额外参数追加在最后。
+参数顺序固定为：Paradox 启动凭据（`--pdx-launcher-session-token` + `--paradox-account-userid`）
+→ 自定义参数 → 勾了"继续游戏"时的 `--continuelastsave` → `launcher-settings.json` 里的 `exeArgs`
+（CK3 / Victoria 3 / Stellaris 是 `-gdpr-compliant`，Prison Architect 是 `--launched-from-launcher`）。
 
-**不传 session token**——那是官方启动器跟 Paradox 服务端通信用的，离线复刻不需要。
+启动凭据来自 PdxNext 自己恢复的 Paradox 会话，**不能省略**：CS2 会用它初始化平台服务，
+缺少时会走到资产库空引用并黑屏。未登录时启动按钮会提示先到「账号」页登录，不会裸启动游戏。
 
 ### 补丁（DLC 解锁 / 一键移除）
 设置 → 高级里有「一键打补丁」和「移除补丁」：给**当前选中的游戏**换上 CreamAPI loader（`steam_api64.dll` /
@@ -599,13 +601,13 @@ BMP/PNG 帧策略、32px 帧的金色占比与圆角透明、8 张 PNG 的魔数
 - 列表行也会挂 Steam 状态徽标（与 Mod 库同一套：已安装 / 有更新 / 下载中 N% · 已下载 x/y / 排队中 / 本地禁用）：
   列表先铺出来，再后台读一次整库状态补上去（走 60 秒缓存，通常不新起 `steam-host` 子进程）；
   详情页改订阅后会失效缓存，返回列表即可看到新徽标。
-- 搜索只在**回车**或点刷新时发起：打字过程中不发请求（旧实现每敲一个字符就排一次 1–3 MB 的列表页请求，
+- 搜索只在**回车**或在页面内容区右键时发起：打字过程中不发请求（旧实现每敲一个字符就排一次 1–3 MB 的列表页请求，
   限流下页面看起来像卡死）；新查询会取消上一轮在途请求，迟到的结果按查询代号丢掉。
 - 搜索框是 `AutoSuggestBox`（7 处搜索框统一，见 HANDOFF §0.85）：工坊页下拉给**最近提交词**
   （`workshopSearchHistory`，最多 8 条、忽略大小写去重、最新在前；只在本机提交成功后才写入），
   其余六处下拉给**当前已加载 mod 名字**里包含输入的那些（前缀匹配排前、包含匹配排后，最多 8 条）；
-  打字、点清除按钮都不发请求，只有回车 / 点放大镜 / 点刷新才查。
-- 被限流时状态栏/详情页会给「已暂停约 N 分钟」「请约 N 分钟后重试」，刷新按钮在冷却期不再发请求；
+  打字、点清除按钮都不发请求，只有回车 / 点放大镜 / 在页面内容区右键才查。
+- 被限流时状态栏/详情页会给「已暂停约 N 分钟」「请约 N 分钟后重试」，右键刷新在冷却期不再发请求；
   图片下载遇到限流立即放弃（其它瞬时失败仍是 500 ms / 1500 ms 三次重试）。
 - 「在浏览器打开创意工坊」走系统浏览器，不经过闸门，但仍然占同一 IP 的配额。
 
@@ -752,8 +754,14 @@ src/
     Controls/                  :: 自绘控件：ConfirmOverlay（全局「确认 / 取消」浮层，取消在左、确认在右）、SettingsCard、SettingsValueCard、MarkdownView、PdxWrapPanel（排不下就自动换行，WinUI 没有 WrapPanel）
     Services/                  :: AppServices 装配、ThemeApplier、BitmapLoader ...
   PdxLauncher.Localization.Generator/ :: Roslyn 增量源生成器：编译期读 Strings/*/Resources.resw，生成 Localizer 属性与 Keys（不落盘）
+sdk/
+  pdx/                       :: 官方 PDX.SDK 四个 DLL（PDX.SDK / Contracts / Network / External），随仓提交；
+                                运行时由 Core 的 PdxSdkHost 直接加载，做登录态订阅、下载与 PGP 验签
+docs/PDX-SDK/                :: PDX.SDK 的反编译参考（只读，不参与编译）；
+                                ilspycmd -p --nested-directories -o docs/PDX-SDK/PDX.SDK sdk/pdx/PDX.SDK.dll
+                                （Contracts / Network 同理；生成后删掉各目录的 *.csproj）
 tests/
-  PdxLauncher.Checks/          :: 184 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 197 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步
@@ -889,7 +897,24 @@ settings.json / dlc-descriptions.json / theme-cache / news-cache / mod-cache，�
    `content_load.json` 里写得再对也不生效，且游戏日志不报任何错。启动器会在播放集页给出警告，
    并可用「修复 mod 路径」把本地 mod 目录改成 `mod_<id 前 8 位>`。父目录含非 ASCII（如 `C:\Users\张三\…`）时
    不自动改名，只提示——那种情况得改 `launcher-settings.json` 的 `gameDataPath`。CK3 / Stellaris / EU4 无此限制。
-9. **所有原生 Steamworks 调用都在一次性子进程里跑**：DLC 授权探测、创意工坊直连订阅、成就读取都需要以游戏 appId 调
+### 术语：两个「直连」不是一回事
+
+- **直连（Steamworks）**：启动器通过 `steam_api64.dll` 调用 `ISteamUGC`，直接读写 Steam 账号里的工坊订阅 / 安装 / 下载状态。界面上叫「在启动器内订阅 / 退订 Steam 工坊」。
+- **直连（网络）**：不走任何代理，直接连服务器。设置页「网络」分区里的「直连（未使用代理）」指的是它。
+
+两者毫无关系；搜索 `直连` 时先看上下文属于哪一类。
+
+`steam_api64.dll` 的查找顺序（见 `SteamApiLocator.Candidates`，设置页「Steam」分区会显示命中的来源）：
+
+1. 设置里手填的路径（dll 或所在目录）
+2. 启动器程序目录
+3. 开发期仓库 `sdk/redistributable_bin/win64/`（从程序目录往上最多 6 层）
+4. **当前游戏安装目录**及 `binaries` / `bin` / `steamworks` 子目录（CS2 额外含 `Cities2_Data\Plugins\x86_64`）
+5. Steam 客户端根目录（通常没有这份 DLL）
+
+第 4 档才是真正的兜底：Valve 不往 Steam 客户端目录放 `steam_api64.dll`，它由每款 Steam 游戏自带；本仓库不分发 Valve 的二进制。
+
+9. **所有原生 Steamworks 调用都在一次性子进程里跑**：DLC 授权探测、启动器内 Steam 工坊订阅（代码里叫「直连」）、成就读取都需要以游戏 appId 调
    `SteamAPI_Init`，而 Steam 会把「调过它的进程」登记成该游戏的 game process（`SteamAPI_Shutdown` 不撤销）。
    2026-10-31 之前启动器自己调，导致游戏退出后 Steam 仍显示「运行中」，点 Steam 的「退出游戏」还会把启动器杀掉；
    现在改成同一个 exe 的隐藏宿主模式（`PdxLauncher.App.exe --steam-host probe|achievements|workshop-…`），探测约 1 s、订阅最多 25 s、
@@ -898,7 +923,7 @@ settings.json / dlc-descriptions.json / theme-cache / news-cache / mod-cache，�
    **启动器不在启动 / 切游戏时预读成就，也不保留常驻 `serve` worker**：常驻进程会让 Steam 在两次读取之间一直把游戏显示成
    「运行中」（2026-11-07 修复，见 HANDOFF §0.95）。成就只在用户打开成就页时按需读取，每次一个一次性 `achievements` 子进程。
    所以偶尔在 Steam 库里闪一下「运行中」是子进程，属预期；主窗口不会被登记，也不会被连坐。
-   要完全零登记只能放弃这些 Steamworks 功能（成就页 / DLC 授权 / 工坊直连），启动器不做这个取舍。
+   要完全零登记只能放弃这些 Steamworks 功能（成就页 / DLC 授权 / 启动器内工坊订阅），启动器不做这个取舍。
    设置页把「读状态」和「改订阅」拆成两个开关：读状态（默认开）每次只起一个只读子进程；
    写动作（默认关）才允许订阅 / 退订 / 触发下载 / 本地禁用。
 

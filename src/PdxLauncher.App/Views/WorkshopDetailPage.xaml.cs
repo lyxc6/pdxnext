@@ -83,7 +83,8 @@ public sealed partial class WorkshopDetailPage : Page
             new WorkshopStateReader(
                 SteamWorkshopBackends.CreateForState,
                 AppServices.WorkshopStates,
-                AppServices.Logger));
+                AppServices.Logger),
+            AppServices.SubscribedModCleanup);
 
         // 正文里的行内图片与顶部图片墙共用同一份缓存文件：先把解析器接上，
         // 图片下载完成后再由 GalleryImageReady 原地刷新，不重建整页。
@@ -540,8 +541,19 @@ public sealed partial class WorkshopDetailPage : Page
             ? string.Empty
             : L.T(
                 subscribe ? Keys.WorkshopDetailSubscribeFailed : Keys.WorkshopDetailUnsubscribeFailed,
-                result.ErrorMessage ?? string.Empty);
+                DescribeSubscribeFailure(result.ErrorMessage));
     }
+
+    /// <summary>
+    /// 把 PDX 订阅失败里的内部错误码换成用户可读的原因；其它码原样透出（便于排障）。
+    /// </summary>
+    private string DescribeSubscribeFailure(string? errorCode) =>
+        errorCode switch
+        {
+            "workshop-subscription:no-active-playset" => L.WorkshopDetailSubscribeNoPlayset,
+            "workshop-subscription:sdk-unavailable" => L.WorkshopDetailSubscribeSdkUnavailable,
+            _ => errorCode ?? string.Empty,
+        };
 
     /// <summary>Steam：订阅其实要在 Steam 客户端里完成，这里只负责把页面递过去。</summary>
     private async void OnSubscribeSteamClick(object sender, RoutedEventArgs e)
@@ -571,7 +583,9 @@ public sealed partial class WorkshopDetailPage : Page
 
             // 成功静默，理由同 PDX 分支。
             _viewModel.StatusText = result.Ok
-                ? string.Empty
+                ? string.IsNullOrWhiteSpace(result.WarningText)
+                    ? string.Empty
+                    : L.T(Keys.WorkshopDetailUnsubscribeCleanupWarning, result.WarningText)
                 : L.T(
                     subscribe ? Keys.WorkshopDetailSubscribeFailed : Keys.WorkshopDetailUnsubscribeFailed,
                     result.ErrorText ?? string.Empty);

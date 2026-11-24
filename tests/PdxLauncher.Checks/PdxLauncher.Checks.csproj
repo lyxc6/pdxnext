@@ -9,6 +9,28 @@
     <ProjectReference Include="..\..\src\PdxLauncher.Core\PdxLauncher.Core.csproj" />
     <ProjectReference Include="..\..\src\PdxLauncher.Imaging\PdxLauncher.Imaging.csproj" />
   </ItemGroup>
+  <!--
+    官方 PDX.SDK（net48）由 Core 引用，但 ProjectReference 不会把它的类型再暴露给本工程；
+    PdxSdkChecks 要直接断言 Config 字段，所以这里显式引用同一组 DLL。
+  -->
+  <ItemGroup>
+    <Reference Include="PDX.SDK">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\sdk\pdx\PDX.SDK.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PDX.SDK.Contracts">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\sdk\pdx\PDX.SDK.Contracts.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="PDX.SDK.Network">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\sdk\pdx\PDX.SDK.Network.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="External">
+      <HintPath>$(MSBuildThisFileDirectory)..\..\sdk\pdx\External.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
   <ItemGroup>
     <!--
       链接 App 层的 PlaySetEditor 源码进来做自检。该文件通篇只用 Core 的类型
@@ -235,6 +257,8 @@
     <Compile Include="..\..\src\PdxLauncher.App\Services\WorkshopStateReader.cs" Link="Linked\WorkshopStateReader.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\IWorkshopStateSource.cs" Link="Linked\IWorkshopStateSource.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementRowViewModel.cs" Link="Linked\AchievementRowViewModel.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementConditionPresentation.cs" Link="Linked\AchievementConditionPresentation.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementToggleCommand.cs" Link="Linked\AchievementToggleCommand.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\ViewModels\AchievementIconPresentation.cs" Link="Linked\AchievementIconPresentation.cs" />
     <!--
       拉起 Steam 宿主子进程的客户端与成就数据源。两者都只依赖 Core + System.*，
@@ -249,6 +273,7 @@
       或「没美术的游戏还画着幽灵按钮」，编译器看不见，因此必须由 HomeButtonStyleChecks 直接测。
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\HomeButtonStylePolicy.cs" Link="Linked\HomeButtonStylePolicy.cs" />
+    <Compile Include="..\..\src\PdxLauncher.App\Services\HomeThemePolicy.cs" Link="Linked\HomeThemePolicy.cs" />
     <!--
       随包自带素材的解析（Assets/themes/<gameId>/background.jpg + logo.png）。
       只依赖 Core 的 IBundledThemeSource / GameInstallation / ThemeSpec，可以原样链接进来；

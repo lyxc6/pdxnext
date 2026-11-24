@@ -24,7 +24,7 @@ public sealed class PdxDatabase
     public const string FileName = "pdxnext.sqlite";
 
     /// <summary>当前 schema 版本；加表/加列时递增，并在 <see cref="Migrate"/> 里补一段迁移。</summary>
-    public const int SchemaVersion = 5;
+    public const int SchemaVersion = 6;
 
     /// <summary>schema 版本号所在的 meta 键。</summary>
     public const string SchemaVersionKey = "schema_version";
@@ -92,6 +92,26 @@ public sealed class PdxDatabase
 
     private const string AddMcpCallsKeyIdSql =
         "ALTER TABLE mcp_calls ADD COLUMN key_id TEXT";
+
+    private const string CreateMcpChangePlansSql =
+        """
+        CREATE TABLE IF NOT EXISTS mcp_change_plans (
+            id TEXT PRIMARY KEY,
+            domain TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            game_id TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            patch_json TEXT NOT NULL,
+            expected_hash TEXT NOT NULL,
+            key_id TEXT,
+            status TEXT NOT NULL,
+            approved_by TEXT,
+            created_utc INTEGER NOT NULL,
+            updated_utc INTEGER NOT NULL)
+        """;
+
+    private const string CreateMcpChangePlansIndexSql =
+        "CREATE INDEX IF NOT EXISTS ix_mcp_change_plans_created ON mcp_change_plans (created_utc DESC)";
 
     private const string McpCallColumnsSql = "PRAGMA table_info(mcp_calls)";
 
@@ -503,6 +523,13 @@ public sealed class PdxDatabase
 
             connection.Execute("CREATE INDEX IF NOT EXISTS ix_mcp_access_keys_prefix ON mcp_access_keys (key_prefix)");
             connection.Execute("CREATE INDEX IF NOT EXISTS ix_mcp_calls_key ON mcp_calls (key_id, started_utc DESC)");
+        }
+
+        // v6：AI 提议、用户确认、App 执行的变更计划。
+        if (fromVersion < 6)
+        {
+            connection.Execute(CreateMcpChangePlansSql);
+            connection.Execute(CreateMcpChangePlansIndexSql);
         }
     }
 

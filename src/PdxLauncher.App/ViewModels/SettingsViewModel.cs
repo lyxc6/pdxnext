@@ -36,6 +36,10 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     public ObservableCollection<McpCallHistoryEntry> McpRecentCalls { get; } = new();
 
+    public ObservableCollection<McpChangePlan> McpChangePlans { get; } = new();
+
+    public bool HasMcpChangePlans => McpChangePlans.Count > 0;
+
     public IReadOnlyList<string> McpClientKinds { get; } = (string[])[
         "Claude Desktop", "Claude Code", "Codex", "Cursor", "VS Code",
     ];
@@ -68,6 +72,76 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         {
             AppServices.Logger.Warn("读取 MCP 访问密钥失败：" + exception.Message);
         }
+    }
+
+    public void RefreshMcpChangePlans()
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            McpChangePlans.Clear();
+            foreach (var plan in new McpChangePlanStore(AppServices.Database).List())
+            {
+                McpChangePlans.Add(plan);
+            }
+
+            OnPropertyChanged(nameof(HasMcpChangePlans));
+        }
+        catch (Exception exception)
+        {
+            AppServices.Logger.Warn("读取 MCP 变更计划失败：" + exception.Message);
+        }
+    }
+
+    public async Task<bool> ApproveMcpChangePlanAsync(string planId)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return false;
+        }
+
+        var store = new McpChangePlanStore(AppServices.Database);
+        var plan = store.Get(planId);
+        if (plan is null
+            || plan.Status != McpChangePlanStatus.AwaitingApproval
+            || McpChangePlanPolicy.IsExpired(plan, DateTimeOffset.UtcNow))
+        {
+            RefreshMcpChangePlans();
+            return false;
+        }
+
+        if (!store.UpdateStatus(planId, McpChangePlanStatus.Approved, "app"))
+        {
+            RefreshMcpChangePlans();
+            return false;
+        }
+
+        var applied = await McpChangePlanExecutor.ApplyAsync(
+            plan,
+            AppServices.GameCatalog,
+            AppServices.PlaySets,
+            AppServices.Settings,
+            AppServices.SettingsStore).ConfigureAwait(true);
+        store.UpdateStatus(planId, applied ? McpChangePlanStatus.Applied : McpChangePlanStatus.Failed, "app");
+        RefreshMcpChangePlans();
+        return applied;
+    }
+
+    public bool RejectMcpChangePlan(string planId)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return false;
+        }
+
+        var result = new McpChangePlanStore(AppServices.Database)
+            .UpdateStatus(planId, McpChangePlanStatus.Rejected, "app");
+        RefreshMcpChangePlans();
+        return result;
     }
 
     public McpCreatedAccessKey? CreateMcpAccessKey(string displayName) =>
@@ -317,7 +391,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     }
 
     /// <summary>
-    /// Steam 工坊直连订阅开关（实验性，默认关）：写入 AppSettings.SteamWorkshopSubscribeEnabled 并登记延迟落盘。
+    /// 「在启动器内订阅 / 退订 Steam 工坊」开关（实验性，默认关）：
+    /// 写入 AppSettings.SteamWorkshopSubscribeEnabled 并登记延迟落盘。
+    /// 「直连」指 Steamworks 原生调用，与网络代理设置无关。
     /// 关掉时不碰任何 Steamworks 接口，详情页按钮退回「在 Steam 客户端里打开」。
     /// </summary>
     public bool SteamSubscribeEnabled
@@ -367,7 +443,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
             SetSteamApiStatus(resolved is null
                 ? T(Keys.SettingsSteamApiMissing, DescribeSteamApiCandidates(locator))
-                : T(Keys.SettingsSteamApiReady));
+                : T(Keys.SettingsSteamApiReady, DescribeSteamApiSource(resolved)));
         }
         catch (Exception ex)
         {
@@ -375,6 +451,54 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             SetSteamApiStatus(T(Keys.SettingsSteamApiMissing, ex.Message));
         }
     }
+
+    /// <summary>
+    /// 把命中的 DLL 归到「游戏目录 / 手填 / 程序目录 / 仓库 sdk / Steam 客户端」之一，
+    /// 让设置页能回答「这份是哪来的」。归类只按路径形态判断，不重新探测。
+    /// </summary>
+    private static string DescribeSteamApiSource(string resolved)
+    {
+        try
+        {
+            var configured = AppServices.Settings.SteamApiDllPath?.Trim();
+            if (!string.IsNullOrWhiteSpace(configured)
+                && string.Equals(resolved, configured, StringComparison.OrdinalIgnoreCase))
+            {
+                return T(Keys.SettingsSteamApiSourceManual);
+            }
+
+            if (AppServices.CurrentGame?.InstallRoot is { Length: > 0 } root
+                && IsUnder(resolved, root))
+            {
+                return T(Keys.SettingsSteamApiSourceGame);
+            }
+
+            if (string.Equals(
+                    resolved,
+                    Path.Combine(AppContext.BaseDirectory, SteamApiLocator.FileName),
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return T(Keys.SettingsSteamApiSourceApp);
+            }
+
+            if (IsUnder(resolved, Path.Combine(AppContext.BaseDirectory, "sdk", "redistributable_bin", "win64")))
+            {
+                return T(Keys.SettingsSteamApiSourceSdk);
+            }
+
+            return T(Keys.SettingsSteamApiSourceSteam);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return T(Keys.CommonUnknown);
+        }
+    }
+
+    private static bool IsUnder(string path, string root) =>
+        root.Length > 0
+        && path.StartsWith(
+            root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+            StringComparison.OrdinalIgnoreCase);
 
     /// <summary>把候选路径压成一句短说明（只列前两条，避免状态栏过长）。</summary>
     private static string DescribeSteamApiCandidates(SteamApiLocator locator)

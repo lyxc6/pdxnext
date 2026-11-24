@@ -36,7 +36,7 @@ echo ============================================
 echo.
 
 call "%~dp0scripts\msg.cmd" P_STEP1
-dotnet build "PdxLauncher.sln" -c Release -m:1 --nologo
+dotnet build "PdxLauncher.sln" -c Release -m:1 --nologo -p:UseSharedCompilation=false -nodeReuse:false
 if errorlevel 1 (
     echo.
     call "%~dp0scripts\msg.cmd" P_FAILBUILD
@@ -60,7 +60,7 @@ set "PUBDATABACKUP=%PUBDIR%.__data__"
 if exist "%PUBDATABACKUP%" rmdir /s /q "%PUBDATABACKUP%"
 if exist "%PUBDIR%\data" move "%PUBDIR%\data" "%PUBDATABACKUP%" >nul
 if exist "%PUBDIR%" rmdir /s /q "%PUBDIR%"
-dotnet publish "src\PdxLauncher.App\PdxLauncher.App.csproj" -c Release -m:1 --nologo -p:Platform=x64
+dotnet publish "src\PdxLauncher.App\PdxLauncher.App.csproj" -c Release -m:1 --nologo -p:Platform=x64 -p:UseSharedCompilation=false -nodeReuse:false
 if errorlevel 1 (
     echo.
     call "%~dp0scripts\msg.cmd" P_FAILPUB

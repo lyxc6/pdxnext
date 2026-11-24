@@ -248,10 +248,17 @@ public sealed class CrashAnalysisViewModel : LocalizedObservableObject
     /// <summary>从监听器读取最近一次会话并重建「本次游戏」文本。</summary>
     public void RefreshSession()
     {
-        _session = AppServices.GameSessionMonitor.LastSession;
+        _session = AppServices.GameSessionMonitor.CurrentSnapshot;
         HasSession = _session is not null;
         SessionText = BuildSessionText(_session);
     }
+
+    private string DescribeFatalCategory(string category) => category switch
+    {
+        "platform-service" => T(Keys.CrashSessionFatalPlatformService),
+        "asset-database" => T(Keys.CrashSessionFatalAssetDatabase),
+        _ => T(Keys.CrashSessionFatalUnknown),
+    };
 
     private string BuildSessionText(GameSessionSnapshot? session)
     {
@@ -265,7 +272,13 @@ public sealed class CrashAnalysisViewModel : LocalizedObservableObject
             Keys.CrashSessionHeader,
             string.IsNullOrWhiteSpace(session.GameName) ? session.GameId : session.GameName,
             CrashAnalysisText.FormatTime(session.StartTime, L),
-            CrashAnalysisText.FormatTime(session.EndTime, L)));
+            session.EndTime is { } end ? CrashAnalysisText.FormatTime(end, L) : T(Keys.CrashSessionStillRunning)));
+        if (session.FatalInfo is { } fatal)
+        {
+            builder.AppendLine(T(Keys.CrashSessionFatalTitle, DescribeFatalCategory(fatal.Category)));
+            builder.AppendLine(T(Keys.CrashSessionFatalRow, fatal.LogName, fatal.Sample));
+        }
+
         builder.AppendLine(T(Keys.CrashSessionErrorCount, session.ErrorBlocks));
 
         if (session.Groups.Count > 0)
