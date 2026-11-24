@@ -441,10 +441,12 @@ Cities: Skylines 则是**本体根本不读任何加载文件**——它的 mod 
 `Process.Start` 直接拉 `exePath`，**cwd = 游戏 exe 所在目录**，`UseShellExecute=false`，
 `CreateNoWindow=true`，stdout/stdin 不重定向（stderr 重定向到日志）。
 
-参数只传 `launcher-settings.json` 里的 `exeArgs`（CK3 / Victoria 3 / Stellaris 是 `-gdpr-compliant`，Prison Architect 是 `--launched-from-launcher`）；
-勾了"继续游戏"再加 `--continuelastsave`；设置页里手填的额外参数追加在最后。
+参数顺序固定为：Paradox 启动凭据（`--pdx-launcher-session-token` + `--paradox-account-userid`）
+→ 自定义参数 → 勾了"继续游戏"时的 `--continuelastsave` → `launcher-settings.json` 里的 `exeArgs`
+（CK3 / Victoria 3 / Stellaris 是 `-gdpr-compliant`，Prison Architect 是 `--launched-from-launcher`）。
 
-**不传 session token**——那是官方启动器跟 Paradox 服务端通信用的，离线复刻不需要。
+启动凭据来自 PdxNext 自己恢复的 Paradox 会话，**不能省略**：CS2 会用它初始化平台服务，
+缺少时会走到资产库空引用并黑屏。未登录时启动按钮会提示先到「账号」页登录，不会裸启动游戏。
 
 ### 补丁（DLC 解锁 / 一键移除）
 设置 → 高级里有「一键打补丁」和「移除补丁」：给**当前选中的游戏**换上 CreamAPI loader（`steam_api64.dll` /

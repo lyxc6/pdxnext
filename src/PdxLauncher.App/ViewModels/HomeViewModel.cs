@@ -234,8 +234,6 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
             return;
         }
 
-        var request = AppServices.CreateLaunchRequest(game, continueLastSave);
-
         // 启动结果只经 LaunchCompleted → HomeInfoBar 展示；底部状态行只承载非启动状态，
         // 这里先清掉上一段状态，避免旧文案与启动提示同时出现。
         ClearStatus();
@@ -243,6 +241,17 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
         IsBusy = true;
         try
         {
+            var requestResult = await AppServices
+                .CreateLaunchRequestAsync(game, continueLastSave, CancellationToken.None)
+                .ConfigureAwait(true);
+            if (!requestResult.IsSuccess || requestResult.Value is not { } request)
+            {
+                LaunchCompleted?.Invoke(
+                    this,
+                    ProcessStartResult.Failure(T(Keys.LaunchStatusParadoxLoginRequired)));
+                return;
+            }
+
             var result = await AppServices.Launcher
                 .LaunchAsync(game, request, CancellationToken.None)
                 .ConfigureAwait(true);

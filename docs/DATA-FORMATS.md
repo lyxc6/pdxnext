@@ -380,12 +380,13 @@ UI：DLC 列表左侧固定 208×117 缩略图（尺寸写死在 Border 上，�
 
     exePath 绝对化 = Path.GetFullPath(Combine(InstallRoot, launcherSettings.exePath))
     cwd          = Path.GetDirectoryName(exePath)          // exe 自己所在目录
-    args         = launchRequest 的额外参数（无登录时为空） + launcherSettings.exeArgs
+    args         = --pdx-launcher-session-token <token> --paradox-account-userid <userId>
+                   + launchRequest 的额外参数 + launcherSettings.exeArgs
     启动方式     = detached，stdio 全部不重定向（stdin/stdout/stderr 都不捕获）
 
 官方启动前会先写加载文件（我们改为 UI 里显式保存时写，启动时读当前状态）。
 
---continuelastsave 只在 isGameContinued 时加。
+--continuelastsave 只在 isGameContinued 时加；官方启动日志实测上述凭据必须位于最前。
 
 ## 9. dlc_signature（默认不写）
 
@@ -1296,6 +1297,7 @@ Victoria 3 **无法加载任何路径里含非 ASCII 字符的 mod**（Vic3 wiki
 
 游戏运行期间，`GameSessionLogTracker` 从各日志当前末尾开始按字节偏移增量读取，只统计会话开始之后写入的错误块：
 - 跨 `error.log`/`game.log`/`debug.log` 按「时间 + 来源 + 正文」去重，同一错误只算一次；`CrashLogParser.Signature` 聚类，保留首个来源路径。
+- CS2 的日志来源改为 `<GameDataDir>\Player.log`、`Logs\SceneFlow.log`、`Logs\UI.log`；同时支持 Unity 的 `[yyyy-MM-dd HH:mm:ss,fff] [LEVEL]` 行格式，并把 `fatal://error` / `AssetDatabase.PopulateFromDataSource` 空引用等收敛为一条致命摘要，只提醒一次。
 - 只读取不写游戏目录；日志被轮转/截断时游标归零，读取失败只标记 `Degraded`，不抛到 UI。
 - 游戏进程退出（pid 轮询 + 进程名核对）后 `GameSessionMonitorService` 固化 `GameSessionSnapshot`，在「崩溃分析 → 本次游戏」显示，并通过 `ConfirmOverlay` 轻提示。
 

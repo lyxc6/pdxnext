@@ -333,8 +333,16 @@ public sealed partial class ModEditorViewModel : LocalizedObservableObject
             var args = string.IsNullOrWhiteSpace(DebugArg)
                 ? Array.Empty<string>()
                 : new[] { DebugArg.Trim() };
-            var request = new LaunchRequest(null, args, false);
             var token = _exportCts?.Token ?? CancellationToken.None;
+            var requestResult = await AppServices
+                .CreateLaunchRequestAsync(game, continueLastSave: false, token, args)
+                .ConfigureAwait(true);
+            if (!requestResult.IsSuccess || requestResult.Value is not { } request)
+            {
+                SetStatus(Keys.LaunchStatusParadoxLoginRequired);
+                return;
+            }
+
             var result = await AppServices.Launcher
                 .LaunchAsync(game, request, token)
                 .ConfigureAwait(true);
