@@ -7812,3 +7812,43 @@ mod 名和行尾三个按钮完全看不见，右栏也不能滚动到这些内�
 
 - 未做真机 UIA 视觉核对；行模板已补显式 `Grid.RowDefinitions`，但展开态的实际屏幕表现仍建议发版前人工点开一条成就确认。
 - 本机主工作树有另一条 `sess/20261123-mcp-page-scopes` 会话的未提交改动，本轮未触碰。
+
+## 0.103 2026-11-24：1.4.3 收尾 —— 子分支合并、发版与安装校验
+
+对话分支：无（本轮直接在 `ver/1.4.3` 上收尾，未新开 `sess/*`）。
+
+### 0.103.1 做了什么
+
+- `sess/20261124-fix-cs2-session-fatal-monitoring`（CS2 会话 FATAL 识别 + Paradox 启动凭据）与
+  `sess/20261124-steam-direct-wording`（Steam 直连改名）都已 `--no-ff` 合回 `ver/1.4.3`，分支删除，
+  `.agents/worktrees/fix-cs2-session-fatal-monitoring` 链接树已移除。
+- `version.props` 1.4.2 → 1.4.3；`CHANGELOG.md` 的 `[Unreleased]` 改成 `## [1.4.3] - 2026-11-24`
+  并按本轮全部提交补齐 Added / Changed / Fixed。
+- `publish.cmd` 的两处 `dotnet build` / `dotnet publish` 补 `-p:UseSharedCompilation=false -nodeReuse:false`，
+  与 `dev.cmd` / `build.cmd` / `session.ps1` 保持一致（沙箱或受限环境下共享编译器的命名管道会被拒绝）。
+
+### 0.103.2 验证
+
+- `cmd /c dev.cmd build`：0 警告 0 错误，`检查类: 197，失败: 0，断言失败总数: 0`，`DEV_RESULT=PASS`。
+- `cmd /c publish.cmd`：构建 + 自检通过，`dist\PdxNext` 230 MB；`PDX.SDK.dll` / `PDX.SDK.Contracts.dll` /
+  `PDX.SDK.Network.dll` / `External.dll` 四个 DLL 均在发布目录里。
+- `python tools\build-installer.py`：`PdxNext-Setup-1.4.3.exe` 90,031,017 B，
+  sha256 `629c080f2e064557c6e734cc61d11075c78048a5d2304ed9a0d9e6271958149c`。
+- 静默安装（`/VERYSILENT /SUPPRESSMSGBOXES /CURRENTUSER /NORESTART`）后
+  `tools\verify-installed-version.ps1`：`OK D:\app\PdxNext\PdxLauncher.App.exe FileVersion=1.4.3.0`。
+- 实机启动已安装版本：窗口标题 `PdxNext · Cities: Skylines II · 1.6.4f1`，首帧 1.3 s，
+  公告走 `平台=steam` 缓存，Steam 宿主 probe exit=0；当日日志无 ERROR/FATAL。
+
+### 0.103.3 没做什么
+
+- 没有合并 `ver/1.4.3` → `main`、没有冻结分支、没有打 tag、没有 push：这几步按 `docs/VERSIONING.md` §4
+  是该版本确认发布时才做，本轮只做到「可发布」。
+- 没有删除 `dist\installer\PdxNext-Setup-1.5.0.exe`（11-21 遗留的未发布构建产物）。
+- 本机 `D:\app\PdxNext` 装的是 1.4.3，`data\` 为实测数据，未清理。
+
+### 0.103.4 下一步建议
+
+1. 用户确认发版后：`git switch main && git merge --no-ff ver/1.4.3` →
+   从 `main` 的 `integration-branch` 删掉 `ver/1.4.3` 并提交 `chore(branch): 冻结 ver/1.4.3（发布 1.4.3）` →
+   `git tag v1.4.3` → 推送 `main` 与 tag，由 CI 出 Release。
+2. 若 1.4.3 还需要补丁，按规范从 `main` 开 `ver/1.4.4`，不要在冻结后的 1.4.3 上继续提交。
