@@ -1162,6 +1162,40 @@ public static class GamesChecks
         ChecksContext.Equal("公告 id: 其它游戏原样", "ck3", KnownGames.GetNewsFeedGameId("ck3"));
         ChecksContext.Equal("公告 id: null → 空串", string.Empty, KnownGames.GetNewsFeedGameId(null));
 
+        var newsGame = new GameInstallation(
+            "cities_skylines_2",
+            "Cities: Skylines II",
+            "1.6",
+            Path.GetTempPath(),
+            Path.Combine(Path.GetTempPath(), "launcher-settings.json"),
+            LoadFileFormat.PlaysetConfigV1,
+            Path.GetTempPath(),
+            Path.GetTempPath(),
+            Path.GetTempPath(),
+            Path.Combine(Path.GetTempPath(), "game.exe"),
+            Array.Empty<string>(),
+            Array.Empty<AlternativeExecutable>(),
+            new ThemeSpec(
+                Background: null,
+                Logo: null,
+                AppIcon: null,
+                AppTaskbarIcon: null,
+                ButtonBackground: null,
+                ButtonFont: null,
+                ButtonTextColor: "#FFFFFF",
+                ButtonHoverTextColor: "#FFFFFF",
+                FontSize: 14,
+                FontWeight: 400,
+                TextShadow: null,
+                Source: ThemeAssetSource.BuiltInPlaceholder),
+            null,
+            null,
+            949230,
+            GameSupport.Full);
+        ChecksContext.Equal("公告上下文: 缺省平台为 pdx", "pdx", NewsFeedRequest.FromGame(newsGame, allowOnline: true).DistributionPlatform);
+        ChecksContext.Equal("公告上下文: 平台显式值保留", "steam", (NewsFeedRequest.FromGame(newsGame, allowOnline: true) with { DistributionPlatform = "steam" }).DistributionPlatform);
+        ChecksContext.Equal("公告上下文: 缺省启动次数为 0", 0, NewsFeedRequest.FromGame(newsGame, allowOnline: true).LaunchCount);
+
         ChecksContext.Equal("展示名: 别名 infinite", "Star Trek: Infinite", KnownGames.GetDisplayName("infinite"));
         ChecksContext.Equal("展示名: 别名 prison_architect", "Prison Architect", KnownGames.GetDisplayName("prison_architect"));
         ChecksContext.Equal("展示名: 未登记 gameId 返回 null", (string?)null, KnownGames.GetDisplayName("some_other_game"));

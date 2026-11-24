@@ -15,6 +15,9 @@ public static class RefreshGestureChecks
         ("SaveBackupsPage", "SaveBackupsPage", "btnBackupsRefresh"),
     ];
 
+    private const string HomeXaml = "HomePage";
+    private const string HomeCode = "HomePage";
+
     public static int Run(IFileSystem fs)
     {
         ArgumentNullException.ThrowIfNull(fs);
@@ -50,6 +53,8 @@ public static class RefreshGestureChecks
                     && code.Contains("Refresh()", StringComparison.Ordinal));
         }
 
+        CheckHomeNewsRefresh(root);
+
         ChecksContext.Check(
             "右键刷新: 保留 Mod 库行菜单",
             File.ReadAllText(Path.Combine(root, "src", "PdxLauncher.App", "Views", "ModLibraryPage.xaml"))
@@ -72,6 +77,42 @@ public static class RefreshGestureChecks
         }
 
         return ChecksContext.Failures - before;
+    }
+
+    private static void CheckHomeNewsRefresh(string root)
+    {
+        var xamlPath = Path.Combine(root, "src", "PdxLauncher.App", "Views", HomeXaml + ".xaml");
+        var codePath = Path.Combine(root, "src", "PdxLauncher.App", "Views", HomeCode + ".xaml.cs");
+        var vmPath = Path.Combine(root, "src", "PdxLauncher.App", "ViewModels", "HomeViewModel.cs");
+        if (!ChecksContext.Check("主页公告刷新: XAML 存在", File.Exists(xamlPath), xamlPath)
+            || !ChecksContext.Check("主页公告刷新: code-behind 存在", File.Exists(codePath), codePath)
+            || !ChecksContext.Check("主页公告刷新: ViewModel 存在", File.Exists(vmPath), vmPath))
+        {
+            return;
+        }
+
+        var xaml = File.ReadAllText(xamlPath);
+        var code = File.ReadAllText(codePath);
+        var vm = File.ReadAllText(vmPath);
+        ChecksContext.Check(
+            "主页公告刷新: 内容区接管 RightTapped",
+            xaml.Contains("x:Name=\"HomeScrollViewer\"", StringComparison.Ordinal)
+                && xaml.Contains("Background=\"Transparent\"", StringComparison.Ordinal)
+                && xaml.Contains("RightTapped=\"OnPageRightTapped\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "主页公告刷新: 复用 PageRefreshGesture",
+            code.Contains("OnPageRightTapped(object sender, RightTappedRoutedEventArgs e)", StringComparison.Ordinal)
+                && code.Contains("PageRefreshGesture.ShouldRefresh(e.OriginalSource, HomeScrollViewer)", StringComparison.Ordinal)
+                && code.Contains("e.Handled = true", StringComparison.Ordinal));
+        var handlerStart = code.IndexOf("OnPageRightTapped(object sender, RightTappedRoutedEventArgs e)", StringComparison.Ordinal);
+        var handler = handlerStart >= 0
+            ? code[handlerStart..Math.Min(code.Length, handlerStart + 800)]
+            : string.Empty;
+        ChecksContext.Check(
+            "主页公告刷新: 只调用 RefreshNewsAsync",
+            code.Contains("_viewModel.RefreshNewsAsync(_lifetime.Token)", StringComparison.Ordinal)
+                && vm.Contains("internal async Task RefreshNewsAsync(CancellationToken cancellationToken)", StringComparison.Ordinal)
+                && !handler.Contains("ReloadAsync()", StringComparison.Ordinal));
     }
 
     private static string FindWorkspaceRoot()

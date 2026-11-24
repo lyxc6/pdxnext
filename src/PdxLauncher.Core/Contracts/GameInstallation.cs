@@ -20,7 +20,8 @@ public sealed record GameInstallation(
     string? BrowserDlcUrl,
     string? BrowserModUrl,
     int? SteamAppId,
-    GameSupport Support)
+    GameSupport Support,
+    string DistributionPlatform = "pdx")
 {
     /// <summary>能识别并展示（不代表能管理内容）；等价于 <c>Support != Unsupported</c>。</summary>
     public bool IsSupported => Support != GameSupport.Unsupported;

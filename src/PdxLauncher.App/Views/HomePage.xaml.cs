@@ -185,6 +185,17 @@ public sealed partial class HomePage : Page
         _lifetime.Cancel();
     }
 
+    private void OnPageRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        if (!PageRefreshGesture.ShouldRefresh(e.OriginalSource, HomeScrollViewer))
+        {
+            return;
+        }
+
+        e.Handled = true;
+        _ = _viewModel.RefreshNewsAsync(_lifetime.Token);
+    }
+
     /// <summary>
     /// 首帧探测：主页第一次真的被合成器画出来时记一条里程碑并打一行明细日志。
     /// <para>

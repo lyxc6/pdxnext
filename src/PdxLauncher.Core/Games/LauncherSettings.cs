@@ -25,4 +25,5 @@ public sealed record LauncherSettings(
     string? ThemeFile,
     string LauncherSettingsPath,
     string InstallRoot,
-    bool IsLooseFilesModSupported);
+    bool IsLooseFilesModSupported,
+    string DistributionPlatform = "pdx");

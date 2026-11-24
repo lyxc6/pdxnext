@@ -1,0 +1,53 @@
+{
+  "main": {
+    "contentCards": [
+      {
+        "title": "错误游戏",
+        "imageUrl": "https://braze-images.com/x/wrong-game.jpg",
+        "weight": 10,
+        "extras": { "game": "ck3" }
+      },
+      {
+        "title": "正确卡片",
+        "description": "新格式",
+        "imageUrl": "https://braze-images.com/x/main.jpg",
+        "url": "https://www.paradoxinteractive.com/games/cities-skylines-ii",
+        "weight": 2,
+        "extras": {
+          "game": "cities_skylines_2",
+          "distributionPlatforms": "steam,pdx",
+          "sections": "main"
+        },
+        "filter": { "owns": "dlc001" }
+      },
+      {
+        "title": "DLC 未拥有",
+        "imageUrl": "https://braze-images.com/x/locked.jpg",
+        "weight": 9,
+        "extras": { "game": "cities_skylines_2" },
+        "filter": { "and": [{ "owns": "missing-dlc" }] }
+      }
+    ]
+  },
+  "secondary-1": {
+    "contentCards": {
+      "card-a": {
+        "title": "启动次数不符",
+        "imageUrl": "https://braze-images.com/x/wrong-count.jpg",
+        "weight": 9,
+        "extras": { "game": "cities_skylines_2", "numberOfLauncherStarts": 99 }
+      },
+      "card-b": {
+        "title": "副卡",
+        "imageUrl": "https://braze-images.com/x/secondary.jpg",
+        "weight": 3,
+        "extras": {
+          "game": "cities_skylines_2",
+          "minNumberOfLauncherStarts": 1,
+          "maxNumberOfLauncherStarts": 10
+        },
+        "filter": { "or": [{ "owns": "dlc001" }, { "owns": "missing-dlc" }] }
+      }
+    }
+  }
+}
