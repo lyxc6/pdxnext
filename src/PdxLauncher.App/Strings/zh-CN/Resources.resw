@@ -1540,9 +1540,6 @@
   <data name="LibraryEmptyHint" xml:space="preserve">
     <value>未发现已安装的 Paradox 游戏。已扫描 Steam 库与官方启动器的游戏库路径（含 %LOCALAPPDATA%\Programs\Paradox Interactive\games）；请确认游戏目录里有 launcher-settings.json，或点击右上角刷新。</value>
   </data>
-  <data name="LibraryFound" xml:space="preserve">
-    <value>已发现 {0} 个游戏</value>
-  </data>
   <data name="LibraryGridName" xml:space="preserve">
     <value>已安装游戏列表</value>
   </data>
@@ -1557,9 +1554,6 @@
   </data>
   <data name="LibraryLaunchedTitle" xml:space="preserve">
     <value>已启动</value>
-  </data>
-  <data name="LibraryNotFound" xml:space="preserve">
-    <value>未发现已安装的 Paradox 游戏</value>
   </data>
   <data name="LibraryProcessCreated" xml:space="preserve">
     <value>游戏进程已创建。</value>

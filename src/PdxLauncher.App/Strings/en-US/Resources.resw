@@ -1540,9 +1540,6 @@
   <data name="LibraryEmptyHint" xml:space="preserve">
     <value>No installed Paradox games found. The Steam library and the official launcher's game paths (including %LOCALAPPDATA%\Programs\Paradox Interactive\games) were scanned; make sure the game folder contains launcher-settings.json, or click Refresh in the top right.</value>
   </data>
-  <data name="LibraryFound" xml:space="preserve">
-    <value>Found {0} games</value>
-  </data>
   <data name="LibraryGridName" xml:space="preserve">
     <value>Installed games list</value>
   </data>
@@ -1557,9 +1554,6 @@
   </data>
   <data name="LibraryLaunchedTitle" xml:space="preserve">
     <value>Launched</value>
-  </data>
-  <data name="LibraryNotFound" xml:space="preserve">
-    <value>No installed Paradox games found</value>
   </data>
   <data name="LibraryProcessCreated" xml:space="preserve">
     <value>Game process created.</value>
