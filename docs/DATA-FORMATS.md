@@ -1272,7 +1272,7 @@ Victoria 3 **无法加载任何路径里含非 ASCII 字符的 mod**（Vic3 wiki
 - 崩溃码：`C0000017` 内存不足、`C0000006` 磁盘读取失败、`C000001D` 非法指令（超频/硬件不稳）。
 - Windows 事件日志：通过 advapi32 的 `OpenEventLog`/`ReadEventLog` 只读崩溃前后 5 分钟内的 Application 1000（故障模块）、System 2004（低内存）、显卡 TDR、WHEA 硬件错误与磁盘错误；按提供程序/事件 ID 归类，消息截断到 400 字符。读不到（权限/服务未启动）一律当无证据，绝不让页面打不开。
 - 故障模块归因：`nvlddmkm`/`amd`/`igfx`/`d3d11`/`dxgi` 归为显卡驱动故障；`gameoverlayrenderer`/`discordhook`/`rtss`/`graphics-hook`/`reshade`/`overwolf` 归为覆盖层注入。强证据会抑制「原因未知」结论。
-- `meta.yml` 的 `SystemMemory`/`GPUDedicatedMemory` 与游戏数据盘/安装盘可用空间做阈值检查；页面文件与显卡驱动日期因项目不依赖 WMI，保持「未知」并由规则跳过。
+- `meta.yml` 的 `SystemMemory`/`GPUDedicatedMemory` 与游戏数据盘/安装盘可用空间做阈值检查。两个内存字段**无单位时是 MB**（例如 `SystemMemory: 65328` 表示约 64 GB，不是 65328 字节）；写成 `"8 GB"` / `"8192 MB"` 也认。值为 `0` 表示没提供（`GPUDedicatedMemory: 0` 在 RTX 3080 上很常见），一律当未知并跳过阈值判定。页面文件与显卡驱动日期因项目不依赖 WMI，保持「未知」并由规则跳过。
 
 ### 22.2 日志格式
 
