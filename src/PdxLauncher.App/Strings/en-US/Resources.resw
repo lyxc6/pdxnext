@@ -796,6 +796,9 @@
   <data name="CrashSummaryGameDetailNoVersion" xml:space="preserve">
     <value>{0}</value>
   </data>
+  <data name="CrashSummaryMemoryMb" xml:space="preserve">
+    <value>{0} MB RAM</value>
+  </data>
   <data name="CrashSummaryMods" xml:space="preserve">
     <value>Enabled mods</value>
   </data>
@@ -803,7 +806,7 @@
     <value>Unknown</value>
   </data>
   <data name="CrashSummaryModsValue" xml:space="preserve">
-    <value>{0}</value>
+    <value>{0} mods</value>
   </data>
   <data name="CrashSummaryNoCrash" xml:space="preserve">
     <value>No crash dump found</value>
@@ -818,7 +821,7 @@
     <value>System</value>
   </data>
   <data name="CrashSummarySystemDetail" xml:space="preserve">
-    <value>{0} · {1} MB RAM · {2}</value>
+    <value>{0} · {1} · {2}</value>
   </data>
   <data name="CrashTimeUnknown" xml:space="preserve">
     <value>Unknown</value>
