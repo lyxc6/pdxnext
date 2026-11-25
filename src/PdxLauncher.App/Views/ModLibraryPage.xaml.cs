@@ -19,6 +19,8 @@ using PdxLauncher.Core.Playsets;
 /// </summary>
 public sealed partial class ModLibraryPage : Page
 {
+    private readonly GlobalBusyBinding _globalBusyBinding;
+    private readonly GlobalBusyBinding _globalConvertBinding;
     private readonly ModLibraryViewModel _viewModel;
 
     /// <summary>页面生命周期令牌；NavigationCacheMode=Disabled 会在每次进入时重建。</summary>
@@ -50,7 +52,16 @@ public sealed partial class ModLibraryPage : Page
                 SteamWorkshopBackends.CreateForState,
                 AppServices.WorkshopStates),
             AppServices.ModThumbnails,
-            AppServices.Logger);
+            AppServices.Logger,
+            new QuickAddToActivePlaySetService(
+                AppServices.PlaySets,
+                AppServices.LoadFiles,
+                AppServices.Dlcs,
+                AppServices.Logger));
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingModLibrary, nameof(ModLibraryViewModel.IsBusy));
+        _globalConvertBinding = new GlobalBusyBinding(_viewModel, Keys.ShellConvertingToLocal, nameof(ModLibraryViewModel.IsConvertToLocalBusy));
+        _globalBusyBinding.Refresh();
+        _globalConvertBinding.Refresh();
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -113,6 +124,8 @@ public sealed partial class ModLibraryPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _globalBusyBinding.Dispose();
+        _globalConvertBinding.Dispose();
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         _convertCts?.Cancel();
         _lifetime.Cancel();
@@ -249,6 +262,23 @@ public sealed partial class ModLibraryPage : Page
 
     // ------------------------------------------------------------ 控件事件
 
+    /// <summary>行右键菜单「添加到当前播放集」：门控已在 Opening 统一设置，点击后只反馈状态栏。</summary>
+    private async void OnQuickAddToActivePlaySetClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is FrameworkElement { DataContext: ModLibraryRowViewModel row })
+            {
+                await _viewModel.QuickAddToActivePlaySetAsync(row).ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("ModLibraryPage 快速添加到当前播放集失败", ex);
+            _viewModel.SetStatus(L.T(Keys.ModlibQuickAddFailed, ex.Message));
+        }
+    }
+
     /// <summary>
     /// 行右键菜单里的「重试翻译」：把这一页还没译名的行重翻一遍。
     /// 只重翻译名，不重读 Mod 库（重读会把整页缩略图重新解码，列表会闪一下）。
@@ -291,6 +321,7 @@ public sealed partial class ModLibraryPage : Page
 
         var retryEnabled = _viewModel.CanRetryTranslation;
         var refreshEnabled = AppServices.Translation.IsEnabled;
+        var quickAddEnabled = _viewModel.CanQuickAddToPlaySet;
         foreach (var item in flyout.Items)
         {
             if (item is not MenuFlyoutItem menuItem)
@@ -302,6 +333,10 @@ public sealed partial class ModLibraryPage : Page
             // 旧 default 分支回写 menuItem.IsEnabled 会切断绑定，必须跳过。
             switch (AutomationProperties.GetAutomationId(menuItem))
             {
+                case "menuModLibraryAddToActivePlaySet":
+                    menuItem.IsEnabled = quickAddEnabled
+                        && menuItem.DataContext is ModLibraryRowViewModel { IsUnregistered: false };
+                    break;
                 case "menuModLibraryTranslationRetry":
                     menuItem.IsEnabled = retryEnabled;
                     break;

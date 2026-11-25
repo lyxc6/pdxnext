@@ -326,6 +326,14 @@ public sealed class PlaysetsJsonRepository : IPlaySetRepository
         => Task.FromResult(AppResult<bool>.Fail(ErrorKind.Unsupported, "unsupported-format:playsets-json"));
 
     /// <inheritdoc />
+    public Task<AppResult<bool>> UpdateModRegistryIdAsync(
+        GameInstallation game,
+        Guid modId,
+        string? gameRegistryId,
+        CancellationToken cancellationToken)
+        => Task.FromResult(AppResult<bool>.Fail(ErrorKind.Unsupported, "unsupported-format:playsets-json"));
+
+    /// <inheritdoc />
     public Task<AppResult<bool>> AdoptLocalModAsync(
         GameInstallation game,
         Guid oldModId,

@@ -1540,9 +1540,6 @@
   <data name="LibraryEmptyHint" xml:space="preserve">
     <value>No installed Paradox games found. The Steam library and the official launcher's game paths (including %LOCALAPPDATA%\Programs\Paradox Interactive\games) were scanned; make sure the game folder contains launcher-settings.json, or click Refresh in the top right.</value>
   </data>
-  <data name="LibraryFound" xml:space="preserve">
-    <value>Found {0} games</value>
-  </data>
   <data name="LibraryGridName" xml:space="preserve">
     <value>Installed games list</value>
   </data>
@@ -1557,9 +1554,6 @@
   </data>
   <data name="LibraryLaunchedTitle" xml:space="preserve">
     <value>Launched</value>
-  </data>
-  <data name="LibraryNotFound" xml:space="preserve">
-    <value>No installed Paradox games found</value>
   </data>
   <data name="LibraryProcessCreated" xml:space="preserve">
     <value>Game process created.</value>
@@ -2300,25 +2294,28 @@
     <value>Check mod paths</value>
   </data>
   <data name="ModsRepairDialogBody" xml:space="preserve">
-    <value>The following mods will not load in game. Confirming fills in missing paths, renames folders to ASCII, and writes the result back to the mod library.</value>
+    <value>The following mods will not load in game. Confirming fills in missing paths or registry IDs, renames folders to ASCII, and writes the result back to the mod library.</value>
   </data>
   <data name="ModsRepairDialogTitle" xml:space="preserve">
-    <value>Repair mod paths</value>
+    <value>Repair mod problems</value>
   </data>
   <data name="ModsRepairDone" xml:space="preserve">
-    <value>Repaired {0} mod path(s)</value>
+    <value>Repaired {0} mod problem(s)</value>
   </data>
   <data name="ModsRepairFailed" xml:space="preserve">
-    <value>Failed to repair mod paths: {0}</value>
+    <value>Failed to repair mod problems: {0}</value>
   </data>
   <data name="ModsRepairFillHint" xml:space="preserve">
     <value>Fill path</value>
+  </data>
+  <data name="ModsRepairRegistryHint" xml:space="preserve">
+    <value>Fill registry ID (create workshop pointer)</value>
   </data>
   <data name="ModsRepairInvalidName" xml:space="preserve">
     <value>Only ASCII letters, digits, underscore, dot and hyphen are allowed</value>
   </data>
   <data name="ModsRepairName" xml:space="preserve">
-    <value>Repair mod paths</value>
+    <value>Repair mod problems</value>
   </data>
   <data name="ModsRepairNothing" xml:space="preserve">
     <value>No mod paths need repairing</value>
@@ -5193,6 +5190,57 @@ Applying still backs up the original file first, but the backup cannot be verifi
   <data name="ShellTranslating" xml:space="preserve">
     <value>Translating…</value>
   </data>
+  <data name="ShellLoadingHome" xml:space="preserve">
+    <value>Loading current game…</value>
+  </data>
+  <data name="ShellLoadingLibrary" xml:space="preserve">
+    <value>Loading game library…</value>
+  </data>
+  <data name="ShellLoadingPlaySets" xml:space="preserve">
+    <value>Loading play sets…</value>
+  </data>
+  <data name="ShellLoadingModLibrary" xml:space="preserve">
+    <value>Loading mod library…</value>
+  </data>
+  <data name="ShellLoadingWorkshop" xml:space="preserve">
+    <value>Loading Steam Workshop…</value>
+  </data>
+  <data name="ShellLoadingWorkshopDetail" xml:space="preserve">
+    <value>Loading workshop details…</value>
+  </data>
+  <data name="ShellLoadingDlc" xml:space="preserve">
+    <value>Loading DLC…</value>
+  </data>
+  <data name="ShellLoadingSaves" xml:space="preserve">
+    <value>Loading saves…</value>
+  </data>
+  <data name="ShellLoadingAchievements" xml:space="preserve">
+    <value>Loading achievements…</value>
+  </data>
+  <data name="ShellLoadingAddMods" xml:space="preserve">
+    <value>Loading mod list…</value>
+  </data>
+  <data name="ShellLoadingModStudio" xml:space="preserve">
+    <value>Loading mod studio…</value>
+  </data>
+  <data name="ShellLoadingModEditor" xml:space="preserve">
+    <value>Processing mod editor…</value>
+  </data>
+  <data name="ShellLoadingAccount" xml:space="preserve">
+    <value>Processing account request…</value>
+  </data>
+  <data name="ShellLoadingSettings" xml:space="preserve">
+    <value>Processing settings…</value>
+  </data>
+  <data name="ShellLoadingCrashAnalysis" xml:space="preserve">
+    <value>Analyzing crash logs…</value>
+  </data>
+  <data name="ShellLoadingDiagnostics" xml:space="preserve">
+    <value>Collecting diagnostics…</value>
+  </data>
+  <data name="ShellConvertingToLocal" xml:space="preserve">
+    <value>Converting to local…</value>
+  </data>
   <data name="ShellVersion" xml:space="preserve">
     <value>{0}</value>
   </data>
@@ -6470,5 +6518,29 @@ then call list_games to verify.</value>
   </data>
   <data name="SettingsMcpRejectPlan" xml:space="preserve">
     <value>Reject</value>
+  </data>
+  <data name="ModlibQuickAddToActivePlaySet" xml:space="preserve">
+    <value>Add to current play set</value>
+  </data>
+  <data name="ModlibQuickAddAdded" xml:space="preserve">
+    <value>Added {0} to play set "{1}"</value>
+  </data>
+  <data name="ModlibQuickAddAlreadyInSet" xml:space="preserve">
+    <value>{0} is already in play set "{1}"</value>
+  </data>
+  <data name="ModlibQuickAddUnregistered" xml:space="preserve">
+    <value>{0} is not registered in the official library and cannot be added to a play set</value>
+  </data>
+  <data name="ModlibQuickAddNoGame" xml:space="preserve">
+    <value>Select a game before adding a mod to a play set</value>
+  </data>
+  <data name="ModlibQuickAddNoActivePlaySet" xml:space="preserve">
+    <value>The current game has no active play set</value>
+  </data>
+  <data name="ModlibQuickAddUnsupported" xml:space="preserve">
+    <value>The current game does not support play set content management</value>
+  </data>
+  <data name="ModlibQuickAddFailed" xml:space="preserve">
+    <value>Failed to add to the current play set: {0}</value>
   </data>
 </root>

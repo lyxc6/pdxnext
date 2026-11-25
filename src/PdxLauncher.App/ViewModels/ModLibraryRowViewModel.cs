@@ -29,6 +29,13 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
     [ObservableProperty]
     private string? _translatedName;
 
+    /// <summary>是否被至少一个播放集引用；快捷添加成功后由页面就地更新。</summary>
+    [ObservableProperty]
+    private bool _isInPlaySet;
+
+    /// <summary>播放集归属计数；快捷添加后只更新这一行，不重建整个列表。</summary>
+    private int _playSetCount;
+
     public ModLibraryRowViewModel(
         ModLibraryEntry entry,
         string? gameVersion = null,
@@ -41,7 +48,8 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
         ThumbnailSize = thumbnailSize;
         Name = entry.Name;
         ThumbnailPath = entry.ThumbnailPath;
-        IsInPlaySet = entry.IsInPlaySet;
+        _isInPlaySet = entry.IsInPlaySet;
+        _playSetCount = entry.PlaySetIds.Count;
         WorkshopId = SteamWorkshop.GetWorkshopId(entry.SteamId, entry.GameRegistryId);
         WorkshopRef = ModWorkshopRef.Resolve(entry.SteamId, entry.GameRegistryId, entry.Source);
         _gameVersion = gameVersion;
@@ -90,15 +98,39 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
         " · ",
         new[] { SizeText, SubscribedText }.Where(static part => !string.IsNullOrWhiteSpace(part)));
 
-    /// <summary>是否被至少一个播放集引用。</summary>
-    public bool IsInPlaySet { get; }
+    /// <summary>这条 mod 是否在官方库里登记；未登记行不能写进播放集。</summary>
+    public bool IsUnregistered => Entry.IsUnregistered;
 
     /// <summary>播放集归属文案：在 N 个播放集中；不属于任何播放集时为空串（不显示）。</summary>
     /// <remarks>
     /// 不在任何播放集里是常态（387 个 mod 里绝大多数如此），原来那行「没有在播放集中」
     /// 每行都重复一遍纯属噪音：只保留有归属时的计数，没有归属就不显示。
     /// </remarks>
-    public string PlaySetText => IsInPlaySet ? T(Keys.ModlibPlaySetCount, Entry.PlaySetIds.Count) : string.Empty;
+    public string PlaySetText => IsInPlaySet ? T(Keys.ModlibPlaySetCount, PlaySetCount) : string.Empty;
+
+    /// <summary>播放集归属计数；快捷添加后只更新这一行，不重建整个列表。</summary>
+    public int PlaySetCount
+    {
+        get => _playSetCount;
+        private set
+        {
+            if (_playSetCount == value)
+            {
+                return;
+            }
+
+            _playSetCount = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(PlaySetText));
+        }
+    }
+
+    /// <summary>把这一行标记为已进入一个播放集；重复调用不会重复计数。</summary>
+    public void MarkAddedToPlaySet()
+    {
+        IsInPlaySet = true;
+        PlaySetCount = Math.Max(1, _playSetCount + 1);
+    }
 
     /// <summary>支持版本文案：支持版本 1.19.*；mod 没有声明版本时为空串（不显示）。</summary>
     public string SupportedVersionText => string.IsNullOrWhiteSpace(Entry.RequiredVersion)
@@ -221,6 +253,8 @@ public sealed partial class ModLibraryRowViewModel : LocalizedObservableObject
     partial void OnThumbnailPathChanged(string? value) => OnPropertyChanged(nameof(HasThumbnail));
 
     partial void OnTranslatedNameChanged(string? value) => OnPropertyChanged(nameof(HasTranslatedName));
+
+    partial void OnIsInPlaySetChanged(bool value) => OnPropertyChanged(nameof(PlaySetText));
 
     /// <summary>
     /// 版本支持提示：三角只讲「这个 mod 声明支持哪个版本、和当前游戏版本对不对得上」，

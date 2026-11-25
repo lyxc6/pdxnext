@@ -59,6 +59,12 @@ public sealed partial class LibraryViewModel : LocalizedObservableObject
         IsBusy = true;
         try
         {
+            // 页脚只用于异常提示（如服务未就绪）；正常加载时不能留下上一次的状态句，
+            // 否则会和页头的 LibraryCount 同时显示同一份计数。
+            _statusKey = null;
+            _statusArgs = [];
+            StatusMessage = string.Empty;
+
             var games = force
                 ? await GameDiscovery.RefreshAsync(cancellationToken).ConfigureAwait(true)
                 : await GameDiscovery.EnsureAsync(cancellationToken).ConfigureAwait(true);
@@ -66,14 +72,6 @@ public sealed partial class LibraryViewModel : LocalizedObservableObject
             await AppServices.PrepareCardCoversAsync(games, cancellationToken).ConfigureAwait(true);
             RebuildCards(games);
             IsLoaded = true;
-            if (Cards.Count == 0)
-            {
-                SetStatus(Keys.LibraryNotFound);
-            }
-            else
-            {
-                SetStatus(Keys.LibraryFound, Cards.Count);
-            }
         }
         finally
         {

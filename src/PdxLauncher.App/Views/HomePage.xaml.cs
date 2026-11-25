@@ -20,6 +20,7 @@ using PdxLauncher.Core.Contracts;
 public sealed partial class HomePage : Page
 {
     private const int LogoDecodeWidth = 480;
+    private readonly GlobalBusyBinding _globalBusyBinding;
 
     private readonly HomeViewModel _viewModel;
     private readonly ThemeApplier? _themeApplier;
@@ -101,6 +102,8 @@ public sealed partial class HomePage : Page
         InitializeComponent();
 
         _viewModel = new HomeViewModel();
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingHome, nameof(HomeViewModel.IsBusy));
+        _globalBusyBinding.Refresh();
         _viewModel.LaunchCompleted += OnLaunchCompleted;
 
         // 主题按钮的状态（悬停提亮 / 按下缩放 / 禁用置灰）。PointerPressed 等会被 Button 内部
@@ -179,6 +182,7 @@ public sealed partial class HomePage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _globalBusyBinding.Dispose();
         CompositionTarget.Rendering -= OnFirstFrameRendering;
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         Localizer.Instance.LanguageChanged -= OnLanguageChanged;

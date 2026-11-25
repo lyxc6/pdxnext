@@ -281,6 +281,15 @@ public sealed class PlaysetConfigRepository : IPlaySetRepository
         => Task.FromResult(AppResult<bool>.Fail(ErrorKind.Unsupported, "unsupported-format:playset-config"));
 
     /// <inheritdoc />
+    /// <remarks>CS2 的 mod 没有 V0 注册 ID 概念。</remarks>
+    public Task<AppResult<bool>> UpdateModRegistryIdAsync(
+        GameInstallation game,
+        Guid modId,
+        string? gameRegistryId,
+        CancellationToken cancellationToken)
+        => Task.FromResult(AppResult<bool>.Fail(ErrorKind.Unsupported, "unsupported-format:playset-config"));
+
+    /// <inheritdoc />
     /// <remarks>CS2 不在用户口径内，与 <see cref="UpdateModPathsAsync"/> 一致返回 Unsupported。</remarks>
     public Task<AppResult<bool>> AdoptLocalModAsync(
         GameInstallation game,

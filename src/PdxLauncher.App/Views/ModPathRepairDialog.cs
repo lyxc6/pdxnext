@@ -14,7 +14,7 @@ using PdxLauncher.App.Localization;
 using PdxLauncher.Core.Playsets;
 
 /// <summary>
-/// 「修复 mod 路径」确认框。
+/// 「修复 mod 问题」确认框。
 /// 每一项都能单独取消；改名项给一个可就地编辑的目录名输入框，非 ASCII / 非法字符时禁用主按钮
 /// （改了名游戏才认，所以这一步必须让用户看得见自己改成什么）。
 /// </summary>
@@ -125,9 +125,12 @@ internal static class ModPathRepairDialog
         };
         stack.Children.Add(include);
 
-        var hint = repair.Kind == ModPathRepairKind.RenameDirectory
-            ? localizer.ModsRepairRenameHint
-            : localizer.ModsRepairFillHint;
+        var hint = repair.Kind switch
+        {
+            ModPathRepairKind.RenameDirectory => localizer.ModsRepairRenameHint,
+            ModPathRepairKind.FillRegistryId => localizer.ModsRepairRegistryHint,
+            _ => localizer.ModsRepairFillHint,
+        };
         stack.Children.Add(new TextBlock
         {
             Text = hint,
@@ -135,13 +138,30 @@ internal static class ModPathRepairDialog
             Style = Application.Current.Resources["CaptionTextBlockStyle"] as Style,
         });
 
+        var before = repair.Kind == ModPathRepairKind.FillRegistryId
+            ? "gameRegistryId: " + (repair.CurrentRegistryId ?? "—")
+            : repair.CurrentPath ?? "—";
+        var after = repair.Kind == ModPathRepairKind.FillRegistryId
+            ? repair.SuggestedRegistryId ?? "—"
+            : repair.SuggestedPath ?? "—";
         stack.Children.Add(new TextBlock
         {
-            Text = (repair.CurrentPath ?? "—") + "  →  " + (repair.SuggestedPath ?? "—"),
+            Text = before + "  →  " + after,
             TextWrapping = TextWrapping.Wrap,
             Style = Application.Current.Resources["CaptionTextBlockStyle"] as Style,
             IsTextSelectionEnabled = true,
         });
+
+        if (repair.Kind == ModPathRepairKind.FillRegistryId && repair.SuggestedPath is not null)
+        {
+            stack.Children.Add(new TextBlock
+            {
+                Text = repair.SuggestedPath,
+                TextWrapping = TextWrapping.Wrap,
+                Style = Application.Current.Resources["CaptionTextBlockStyle"] as Style,
+                IsTextSelectionEnabled = true,
+            });
+        }
 
         TextBox? nameBox = null;
         var entry = new Entry(repair, include);

@@ -21,6 +21,7 @@ using Windows.System;
 public sealed partial class AccountPage : Page
 {
     private readonly AccountViewModel _viewModel;
+    private readonly GlobalBusyBinding _globalBusyBinding;
 
     /// <summary>页面生命周期令牌；页面不缓存（NavigationCacheMode=Disabled），每次进入都会重建。</summary>
     private CancellationTokenSource _lifetime = new();
@@ -33,6 +34,8 @@ public sealed partial class AccountPage : Page
         InitializeComponent();
 
         _viewModel = new AccountViewModel();
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingAccount, nameof(AccountViewModel.IsBusy));
+        _globalBusyBinding.Refresh();
 
         _statusTimer.Tick += OnStatusTimerTick;
 
@@ -66,6 +69,7 @@ public sealed partial class AccountPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _globalBusyBinding.Dispose();
         AppServices.Account.SessionChanged -= OnSessionChanged;
         _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
         _statusTimer.Stop();

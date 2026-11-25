@@ -28,6 +28,7 @@ public sealed partial class AchievementsPage : Page
     private const int IconPngMaxDimension = 96;
 
     private readonly AchievementsViewModel _viewModel;
+    private readonly GlobalBusyBinding _globalBusyBinding;
     private readonly AchievementSnapshotCache _snapshotCache;
 
     /// <summary>页面生命周期令牌；页面缓存复用，但取数令牌随每次进入/离开重建。</summary>
@@ -51,6 +52,8 @@ public sealed partial class AchievementsPage : Page
             Path.Combine(AppServices.DataRoot, "achievement-icons"),
             IconPngMaxDimension);
         _viewModel = new AchievementsViewModel(AppServices.Achievements, _snapshotCache, iconPngCache);
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingAchievements, nameof(AchievementsViewModel.IsBusy));
+        _globalBusyBinding.Refresh();
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
@@ -89,6 +92,7 @@ public sealed partial class AchievementsPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _globalBusyBinding.Dispose();
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
 
         _lifetime.Cancel();

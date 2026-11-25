@@ -108,6 +108,11 @@
     -->
     <Compile Include="..\..\src\PdxLauncher.App\Services\TranslationActivityMonitor.cs" Link="Linked\TranslationActivityMonitor.cs" />
     <!--
+      全局忙态登记器（标题栏统一加载提示的数据源）。它只依赖 System，不碰 UI 类型，
+      可以原样链接进来；最新操作优先与乱序释放由 GlobalBusyMonitorChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\GlobalBusyMonitor.cs" Link="Linked\GlobalBusyMonitor.cs" />
+    <!--
       自动排序服务（扫描 mod 实际文件足迹 → 分层分类 → 冲突图 → Kahn 排序 → 预览）。
       只用 Core 的 IFileSystem / IAppLogger / GameInstallation / Core.Mods.Sorting，
       不碰任何 UI 类型，可以原样链接进来，由 PlaySetAutoSortServiceChecks

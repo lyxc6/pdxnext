@@ -212,6 +212,17 @@ public sealed class PlaySetRepositoryRouter : IPlaySetRepository
             cancellationToken);
 
     /// <inheritdoc />
+    public Task<AppResult<bool>> UpdateModRegistryIdAsync(
+        GameInstallation game,
+        Guid modId,
+        string? gameRegistryId,
+        CancellationToken cancellationToken)
+        => WriteAsync(
+            game,
+            store => store.UpdateModRegistryIdAsync(game, modId, gameRegistryId, cancellationToken),
+            cancellationToken);
+
+    /// <inheritdoc />
     public Task<AppResult<bool>> AdoptLocalModAsync(
         GameInstallation game,
         Guid oldModId,

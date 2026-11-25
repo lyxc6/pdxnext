@@ -1540,9 +1540,6 @@
   <data name="LibraryEmptyHint" xml:space="preserve">
     <value>未发现已安装的 Paradox 游戏。已扫描 Steam 库与官方启动器的游戏库路径（含 %LOCALAPPDATA%\Programs\Paradox Interactive\games）；请确认游戏目录里有 launcher-settings.json，或点击右上角刷新。</value>
   </data>
-  <data name="LibraryFound" xml:space="preserve">
-    <value>已发现 {0} 个游戏</value>
-  </data>
   <data name="LibraryGridName" xml:space="preserve">
     <value>已安装游戏列表</value>
   </data>
@@ -1557,9 +1554,6 @@
   </data>
   <data name="LibraryLaunchedTitle" xml:space="preserve">
     <value>已启动</value>
-  </data>
-  <data name="LibraryNotFound" xml:space="preserve">
-    <value>未发现已安装的 Paradox 游戏</value>
   </data>
   <data name="LibraryProcessCreated" xml:space="preserve">
     <value>游戏进程已创建。</value>
@@ -2300,25 +2294,28 @@
     <value>检查 mod 路径</value>
   </data>
   <data name="ModsRepairDialogBody" xml:space="preserve">
-    <value>下面这些 mod 在游戏里不会生效。确认后会补上缺失的路径、把目录改成 ASCII 名，并写回 mod 库。</value>
+    <value>下面这些 mod 在游戏里不会生效。确认后会补上缺失的路径或注册 ID、把目录改成 ASCII 名，并写回 mod 库。</value>
   </data>
   <data name="ModsRepairDialogTitle" xml:space="preserve">
-    <value>修复 mod 路径</value>
+    <value>修复 mod 问题</value>
   </data>
   <data name="ModsRepairDone" xml:space="preserve">
-    <value>已修复 {0} 个 mod 路径</value>
+    <value>已修复 {0} 个 mod 问题</value>
   </data>
   <data name="ModsRepairFailed" xml:space="preserve">
-    <value>修复 mod 路径失败：{0}</value>
+    <value>修复 mod 问题失败：{0}</value>
   </data>
   <data name="ModsRepairFillHint" xml:space="preserve">
     <value>补路径</value>
+  </data>
+  <data name="ModsRepairRegistryHint" xml:space="preserve">
+    <value>补注册 ID（生成工坊指针）</value>
   </data>
   <data name="ModsRepairInvalidName" xml:space="preserve">
     <value>目录名只能用 ASCII 字母、数字、下划线、点、连字符</value>
   </data>
   <data name="ModsRepairName" xml:space="preserve">
-    <value>修复 mod 路径</value>
+    <value>修复 mod 问题</value>
   </data>
   <data name="ModsRepairNothing" xml:space="preserve">
     <value>没有需要修复的 mod 路径</value>
@@ -5193,6 +5190,57 @@
   <data name="ShellTranslating" xml:space="preserve">
     <value>正在翻译…</value>
   </data>
+  <data name="ShellLoadingHome" xml:space="preserve">
+    <value>正在加载当前游戏…</value>
+  </data>
+  <data name="ShellLoadingLibrary" xml:space="preserve">
+    <value>正在加载游戏库…</value>
+  </data>
+  <data name="ShellLoadingPlaySets" xml:space="preserve">
+    <value>正在加载播放集…</value>
+  </data>
+  <data name="ShellLoadingModLibrary" xml:space="preserve">
+    <value>正在加载 Mod 库…</value>
+  </data>
+  <data name="ShellLoadingWorkshop" xml:space="preserve">
+    <value>正在加载创意工坊…</value>
+  </data>
+  <data name="ShellLoadingWorkshopDetail" xml:space="preserve">
+    <value>正在加载工坊详情…</value>
+  </data>
+  <data name="ShellLoadingDlc" xml:space="preserve">
+    <value>正在加载 DLC…</value>
+  </data>
+  <data name="ShellLoadingSaves" xml:space="preserve">
+    <value>正在加载存档…</value>
+  </data>
+  <data name="ShellLoadingAchievements" xml:space="preserve">
+    <value>正在加载成就…</value>
+  </data>
+  <data name="ShellLoadingAddMods" xml:space="preserve">
+    <value>正在加载模组列表…</value>
+  </data>
+  <data name="ShellLoadingModStudio" xml:space="preserve">
+    <value>正在加载 Mod 创建…</value>
+  </data>
+  <data name="ShellLoadingModEditor" xml:space="preserve">
+    <value>正在处理 Mod 编辑…</value>
+  </data>
+  <data name="ShellLoadingAccount" xml:space="preserve">
+    <value>正在处理账号请求…</value>
+  </data>
+  <data name="ShellLoadingSettings" xml:space="preserve">
+    <value>正在处理设置…</value>
+  </data>
+  <data name="ShellLoadingCrashAnalysis" xml:space="preserve">
+    <value>正在分析崩溃日志…</value>
+  </data>
+  <data name="ShellLoadingDiagnostics" xml:space="preserve">
+    <value>正在采集诊断数据…</value>
+  </data>
+  <data name="ShellConvertingToLocal" xml:space="preserve">
+    <value>正在转换为本地…</value>
+  </data>
   <data name="ShellVersion" xml:space="preserve">
     <value>{0}</value>
   </data>
@@ -6470,5 +6518,29 @@
   </data>
   <data name="SettingsMcpRejectPlan" xml:space="preserve">
     <value>拒绝</value>
+  </data>
+  <data name="ModlibQuickAddToActivePlaySet" xml:space="preserve">
+    <value>添加到当前播放集</value>
+  </data>
+  <data name="ModlibQuickAddAdded" xml:space="preserve">
+    <value>已把 {0} 添加到播放集「{1}」</value>
+  </data>
+  <data name="ModlibQuickAddAlreadyInSet" xml:space="preserve">
+    <value>{0} 已在播放集「{1}」中</value>
+  </data>
+  <data name="ModlibQuickAddUnregistered" xml:space="preserve">
+    <value>{0} 尚未在官方库中登记，无法添加到播放集</value>
+  </data>
+  <data name="ModlibQuickAddNoGame" xml:space="preserve">
+    <value>请先选择游戏，再添加 mod 到播放集</value>
+  </data>
+  <data name="ModlibQuickAddNoActivePlaySet" xml:space="preserve">
+    <value>当前游戏没有激活的播放集</value>
+  </data>
+  <data name="ModlibQuickAddUnsupported" xml:space="preserve">
+    <value>当前游戏不支持播放集内容管理</value>
+  </data>
+  <data name="ModlibQuickAddFailed" xml:space="preserve">
+    <value>添加到当前播放集失败：{0}</value>
   </data>
 </root>

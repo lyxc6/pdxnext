@@ -25,6 +25,8 @@ using Windows.System;
 /// </summary>
 public sealed partial class ModsPage : Page
 {
+    private readonly GlobalBusyBinding _globalBusyBinding;
+    private readonly GlobalBusyBinding _globalConvertBinding;
     /// <summary>双列左栏的初始宽度（DIP）。XAML 里 ColumnDefinition 的 Width 初值必须与它一致。</summary>
     private const double DefaultLeftColumnWidth = ColumnResize.DefaultWidth;
 
@@ -87,6 +89,10 @@ public sealed partial class ModsPage : Page
                 AppServices.Mods,
                 AppServices.Logger),
             AppServices.Logger);
+        _globalBusyBinding = new GlobalBusyBinding(_viewModel, Keys.ShellLoadingPlaySets, nameof(ModsViewModel.IsBusy));
+        _globalConvertBinding = new GlobalBusyBinding(_viewModel, Keys.ShellConvertingToLocal, nameof(ModsViewModel.IsConvertToLocalBusy));
+        _globalBusyBinding.Refresh();
+        _globalConvertBinding.Refresh();
 
         // 分隔条的事件用代码接线：PdxColumnSplitter 的 Dragged/ResetRequested 是普通事件，
         // 不是依赖属性，XAML 编译器绑不上（也没有对应的 RoutedEvent）。
@@ -155,6 +161,8 @@ public sealed partial class ModsPage : Page
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        _globalBusyBinding.Dispose();
+        _globalConvertBinding.Dispose();
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         _viewModel.RowRevealRequested -= OnRowRevealRequested;
 
