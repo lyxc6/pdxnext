@@ -26,6 +26,7 @@ public static class ModStudioChecks
         var logger = new NullLogger();
 
         CheckDescriptorRules();
+        CheckLocalModFolderRules();
         CheckModIdInput();
         CheckTagCatalog();
         CheckCreateLegacy(fs);
@@ -75,6 +76,79 @@ public static class ModStudioChecks
             "ModstudioDescriptorMetadata",
             ModDescriptorRules.DescribeKey(ModDescriptorFamily.Metadata));
     }
+
+    // ------------------------------------------------------------------
+    // 工坊转本地的目录名规则（允许中文，但不放松路径安全）
+    // ------------------------------------------------------------------
+
+    private static void CheckLocalModFolderRules()
+    {
+        Console.WriteLine("[ModStudioChecks] 本地化目录名");
+
+        ChecksContext.Check(
+            "转换目录名: 中文原名可用",
+            ModCreator.IsValidLocalModFolderName("苦难的女囚")
+                && ModCreator.IsValidLocalModFolderName("猎艳寻欢"));
+        ChecksContext.Check(
+            "转换目录名: 词间空格可用（Less Old Wives…）",
+            ModCreator.IsValidLocalModFolderName("Less Old Wives - AI Men Marry Younger Fertile Women"));
+        ChecksContext.Check(
+            "转换目录名: 拒绝路径穿越",
+            !ModCreator.IsValidLocalModFolderName("..")
+                && !ModCreator.IsValidLocalModFolderName("../escape")
+                && !ModCreator.IsValidLocalModFolderName("a/../b"));
+        ChecksContext.Check(
+            "转换目录名: 拒绝首尾空白与点",
+            !ModCreator.IsValidLocalModFolderName(" mod")
+                && !ModCreator.IsValidLocalModFolderName("mod ")
+                && !ModCreator.IsValidLocalModFolderName("mod.")
+                && !ModCreator.IsValidLocalModFolderName(".mod"));
+        ChecksContext.Check(
+            "转换目录名: 拒绝 Windows 保留名",
+            !ModCreator.IsValidLocalModFolderName("CON")
+                && !ModCreator.IsValidLocalModFolderName("nul")
+                && !ModCreator.IsValidLocalModFolderName("COM1")
+                && !ModCreator.IsValidLocalModFolderName("con.txt"));
+        ChecksContext.Check(
+            "转换目录名: 新建 mod 页仍走严格 ASCII 规则",
+            ModCreator.IsValidFolderName("MyMod")
+                && !ModCreator.IsValidFolderName("苦难的女囚"));
+
+        var zh = LocalModFolderName.Normalize("苦难的女囚");
+        Equal("归一化: 中文原样保留", "苦难的女囚", zh);
+        Equal("归一化: 非法冒号折成下划线", "A_B", LocalModFolderName.Normalize("A:B"));
+        Equal("归一化: 连续空格折叠", "Less Old Wives", LocalModFolderName.Normalize("Less   Old   Wives"));
+        Equal("归一化: 纯符号兜底 localmod", "localmod", LocalModFolderName.Normalize("///"));
+        Equal("归一化: 保留名补前缀", "mod_CON", LocalModFolderName.Normalize("CON"));
+        Equal("归一化: 首字符数字仍合法", "123mod", LocalModFolderName.Normalize("123mod"));
+
+        // Vic3 只吃 ASCII 路径：中文必须变成可区分的 ASCII，不能再集体落到 localmod。
+        var v3A = LocalModFolderName.NormalizeAscii("苦难的女囚");
+        var v3B = LocalModFolderName.NormalizeAscii("猎艳寻欢");
+        ChecksContext.Check(
+            "Vic3: 中文名转出的目录名是纯 ASCII",
+            IsAscii(v3A) && IsAscii(v3B));
+        ChecksContext.Check(
+            "Vic3: 两个不同中文名不会撞成同一个目录",
+            !string.Equals(v3A, v3B, StringComparison.OrdinalIgnoreCase));
+        ChecksContext.Check(
+            "Vic3: 结果仍能通过转换校验",
+            ModCreator.IsValidLocalModFolderName(v3A)
+                && ModCreator.IsValidLocalModFolderName(v3B));
+        Equal(
+            "Vic3: 纯英文名保持原样",
+            "Chinese Fonts",
+            LocalModFolderName.NormalizeAscii("Chinese Fonts"));
+
+        ChecksContext.Check(
+            "归一化: 结果一定能通过转换校验",
+            ModCreator.IsValidLocalModFolderName(zh)
+                && ModCreator.IsValidLocalModFolderName(LocalModFolderName.Normalize("A:B"))
+                && ModCreator.IsValidLocalModFolderName(LocalModFolderName.Normalize("Less   Old   Wives"))
+                && ModCreator.IsValidLocalModFolderName(LocalModFolderName.Normalize("CON")));
+    }
+
+    private static bool IsAscii(string value) => value.All(static ch => ch <= 0x7F);
 
     // ------------------------------------------------------------------
     // 上传目标：Mod ID 与标签清单

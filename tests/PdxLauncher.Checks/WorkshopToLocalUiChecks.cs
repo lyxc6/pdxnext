@@ -253,6 +253,12 @@ public static class WorkshopToLocalUiChecks
             "工坊转本地: Invoker 调 Core 固定 API（ConvertToLocalAsync + 新 ModId 结果类型）",
             invoker.Contains("AppServices.WorkshopToLocal.ConvertToLocalAsync", StringComparison.Ordinal)
                 && invoker.Contains("WorkshopToLocalResult", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "工坊转本地: Invoker 的目录名规则委托给 Core（不再自己折 ASCII）",
+            invoker.Contains("LocalModFolderName.Normalize", StringComparison.Ordinal)
+                && invoker.Contains("LocalModFolderName.NormalizeAscii", StringComparison.Ordinal)
+                && invoker.Contains("GamePathRules.RequiresAsciiPaths", StringComparison.Ordinal)
+                && !invoker.Contains("IsAsciiLetterOrDigit", StringComparison.Ordinal));
     }
 
     /// <summary>DI 注册与启动清理。</summary>
