@@ -7,18 +7,36 @@ using PdxLauncher.Core.Contracts;
 /// 主页公告卡的数据投影（<c>DataTemplate</c> 的 <c>x:DataType</c>）。
 /// 只持有字符串与布尔，不含任何 UI 类型 —— 与 <see cref="GameCardItem"/> 同一写法。
 /// </summary>
-/// <param name="Slot">官方槽位名（main / secondary-1 / secondary-2），同时用于生成 AutomationId。</param>
-/// <param name="Title">标题；官方实测多数为空串（卡片以图为主）。</param>
-/// <param name="Text">正文；同样多数为空串。</param>
-/// <param name="ImagePath">已下载到本地的图片绝对路径；为 null 时卡片只显示文字。</param>
-/// <param name="Link">点开卡片时跳转的链接；可能是 <c>pdxlaun://</c> 深链。</param>
-public sealed record NewsCardItem(
-    string Slot,
-    string? Title,
-    string? Text,
-    string? ImagePath,
-    string? Link)
+/// <remarks>
+/// 用普通不可变类而不是 record：WinUI 的 XamlTypeInfo 会给 record 的 init-only 属性生成 setter，
+/// 编译期报 CS8852；这里只读属性足够，且不改变任何调用方的读取方式。
+/// </remarks>
+public sealed class NewsCardItem
 {
+    /// <summary>官方槽位名（main / secondary-1 / secondary-2），同时用于生成 AutomationId。</summary>
+    public string Slot { get; }
+
+    /// <summary>标题；官方实测多数为空串（卡片以图为主）。</summary>
+    public string? Title { get; }
+
+    /// <summary>正文；同样多数为空串。</summary>
+    public string? Text { get; }
+
+    /// <summary>已下载到本地的图片绝对路径；为 null 时卡片只显示文字。</summary>
+    public string? ImagePath { get; }
+
+    /// <summary>点开卡片时跳转的链接；可能是 <c>pdxlaun://</c> 深链。</summary>
+    public string? Link { get; }
+
+    public NewsCardItem(string slot, string? title, string? text, string? imagePath, string? link)
+    {
+        Slot = slot;
+        Title = title;
+        Text = text;
+        ImagePath = imagePath;
+        Link = link;
+    }
+
     public bool HasImage => !string.IsNullOrWhiteSpace(ImagePath);
 
     public bool HasTitle => !string.IsNullOrWhiteSpace(Title);

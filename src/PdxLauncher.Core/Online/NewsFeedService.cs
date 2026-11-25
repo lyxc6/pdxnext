@@ -18,7 +18,7 @@ using PdxLauncher.Core.Storage;
 /// </summary>
 public sealed class NewsFeedService : INewsFeedService
 {
-    private const int CacheVersion = 2;
+    private const int CacheVersion = 3;
     private const string CacheFileName = "news-cards.json";
     private const string ImagesFolderName = "images";
     private const string ContentCardsEndpointFormat =
@@ -262,10 +262,10 @@ public sealed class NewsFeedService : INewsFeedService
         return new FetchResult(items, imagesIncomplete);
     }
 
-    /// <summary>自动识别新旧 JSON 格式；每个 slot 最多输出一张可显示卡片。</summary>
+    /// <summary>自动识别新旧 JSON 格式；每个 slot 输出全部可见卡片（单卡时即一张）。</summary>
     private static List<CacheItem> ParseItems(string json, NewsFeedRequest request, DateTimeOffset now, Func<double> random)
     {
-        var items = new List<CacheItem>(NewsFeedSlots.Order.Count);
+        var items = new List<CacheItem>();
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
         if (root.ValueKind != JsonValueKind.Object)
@@ -290,14 +290,18 @@ public sealed class NewsFeedService : INewsFeedService
                 continue;
             }
 
-            var candidates = ReadCandidateCards(slotElement, now, modern, slot);
-            var chosen = SelectCard(candidates, request, modern, random, slot);
-            var item = chosen is not { } selected
-                ? null
-                : modern ? ReadModernItem(slot, selected) : ReadItem(slot, selected);
-            if (item is not null)
+            foreach (var candidate in ReadCandidateCards(slotElement, now, modern, slot))
             {
-                items.Add(item);
+                if (modern && !MatchesModernFilters(candidate, request, slot))
+                {
+                    continue;
+                }
+
+                var item = modern ? ReadModernItem(slot, candidate) : ReadItem(slot, candidate);
+                if (item is not null)
+                {
+                    items.Add(item);
+                }
             }
         }
 
@@ -306,7 +310,7 @@ public sealed class NewsFeedService : INewsFeedService
 
     private static List<CacheItem> ParseLegacyItems(JsonElement root, DateTimeOffset now)
     {
-        var items = new List<CacheItem>(NewsFeedSlots.Order.Count);
+        var items = new List<CacheItem>();
         foreach (var slot in NewsFeedSlots.Order)
         {
             if (!root.TryGetProperty(slot, out var slotElement) || slotElement.ValueKind != JsonValueKind.Object)
@@ -319,8 +323,6 @@ public sealed class NewsFeedService : INewsFeedService
                 continue;
             }
 
-            JsonElement? chosenGroup = null;
-            var chosenWeight = int.MinValue;
             foreach (var group in groups.EnumerateArray())
             {
                 if (!IsGroupVisible(group, now))
@@ -328,26 +330,17 @@ public sealed class NewsFeedService : INewsFeedService
                     continue;
                 }
 
-                var weight = ReadGroupWeight(group);
-                if (weight > chosenWeight)
+                if (!group.TryGetProperty("contentItems", out var contentItems))
                 {
-                    chosenWeight = weight;
-                    chosenGroup = group;
+                    continue;
                 }
-            }
 
-            if (chosenGroup is not { } groupElement
-                || !groupElement.TryGetProperty("contentItems", out var contentItems))
-            {
-                continue;
-            }
-
-            foreach (var entry in EnumerateValueElements(contentItems))
-            {
-                if (ReadItem(slot, entry) is { } item)
+                foreach (var entry in EnumerateContentItems(contentItems))
                 {
-                    items.Add(item);
-                    break;
+                    if (ReadItem(slot, entry) is { } item)
+                    {
+                        items.Add(item);
+                    }
                 }
             }
         }
@@ -382,11 +375,11 @@ public sealed class NewsFeedService : INewsFeedService
         {
             if (IsGroupVisible(group, now) && group.TryGetProperty("contentItems", out var contentItems))
             {
-                foreach (var _ in EnumerateValueElements(contentItems))
+                foreach (var itemElement in EnumerateContentItems(contentItems))
                 {
                     if (MatchesSection(group, slot, modern))
                     {
-                        result.Add(group);
+                        result.Add(itemElement);
                     }
                 }
             }
@@ -412,6 +405,12 @@ public sealed class NewsFeedService : INewsFeedService
             }
         }
     }
+
+    /// <summary>
+    /// 旧格式 <c>contentItems</c> 可能是数组，也可能是对象表；每个元素才是真实卡片。
+    /// </summary>
+    private static IEnumerable<JsonElement> EnumerateContentItems(JsonElement contentItems) =>
+        EnumerateValueElements(contentItems);
 
     private static JsonElement? SelectCard(
         List<JsonElement> cards,
