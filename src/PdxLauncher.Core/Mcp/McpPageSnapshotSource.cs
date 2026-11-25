@@ -7,8 +7,9 @@ using PdxLauncher.Core.Games;
 /// <summary>把页面背后的业务数据投影成 MCP 只读快照。</summary>
 public static class McpPageSnapshotSource
 {
-    private static readonly HashSet<string> PublicSettingKeys = new(StringComparer.Ordinal)
-    {
+    /// <summary>设置页允许进入快照的字段；MCP 权限、代理、Steam、翻译密钥、账号一律不在内。</summary>
+    public static readonly IReadOnlyList<string> PublicSettingKeys = (string[])
+    [
         nameof(AppSettings.UiLanguage),
         nameof(AppSettings.PlaySetPageDisplayMode),
         nameof(AppSettings.AlwaysOnTop),
@@ -22,7 +23,7 @@ public static class McpPageSnapshotSource
         nameof(AppSettings.TranslateChangelogEnabled),
         nameof(AppSettings.TranslateCommentsEnabled),
         nameof(AppSettings.WorkshopPageSize),
-    };
+    ];
 
     /// <summary>播放集页快照。</summary>
     public static McpPageSnapshot PlaySets(
@@ -45,7 +46,7 @@ public static class McpPageSnapshotSource
                 new Dictionary<string, string>(StringComparer.Ordinal)
                 {
                     ["name"] = set.Name,
-                    ["isActive"] = set.IsActive ? "true" : "false",
+                    ["isActive"] = McpPageValueText.Bool(set.IsActive),
                 },
                 set.Name))
             .ToArray();
@@ -59,14 +60,19 @@ public static class McpPageSnapshotSource
         var rows = properties
             .Where(property => PublicSettingKeys.Contains(property.Name))
             .OrderBy(static property => property.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(property => new McpPageRow(
-                property.Name,
-                new Dictionary<string, string>(StringComparer.Ordinal)
-                {
-                    ["key"] = property.Name,
-                    ["value"] = property.GetValue(settings)?.ToString() ?? string.Empty,
-                },
-                property.GetValue(settings)?.ToString() ?? string.Empty))
+            .Select(property =>
+            {
+                // 展示值与执行器比较的 expectedHash 必须同源（见 McpPageValueText）。
+                var text = McpPageValueText.FromSetting(settings, property.Name);
+                return new McpPageRow(
+                    property.Name,
+                    new Dictionary<string, string>(StringComparer.Ordinal)
+                    {
+                        ["key"] = property.Name,
+                        ["value"] = text,
+                    },
+                    text);
+            })
             .ToArray();
         return McpPageSnapshotPaging.Slice("settings", "设置", string.Empty, rows, offset, limit);
     }

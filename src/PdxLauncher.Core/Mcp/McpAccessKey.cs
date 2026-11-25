@@ -35,3 +35,33 @@ public sealed record McpAuthorizedKey(
     public bool AllowsScope(string scope) =>
         AllowsAllTools || AllowedTools.Contains(scope, StringComparer.Ordinal);
 }
+
+/// <summary>
+/// MCP 进程的访问状态。必须区分「没配置密钥」与「配置了但校验失败」：
+/// 前者是兼容模式，后者必须拒绝全部工具调用，否则访问密钥形同虚设。
+/// </summary>
+public enum McpAccessState
+{
+    /// <summary>兼容模式：没有配置访问密钥，沿用全局开关。</summary>
+    Legacy,
+
+    /// <summary>密钥有效，按密钥的工具范围过滤。</summary>
+    Authorized,
+
+    /// <summary>传了密钥但不匹配 / 已禁用 / 已过期，必须拒绝。</summary>
+    Rejected,
+}
+
+/// <summary>按「是否传入密钥 + 校验结果」推导访问状态。</summary>
+public static class McpAccessStatePolicy
+{
+    public static McpAccessState Resolve(bool accessKeySupplied, McpAuthorizedKey? authorizedKey)
+    {
+        if (!accessKeySupplied)
+        {
+            return McpAccessState.Legacy;
+        }
+
+        return authorizedKey is null ? McpAccessState.Rejected : McpAccessState.Authorized;
+    }
+}
