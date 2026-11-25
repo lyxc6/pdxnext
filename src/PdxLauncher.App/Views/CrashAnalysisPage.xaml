@@ -269,9 +269,10 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="4">
-                                <TextBlock Text="{x:Bind L.CrashSectionOverview, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
+                                <!-- 左栏导航已经叫「诊断结论」，这里不再重复同一个标题。 -->
                                 <TextBlock Text="{x:Bind ViewModel.LastAnalysisText, Mode=OneWay}"
                                            Style="{StaticResource CaptionTextBlockStyle}"
+                                           Margin="0,4,0,0"
                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -302,15 +303,13 @@
                                  Severity="Error"
                                  IsClosable="False"
                                  IsOpen="{x:Bind ViewModel.HasCritical, Mode=OneWay}"
-                                 Title="{x:Bind ViewModel.VerdictTitle, Mode=OneWay}"
-                                 Message="{x:Bind ViewModel.VerdictMessage, Mode=OneWay}" />
+                                 Title="{x:Bind ViewModel.VerdictTitle, Mode=OneWay}" />
                         <InfoBar x:Name="infCrashWarning"
                                  AutomationProperties.AutomationId="infCrashWarning"
                                  Severity="Warning"
                                  IsClosable="False"
                                  IsOpen="{x:Bind ViewModel.HasWarning, Mode=OneWay}"
-                                 Title="{x:Bind ViewModel.VerdictTitle, Mode=OneWay}"
-                                 Message="{x:Bind ViewModel.VerdictMessage, Mode=OneWay}" />
+                                 Title="{x:Bind ViewModel.VerdictTitle, Mode=OneWay}" />
                         <InfoBar x:Name="infCrashClear"
                                  AutomationProperties.AutomationId="infCrashClear"
                                  Severity="Success"

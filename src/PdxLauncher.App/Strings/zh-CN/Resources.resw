@@ -796,8 +796,11 @@
   <data name="CrashSummaryGameDetailNoVersion" xml:space="preserve">
     <value>{0}</value>
   </data>
+  <data name="CrashSummaryMemoryMb" xml:space="preserve">
+    <value>{0} MB 内存</value>
+  </data>
   <data name="CrashSummaryMods" xml:space="preserve">
-    <value>启用 Mod</value>
+    <value>已启用 Mod</value>
   </data>
   <data name="CrashSummaryModsUnknown" xml:space="preserve">
     <value>未知</value>
@@ -818,7 +821,7 @@
     <value>系统</value>
   </data>
   <data name="CrashSummarySystemDetail" xml:space="preserve">
-    <value>{0} · {1} MB 内存 · {2}</value>
+    <value>{0} · {1} · {2}</value>
   </data>
   <data name="CrashTimeUnknown" xml:space="preserve">
     <value>未知</value>

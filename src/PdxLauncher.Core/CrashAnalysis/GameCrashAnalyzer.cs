@@ -244,29 +244,8 @@ public sealed class GameCrashAnalyzer
 
     private static bool NeedsHeavyScan(IReadOnlyDictionary<string, string>? meta)
     {
-        static long? Bytes(string? raw)
-        {
-            if (string.IsNullOrWhiteSpace(raw))
-            {
-                return null;
-            }
-
-            var match = System.Text.RegularExpressions.Regex.Match(
-                raw, @"(?<n>\d+(?:\.\d+)?)\s*(?<u>[KMGT]?B)?", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (!match.Success || !double.TryParse(match.Groups["n"].Value, System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out var value))
-            {
-                return null;
-            }
-
-            double multiplier = match.Groups["u"].Value.ToUpperInvariant() switch
-            {
-                "GB" => 1024d * 1024d * 1024d,
-                "MB" => 1024d * 1024d,
-                _ => 1d,
-            };
-            return (long)(value * multiplier);
-        }
+        // 单位口径与结论判定共用 PcForensics.ParseMemoryBytes：无单位是 MB，0 视为未提供。
+        static long? Bytes(string? raw) => PcForensics.ParseMemoryBytes(raw);
 
         long? ram = meta is not null && meta.TryGetValue("SystemMemory", out var r) ? Bytes(r) : null;
         long? vram = meta is not null && meta.TryGetValue("GPUDedicatedMemory", out var v) ? Bytes(v) : null;

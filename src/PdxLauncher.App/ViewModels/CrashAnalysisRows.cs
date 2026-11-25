@@ -225,11 +225,12 @@ public static class CrashAnalysisText
             : localizer.CrashSummaryModsUnknown;
 
         var meta = latest?.Meta;
-        var gpu = GetMeta(meta, "GPUName") ?? localizer.CrashTimeUnknown;
-        var memory = GetMeta(meta, "SystemMemory") ?? "?";
-        var os = GetMeta(meta, "OperatingSystem") ?? localizer.CrashTimeUnknown;
+        var gpu = GetMeta(meta, "GPUName");
+        var os = GetMeta(meta, "OperatingSystem");
+        var memory = DescribeMemory(GetMemoryMb(meta), localizer);
 
-        return (CrashSummaryRowViewModel[])[
+        var rows = new List<CrashSummaryRowViewModel>
+        {
             new(
                 localizer.CrashSummaryGame,
                 string.IsNullOrWhiteSpace(report.GameVersion) ? report.GameName : report.GameVersion,
@@ -237,36 +238,75 @@ public static class CrashAnalysisText
                 "crashSummaryGame"),
             new(
                 localizer.CrashSummaryCrashTime,
-                FormatTime(latest?.Timestamp, localizer),
-                latest is null ? localizer.CrashSummaryNoCrash : exceptionValue,
+                // 没有崩溃时这里该说「没有崩溃」，而不是把时间写成「未知」。
+                latest is null ? localizer.CrashSummaryNoCrash : FormatTime(latest.Timestamp, localizer),
+                string.Empty,
                 "crashSummaryCrashTime"),
-            new(
+        };
+
+        // 异常码与启动到崩溃都依赖崩溃包：没有崩溃时这两行没有意义，直接不生成，
+        // 免得整页四行「未知」。
+        if (latest is not null)
+        {
+            rows.Add(new(
                 localizer.CrashSummaryException,
-                latest is null ? localizer.CrashTimeUnknown : exceptionValue,
+                exceptionValue,
                 exceptionDetail,
-                "crashSummaryException"),
-            new(
+                "crashSummaryException"));
+            rows.Add(new(
                 localizer.CrashSummaryDuration,
                 FormatDuration(report.LaunchChain.Duration, localizer),
                 string.Empty,
-                "crashSummaryDuration"),
-            new(
-                localizer.CrashSummaryMods,
-                modValue,
-                report.ModListAvailable ? string.Empty : localizer.CrashOverviewModsUnknown,
-                "crashSummaryMods"),
-            new(
-                localizer.CrashSummarySuspect,
-                suspect?.ModName ?? localizer.CrashSummarySuspectNone,
-                suspect?.SourcePath ?? string.Empty,
-                "crashSummarySuspect"),
-            new(
-                localizer.CrashSummarySystem,
-                gpu,
-                localizer.T("crash.summary.systemDetail", gpu, memory, os),
-                "crashSummarySystem"),
-        ];
+                "crashSummaryDuration"));
+        }
+
+        rows.Add(new(
+            localizer.CrashSummaryMods,
+            modValue,
+            // 长解释只留在下方折叠区，摘要卡不再重复同一段话。
+            report.ModListAvailable ? string.Empty : localizer.CrashOverviewModsUnknown,
+            "crashSummaryMods"));
+        rows.Add(new(
+            localizer.CrashSummarySuspect,
+            suspect?.ModName ?? localizer.CrashSummarySuspectNone,
+            suspect?.SourcePath ?? string.Empty,
+            "crashSummarySuspect"));
+        rows.Add(new(
+            localizer.CrashSummarySystem,
+            gpu ?? localizer.CrashTimeUnknown,
+            BuildSystemDetail(gpu, memory, os),
+            "crashSummarySystem"));
+
+        return rows;
     }
+
+    /// <summary>
+    /// 系统卡描述：只拼真正拿到的片段，缺失的字段不占位。
+    /// </summary>
+    private static string BuildSystemDetail(string? gpu, string? memory, string? os)
+    {
+        var parts = new[] { gpu, memory, os }.Where(static part => !string.IsNullOrWhiteSpace(part)).ToArray();
+        return parts.Length switch
+        {
+            0 => string.Empty,
+            1 => parts[0]!,
+            _ => string.Join(" · ", parts),
+        };
+    }
+
+    /// <summary><c>meta.yml</c> 的内存是 MB 数（无单位即 MB），转成整数 MB。</summary>
+    private static long? GetMemoryMb(IReadOnlyDictionary<string, string>? meta)
+    {
+        var raw = GetMeta(meta, "SystemMemory");
+        return PcForensics.ParseMemoryBytes(raw) is { } bytes
+            ? (long)Math.Round(bytes / (1024d * 1024d))
+            : null;
+    }
+
+    private static string? DescribeMemory(long? memoryMb, Localizer localizer) =>
+        memoryMb is { } mb
+            ? localizer.T("crash.summary.memoryMb", mb.ToString("N0", CultureInfo.CurrentCulture))
+            : null;
 
     /// <summary>诊断结论行。</summary>
     public static IReadOnlyList<CrashFindingRowViewModel> CreateFindingRows(

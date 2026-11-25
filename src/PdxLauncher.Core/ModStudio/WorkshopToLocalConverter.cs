@@ -141,8 +141,12 @@ public sealed class WorkshopToLocalConverter
             return Fail(ErrorKind.Invalid, "not-subscribed-mod");
         }
 
+        // 展示名可能是中文：转换保留可读名字（CK3 等 UTF-8 描述符能加载中文目录），
+        // 只有 Vic3 的 ASCII 限制在下面单独判。ModCreator.IsValidFolderName 是「新建 mod」页的
+        // 保守口径，这里用更宽的本地 mod 目录规则，但不放松路径安全约束。
+        // 不做 ToString.Normalize()：Windows 不区分 NFC/NFD，转形会让两个不同源名在库里对不上。
         var folder = (targetFolderName ?? string.Empty).Trim();
-        if (!ModCreator.IsValidFolderName(folder))
+        if (!ModCreator.IsValidLocalModFolderName(folder))
         {
             return Fail(ErrorKind.Invalid, "invalid-folder-name");
         }
@@ -280,6 +284,14 @@ public sealed class WorkshopToLocalConverter
                         () => _fileSystem.CopyDirectory(sourceDir, stagingContent, overwrite: true, cancellationToken),
                         cancellationToken)
                     .ConfigureAwait(true);
+
+                // 目录型 legacy 会把工坊目录整棵复制进来，内层 descriptor.mod 仍带着 remote_file_id。
+                // 必须在打包前清掉：zip 落地时之后再改 staging 已经进不到包里。
+                if (family == ModDescriptorFamily.Legacy)
+                {
+                    ClearInnerDescriptorWorkshopId(stagingContent);
+                }
+
                 if (needsArchive)
                 {
                     await _packager.CreateFromDirectory(stagingContent, stagingZip, cancellationToken).ConfigureAwait(true);
@@ -584,9 +596,13 @@ public sealed class WorkshopToLocalConverter
         + "version=\"" + Escape(version) + "\"\n"
         + "supported_version=\"" + Escape(supported) + "\"\n";
 
-    /// <summary>在不撞名的前提下挑一个 ASCII 目录名；撞名按 _2.._99 递增，写库前再查一次唯一性。</summary>
+    /// <summary>在不撞名的前提下挑一个目录名（可含中文）；撞名按 _2.._99 递增，写库前再查一次唯一性。</summary>
     private string? ChooseFolderName(GameInstallation game, string baseName, bool isZip)
     {
+        // 撞名判定必须大小写不敏感：Windows 上 `MyMod` 与 `mymod` 是同一目录，
+        // 但 IFileSystem.DirectoryExists 可能因测试替身 / 网络盘给出 false，最后落到
+        // MoveDirectory 才报已存在。父目录只需要枚举一次，99 次递增不必每次都重扫。
+        var taken = EnumerateTakenNames(game.ModDir);
         for (var attempt = 1; attempt <= MaxNameAttempts; attempt++)
         {
             var candidate = attempt == 1
@@ -595,15 +611,42 @@ public sealed class WorkshopToLocalConverter
             var directory = _fileSystem.Combine(game.ModDir, candidate);
             var archive = _fileSystem.Combine(game.ModDir, candidate + ".zip");
             var outer = _fileSystem.Combine(game.ModDir, candidate + ".mod");
-            if (!_fileSystem.DirectoryExists(directory)
-                && !_fileSystem.FileExists(archive)
-                && !_fileSystem.FileExists(outer))
+            if (taken.Contains(candidate)
+                || taken.Contains(candidate + ".zip")
+                || taken.Contains(candidate + ".mod")
+                || _fileSystem.DirectoryExists(directory)
+                || _fileSystem.FileExists(archive)
+                || _fileSystem.FileExists(outer))
             {
-                return candidate;
+                continue;
             }
+
+            return candidate;
         }
 
         return null;
+    }
+
+    /// <summary>父目录下已有的条目名（忽略大小写）；父目录不存在时返回空集。</summary>
+    private HashSet<string> EnumerateTakenNames(string parentDirectory)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!_fileSystem.DirectoryExists(parentDirectory))
+        {
+            return names;
+        }
+
+        foreach (var path in _fileSystem.EnumerateFiles(parentDirectory, "*", recursive: false)
+                     .Concat(_fileSystem.EnumerateDirectories(parentDirectory)))
+        {
+            var name = _fileSystem.GetFileName(path);
+            if (!string.IsNullOrEmpty(name))
+            {
+                names.Add(name);
+            }
+        }
+
+        return names;
     }
 
     /// <summary>
@@ -651,6 +694,28 @@ public sealed class WorkshopToLocalConverter
             landingIsZip ? "archive" : "path",
             _fileSystem.GetFullPath(finalAbsolute).Replace('\\', '/'));
         return text;
+    }
+
+    /// <summary>目录型 legacy：删掉内层 <c>descriptor.mod</c> 里的 <c>remote_file_id</c>；文件不存在时跳过。</summary>
+    private void ClearInnerDescriptorWorkshopId(string stagingContent)
+    {
+        var inner = _fileSystem.Combine(stagingContent, "descriptor.mod");
+        if (!_fileSystem.FileExists(inner))
+        {
+            return;
+        }
+
+        var original = TryReadText(inner);
+        if (string.IsNullOrWhiteSpace(original) || original.IndexOf("remote_file_id", StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            return;
+        }
+
+        var updated = LegacyDescriptorText.RemoveKey(original, "remote_file_id");
+        if (!string.Equals(updated, original, StringComparison.Ordinal))
+        {
+            _fileSystem.WriteAllTextAtomic(inner, updated);
+        }
     }
 
     /// <summary>metadata 家族：把数字 id 清空为空串，保留其余键。</summary>
