@@ -63,6 +63,12 @@ public sealed class UpdateService
     /// <summary>改名失败后的重试间隔；杀毒 / 索引器通常只短暂占用刚写完的文件。</summary>
     public static readonly TimeSpan DefaultMoveRetryDelay = TimeSpan.FromMilliseconds(500);
 
+    /// <summary>安装包下载尝试次数（首次 + 2 次重试）。</summary>
+    public const int DownloadAttempts = 3;
+
+    /// <summary>下载失败后的首个退避间隔；第 2 次重试按 3 倍退避（500ms → 1500ms）。</summary>
+    public static readonly TimeSpan DefaultDownloadRetryDelay = TimeSpan.FromMilliseconds(500);
+
     private readonly IHttpFetcher _http;
     private readonly IDownloadFetcher? _downloads;
     private readonly IAppLogger _logger;
@@ -109,6 +115,9 @@ public sealed class UpdateService
 
     /// <summary>改名重试间隔；自检把它设成 zero 以免拖慢。</summary>
     public TimeSpan MoveRetryDelay { get; init; } = DefaultMoveRetryDelay;
+
+    /// <summary>下载重试间隔基数；自检把它设成 zero 以免拖慢。</summary>
+    public TimeSpan DownloadRetryDelay { get; init; } = DefaultDownloadRetryDelay;
 
     /// <summary>构造时传入的设置实例；必须与 AppServices.Settings 是同一个对象。</summary>
     public AppSettings Settings => _settings;
@@ -274,78 +283,112 @@ public sealed class UpdateService
         }
 
         TryDelete(tempPath);
+        // 用户已经取消时不要再多发一次网络请求。
+        cancellationToken.ThrowIfCancellationRequested();
         var downloads = _downloads
             ?? throw new InvalidOperationException("当前网络层不支持文件下载");
 
         var verified = false;
-        try
+        for (var attempt = 1; ; attempt++)
         {
-            // 更新包不做续传：失败会删掉 .part 整份重下，行为与上一版一致。
-            var download = await downloads
-                .GetDownloadAsync(manifest.SetupUri, startOffset: null, cancellationToken)
-                .ConfigureAwait(false);
-            using var content = download.Content;
-            var total = download.ContentLength ?? manifest.Size;
-
-            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            var buffer = new byte[81920];
-            long received = 0;
-            var lastReported = 0L;
-            await using (var output = new FileStream(
-                tempPath,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None,
-                81920,
-                useAsync: true))
+            try
             {
-                int read;
-                while ((read = await content.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
-                {
-                    await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-                    hash.AppendData(buffer, 0, read);
-                    received += read;
+                // 更新包不做续传：每次尝试都整份重下，失败后删掉 .part。
+                var download = await downloads
+                    .GetDownloadAsync(manifest.SetupUri, startOffset: null, cancellationToken)
+                    .ConfigureAwait(false);
+                using var content = download.Content;
+                var total = download.ContentLength ?? manifest.Size;
 
-                    if (received - lastReported >= 256 * 1024)
+                using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                var buffer = new byte[81920];
+                long received = 0;
+                var lastReported = 0L;
+                await using (var output = new FileStream(
+                    tempPath,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.None,
+                    81920,
+                    useAsync: true))
+                {
+                    int read;
+                    while ((read = await content.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
                     {
-                        lastReported = received;
-                        progress?.Report(new UpdateProgress(received, total));
+                        await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                        hash.AppendData(buffer, 0, read);
+                        received += read;
+
+                        if (received - lastReported >= 256 * 1024)
+                        {
+                            lastReported = received;
+                            progress?.Report(new UpdateProgress(received, total));
+                        }
                     }
+
+                    await output.FlushAsync(cancellationToken).ConfigureAwait(false);
                 }
 
-                await output.FlushAsync(cancellationToken).ConfigureAwait(false);
-            }
+                // 写句柄必须在这里已经关闭：Windows 改名要求源文件句柄共享 Delete，
+                // FileShare.None 下改名必然报 sharing violation（也就是「文件被另一进程占用」）。
+                if (received != manifest.Size)
+                {
+                    throw new InvalidDataException("安装包大小不符：期望 " + manifest.Size + "，实际 " + received);
+                }
 
-            // 写句柄必须在这里已经关闭：Windows 改名要求源文件句柄共享 Delete，
-            // FileShare.None 下改名必然报 sharing violation（也就是「文件被另一进程占用」）。
-            if (received != manifest.Size)
+                var actual = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+                if (!string.Equals(actual, manifest.Sha256, StringComparison.Ordinal))
+                {
+                    throw new InvalidDataException("安装包 SHA-256 不符");
+                }
+
+                verified = true;
+                await MoveVerifiedPackageAsync(tempPath, finalPath, cancellationToken).ConfigureAwait(false);
+                progress?.Report(new UpdateProgress(received, total));
+                _logger.Info("更新安装包已下载并校验: " + finalPath);
+                return finalPath;
+            }
+            catch (Exception ex) when (ex is not SteamThrottleException
+                && ex is not InvalidDataException
+                && ex is not UpdatePackageLockedException
+                && !(ex is OperationCanceledException && cancellationToken.IsCancellationRequested))
             {
-                throw new InvalidDataException("安装包大小不符：期望 " + manifest.Size + "，实际 " + received);
-            }
+                // 已校验完整的包不能删：改名被占用时下次可直接复用，避免重下几十 MB。
+                if (!verified)
+                {
+                    TryDelete(tempPath);
+                }
 
-            var actual = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
-            if (!string.Equals(actual, manifest.Sha256, StringComparison.Ordinal))
+                if (attempt >= DownloadAttempts)
+                {
+                    _logger.Warn("更新包下载失败（已重试 " + (DownloadAttempts - 1) + " 次）：" + ex.Message);
+                    throw;
+                }
+
+                // 传输中途失败也重试；本轮进度作废，下一轮从 0 重新报。
+                progress?.Report(new UpdateProgress(0, manifest.Size));
+                _logger.Warn(
+                    "更新包下载重试 " + attempt + "/" + (DownloadAttempts - 1) + "：" + ex.Message);
+                await Task.Delay(DownloadRetryDelayFor(attempt), cancellationToken).ConfigureAwait(false);
+            }
+            catch
             {
-                throw new InvalidDataException("安装包 SHA-256 不符");
-            }
+                // 限流 / 校验不符 / 改名被占用 / 用户取消：不重试，保留原语义。
+                if (!verified)
+                {
+                    TryDelete(tempPath);
+                }
 
-            verified = true;
-            await MoveVerifiedPackageAsync(tempPath, finalPath, cancellationToken).ConfigureAwait(false);
-            progress?.Report(new UpdateProgress(received, total));
-            _logger.Info("更新安装包已下载并校验: " + finalPath);
-            return finalPath;
-        }
-        catch
-        {
-            // 已校验完整的包不能删：改名被占用时下次可直接复用，避免重下几十 MB。
-            if (!verified)
-            {
-                TryDelete(tempPath);
+                throw;
             }
-
-            throw;
         }
     }
+
+    /// <summary>第 n 次失败后的等待时间：500ms、1500ms（3 倍退避）。</summary>
+    private TimeSpan DownloadRetryDelayFor(int attempt) =>
+        attempt <= 1
+            ? DownloadRetryDelay
+            : TimeSpan.FromMilliseconds(DownloadRetryDelay.TotalMilliseconds * 3);
 
     /// <summary>
     /// 把已校验的 <c>.part</c> 改名为正式安装包。Windows 上杀毒 / 索引器可能在文件刚写完时

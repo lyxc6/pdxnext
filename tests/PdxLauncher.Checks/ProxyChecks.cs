@@ -20,6 +20,7 @@ public static class ProxyChecks
         CheckManual();
         CheckSystem();
         CheckDirectIgnoresEnvironment();
+        CheckAdoptSystemProxy();
         CheckBypassPatterns();
         CheckLogging();
         return ChecksContext.Failures == before ? 0 : 1;
@@ -252,6 +253,60 @@ public static class ProxyChecks
     }
 
     // ------------------------------------------------------------ ProxyOverride
+
+    /// <summary>
+    /// 首次启动的懒采纳：只有「用户从没表过态」才把系统代理写成 system。
+    /// 显式 direct、旧配置里的 proxyUrl、探测不到代理这三种情况都必须原样保留。
+    /// </para>
+    /// </summary>
+    private static void CheckAdoptSystemProxy()
+    {
+        var systemOn = new Func<SystemProxySettings?>(
+            () => new SystemProxySettings(true, "127.0.0.1:7890", null, null));
+        var envOn = new Func<string, string?>(name =>
+            string.Equals(name, "http_proxy", StringComparison.OrdinalIgnoreCase) ? "http://10.0.0.1:3128" : null);
+
+        // 空模式 + 系统代理 → 采纳。
+        var blank = new AppSettings();
+        ChecksContext.Check("采纳: 空模式遇到系统代理 → true",
+            ProxyResolver.TryAdoptSystemProxy(blank, null, envOn, systemOn));
+        ChecksContext.Equal("采纳: 模式写成 system", ProxyModes.System, blank.ProxyMode);
+
+        // 空模式 + 系统代理关闭 + 环境变量 → 也采纳。
+        var viaEnv = new AppSettings { ProxyMode = "  " };
+        ChecksContext.Check("采纳: 空模式回落到环境变量 → true",
+            ProxyResolver.TryAdoptSystemProxy(viaEnv, null, envOn, () => new SystemProxySettings(false, null, null, null)));
+        ChecksContext.Equal("采纳: 环境变量分支也写 system", ProxyModes.System, viaEnv.ProxyMode);
+
+        // 探测不到代理 → 不改写，下次启动再试。
+        var nothing = new AppSettings();
+        Func<SystemProxySettings?> noSystem = () => null;
+        ChecksContext.Check("采纳: 没有任何代理 → false",
+            !ProxyResolver.TryAdoptSystemProxy(nothing, null, _ => null, noSystem));
+        ChecksContext.Check("采纳: 没探测到时不写模式", nothing.ProxyMode is null);
+
+        // 显式 direct → 绝不改写。
+        var explicitDirect = new AppSettings { ProxyMode = ProxyModes.Direct };
+        ChecksContext.Check("采纳: 显式 direct 不采纳",
+            !ProxyResolver.TryAdoptSystemProxy(explicitDirect, null, envOn, systemOn));
+        ChecksContext.Equal("采纳: 显式 direct 保持原值", ProxyModes.Direct, explicitDirect.ProxyMode);
+
+        // 旧配置只填了 proxyUrl → 仍是手动配置，不采纳。
+        var legacyManual = new AppSettings { ProxyUrl = "127.0.0.1:7890" };
+        ChecksContext.Check("采纳: 旧配置有地址不采纳",
+            !ProxyResolver.TryAdoptSystemProxy(legacyManual, null, envOn, systemOn));
+        ChecksContext.Check("采纳: 旧配置模式仍为空（由 Normalize 归为 manual）", legacyManual.ProxyMode is null);
+
+        // PAC 脚本：.NET 不执行 PAC，不能当作可用代理采纳。
+        var pac = new AppSettings();
+        ChecksContext.Check("采纳: 只有 PAC 不采纳",
+            !ProxyResolver.TryAdoptSystemProxy(
+                pac,
+                null,
+                _ => null,
+                () => new SystemProxySettings(false, null, null, "http://pac.example/proxy.pac")));
+        ChecksContext.Check("采纳: PAC 时模式仍为空", pac.ProxyMode is null);
+    }
 
     private static void CheckBypassPatterns()
     {

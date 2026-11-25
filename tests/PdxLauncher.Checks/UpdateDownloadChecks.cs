@@ -19,6 +19,10 @@ public static class UpdateDownloadChecks
         CheckNormalDownload();
         CheckLockedTargetKeepsAndReusesPart();
         CheckBadHashDropsPart();
+        CheckTransientFailureRetries();
+        CheckAllAttemptsFailCleanup();
+        CheckThrottleDoesNotRetry();
+        CheckCancellationDoesNotRetry();
 
         return ChecksContext.Failures == before ? 0 : 1;
     }
@@ -138,7 +142,136 @@ public static class UpdateDownloadChecks
             "1.4.0")
         {
             MoveRetryDelay = TimeSpan.Zero,
+            DownloadRetryDelay = TimeSpan.Zero,
         };
+
+    private static void CheckTransientFailureRetries()
+    {
+        Console.WriteLine("[UpdateDownloadChecks] 前两次瞬时失败后第三次成功");
+        var root = NewRoot();
+        try
+        {
+            var payload = Payload();
+            var fetcher = new FakeUpdateFetcher(
+                payload,
+                attempt => attempt < 3
+                    ? new System.Net.Http.HttpRequestException("离线测试：连接被重置")
+                    : null);
+            var service = NewService(root, fetcher);
+            var manifest = Manifest(payload);
+
+            var path = service.DownloadAsync(manifest, null, CancellationToken.None).GetAwaiter().GetResult();
+
+            ChecksContext.Equal("瞬时失败: 第 3 次尝试成功", 3, fetcher.GetDownloadCallCount);
+            ChecksContext.EqualBytes("瞬时失败后内容一致", payload, File.ReadAllBytes(path));
+            ChecksContext.Check("瞬时失败后没有 .part 残留", !File.Exists(path + ".part"));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    private static void CheckAllAttemptsFailCleanup()
+    {
+        Console.WriteLine("[UpdateDownloadChecks] 三次全失败：清理 .part 并抛出原异常");
+        var root = NewRoot();
+        try
+        {
+            var payload = Payload();
+            var finalPath = Path.Combine(root, "PdxNext-Setup-1.4.1.exe");
+            var fetcher = new FakeUpdateFetcher(
+                payload,
+                _ => new System.Net.Http.HttpRequestException("离线测试：TLS 握手失败"));
+            var service = NewService(root, fetcher);
+            var manifest = Manifest(payload);
+
+            var thrown = false;
+            try
+            {
+                service.DownloadAsync(manifest, null, CancellationToken.None).GetAwaiter().GetResult();
+            }
+            catch (System.Net.Http.HttpRequestException)
+            {
+                thrown = true;
+            }
+
+            ChecksContext.Check("三次全失败: 抛 HttpRequestException", thrown);
+            ChecksContext.Equal("三次全失败: 正好尝试 3 次", UpdateService.DownloadAttempts, fetcher.GetDownloadCallCount);
+            ChecksContext.Check("三次全失败: .part 被清理", !File.Exists(finalPath + ".part"));
+            ChecksContext.Check("三次全失败: 没有正式安装包", !File.Exists(finalPath));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    private static void CheckThrottleDoesNotRetry()
+    {
+        Console.WriteLine("[UpdateDownloadChecks] 被限流不重试");
+        var root = NewRoot();
+        try
+        {
+            var payload = Payload();
+            var fetcher = new FakeUpdateFetcher(
+                payload,
+                _ => new PdxLauncher.Core.Online.SteamThrottleException(
+                    "github.com",
+                    TimeSpan.FromSeconds(30),
+                    rejectedByCooldown: false,
+                    "离线测试：429"));
+            var service = NewService(root, fetcher);
+
+            var thrown = false;
+            try
+            {
+                service.DownloadAsync(Manifest(payload), null, CancellationToken.None).GetAwaiter().GetResult();
+            }
+            catch (PdxLauncher.Core.Online.SteamThrottleException)
+            {
+                thrown = true;
+            }
+
+            ChecksContext.Check("限流: 抛出原异常", thrown);
+            ChecksContext.Equal("限流: 只尝试 1 次", 1, fetcher.GetDownloadCallCount);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    private static void CheckCancellationDoesNotRetry()
+    {
+        Console.WriteLine("[UpdateDownloadChecks] 用户取消不重试");
+        var root = NewRoot();
+        try
+        {
+            var payload = Payload();
+            var fetcher = new FakeUpdateFetcher(payload);
+            var service = NewService(root, fetcher);
+            using var cancellation = new CancellationTokenSource();
+            cancellation.Cancel();
+
+            var thrown = false;
+            try
+            {
+                service.DownloadAsync(Manifest(payload), null, cancellation.Token).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException)
+            {
+                thrown = true;
+            }
+
+            ChecksContext.Check("取消: 抛出 OperationCanceledException", thrown);
+            ChecksContext.Equal("取消: 不发起下载", 0, fetcher.GetDownloadCallCount);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
 
     private static UpdateManifest Manifest(byte[] payload, bool badHash = false) => new()
     {
@@ -177,8 +310,13 @@ public static class UpdateDownloadChecks
     private sealed class FakeUpdateFetcher : IHttpFetcher, IDownloadFetcher
     {
         private readonly byte[] _payload;
+        private readonly Func<int, Exception?>? _failOn;
 
-        public FakeUpdateFetcher(byte[] payload) => _payload = payload;
+        public FakeUpdateFetcher(byte[] payload, Func<int, Exception?>? failOn = null)
+        {
+            _payload = payload;
+            _failOn = failOn;
+        }
 
         public int GetDownloadCallCount { get; private set; }
 
@@ -194,6 +332,11 @@ public static class UpdateDownloadChecks
         public Task<HttpDownload> GetDownloadAsync(Uri uri, long? startOffset, CancellationToken cancellationToken)
         {
             GetDownloadCallCount++;
+            if (_failOn?.Invoke(GetDownloadCallCount) is { } failure)
+            {
+                throw failure;
+            }
+
             return Task.FromResult(new HttpDownload(new MemoryStream(_payload, writable: false), _payload.Length));
         }
     }

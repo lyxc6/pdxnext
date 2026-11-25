@@ -303,7 +303,7 @@ magic：PNG 89 50 4E 47、JPEG FF D8 FF、GIF "GIF8"、SVG 含 "<svg"、字体 0
 
 | 键 | 取值 | 说明 |
 | --- | --- | --- |
-| `proxyMode` | `"direct"` / `"system"` / `"manual"` | 缺省（旧配置）时按 `proxyUrl` 是否有值推断：有→`manual`，无→`direct` |
+| `proxyMode` | `"direct"` / `"system"` / `"manual"` | 缺省（旧配置）时按 `proxyUrl` 是否有值推断：有→`manual`，无→`direct`。额外一步：启动时若该键为空且 `proxyUrl` 也为空、探测到可用系统代理，应用会把它写成 `system` 并落盘；显式 `direct` 与旧配置的 `proxyUrl` 都不会被改写 |
 | `proxyUrl` | `"http://127.0.0.1:7890"` | 只在 `manual` 下使用；缺 scheme 自动补 `http://`，两端引号会被去掉 |
 
 - `direct`：不构造代理，环境变量与 WinINET 设置都不读。
