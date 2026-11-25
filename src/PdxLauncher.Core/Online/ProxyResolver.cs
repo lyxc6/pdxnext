@@ -63,6 +63,53 @@ public static class ProxyResolver
         return resolution.Proxy;
     }
 
+    /// <summary>
+    /// 首次启动的懒采纳：<c>proxyMode</c> 从未设置（null / 空白）且没有旧配置地址时，
+    /// 探测一次系统代理（含环境变量回落），探测到可用代理就把它写成 <c>system</c> 并返回 true。
+    /// <para>
+    /// 只有「用户从没表过态」才采纳：显式 <c>direct</c>、旧配置里的 <c>proxyUrl</c>
+    /// 都不会被改写。探测不到代理（含 PAC / SOCKS / 非法地址）保持原样，
+    /// 下次启动再试——所以在新机器上先启动、后开代理也能自动跟上。
+    /// </para>
+    /// </summary>
+    /// <param name="settings">用户设置；采纳时就地写入 <see cref="AppSettings.ProxyMode"/>。</param>
+    /// <param name="logger">可选日志出口，记录采纳结果与被采纳的地址。</param>
+    /// <param name="environment">环境变量读取函数，默认读真实环境变量。</param>
+    /// <param name="systemProxy">系统代理读取函数，默认读 HKCU WinINET。</param>
+    /// <returns>确实把模式改成 <c>system</c> 时返回 true；调用方据此决定是否落盘。</returns>
+    public static bool TryAdoptSystemProxy(
+        AppSettings settings,
+        IAppLogger? logger = null,
+        Func<string, string?>? environment = null,
+        Func<SystemProxySettings?>? systemProxy = null)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var mode = settings.ProxyMode?.Trim();
+        if (!string.IsNullOrEmpty(mode) || !string.IsNullOrWhiteSpace(settings.ProxyUrl))
+        {
+            return false;
+        }
+
+        var probe = Describe(
+            new AppSettings { ProxyMode = ProxyModes.System },
+            environment,
+            systemProxy);
+        if (probe.Url is null)
+        {
+            if (probe.Warning is not null)
+            {
+                logger?.Info("首次启动未采纳代理：" + probe.Warning);
+            }
+
+            return false;
+        }
+
+        settings.ProxyMode = ProxyModes.System;
+        logger?.Info("首次启动采纳系统代理（" + probe.Source + "）：" + probe.Url);
+        return true;
+    }
+
     private static ProxyResolution DescribeManual(string? rawUrl)
     {
         var url = Normalize(rawUrl);

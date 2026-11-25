@@ -141,6 +141,18 @@ public partial class App : Application
         var settingsStore = new AppSettingsStore(documents, logger);
         var settings = settingsStore.Load();
 
+        // 用户从没表过态（proxyMode 为空）时，把可用的系统代理采纳成 system 并落盘：
+        // 默认直连在装了系统代理的机器上会让更新检查与在线功能全部超时。
+        // 落盘失败只记日志：本次进程仍按已采纳的模式联网，下次启动会重新探测。
+        if (ProxyResolver.TryAdoptSystemProxy(settings, logger))
+        {
+            var saved = settingsStore.Save(settings);
+            if (!saved.IsSuccess)
+            {
+                logger.Warn("首次启动采纳系统代理后写入设置失败：" + saved.ErrorMessage);
+            }
+        }
+
         // 联网链路（HttpFetcher → 元数据 / 素材 / 主题 / DLC 简介）集中在 NetworkComposition，
         // 设置页改代理后只换连接池、不换服务对象（见 AppServices.TryRebuildNetworkServices）。
         var network = NetworkComposition.Create(fileSystem, logger, clock, settings, documents, database);
