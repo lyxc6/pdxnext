@@ -43,13 +43,14 @@ public static class PerformanceGaugeMathChecks
     {
         ChecksContext.Equal("仪表内存：0 → 0%", 0, PerformanceGaugeMath.ComputeMemory(0).Percent);
         ChecksContext.Equal("仪表内存：空快照状态正常", GaugeStatus.Normal, PerformanceGaugeMath.ComputeMemory(0).Status);
-        CheckApprox("仪表内存：空闲目标 → 60%", PerformanceGaugeMath.IdleMemoryPercent, PerformanceGaugeMath.ComputeMemory(PerformanceHints.IdleBudgetBytes).Percent, 0.001);
-        CheckApprox("仪表内存：详情预算 → 100%", 100, PerformanceGaugeMath.ComputeMemory(PerformanceHints.DetailBudgetBytes).Percent, 0.001);
-        ChecksContext.Equal("仪表内存：超过详情预算仍 100%", 100, PerformanceGaugeMath.ComputeMemory(PerformanceHints.DetailBudgetBytes * 2).Percent);
-        ChecksContext.Equal("仪表内存：超过详情预算状态危险", GaugeStatus.Critical, PerformanceGaugeMath.ComputeMemory(PerformanceHints.DetailBudgetBytes * 2).Status);
+        CheckApprox("仪表内存：半目标 → 50%", 50, PerformanceGaugeMath.ComputeMemory(PerformanceHints.IdleBudgetBytes / 2).Percent, 0.001);
+        CheckApprox("仪表内存：空闲目标 → 100%", 100, PerformanceGaugeMath.ComputeMemory(PerformanceHints.IdleBudgetBytes).Percent, 0.001);
+        ChecksContext.Equal("仪表内存：空闲目标状态危险", GaugeStatus.Critical, PerformanceGaugeMath.ComputeMemory(PerformanceHints.IdleBudgetBytes).Status);
+        ChecksContext.Equal("仪表内存：超过空闲目标仍 100%", 100, PerformanceGaugeMath.ComputeMemory(PerformanceHints.IdleBudgetBytes * 3).Percent);
+        ChecksContext.Equal("仪表内存：超过空闲目标状态危险", GaugeStatus.Critical, PerformanceGaugeMath.ComputeMemory(PerformanceHints.IdleBudgetBytes * 3).Status);
 
-        // 60% ~ 100% 段的 75% 告警线：60 + (x-250)/(550-250)*40 = 75 → x = 362.5 MB。
-        double warningBytes = 362.5 * Megabyte;
+        // 75% 告警线 = 250 MB × 75% = 187.5 MB。
+        double warningBytes = PerformanceHints.IdleBudgetBytes * 0.75;
         ChecksContext.Equal("仪表内存：75% 状态告警", GaugeStatus.Warning, PerformanceGaugeMath.ComputeMemory(warningBytes).Status);
         ChecksContext.Equal("仪表内存：略低于 75% 状态正常", GaugeStatus.Normal, PerformanceGaugeMath.ComputeMemory(warningBytes - 1).Status);
     }

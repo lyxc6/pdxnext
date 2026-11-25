@@ -21,7 +21,6 @@ public static class DiagnosticsPageChecks
         "navDiagStartup",
         "btnDiagRefresh",
         "btnDiagRefreshCache",
-        "btnDiagRefreshCacheOverview",
         "btnDiagClearAllCaches",
         "btnDiagRefreshLog",
         "btnDiagOpenLogFolder",
@@ -30,6 +29,7 @@ public static class DiagnosticsPageChecks
         "tglDiagLogWrap",
         "tglDiagLive",
         "diagGauges",
+        "expDiagDetails",
         "txtDiagLogTail",
         "txtDiagStatus",
     ];
@@ -109,9 +109,12 @@ public static class DiagnosticsPageChecks
         ChecksContext.Check("概览用 PdxGaugeRing 模板显示四个核心环",
             xaml.Contains("GaugeRingTemplate", StringComparison.Ordinal) &&
             xaml.Contains("controls:PdxGaugeRing", StringComparison.Ordinal));
-        ChecksContext.Check("概览仪表用 PdxWrapPanel 折行",
-            SliceBetween(xaml, "<ItemsControl x:Name=\"diagGauges\"", "</ItemsControl>")
-                .Contains("controls:PdxWrapPanel", StringComparison.Ordinal));
+        ChecksContext.Check("概览仪表固定四等列（最小窗口宽下也不折成 3+1）",
+            SliceBetween(xaml, "<Grid x:Name=\"diagGauges\"", "</Grid>")
+                .Contains("<ColumnDefinition Width=\"*\" />", StringComparison.Ordinal) &&
+            xaml.Contains("GaugeRingTemplate", StringComparison.Ordinal) &&
+            xaml.Contains("ItemsSource=\"{x:Bind ViewModel.MemoryGauge", StringComparison.Ordinal) &&
+            xaml.Contains("ItemsSource=\"{x:Bind ViewModel.StartupGauge", StringComparison.Ordinal));
         ChecksContext.Check("实时开关绑定 LiveEnabled 并接 Toggled",
             xaml.Contains("IsOn=\"{x:Bind ViewModel.LiveEnabled, Mode=TwoWay}\"", StringComparison.Ordinal) &&
             codeBehind.Contains("OnLiveToggled", StringComparison.Ordinal));
@@ -125,6 +128,19 @@ public static class DiagnosticsPageChecks
             viewModel.Contains("ObservableCollection<GaugeViewModel> Gauges", StringComparison.Ordinal) &&
             viewModel.Contains("LiveStatusText", StringComparison.Ordinal) &&
             viewModel.Contains("PerformanceGaugeMath.ComputeMemory", StringComparison.Ordinal));
+        ChecksContext.Check("概览不再重复「概览」大标题",
+            !SliceBetween(xaml, "<StackPanel x:Name=\"secOverview\"", "<TextBlock Text=\"{x:Bind L.DiagnosticsOverviewMetricsTitle")
+                .Contains("L.DiagnosticsSectionOverview", StringComparison.Ordinal));
+        ChecksContext.Check("概览移除重复缓存合计卡",
+            !SliceBetween(xaml, "<StackPanel x:Name=\"secOverview\"", "x:Name=\"secCache\"")
+                .Contains("CacheTotalText", StringComparison.Ordinal) &&
+            !xaml.Contains("btnDiagRefreshCacheOverview", StringComparison.Ordinal));
+        ChecksContext.Check("概览移除重复工作集指标卡",
+            !viewModel.Contains("DiagnosticsMetricWorkingSet", StringComparison.Ordinal) &&
+            !viewModel.Contains("\"workingSet\"", StringComparison.Ordinal));
+        ChecksContext.Check("更多进程指标折叠区存在",
+            xaml.Contains("x:Name=\"expDiagDetails\"", StringComparison.Ordinal) &&
+            xaml.Contains("ViewModel.DetailMetrics", StringComparison.Ordinal));
 
         // 动画三项：补间弧长、更新脉冲、60 秒迷你趋势线。
         ChecksContext.Check("仪表环用 Storyboard + CubicEase 补间弧长",
@@ -143,10 +159,11 @@ public static class DiagnosticsPageChecks
         ChecksContext.Check("仪表就地更新而不是 Clear+重建（补间前提）",
             viewModel.Contains("gauge.Apply(reading.Percent", StringComparison.Ordinal) &&
             !viewModel.Contains("Gauges.Clear();", StringComparison.Ordinal) &&
-            rows.Contains("public bool Apply(double percent", StringComparison.Ordinal));
+            rows.Contains("public bool Apply(double percent", StringComparison.Ordinal) &&
+            rows.Contains("public string TrendCaption", StringComparison.Ordinal));
 
         ChecksContext.Check("概览指标卡按稳定键就地更新，不再每次采样整批重建",
-            viewModel.Contains("existing = Metrics.FirstOrDefault(metric => metric.Key == key)", StringComparison.Ordinal) &&
+            viewModel.Contains("existing = target.FirstOrDefault(metric => metric.Key == key)", StringComparison.Ordinal) &&
             !viewModel.Contains("AddMetric(", StringComparison.Ordinal) &&
             rows.Contains("void Apply(string title, string value, string detail)", StringComparison.Ordinal));
         ChecksContext.Check("优化建议按稳定键就地更新，消失的建议才移除",
@@ -245,6 +262,23 @@ public static class DiagnosticsPageChecks
             viewModel.Contains("DiagnosticsLogWrap = value", StringComparison.Ordinal) &&
             viewModel.Contains("DiagnosticsLogAutoRefresh = value", StringComparison.Ordinal) &&
             viewModel.Contains("SaveSettings()", StringComparison.Ordinal));
+        ChecksContext.Check("概览实时开关写回设置",
+            settings.Contains("DiagnosticsOverviewLive", StringComparison.Ordinal) &&
+            viewModel.Contains("DiagnosticsOverviewLive = value", StringComparison.Ordinal) &&
+            viewModel.Contains("PersistLiveEnabled", StringComparison.Ordinal));
+        ChecksContext.Check("概览不再出现『预算 N%』这类含糊口径",
+            !viewModel.Contains("DiagnosticsGaugePercent", StringComparison.Ordinal) &&
+            !xaml.Contains("预算", StringComparison.Ordinal) &&
+            viewModel.Contains("GaugeDetail(", StringComparison.Ordinal));
+        ChecksContext.Check("优化建议只写动作、不复述数字（文案与调用都不带占位符）",
+            !viewModel.Contains("SizeFormatter.Format(hint.Value)", StringComparison.Ordinal) &&
+            !zhTable["DiagnosticsHintMemoryHighDetail"].Contains("{0}", StringComparison.Ordinal) &&
+            !zhTable["DiagnosticsHintCacheLargeDetail"].Contains("{0}", StringComparison.Ordinal) &&
+            !zhTable["DiagnosticsHintLogNearRotationDetail"].Contains("{0}", StringComparison.Ordinal) &&
+            !zhTable["DiagnosticsHintLogArchivesDetail"].Contains("{0}", StringComparison.Ordinal) &&
+            !zhTable["DiagnosticsHintWorkshopCacheLargeDetail"].Contains("{0}", StringComparison.Ordinal));
+        ChecksContext.Check("采样时间用固定 24 小时制到秒",
+            viewModel.Contains("\"yyyy-MM-dd HH:mm:ss\"", StringComparison.Ordinal));
         ChecksContext.Check("日志显示行由解析函数生成",
             viewModel.Contains("LogTailReader.ParseDisplayLines", StringComparison.Ordinal));
 
@@ -262,8 +296,13 @@ public static class DiagnosticsPageChecks
         foreach (var key in new[]
                  {
                      "DiagnosticsGaugeMemory", "DiagnosticsGaugeCache", "DiagnosticsGaugeLog", "DiagnosticsGaugeStartup",
-                     "DiagnosticsGaugePercent", "DiagnosticsGaugeLiveOn", "DiagnosticsGaugeLiveOff",
-                     "DiagnosticsGaugeLiveToggle", "DiagnosticsGaugeSubtitle",
+                     "DiagnosticsGaugeMemoryPercent", "DiagnosticsGaugeMemoryOver",
+                     "DiagnosticsGaugeCachePercent", "DiagnosticsGaugeCacheOver",
+                     "DiagnosticsGaugeLogPercent", "DiagnosticsGaugeLogOver",
+                     "DiagnosticsGaugeStartupPercent", "DiagnosticsGaugeStartupOver",
+                     "DiagnosticsGaugeLiveOn", "DiagnosticsGaugeLiveOff",
+                     "DiagnosticsGaugeLiveToggle", "DiagnosticsGaugeTrendWindow",
+                     "DiagnosticsMoreMetrics",
                  })
         {
             ChecksContext.Check("zh-CN 有实时仪表文案 " + key, zhTable.ContainsKey(key));

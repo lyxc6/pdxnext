@@ -28,9 +28,6 @@ public static class PerformanceGaugeMath
     /// <summary>状态阈值：达到 75% 视为接近预算。</summary>
     public const double WarningPercent = 75;
 
-    /// <summary>内存映射：空闲目标（250 MB）对应 60%，详情预算（550 MB）对应 100%。</summary>
-    public const double IdleMemoryPercent = 60;
-
     /// <summary>把任意数值夹到 0 ~ 100；NaN / 无穷按 0 处理。</summary>
     public static double ClampPercent(double value)
     {
@@ -43,8 +40,9 @@ public static class PerformanceGaugeMath
     }
 
     /// <summary>
-    /// 工作集映射：0 → 0%，空闲目标 → 60%，详情预算及以上 → 100%，中间线性插值。
-    /// 空闲目标以下用更平缓的斜率，让用户从「绿变黄」之前就能看到环在涨。
+    /// 工作集映射：0 → 0%，空闲目标（250 MB）及以上 → 100%。
+    /// 概览只按「空载」这一条验收线判色，工作集超过空闲目标即视为需要处理；
+    /// 工坊详情页的 550 MB 是另一个场景的目标，不参与这个环，避免「超了 250 MB 却显示 99%」。
     /// </summary>
     public static GaugeReading ComputeMemory(double workingSetBytes)
     {
@@ -53,12 +51,7 @@ public static class PerformanceGaugeMath
             return new GaugeReading(0, GaugeStatus.Normal);
         }
 
-        double percent = workingSetBytes <= PerformanceHints.IdleBudgetBytes
-            ? workingSetBytes / PerformanceHints.IdleBudgetBytes * IdleMemoryPercent
-            : IdleMemoryPercent
-              + (workingSetBytes - PerformanceHints.IdleBudgetBytes)
-                / (PerformanceHints.DetailBudgetBytes - PerformanceHints.IdleBudgetBytes)
-                * (100 - IdleMemoryPercent);
+        double percent = workingSetBytes / PerformanceHints.IdleBudgetBytes * 100;
 
         return ToReading(percent);
     }

@@ -17,6 +17,7 @@ public sealed class GaugeViewModel : ObservableObject
 
     private string _valueText;
     private string _detailText;
+    private string _trendCaption;
     private double _percent;
     private GaugeStatus _status;
     private IReadOnlyList<TrendPoint> _trendPoints = Array.Empty<TrendPoint>();
@@ -26,6 +27,7 @@ public sealed class GaugeViewModel : ObservableObject
         string title,
         string valueText,
         string detailText,
+        string trendCaption,
         double percent,
         GaugeStatus status,
         string automationId)
@@ -34,6 +36,7 @@ public sealed class GaugeViewModel : ObservableObject
         Title = title;
         _valueText = valueText;
         _detailText = detailText;
+        _trendCaption = trendCaption;
         _percent = percent;
         _status = status;
         AutomationId = automationId;
@@ -60,6 +63,13 @@ public sealed class GaugeViewModel : ObservableObject
         private set => SetProperty(ref _detailText, value);
     }
 
+    /// <summary>趋势线标注（最近 60 秒），跟当前语言走。</summary>
+    public string TrendCaption
+    {
+        get => _trendCaption;
+        private set => SetProperty(ref _trendCaption, value);
+    }
+
     /// <summary>占预算百分比（0 ~ 100），驱动弧长补间。</summary>
     public double Percent
     {
@@ -83,7 +93,7 @@ public sealed class GaugeViewModel : ObservableObject
     public string AutomationId { get; }
 
     /// <summary>用一次新采样就地更新全部显示值；返回是否有变化（决定是否触发高亮脉冲）。</summary>
-    public bool Apply(double percent, string valueText, string detailText, GaugeStatus status)
+    public bool Apply(double percent, string valueText, string detailText, string trendCaption, GaugeStatus status)
     {
         var clamped = PerformanceGaugeMath.ClampPercent(percent);
         bool changed = Math.Abs(clamped - Percent) > 0.01
@@ -93,6 +103,7 @@ public sealed class GaugeViewModel : ObservableObject
         Percent = clamped;
         ValueText = valueText;
         DetailText = detailText;
+        TrendCaption = trendCaption;
         Status = status;
         _trend.Append(clamped, DateTimeOffset.Now);
         TrendPoints = GaugeTrendMath.BuildPoints(_trend.Values());

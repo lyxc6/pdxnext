@@ -833,37 +833,31 @@
     <value>缓存只影响速度，不会删游戏文件；清完首次打开相应页面会重新生成。</value>
   </data>
   <data name="DiagnosticsHintCacheLargeDetail" xml:space="preserve">
-    <value>缓存合计 {0}，超过 500 MB；缓存分区可以按行清理。</value>
+    <value>到缓存分区按行清理。</value>
   </data>
   <data name="DiagnosticsHintCacheLargeTitle" xml:space="preserve">
     <value>缓存总量偏大</value>
   </data>
   <data name="DiagnosticsHintLogArchivesDetail" xml:space="preserve">
-    <value>日志目录合计 {0}；旧文件只在排查问题时才有用。</value>
+    <value>旧文件只在排查问题时才有用，可先复制一份再清理。</value>
   </data>
   <data name="DiagnosticsHintLogArchivesTitle" xml:space="preserve">
     <value>已有 3 个历史日志</value>
   </data>
   <data name="DiagnosticsHintLogNearRotationDetail" xml:space="preserve">
-    <value>当前日志 {0}，到 5 MB 会轮转；要留档先打开日志目录复制一份。</value>
+    <value>要留档先打开日志目录复制一份。</value>
   </data>
   <data name="DiagnosticsHintLogNearRotationTitle" xml:space="preserve">
     <value>日志接近轮转阈值</value>
   </data>
-  <data name="DiagnosticsHintMemoryAboveDetailBudgetDetail" xml:space="preserve">
-    <value>当前 {0}，超过 550 MB；先清一次大缓存，再看工坊详情是否仍偏高。</value>
-  </data>
-  <data name="DiagnosticsHintMemoryAboveDetailBudgetTitle" xml:space="preserve">
-    <value>工作集超过详情页预算</value>
-  </data>
   <data name="DiagnosticsHintMemoryHighDetail" xml:space="preserve">
-    <value>当前 {0}，超过 250 MB 的空闲目标；多为缩略图与图片缓存，可到缓存分区清理。</value>
+    <value>先清缓存分区，再确认工作集是否回落。</value>
   </data>
   <data name="DiagnosticsHintMemoryHighTitle" xml:space="preserve">
-    <value>工作集高于空闲预算</value>
+    <value>工作集高于空闲目标</value>
   </data>
   <data name="DiagnosticsHintStartupSlowDetail" xml:space="preserve">
-    <value>这次到可交互用了 {0}；到启动耗时分区看是哪一段慢。</value>
+    <value>到启动耗时分区看是哪一段慢。</value>
   </data>
   <data name="DiagnosticsHintStartupSlowTitle" xml:space="preserve">
     <value>冷启动超过 2.5 秒</value>
@@ -881,7 +875,7 @@
     <value>翻译模型常驻内存</value>
   </data>
   <data name="DiagnosticsHintWorkshopCacheLargeDetail" xml:space="preserve">
-    <value>工坊条目与分页合计 {0} 条，超过 2000；不需要离线浏览时可以清掉。</value>
+    <value>不需要离线浏览时，可以到缓存分区清掉。</value>
   </data>
   <data name="DiagnosticsHintWorkshopCacheLargeTitle" xml:space="preserve">
     <value>工坊缓存条目偏多</value>
@@ -971,7 +965,7 @@
     <value>线程 / 句柄</value>
   </data>
   <data name="DiagnosticsMetricThreadsDetail" xml:space="preserve">
-    <value>句柄只增不减，常见于图片或文件没释放。</value>
+    <value>持续上涨时常对应图片或文件句柄未释放。</value>
   </data>
   <data name="DiagnosticsMetricThumbnails" xml:space="preserve">
     <value>Mod 缩略图</value>
@@ -980,16 +974,10 @@
     <value>内存里持有的缩略图对象数。</value>
   </data>
   <data name="DiagnosticsMetricUptime" xml:space="preserve">
-    <value>已运行</value>
+    <value>进程已运行</value>
   </data>
   <data name="DiagnosticsMetricUptimeDetail" xml:space="preserve">
-    <value>从进程启动到这次采样。</value>
-  </data>
-  <data name="DiagnosticsMetricWorkingSet" xml:space="preserve">
-    <value>工作集</value>
-  </data>
-  <data name="DiagnosticsMetricWorkingSetDetail" xml:space="preserve">
-    <value>空闲目标 250 MB；工坊详情页预算 550 MB。</value>
+    <value>从进程启动到本次采样，不是页面停留时间。</value>
   </data>
   <data name="DiagnosticsMetricWorkshop" xml:space="preserve">
     <value>工坊条目 / 分页</value>
@@ -1045,6 +1033,12 @@
   <data name="DiagnosticsGaugeCache" xml:space="preserve">
     <value>缓存</value>
   </data>
+  <data name="DiagnosticsGaugeCacheOver" xml:space="preserve">
+    <value>超出 {0}</value>
+  </data>
+  <data name="DiagnosticsGaugeCachePercent" xml:space="preserve">
+    <value>到观察线 {0}%</value>
+  </data>
   <data name="DiagnosticsGaugeLiveOff" xml:space="preserve">
     <value>已暂停</value>
   </data>
@@ -1055,25 +1049,40 @@
     <value>实时刷新</value>
   </data>
   <data name="DiagnosticsGaugeLog" xml:space="preserve">
-    <value>日志</value>
+    <value>当前日志</value>
+  </data>
+  <data name="DiagnosticsGaugeLogOver" xml:space="preserve">
+    <value>超出 {0}</value>
+  </data>
+  <data name="DiagnosticsGaugeLogPercent" xml:space="preserve">
+    <value>距轮转 {0}%</value>
   </data>
   <data name="DiagnosticsGaugeMemory" xml:space="preserve">
-    <value>内存</value>
+    <value>工作集</value>
   </data>
-  <data name="DiagnosticsGaugePercent" xml:space="preserve">
-    <value>预算 {0}%</value>
+  <data name="DiagnosticsGaugeMemoryOver" xml:space="preserve">
+    <value>超出 {0}</value>
+  </data>
+  <data name="DiagnosticsGaugeMemoryPercent" xml:space="preserve">
+    <value>到目标 {0}%</value>
   </data>
   <data name="DiagnosticsGaugeStartup" xml:space="preserve">
     <value>启动</value>
   </data>
-  <data name="DiagnosticsGaugeSubtitle" xml:space="preserve">
-    <value>实时预算仪表 · 每秒刷新，缓存与日志每 5 秒刷新</value>
+  <data name="DiagnosticsGaugeStartupOver" xml:space="preserve">
+    <value>超出目标 {0}</value>
   </data>
-  <data name="DiagnosticsOverviewCountersTitle" xml:space="preserve">
-    <value>缓存与内容</value>
+  <data name="DiagnosticsGaugeStartupPercent" xml:space="preserve">
+    <value>到目标 {0}%</value>
+  </data>
+  <data name="DiagnosticsGaugeTrendWindow" xml:space="preserve">
+    <value>最近 60 秒</value>
+  </data>
+  <data name="DiagnosticsMoreMetrics" xml:space="preserve">
+    <value>更多进程指标</value>
   </data>
   <data name="DiagnosticsOverviewHintsEmpty" xml:space="preserve">
-    <value>没有发现明显问题：内存、缓存、日志与限流都还在预算内。</value>
+    <value>当前没有需要处理的项目。</value>
   </data>
   <data name="DiagnosticsOverviewHintsTitle" xml:space="preserve">
     <value>优化建议</value>
@@ -1082,13 +1091,13 @@
     <value>进程与内存</value>
   </data>
   <data name="DiagnosticsOverviewRefresh" xml:space="preserve">
-    <value>重新采样</value>
+    <value>立即刷新</value>
   </data>
   <data name="DiagnosticsOverviewUpdated" xml:space="preserve">
-    <value>采样时间 {0}</value>
+    <value>采样 {0}</value>
   </data>
   <data name="DiagnosticsPageSubtitle" xml:space="preserve">
-    <value>只读采样内存、缓存占用、日志尾部、限流与启动耗时；不联网、不写游戏目录。</value>
+    <value>只读诊断：不联网、不写游戏目录。</value>
   </data>
   <data name="DiagnosticsPageTitle" xml:space="preserve">
     <value>性能与日志</value>

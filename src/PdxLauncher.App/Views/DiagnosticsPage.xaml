@@ -28,6 +28,7 @@
                                    DetailText="{x:Bind DetailText, Mode=OneWay}"
                                    Status="{x:Bind Status, Mode=OneWay}"
                                    TrendPoints="{x:Bind TrendPoints, Mode=OneWay}"
+                                   TrendCaption="{x:Bind TrendCaption, Mode=OneWay}"
                                    AutomationProperties.AutomationId="{x:Bind AutomationId, Mode=OneWay}"
                                    AutomationProperties.Name="{x:Bind Title, Mode=OneWay}" />
         </DataTemplate>
@@ -231,12 +232,11 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="4">
-                                <TextBlock Text="{x:Bind L.DiagnosticsSectionOverview, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
-                                <TextBlock Text="{x:Bind ViewModel.LastSampleText, Mode=OneWay}"
-                                           Style="{StaticResource CaptionTextBlockStyle}"
-                                           Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                            </StackPanel>
+                            <TextBlock Grid.Column="0"
+                                       Text="{x:Bind ViewModel.LastSampleText, Mode=OneWay}"
+                                       VerticalAlignment="Center"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                                 <ToggleSwitch x:Name="tglDiagLive"
                                               AutomationProperties.AutomationId="tglDiagLive"
@@ -253,19 +253,33 @@
                             </StackPanel>
                         </Grid>
 
-                        <!-- 实时预算仪表：内存 / 缓存 / 日志 / 启动，四个环每秒分级刷新。 -->
-                        <TextBlock Text="{x:Bind L.DiagnosticsGaugeSubtitle, Mode=OneWay}"
-                                   Style="{StaticResource DiagnosticsHintTextStyle}" />
-                        <ItemsControl x:Name="diagGauges"
-                                      AutomationProperties.AutomationId="diagGauges"
-                                      ItemsSource="{x:Bind ViewModel.Gauges, Mode=OneWay}"
-                                      ItemTemplate="{StaticResource GaugeRingTemplate}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <controls:PdxWrapPanel Spacing="16" />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                        </ItemsControl>
+                        <!-- 四个核心环固定四等列：1040 DIP 最小窗口宽下也排成一行，不把启动环孤零零挤到第二行。 -->
+                        <Grid x:Name="diagGauges"
+                              AutomationProperties.AutomationId="diagGauges"
+                              ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <ItemsRepeater Grid.Column="0"
+                                           HorizontalAlignment="Stretch"
+                                           ItemsSource="{x:Bind ViewModel.MemoryGauge, Mode=OneWay}"
+                                           ItemTemplate="{StaticResource GaugeRingTemplate}" />
+                            <ItemsRepeater Grid.Column="1"
+                                           HorizontalAlignment="Stretch"
+                                           ItemsSource="{x:Bind ViewModel.CacheGauge, Mode=OneWay}"
+                                           ItemTemplate="{StaticResource GaugeRingTemplate}" />
+                            <ItemsRepeater Grid.Column="2"
+                                           HorizontalAlignment="Stretch"
+                                           ItemsSource="{x:Bind ViewModel.LogGauge, Mode=OneWay}"
+                                           ItemTemplate="{StaticResource GaugeRingTemplate}" />
+                            <ItemsRepeater Grid.Column="3"
+                                           HorizontalAlignment="Stretch"
+                                           ItemsSource="{x:Bind ViewModel.StartupGauge, Mode=OneWay}"
+                                           ItemTemplate="{StaticResource GaugeRingTemplate}" />
+                        </Grid>
 
                         <TextBlock Text="{x:Bind L.DiagnosticsOverviewMetricsTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
                         <ItemsControl ItemsSource="{x:Bind ViewModel.Metrics, Mode=OneWay}"
@@ -277,25 +291,22 @@
                             </ItemsControl.ItemsPanel>
                         </ItemsControl>
 
-                        <TextBlock Text="{x:Bind L.DiagnosticsOverviewCountersTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
-                        <ct:SettingsCard Header="{x:Bind ViewModel.CacheTotalText, Mode=OneWay}"
-                                               Description="{x:Bind L.DiagnosticsCacheHint, Mode=OneWay}"
-                                         Background="{ThemeResource PdxCardBackgroundBrush}"
-                                         BorderBrush="{ThemeResource PdxCardStrokeBrush}"
-                                         BorderThickness="1"
-                                         CornerRadius="8"
-                                         MinHeight="56"
-                                         Padding="16,12"
-                                         IsClickEnabled="False">
-                                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                                    <ProgressRing Width="16" Height="16"
-                                                  IsActive="{x:Bind ViewModel.IsCacheBusy, Mode=OneWay}"
-                                                  Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.IsCacheBusy), Mode=OneWay}" />
-                                    <Button AutomationProperties.AutomationId="btnDiagRefreshCacheOverview"
-                                            Content="{x:Bind L.SettingsCacheRefresh, Mode=OneWay}"
-                                            Click="OnRefreshCacheClick" />
-                                </StackPanel>
-                        </ct:SettingsCard>
+                        <Expander x:Name="expDiagDetails"
+                                  AutomationProperties.AutomationId="expDiagDetails"
+                                  Header="{x:Bind L.DiagnosticsMoreMetrics, Mode=OneWay}"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Stretch"
+                                  IsExpanded="False"
+                                  Margin="0,4,0,0">
+                            <ItemsControl ItemsSource="{x:Bind ViewModel.DetailMetrics, Mode=OneWay}"
+                                          ItemTemplate="{StaticResource MetricRowTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Spacing="0" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </Expander>
 
                         <TextBlock Text="{x:Bind L.DiagnosticsOverviewHintsTitle, Mode=OneWay}" Style="{StaticResource DiagnosticsSubsectionTitleStyle}" />
                         <ItemsControl ItemsSource="{x:Bind ViewModel.Hints, Mode=OneWay}"
@@ -384,7 +395,6 @@
                     <!-- ============ 启动耗时 ============ -->
                     <StackPanel x:Name="secStartup" Spacing="8" Visibility="Collapsed">
                         <TextBlock Text="{x:Bind L.DiagnosticsSectionStartup, Mode=OneWay}" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,4,0,0" />
-                        <TextBlock Text="{x:Bind L.DiagnosticsPageSubtitle, Mode=OneWay}" Style="{StaticResource DiagnosticsHintTextStyle}" />
 
                         <ct:SettingsCard Header="{x:Bind ViewModel.StartupTotalText, Mode=OneWay}"
                                                Description="{x:Bind L.DiagnosticsStartupNote, Mode=OneWay}"

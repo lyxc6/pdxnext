@@ -83,6 +83,13 @@ public sealed class PdxGaugeRing : Control
         typeof(PdxGaugeRing),
         new PropertyMetadata(0d));
 
+    /// <summary><see cref="TrendCaption"/> 的依赖属性（趋势线的时长标注，如「最近 60 秒」）。</summary>
+    public static readonly DependencyProperty TrendCaptionProperty = DependencyProperty.Register(
+        nameof(TrendCaption),
+        typeof(string),
+        typeof(PdxGaugeRing),
+        new PropertyMetadata(string.Empty));
+
     private Path? _arcPath;
     private Path? _glowPath;
     private Path? _trendPath;
@@ -151,6 +158,13 @@ public sealed class PdxGaugeRing : Control
     {
         get => (double)GetValue(PulseOpacityProperty);
         set => SetValue(PulseOpacityProperty, value);
+    }
+
+    /// <summary>趋势线标注（避免这条折线被看成页面分隔线）。</summary>
+    public string TrendCaption
+    {
+        get => (string)GetValue(TrendCaptionProperty);
+        set => SetValue(TrendCaptionProperty, value);
     }
 
     /// <inheritdoc />

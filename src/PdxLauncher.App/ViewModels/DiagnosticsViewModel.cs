@@ -54,6 +54,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
     {
         _logWrap = AppServices.IsInitialized && AppServices.Settings.DiagnosticsLogWrap;
         _autoRefresh = AppServices.IsInitialized && AppServices.Settings.DiagnosticsLogAutoRefresh;
+        _live = !AppServices.IsInitialized || AppServices.Settings.DiagnosticsOverviewLive;
         CacheRows = new ObservableCollection<CacheRowViewModel>(CacheRowCatalog.Create());
         RebuildMetrics();
         RebuildGauges();
@@ -65,11 +66,23 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
     /// <summary>七类联网缓存，与设置页共用同一份行定义。</summary>
     public ObservableCollection<CacheRowViewModel> CacheRows { get; }
 
-    /// <summary>概览指标卡（工作集、托管堆、GC、句柄…）。</summary>
+    /// <summary>概览主指标卡（托管堆、GC、线程 / 句柄）。</summary>
     public ObservableCollection<DiagnosticMetricViewModel> Metrics { get; } = new();
+
+    /// <summary>概览「更多进程指标」折叠区（私有内存、峰值、进程已运行、缓存条目计数）。</summary>
+    public ObservableCollection<DiagnosticMetricViewModel> DetailMetrics { get; } = new();
 
     /// <summary>概览的四个核心仪表环（内存 / 缓存 / 日志 / 启动耗时）。</summary>
     public ObservableCollection<GaugeViewModel> Gauges { get; } = new();
+
+    /// <summary>工作集环的单列数据源（四列各自固定一个环，避免最小窗口宽下折成 3+1）。</summary>
+    public ObservableCollection<GaugeViewModel> MemoryGauge { get; } = new();
+
+    public ObservableCollection<GaugeViewModel> CacheGauge { get; } = new();
+
+    public ObservableCollection<GaugeViewModel> LogGauge { get; } = new();
+
+    public ObservableCollection<GaugeViewModel> StartupGauge { get; } = new();
 
     /// <summary>按严重度排好的优化建议。</summary>
     public ObservableCollection<DiagnosticHintViewModel> Hints { get; } = new();
@@ -99,7 +112,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
         private set => SetProperty(ref _isLogBusy, value);
     }
 
-    public bool HasMetrics => Metrics.Count > 0;
+    public bool HasMetrics => Metrics.Count > 0 || DetailMetrics.Count > 0;
 
     public bool HasHints => Hints.Count > 0;
 
@@ -114,12 +127,12 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
     /// <summary>合计占用文案（只统计字节，文件数在每行里）。</summary>
     public string CacheTotalText => T(Keys.SettingsCacheSummary, SizeFormatter.Format(_cacheBytes));
 
-    /// <summary>最近一次采样的本地时间。</summary>
+    /// <summary>最近一次采样的本地时间（24 小时制，精确到秒，便于确认实时刷新没有停）。</summary>
     public string LastSampleText => _sampledAt is { } at
-        ? T(Keys.DiagnosticsOverviewUpdated, at.ToLocalTime().ToString("g", CultureInfo.CurrentCulture))
+        ? T(Keys.DiagnosticsOverviewUpdated, at.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture))
         : string.Empty;
 
-    /// <summary>实时刷新开关（由页面读写，默认开；关掉后概览不再定时采样）。</summary>
+    /// <summary>实时刷新开关（持久化；关掉后概览不再定时采样，重进页面也保持暂停）。</summary>
     public bool LiveEnabled
     {
         get => _live;
@@ -128,6 +141,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
             if (SetProperty(ref _live, value))
             {
                 OnPropertyChanged(nameof(LiveStatusText));
+                PersistLiveEnabled(value);
             }
         }
     }
@@ -281,6 +295,29 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
         catch (Exception ex)
         {
             AppServices.Logger.Warn("保存日志自动换行设置失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>把概览实时开关写回设置；失败只记日志，开关仍然即时生效。</summary>
+    private static void PersistLiveEnabled(bool value)
+    {
+        try
+        {
+            if (!AppServices.IsInitialized)
+            {
+                return;
+            }
+
+            AppServices.Settings.DiagnosticsOverviewLive = value;
+            var saved = AppServices.SaveSettings();
+            if (!saved.IsSuccess)
+            {
+                AppServices.Logger.Warn("保存概览实时刷新设置失败: " + saved.ErrorMessage);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Warn("保存概览实时刷新设置失败: " + ex.Message);
         }
     }
 
@@ -545,42 +582,87 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
     private void RebuildGauges()
     {
         var workingSet = _snapshot?.WorkingSetBytes ?? 0;
+        var memoryReading = PerformanceGaugeMath.ComputeMemory(workingSet);
         ApplyGauge(
             "memory",
             Keys.DiagnosticsGaugeMemory,
             SizeFormatter.Format(workingSet),
-            PerformanceGaugeMath.ComputeMemory(workingSet));
+            memoryReading,
+            GaugeDetail(Keys.DiagnosticsGaugeMemoryPercent, Keys.DiagnosticsGaugeMemoryOver, memoryReading, workingSet, PerformanceHints.IdleBudgetBytes, isDuration: false),
+            MemoryGauge);
 
+        var cacheReading = PerformanceGaugeMath.ComputeCache(_cacheBytes);
         ApplyGauge(
             "cache",
             Keys.DiagnosticsGaugeCache,
             SizeFormatter.Format(_cacheBytes),
-            PerformanceGaugeMath.ComputeCache(_cacheBytes));
+            cacheReading,
+            GaugeDetail(Keys.DiagnosticsGaugeCachePercent, Keys.DiagnosticsGaugeCacheOver, cacheReading, _cacheBytes, PerformanceHints.CacheBudgetBytes, isDuration: false),
+            CacheGauge);
 
+        var logReading = PerformanceGaugeMath.ComputeLog(_logMetrics.CurrentBytes);
         ApplyGauge(
             "log",
             Keys.DiagnosticsGaugeLog,
             SizeFormatter.Format(_logMetrics.CurrentBytes),
-            PerformanceGaugeMath.ComputeLog(_logMetrics.CurrentBytes));
+            logReading,
+            GaugeDetail(Keys.DiagnosticsGaugeLogPercent, Keys.DiagnosticsGaugeLogOver, logReading, _logMetrics.CurrentBytes, FileLogger.MaxBytes, isDuration: false),
+            LogGauge);
 
         double startupMs = _marks.Count == 0 ? 0 : _marks[^1].ElapsedMilliseconds;
+        var startupReading = PerformanceGaugeMath.ComputeStartup(startupMs);
         ApplyGauge(
             "startup",
             Keys.DiagnosticsGaugeStartup,
             startupMs <= 0 ? T(Keys.DiagnosticsStartupEmpty) : FormatDuration(TimeSpan.FromMilliseconds(startupMs)),
-            PerformanceGaugeMath.ComputeStartup(startupMs));
+            startupReading,
+            startupMs <= 0
+                ? T(Keys.DiagnosticsStartupEmpty)
+                : GaugeDetail(Keys.DiagnosticsGaugeStartupPercent, Keys.DiagnosticsGaugeStartupOver, startupReading, startupMs, PerformanceHints.StartupBudgetMilliseconds, isDuration: true),
+            StartupGauge);
     }
 
-    private void ApplyGauge(string key, string titleKey, string valueText, GaugeReading reading)
+    /// <summary>四列各绑一个环；只首次放入，后续由 <see cref="Gauges"/> 里的同一实例就地更新，补间才连续。</summary>
+    private void ApplyGauge(
+        string key,
+        string titleKey,
+        string valueText,
+        GaugeReading reading,
+        string detail,
+        ObservableCollection<GaugeViewModel> column)
+    {
+        ApplyGauge(key, titleKey, valueText, reading, detail);
+        if (column.Count == 0)
+        {
+            column.Add(Gauges.First(gauge => gauge.Key == key));
+        }
+    }
+
+    /// <summary>
+    /// 环中心第二行：未超目标时显示「到目标 x%」，超过后显示「超出目标 N」，不再出现含糊的「预算 N%」。
+    /// </summary>
+    private static string GaugeDetail(string percentKey, string overKey, GaugeReading reading, double value, double budget, bool isDuration)
+    {
+        if (reading.Status == GaugeStatus.Critical || value >= budget)
+        {
+            var over = Math.Max(0, value - budget);
+            return isDuration
+                ? T(overKey, FormatDuration(TimeSpan.FromMilliseconds(over)))
+                : T(overKey, SizeFormatter.Format((long)over));
+        }
+
+        return T(percentKey, Math.Round(reading.Percent).ToString(CultureInfo.InvariantCulture));
+    }
+
+    private void ApplyGauge(string key, string titleKey, string valueText, GaugeReading reading, string detail)
     {
         var title = T(titleKey);
-        var detail = T(Keys.DiagnosticsGaugePercent, Math.Round(reading.Percent).ToString(CultureInfo.InvariantCulture));
         var automationId = "diagGauge" + Pascalize(key);
 
         var existing = Gauges.FirstOrDefault(gauge => gauge.Key == key);
         if (existing is { } gauge)
         {
-            gauge.Apply(reading.Percent, valueText, detail, reading.Status);
+            gauge.Apply(reading.Percent, valueText, detail, T(Keys.DiagnosticsGaugeTrendWindow), reading.Status);
         }
         else
         {
@@ -589,6 +671,7 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
                 title,
                 valueText,
                 detail,
+                T(Keys.DiagnosticsGaugeTrendWindow),
                 reading.Percent,
                 reading.Status,
                 automationId));
@@ -601,15 +684,14 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
         if (snapshot is null)
         {
             Metrics.Clear();
+            DetailMetrics.Clear();
             OnPropertyChanged(nameof(HasMetrics));
             return;
         }
 
-        ApplyMetric("workingSet", Keys.DiagnosticsMetricWorkingSet, Keys.DiagnosticsMetricWorkingSetDetail, SizeFormatter.Format(snapshot.WorkingSetBytes));
-        ApplyMetric("private", Keys.DiagnosticsMetricPrivate, Keys.DiagnosticsMetricPrivateDetail, SizeFormatter.Format(snapshot.PrivateBytes));
-        ApplyMetric("managed", Keys.DiagnosticsMetricManaged, Keys.DiagnosticsMetricManagedDetail, SizeFormatter.Format(snapshot.ManagedBytes));
-        ApplyMetric("peak", Keys.DiagnosticsMetricPeak, Keys.DiagnosticsMetricPeakDetail, SizeFormatter.Format(snapshot.PeakWorkingSetBytes));
+        ApplyMetric(Metrics, "managed", Keys.DiagnosticsMetricManaged, Keys.DiagnosticsMetricManagedDetail, SizeFormatter.Format(snapshot.ManagedBytes));
         ApplyMetric(
+            Metrics,
             "gc",
             Keys.DiagnosticsMetricGc,
             Keys.DiagnosticsMetricGcDetail,
@@ -617,38 +699,43 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
                 + snapshot.Gen1.ToString(CultureInfo.InvariantCulture) + " / "
                 + snapshot.Gen2.ToString(CultureInfo.InvariantCulture));
         ApplyMetric(
+            Metrics,
             "threads",
             Keys.DiagnosticsMetricThreads,
             Keys.DiagnosticsMetricThreadsDetail,
             snapshot.ThreadCount.ToString(CultureInfo.InvariantCulture) + " / "
                 + snapshot.HandleCount.ToString(CultureInfo.InvariantCulture));
-        ApplyMetric("uptime", Keys.DiagnosticsMetricUptime, Keys.DiagnosticsMetricUptimeDetail, FormatDuration(snapshot.Uptime));
+        ApplyMetric(DetailMetrics, "private", Keys.DiagnosticsMetricPrivate, Keys.DiagnosticsMetricPrivateDetail, SizeFormatter.Format(snapshot.PrivateBytes));
+        ApplyMetric(DetailMetrics, "peak", Keys.DiagnosticsMetricPeak, Keys.DiagnosticsMetricPeakDetail, SizeFormatter.Format(snapshot.PeakWorkingSetBytes));
+        ApplyMetric(DetailMetrics, "uptime", Keys.DiagnosticsMetricUptime, Keys.DiagnosticsMetricUptimeDetail, FormatDuration(snapshot.Uptime));
         ApplyMetric(
+            DetailMetrics,
             "workshop",
             Keys.DiagnosticsMetricWorkshop,
             Keys.DiagnosticsMetricWorkshopDetail,
             snapshot.WorkshopItems.ToString(CultureInfo.InvariantCulture) + " / "
                 + snapshot.WorkshopPages.ToString(CultureInfo.InvariantCulture));
         ApplyMetric(
+            DetailMetrics,
             "thumbnails",
             Keys.DiagnosticsMetricThumbnails,
             Keys.DiagnosticsMetricThumbnailsDetail,
             snapshot.ModThumbnails.ToString(CultureInfo.InvariantCulture));
     }
 
-    private void ApplyMetric(string key, string titleKey, string detailKey, string value)
+    private void ApplyMetric(ObservableCollection<DiagnosticMetricViewModel> target, string key, string titleKey, string detailKey, string value)
     {
         var title = T(titleKey);
         var detail = T(detailKey);
         var automationId = "diagMetric" + Pascalize(key);
-        var existing = Metrics.FirstOrDefault(metric => metric.Key == key);
+        var existing = target.FirstOrDefault(metric => metric.Key == key);
         if (existing is { } metric)
         {
             metric.Apply(title, value, detail);
         }
         else
         {
-            Metrics.Add(new DiagnosticMetricViewModel(key, title, value, detail, automationId));
+            target.Add(new DiagnosticMetricViewModel(key, title, value, detail, automationId));
         }
 
         OnPropertyChanged(nameof(HasMetrics));
@@ -872,25 +959,18 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
             Keys.DiagnosticsHintThrottleRejectedDetail,
             hint.Subject ?? T(Keys.CommonUnknown),
             hint.Value.ToString(CultureInfo.InvariantCulture)),
-        DiagnosticHintCode.StartupSlow => T(
-            Keys.DiagnosticsHintStartupSlowDetail,
-            FormatDuration(TimeSpan.FromMilliseconds(hint.Value))),
-        DiagnosticHintCode.WorkshopCacheLarge => T(
-            Keys.DiagnosticsHintWorkshopCacheLargeDetail,
-            hint.Value.ToString(CultureInfo.InvariantCulture)),
+        DiagnosticHintCode.StartupSlow => T(Keys.DiagnosticsHintStartupSlowDetail),
+        DiagnosticHintCode.WorkshopCacheLarge => T(Keys.DiagnosticsHintWorkshopCacheLargeDetail),
         DiagnosticHintCode.TranslationModelResident => T(Keys.DiagnosticsHintTranslationModelResidentDetail),
-        DiagnosticHintCode.MemoryHigh or DiagnosticHintCode.MemoryAboveDetailBudget => T(
-            DetailKeyFor(hint.Code),
-            SizeFormatter.Format(hint.Value)),
-        DiagnosticHintCode.CacheLarge => T(Keys.DiagnosticsHintCacheLargeDetail, SizeFormatter.Format(hint.Value)),
-        DiagnosticHintCode.LogNearRotation => T(Keys.DiagnosticsHintLogNearRotationDetail, SizeFormatter.Format(hint.Value)),
-        DiagnosticHintCode.LogArchives => T(Keys.DiagnosticsHintLogArchivesDetail, SizeFormatter.Format(hint.Value)),
+        DiagnosticHintCode.MemoryHigh => T(Keys.DiagnosticsHintMemoryHighDetail),
+        DiagnosticHintCode.CacheLarge => T(Keys.DiagnosticsHintCacheLargeDetail),
+        DiagnosticHintCode.LogNearRotation => T(Keys.DiagnosticsHintLogNearRotationDetail),
+        DiagnosticHintCode.LogArchives => T(Keys.DiagnosticsHintLogArchivesDetail),
         _ => string.Empty,
     };
 
     private static string TitleKeyFor(DiagnosticHintCode code) => code switch
     {
-        DiagnosticHintCode.MemoryAboveDetailBudget => Keys.DiagnosticsHintMemoryAboveDetailBudgetTitle,
         DiagnosticHintCode.MemoryHigh => Keys.DiagnosticsHintMemoryHighTitle,
         DiagnosticHintCode.ThrottleRejected => Keys.DiagnosticsHintThrottleRejectedTitle,
         DiagnosticHintCode.StartupSlow => Keys.DiagnosticsHintStartupSlowTitle,
@@ -899,13 +979,6 @@ public sealed class DiagnosticsViewModel : LocalizedObservableObject
         DiagnosticHintCode.LogNearRotation => Keys.DiagnosticsHintLogNearRotationTitle,
         DiagnosticHintCode.LogArchives => Keys.DiagnosticsHintLogArchivesTitle,
         DiagnosticHintCode.TranslationModelResident => Keys.DiagnosticsHintTranslationModelResidentTitle,
-        _ => Keys.CommonUnknown,
-    };
-
-    private static string DetailKeyFor(DiagnosticHintCode code) => code switch
-    {
-        DiagnosticHintCode.MemoryAboveDetailBudget => Keys.DiagnosticsHintMemoryAboveDetailBudgetDetail,
-        DiagnosticHintCode.MemoryHigh => Keys.DiagnosticsHintMemoryHighDetail,
         _ => Keys.CommonUnknown,
     };
 
