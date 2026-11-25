@@ -27,6 +27,41 @@ public static class ModCreator
     public static bool IsValidFolderName(string? folder) =>
         !string.IsNullOrWhiteSpace(folder) && FolderPattern.IsMatch(folder);
 
+    /// <summary>
+    /// 「工坊转本地」的目录名是否可落地。与 <see cref="IsValidFolderName"/> 相比放宽了两点：
+    /// 允许 Unicode 字母（中文 mod 名原样落地）与词间单个空格（<c>Less Old Wives…</c> 这类原名）。
+    /// <para>
+    /// 不放宽路径安全：仍然拒绝 <c>..</c>、首尾空白/点、以及 Windows 保留名，因为这个名字会直接参与
+    /// <c>Path.Combine</c> 与 <c>mod/&lt;folder&gt;.mod</c> 的拼装。ASCII 限制属于具体游戏
+    /// （<see cref="GamePathRules.RequiresAsciiPaths"/>），由调用方按游戏再判一次，不混进这条通用规则。
+    /// </para>
+    /// </summary>
+    public static bool IsValidLocalModFolderName(string? folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder) || folder.Length > LocalModFolderName.MaxLength)
+        {
+            return false;
+        }
+
+        if (!LocalModFolderName.IsAllowedFirst(folder[0]))
+        {
+            return false;
+        }
+
+        foreach (var ch in folder)
+        {
+            if (!LocalModFolderName.IsAllowed(ch))
+            {
+                return false;
+            }
+        }
+
+        return folder[^1] is not (' ' or '.')
+            && !folder.Contains("..", StringComparison.Ordinal)
+            && !folder.Contains("  ", StringComparison.Ordinal)
+            && !LocalModFolderName.IsReserved(folder);
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
