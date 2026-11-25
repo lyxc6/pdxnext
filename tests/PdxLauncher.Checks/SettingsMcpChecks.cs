@@ -125,6 +125,15 @@ public static class SettingsMcpChecks
             "设置 MCP: 变更计划面板走 resw 文案",
             settingsXaml.Contains("L.SettingsMcpChangePlans", StringComparison.Ordinal)
                 && !settingsXaml.Contains("Text=\"AI change plans\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "设置 MCP: 文档区工具名来自目录而不是手抄",
+            docsControlXaml.Contains("ItemsSource=\"{x:Bind VisibleTools", StringComparison.Ordinal)
+                && !docsControlXaml.Contains("<TextBlock Text=\"list_games\"", StringComparison.Ordinal)
+                && docsControlCode.Contains("McpToolCatalog.Tools", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "设置 MCP: 安装说明默认收起",
+            docsControlXaml.Contains("expMcpDocs", StringComparison.Ordinal)
+                && docsControlXaml.Contains("IsExpanded=\"False\"", StringComparison.Ordinal));
 
         var zh = I18nResw.Read(root, "zh-CN");
         var en = I18nResw.Read(root, "en-US");

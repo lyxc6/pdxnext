@@ -305,6 +305,37 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private void OnRefreshMcpCallsClick(object sender, RoutedEventArgs e) =>
         _viewModel.RefreshMcpCalls();
 
+    /// <summary>三个筛选项任一变化都重新查询；页码回到第一页。</summary>
+    private void OnMcpFilterChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_isMcpFilterReady)
+        {
+            return;
+        }
+
+        _viewModel.McpCallPage = 0;
+        _viewModel.RefreshMcpCalls(
+            SelectedFilterValue(McpFilterToolBox),
+            SelectedOutcome(),
+            SelectedFilterValue(McpFilterKeyBox));
+    }
+
+    /// <summary>首次进分节时 ComboBox 会先发一次 SelectionChanged；避免无谓查询。</summary>
+    private bool _isMcpFilterReady;
+
+    private static string? SelectedFilterValue(ComboBox box) =>
+        box?.SelectedItem is McpFilterOption option ? option.Value : null;
+
+    private McpCallOutcome? SelectedOutcome() =>
+        SelectedFilterValue(McpFilterOutcomeBox) is { } text && Enum.TryParse<McpCallOutcome>(text, out var outcome)
+            ? outcome
+            : null;
+
+    private async void OnRunMcpProbeClick(object sender, RoutedEventArgs e)
+    {
+        await _viewModel.RunMcpProbeAsync();
+    }
+
     private void OnRefreshMcpPlansClick(object sender, RoutedEventArgs e) =>
         _viewModel.RefreshMcpChangePlans();
 
@@ -344,16 +375,39 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
     private void OnCreateMcpKeyClick(object sender, RoutedEventArgs e)
     {
-        var created = _viewModel.CreateMcpAccessKey("AI Client");
+        var name = string.IsNullOrWhiteSpace(McpKeyNameBox?.Text) ? "AI Client" : McpKeyNameBox.Text.Trim();
+        var created = _viewModel.CreateMcpAccessKey(name, SelectedMcpKeyScope());
         if (created is null)
         {
             return;
         }
 
         OneTimeMcpKeyBox.Text = created.RawToken;
+        if (McpKeyNameBox is not null)
+        {
+            McpKeyNameBox.Text = string.Empty;
+        }
+
         OnPropertyChangedForMcpKeys();
         mcpDocsContent.SetSelectedKey(created, _viewModel.McpAccessKeys);
     }
+
+    /// <summary>下拉顺序：只读 / 上传草稿 / 播放集 / 设置 / 全部，默认只读。</summary>
+    private IReadOnlyList<string> SelectedMcpKeyScope()
+    {
+        var index = Math.Clamp(McpKeyScopeBox?.SelectedIndex ?? 0, 0, McpScopeChoices.Count - 1);
+        return McpScopeChoices[index];
+    }
+
+    private static readonly IReadOnlyList<IReadOnlyList<string>> McpScopeChoices =
+    new IReadOnlyList<string>[]
+    {
+        new[] { McpPermissionScopes.UploadRead, McpPermissionScopes.PlaySetsRead, McpPermissionScopes.SettingsRead },
+        new[] { McpPermissionScopes.UploadRead, McpPermissionScopes.UploadWrite },
+        new[] { McpPermissionScopes.PlaySetsRead, McpPermissionScopes.PlaySetsWriteSafe },
+        new[] { McpPermissionScopes.SettingsRead, McpPermissionScopes.SettingsWriteSafe },
+        new[] { "*" },
+    };
 
     private void OnRotateMcpKeyClick(object sender, RoutedEventArgs e)
     {
@@ -394,10 +448,26 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private async void OnExportMcpCallsClick(object sender, RoutedEventArgs e)
     {
         var json = _viewModel.ExportMcpCalls();
-        var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
-        package.SetText(json);
-        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
-        await Task.CompletedTask;
+        var path = await FilePickers.PickSaveJsonAsync("pdxnext-mcp-calls");
+        if (string.IsNullOrEmpty(path))
+        {
+            return;
+        }
+
+        try
+        {
+            await File.WriteAllTextAsync(path, json, System.Text.Encoding.UTF8);
+            _viewModel.SetMcpExportStatus(Localizer.Instance.T(Keys.SettingsMcpExportSaved, path));
+        }
+        catch (Exception ex)
+        {
+            // 写盘失败时退回剪贴板，不让用户白点。
+            AppServices.Logger.Warn("保存 MCP 调用记录失败：" + ex.Message);
+            var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(json);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+            _viewModel.SetMcpExportStatus(Localizer.Instance.T(Keys.SettingsMcpExportCopied));
+        }
     }
 
     private async void OnCheckUpdatesClick(object sender, RoutedEventArgs e)
@@ -441,7 +511,10 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 
         if (index == McpSectionIndex)
         {
+            _isMcpFilterReady = false;
             _viewModel.RefreshMcpCalls();
+            _viewModel.RefreshMcpFilterOptions();
+            _isMcpFilterReady = true;
         }
     }
 

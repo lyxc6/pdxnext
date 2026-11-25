@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -40,6 +41,18 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
 
     /// <summary>XAML 里显示的“是否可写”状态文本。</summary>
     public string PermissionText { get; private set; } = string.Empty;
+
+    /// <summary>「可用工具」按当前权限过滤后的目录；不再手写工具名。</summary>
+    public IReadOnlyList<McpToolDescriptor> VisibleTools =>
+        !_enabled
+            ? Array.Empty<McpToolDescriptor>()
+            : _draftWriteEnabled
+                ? McpToolCatalog.Tools
+                : McpToolCatalog.Tools.Where(tool => tool.Risk == McpToolRisk.ReadOnly).ToArray();
+
+    /// <summary>「共 N 个 / 当前暴露 M 个」的口径以目录为唯一事实源。</summary>
+    public string ToolCountText =>
+        Localizer.Instance.T(Keys.McpToolCountHint, McpToolCatalog.Tools.Count, VisibleTools.Count);
 
     /// <summary>密钥列表由设置页在打开 MCP 分节时注入。</summary>
     public IReadOnlyList<McpAccessKey> AccessKeys { get; private set; } = [];
@@ -114,6 +127,8 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
             (true, true) => localizer.McpPermissionReadWrite,
         };
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PermissionText)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(VisibleTools)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ToolCountText)));
 
         PromptTextBlock.Text = localizer.T(
             Keys.ModstudioMcpQuickInstallPrompt,
