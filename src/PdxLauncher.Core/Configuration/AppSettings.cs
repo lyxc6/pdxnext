@@ -215,8 +215,10 @@ public sealed class AppSettings
     public bool McpEnabled { get; set; } = true;
 
     /// <summary>
-    /// 是否允许 MCP 写入 Mod 上传草稿（默认关）。只读工具默认可用；写入草稿必须在设置页单独授权。
+    /// 已废弃：MCP 写入权限改由各访问密钥的能力决定。保留这个属性只为兼容旧
+    /// <c>settings.json</c> 的反序列化（不认识的多余字段会被忽略，删掉也无碍），代码不再读写它。
     /// </summary>
+    [Obsolete("MCP 写入权限已改为按密钥能力授权，不再使用全局开关。")]
     public bool McpDraftWriteEnabled { get; set; }
 
     /// <summary>

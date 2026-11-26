@@ -28,16 +28,22 @@ public static class McpClientConfigGenerator
         string exePath,
         string dataRoot,
         bool enabled,
-        bool draftWriteEnabled,
         McpAccessKey? accessKey,
-        string rawToken)
+        string rawToken,
+        bool legacyReadOnly = true)
     {
         var args = new List<string>
         {
             "--data-root", dataRoot,
             "--enabled", enabled ? "true" : "false",
-            "--draft-write", draftWriteEnabled ? "true" : "false",
         };
+
+        // 不带密钥的兼容模式默认只读；带着密钥时权限完全由密钥能力决定，不再传写入开关。
+        if (accessKey is null)
+        {
+            args.Add("--legacy-read-only");
+            args.Add(legacyReadOnly ? "true" : "false");
+        }
 
         // Claude Code / Codex 用环境变量传密钥；只有 Claude Desktop 的 JSON 支持内联把它当默认值。
         if (accessKey is not null)

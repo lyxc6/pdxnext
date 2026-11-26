@@ -12,7 +12,6 @@ using PdxLauncher.Core.Storage;
 public sealed class McpAccessKeyStore
 {
     private const string TokenPrefix = "pdxmcp_";
-    private const string AllTools = "*";
 
     private readonly PdxDatabase _database;
 
@@ -32,7 +31,7 @@ public sealed class McpAccessKeyStore
     /// <summary>创建密钥；原始 token 只通过返回值暴露一次。</summary>
     public McpCreatedAccessKey Create(
         string displayName,
-        IReadOnlyList<string> allowedTools,
+        IReadOnlyList<string> capabilities,
         DateTimeOffset? expiresUtc)
     {
         var id = Guid.NewGuid().ToString("N");
@@ -43,7 +42,7 @@ public sealed class McpAccessKeyStore
             NormalizeName(displayName),
             TokenPrefix + id[..8],
             true,
-            NormalizeTools(allowedTools),
+            NormalizeCapabilities(capabilities),
             expiresUtc,
             DateTimeOffset.UtcNow,
             null);
@@ -56,7 +55,7 @@ public sealed class McpAccessKeyStore
             key.DisplayName,
             HashToken(token),
             key.KeyPrefix,
-            key.AllowedTools,
+            key.Capabilities,
             key.ExpiresUtc?.ToUnixTimeMilliseconds(),
             key.CreatedUtc.ToUnixTimeMilliseconds()));
 
@@ -87,7 +86,7 @@ public sealed class McpAccessKeyStore
         }
 
         string displayName;
-        string allowedTools;
+        string capabilities;
         using (var connection = _database.Open())
         {
             var row = connection.Query(
@@ -99,7 +98,7 @@ public sealed class McpAccessKeyStore
             }
 
             displayName = row["display_name"] as string ?? string.Empty;
-            allowedTools = row["allowed_tools"] as string ?? AllTools;
+            capabilities = row["allowed_tools"] as string ?? string.Empty;
 
             connection.Execute(
                 "UPDATE mcp_access_keys SET last_used_utc = ? WHERE id = ?",
@@ -107,10 +106,12 @@ public sealed class McpAccessKeyStore
                 id);
         }
 
-        var tools = allowedTools == AllTools
-            ? new[] { AllTools }
-            : allowedTools.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return new McpAuthorizedKey(id, displayName, tools);
+        var normalized = NormalizeCapabilities(
+            capabilities.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return new McpAuthorizedKey(
+            id,
+            displayName,
+            normalized.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 
     /// <summary>轮换密钥；原始 token 只通过返回值暴露一次。</summary>
@@ -138,8 +139,8 @@ public sealed class McpAccessKeyStore
     public bool SetEnabled(string id, bool enabled) =>
         UpdateField(id, "enabled", enabled ? 1 : 0);
 
-    public bool UpdateTools(string id, IReadOnlyList<string> allowedTools) =>
-        UpdateField(id, "allowed_tools", NormalizeTools(allowedTools));
+    public bool UpdateCapabilities(string id, IReadOnlyList<string> capabilities) =>
+        UpdateField(id, "allowed_tools", NormalizeCapabilities(capabilities));
 
     public bool UpdateExpiry(string id, DateTimeOffset? expiresUtc) =>
         UpdateField(id, "expires_utc", expiresUtc?.ToUnixTimeMilliseconds());
@@ -224,21 +225,17 @@ public sealed class McpAccessKeyStore
         return normalized.Length > 80 ? normalized[..80] : normalized;
     }
 
-    private static string NormalizeTools(IReadOnlyList<string>? tools)
-    {
-        if (tools is null || tools.Count == 0)
-        {
-            return AllTools;
-        }
-
-        var normalized = tools
-            .Where(static tool => !string.IsNullOrWhiteSpace(tool))
-            .Select(static tool => tool.Trim())
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(static tool => tool, StringComparer.Ordinal)
-            .ToList();
-        return normalized.Count == 0 ? AllTools : string.Join(',', normalized);
-    }
+    /// <summary>
+    /// 统一写入口：库里的旧作用域/工具名先归一到能力，再按能力顺序落库；
+    /// 空选择写成空串，表示「没有任何能力」，不再偷偷升级成全部。
+    /// </summary>
+    private static string NormalizeCapabilities(IReadOnlyList<string>? capabilities) =>
+        McpCapabilityCatalog.ToStorage(
+            McpCapabilityCatalog.Normalize(
+                (capabilities ?? Array.Empty<string>())
+                    .Where(static value => !string.IsNullOrWhiteSpace(value))
+                    .Select(static value => value.Trim())
+                    .ToArray()));
 
     private static McpAccessKey Project(IReadOnlyDictionary<string, object?> row) =>
         new(
@@ -246,7 +243,9 @@ public sealed class McpAccessKeyStore
             row["display_name"] as string ?? string.Empty,
             row["key_prefix"] as string ?? string.Empty,
             ReadInt64(row, "enabled") != 0,
-            row["allowed_tools"] as string ?? AllTools,
+            NormalizeCapabilities(
+                (row["allowed_tools"] as string ?? string.Empty)
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)),
             ReadNullableDateTime(row, "expires_utc"),
             ReadDateTime(row, "created_utc"),
             ReadNullableDateTime(row, "last_used_utc"));

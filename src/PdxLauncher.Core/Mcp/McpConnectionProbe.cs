@@ -35,7 +35,6 @@ public static class McpConnectionProbe
         string exePath,
         string dataRoot,
         bool enabled,
-        bool draftWriteEnabled,
         int timeoutMilliseconds = DefaultTimeoutMilliseconds)
     {
         if (string.IsNullOrWhiteSpace(exePath) || !File.Exists(exePath))
@@ -69,8 +68,8 @@ public static class McpConnectionProbe
             process.StartInfo.ArgumentList.Add(dataRoot);
             process.StartInfo.ArgumentList.Add("--enabled");
             process.StartInfo.ArgumentList.Add(enabled ? "true" : "false");
-            process.StartInfo.ArgumentList.Add("--draft-write");
-            process.StartInfo.ArgumentList.Add(draftWriteEnabled ? "true" : "false");
+            process.StartInfo.ArgumentList.Add("--legacy-read-only");
+            process.StartInfo.ArgumentList.Add("true");
 
             if (!process.Start())
             {

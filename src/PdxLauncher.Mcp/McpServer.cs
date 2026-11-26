@@ -254,7 +254,7 @@ internal sealed class McpServer
         var arguments = parameters["arguments"] as JsonObject ?? new JsonObject();
         try
         {
-            if (!IsToolAuthorized(name))
+            if (!IsToolAuthorized(name, arguments))
             {
                 errorCode = "FORBIDDEN";
                 throw new McpProtocolException(-32003, "访问密钥未授权调用 " + name);
@@ -353,17 +353,17 @@ internal sealed class McpServer
     private bool IsConnected() =>
         _enabled
         && _accessState != McpAccessState.Rejected
-        && (_authorizedKey is null || _authorizedKey.AllowedTools.Count > 0);
+        && (_authorizedKey is null || _authorizedKey.Capabilities.Count > 0);
 
     private string PermissionModeText => !_enabled
         ? "已关闭"
         : _accessState == McpAccessState.Rejected
             ? "密钥无效"
             : _authorizedKey is not null
-                ? _authorizedKey.AllowsAllTools
-                    ? "全部工具"
-                    : string.Join('|', _authorizedKey.AllowedTools)
-                : _tools.IsDraftWriteEnabled ? "可写" : "只读";
+                ? _authorizedKey.AllowsAllCapabilities
+                    ? "全部能力"
+                    : string.Join('|', _authorizedKey.Capabilities)
+                : "兼容模式（只读）";
 
     private JsonArray FilterTools(JsonArray tools)
     {
@@ -387,7 +387,29 @@ internal sealed class McpServer
         return filtered;
     }
 
-    private bool IsToolAuthorized(string name) => _authorizedKey is null || _authorizedKey.Allows(name);
+    /// <summary>
+    /// 带密钥时按能力过滤工具；兼容模式只暴露读取工具，写入必须由密钥显式授权。
+    /// 变更计划先按工具名露出，调用时再按 domain 细判，避免 AI 看到用不了的跨域计划工具。
+    /// </summary>
+    private bool IsToolAuthorized(string name, JsonObject? arguments = null)
+    {
+        var authorization = _authorizedKey
+            ?? (_accessState == McpAccessState.Legacy ? McpLegacyAuthorization.Instance : null);
+        if (authorization is null)
+        {
+            return false;
+        }
+
+        var domain = name == "create_change_plan"
+            ? ReadStringArgument(arguments, "domain")
+            : null;
+        return authorization.Allows(name, domain);
+    }
+
+    private static string? ReadStringArgument(JsonObject? arguments, string name) =>
+        arguments?[name] is JsonValue value && value.TryGetValue<string>(out var text)
+            ? text
+            : null;
 
     private void WriteResult(JsonNode? id, JsonNode result)
     {

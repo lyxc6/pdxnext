@@ -40,7 +40,7 @@ internal sealed class McpTools
     private readonly McpChangePlanStore _changePlans;
     private readonly PlaySetStoreRouter _playSetRouter;
     private readonly AppSettingsStore _settingsStore;
-    private readonly bool _draftWriteEnabled;
+    private readonly bool _legacyReadOnly;
     private McpAuthorizedKey? _authorizedKey;
 
     private IReadOnlyList<GameInstallation>? _gameCache;
@@ -48,23 +48,26 @@ internal sealed class McpTools
         new(StringComparer.OrdinalIgnoreCase);
 
     public McpTools(IFileSystem fileSystem, IAppLogger logger, string dataRoot)
-        : this(fileSystem, logger, dataRoot, draftWriteEnabled: true)
+        : this(fileSystem, logger, dataRoot, legacyReadOnly: false)
     {
     }
 
-    /// <summary>按设置页授权构造工具集合：只读工具始终可用，写草稿需显式授权。</summary>
+    /// <summary>
+    /// 构造工具集合。带密钥时工具按密钥能力过滤；未传密钥的兼容模式只登记读取能力，
+    /// 所以 <paramref name="legacyReadOnly"/> 只为 true 时（兼容模式）才砍掉写入工具。
+    /// </summary>
     public McpTools(
         IFileSystem fileSystem,
         IAppLogger logger,
         string dataRoot,
-        bool draftWriteEnabled)
+        bool legacyReadOnly)
     {
         _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _drafts = new ModUploadDraftStore(fileSystem, dataRoot);
         _gameCatalog = new GameCatalog(fileSystem, logger);
         _modCatalog = new ModCatalog(fileSystem, logger);
-        _draftWriteEnabled = draftWriteEnabled;
+        _legacyReadOnly = legacyReadOnly;
         _database = new PdxDatabase(fileSystem, logger, Path.Combine(dataRoot, PdxDatabase.FileName));
         _changePlans = new McpChangePlanStore(_database);
         var clock = new SystemClock();
@@ -143,7 +146,7 @@ internal sealed class McpTools
 
         };
 
-        if (_draftWriteEnabled)
+        if (!_legacyReadOnly)
         {
             tools.Add(Tool(
                 "save_upload_draft",
@@ -235,9 +238,9 @@ internal sealed class McpTools
     {
         try
         {
-            if (!IsToolAllowed(name))
+            if (!IsToolAllowed(name, arguments))
             {
-                throw new McpToolException("工具 " + name + " 未在 MCP 权限中授权；可在设置 → MCP 里开启草稿写入");
+                throw new McpToolException("工具 " + name + " 未在当前 MCP 密钥的权限中授权；可在设置 → MCP 里编辑密钥权限");
             }
 
             var result = name switch
@@ -272,15 +275,18 @@ internal sealed class McpTools
         }
     }
 
-    private bool IsToolAllowed(string name) => name switch
+    /// <summary>
+    /// 工具是否在当前密钥能力内。写入工具只认密钥能力，不再被全局开关二次压制；
+    /// 兼容模式没有密钥，只放行 <see cref="McpLegacyAuthorization"/> 里的读取能力。
+    /// </summary>
+    private bool IsToolAllowed(string name, JsonObject? arguments = null)
     {
-        "save_upload_draft" or "clear_upload_draft" => _draftWriteEnabled,
-        "create_change_plan" => _draftWriteEnabled,
-        _ => true,
-    };
-
-    /// <summary>供调用历史记录当前权限模式。</summary>
-    public bool IsDraftWriteEnabled => _draftWriteEnabled;
+        var domain = name == "create_change_plan"
+            ? ReadString(arguments, "domain")
+            : null;
+        var authorization = _authorizedKey ?? (_legacyReadOnly ? McpLegacyAuthorization.Instance : null);
+        return authorization is null || authorization.Allows(name, domain);
+    }
 
     /// <summary>由协议层在密钥认证成功后设置，用于记录计划的来源密钥。</summary>
     public void SetAuthorizedKey(McpAuthorizedKey? authorizedKey) => _authorizedKey = authorizedKey;

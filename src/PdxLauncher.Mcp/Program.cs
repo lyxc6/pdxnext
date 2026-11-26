@@ -16,7 +16,7 @@ internal static class Program
 {
     public static int Main(string[] args)
     {
-        if (!TryParseOptions(args, out var dataRoot, out var enabled, out var draftWriteEnabled, out var accessKeyToken, out var error))
+        if (!TryParseOptions(args, out var dataRoot, out var enabled, out var legacyReadOnly, out var accessKeyToken, out var error))
         {
             Console.Error.WriteLine(error);
             return 2;
@@ -39,7 +39,7 @@ internal static class Program
                 NewLine = "\n",
             };
 
-            var tools = new McpTools(fileSystem, logger, dataRoot!, draftWriteEnabled);
+            var tools = new McpTools(fileSystem, logger, dataRoot!, legacyReadOnly);
             var database = new PdxDatabase(fileSystem, logger, Path.Combine(dataRoot!, PdxDatabase.FileName));
             var history = new McpCallHistoryStore(database);
             var keyStore = new McpAccessKeyStore(database);
@@ -78,13 +78,13 @@ internal static class Program
         string[] args,
         out string? dataRoot,
         out bool enabled,
-        out bool draftWriteEnabled,
+        out bool legacyReadOnly,
         out string? accessKeyToken,
         out string? error)
     {
         dataRoot = null;
         enabled = true;
-        draftWriteEnabled = false;
+        legacyReadOnly = false;
         accessKeyToken = null;
         error = null;
 
@@ -95,7 +95,7 @@ internal static class Program
                 || string.Equals(arg, "-h", StringComparison.OrdinalIgnoreCase))
             {
                 error = "PdxLauncher.Mcp.exe [--data-root <dir>] [--enabled true|false] "
-                    + "[--draft-write true|false] [--access-key <token>]";
+                    + "[--legacy-read-only true|false] [--access-key <token>]";
                 return false;
             }
 
@@ -130,9 +130,16 @@ internal static class Program
                 continue;
             }
 
-            if (TryParseBoolOption(args, ref i, "--draft-write", draftWriteEnabled, out var parsedDraft, out error))
+            // 兼容模式（不带密钥）默认只读；写入必须由密钥能力显式授权。
+            if (TryParseBoolOption(args, ref i, "--legacy-read-only", legacyReadOnly, out var parsedLegacy, out error))
             {
-                draftWriteEnabled = parsedDraft;
+                legacyReadOnly = parsedLegacy;
+                continue;
+            }
+
+            // 旧版生成的客户端配置仍会带 --draft-write；接受但不再生效，读写只由密钥能力决定。
+            if (SkipLegacyDraftWriteOption(args, ref i, out error))
+            {
                 continue;
             }
 
@@ -206,5 +213,25 @@ internal static class Program
 
         error = name + " 需要 true 或 false";
         return false;
+    }
+
+    /// <summary>吃掉旧配置里的 <c>--draft-write</c>（带值或不带值），不再把它当成权限来源。</summary>
+    private static bool SkipLegacyDraftWriteOption(string[] args, ref int index, out string? error)
+    {
+        error = null;
+        var arg = args[index];
+        if (!arg.StartsWith("--draft-write", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (string.Equals(arg, "--draft-write", StringComparison.OrdinalIgnoreCase)
+            && index + 1 < args.Length
+            && bool.TryParse(args[index + 1], out _))
+        {
+            index++;
+        }
+
+        return true;
     }
 }
