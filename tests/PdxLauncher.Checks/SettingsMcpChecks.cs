@@ -42,7 +42,7 @@ public static class SettingsMcpChecks
                 && settingsXaml.Contains("AutomationProperties.AutomationId=\"expMcpRecentCalls\"", StringComparison.Ordinal));
         ChecksContext.Check(
             "设置 MCP: 工具目录和调用记录来自 VM",
-            settingsXaml.Contains("ViewModel.McpTools", StringComparison.Ordinal)
+            settingsXaml.Contains("ViewModel.McpVisibleTools", StringComparison.Ordinal)
                 && settingsXaml.Contains("ViewModel.McpRecentCalls", StringComparison.Ordinal)
                 && settingsVm.Contains("RefreshMcpCalls", StringComparison.Ordinal)
                 && settingsVm.Contains("McpCallHistoryStore", StringComparison.Ordinal));
@@ -99,6 +99,41 @@ public static class SettingsMcpChecks
             "MCP 权限: 自然语言提示词带权限参数",
             docsControlCode.Contains("Keys.ModstudioMcpQuickInstallPrompt", StringComparison.Ordinal)
                 && docsControlCode.Contains("draftWriteEnabled ? \"true\" : \"false\"", StringComparison.Ordinal));
+
+        ChecksContext.Check(
+            "设置 MCP: 概览状态来自真实探测而非权限文案",
+            settingsXaml.Contains("ViewModel.McpServiceStateText", StringComparison.Ordinal)
+                && settingsXaml.Contains("btnRunMcpProbe", StringComparison.Ordinal)
+                && settingsVm.Contains("McpConnectionProbe.Run", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "设置 MCP: 工具数与目录同源并按权限过滤",
+            settingsXaml.Contains("ViewModel.McpToolCount", StringComparison.Ordinal)
+                && settingsXaml.Contains("ViewModel.McpVisibleTools", StringComparison.Ordinal)
+                && settingsVm.Contains("McpToolCatalog.Tools.Count", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "设置 MCP: 三个筛选都接 SelectionChanged",
+            CountOccurrences(settingsXaml, "SelectionChanged=\"OnMcpFilterChanged\"") == 3
+                && settingsCode.Contains("OnMcpFilterChanged", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "设置 MCP: 筛选工具项来自目录",
+            settingsXaml.Contains("ViewModel.McpFilterToolOptions", StringComparison.Ordinal)
+                && !settingsXaml.Contains("<ComboBoxItem Content=\"list_games\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "设置 MCP: 最近调用空态使用反向可见性",
+            settingsXaml.Contains("FromBoolInverse(ViewModel.HasMcpRecentCalls)", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "设置 MCP: 变更计划面板走 resw 文案",
+            settingsXaml.Contains("L.SettingsMcpChangePlans", StringComparison.Ordinal)
+                && !settingsXaml.Contains("Text=\"AI change plans\"", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "设置 MCP: 文档区工具名来自目录而不是手抄",
+            docsControlXaml.Contains("ItemsSource=\"{x:Bind VisibleTools", StringComparison.Ordinal)
+                && !docsControlXaml.Contains("<TextBlock Text=\"list_games\"", StringComparison.Ordinal)
+                && docsControlCode.Contains("McpToolCatalog.Tools", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "设置 MCP: 安装说明默认收起",
+            docsControlXaml.Contains("expMcpDocs", StringComparison.Ordinal)
+                && docsControlXaml.Contains("IsExpanded=\"False\"", StringComparison.Ordinal));
 
         var zh = I18nResw.Read(root, "zh-CN");
         var en = I18nResw.Read(root, "en-US");

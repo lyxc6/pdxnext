@@ -6546,6 +6546,99 @@
   <data name="SettingsMcpRejectPlan" xml:space="preserve">
     <value>拒绝</value>
   </data>
+  <data name="CommonAll" xml:space="preserve">
+    <value>全部</value>
+  </data>
+  <data name="McpProbeNotRun" xml:space="preserve">
+    <value>未检测</value>
+  </data>
+  <data name="McpProbeRunning" xml:space="preserve">
+    <value>检测中…</value>
+  </data>
+  <data name="McpProbeOk" xml:space="preserve">
+    <value>已连接：{0} 个工具</value>
+  </data>
+  <data name="McpProbeFailed" xml:space="preserve">
+    <value>连接失败：{0}</value>
+  </data>
+  <data name="McpProbeDetail" xml:space="preserve">
+    <value>服务版本 {0} · 协议 {1}</value>
+  </data>
+  <data name="McpProbeButton" xml:space="preserve">
+    <value>测试连接</value>
+  </data>
+  <data name="McpToolExposed" xml:space="preserve">
+    <value>当前暴露</value>
+  </data>
+  <data name="McpToolHidden" xml:space="preserve">
+    <value>未暴露</value>
+  </data>
+  <data name="McpToolCountHint" xml:space="preserve">
+    <value>共 {0} 个工具，当前权限暴露 {1} 个。</value>
+  </data>
+  <data name="SettingsMcpRotateKey" xml:space="preserve">
+    <value>轮换</value>
+  </data>
+  <data name="SettingsMcpDeleteKey" xml:space="preserve">
+    <value>删除</value>
+  </data>
+  <data name="SettingsMcpRefreshPlans" xml:space="preserve">
+    <value>刷新计划</value>
+  </data>
+  <data name="SettingsMcpNoChangePlans" xml:space="preserve">
+    <value>暂无待确认的变更计划</value>
+  </data>
+  <data name="SettingsMcpPlanDraft" xml:space="preserve">
+    <value>草稿</value>
+  </data>
+  <data name="SettingsMcpPlanValidated" xml:space="preserve">
+    <value>已校验</value>
+  </data>
+  <data name="SettingsMcpPlanAwaiting" xml:space="preserve">
+    <value>等待你确认</value>
+  </data>
+  <data name="SettingsMcpPlanApproved" xml:space="preserve">
+    <value>已批准，等待执行</value>
+  </data>
+  <data name="SettingsMcpPlanApplied" xml:space="preserve">
+    <value>已执行</value>
+  </data>
+  <data name="SettingsMcpPlanRejected" xml:space="preserve">
+    <value>已拒绝</value>
+  </data>
+  <data name="SettingsMcpPlanExpired" xml:space="preserve">
+    <value>已过期</value>
+  </data>
+  <data name="SettingsMcpPlanFailed" xml:space="preserve">
+    <value>执行失败</value>
+  </data>
+  <data name="SettingsMcpExportCopied" xml:space="preserve">
+    <value>调用记录已复制到剪贴板</value>
+  </data>
+  <data name="SettingsMcpExportSaved" xml:space="preserve">
+    <value>调用记录已保存到 {0}</value>
+  </data>
+  <data name="SettingsMcpKeyScopeDefault" xml:space="preserve">
+    <value>只读（推荐）</value>
+  </data>
+  <data name="SettingsMcpKeyScopeUpload" xml:space="preserve">
+    <value>上传草稿（含写入）</value>
+  </data>
+  <data name="SettingsMcpKeyScopePlaySets" xml:space="preserve">
+    <value>播放集（只读 + 安全写入）</value>
+  </data>
+  <data name="SettingsMcpKeyScopeSettings" xml:space="preserve">
+    <value>设置（只读 + 安全写入）</value>
+  </data>
+  <data name="SettingsMcpKeyScopeAll" xml:space="preserve">
+    <value>全部工具</value>
+  </data>
+  <data name="SettingsMcpKeyDisplayName" xml:space="preserve">
+    <value>密钥名称</value>
+  </data>
+  <data name="SettingsMcpKeyDisplayNamePlaceholder" xml:space="preserve">
+    <value>例如 Claude Desktop</value>
+  </data>
   <data name="ModlibQuickAddToActivePlaySet" xml:space="preserve">
     <value>添加到当前播放集</value>
   </data>

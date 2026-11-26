@@ -67,6 +67,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             }
 
             OnPropertyChanged(nameof(HasMcpAccessKeys));
+            RefreshMcpFilterOptions();
         }
         catch (Exception exception)
         {
@@ -144,8 +145,13 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         return result;
     }
 
-    public McpCreatedAccessKey? CreateMcpAccessKey(string displayName) =>
-        MutateMcpAccessKey(store => store.Create(displayName, (string[])["*"], null));
+    public McpCreatedAccessKey? CreateMcpAccessKey(
+        string displayName,
+        IReadOnlyList<string>? allowedTools = null) =>
+        MutateMcpAccessKey(store => store.Create(
+            displayName,
+            allowedTools ?? (string[])["upload.read"],
+            null));
 
     public McpCreatedAccessKey? RotateMcpAccessKey(string id) =>
         MutateMcpAccessKey(store => store.Rotate(id));
@@ -156,7 +162,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public bool SetMcpAccessKeyEnabled(string id, bool enabled) =>
         MutateMcpAccessKey(store => store.SetEnabled(id, enabled));
 
-    public void UpdateMcpClientConfig(McpCreatedAccessKey? selectedKey)
+    public void UpdateMcpClientConfig(McpCreatedAccessKey? selectedKey = null)
     {
         var client = (McpClientKind)Math.Clamp(McpClientKindIndex, 0, McpClientKinds.Count - 1);
         McpClientConfigText = McpClientConfigGenerator.Create(
@@ -217,6 +223,156 @@ public sealed class SettingsViewModel : LocalizedObservableObject
                 ? T(Keys.McpPermissionReadWrite)
                 : T(Keys.McpPermissionReadOnly);
 
+    /// <summary>
+    /// 概览的「服务状态」：真实探测结果优先，没探测过就显示「未检测」。
+    /// </summary>
+    public string McpServiceStateText =>
+        !AppServices.IsInitialized
+            ? T(Keys.McpProbeNotRun)
+            : IsMcpProbeRunning
+                ? T(Keys.McpProbeRunning)
+                : McpProbeStateText.Length > 0
+                    ? McpProbeStateText
+                    : T(Keys.McpProbeNotRun);
+
+    /// <summary>最近一次探测的原始状态文案；空表示还没探测过。</summary>
+    public string McpProbeStateText { get; private set; } = string.Empty;
+
+    /// <summary>最近一次探测的补充说明（版本、工具名、失败原因）。</summary>
+    public string McpProbeDetailText { get; private set; } = string.Empty;
+
+    public bool HasMcpProbeRun { get; private set; }
+
+    public bool IsMcpProbeRunning { get; private set; }
+
+    public bool CanRunMcpProbe => !IsMcpProbeRunning;
+
+    public int McpProbeToolCount { get; private set; }
+
+    /// <summary>最近一次探测的工具名；页面工具目录按它标记「当前暴露 / 未暴露」。</summary>
+    public IReadOnlyList<string> McpProbeToolNames { get; private set; } = Array.Empty<string>();
+
+    /// <summary>按「是否总开关开启 + 是否草稿写入」计算当前权限下会暴露的工具数。</summary>
+    public int McpToolCount =>
+        AppServices.IsInitialized
+            ? McpToolCatalog.Tools.Count(tool =>
+                tool.Risk == McpToolRisk.ReadOnly || AppServices.Settings.McpDraftWriteEnabled)
+            : McpToolCatalog.Tools.Count;
+
+    /// <summary>当前权限下的工具子集，供目录与「可用工具」标签绑定。</summary>
+    public IReadOnlyList<McpToolDescriptor> McpVisibleTools =>
+        AppServices.IsInitialized && !AppServices.Settings.McpDraftWriteEnabled
+            ? McpToolCatalog.Tools.Where(tool => tool.Risk == McpToolRisk.ReadOnly).ToArray()
+            : McpToolCatalog.Tools;
+
+    public async Task RunMcpProbeAsync()
+    {
+        if (!AppServices.IsInitialized || IsMcpProbeRunning)
+        {
+            return;
+        }
+
+        IsMcpProbeRunning = true;
+        OnPropertyChanged(nameof(IsMcpProbeRunning));
+        OnPropertyChanged(nameof(CanRunMcpProbe));
+        OnPropertyChanged(nameof(McpServiceStateText));
+
+        try
+        {
+            var exePath = Path.Combine(AppContext.BaseDirectory, "PdxLauncher.Mcp.exe");
+            var result = await Task.Run(() => McpConnectionProbe.Run(
+                exePath,
+                AppServices.DataRoot,
+                AppServices.Settings.McpEnabled,
+                AppServices.Settings.McpDraftWriteEnabled)).ConfigureAwait(true);
+
+            HasMcpProbeRun = true;
+            McpProbeToolCount = result.ToolCount;
+            McpProbeToolNames = result.ToolNames;
+            McpProbeStateText = result.Success
+                ? T(Keys.McpProbeOk, result.ToolCount)
+                : T(Keys.McpProbeFailed, result.Message);
+            McpProbeDetailText = result.Success
+                ? T(Keys.McpProbeDetail, result.ServerVersion ?? T(Keys.CommonUnknown), result.ProtocolVersion ?? T(Keys.CommonUnknown))
+                : result.Code;
+        }
+        catch (Exception exception)
+        {
+            AppServices.Logger.Warn("MCP 连接探测失败：" + exception.Message);
+            HasMcpProbeRun = true;
+            McpProbeStateText = T(Keys.McpProbeFailed, exception.Message);
+            McpProbeDetailText = "PROBE_EXCEPTION";
+        }
+        finally
+        {
+            IsMcpProbeRunning = false;
+            OnPropertyChanged(nameof(IsMcpProbeRunning));
+            OnPropertyChanged(nameof(CanRunMcpProbe));
+            OnPropertyChanged(nameof(HasMcpProbeRun));
+            OnPropertyChanged(nameof(McpServiceStateText));
+            OnPropertyChanged(nameof(McpProbeDetailText));
+            OnPropertyChanged(nameof(McpProbeToolCount));
+            OnPropertyChanged(nameof(McpProbeToolNames));
+        }
+    }
+
+    /// <summary>权限开关变化后刷新目录计数与探测状态文案。</summary>
+    public void RefreshMcpToolVisibility()
+    {
+        OnPropertyChanged(nameof(McpToolCount));
+        OnPropertyChanged(nameof(McpVisibleTools));
+    }
+
+    /// <summary>导出结果提示；由页面在写盘后写入。</summary>
+    public string McpExportStatusText { get; private set; } = string.Empty;
+
+    public void SetMcpExportStatus(string text)
+    {
+        McpExportStatusText = text;
+        OnPropertyChanged(nameof(McpExportStatusText));
+    }
+
+    /// <summary>当前最近调用筛选；翻页与导出必须沿用同一组条件。</summary>
+    public string? McpCallFilterTool { get; set; }
+
+    public McpCallOutcome? McpCallFilterOutcome { get; set; }
+
+    public string? McpCallFilterKeyId { get; set; }
+
+    /// <summary>筛选结果为空时显示「暂无调用记录」；不能用 HasMcpRecentCalls 直接当可见性。</summary>
+    public bool HasNoMcpRecentCalls => McpRecentCalls.Count == 0;
+
+    /// <summary>工具筛选项：全部 + 目录里的每个工具；不再手写旧 6 个名字。</summary>
+    public IReadOnlyList<McpFilterOption> McpFilterToolOptions =>
+        new[] { new McpFilterOption(T(Keys.CommonAll), null) }
+            .Concat(McpToolCatalog.Tools.Select(tool => new McpFilterOption(tool.Name, tool.Name)))
+            .ToArray();
+
+    /// <summary>结果筛选项：全部 / 成功 / 工具错误 / 协议错误 / 内部错误。</summary>
+    public IReadOnlyList<McpFilterOption> McpFilterOutcomeOptions =>
+        (McpFilterOption[])
+        [
+            new(T(Keys.CommonAll), null),
+            new(T(Keys.SettingsMcpCallSuccess), nameof(McpCallOutcome.Success)),
+            new(T(Keys.SettingsMcpCallToolError), nameof(McpCallOutcome.ToolError)),
+            new(T(Keys.SettingsMcpCallProtocolError), nameof(McpCallOutcome.ProtocolError)),
+            new(T(Keys.SettingsMcpCallInternalError), nameof(McpCallOutcome.InternalError)),
+        ];
+
+    /// <summary>密钥筛选项：「全部」+ 已有密钥；label 用显示名，value 用 id。</summary>
+    public IReadOnlyList<McpFilterOption> McpFilterKeyOptions =>
+        new[] { new McpFilterOption(T(Keys.CommonAll), null) }
+            .Concat(McpAccessKeys.Select(key => new McpFilterOption(key.DisplayName + " · " + key.KeyPrefix, key.Id)))
+            .ToArray();
+
+    /// <summary>密钥列表变化后刷新密钥筛选项（ItemsSource 是重新计算的）。</summary>
+    public void RefreshMcpFilterOptions()
+    {
+        OnPropertyChanged(nameof(McpFilterToolOptions));
+        OnPropertyChanged(nameof(McpFilterOutcomeOptions));
+        OnPropertyChanged(nameof(McpFilterKeyOptions));
+    }
+
     public int McpCallTotal { get; private set; }
 
     public int McpCallSuccess { get; private set; }
@@ -231,7 +387,10 @@ public sealed class SettingsViewModel : LocalizedObservableObject
 
     public int McpCallPageSize => 50;
 
-    public int McpCallPageCount => Math.Max(1, (McpCallTotal + McpCallPageSize - 1) / McpCallPageSize);
+    /// <summary>当前筛选命中的总条数；没有筛选时等于 <see cref="McpCallTotal"/>。</summary>
+    public int McpCallFilteredTotal { get; private set; }
+
+    public int McpCallPageCount => Math.Max(1, (McpCallFilteredTotal + McpCallPageSize - 1) / McpCallPageSize);
 
     public bool CanMcpCallPreviousPage => McpCallPage > 0;
 
@@ -244,12 +403,28 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             return;
         }
 
+        // 显式传入的筛选覆盖当前条件；不传则沿用上一次筛选（翻页时用）。
+        if (toolName is not null || keyId is not null || outcome is not null)
+        {
+            McpCallFilterTool = toolName;
+            McpCallFilterOutcome = outcome;
+            McpCallFilterKeyId = keyId;
+        }
+        else
+        {
+            toolName = McpCallFilterTool;
+            outcome = McpCallFilterOutcome;
+            keyId = McpCallFilterKeyId;
+        }
+
         try
         {
             var history = new McpCallHistoryStore(AppServices.Database);
             var query = new McpCallHistoryQuery(toolName, outcome, keyId, McpCallPage * McpCallPageSize, McpCallPageSize);
             var entries = history.Query(query);
             var stats = history.GetStats();
+            // 分页只统计筛选后的条数；否则筛出 3 条仍然显示 1 页以上。
+            McpCallFilteredTotal = history.Count(query);
 
             McpRecentCalls.Clear();
             foreach (var entry in entries)
@@ -263,7 +438,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             OnPropertyChanged(nameof(McpCallSuccess));
             OnPropertyChanged(nameof(McpCallSuccessRate));
             OnPropertyChanged(nameof(HasMcpRecentCalls));
+            OnPropertyChanged(nameof(HasNoMcpRecentCalls));
             OnPropertyChanged(nameof(McpCallPageCount));
+            OnPropertyChanged(nameof(McpCallFilteredTotal));
             OnPropertyChanged(nameof(CanMcpCallPreviousPage));
             OnPropertyChanged(nameof(CanMcpCallNextPage));
         }
@@ -284,6 +461,9 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         {
             new McpCallHistoryStore(AppServices.Database).Clear();
             McpCallPage = 0;
+            McpCallFilterTool = null;
+            McpCallFilterOutcome = null;
+            McpCallFilterKeyId = null;
             RefreshMcpCalls();
         }
         catch (Exception exception)
@@ -298,6 +478,11 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         {
             return "[]";
         }
+
+        // 不传参数时导出当前筛选结果，与屏幕上的列表一致。
+        toolName ??= McpCallFilterTool;
+        outcome ??= McpCallFilterOutcome;
+        keyId ??= McpCallFilterKeyId;
 
         try
         {
@@ -1307,10 +1492,10 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// <summary>刷新 MCP 开关绑定，供设置页订阅 VM 属性变化时更新文档区。</summary>
     public void RefreshMcpPermissions()
     {
-        OnPropertyChanged(nameof(McpEnabled));
-        OnPropertyChanged(nameof(McpDraftWriteEnabled));
-            OnPropertyChanged(nameof(McpPermissionModeText));
-            UpdateMcpClientConfig(null);
+        OnPropertyChanged(nameof(McpPermissionModeText));
+        RefreshMcpToolVisibility();
+        OnPropertyChanged(nameof(McpServiceStateText));
+        UpdateMcpClientConfig(null);
     }
 
     /// <summary>
@@ -1340,7 +1525,8 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             AppServices.Settings.McpEnabled,
             v => AppServices.Settings.McpEnabled = v,
             Keys.SettingsMcpStatusEnabled,
-            Keys.SettingsMcpStatusDisabled);
+            Keys.SettingsMcpStatusDisabled,
+            afterSave: RefreshMcpPermissions);
     }
 
     /// <summary>
@@ -1354,7 +1540,8 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             AppServices.Settings.McpDraftWriteEnabled,
             v => AppServices.Settings.McpDraftWriteEnabled = v,
             Keys.SettingsMcpStatusWriteOn,
-            Keys.SettingsMcpStatusWriteOff);
+            Keys.SettingsMcpStatusWriteOff,
+            afterSave: RefreshMcpPermissions);
     }
 
     // ------------------------------------------------------------ 启动区

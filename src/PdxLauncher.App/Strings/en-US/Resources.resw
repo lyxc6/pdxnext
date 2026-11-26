@@ -6546,6 +6546,99 @@ then call list_games to verify.</value>
   <data name="SettingsMcpRejectPlan" xml:space="preserve">
     <value>Reject</value>
   </data>
+  <data name="CommonAll" xml:space="preserve">
+    <value>All</value>
+  </data>
+  <data name="McpProbeNotRun" xml:space="preserve">
+    <value>Not tested</value>
+  </data>
+  <data name="McpProbeRunning" xml:space="preserve">
+    <value>Testing…</value>
+  </data>
+  <data name="McpProbeOk" xml:space="preserve">
+    <value>Connected: {0} tools</value>
+  </data>
+  <data name="McpProbeFailed" xml:space="preserve">
+    <value>Connection failed: {0}</value>
+  </data>
+  <data name="McpProbeDetail" xml:space="preserve">
+    <value>Server {0} · protocol {1}</value>
+  </data>
+  <data name="McpProbeButton" xml:space="preserve">
+    <value>Test connection</value>
+  </data>
+  <data name="McpToolExposed" xml:space="preserve">
+    <value>Exposed</value>
+  </data>
+  <data name="McpToolHidden" xml:space="preserve">
+    <value>Not exposed</value>
+  </data>
+  <data name="McpToolCountHint" xml:space="preserve">
+    <value>{0} tools total; {1} exposed with current permissions.</value>
+  </data>
+  <data name="SettingsMcpRotateKey" xml:space="preserve">
+    <value>Rotate</value>
+  </data>
+  <data name="SettingsMcpDeleteKey" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="SettingsMcpRefreshPlans" xml:space="preserve">
+    <value>Refresh plans</value>
+  </data>
+  <data name="SettingsMcpNoChangePlans" xml:space="preserve">
+    <value>No pending change plans</value>
+  </data>
+  <data name="SettingsMcpPlanDraft" xml:space="preserve">
+    <value>Draft</value>
+  </data>
+  <data name="SettingsMcpPlanValidated" xml:space="preserve">
+    <value>Validated</value>
+  </data>
+  <data name="SettingsMcpPlanAwaiting" xml:space="preserve">
+    <value>Awaiting your approval</value>
+  </data>
+  <data name="SettingsMcpPlanApproved" xml:space="preserve">
+    <value>Approved, pending execution</value>
+  </data>
+  <data name="SettingsMcpPlanApplied" xml:space="preserve">
+    <value>Applied</value>
+  </data>
+  <data name="SettingsMcpPlanRejected" xml:space="preserve">
+    <value>Rejected</value>
+  </data>
+  <data name="SettingsMcpPlanExpired" xml:space="preserve">
+    <value>Expired</value>
+  </data>
+  <data name="SettingsMcpPlanFailed" xml:space="preserve">
+    <value>Failed</value>
+  </data>
+  <data name="SettingsMcpExportCopied" xml:space="preserve">
+    <value>Call history copied to clipboard</value>
+  </data>
+  <data name="SettingsMcpExportSaved" xml:space="preserve">
+    <value>Call history saved to {0}</value>
+  </data>
+  <data name="SettingsMcpKeyScopeDefault" xml:space="preserve">
+    <value>Read-only (recommended)</value>
+  </data>
+  <data name="SettingsMcpKeyScopeUpload" xml:space="preserve">
+    <value>Upload drafts (with write)</value>
+  </data>
+  <data name="SettingsMcpKeyScopePlaySets" xml:space="preserve">
+    <value>Play sets (read + safe write)</value>
+  </data>
+  <data name="SettingsMcpKeyScopeSettings" xml:space="preserve">
+    <value>Settings (read + safe write)</value>
+  </data>
+  <data name="SettingsMcpKeyScopeAll" xml:space="preserve">
+    <value>All tools</value>
+  </data>
+  <data name="SettingsMcpKeyDisplayName" xml:space="preserve">
+    <value>Key name</value>
+  </data>
+  <data name="SettingsMcpKeyDisplayNamePlaceholder" xml:space="preserve">
+    <value>e.g. Claude Desktop</value>
+  </data>
   <data name="ModlibQuickAddToActivePlaySet" xml:space="preserve">
     <value>Add to current play set</value>
   </data>

@@ -1,5 +1,6 @@
 namespace PdxLauncher.Core.Mcp;
 
+using System.Text;
 using System.Text.Json;
 using System.Text.Encodings.Web;
 
@@ -38,6 +39,7 @@ public static class McpClientConfigGenerator
             "--draft-write", draftWriteEnabled ? "true" : "false",
         };
 
+        // Claude Code / Codex 用环境变量传密钥；只有 Claude Desktop 的 JSON 支持内联把它当默认值。
         if (accessKey is not null)
         {
             if (client == McpClientKind.ClaudeDesktop)
@@ -71,6 +73,13 @@ public static class McpClientConfigGenerator
                     },
                 },
                 JsonOptions);
+        }
+
+        // Codex 读 ~/.codex/config.toml 的 [mcp_servers.<name>]，不是 mcpServers JSON；
+        // 把 JSON 粘进去会让整份配置解析失败。
+        if (client == McpClientKind.Codex)
+        {
+            return CreateCodexToml(exePath, args, accessKey, rawToken);
         }
 
         if (client == McpClientKind.VsCode)
@@ -113,4 +122,35 @@ public static class McpClientConfigGenerator
             },
             JsonOptions);
     }
+
+    /// <summary>生成 Codex 的 TOML 片段；密钥用环境变量占位，避免明文写进配置。</summary>
+    private static string CreateCodexToml(string exePath, List<string> args, McpAccessKey? accessKey, string rawToken)
+    {
+        var builder = new StringBuilder();
+        builder.AppendLine("[mcp_servers.pdxnext]");
+        builder.AppendLine("command = " + TomlString(exePath));
+        builder.Append("args = [");
+        for (var i = 0; i < args.Count; i++)
+        {
+            if (i > 0)
+            {
+                builder.Append(", ");
+            }
+
+            builder.Append(TomlString(args[i]));
+        }
+
+        builder.AppendLine("]");
+        if (accessKey is not null)
+        {
+            builder.AppendLine("[mcp_servers.pdxnext.env]");
+            builder.Append("PDXNEXT_MCP_ACCESS_KEY = ").AppendLine(TomlString(rawToken));
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
+    private static string TomlString(string value) =>
+        "\"" + value.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
 }

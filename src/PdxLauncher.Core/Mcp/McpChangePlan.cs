@@ -121,7 +121,6 @@ public static class McpChangePlanPolicy
     {
         if (string.IsNullOrWhiteSpace(request.Domain)
             || string.IsNullOrWhiteSpace(request.Operation)
-            || string.IsNullOrWhiteSpace(request.GameId)
             || string.IsNullOrWhiteSpace(request.TargetId))
         {
             return new McpChangePlanValidation(false, "PLAN_FIELDS_MISSING");
@@ -131,6 +130,18 @@ public static class McpChangePlanPolicy
             || !operations.Contains(request.Operation))
         {
             return new McpChangePlanValidation(false, "PLAN_OPERATION_FORBIDDEN");
+        }
+
+        // settings 域不依赖游戏；playsets 域必须有 gameId，不能拿空值蒙混。
+        var requiresGame = string.Equals(request.Domain, "playsets", StringComparison.Ordinal);
+        if (requiresGame && string.IsNullOrWhiteSpace(request.GameId))
+        {
+            return new McpChangePlanValidation(false, "PLAN_FIELDS_MISSING");
+        }
+
+        if (!requiresGame && !string.IsNullOrWhiteSpace(request.GameId))
+        {
+            return new McpChangePlanValidation(false, "PLAN_GAME_NOT_ALLOWED");
         }
 
         if (!AllowedFields.TryGetValue(request.Operation, out var allowedFields))
