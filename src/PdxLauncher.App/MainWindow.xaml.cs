@@ -116,6 +116,12 @@ public sealed partial class MainWindow : Window
     /// <summary>是否已挂上标题栏留白的重算回调（DPI / 尺寸变化时重算）。</summary>
     private bool _captionPaddingHooked;
 
+    /// <summary>是否已挂上 WM_GETMINMAXINFO 的最小尺寸兜底。</summary>
+    private bool _minimumSizeHooked;
+
+    /// <summary>子类化回调必须保存在字段里，否则委托会被 GC 回收。</summary>
+    private SubclassProcDelegate? SubclassProc;
+
     /// <summary>XAML 里取界面文案的入口（切语言时由 Localizer 的属性变更驱动）。</summary>
     public Localizer L => Localizer.Instance;
 
@@ -144,6 +150,8 @@ public sealed partial class MainWindow : Window
         SetTitleBar(AppTitleBar);
 
         ApplyWindowSize();
+        ApplyPresenterMinimumSize();
+        HookMinimumWindowSize();
 
         ApplyWindowIcon();
 
@@ -222,6 +230,8 @@ public sealed partial class MainWindow : Window
         }
 
         _isStarted = true;
+        ApplyPresenterMinimumSize();
+        EnforceMinimumWindowSize();
         StartupTimeline.Mark(StartupTimeline.ShellReady);
 
         ApplyAlwaysOnTopPreference();
@@ -1604,6 +1614,297 @@ public sealed partial class MainWindow : Window
                 AppServices.Logger.Warn("设置窗口尺寸失败: " + ex.Message);
             }
         }
+    }
+
+    /// <summary>
+    /// Win32 兜底：<c>OverlappedPresenter.PreferredMinimumWidth/Height</c> 在 2.7 上只是提示，
+    /// 实测仍能拖到 700×500 物理像素。这里用 WM_GETMINMAXINFO 强制最小尺寸，保证主页
+    /// 永远有 1040×600 DIP 的可用空间。
+    /// <para>
+    /// <c>MINMAXINFO.MinTrackSize</c> 是**物理像素**，所以这里乘当前 DPI 缩放；
+    /// 反过来把它当 DIP 写死会让 150% 缩放下只锁到 693×400 DIP。
+    /// </para>
+    /// </summary>
+    private void HookMinimumWindowSize()
+    {
+        if (_minimumSizeHooked)
+        {
+            return;
+        }
+
+        try
+        {
+            // WinUI 的 WindowNative 句柄是 content child；WM_GETMINMAXINFO/WM_SIZING 只发给顶层窗口。
+            var hwnd = GetAncestor(WinRT.Interop.WindowNative.GetWindowHandle(this), 2);
+            if (hwnd == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("GetAncestor(GA_ROOT) 返回空");
+            }
+            SubclassProc = OnMinimumWindowSizeMessage;
+            var ok = SetWindowSubclass(hwnd, SubclassProc, (UIntPtr)1, IntPtr.Zero);
+            if (!ok)
+            {
+                throw new InvalidOperationException("SetWindowSubclass 返回 false");
+            }
+
+            _minimumSizeHooked = true;
+        }
+        catch (Exception ex)
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Warn("挂载最小窗口尺寸钩子失败: " + ex.Message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 先用 OverlappedPresenter 设定最小尺寸（它按 DIP 生效，实测传 1040/600 即可），
+    /// 再由 WM_GETMINMAXINFO 按物理像素兜底。两条路径都保留：Presenter 在 WinUI 内部
+    /// 生效，钩子处理旧式拖拽边界，任意一条被框架跳过时另一条仍能拦住。
+    /// </summary>
+    private void ApplyPresenterMinimumSize()
+    {
+        try
+        {
+            if (AppWindow.Presenter is not Microsoft.UI.Windowing.OverlappedPresenter presenter)
+            {
+                return;
+            }
+
+            // 实测该属性按**物理像素**生效：150% 下传 1040/600 会锁到 693×400 DIP，
+            // 因此必须乘当前 DPI 缩放，才能得到 1040×600 DIP。
+            var scale = ResolveUiScale();
+            presenter.PreferredMinimumWidth = (int)Math.Round(MinimumWindowWidth * scale);
+            presenter.PreferredMinimumHeight = (int)Math.Round(MinimumWindowHeight * scale);
+        }
+        catch (Exception ex)
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Warn("设置 Presenter 最小尺寸失败: " + ex.Message);
+            }
+        }
+    }
+
+    /// <summary>
+    /// UI 实际缩放：优先 <c>XamlRoot.RasterizationScale</c>（窗口未显示时也可靠），
+    /// 兜底再用 <c>GetDpiForWindow</c>。构造期 GetDpiForWindow 可能仍返回 96。
+    /// </summary>
+    private double ResolveUiScale()
+    {
+        try
+        {
+            if (RootGrid.XamlRoot is { RasterizationScale: > 0 } root)
+            {
+                return root.RasterizationScale;
+            }
+        }
+        catch (Exception)
+        {
+            // 未进可视化树时读 XamlRoot 会抛；退回 DPI 路径。
+        }
+
+        return GetScaleFactor();
+    }
+
+    /// <summary>WM_GETMINMAXINFO：按当前 DPI 把 track 最小尺寸换成 1040×600 DIP。</summary>
+    private IntPtr OnMinimumWindowSizeMessage(
+        IntPtr hwnd,
+        uint message,
+        IntPtr wParam,
+        IntPtr lParam,
+        UIntPtr uIdSubclass,
+        IntPtr dwRefData)
+    {
+        // WM_GETMINMAXINFO=0x24 定最小尺寸，WM_SIZING=0x214 拖拽中纠正，WM_WINDOWPOSCHANGING=0x46 兜底。
+        if (message != 0x0024 && message != 0x0214 && message != 0x0046)
+        {
+            return DefSubclassProc(hwnd, message, wParam, lParam);
+        }
+
+        try
+        {
+            var dpi = GetDpiForWindow(hwnd);
+            var scale = dpi <= 0 ? 1.0 : dpi / 96.0;
+            var minWidth = (int)Math.Round(MinimumWindowWidth * scale);
+            var minHeight = (int)Math.Round(MinimumWindowHeight * scale);
+            if (message == 0x0214)
+            {
+                // WM_SIZING：系统已给出拖拽矩形，把小于最小尺寸的边直接推回。
+                var dragRect = System.Runtime.InteropServices.Marshal.PtrToStructure<NativeRect>(lParam);
+                if (dragRect.Right - dragRect.Left < minWidth)
+                {
+                    dragRect.Right = dragRect.Left + minWidth;
+                }
+
+                if (dragRect.Bottom - dragRect.Top < minHeight)
+                {
+                    dragRect.Bottom = dragRect.Top + minHeight;
+                }
+
+                System.Runtime.InteropServices.Marshal.StructureToPtr(dragRect, lParam, false);
+            }
+            else if (message == 0x0046)
+            {
+                // WM_WINDOWPOSCHANGING：直接夹住 cx/cy，系统不再按旧的 1040×600 px 下限截断。
+                var pos = System.Runtime.InteropServices.Marshal.PtrToStructure<WindowPos>(lParam);
+                if ((pos.Flags & 0x0001) == 0)
+                {
+                    if (pos.Cx < minWidth)
+                    {
+                        pos.Cx = minWidth;
+                    }
+
+                    if (pos.Cy < minHeight)
+                    {
+                        pos.Cy = minHeight;
+                    }
+
+                    System.Runtime.InteropServices.Marshal.StructureToPtr(pos, lParam, false);
+                }
+            }
+            else if (message == 0x0024)
+            {
+                var info = System.Runtime.InteropServices.Marshal.PtrToStructure<MinMaxInfo>(lParam);
+                // Win32 的 WM_GETMINMAXINFO 以物理像素为单位：DIP * DPI 缩放才是正确值。
+                info.MinTrackSize.X = minWidth;
+                info.MinTrackSize.Y = minHeight;
+                System.Runtime.InteropServices.Marshal.StructureToPtr(info, lParam, false);
+            }
+            else
+            {
+                // WM_SIZING：系统已给出矩形，这里把低于最小尺寸的边推回。
+                var rect = System.Runtime.InteropServices.Marshal.PtrToStructure<NativeRect>(lParam);
+                if (rect.Right - rect.Left < minWidth)
+                {
+                    rect.Right = rect.Left + minWidth;
+                }
+
+                if (rect.Bottom - rect.Top < minHeight)
+                {
+                    rect.Bottom = rect.Top + minHeight;
+                }
+
+                System.Runtime.InteropServices.Marshal.StructureToPtr(rect, lParam, false);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Warn("修正最小窗口尺寸失败: " + ex.Message);
+            }
+        }
+
+        return IntPtr.Zero;
+    }
+
+    /// <summary>窗口被系统/框架压到小于目标尺寸后，主动拉回最小尺寸。</summary>
+    private void EnforceMinimumWindowSize()
+    {
+        try
+        {
+            var hwnd = GetAncestor(WinRT.Interop.WindowNative.GetWindowHandle(this), 2);
+            var dpi = GetDpiForWindow(hwnd);
+            var scale = dpi <= 0 ? 1.0 : dpi / 96.0;
+            var minWidth = (int)Math.Round(MinimumWindowWidth * scale);
+            var minHeight = (int)Math.Round(MinimumWindowHeight * scale);
+            var rect = new NativeRect();
+            if (!GetWindowRect(hwnd, ref rect))
+            {
+                return;
+            }
+
+            var width = rect.Right - rect.Left;
+            var height = rect.Bottom - rect.Top;
+            if (width >= minWidth && height >= minHeight)
+            {
+                return;
+            }
+
+            SetWindowPos(hwnd, IntPtr.Zero, rect.Left, rect.Top,
+                Math.Max(width, minWidth), Math.Max(height, minHeight), 0x0004);
+        }
+        catch (Exception ex)
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Warn("强制最小窗口尺寸失败: " + ex.Message);
+            }
+        }
+    }
+
+    private delegate IntPtr SubclassProcDelegate(
+        IntPtr hwnd,
+        uint message,
+        IntPtr wParam,
+        IntPtr lParam,
+        UIntPtr uIdSubclass,
+        IntPtr dwRefData);
+
+    [DllImport("comctl32.dll", SetLastError = true)]
+    private static extern bool SetWindowSubclass(
+        IntPtr hwnd,
+        SubclassProcDelegate proc,
+        UIntPtr uIdSubclass,
+        IntPtr dwRefData);
+
+    [DllImport("comctl32.dll")]
+    private static extern IntPtr DefSubclassProc(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct NativePoint
+    {
+        public int X;
+        public int Y;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct WindowPos
+    {
+        public IntPtr Hwnd;
+        public IntPtr HwndInsertAfter;
+        public int X;
+        public int Y;
+        public int Cx;
+        public int Cy;
+        public uint Flags;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hwnd, ref NativeRect rect);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(
+        IntPtr hwnd,
+        IntPtr hwndInsertAfter,
+        int x,
+        int y,
+        int cx,
+        int cy,
+        uint flags);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct NativeRect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MinMaxInfo
+    {
+        public NativePoint Reserved;
+        public NativePoint MaxSize;
+        public NativePoint MaxPosition;
+        public NativePoint MinTrackSize;
+        public NativePoint MaxTrackSize;
     }
 
     /// <summary>

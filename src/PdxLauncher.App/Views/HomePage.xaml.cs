@@ -148,6 +148,9 @@ public sealed partial class HomePage : Page
         {
             StartupTimeline.MarkInternal(StartupTimeline.HomePageLoaded);
             HookFirstFrame();
+            SizeChanged -= OnHomePageSizeChanged;
+            SizeChanged += OnHomePageSizeChanged;
+            ApplyHomeScale(HomeScrollViewer.ActualWidth, HomeScrollViewer.ActualHeight);
 
             if (_lifetime.IsCancellationRequested)
             {
@@ -187,7 +190,28 @@ public sealed partial class HomePage : Page
         CompositionTarget.Rendering -= OnFirstFrameRendering;
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         Localizer.Instance.LanguageChanged -= OnLanguageChanged;
+        SizeChanged -= OnHomePageSizeChanged;
         _lifetime.Cancel();
+    }
+
+    /// <summary>页面自身尺寸变化（窗口缩放/导航折叠）时也重算一次，避免 ScrollViewer 漏发 SizeChanged。</summary>
+    private void OnHomePageSizeChanged(object sender, SizeChangedEventArgs e) =>
+        ApplyHomeScale(e.NewSize.Width, e.NewSize.Height);
+
+    /// <summary>主页内容区尺寸变化：按可用宽度整体等比缩小（1040 DIP 内容区为 1.0，最低 0.8）。</summary>
+    private void OnHomeViewportSizeChanged(object sender, SizeChangedEventArgs e) =>
+        ApplyHomeScale(e.NewSize.Width, e.NewSize.Height);
+
+    /// <summary>只在缩放变化超过 0.01 时应用，拖拽窗口时避免整页反复重排。</summary>
+    private void ApplyHomeScale(double availableWidth, double availableHeight)
+    {
+        var scale = HomeScalePolicy.Resolve(availableWidth, availableHeight);
+        if (Math.Abs(HomeScaleHost.ScaleFactor - scale) < 0.01)
+        {
+            return;
+        }
+
+        HomeScaleHost.ScaleFactor = scale;
     }
 
     private void OnPageRightTapped(object sender, RightTappedRoutedEventArgs e)
