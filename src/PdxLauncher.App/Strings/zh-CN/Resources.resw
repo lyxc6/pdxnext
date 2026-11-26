@@ -4413,9 +4413,6 @@
   <data name="SettingsMcpTools" xml:space="preserve">
     <value>可用工具与权限</value>
   </data>
-  <data name="SettingsMcpToolSummary" xml:space="preserve">
-    <value>默认只读工具：list_games、list_mods、list_tags、get_upload_draft；开启写入开关后增加 save_upload_draft、clear_upload_draft。MCP 不会发布 Mod。</value>
-  </data>
   <data name="SettingsMcpHint" xml:space="preserve">
     <value>权限由本机 stdio 子进程执行；关闭总开关后客户端看到空工具表，调用会被拒绝。</value>
   </data>
@@ -6806,6 +6803,12 @@
   </data>
   <data name="SettingsMcpCapSettingsPlanDesc" xml:space="preserve">
     <value>提交修改白名单设置项的变更计划，由你在 MCP 页确认后执行。</value>
+  </data>
+  <data name="SettingsMcpToolAlways" xml:space="preserve">
+    <value>（无对应能力，始终不可用）</value>
+  </data>
+  <data name="SettingsMcpToolSummary" xml:space="preserve">
+    <value>每行下方的小字是该工具的授权能力；可在「访问密钥」里按需勾选。MCP 不会发布 Mod。</value>
   </data>
   <data name="ModlibQuickAddToActivePlaySet" xml:space="preserve">
     <value>添加到当前播放集</value>

@@ -4414,7 +4414,10 @@ Applying still backs up the original file first, but the backup cannot be verifi
     <value>Available tools and permissions</value>
   </data>
   <data name="SettingsMcpToolSummary" xml:space="preserve">
-    <value>Read-only tools: list_games, list_mods, list_tags, get_upload_draft. Enable the write switch to add save_upload_draft and clear_upload_draft. MCP never publishes mods.</value>
+    <value>Each row lists the capability that grants the tool; check them per access key. MCP never publishes mods.</value>
+  </data>
+  <data name="SettingsMcpToolAlways" xml:space="preserve">
+    <value>(no matching capability; never available)</value>
   </data>
   <data name="SettingsMcpHint" xml:space="preserve">
     <value>Permissions are enforced by the local stdio child process; with the master switch off, clients see no tools and every call is rejected.</value>

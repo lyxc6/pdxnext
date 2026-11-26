@@ -12,15 +12,49 @@ public static class McpToolRiskText
         : Localizer.Instance.SettingsMcpToolWrite;
 
     /// <summary>
-    /// 工具是否存在一条可访问它的密钥能力。总开关只决定服务是否在线；
-    /// 具体工具是否暴露给某个客户端由密钥权限决定，所以这里只能说「目录内可用」。
+    /// 当前配置下是否至少有一把密钥（或兼容模式）能调用该工具。
+    /// 逐客户端的实际过滤仍由各自的密钥能力决定。
     /// </summary>
-    public static string Exposed(McpToolRisk risk)
+    public static string Exposed(string toolName)
     {
         var enabled = AppServices.IsInitialized && AppServices.Settings.McpEnabled;
-        return enabled
+        return enabled && IsCoveredByAnyKey(toolName)
             ? Localizer.Instance.McpToolExposed
             : Localizer.Instance.McpToolHidden;
+    }
+
+    /// <summary>与设置页目录同一口径：有密钥看密钥能力并集，没密钥看兼容模式的只读能力。</summary>
+    private static bool IsCoveredByAnyKey(string toolName)
+    {
+        if (!AppServices.IsInitialized)
+        {
+            return true;
+        }
+
+        var keys = new McpAccessKeyStore(AppServices.Database).List();
+        return keys.Count > 0
+            ? keys.Any(key => key.CapabilityList.Any(capability =>
+                McpCapabilityCatalog.AllowsTool(capability, toolName)))
+            : McpCapabilityCatalog.ReadOnly.Any(capability =>
+                McpCapabilityCatalog.AllowsTool(capability, toolName));
+    }
+
+    /// <summary>
+    /// DataTemplate 里说明「哪些能力能调用这个工具」；不再指向已退役的全局写入开关。
+    /// </summary>
+    public static string CapabilityGrant(string toolName)
+    {
+        var plans = toolName == "create_change_plan";
+        var labels = McpCapabilityCatalog.All
+            .Where(capability => McpCapabilityCatalog.AllowsTool(capability, toolName))
+            .Where(capability => !plans || capability is McpCapabilityCatalog.PlaySetsPlan or McpCapabilityCatalog.SettingsPlan)
+            .Select(McpKeyEditorViewModel.CapabilityLabel)
+            .ToArray();
+        return labels.Length == 0
+            ? Localizer.Instance.SettingsMcpToolAlways
+            : string.Join(
+                Localizer.Instance.SettingsMcpKeySummarySeparator,
+                labels);
     }
 }
 
