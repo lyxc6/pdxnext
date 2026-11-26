@@ -32,12 +32,14 @@
                   VerticalScrollBarVisibility="Auto"
                   VerticalScrollMode="Auto"
                   Background="Transparent"
+                  SizeChanged="OnHomeViewportSizeChanged"
                   RightTapped="OnPageRightTapped">
-        <StackPanel
-            MaxWidth="1120"
-            Padding="24"
-            HorizontalAlignment="Center"
-            Spacing="16">
+        <controls:PdxScaledPresenter x:Name="HomeScaleHost">
+            <StackPanel
+                MaxWidth="1120"
+                Padding="24"
+                HorizontalAlignment="Center"
+                Spacing="16">
 
             <!--
                 页头即主视觉：字标 / 标题居中排列，直接浮在整窗背景图上；
@@ -377,6 +379,7 @@
                 x:Name="AccentButtonDisabledForegroundProbe"
                 BorderBrush="{ThemeResource TextOnAccentFillColorDisabledBrush}"
                 Visibility="Collapsed" />
-        </StackPanel>
+            </StackPanel>
+        </controls:PdxScaledPresenter>
     </ScrollViewer>
 </Page>
