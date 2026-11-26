@@ -796,6 +796,9 @@
   <data name="CrashSummaryGameDetailNoVersion" xml:space="preserve">
     <value>{0}</value>
   </data>
+  <data name="CrashSummaryMemoryMb" xml:space="preserve">
+    <value>{0} MB RAM</value>
+  </data>
   <data name="CrashSummaryMods" xml:space="preserve">
     <value>Enabled mods</value>
   </data>
@@ -803,7 +806,7 @@
     <value>Unknown</value>
   </data>
   <data name="CrashSummaryModsValue" xml:space="preserve">
-    <value>{0}</value>
+    <value>{0} mods</value>
   </data>
   <data name="CrashSummaryNoCrash" xml:space="preserve">
     <value>No crash dump found</value>
@@ -818,7 +821,7 @@
     <value>System</value>
   </data>
   <data name="CrashSummarySystemDetail" xml:space="preserve">
-    <value>{0} · {1} MB RAM · {2}</value>
+    <value>{0} · {1} · {2}</value>
   </data>
   <data name="CrashTimeUnknown" xml:space="preserve">
     <value>Unknown</value>
@@ -833,37 +836,31 @@
     <value>Caches only affect speed and never delete game files; they are rebuilt the next time you open the matching page.</value>
   </data>
   <data name="DiagnosticsHintCacheLargeDetail" xml:space="preserve">
-    <value>Caches total {0}, above 500 MB. Clear them row by row on the Cache tab.</value>
+    <value>Clear them row by row on the Cache tab.</value>
   </data>
   <data name="DiagnosticsHintCacheLargeTitle" xml:space="preserve">
     <value>Caches are large</value>
   </data>
   <data name="DiagnosticsHintLogArchivesDetail" xml:space="preserve">
-    <value>The log folder totals {0}. Old files only matter when troubleshooting.</value>
+    <value>Old files only matter when troubleshooting; copy one before clearing.</value>
   </data>
   <data name="DiagnosticsHintLogArchivesTitle" xml:space="preserve">
     <value>Three archived logs exist</value>
   </data>
   <data name="DiagnosticsHintLogNearRotationDetail" xml:space="preserve">
-    <value>The current log is {0}; it rotates at 5 MB. Copy it from the log folder if you need a record.</value>
+    <value>Copy it from the log folder if you need a record.</value>
   </data>
   <data name="DiagnosticsHintLogNearRotationTitle" xml:space="preserve">
     <value>The log is close to rotation</value>
   </data>
-  <data name="DiagnosticsHintMemoryAboveDetailBudgetDetail" xml:space="preserve">
-    <value>Currently {0}, above 550 MB. Clear the largest caches first, then re-check workshop detail.</value>
-  </data>
-  <data name="DiagnosticsHintMemoryAboveDetailBudgetTitle" xml:space="preserve">
-    <value>Working set is above the detail-page budget</value>
-  </data>
   <data name="DiagnosticsHintMemoryHighDetail" xml:space="preserve">
-    <value>Currently {0}, above the 250 MB idle target. Usually thumbnails and image caches; clear them on the Cache tab.</value>
+    <value>Clear the Cache tab, then check whether the working set drops back.</value>
   </data>
   <data name="DiagnosticsHintMemoryHighTitle" xml:space="preserve">
-    <value>Working set is above the idle budget</value>
+    <value>Working set is above the idle target</value>
   </data>
   <data name="DiagnosticsHintStartupSlowDetail" xml:space="preserve">
-    <value>Reached interactive in {0}. Check the Startup tab to see which stage is slow.</value>
+    <value>Check the Startup tab to see which stage is slow.</value>
   </data>
   <data name="DiagnosticsHintStartupSlowTitle" xml:space="preserve">
     <value>Cold start is slower than 2.5 s</value>
@@ -881,7 +878,7 @@
     <value>Translation model stays resident</value>
   </data>
   <data name="DiagnosticsHintWorkshopCacheLargeDetail" xml:space="preserve">
-    <value>{0} workshop entries and pages, above 2000. Clear them when offline browsing is not needed.</value>
+    <value>Clear them on the Cache tab when offline browsing is not needed.</value>
   </data>
   <data name="DiagnosticsHintWorkshopCacheLargeTitle" xml:space="preserve">
     <value>Workshop cache holds many entries</value>
@@ -971,7 +968,7 @@
     <value>Threads / handles</value>
   </data>
   <data name="DiagnosticsMetricThreadsDetail" xml:space="preserve">
-    <value>Handles that only grow usually mean unreleased images or files.</value>
+    <value>Steady growth often means image or file handles are not released.</value>
   </data>
   <data name="DiagnosticsMetricThumbnails" xml:space="preserve">
     <value>Mod thumbnails</value>
@@ -980,16 +977,10 @@
     <value>Thumbnail objects held in memory.</value>
   </data>
   <data name="DiagnosticsMetricUptime" xml:space="preserve">
-    <value>Uptime</value>
+    <value>Process uptime</value>
   </data>
   <data name="DiagnosticsMetricUptimeDetail" xml:space="preserve">
-    <value>From process start to this sample.</value>
-  </data>
-  <data name="DiagnosticsMetricWorkingSet" xml:space="preserve">
-    <value>Working set</value>
-  </data>
-  <data name="DiagnosticsMetricWorkingSetDetail" xml:space="preserve">
-    <value>Idle target 250 MB; workshop detail budget 550 MB.</value>
+    <value>From process start to this sample, not the time spent on this page.</value>
   </data>
   <data name="DiagnosticsMetricWorkshop" xml:space="preserve">
     <value>Workshop entries / pages</value>
@@ -1045,6 +1036,12 @@
   <data name="DiagnosticsGaugeCache" xml:space="preserve">
     <value>Cache</value>
   </data>
+  <data name="DiagnosticsGaugeCacheOver" xml:space="preserve">
+    <value>{0} over</value>
+  </data>
+  <data name="DiagnosticsGaugeCachePercent" xml:space="preserve">
+    <value>{0}% of the target</value>
+  </data>
   <data name="DiagnosticsGaugeLiveOff" xml:space="preserve">
     <value>Paused</value>
   </data>
@@ -1055,25 +1052,40 @@
     <value>Live refresh</value>
   </data>
   <data name="DiagnosticsGaugeLog" xml:space="preserve">
-    <value>Log</value>
+    <value>Current log</value>
+  </data>
+  <data name="DiagnosticsGaugeLogOver" xml:space="preserve">
+    <value>{0} over</value>
+  </data>
+  <data name="DiagnosticsGaugeLogPercent" xml:space="preserve">
+    <value>{0}% to rotation</value>
   </data>
   <data name="DiagnosticsGaugeMemory" xml:space="preserve">
-    <value>Memory</value>
+    <value>Working set</value>
   </data>
-  <data name="DiagnosticsGaugePercent" xml:space="preserve">
-    <value>{0}% of budget</value>
+  <data name="DiagnosticsGaugeMemoryOver" xml:space="preserve">
+    <value>{0} over</value>
+  </data>
+  <data name="DiagnosticsGaugeMemoryPercent" xml:space="preserve">
+    <value>{0}% of target</value>
   </data>
   <data name="DiagnosticsGaugeStartup" xml:space="preserve">
     <value>Startup</value>
   </data>
-  <data name="DiagnosticsGaugeSubtitle" xml:space="preserve">
-    <value>Real-time budget dashboard · refreshes every second, cache and log every 5 seconds</value>
+  <data name="DiagnosticsGaugeStartupOver" xml:space="preserve">
+    <value>{0} above the target</value>
   </data>
-  <data name="DiagnosticsOverviewCountersTitle" xml:space="preserve">
-    <value>Cache and content</value>
+  <data name="DiagnosticsGaugeStartupPercent" xml:space="preserve">
+    <value>{0}% of the target</value>
+  </data>
+  <data name="DiagnosticsGaugeTrendWindow" xml:space="preserve">
+    <value>Last 60 seconds</value>
+  </data>
+  <data name="DiagnosticsMoreMetrics" xml:space="preserve">
+    <value>More process metrics</value>
   </data>
   <data name="DiagnosticsOverviewHintsEmpty" xml:space="preserve">
-    <value>Nothing stands out: memory, cache, logs and throttling are all within budget.</value>
+    <value>Nothing needs attention right now.</value>
   </data>
   <data name="DiagnosticsOverviewHintsTitle" xml:space="preserve">
     <value>Suggested optimizations</value>
@@ -1082,13 +1094,13 @@
     <value>Process and memory</value>
   </data>
   <data name="DiagnosticsOverviewRefresh" xml:space="preserve">
-    <value>Sample again</value>
+    <value>Refresh now</value>
   </data>
   <data name="DiagnosticsOverviewUpdated" xml:space="preserve">
-    <value>Sampled at {0}</value>
+    <value>Sampled {0}</value>
   </data>
   <data name="DiagnosticsPageSubtitle" xml:space="preserve">
-    <value>Read-only samples of memory, cache usage, log tail, throttling and startup time. No network access, no writes to game folders.</value>
+    <value>Read-only diagnostics: no network access, no writes to game folders.</value>
   </data>
   <data name="DiagnosticsPageTitle" xml:space="preserve">
     <value>Performance &amp; Logs</value>
@@ -1527,6 +1539,21 @@
   </data>
   <data name="HomeVersionUnknown" xml:space="preserve">
     <value>Version unknown</value>
+  </data>
+  <data name="HomeMoreActions" xml:space="preserve">
+    <value>More actions</value>
+  </data>
+  <data name="HomeOpenGameDirectory" xml:space="preserve">
+    <value>Open game directory</value>
+  </data>
+  <data name="HomeNewsPrevious" xml:space="preserve">
+    <value>Previous news card</value>
+  </data>
+  <data name="HomeNewsNext" xml:space="preserve">
+    <value>Next news card</value>
+  </data>
+  <data name="HomeStatusOpenGameDirectoryFailed" xml:space="preserve">
+    <value>Failed to open game directory: {0}</value>
   </data>
   <data name="LibraryBadgeLaunchOnly" xml:space="preserve">
     <value>Launch only</value>
@@ -6518,6 +6545,99 @@ then call list_games to verify.</value>
   </data>
   <data name="SettingsMcpRejectPlan" xml:space="preserve">
     <value>Reject</value>
+  </data>
+  <data name="CommonAll" xml:space="preserve">
+    <value>All</value>
+  </data>
+  <data name="McpProbeNotRun" xml:space="preserve">
+    <value>Not tested</value>
+  </data>
+  <data name="McpProbeRunning" xml:space="preserve">
+    <value>Testing…</value>
+  </data>
+  <data name="McpProbeOk" xml:space="preserve">
+    <value>Connected: {0} tools</value>
+  </data>
+  <data name="McpProbeFailed" xml:space="preserve">
+    <value>Connection failed: {0}</value>
+  </data>
+  <data name="McpProbeDetail" xml:space="preserve">
+    <value>Server {0} · protocol {1}</value>
+  </data>
+  <data name="McpProbeButton" xml:space="preserve">
+    <value>Test connection</value>
+  </data>
+  <data name="McpToolExposed" xml:space="preserve">
+    <value>Exposed</value>
+  </data>
+  <data name="McpToolHidden" xml:space="preserve">
+    <value>Not exposed</value>
+  </data>
+  <data name="McpToolCountHint" xml:space="preserve">
+    <value>{0} tools total; {1} exposed with current permissions.</value>
+  </data>
+  <data name="SettingsMcpRotateKey" xml:space="preserve">
+    <value>Rotate</value>
+  </data>
+  <data name="SettingsMcpDeleteKey" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="SettingsMcpRefreshPlans" xml:space="preserve">
+    <value>Refresh plans</value>
+  </data>
+  <data name="SettingsMcpNoChangePlans" xml:space="preserve">
+    <value>No pending change plans</value>
+  </data>
+  <data name="SettingsMcpPlanDraft" xml:space="preserve">
+    <value>Draft</value>
+  </data>
+  <data name="SettingsMcpPlanValidated" xml:space="preserve">
+    <value>Validated</value>
+  </data>
+  <data name="SettingsMcpPlanAwaiting" xml:space="preserve">
+    <value>Awaiting your approval</value>
+  </data>
+  <data name="SettingsMcpPlanApproved" xml:space="preserve">
+    <value>Approved, pending execution</value>
+  </data>
+  <data name="SettingsMcpPlanApplied" xml:space="preserve">
+    <value>Applied</value>
+  </data>
+  <data name="SettingsMcpPlanRejected" xml:space="preserve">
+    <value>Rejected</value>
+  </data>
+  <data name="SettingsMcpPlanExpired" xml:space="preserve">
+    <value>Expired</value>
+  </data>
+  <data name="SettingsMcpPlanFailed" xml:space="preserve">
+    <value>Failed</value>
+  </data>
+  <data name="SettingsMcpExportCopied" xml:space="preserve">
+    <value>Call history copied to clipboard</value>
+  </data>
+  <data name="SettingsMcpExportSaved" xml:space="preserve">
+    <value>Call history saved to {0}</value>
+  </data>
+  <data name="SettingsMcpKeyScopeDefault" xml:space="preserve">
+    <value>Read-only (recommended)</value>
+  </data>
+  <data name="SettingsMcpKeyScopeUpload" xml:space="preserve">
+    <value>Upload drafts (with write)</value>
+  </data>
+  <data name="SettingsMcpKeyScopePlaySets" xml:space="preserve">
+    <value>Play sets (read + safe write)</value>
+  </data>
+  <data name="SettingsMcpKeyScopeSettings" xml:space="preserve">
+    <value>Settings (read + safe write)</value>
+  </data>
+  <data name="SettingsMcpKeyScopeAll" xml:space="preserve">
+    <value>All tools</value>
+  </data>
+  <data name="SettingsMcpKeyDisplayName" xml:space="preserve">
+    <value>Key name</value>
+  </data>
+  <data name="SettingsMcpKeyDisplayNamePlaceholder" xml:space="preserve">
+    <value>e.g. Claude Desktop</value>
   </data>
   <data name="ModlibQuickAddToActivePlaySet" xml:space="preserve">
     <value>Add to current play set</value>

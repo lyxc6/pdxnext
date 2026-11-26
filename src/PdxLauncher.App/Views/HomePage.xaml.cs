@@ -4,6 +4,7 @@ using System.Diagnostics;
 
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using PdxLauncher.App.Controls;
@@ -147,6 +148,9 @@ public sealed partial class HomePage : Page
         {
             StartupTimeline.MarkInternal(StartupTimeline.HomePageLoaded);
             HookFirstFrame();
+            SizeChanged -= OnHomePageSizeChanged;
+            SizeChanged += OnHomePageSizeChanged;
+            ApplyHomeScale(HomeScrollViewer.ActualWidth, HomeScrollViewer.ActualHeight);
 
             if (_lifetime.IsCancellationRequested)
             {
@@ -186,7 +190,28 @@ public sealed partial class HomePage : Page
         CompositionTarget.Rendering -= OnFirstFrameRendering;
         AppServices.CurrentGameChanged -= OnCurrentGameChanged;
         Localizer.Instance.LanguageChanged -= OnLanguageChanged;
+        SizeChanged -= OnHomePageSizeChanged;
         _lifetime.Cancel();
+    }
+
+    /// <summary>页面自身尺寸变化（窗口缩放/导航折叠）时也重算一次，避免 ScrollViewer 漏发 SizeChanged。</summary>
+    private void OnHomePageSizeChanged(object sender, SizeChangedEventArgs e) =>
+        ApplyHomeScale(e.NewSize.Width, e.NewSize.Height);
+
+    /// <summary>主页内容区尺寸变化：按可用宽度整体等比缩小（1040 DIP 内容区为 1.0，最低 0.8）。</summary>
+    private void OnHomeViewportSizeChanged(object sender, SizeChangedEventArgs e) =>
+        ApplyHomeScale(e.NewSize.Width, e.NewSize.Height);
+
+    /// <summary>只在缩放变化超过 0.01 时应用，拖拽窗口时避免整页反复重排。</summary>
+    private void ApplyHomeScale(double availableWidth, double availableHeight)
+    {
+        var scale = HomeScalePolicy.Resolve(availableWidth, availableHeight);
+        if (Math.Abs(HomeScaleHost.ScaleFactor - scale) < 0.01)
+        {
+            return;
+        }
+
+        HomeScaleHost.ScaleFactor = scale;
     }
 
     private void OnPageRightTapped(object sender, RightTappedRoutedEventArgs e)
@@ -622,14 +647,9 @@ public sealed partial class HomePage : Page
         bottomLine.Visibility = Visibility.Visible;
     }
 
-    private void OnNewsMainClick(object sender, RoutedEventArgs e) =>
-        OpenNewsLink(_viewModel.NewsMain);
-
-    private void OnNewsSecondary1Click(object sender, RoutedEventArgs e) =>
-        OpenNewsLink(_viewModel.NewsSecondary1);
-
-    private void OnNewsSecondary2Click(object sender, RoutedEventArgs e) =>
-        OpenNewsLink(_viewModel.NewsSecondary2);
+    /// <summary>NewsCarousel 的当前可见卡被点击：统一走外链/深链提示。</summary>
+    private void OnNewsCardActivated(object? sender, NewsCardItem card) =>
+        OpenNewsLink(card);
 
     /// <summary>
     /// 打开公告外链。打开浏览器属于 shell 动作，不是文件内容读写，故不经 IFileSystem
@@ -680,31 +700,68 @@ public sealed partial class HomePage : Page
         }
     }
 
-    private void OnNewsCardPointerEntered(object sender, PointerRoutedEventArgs e) =>
-        SetNewsCardHovered(sender, true);
+    /// <summary>三点菜单的当前弹出实例；延迟创建，避免每次页面构造都建 XAML 对象。</summary>
+    private MenuFlyout? _moreActionsMenu;
 
-    private void OnNewsCardPointerExited(object sender, PointerRoutedEventArgs e) =>
-        SetNewsCardHovered(sender, false);
-
-    /// <summary>
-    /// 悬停遮罩（官方 .news:hover:after 的 rgba(19, 23, 36, .5)）是 XAML 里命名的 Border，
-    /// 直接改 Opacity 即可。不改卡片自身的 Background/BorderBrush —— ThemeResource 画笔
-    /// 在代码里按主题查不到（ThemeDictionaries 不走 ResourceDictionary.TryGetValue），
-    /// 查表失败会静默没有 hover；遮罩的画笔由 XAML 解析，一定生效。
-    /// </summary>
-    private void SetNewsCardHovered(object sender, bool hovered)
+    /// <summary>三点菜单：打开游戏目录（与官方 BROWSE_GAME_FILES 对齐）。</summary>
+    private void OnMoreActionsClick(object sender, RoutedEventArgs e)
     {
-        var veil = ReferenceEquals(sender, btnNewsMain)
-            ? NewsHoverVeilMain
-            : ReferenceEquals(sender, btnNewsSecondary1)
-                ? NewsHoverVeilSecondary1
-                : ReferenceEquals(sender, btnNewsSecondary2)
-                    ? NewsHoverVeilSecondary2
-                    : null;
-
-        if (veil is not null)
+        if (sender is not Button button)
         {
-            veil.Opacity = hovered ? 1 : 0;
+            return;
+        }
+
+        if (_moreActionsMenu is null)
+        {
+            var item = new MenuFlyoutItem
+            {
+                Text = Localizer.Instance.HomeOpenGameDirectory,
+            };
+            item.Click += OnOpenGameDirectoryClick;
+            _moreActionsMenu = new MenuFlyout { Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft };
+            _moreActionsMenu.Items.Add(item);
+        }
+
+        if (_moreActionsMenu.Items[0] is MenuFlyoutItem menuItem)
+        {
+            menuItem.IsEnabled = _viewModel.CanOpenGameDirectory;
+        }
+
+        _moreActionsMenu.ShowAt(button);
+    }
+
+    /// <summary>三点菜单里的「打开游戏目录」：只做 shell 动作，不写游戏目录。</summary>
+    private void OnOpenGameDirectoryClick(object sender, RoutedEventArgs e)
+    {
+        var path = _viewModel.Game?.InstallRoot;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                _viewModel.SetStatus(Keys.HomeStatusOpenGameDirectoryFailed, Localizer.Instance.HomeNoGameSelected);
+                return;
+            }
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = "\"" + path + "\"",
+                UseShellExecute = true,
+            };
+            using var process = Process.Start(startInfo);
+            if (process is null)
+            {
+                _viewModel.SetStatus(Keys.HomeStatusOpenGameDirectoryFailed, path);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (AppServices.IsInitialized)
+            {
+                AppServices.Logger.Error("主页打开游戏目录失败: " + path, ex);
+            }
+
+            _viewModel.SetStatus(Keys.HomeStatusOpenGameDirectoryFailed, ex.Message);
         }
     }
 

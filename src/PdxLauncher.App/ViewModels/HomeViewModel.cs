@@ -58,20 +58,17 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
     [ObservableProperty]
     private string _statusMessage = string.Empty;
 
-    /// <summary>
-    /// 公告主卡（官方槽位 main）。始终非 null —— 没有公告时是空卡，
-    /// 因为 x:Bind 直接访问 NewsMain.Title 这类路径，中间对象为 null 会崩。
-    /// </summary>
-    [ObservableProperty]
-    private NewsCardItem _newsMain = NewsCardItem.Empty(NewsFeedSlots.Main);
+    /// <summary>官方主公告槽位的全部轮播卡（接口当前多为 1 张）。</summary>
+    public ObservableCollection<NewsCardItem> NewsMainItems { get; } = new();
 
-    /// <summary>公告副卡 1（官方槽位 secondary-1），同样始终非 null。</summary>
-    [ObservableProperty]
-    private NewsCardItem _newsSecondary1 = NewsCardItem.Empty(NewsFeedSlots.Secondary1);
+    /// <summary>官方第二槽位的全部轮播卡。</summary>
+    public ObservableCollection<NewsCardItem> NewsSecondary1Items { get; } = new();
 
-    /// <summary>公告副卡 2（官方槽位 secondary-2），同样始终非 null。</summary>
-    [ObservableProperty]
-    private NewsCardItem _newsSecondary2 = NewsCardItem.Empty(NewsFeedSlots.Secondary2);
+    /// <summary>官方第三槽位的全部轮播卡。</summary>
+    public ObservableCollection<NewsCardItem> NewsSecondary2Items { get; } = new();
+
+    /// <summary>「更多操作」菜单：无存档时主启动按钮左侧的三点入口是否可用。</summary>
+    public bool CanOpenGameDirectory => Game is not null && !string.IsNullOrWhiteSpace(Game.InstallRoot);
 
     /// <summary>载入播放列表或切换激活播放集期间为 true，避免下拉框的回写动作递归触发。</summary>
     private bool _suppressPlaySetChange;
@@ -134,14 +131,25 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
     /// <summary>游戏版本原值（如 "1.13.11 (Matcha)"），背景右下角小字用。</summary>
     public string RawVersionText => Game?.Version ?? string.Empty;
 
-    /// <summary>三张公告卡里有任意一张就显示整个公告区。</summary>
-    public bool HasNews => !NewsMain.IsEmpty || !NewsSecondary1.IsEmpty || !NewsSecondary2.IsEmpty;
+    /// <summary>三个公告槽位里任意一个有卡就显示整个公告区。</summary>
+    public bool HasNews => NewsMainItems.Count > 0 || NewsSecondary1Items.Count > 0 || NewsSecondary2Items.Count > 0;
 
-    public bool HasNewsMain => !NewsMain.IsEmpty;
+    public bool HasNewsMain => NewsMainItems.Count > 0;
 
-    public bool HasNewsSecondary1 => !NewsSecondary1.IsEmpty;
+    public bool HasNewsSecondary1 => NewsSecondary1Items.Count > 0;
 
-    public bool HasNewsSecondary2 => !NewsSecondary2.IsEmpty;
+    public bool HasNewsSecondary2 => NewsSecondary2Items.Count > 0;
+
+    /// <summary>当前槽位的首张卡（兼容既有页面/测试对单卡的读取）。</summary>
+    public NewsCardItem NewsMain => NewsMainItems.Count > 0 ? NewsMainItems[0] : NewsCardItem.Empty(NewsFeedSlots.Main);
+
+    public NewsCardItem NewsSecondary1 => NewsSecondary1Items.Count > 0
+        ? NewsSecondary1Items[0]
+        : NewsCardItem.Empty(NewsFeedSlots.Secondary1);
+
+    public NewsCardItem NewsSecondary2 => NewsSecondary2Items.Count > 0
+        ? NewsSecondary2Items[0]
+        : NewsCardItem.Empty(NewsFeedSlots.Secondary2);
 
     public bool HasContinue => !string.IsNullOrWhiteSpace(ContinueTitle);
 
@@ -504,9 +512,7 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
     private async Task LoadNewsAsync(GameInstallation game, CancellationToken cancellationToken)
     {
         // 换游戏时先把上一款游戏的公告清掉，避免旧卡在新公告到来前继续显示。
-        NewsMain = NewsCardItem.Empty(NewsFeedSlots.Main);
-        NewsSecondary1 = NewsCardItem.Empty(NewsFeedSlots.Secondary1);
-        NewsSecondary2 = NewsCardItem.Empty(NewsFeedSlots.Secondary2);
+        ClearNewsCollections();
 
         try
         {
@@ -518,12 +524,7 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
                     cancellationToken).ConfigureAwait(true), cancellationToken)
                 .ConfigureAwait(true);
 
-            NewsMain = NewsCardItem.FromFeedItem(feed.Find(NewsFeedSlots.Main))
-                ?? NewsCardItem.Empty(NewsFeedSlots.Main);
-            NewsSecondary1 = NewsCardItem.FromFeedItem(feed.Find(NewsFeedSlots.Secondary1))
-                ?? NewsCardItem.Empty(NewsFeedSlots.Secondary1);
-            NewsSecondary2 = NewsCardItem.FromFeedItem(feed.Find(NewsFeedSlots.Secondary2))
-                ?? NewsCardItem.Empty(NewsFeedSlots.Secondary2);
+            FillNewsCollections(feed);
 
             if (feed.IsEmpty)
             {
@@ -573,9 +574,7 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
                 .CreateAsync(game, AppServices.Settings.NewsFeedOnlineEnabled, forceRefresh: true, cancellationToken)
                 .ConfigureAwait(true);
             var feed = await AppServices.NewsFeed.GetAsync(request, cancellationToken).ConfigureAwait(true);
-            NewsMain = NewsCardItem.FromFeedItem(feed.Find(NewsFeedSlots.Main)) ?? NewsCardItem.Empty(NewsFeedSlots.Main);
-            NewsSecondary1 = NewsCardItem.FromFeedItem(feed.Find(NewsFeedSlots.Secondary1)) ?? NewsCardItem.Empty(NewsFeedSlots.Secondary1);
-            NewsSecondary2 = NewsCardItem.FromFeedItem(feed.Find(NewsFeedSlots.Secondary2)) ?? NewsCardItem.Empty(NewsFeedSlots.Secondary2);
+            FillNewsCollections(feed);
         }
         catch (OperationCanceledException)
         {
@@ -590,9 +589,7 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
     {
         BackgroundPath = string.Empty;
         LogoPath = string.Empty;
-        NewsMain = NewsCardItem.Empty(NewsFeedSlots.Main);
-        NewsSecondary1 = NewsCardItem.Empty(NewsFeedSlots.Secondary1);
-        NewsSecondary2 = NewsCardItem.Empty(NewsFeedSlots.Secondary2);
+        ClearNewsCollections();
         PlaySetName = string.Empty;
         ModCount = 0;
         EnabledModCount = 0;
@@ -666,6 +663,7 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(SupportNotice));
         OnPropertyChanged(nameof(PlaySetText));
         OnPropertyChanged(nameof(CountsText));
+        OnPropertyChanged(nameof(CanOpenGameDirectory));
     }
 
     partial void OnGameChanged(GameInstallation? value)
@@ -680,23 +678,58 @@ public sealed partial class HomeViewModel : LocalizedObservableObject
         OnPropertyChanged(nameof(SupportNotice));
         OnPropertyChanged(nameof(PlaySetText));
         OnPropertyChanged(nameof(CountsText));
+        OnPropertyChanged(nameof(CanOpenGameDirectory));
     }
 
-    partial void OnNewsMainChanged(NewsCardItem value)
+    /// <summary>清空三个公告槽位，并通知派生属性。</summary>
+    private void ClearNewsCollections()
     {
+        NewsMainItems.Clear();
+        NewsSecondary1Items.Clear();
+        NewsSecondary2Items.Clear();
+        RaiseNewsDerived();
+    }
+
+    /// <summary>按 slot 把 feed 投影到三个槽位集合；同槽多卡按接口顺序保留。</summary>
+    private void FillNewsCollections(NewsFeed feed)
+    {
+        NewsMainItems.Clear();
+        NewsSecondary1Items.Clear();
+        NewsSecondary2Items.Clear();
+
+        foreach (var item in feed.Items)
+        {
+            var card = NewsCardItem.FromFeedItem(item);
+            if (card is null)
+            {
+                continue;
+            }
+
+            switch (item.Slot)
+            {
+                case NewsFeedSlots.Main:
+                    NewsMainItems.Add(card);
+                    break;
+                case NewsFeedSlots.Secondary1:
+                    NewsSecondary1Items.Add(card);
+                    break;
+                case NewsFeedSlots.Secondary2:
+                    NewsSecondary2Items.Add(card);
+                    break;
+            }
+        }
+
+        RaiseNewsDerived();
+    }
+
+    private void RaiseNewsDerived()
+    {
+        OnPropertyChanged(nameof(NewsMain));
+        OnPropertyChanged(nameof(NewsSecondary1));
+        OnPropertyChanged(nameof(NewsSecondary2));
         OnPropertyChanged(nameof(HasNews));
         OnPropertyChanged(nameof(HasNewsMain));
-    }
-
-    partial void OnNewsSecondary1Changed(NewsCardItem value)
-    {
-        OnPropertyChanged(nameof(HasNews));
         OnPropertyChanged(nameof(HasNewsSecondary1));
-    }
-
-    partial void OnNewsSecondary2Changed(NewsCardItem value)
-    {
-        OnPropertyChanged(nameof(HasNews));
         OnPropertyChanged(nameof(HasNewsSecondary2));
     }
 

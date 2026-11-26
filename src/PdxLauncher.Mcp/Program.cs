@@ -43,9 +43,15 @@ internal static class Program
             var database = new PdxDatabase(fileSystem, logger, Path.Combine(dataRoot!, PdxDatabase.FileName));
             var history = new McpCallHistoryStore(database);
             var keyStore = new McpAccessKeyStore(database);
-            var authorizedKey = string.IsNullOrWhiteSpace(accessKeyToken)
-                ? null
-                : keyStore.Authenticate(accessKeyToken);
+            var accessKeySupplied = !string.IsNullOrWhiteSpace(accessKeyToken);
+            var authorizedKey = accessKeySupplied ? keyStore.Authenticate(accessKeyToken!) : null;
+            // 传了密钥却校验失败，必须拒绝；不能退化成「没传密钥」的兼容模式。
+            var accessState = McpAccessStatePolicy.Resolve(accessKeySupplied, authorizedKey);
+            if (accessState == McpAccessState.Rejected)
+            {
+                logger.Warn("MCP 访问密钥无效、已禁用或已过期，工具调用将被拒绝");
+            }
+
             tools.SetAuthorizedKey(authorizedKey);
             var server = new McpServer(
                 input,
@@ -55,7 +61,8 @@ internal static class Program
                 logger,
                 enabled,
                 history,
-                authorizedKey);
+                authorizedKey,
+                accessState);
             server.RunAsync(CancellationToken.None).GetAwaiter().GetResult();
             return 0;
         }

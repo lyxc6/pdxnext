@@ -5,9 +5,6 @@ using PdxLauncher.Core.Infrastructure;
 /// <summary>一条可优化项的类型。页面按它映射标题与说明文案（中英文各一份）。</summary>
 public enum DiagnosticHintCode
 {
-    /// <summary>工作集超过工坊详情页预算（550 MB）。</summary>
-    MemoryAboveDetailBudget,
-
     /// <summary>工作集超过空闲目标（250 MB）。</summary>
     MemoryHigh,
 
@@ -55,14 +52,12 @@ public sealed record PerformanceHintInput(
 
 /// <summary>
 /// 「性能与日志」页面的优化建议规则。阈值与 <c>docs/MEMORY-BASELINE.md</c> 的验收目标一致：
-/// 空闲 250 MB、工坊详情 550 MB、冷启动 2.5 秒；缓存 500 MB、工坊条目 2000、日志 80% 轮转阈值是本页新增的观察线。
+/// 空闲 250 MB、冷启动 2.5 秒；缓存 500 MB、工坊条目 2000、日志 80% 轮转阈值是本页新增的观察线。
+/// 概览只按空闲目标判色，工坊详情页的 550 MB 仍留在基线文档里作为场景目标，但不生成第二条内存建议。
 /// 纯函数、无 IO、无 UI，方便自检把每个边界都钉住。
 /// </summary>
 public static class PerformanceHints
 {
-    /// <summary>工坊详情页的内存预算（MEMORY-BASELINE 的 550 MB）。</summary>
-    public const long DetailBudgetBytes = 550L * 1024 * 1024;
-
     /// <summary>空闲态内存目标（MEMORY-BASELINE 的 250 MB）。</summary>
     public const long IdleBudgetBytes = 250L * 1024 * 1024;
 
@@ -78,18 +73,14 @@ public static class PerformanceHints
     /// <summary>冷启动到首页可交互的目标（MEMORY-BASELINE 的 2.5 秒）。</summary>
     public const double StartupBudgetMilliseconds = 2500;
 
-    /// <summary>按严重度从高到低评估；同一类内存问题只出一条（详情预算优先于空闲目标）。</summary>
+    /// <summary>按严重度从高到低评估；内存只按空闲目标出且只出一条。</summary>
     public static IReadOnlyList<DiagnosticHint> Evaluate(PerformanceHintInput input)
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        var hints = new List<DiagnosticHint>(9);
+        var hints = new List<DiagnosticHint>(8);
 
-        if (input.WorkingSetBytes >= DetailBudgetBytes)
-        {
-            hints.Add(new DiagnosticHint(DiagnosticHintCode.MemoryAboveDetailBudget, input.WorkingSetBytes));
-        }
-        else if (input.WorkingSetBytes >= IdleBudgetBytes)
+        if (input.WorkingSetBytes >= IdleBudgetBytes)
         {
             hints.Add(new DiagnosticHint(DiagnosticHintCode.MemoryHigh, input.WorkingSetBytes));
         }

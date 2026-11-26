@@ -280,6 +280,16 @@
     <Compile Include="..\..\src\PdxLauncher.App\Services\HomeButtonStylePolicy.cs" Link="Linked\HomeButtonStylePolicy.cs" />
     <Compile Include="..\..\src\PdxLauncher.App\Services\HomeThemePolicy.cs" Link="Linked\HomeThemePolicy.cs" />
     <!--
+      主页公告轮播的显示规则：单卡不显示箭头/进度点，多卡才轮播。纯函数，能原样链接；
+      判据错了的表现是「一张卡也出现进度点」或「多卡永远停在第一张」，由 HomeNewsCarouselChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\NewsCarouselPolicy.cs" Link="Linked\NewsCarouselPolicy.cs" />
+    <!--
+      主页整体缩放策略：按内容区宽度等比缩小，下限 0.8。纯函数；判据错了的表现是
+      「最小窗口下三卡仍溢出」或「大窗口被放大糊掉」，由 HomeAdaptiveChecks 钉住。
+    -->
+    <Compile Include="..\..\src\PdxLauncher.App\Services\HomeScalePolicy.cs" Link="Linked\HomeScalePolicy.cs" />
+    <!--
       随包自带素材的解析（Assets/themes/<gameId>/background.jpg + logo.png）。
       只依赖 Core 的 IBundledThemeSource / GameInstallation / ThemeSpec，可以原样链接进来；
       它错了的表现是「EU5 主页没有字标」或「其它游戏误吃了 EU5 的图」，由 HomeButtonStyleChecks 用临时目录钉住。

@@ -78,10 +78,11 @@ public static class PcForensicsChecks
 
     private static void CheckSystemState()
     {
+        // meta.yml 无单位即 MB：4096 MB ≈ 4 GB，2048 MB ≈ 2 GB。
         var meta = new Dictionary<string, string>
         {
-            ["SystemMemory"] = "4294967296",       // 4 GB
-            ["GPUDedicatedMemory"] = "2147483648", // 2 GB
+            ["SystemMemory"] = "4096",
+            ["GPUDedicatedMemory"] = "2048",
         };
         var system = new PcSystemSnapshot(
             DataDriveFreeBytes: 2L * 1024 * 1024 * 1024,
@@ -100,6 +101,26 @@ public static class PcForensicsChecks
 
         var unknown = PcForensics.FromSystemState(null, PcSystemSnapshot.Unknown, 0);
         ChecksContext.Check("全部未知 → 无配置结论", unknown.Count == 0);
+
+        // 真机回归：Victoria 3 在 64 GB 机器上写 SystemMemory: 65328（MB），
+        // 旧实现按字节解析会判成 64 KB，进而误报「内存不足」。
+        var bigMachine = new Dictionary<string, string>
+        {
+            ["SystemMemory"] = "65328",
+            ["GPUDedicatedMemory"] = "0",
+        };
+        var bigFindings = PcForensics.FromSystemState(bigMachine, system, modelCount: 4000)
+            .Select(f => f.Code).ToHashSet();
+        ChecksContext.Check(
+            "meta 65328（无单位=MB，约 64GB）→ 不报低内存",
+            !bigFindings.Contains(CrashFindingCode.PcLowMemoryConfig));
+        ChecksContext.Check(
+            "meta GPUDedicatedMemory: 0 → 视为未提供，不报显存不足",
+            !bigFindings.Contains(CrashFindingCode.PcLowVideoMemory));
+        ChecksContext.Check(
+            "带单位：8 GB 解析为 8 GiB",
+            PcForensics.ParseMemoryBytes("8 GB") == 8L * 1024 * 1024 * 1024);
+        ChecksContext.Check("0 视为未提供", PcForensics.ParseMemoryBytes("0") is null);
     }
 
     private static void CheckDbConflicts()

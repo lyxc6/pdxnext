@@ -32,12 +32,14 @@
                   VerticalScrollBarVisibility="Auto"
                   VerticalScrollMode="Auto"
                   Background="Transparent"
+                  SizeChanged="OnHomeViewportSizeChanged"
                   RightTapped="OnPageRightTapped">
-        <StackPanel
-            MaxWidth="1120"
-            Padding="24"
-            HorizontalAlignment="Center"
-            Spacing="16">
+        <controls:PdxScaledPresenter x:Name="HomeScaleHost">
+            <StackPanel
+                MaxWidth="1120"
+                Padding="24"
+                HorizontalAlignment="Center"
+                Spacing="16">
 
             <!--
                 页头即主视觉：字标 / 标题居中排列，直接浮在整窗背景图上；
@@ -99,6 +101,7 @@
                         Click="OnContinueClick"
                         HorizontalContentAlignment="Stretch"
                         IsEnabled="{x:Bind ViewModel.HasContinue, Mode=OneWay}"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasContinue), Mode=OneWay}"
                         PointerEntered="OnThemedButtonPointerEntered"
                         PointerExited="OnThemedButtonPointerExited"
                         ToolTipService.ToolTip="{x:Bind ViewModel.ContinueToolTip, Mode=OneWay}"
@@ -179,6 +182,20 @@
                                 VerticalAlignment="Center" />
                         </Grid>
                     </Button>
+                    <Button
+                        x:Name="MoreActionsButton"
+                        Width="32"
+                        Height="66"
+                        Padding="0"
+                        AutomationProperties.AutomationId="btnHomeMoreActions"
+                        AutomationProperties.Name="{x:Bind L.HomeMoreActions, Mode=OneWay}"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="OnMoreActionsClick"
+                        CornerRadius="4"
+                        ToolTipService.ToolTip="{x:Bind L.HomeMoreActions, Mode=OneWay}">
+                        <FontIcon Glyph="&#xE712;" FontSize="16" />
+                    </Button>
                 </StackPanel>
 
                 <StackPanel
@@ -257,23 +274,23 @@
             -->
             <Grid MaxWidth="986" HorizontalAlignment="Stretch">
                 <TextBlock
+                    Height="24"
                     HorizontalAlignment="Right"
                     AutomationProperties.AutomationId="txtHomeVersion"
+                    FontSize="14"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Style="{StaticResource CaptionTextBlockStyle}"
                     Text="{x:Bind ViewModel.RawVersionText, Mode=OneWay}" />
             </Grid>
 
             <!--
-                官方公告卡：三块固定尺寸纯图卡，整行居中
+                官方公告卡：三块固定尺寸纯图槽位，整行居中
                 （451 + 246 + 246 + 2x24 间距 = 991；Viewbox 的 MaxWidth 是 986，比内容窄 5 DIP，
-                整行按约 99.5% 等比缩，视觉上仍是官方比例）。
+                 整行按约 99.5% 等比缩，视觉上仍是官方比例）。
                 官方是 flex 行（.news__container），缺哪块就少一块、整行仍居中，所以这里用
                 「Viewbox + 水平 StackPanel」而不是三列 Grid —— Grid 会给隐藏的卡留空列。
                 Viewbox 只向下缩放：窗口窄于 991 时整行等比缩小，不裁切、不横向滚动。
-                卡片用透明 Button 承载点击与无障碍，系统按钮底色在 Button.Resources 里全部压成透明；
-                视觉全部由 Content 里的 Border/Image 提供：无内边距、图铺满整卡、只有标题叠加层。
-                悬停反馈是叠一层 50% 深色遮罩（官方 .news:hover:after），不改 Button.Background。
+                每个槽位都是 NewsCarousel：单卡时不显示箭头/进度点，多卡时按官方 2 秒节奏轮播。
             -->
             <Viewbox
                 x:Name="NewsRegion"
@@ -284,222 +301,48 @@
                 StretchDirection="DownOnly"
                 Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasNews), Mode=OneWay}">
                 <StackPanel Orientation="Horizontal" Spacing="24">
-
-                <Button
-                    x:Name="btnNewsMain"
-                    Width="451"
-                    Height="230"
-                    Padding="0"
-                    HorizontalAlignment="Stretch"
-                    VerticalAlignment="Stretch"
-                    HorizontalContentAlignment="Stretch"
-                    VerticalContentAlignment="Stretch"
-                    AutomationProperties.AutomationId="btnNewsMain"
-                    Click="OnNewsMainClick"
-                    CornerRadius="4"
-                    PointerEntered="OnNewsCardPointerEntered"
-                    PointerExited="OnNewsCardPointerExited"
-                    Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasNewsMain), Mode=OneWay}">
-                    <Button.Resources>
-                        <SolidColorBrush x:Key="ButtonBackground" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBorderBrush" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent" />
-                    </Button.Resources>
-                    <Border
-                        Background="{ThemeResource PdxCardGlassBrush}"
-                        BorderBrush="#66000000"
-                        BorderThickness="1"
-                        CornerRadius="4">
-                        <Grid>
-                            <Image
-                                AutomationProperties.AutomationId="imgNews_main"
-                                AutomationProperties.Name="{x:Bind L.HomeNewsImageName, Mode=OneWay}"
-                                Stretch="UniformToFill"
-                                Source="{x:Bind svc:XamlImage.FromPath(ViewModel.NewsMain.ImagePath, 1024), Mode=OneWay}"
-                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.NewsMain.HasImage), Mode=OneWay}" />
-                            <Border
-                                IsHitTestVisible="False"
-                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.NewsMain.HasTitle), Mode=OneWay}">
-                                <Border.Background>
-                                    <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
-                                        <GradientStop Offset="0" Color="#00000000" />
-                                        <GradientStop Offset="1" Color="#80000000" />
-                                    </LinearGradientBrush>
-                                </Border.Background>
-                            </Border>
-                            <TextBlock
-                                Margin="28,0,28,24"
-                                VerticalAlignment="Bottom"
-                                FontSize="24"
-                                Foreground="White"
-                                MaxLines="3"
-                                Text="{x:Bind ViewModel.NewsMain.Title, Mode=OneWay}"
-                                TextTrimming="CharacterEllipsis"
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.NewsMain.HasTitle), Mode=OneWay}" />
-                            <Border
-                                x:Name="NewsHoverVeilMain"
-                                Background="#80131724"
-                                CornerRadius="4"
-                                IsHitTestVisible="False"
-                                Opacity="0" />
-                            <Border
-                                BorderBrush="#1AFFFFFF"
-                                BorderThickness="1"
-                                CornerRadius="4"
-                                IsHitTestVisible="False" />
-                        </Grid>
-                    </Border>
-                </Button>
-
-                <Button
-                    x:Name="btnNewsSecondary1"
-                    Width="246"
-                    Height="230"
-                    Padding="0"
-                    HorizontalAlignment="Stretch"
-                    VerticalAlignment="Stretch"
-                    HorizontalContentAlignment="Stretch"
-                    VerticalContentAlignment="Stretch"
-                    AutomationProperties.AutomationId="btnNewsSecondary1"
-                    Click="OnNewsSecondary1Click"
-                    CornerRadius="4"
-                    PointerEntered="OnNewsCardPointerEntered"
-                    PointerExited="OnNewsCardPointerExited"
-                    Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasNewsSecondary1), Mode=OneWay}">
-                    <Button.Resources>
-                        <SolidColorBrush x:Key="ButtonBackground" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBorderBrush" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent" />
-                    </Button.Resources>
-                    <Border
-                        Background="{ThemeResource PdxCardGlassBrush}"
-                        BorderBrush="#66000000"
-                        BorderThickness="1"
-                        CornerRadius="4">
-                        <Grid>
-                            <Image
-                                AutomationProperties.AutomationId="imgNews_secondary1"
-                                AutomationProperties.Name="{x:Bind L.HomeNewsImageName, Mode=OneWay}"
-                                Stretch="UniformToFill"
-                                Source="{x:Bind svc:XamlImage.FromPath(ViewModel.NewsSecondary1.ImagePath, 640), Mode=OneWay}"
-                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.NewsSecondary1.HasImage), Mode=OneWay}" />
-                            <Border
-                                IsHitTestVisible="False"
-                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.NewsSecondary1.HasTitle), Mode=OneWay}">
-                                <Border.Background>
-                                    <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
-                                        <GradientStop Offset="0" Color="#00000000" />
-                                        <GradientStop Offset="1" Color="#80000000" />
-                                    </LinearGradientBrush>
-                                </Border.Background>
-                            </Border>
-                            <TextBlock
-                                Margin="28,0,28,24"
-                                VerticalAlignment="Bottom"
-                                FontSize="24"
-                                Foreground="White"
-                                MaxLines="3"
-                                Text="{x:Bind ViewModel.NewsSecondary1.Title, Mode=OneWay}"
-                                TextTrimming="CharacterEllipsis"
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.NewsSecondary1.HasTitle), Mode=OneWay}" />
-                            <Border
-                                x:Name="NewsHoverVeilSecondary1"
-                                Background="#80131724"
-                                CornerRadius="4"
-                                IsHitTestVisible="False"
-                                Opacity="0" />
-                            <Border
-                                BorderBrush="#1AFFFFFF"
-                                BorderThickness="1"
-                                CornerRadius="4"
-                                IsHitTestVisible="False" />
-                        </Grid>
-                    </Border>
-                </Button>
-
-                <Button
-                    x:Name="btnNewsSecondary2"
-                    Width="246"
-                    Height="230"
-                    Padding="0"
-                    HorizontalAlignment="Stretch"
-                    VerticalAlignment="Stretch"
-                    HorizontalContentAlignment="Stretch"
-                    VerticalContentAlignment="Stretch"
-                    AutomationProperties.AutomationId="btnNewsSecondary2"
-                    Click="OnNewsSecondary2Click"
-                    CornerRadius="4"
-                    PointerEntered="OnNewsCardPointerEntered"
-                    PointerExited="OnNewsCardPointerExited"
-                    Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasNewsSecondary2), Mode=OneWay}">
-                    <Button.Resources>
-                        <SolidColorBrush x:Key="ButtonBackground" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBackgroundDisabled" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBorderBrush" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="Transparent" />
-                        <SolidColorBrush x:Key="ButtonBorderBrushDisabled" Color="Transparent" />
-                    </Button.Resources>
-                    <Border
-                        Background="{ThemeResource PdxCardGlassBrush}"
-                        BorderBrush="#66000000"
-                        BorderThickness="1"
-                        CornerRadius="4">
-                        <Grid>
-                            <Image
-                                AutomationProperties.AutomationId="imgNews_secondary2"
-                                AutomationProperties.Name="{x:Bind L.HomeNewsImageName, Mode=OneWay}"
-                                Stretch="UniformToFill"
-                                Source="{x:Bind svc:XamlImage.FromPath(ViewModel.NewsSecondary2.ImagePath, 640), Mode=OneWay}"
-                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.NewsSecondary2.HasImage), Mode=OneWay}" />
-                            <Border
-                                IsHitTestVisible="False"
-                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.NewsSecondary2.HasTitle), Mode=OneWay}">
-                                <Border.Background>
-                                    <LinearGradientBrush StartPoint="0.5,0" EndPoint="0.5,1">
-                                        <GradientStop Offset="0" Color="#00000000" />
-                                        <GradientStop Offset="1" Color="#80000000" />
-                                    </LinearGradientBrush>
-                                </Border.Background>
-                            </Border>
-                            <TextBlock
-                                Margin="28,0,28,24"
-                                VerticalAlignment="Bottom"
-                                FontSize="24"
-                                Foreground="White"
-                                MaxLines="3"
-                                Text="{x:Bind ViewModel.NewsSecondary2.Title, Mode=OneWay}"
-                                TextTrimming="CharacterEllipsis"
-                                TextWrapping="Wrap"
-                                Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.NewsSecondary2.HasTitle), Mode=OneWay}" />
-                            <Border
-                                x:Name="NewsHoverVeilSecondary2"
-                                Background="#80131724"
-                                CornerRadius="4"
-                                IsHitTestVisible="False"
-                                Opacity="0" />
-                            <Border
-                                BorderBrush="#1AFFFFFF"
-                                BorderThickness="1"
-                                CornerRadius="4"
-                                IsHitTestVisible="False" />
-                        </Grid>
-                    </Border>
-                </Button>
+                    <controls:NewsCarousel
+                        x:Name="NewsCarouselMain"
+                        Width="451"
+                        Height="230"
+                        ImageDecodeWidth="1024"
+                        Items="{x:Bind ViewModel.NewsMainItems, Mode=OneWay}"
+                        CardAutomationId="btnNewsMain"
+                        CardAutomationName="{x:Bind L.HomeNewsCardName, Mode=OneWay}"
+                        PreviousAutomationName="{x:Bind L.HomeNewsPrevious, Mode=OneWay}"
+                        NextAutomationName="{x:Bind L.HomeNewsNext, Mode=OneWay}"
+                        PreviousToolTip="{x:Bind L.HomeNewsPrevious, Mode=OneWay}"
+                        NextToolTip="{x:Bind L.HomeNewsNext, Mode=OneWay}"
+                        CardActivated="OnNewsCardActivated"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasNewsMain), Mode=OneWay}" />
+                    <controls:NewsCarousel
+                        x:Name="NewsCarouselSecondary1"
+                        Width="246"
+                        Height="230"
+                        ImageDecodeWidth="640"
+                        Items="{x:Bind ViewModel.NewsSecondary1Items, Mode=OneWay}"
+                        CardAutomationId="btnNewsSecondary1"
+                        CardAutomationName="{x:Bind L.HomeNewsCardName, Mode=OneWay}"
+                        PreviousAutomationName="{x:Bind L.HomeNewsPrevious, Mode=OneWay}"
+                        NextAutomationName="{x:Bind L.HomeNewsNext, Mode=OneWay}"
+                        PreviousToolTip="{x:Bind L.HomeNewsPrevious, Mode=OneWay}"
+                        NextToolTip="{x:Bind L.HomeNewsNext, Mode=OneWay}"
+                        CardActivated="OnNewsCardActivated"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasNewsSecondary1), Mode=OneWay}" />
+                    <controls:NewsCarousel
+                        x:Name="NewsCarouselSecondary2"
+                        Width="246"
+                        Height="230"
+                        ImageDecodeWidth="640"
+                        Items="{x:Bind ViewModel.NewsSecondary2Items, Mode=OneWay}"
+                        CardAutomationId="btnNewsSecondary2"
+                        CardAutomationName="{x:Bind L.HomeNewsCardName, Mode=OneWay}"
+                        PreviousAutomationName="{x:Bind L.HomeNewsPrevious, Mode=OneWay}"
+                        NextAutomationName="{x:Bind L.HomeNewsNext, Mode=OneWay}"
+                        PreviousToolTip="{x:Bind L.HomeNewsPrevious, Mode=OneWay}"
+                        NextToolTip="{x:Bind L.HomeNewsNext, Mode=OneWay}"
+                        CardActivated="OnNewsCardActivated"
+                        Visibility="{x:Bind svc:XamlVisibility.FromBool(ViewModel.HasNewsSecondary2), Mode=OneWay}" />
                 </StackPanel>
             </Viewbox>
 
@@ -536,6 +379,7 @@
                 x:Name="AccentButtonDisabledForegroundProbe"
                 BorderBrush="{ThemeResource TextOnAccentFillColorDisabledBrush}"
                 Visibility="Collapsed" />
-        </StackPanel>
+            </StackPanel>
+        </controls:PdxScaledPresenter>
     </ScrollViewer>
 </Page>

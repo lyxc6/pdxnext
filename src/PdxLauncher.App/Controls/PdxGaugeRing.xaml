@@ -9,7 +9,8 @@
         画布固定 120×120，外层 Viewbox 按控件尺寸等比缩放；弧线由 PdxGaugeRing 代码按补间后的值生成。
         三态描边取 WinUI 内置语义画笔，跟随 Light / Dark / HighContrast；
         GlowPath 与弧线同几何、更粗更淡，由 PulseOpacity 驱动短暂高亮；
-        环下方一条 60 秒迷你趋势折线，值越高线越靠上。
+        环下方一条 60 秒迷你趋势折线（带标注与浅底槽），值越高线越靠上。
+        控件宽 132：四列在 1040 DIP 最小窗口宽下仍能排成一行；折成 3+1 会留下孤立的第四张卡。
     -->
     <Style TargetType="local:PdxGaugeRing">
         <Setter Property="Width" Value="132" />
@@ -51,7 +52,7 @@
 
                         <Viewbox Width="104" Height="104" Stretch="Uniform">
                             <Grid Width="120" Height="120">
-                                <!-- 底环：整圈淡描边，表示「预算 100%」。 -->
+                                <!-- 底环：整圈淡描边，表示「到达目标」。 -->
                                 <Ellipse Width="104" Height="104"
                                          Stroke="{ThemeResource SubtleFillColorSecondaryBrush}"
                                          StrokeThickness="8" />
@@ -62,7 +63,7 @@
                                       Opacity="{Binding PulseOpacity, RelativeSource={RelativeSource TemplatedParent}}" />
                                 <!-- 前景弧：Path.Data 由代码按补间值生成，从正上方顺时针画出。 -->
                                 <Path x:Name="ArcPath" StrokeThickness="8" />
-                                <!-- 圆心读数：短数值 + 占预算百分比，均不随弧线旋转。 -->
+                                <!-- 圆心读数：短数值 + 到达目标百分比，均不随弧线旋转。 -->
                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="0">
                                     <TextBlock Text="{TemplateBinding ValueText}"
                                                Style="{StaticResource SubtitleTextBlockStyle}"
@@ -80,10 +81,24 @@
                             </Grid>
                         </Viewbox>
 
-                        <!-- 60 秒迷你趋势线：固定 120×24 画布，折线越高表示最近占比越高。 -->
-                        <Viewbox Width="120" Height="24" Stretch="Uniform">
-                            <Path x:Name="TrendPath" StrokeThickness="1.5" />
-                        </Viewbox>
+                        <!-- 60 秒迷你趋势线：放进与圆环等宽的槽里并配文字标注，避免被误读成页面边框。 -->
+                        <StackPanel Width="120" Spacing="4" HorizontalAlignment="Center">
+                            <Border Height="24"
+                                    CornerRadius="4"
+                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                    Opacity="0.35">
+                                <Viewbox Height="24" Stretch="Uniform">
+                                    <Path x:Name="TrendPath" StrokeThickness="1.5" />
+                                </Viewbox>
+                            </Border>
+                            <TextBlock Text="{TemplateBinding TrendCaption}"
+                                       Style="{StaticResource CaptionTextBlockStyle}"
+                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                       FontSize="11"
+                                       TextAlignment="Center"
+                                       TextWrapping="NoWrap"
+                                       IsTextSelectionEnabled="False" />
+                        </StackPanel>
 
                         <TextBlock Text="{TemplateBinding Title}"
                                    Style="{StaticResource CaptionTextBlockStyle}"

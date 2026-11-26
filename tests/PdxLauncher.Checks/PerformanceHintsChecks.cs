@@ -39,8 +39,8 @@ public static class PerformanceHintsChecks
             DiagnosticHintCode.MemoryHigh,
             PerformanceHints.Evaluate(Defaults() with { WorkingSetBytes = 549 * Megabyte })[0].Code);
         ChecksContext.Equal(
-            "性能建议：550 MB 报详情预算超标",
-            DiagnosticHintCode.MemoryAboveDetailBudget,
+            "性能建议：550 MB 仍只报空闲内存超标",
+            DiagnosticHintCode.MemoryHigh,
             PerformanceHints.Evaluate(Defaults() with { WorkingSetBytes = 550 * Megabyte })[0].Code);
 
         var both = PerformanceHints.Evaluate(Defaults() with { WorkingSetBytes = 900 * Megabyte });
@@ -161,7 +161,7 @@ public static class PerformanceHintsChecks
         var codes = string.Join(",", all.Select(hint => hint.Code.ToString()));
         ChecksContext.Equal(
             "性能建议：全部触发时按严重度排序",
-            "MemoryAboveDetailBudget,ThrottleRejected,StartupSlow,CacheLarge,WorkshopCacheLarge,LogNearRotation,LogArchives,TranslationModelResident",
+            "MemoryHigh,ThrottleRejected,StartupSlow,CacheLarge,WorkshopCacheLarge,LogNearRotation,LogArchives,TranslationModelResident",
             codes);
         ChecksContext.Equal("性能建议：全部触发共 8 条", 8, all.Count);
     }

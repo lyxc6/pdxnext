@@ -186,6 +186,39 @@ public static partial class PcForensics
         or CrashFindingCode.PcOverlayCrash
         or CrashFindingCode.PcHardwareErrorCrash;
 
+    /// <summary>
+    /// 把 <c>meta.yml</c> 的内存字段解析成字节。PDX 游戏写的是「无单位即 MB」（例如
+    /// <c>SystemMemory: 65328</c> 表示 64 GB），也接受 <c>"8 GB"</c> / <c>"8192 MB"</c> 这类写法。
+    /// 解析失败或结果非正（含 <c>GPUDedicatedMemory: 0</c>，表示没提供而不是 0 字节）返回 <c>null</c>，
+    /// 调用方据此跳过阈值判定，避免把 64 GB 机器判成内存不足。
+    /// </summary>
+    public static long? ParseMemoryBytes(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(raw, @"(?<number>\d+(?:\.\d+)?)\s*(?<unit>[KMGT]?B)?", RegexOptions.IgnoreCase);
+        if (!match.Success
+            || !double.TryParse(match.Groups["number"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+        {
+            return null;
+        }
+
+        double multiplier = match.Groups["unit"].Value.ToUpperInvariant() switch
+        {
+            "KB" => 1024d,
+            "MB" => 1024d * 1024d,
+            "GB" => 1024d * 1024d * 1024d,
+            "TB" => 1024d * 1024d * 1024d * 1024d,
+            _ => 1024d * 1024d, // 无单位按 MB
+        };
+
+        double bytes = value * multiplier;
+        return bytes > 0 && bytes <= long.MaxValue ? (long)bytes : null;
+    }
+
     /// <summary>PC 侧故障的归类，供排序/抑制使用。</summary>
     public enum PcCrashKind
     {
@@ -237,33 +270,8 @@ public static partial class PcForensics
         return null;
     }
 
-    private static long? ParseByteLike(IReadOnlyDictionary<string, string>? meta, string key)
-    {
-        if (meta is null || !meta.TryGetValue(key, out var raw) || string.IsNullOrWhiteSpace(raw))
-        {
-            return null;
-        }
-
-        // meta.yml 里的数字常见写法：8589934592 / "8589934592" / "8 GB" / "8192 MB"。
-        var match = Regex.Match(raw, @"(?<number>\d+(?:\.\d+)?)\s*(?<unit>[KMGT]?B)?", RegexOptions.IgnoreCase);
-        if (!match.Success || !double.TryParse(match.Groups["number"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
-        {
-            return null;
-        }
-
-        string unit = match.Groups["unit"].Value.ToUpperInvariant();
-        double multiplier = unit switch
-        {
-            "KB" => 1024d,
-            "MB" => 1024d * 1024d,
-            "GB" => 1024d * 1024d * 1024d,
-            "TB" => 1024d * 1024d * 1024d * 1024d,
-            _ => 1d, // 无单位按字节
-        };
-
-        double bytes = value * multiplier;
-        return bytes is >= 0 and <= long.MaxValue ? (long)bytes : null;
-    }
+    private static long? ParseByteLike(IReadOnlyDictionary<string, string>? meta, string key) =>
+        meta is not null && meta.TryGetValue(key, out var raw) ? ParseMemoryBytes(raw) : null;
 
     private static long? FirstLowDisk(params long?[] freeBytes)
     {

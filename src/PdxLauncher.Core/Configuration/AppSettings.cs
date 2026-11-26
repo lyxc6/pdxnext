@@ -199,6 +199,12 @@ public sealed class AppSettings
     /// </summary>
     public bool DiagnosticsLogAutoRefresh { get; set; }
 
+    /// <summary>
+    /// 性能与日志页概览的实时刷新开关。默认开；关掉后离页 / 重启都保持暂停，
+    /// 避免页面标题写着「实时中」但定时器其实没跑。
+    /// </summary>
+    public bool DiagnosticsOverviewLive { get; set; } = true;
+
     /// <summary>启动后自动检查更新（默认开）。每机器安装仍会弹 UAC 才能升级。</summary>
     public bool AutoCheckUpdates { get; set; } = true;
 

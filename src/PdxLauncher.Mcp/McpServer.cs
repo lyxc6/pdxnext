@@ -30,6 +30,7 @@ internal sealed class McpServer
     private readonly IAppLogger _logger;
     private readonly McpCallHistoryStore? _history;
     private readonly McpAuthorizedKey? _authorizedKey;
+    private readonly McpAccessState _accessState;
 
     public McpServer(
         TextReader input,
@@ -39,7 +40,8 @@ internal sealed class McpServer
         IAppLogger logger,
         bool enabled = true,
         McpCallHistoryStore? history = null,
-        McpAuthorizedKey? authorizedKey = null)
+        McpAuthorizedKey? authorizedKey = null,
+        McpAccessState accessState = McpAccessState.Legacy)
     {
         _input = input ?? throw new ArgumentNullException(nameof(input));
         _output = output ?? throw new ArgumentNullException(nameof(output));
@@ -49,6 +51,7 @@ internal sealed class McpServer
         _enabled = enabled;
         _history = history;
         _authorizedKey = authorizedKey;
+        _accessState = accessState;
     }
 
     private readonly bool _enabled;
@@ -162,6 +165,7 @@ internal sealed class McpServer
             case "tools/call":
                 if (!IsConnected())
                 {
+                    var rejected = _accessState == McpAccessState.Rejected;
                     try
                     {
                         _history?.Record(new McpCallHistoryEntry(
@@ -170,8 +174,8 @@ internal sealed class McpServer
                             0,
                             ReadToolName(parameters),
                             McpCallOutcome.ProtocolError,
-                            "DISABLED",
-                            "已关闭"));
+                            rejected ? "AUTH_REJECTED" : "DISABLED",
+                            rejected ? "密钥无效" : "已关闭"));
                     }
                     catch (Exception exception)
                     {
@@ -180,7 +184,9 @@ internal sealed class McpServer
 
                     throw new McpProtocolException(
                         -32001,
-                        _enabled ? "MCP 访问密钥无效、已禁用或已过期" : "MCP 工具已在 PdxNext 设置中关闭");
+                        rejected
+                            ? "MCP 访问密钥无效、已禁用或已过期"
+                            : "MCP 工具已在 PdxNext 设置中关闭");
                 }
 
                 return await CallToolAsync(parameters, cancellationToken).ConfigureAwait(false);
@@ -344,15 +350,20 @@ internal sealed class McpServer
                 ? text
                 : "<invalid>";
 
-    private bool IsConnected() => _enabled && (_authorizedKey is null || _authorizedKey.AllowedTools.Count > 0);
+    private bool IsConnected() =>
+        _enabled
+        && _accessState != McpAccessState.Rejected
+        && (_authorizedKey is null || _authorizedKey.AllowedTools.Count > 0);
 
     private string PermissionModeText => !_enabled
         ? "已关闭"
-        : _authorizedKey is not null
-            ? _authorizedKey.AllowsAllTools
-                ? "全部工具"
-                : string.Join('|', _authorizedKey.AllowedTools)
-            : _tools.IsDraftWriteEnabled ? "可写" : "只读";
+        : _accessState == McpAccessState.Rejected
+            ? "密钥无效"
+            : _authorizedKey is not null
+                ? _authorizedKey.AllowsAllTools
+                    ? "全部工具"
+                    : string.Join('|', _authorizedKey.AllowedTools)
+                : _tools.IsDraftWriteEnabled ? "可写" : "只读";
 
     private JsonArray FilterTools(JsonArray tools)
     {

@@ -28,7 +28,8 @@ Mod 创建页不再保留 MCP 按钮。
 
 ## 2. 客户端配置
 
-MCP 分节首屏的「一句话安装」可以直接复制给 AI 客户端（Claude Desktop / Cursor）：
+MCP 分节首屏的「一句话安装」可以直接复制给 AI 客户端（Claude Desktop / Claude Code /
+Codex / Cursor / VS Code）；安装说明默认折叠，页面首屏只显示连接状态与权限。
 
 ```text
 请把 PdxNext 的 MCP 服务接入当前客户端：
@@ -57,8 +58,11 @@ MCP 程序与 `PdxLauncher.App.exe` 在同一目录。启动器会按本机实�
 
 - Claude Desktop：`%APPDATA%\Claude\claude_desktop_config.json`
 - Cursor：项目或用户的 `mcp.json`
+- Codex：`~/.codex/config.toml` 的 `[mcp_servers.pdxnext]`（页面会生成 TOML，不是 JSON）
+- VS Code：`settings.json` 的 `servers` + `"type": "stdio"`
 - 其它客户端：只要支持 stdio MCP，把它当普通 `command` 启动即可
-- 改完配置要重启客户端，工具列表里应出现 `pdxnext` 和 6 个工具
+- 改完配置要重启客户端，工具列表里应出现 `pdxnext`；工具数取决于权限：
+  只读 7 个，开启草稿写入后 10 个
 
 `--data-root` 可省略；省略时使用 MCP 程序自己解析出的数据根（与启动器同目录时结果一致）。
 如果程序被复制到别处，必须显式传 `--data-root`。
@@ -130,6 +134,7 @@ MCP 权限、代理地址、翻译 API key、账号信息、窗口位置等字�
 ### `create_change_plan`
 
 参数：`domain`、`operation`、`gameId`、`targetId`、`expectedHash`、`patch`。
+`settings` 域的 `gameId` 必须为空字符串；`playsets` 域必填，传空会被拒绝。
 只创建计划并写入自有 SQLite，不经 App 批准不会改业务数据。首期支持：
 `playsets/rename_play_set`、`playsets/create_play_set`、`playsets/set_mod_enabled`、
 `settings/set_setting`；危险操作（删除、激活、发布、账号、补丁）不在白名单内。
@@ -183,6 +188,7 @@ MCP 权限、代理地址、翻译 API key、账号信息、窗口位置等字�
 - 访问密钥存于 `mcp_access_keys` 表：明文 `pdxmcp_<id>_<secret>` 只在创建/轮换时显示一次，SQLite 只存 SHA-256 哈希与前缀；校验使用固定时间比较
 - 无 `--access-key` 是兼容模式，沿用全局 `--enabled` / `--draft-write`；传密钥时该密钥的工具范围生效，过期/禁用/错误密钥被拒绝
 - Claude Desktop 配置内联密钥；Claude Code、Codex、Cursor、VS Code 配置用 `PDXNEXT_MCP_ACCESS_KEY` 占位，用户自行写入安全存储
+- 传了密钥但校验失败时直接拒绝：工具表为空，`tools/call` 返回 `-32001`；只有完全不传 `--access-key` 才是兼容模式
 - 总开关由 `AppSettings.McpEnabled` 控制（默认开）：关闭后 MCP 进程返回空工具表并拒绝全部 `tools/call`
 - 工具权限按最小权限分层：只读工具（`list_games` / `list_mods` / `list_tags` / `get_upload_draft`）默认可用；
   写入工具（`save_upload_draft` / `clear_upload_draft`）必须由 `AppSettings.McpDraftWriteEnabled` 单独开启（默认关）

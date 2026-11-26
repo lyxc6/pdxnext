@@ -29,6 +29,8 @@ public static class WorkshopToLocalBehaviorChecks
         var before = ChecksContext.Failures;
 
         RunCase("legacy 描述符改写", () => LegacyDescriptorRewrite(fs));
+        RunCase("中文 / 空格目录名与撞名", () => LocalizedFolderNames(fs));
+        RunCase("内层 descriptor.mod 去工坊 id", () => InnerDescriptorWorkshopIdCleared(fs));
         RunCase("metadata 数字 id 清空", () => MetadataIdCleared(fs));
         RunCase("归档落地与 archive 路径", () => ArchiveLanding(fs));
         RunCase("播放集多引用替换", () => MultiReferenceAdoption(fs));
@@ -104,6 +106,96 @@ public static class WorkshopToLocalBehaviorChecks
     }
 
     // --------------------------------------------------------------- metadata
+
+    /// <summary>
+    /// 中文 / 带空格的名字必须原样落地，不能都折成 <c>localmod</c>；
+    /// 第二个中文名撞名时按 <c>_2</c> 递进，且大小写不同也算撞名（Windows 语义）。
+    /// </summary>
+    private static async Task LocalizedFolderNames(IFileSystem fs)
+    {
+        using var f = new Fixture(fs, "localized", "ck3", LoadFileFormat.DlcLoadV0);
+        f.WriteSource("descriptor.mod", "name=\"Localized\"\nversion=\"1.0\"\nsupported_version=\"1.9.*\"\n");
+        var oldId = Guid.NewGuid();
+        var old = f.MakeOldMod(oldId, "Localized", "1.9.*", "1.0");
+        await f.SeedAsync(old).ConfigureAwait(true);
+        f.Catalog.Mod = old with { DirPath = f.WorkshopDir, Source = "steam", SteamId = "12345" };
+
+        var first = await f.MakeConverter().ConvertToLocalAsync(
+            f.Game, oldId, "苦难的女囚", null, CancellationToken.None).ConfigureAwait(true);
+        ChecksContext.Check("中文名: 转换成功", first.IsSuccess, first.ErrorMessage);
+        ChecksContext.Check(
+            "中文名: 落地目录叫原名（苦难的女囚）",
+            Directory.Exists(Path.Combine(f.Game.ModDir, "苦难的女囚")));
+        ChecksContext.Check(
+            "中文名: 顶层外层 .mod 叫原名（苦难的女囚.mod）",
+            File.Exists(Path.Combine(f.Game.ModDir, "苦难的女囚.mod")));
+        foreach (var legacy in new[] { "localmod", "localmod.mod", "localmod.zip" })
+        {
+            ChecksContext.Check(
+                "中文名: 不再落到 localmod（" + legacy + "）",
+                !File.Exists(Path.Combine(f.Game.ModDir, legacy))
+                    && !Directory.Exists(Path.Combine(f.Game.ModDir, legacy)));
+        }
+
+        if (first.IsSuccess)
+        {
+            ChecksContext.Check(
+                "中文名: path 指向中文目录",
+                File.ReadAllText(Path.Combine(f.Game.ModDir, "苦难的女囚.mod"))
+                    .Contains("path=\"" + Path.GetFullPath(Path.Combine(f.Game.ModDir, "苦难的女囚")).Replace('\\', '/') + "\"",
+                        StringComparison.Ordinal));
+        }
+
+        // 第二个不同 mod 用同一个展示名（如作者改名前后的两份订阅）：目录名必须变成 苦难的女囚_2，不能覆盖已有目录。
+        var again = f.MakeOldMod(Guid.NewGuid(), "Localized", "1.9.*", "1.0");
+        await f.SeedAsync(again).ConfigureAwait(true);
+        f.Catalog.Mod = again with { DirPath = f.WorkshopDir, Source = "steam", SteamId = "12345" };
+        var second = await f.MakeConverter().ConvertToLocalAsync(
+            f.Game, again.ModId, "苦难的女囚", null, CancellationToken.None).ConfigureAwait(true);
+        ChecksContext.Check("中文名撞名: 第二次转换成功", second.IsSuccess, second.ErrorMessage);
+        ChecksContext.Check(
+            "中文名撞名: 落地为 苦难的女囚_2",
+            Directory.Exists(Path.Combine(f.Game.ModDir, "苦难的女囚_2"))
+                && File.Exists(Path.Combine(f.Game.ModDir, "苦难的女囚_2.mod")));
+
+        // 大小写不同的同名条目也要避让（Windows 上没法共存两个只差大小写的目录）。
+        Directory.CreateDirectory(Path.Combine(f.Game.ModDir, "CaseMod"));
+        var third = await f.MakeConverter().ConvertToLocalAsync(
+            f.Game, again.ModId, "CASEMOD", null, CancellationToken.None).ConfigureAwait(true);
+        ChecksContext.Check(
+            "大小写撞名: 不落到 CaseMod，改走 CASEMOD_2",
+            !third.IsSuccess || Directory.Exists(Path.Combine(f.Game.ModDir, "CASEMOD_2")),
+            third.ErrorMessage);
+    }
+
+    /// <summary>目录型 legacy 的内层 <c>descriptor.mod</c> 必须去掉 <c>remote_file_id</c>，否则第三方读到的仍是工坊 mod。</summary>
+    private static async Task InnerDescriptorWorkshopIdCleared(IFileSystem fs)
+    {
+        using var f = new Fixture(fs, "inner", "ck3", LoadFileFormat.DlcLoadV0);
+        f.WriteSource(
+            "descriptor.mod",
+            "version=\"1.0\"\ntags={ \"Gameplay\" }\nname=\"Inner Test\"\n"
+            + "supported_version=\"1.9.*\"\nremote_file_id=\"12345\"\n");
+        f.WriteSource("content.txt", "payload");
+
+        var oldId = Guid.NewGuid();
+        var old = f.MakeOldMod(oldId, "Inner Test", "1.9.*", "1.0");
+        await f.SeedAsync(old).ConfigureAwait(true);
+        f.Catalog.Mod = old with { DirPath = f.WorkshopDir, Source = "steam", SteamId = "12345" };
+
+        var result = await f.MakeConverter().ConvertToLocalAsync(
+            f.Game, oldId, "InnerMod", null, CancellationToken.None).ConfigureAwait(true);
+        if (!ChecksContext.Check("内层描述符: 转换成功", result.IsSuccess, result.ErrorMessage))
+        {
+            return;
+        }
+
+        var inner = Path.Combine(f.Game.ModDir, "InnerMod", "descriptor.mod");
+        var text = File.ReadAllText(inner);
+        ChecksContext.Check("内层描述符: remote_file_id 已删", !text.Contains("remote_file_id", StringComparison.Ordinal));
+        ChecksContext.Check("内层描述符: name 仍保留", text.Contains("name=\"Inner Test\"", StringComparison.Ordinal));
+        ChecksContext.Check("内层描述符: tags 仍保留", text.Contains("\"Gameplay\"", StringComparison.Ordinal));
+    }
 
     private static async Task MetadataIdCleared(IFileSystem fs)
     {

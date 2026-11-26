@@ -205,10 +205,10 @@ internal sealed class McpTools
                     new JsonObject
                     {
                         ["domain"] = Property("string", "业务域：playsets 或 settings。"),
-                        ["operation"] = Property("string", "操作名：rename_play_set / set_mod_enabled / set_setting 等。"),
-                        ["gameId"] = Property("string", "游戏 id；设置域可传空字符串。"),
+                        ["operation"] = Property("string", "操作名：rename_play_set / create_play_set / set_mod_enabled / set_setting。"),
+                        ["gameId"] = Property("string", "游戏 id；设置域必须传空字符串，播放集域必填。"),
                         ["targetId"] = Property("string", "目标对象 id；设置域传设置键。"),
-                        ["expectedHash"] = Property("string", "读取页面时得到的期望摘要，用于防止覆盖用户后续修改。"),
+                        ["expectedHash"] = Property("string", "读取页面时得到的期望摘要；create_play_set 传空字符串。"),
                         ["patch"] = new JsonObject
                         {
                             ["type"] = "object",
@@ -376,11 +376,20 @@ internal sealed class McpTools
             patch[pair.Key] = text;
         }
 
+        // settings 域不接受游戏 id：AI 传「占位值」时必须说清楚，而不是静默改写成空。
+        var isSettingsDomain = string.Equals(domain, "settings", StringComparison.Ordinal);
+        if (isSettingsDomain && !string.IsNullOrWhiteSpace(gameId))
+        {
+            throw new McpToolException("settings 域的 gameId 必须为空字符串");
+        }
+
         var request = new McpChangePlanRequest(domain, operation, gameId, targetId, patch, expectedHash);
         var validation = McpChangePlanPolicy.Validate(request);
         if (!validation.IsValid)
         {
-            throw new McpToolException("变更计划未通过校验：" + validation.ErrorCode);
+            throw new McpToolException(
+                "变更计划未通过校验：" + validation.ErrorCode
+                + (validation.ErrorCode == "PLAN_GAME_NOT_ALLOWED" ? "（settings 域的 gameId 必须为空）" : string.Empty));
         }
 
         var plan = _changePlans.CreatePlan(request, _authorizedKey?.KeyId ?? "legacy", DateTimeOffset.UtcNow);

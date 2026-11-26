@@ -7,6 +7,7 @@ using System.Globalization;
 using Microsoft.Windows.ApplicationModel.Resources;
 
 using PdxLauncher.Core.Configuration;
+using PdxLauncher.Core.Localization;
 
 /// <summary>
 /// 界面文案入口。文案源是 <c>Strings/&lt;lang&gt;/Resources.resw</c>，编译时由
@@ -131,12 +132,18 @@ public sealed partial class Localizer : INotifyPropertyChanged
         return context;
     }
 
-    /// <summary>生成属性与内部调用的实现：查 MRT 资源 → 格式化。</summary>
+    /// <summary>
+    /// 生成属性与内部调用的实现：查 MRT 资源 → 格式化。
+    /// 查表前先做 <see cref="LocalizationKey.Normalize"/>：资源名只能是 PascalCase 标识符，
+    /// 点分键（<c>crash.summary.gameDetail</c>）直接查表必然落空。
+    /// </summary>
     private string Format(string key, object?[]? args = null)
     {
-        var candidate = _resources.MainResourceMap.TryGetValue(ResourcePrefix + key, _context);
+        var candidate = _resources.MainResourceMap.TryGetValue(
+            ResourcePrefix + LocalizationKey.Normalize(key), _context);
         if (candidate is null)
         {
+            // 回退文案打印原始键：归一化后的名字反而不利于定位调用点。
             Debug.Fail("缺少界面文案资源: " + key);
             return "⟨" + key + "⟩";
         }

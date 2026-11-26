@@ -17,7 +17,7 @@ public static class McpChangePlanExecutorChecks
         var request = new McpChangePlanRequest(
             "settings",
             "set_setting",
-            "settings",
+            string.Empty,
             nameof(AppSettings.UiLanguage),
             new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -74,6 +74,9 @@ public static class McpChangePlanExecutorChecks
             "旧摘要");
         ChecksContext.Check("播放集重命名可进入确认", McpChangePlanPolicy.Validate(rename).IsValid);
         ChecksContext.Check("无游戏 id 的播放集计划被拒绝", !McpChangePlanPolicy.Validate(rename with { GameId = string.Empty }).IsValid);
+        ChecksContext.Check(
+            "设置域不允许塞游戏 id",
+            !McpChangePlanPolicy.Validate(request with { GameId = "ck3" }).IsValid);
 
         var root = PlaysetChecks.CreateTempRoot(fs, "mcp-plan-executor");
         try
@@ -87,7 +90,7 @@ public static class McpChangePlanExecutorChecks
                 "plan-2",
                 "settings",
                 "set_setting",
-                "settings",
+                string.Empty,
                 nameof(AppSettings.UiLanguage),
                 new Dictionary<string, string>(StringComparer.Ordinal)
                 {

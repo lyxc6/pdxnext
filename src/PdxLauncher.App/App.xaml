@@ -11,6 +11,8 @@
                 <ResourceDictionary Source="Controls/PdxTagChip.xaml" />
                 <!-- 性能概览的带值圆环仪表（DefaultStyleKey = PdxGaugeRing）。 -->
                 <ResourceDictionary Source="Controls/PdxGaugeRing.xaml" />
+                <!-- 主页官方公告槽位的轮播控件（DefaultStyleKey = NewsCarousel）。 -->
+                <ResourceDictionary Source="Controls/NewsCarousel.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <!--

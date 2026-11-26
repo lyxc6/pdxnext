@@ -562,6 +562,9 @@ BMP/PNG 帧策略、32px 帧的金色占比与圆角透明、8 张 PNG 的魔数
 一眼能看出最终走的是哪条链路；代理地址非法、填了 SOCKS、系统配置了 PAC 脚本等情况不会静默失败，
 而是在这一行和日志里说明「为什么现在直连」。地址框改完按回车或点别处即生效。
 旧配置只有 `proxyUrl` 没有 `proxyMode` 时按「手动配置」处理，行为与上一版一致。
+另外，首次启动发现 `proxyMode` 为空、`proxyUrl` 也为空且能探测到可用的系统代理（含环境变量回落）时，
+启动装配会把它采纳成 `system` 并立即落盘，避免默认直连在装了系统代理的机器上全线超时；
+显式选过 `direct` 或填过 `proxyUrl` 的用户不会被改写。
 
 代理卡片下面还有一张「连通性自检」（`src/PdxLauncher.Core/Online/NetworkProbe.cs`）：
 点一次「测试」，对创意工坊真正依赖的三台主机各发一条真实请求 ——
@@ -761,7 +764,7 @@ docs/PDX-SDK/                :: PDX.SDK 的反编译参考（只读，不参与�
                                 ilspycmd -p --nested-directories -o docs/PDX-SDK/PDX.SDK sdk/pdx/PDX.SDK.dll
                                 （Contracts / Network 同理；生成后删掉各目录的 *.csproj）
 tests/
-  PdxLauncher.Checks/          :: 201 个检查类，纯 console 自检（无 xunit，因为离线）
+  PdxLauncher.Checks/          :: 205 个检查类，纯 console 自检（无 xunit，因为离线）
   fixtures/                    :: 抓下来的真实数据样本
 docs/
   HANDOFF.md                   :: 交接文档：已完成项 / 已知缺陷 / 下一步

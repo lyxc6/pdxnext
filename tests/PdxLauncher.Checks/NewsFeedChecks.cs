@@ -170,7 +170,38 @@ public static class NewsFeedChecks
                 new RecordingLogger(),
                 Sub(fs, tempRoot, "visible-weight")),
             "ck3");
-        ChecksContext.Equal("同 slot 取 weight 大的组", "高权重", weightedFeed.Find(NewsFeedSlots.Main)?.Title);
+        var weightedMain = weightedFeed.Items.Where(item => item.Slot == NewsFeedSlots.Main).ToList();
+        ChecksContext.Equal("同 slot 保留全部可见组", 2, weightedMain.Count);
+        ChecksContext.Equal("同 slot 按原顺序保留低权重组", "低权重", weightedMain[0].Title);
+        ChecksContext.Equal("同 slot 按原顺序保留高权重组", "高权重", weightedMain[1].Title);
+
+        const string twoCards = """
+            {
+              "main": {
+                "contentGroups": [
+                  {
+                    "settings": { "weight": 1, "visible": { "from": "2024-01-01T00:00:00Z", "until": "2099-12-31T23:59:59Z" } },
+                    "contentItems": [
+                      { "content": { "title": { "en": "同组第一张" } } },
+                      { "content": { "title": { "en": "同组第二张" } } }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+        var twoCardsFeed = Fetch(
+            new NewsFeedService(
+                fs,
+                new FakeHttpFetcher(_ => JsonStream(twoCards)),
+                new FakeAssetDownloader(fs),
+                new FakeClock(Now),
+                new RecordingLogger(),
+                Sub(fs, tempRoot, "visible-two-items")),
+            "ck3");
+        ChecksContext.Equal("同一 contentItems 的两张都保留", 2, twoCardsFeed.Items.Count);
+        ChecksContext.Equal("同一 contentItems 的第一张", "同组第一张", twoCardsFeed.Items[0].Title);
+        ChecksContext.Equal("同一 contentItems 的第二张", "同组第二张", twoCardsFeed.Items[1].Title);
     }
 
     // ------------------------------------------------------------ 缺 slot 容错
@@ -295,7 +326,9 @@ public static class NewsFeedChecks
 
         var feed = service.GetAsync(request, CancellationToken.None).GetAwaiter().GetResult();
         ChecksContext.Equal("新版公告按 slot 解析两张", 2, feed.Items.Count);
-        ChecksContext.Equal("主卡标题按过滤条件选中", "正确卡片", feed.Find(NewsFeedSlots.Main)?.Title);
+        var mainCards = feed.Items.Where(item => item.Slot == NewsFeedSlots.Main).ToList();
+        ChecksContext.Equal("主卡只保留通过过滤的一张", 1, mainCards.Count);
+        ChecksContext.Equal("主卡标题按过滤条件选中", "正确卡片", mainCards[0].Title);
         ChecksContext.Equal("副卡支持 contentItems 对象", "副卡", feed.Find(NewsFeedSlots.Secondary1)?.Title);
         ChecksContext.Check(
             "请求 URL 带平台参数",
@@ -303,7 +336,7 @@ public static class NewsFeedChecks
             http.LastUri?.ToString() ?? "null");
         var cacheText = fs.ReadAllText(service.CachePath);
         ChecksContext.Check("缓存键包含平台", cacheText.Contains("\"cities_skylines_2:steam\"", StringComparison.Ordinal));
-        ChecksContext.Check("缓存 schema 升到 2", cacheText.Contains("\"version\":2", StringComparison.Ordinal));
+        ChecksContext.Check("缓存 schema 升到 3", cacheText.Contains("\"version\":3", StringComparison.Ordinal));
 
         var pdxHttp = new FakeHttpFetcher(_ => JsonStream(json));
         var pdxService = new NewsFeedService(
@@ -327,7 +360,7 @@ public static class NewsFeedChecks
             Sub(fs, tempRoot, "modern-weight"),
             random: () => 0.99);
         var weightedFeed = weighted.GetAsync(request, CancellationToken.None).GetAwaiter().GetResult();
-        ChecksContext.Equal("随机源命中低权重但可用的组", "正确卡片", weightedFeed.Find(NewsFeedSlots.Main)?.Title);
+        ChecksContext.Equal("另一随机源同样保留过滤后的唯一主卡", "正确卡片", weightedFeed.Find(NewsFeedSlots.Main)?.Title);
 
         var withoutOwnership = new NewsFeedService(
             fs,
