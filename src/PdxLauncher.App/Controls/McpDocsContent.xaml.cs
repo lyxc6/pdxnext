@@ -33,7 +33,7 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
     private string _dataRoot = string.Empty;
     private McpCreatedAccessKey? _selectedKey;
     private bool _enabled = true;
-    private bool _draftWriteEnabled;
+    private bool _readOnlyHint;
     private bool _isInitialized;
 
     /// <summary>XAML 里 <c>{x:Bind L.Foo}</c> 的入口。</summary>
@@ -46,9 +46,11 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
     public IReadOnlyList<McpToolDescriptor> VisibleTools =>
         !_enabled
             ? Array.Empty<McpToolDescriptor>()
-            : _draftWriteEnabled
-                ? McpToolCatalog.Tools
-                : McpToolCatalog.Tools.Where(tool => tool.Risk == McpToolRisk.ReadOnly).ToArray();
+            : _selectedKey is not null
+                ? McpToolCatalog.Tools.Where(tool =>
+                    _selectedKey.Key.CapabilityList.Any(capability =>
+                        McpCapabilityCatalog.AllowsTool(capability, tool.Name))).ToArray()
+                : McpToolCatalog.Tools;
 
     /// <summary>「共 N 个 / 当前暴露 M 个」的口径以目录为唯一事实源。</summary>
     public string ToolCountText =>
@@ -61,18 +63,18 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
     /// <param name="exePath">当前程序目录下的 PdxLauncher.Mcp.exe。</param>
     /// <param name="dataRoot">启动器数据根。</param>
     /// <param name="enabled">MCP 总开关是否已开启。</param>
-    /// <param name="draftWriteEnabled">是否允许 AI 写入上传草稿。</param>
+    /// <param name="readOnlyHint">是否只有只读能力；用于兼容模式与未选密钥时的说明。</param>
     public void InitializeContent(
         string exePath,
         string dataRoot,
         bool enabled = true,
-        bool draftWriteEnabled = false)
+        bool readOnlyHint = false)
     {
         _exePath = exePath;
         _dataRoot = dataRoot;
         _enabled = enabled;
-        _draftWriteEnabled = draftWriteEnabled;
-        RefreshPermissions(enabled, draftWriteEnabled);
+        _readOnlyHint = readOnlyHint;
+        RefreshPermissions(enabled, readOnlyHint);
 
         ExeMissingText.Text = Localizer.Instance.T(Keys.ModstudioMcpDocsExeMissing, exePath);
         ExeMissingText.Visibility = File.Exists(exePath) ? Visibility.Collapsed : Visibility.Visible;
@@ -84,12 +86,12 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
         McpClientKind client,
         McpCreatedAccessKey? selectedKey,
         bool enabled,
-        bool draftWriteEnabled)
+        bool readOnlyHint)
     {
         AccessKeys = accessKeys;
         _selectedKey = selectedKey;
         _enabled = enabled;
-        _draftWriteEnabled = draftWriteEnabled;
+        _readOnlyHint = readOnlyHint;
         var key = selectedKey?.Key;
         var raw = selectedKey?.RawToken ?? string.Empty;
         ConfigBox.Text = McpClientConfigGenerator.Create(
@@ -97,9 +99,10 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
             _exePath,
             _dataRoot,
             enabled,
-            draftWriteEnabled,
             key,
             raw);
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(VisibleTools)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ToolCountText)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AccessKeys)));
     }
 
@@ -113,18 +116,18 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
             (McpClientKind)Math.Clamp(ClientKindSelector.SelectedIndex, 0, 4),
             key,
             _enabled,
-            _draftWriteEnabled);
+            _readOnlyHint);
     }
 
     /// <summary>权限开关变化后刷新状态文本与配置.args，不重新探测路径。</summary>
-    public void RefreshPermissions(bool enabled, bool draftWriteEnabled)
+    public void RefreshPermissions(bool enabled, bool readOnlyHint)
     {
         var localizer = Localizer.Instance;
-        PermissionText = (enabled, draftWriteEnabled) switch
+        PermissionText = (enabled, readOnlyHint) switch
         {
             (false, _) => localizer.McpPermissionOff,
-            (true, false) => localizer.McpPermissionReadOnly,
-            (true, true) => localizer.McpPermissionReadWrite,
+            (true, true) => localizer.McpPermissionReadOnly,
+            (true, false) => localizer.McpPermissionReadWrite,
         };
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PermissionText)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(VisibleTools)));
@@ -135,11 +138,11 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
             _exePath,
             _dataRoot,
             enabled ? "true" : "false",
-            draftWriteEnabled ? "true" : "false");
+            readOnlyHint ? "true" : "false");
         FlowTextBlock.Text = enabled
-            ? draftWriteEnabled
-                ? localizer.ModstudioMcpFlowBody
-                : localizer.McpFlowReadOnly
+            ? readOnlyHint
+                ? localizer.McpFlowReadOnly
+                : localizer.ModstudioMcpFlowBody
             : localizer.McpFlowDisabled;
         ExePathText.Text = _exePath;
         UpdateConfiguration(
@@ -147,7 +150,7 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
             (McpClientKind)Math.Clamp(ClientKindSelector.SelectedIndex, 0, 4),
             _selectedKey,
             enabled,
-            draftWriteEnabled);
+            readOnlyHint);
     }
 
     private void OnClientKindChanged(object sender, SelectionChangedEventArgs e)
@@ -162,7 +165,7 @@ public sealed partial class McpDocsContent : UserControl, INotifyPropertyChanged
             (McpClientKind)Math.Clamp(ClientKindSelector.SelectedIndex, 0, 4),
             _selectedKey,
             _enabled,
-            _draftWriteEnabled);
+            _readOnlyHint);
     }
 
     private void OnCopyPromptClick(object sender, RoutedEventArgs e)

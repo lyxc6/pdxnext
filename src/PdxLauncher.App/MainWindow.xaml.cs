@@ -430,6 +430,54 @@ public sealed partial class MainWindow : Window
             _saveBackupsPage = saveBackupsPage;
             saveBackupsPage.NavigationRequested += OnPageNavigationRequested;
         }
+
+        if (content is McpKeyEditorPage mcpKeyEditorPage)
+        {
+            mcpKeyEditorPage.NavigationRequested += OnMcpKeyEditorRequested;
+        }
+
+        if (content is SettingsPage settingsPage)
+        {
+            settingsPage.McpKeyEditorRequested += OnMcpKeyEditorOpenRequested;
+        }
+    }
+
+    /// <summary>设置页要求打开 MCP 密钥子页；左栏选中态故意停在「设置」。</summary>
+    private void OnMcpKeyEditorOpenRequested(object? sender, McpKeyEditorNavigationRequest request)
+    {
+        try
+        {
+            if (!_navigation.Navigate(NavigationService.McpKeyEditorTag, request))
+            {
+                AppServices.Logger.Warn("导航到 MCP 密钥子页失败");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("导航到 MCP 密钥子页异常", ex);
+        }
+    }
+
+    /// <summary>
+    /// MCP 密钥子页返回设置页：把「是否保存 / 一次性明文」带回去，
+    /// 左栏选中态同步成「设置」，让用户回到原来的 MCP 分节。
+    /// </summary>
+    private void OnMcpKeyEditorRequested(object? sender, McpKeyEditorNavigationResult result)
+    {
+        try
+        {
+            if (!_navigation.Navigate(NavigationService.SettingsTag, result))
+            {
+                AppServices.Logger.Warn("带着 MCP 密钥结果回到设置页失败");
+                return;
+            }
+
+            SyncSelectedNavItem(NavigationService.SettingsTag);
+        }
+        catch (Exception ex)
+        {
+            AppServices.Logger.Error("带着 MCP 密钥结果回到设置页异常", ex);
+        }
     }
 
     /// <summary>

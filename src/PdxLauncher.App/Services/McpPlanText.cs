@@ -17,6 +17,9 @@ public static class McpPlanText
 
     public static string DeleteText() => Localizer.Instance.SettingsMcpDeleteKey;
 
+    /// <summary>DataTemplate 里的「编辑」按钮文案。</summary>
+    public static string EditText() => Localizer.Instance.SettingsMcpKeyEdit;
+
     /// <summary>把 domain / gameId / targetId / patch 压成一句可核对的话。</summary>
     public static string Describe(
         string domain,

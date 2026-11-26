@@ -23,8 +23,8 @@ AI 对业务数据的写入只能提交 **变更计划**；用户必须在启动
 `PdxLauncher.Mcp.exe` 由 App 的构建目标复制到 App 输出目录；`publish.cmd` 和安装包
 会把它一起带上。它不启动 WinUI，也不加载 Steam，只引用 `PdxLauncher.Core`。
 
-入口在「设置 → MCP」分节：页面含权限开关、工具清单、一句话安装、三步流程和默认收起的手动 JSON 配置。
-Mod 创建页不再保留 MCP 按钮。
+入口在「设置 → MCP」分节：页面含总开关、访问密钥列表（权限在密钥子页里按能力勾选）、工具清单、
+一句话安装、三步流程和默认收起的手动 JSON 配置。Mod 创建页不再保留 MCP 按钮。
 
 ## 2. 客户端配置
 
@@ -34,12 +34,12 @@ Codex / Cursor / VS Code）；安装说明默认折叠，页面首屏只显示�
 ```text
 请把 PdxNext 的 MCP 服务接入当前客户端：
 名称 pdxnext，命令 "<程序目录>\PdxLauncher.Mcp.exe"，
-参数 "--data-root" "<程序目录>\data"；
-       "--enabled" "true" "--draft-write" "false"；
+参数 "--data-root" "<程序目录>\data" "--enabled" "true"；带密钥时再加上密钥参数；
 接入后调用 list_games 验证。
 ```
 
-点「手动配置（JSON）」会展开完整 JSON 和当前程序路径；JSON 的 `args` 会带上当前权限开关。
+点「手动配置（JSON）」会展开完整 JSON 和当前程序路径；JSON 的 `args` 会带上总开关，带密钥时带上密钥。
+写入权限不写进参数，由该密钥在库里的能力决定。
 
 MCP 程序与 `PdxLauncher.App.exe` 在同一目录。启动器会按本机实际路径生成配置，
 不是写死的：dev 构建指向 `bin` 输出目录，安装版指向安装目录。
@@ -50,7 +50,7 @@ MCP 程序与 `PdxLauncher.App.exe` 在同一目录。启动器会按本机实�
     "pdxnext": {
       "command": "C:\\Program Files\\PdxNext\\PdxLauncher.Mcp.exe",
       "args": ["--data-root", "C:\\Users\\<user>\\AppData\\Local\\PdxNext-Data",
-               "--enabled", "true", "--draft-write", "false"]
+               "--enabled", "true"]
     }
   }
 }
@@ -61,8 +61,8 @@ MCP 程序与 `PdxLauncher.App.exe` 在同一目录。启动器会按本机实�
 - Codex：`~/.codex/config.toml` 的 `[mcp_servers.pdxnext]`（页面会生成 TOML，不是 JSON）
 - VS Code：`settings.json` 的 `servers` + `"type": "stdio"`
 - 其它客户端：只要支持 stdio MCP，把它当普通 `command` 启动即可
-- 改完配置要重启客户端，工具列表里应出现 `pdxnext`；工具数取决于权限：
-  只读 7 个，开启草稿写入后 10 个
+- 改完配置要重启客户端，工具列表里应出现 `pdxnext`；工具数取决于该密钥勾选的能力：
+  最小 4 个，全选 10 个；兼容模式（不带密钥）7 个只读工具
 
 `--data-root` 可省略；省略时使用 MCP 程序自己解析出的数据根（与启动器同目录时结果一致）。
 如果程序被复制到别处，必须显式传 `--data-root`。
@@ -186,13 +186,16 @@ MCP 权限、代理地址、翻译 API key、账号信息、窗口位置等字�
 - 调用历史写入失败只记日志，不改变工具响应；设置页“最近调用”只显示最近 100 条
 - 调用历史可按工具、结果和密钥筛选，分页浏览，清空或导出 JSON；导出只含元数据白名单
 - 访问密钥存于 `mcp_access_keys` 表：明文 `pdxmcp_<id>_<secret>` 只在创建/轮换时显示一次，SQLite 只存 SHA-256 哈希与前缀；校验使用固定时间比较
-- 无 `--access-key` 是兼容模式，沿用全局 `--enabled` / `--draft-write`；传密钥时该密钥的工具范围生效，过期/禁用/错误密钥被拒绝
+- 无 `--access-key` 是兼容模式：只吃全局 `--enabled`，且默认只读（`--legacy-read-only true`）；传密钥时按该密钥的能力放行，过期/禁用/错误密钥被拒绝
 - Claude Desktop 配置内联密钥；Claude Code、Codex、Cursor、VS Code 配置用 `PDXNEXT_MCP_ACCESS_KEY` 占位，用户自行写入安全存储
 - 传了密钥但校验失败时直接拒绝：工具表为空，`tools/call` 返回 `-32001`；只有完全不传 `--access-key` 才是兼容模式
 - 总开关由 `AppSettings.McpEnabled` 控制（默认开）：关闭后 MCP 进程返回空工具表并拒绝全部 `tools/call`
-- 工具权限按最小权限分层：只读工具（`list_games` / `list_mods` / `list_tags` / `get_upload_draft`）默认可用；
-  写入工具（`save_upload_draft` / `clear_upload_draft`）必须由 `AppSettings.McpDraftWriteEnabled` 单独开启（默认关）
-- 权限通过 `--enabled` / `--draft-write` 传给 MCP 子进程，并写进生成的客户端配置 args；改完需重启 AI 客户端
+- 工具权限按密钥能力分层：每把密钥在「设置 → MCP → 访问密钥」的子页里勾选能力，
+  能力到工具的映射见 `McpCapabilityCatalog`（游戏浏览 / 上传草稿读取 / 上传草稿写入 /
+  播放集读取 / 播放集计划 / 设置读取 / 设置计划）；变更计划再按 domain 细判，跨域会被拒绝
+- 写入不再有全局开关：`AppSettings.McpDraftWriteEnabled` 已退役（保留字段只为兼容旧 `settings.json`），
+  AI 能不能写只看密钥；改完密钥能力立即生效，不必重新生成密钥
+- 权限不再写进客户端配置的 args；只有总开关和密钥进参数，所以给某把钥匙加权限不必重贴配置
 - 工具只能写入 `--data-root` 下的 `mcp\upload-drafts`，写入路径由游戏 id + mod 路径哈希推导
 - 写草稿前要求 mod 能被 `list_mods` 发现（本地目录、描述符可读、游戏可上传）
 - 没有发布工具，也不接受任意文件路径

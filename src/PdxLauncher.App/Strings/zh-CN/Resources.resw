@@ -6639,6 +6639,174 @@
   <data name="SettingsMcpKeyDisplayNamePlaceholder" xml:space="preserve">
     <value>例如 Claude Desktop</value>
   </data>
+  <data name="SettingsMcpKeyOnlyHint" xml:space="preserve">
+    <value>写入权限只由访问密钥决定：密钥勾选了写入能力才能写入，不再受全局开关限制。</value>
+  </data>
+  <data name="SettingsMcpAccessKeysHint" xml:space="preserve">
+    <value>每个客户端用一把独立密钥，按需勾选能力；密钥可随时改权限，立即生效。</value>
+  </data>
+  <data name="SettingsMcpKeyEdit" xml:space="preserve">
+    <value>编辑</value>
+  </data>
+  <data name="SettingsMcpKeyCreateTitle" xml:space="preserve">
+    <value>新建访问密钥</value>
+  </data>
+  <data name="SettingsMcpKeyEditTitle" xml:space="preserve">
+    <value>编辑访问密钥</value>
+  </data>
+  <data name="SettingsMcpKeyCreateSubtitle" xml:space="preserve">
+    <value>为这个 AI 客户端单独生成密钥，并勾选它需要的能力。</value>
+  </data>
+  <data name="SettingsMcpKeyEditSubtitle" xml:space="preserve">
+    <value>改名、调整能力或到期时间；改完立即生效，不用重新生成密钥。</value>
+  </data>
+  <data name="SettingsMcpKeyBack" xml:space="preserve">
+    <value>返回</value>
+  </data>
+  <data name="SettingsMcpKeySectionBasics" xml:space="preserve">
+    <value>基本信息</value>
+  </data>
+  <data name="SettingsMcpKeySectionCapabilities" xml:space="preserve">
+    <value>权限</value>
+  </data>
+  <data name="SettingsMcpKeyCapabilitiesHint" xml:space="preserve">
+    <value>按业务域勾选；勾选“提议变更”只代表 AI 能提交变更计划，真正落盘仍要在启动器里确认。</value>
+  </data>
+  <data name="SettingsMcpKeySectionDanger" xml:space="preserve">
+    <value>密钥维护</value>
+  </data>
+  <data name="SettingsMcpKeyDangerHint" xml:space="preserve">
+    <value>轮换会立即作废旧密钥，需要把新密钥重新填进 AI 客户端；删除后该客户端立刻失去访问。</value>
+  </data>
+  <data name="SettingsMcpKeyRotate" xml:space="preserve">
+    <value>轮换密钥</value>
+  </data>
+  <data name="SettingsMcpKeyDelete" xml:space="preserve">
+    <value>删除密钥</value>
+  </data>
+  <data name="SettingsMcpKeyDeleteTitle" xml:space="preserve">
+    <value>删除这个访问密钥？</value>
+  </data>
+  <data name="SettingsMcpKeyDeleteContent" xml:space="preserve">
+    <value>「{0}」会立刻失效，正在使用它的 AI 客户端将无法再调用任何工具。此操作不可撤销。</value>
+  </data>
+  <data name="SettingsMcpKeySave" xml:space="preserve">
+    <value>保存</value>
+  </data>
+  <data name="SettingsMcpKeyCancel" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="SettingsMcpKeyDone" xml:space="preserve">
+    <value>完成</value>
+  </data>
+  <data name="SettingsMcpKeyCopied" xml:space="preserve">
+    <value>已复制到剪贴板</value>
+  </data>
+  <data name="SettingsMcpKeyCreatedTitle" xml:space="preserve">
+    <value>密钥只显示这一次</value>
+  </data>
+  <data name="SettingsMcpKeyCreatedHint" xml:space="preserve">
+    <value>立即复制并填进对应 AI 客户端；关闭或离开本页后无法再查看。</value>
+  </data>
+  <data name="SettingsMcpKeyWriteWarning" xml:space="preserve">
+    <value>这个密钥可以写数据：AI 能改上传草稿，或提交要你在启动器里确认的变更计划。MCP 不会自行发布 Mod。</value>
+  </data>
+  <data name="SettingsMcpKeyPrefixNew" xml:space="preserve">
+    <value>保存后生成</value>
+  </data>
+  <data name="SettingsMcpKeyStatusNew" xml:space="preserve">
+    <value>未保存</value>
+  </data>
+  <data name="SettingsMcpKeyNoExpiry" xml:space="preserve">
+    <value>永不过期</value>
+  </data>
+  <data name="SettingsMcpKeyExpiry" xml:space="preserve">
+    <value>到期时间</value>
+  </data>
+  <data name="SettingsMcpKeyExpiryShort" xml:space="preserve">
+    <value>到期：{0}</value>
+  </data>
+  <data name="SettingsMcpKeyExpiryDialogTitle" xml:space="preserve">
+    <value>选择到期日期</value>
+  </data>
+  <data name="SettingsMcpKeySetExpiry" xml:space="preserve">
+    <value>设置到期</value>
+  </data>
+  <data name="SettingsMcpKeyClearExpiry" xml:space="preserve">
+    <value>清除到期</value>
+  </data>
+  <data name="SettingsMcpKeyNameRequired" xml:space="preserve">
+    <value>请填写密钥名称</value>
+  </data>
+  <data name="SettingsMcpKeyCapabilityRequired" xml:space="preserve">
+    <value>至少勾选一项能力</value>
+  </data>
+  <data name="SettingsMcpStatusUnavailable" xml:space="preserve">
+    <value>服务尚未就绪，稍后再试</value>
+  </data>
+  <data name="SettingsMcpKeySummaryNone" xml:space="preserve">
+    <value>（未选能力）</value>
+  </data>
+  <data name="SettingsMcpKeySummaryAll" xml:space="preserve">
+    <value>全部能力</value>
+  </data>
+  <data name="SettingsMcpKeySummarySeparator" xml:space="preserve">
+    <value>、</value>
+  </data>
+  <data name="SettingsMcpCapGroupGames" xml:space="preserve">
+    <value>游戏与本地 Mod</value>
+  </data>
+  <data name="SettingsMcpCapGames" xml:space="preserve">
+    <value>浏览游戏与本地 Mod</value>
+  </data>
+  <data name="SettingsMcpCapGamesDesc" xml:space="preserve">
+    <value>列出已安装游戏、可上传的 Mod 和工坊标签（list_games / list_mods / list_tags）。</value>
+  </data>
+  <data name="SettingsMcpCapGroupUpload" xml:space="preserve">
+    <value>上传草稿</value>
+  </data>
+  <data name="SettingsMcpCapUploadRead" xml:space="preserve">
+    <value>读取上传草稿</value>
+  </data>
+  <data name="SettingsMcpCapUploadReadDesc" xml:space="preserve">
+    <value>读取某个 Mod 的上传草稿与默认值（get_upload_draft）。</value>
+  </data>
+  <data name="SettingsMcpCapUploadWrite" xml:space="preserve">
+    <value>修改上传草稿</value>
+  </data>
+  <data name="SettingsMcpCapUploadWriteDesc" xml:space="preserve">
+    <value>写入或删除上传草稿（save_upload_draft / clear_upload_draft）；不会发布 Mod。</value>
+  </data>
+  <data name="SettingsMcpCapGroupPlaySets" xml:space="preserve">
+    <value>播放集</value>
+  </data>
+  <data name="SettingsMcpCapPlaySetsRead" xml:space="preserve">
+    <value>读取播放集</value>
+  </data>
+  <data name="SettingsMcpCapPlaySetsReadDesc" xml:space="preserve">
+    <value>读取某款游戏的播放集列表（get_playsets_page）。</value>
+  </data>
+  <data name="SettingsMcpCapPlaySetsPlan" xml:space="preserve">
+    <value>提议播放集变更</value>
+  </data>
+  <data name="SettingsMcpCapPlaySetsPlanDesc" xml:space="preserve">
+    <value>提交新建 / 改名播放集、启用或禁用 Mod 的变更计划，由你在 MCP 页确认后执行。</value>
+  </data>
+  <data name="SettingsMcpCapGroupSettings" xml:space="preserve">
+    <value>设置</value>
+  </data>
+  <data name="SettingsMcpCapSettingsRead" xml:space="preserve">
+    <value>读取设置</value>
+  </data>
+  <data name="SettingsMcpCapSettingsReadDesc" xml:space="preserve">
+    <value>读取可公开的启动器设置项（get_settings_page）；不含密钥、代理与账号。</value>
+  </data>
+  <data name="SettingsMcpCapSettingsPlan" xml:space="preserve">
+    <value>提议设置变更</value>
+  </data>
+  <data name="SettingsMcpCapSettingsPlanDesc" xml:space="preserve">
+    <value>提交修改白名单设置项的变更计划，由你在 MCP 页确认后执行。</value>
+  </data>
   <data name="ModlibQuickAddToActivePlaySet" xml:space="preserve">
     <value>添加到当前播放集</value>
   </data>

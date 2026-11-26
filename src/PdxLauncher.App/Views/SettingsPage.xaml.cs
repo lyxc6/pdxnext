@@ -7,6 +7,7 @@ using PdxLauncher.Core.Mcp;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Navigation;
 using PdxLauncher.App.Controls;
 using PdxLauncher.App.Localization;
 using PdxLauncher.App.Services;
@@ -23,6 +24,15 @@ using Windows.System;
 public sealed partial class SettingsPage : Page, INotifyPropertyChanged
 {
     private int _sectionIndex = -1;
+
+    /// <summary>从密钥子页带回来的结果；OnLoaded 恢复分节后消费。</summary>
+    private McpKeyEditorNavigationResult? _pendingKeyEditorResult;
+
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
+        _pendingKeyEditorResult = e.Parameter as McpKeyEditorNavigationResult;
+    }
 
     /// <summary>供 x:Load / Visibility 绑定：同一时刻只有选中分节为 true。</summary>
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -136,6 +146,15 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
             // 回到上次停留的分节（冷启动也生效），并把左栏高亮一起同步；
             // 缓存统计紧接着单独跑一次，所以这里不再重复触发。
             RestoreSection();
+
+            // 从 MCP 密钥子页回来：强制停在 MCP 分节并消费一次性明文，
+            // 否则 RestoreSection 可能把用户送到别的分节。
+            if (_pendingKeyEditorResult is { } keyResult)
+            {
+                _pendingKeyEditorResult = null;
+                ShowSection(McpSectionIndex, refreshCache: false);
+                ApplyMcpKeyEditorResult(keyResult);
+            }
 
             // 缓存占用只看文件属性，独立于设置加载，失败不该影响整页。
             await _viewModel.RefreshCacheStatsAsync(_lifetime.Token).ConfigureAwait(true);
@@ -279,7 +298,7 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
                 Path.Combine(AppContext.BaseDirectory, "PdxLauncher.Mcp.exe"),
                 AppServices.DataRoot,
                 _viewModel.McpEnabled,
-                _viewModel.McpDraftWriteEnabled);
+                readOnlyHint: false);
         _viewModel.RefreshMcpAccessKeys();
         _viewModel.RefreshMcpChangePlans();
         mcpDocsContent.SetSelectedKey(mcpDocsContent.SelectedKey, _viewModel.McpAccessKeys);
@@ -293,12 +312,12 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
     private void OnViewModelPropertyChangedForMcp(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is not (nameof(SettingsViewModel.McpEnabled)
-            or nameof(SettingsViewModel.McpDraftWriteEnabled)))
+            or nameof(SettingsViewModel.HasMcpWriteCapability)))
         {
             return;
         }
 
-        mcpDocsContent.RefreshPermissions(_viewModel.McpEnabled, _viewModel.McpDraftWriteEnabled);
+        mcpDocsContent.RefreshPermissions(_viewModel.McpEnabled, !_viewModel.HasMcpWriteCapability);
         mcpDocsContent.SetSelectedKey(mcpDocsContent.SelectedKey, _viewModel.McpAccessKeys);
     }
 
@@ -363,72 +382,54 @@ public sealed partial class SettingsPage : Page, INotifyPropertyChanged
         }
     }
 
-    public bool HasOneTimeMcpKey => !string.IsNullOrEmpty(OneTimeMcpKeyBox?.Text);
-
     public bool HasNoMcpAccessKeys => _viewModel.McpAccessKeys.Count == 0;
 
-    private void OnPropertyChangedForMcpKeys()
-    {
-        OnPropertyChanged(nameof(HasOneTimeMcpKey));
-        OnPropertyChanged(nameof(HasNoMcpAccessKeys));
-    }
+    private void OnPropertyChangedForMcpKeys() => OnPropertyChanged(nameof(HasNoMcpAccessKeys));
 
-    private void OnCreateMcpKeyClick(object sender, RoutedEventArgs e)
-    {
-        var name = string.IsNullOrWhiteSpace(McpKeyNameBox?.Text) ? "AI Client" : McpKeyNameBox.Text.Trim();
-        var created = _viewModel.CreateMcpAccessKey(name, SelectedMcpKeyScope());
-        if (created is null)
-        {
-            return;
-        }
+    /// <summary>「新建密钥」进独立子页；权限在子页里按能力勾选，不再在这里选预设。</summary>
+    private void OnNewMcpKeyClick(object sender, RoutedEventArgs e) =>
+        RequestMcpKeyEditor(new McpKeyEditorNavigationRequest(null, string.Empty, null));
 
-        OneTimeMcpKeyBox.Text = created.RawToken;
-        if (McpKeyNameBox is not null)
-        {
-            McpKeyNameBox.Text = string.Empty;
-        }
-
-        OnPropertyChangedForMcpKeys();
-        mcpDocsContent.SetSelectedKey(created, _viewModel.McpAccessKeys);
-    }
-
-    /// <summary>下拉顺序：只读 / 上传草稿 / 播放集 / 设置 / 全部，默认只读。</summary>
-    private IReadOnlyList<string> SelectedMcpKeyScope()
-    {
-        var index = Math.Clamp(McpKeyScopeBox?.SelectedIndex ?? 0, 0, McpScopeChoices.Count - 1);
-        return McpScopeChoices[index];
-    }
-
-    private static readonly IReadOnlyList<IReadOnlyList<string>> McpScopeChoices =
-    new IReadOnlyList<string>[]
-    {
-        new[] { McpPermissionScopes.UploadRead, McpPermissionScopes.PlaySetsRead, McpPermissionScopes.SettingsRead },
-        new[] { McpPermissionScopes.UploadRead, McpPermissionScopes.UploadWrite },
-        new[] { McpPermissionScopes.PlaySetsRead, McpPermissionScopes.PlaySetsWriteSafe },
-        new[] { McpPermissionScopes.SettingsRead, McpPermissionScopes.SettingsWriteSafe },
-        new[] { "*" },
-    };
-
-    private void OnRotateMcpKeyClick(object sender, RoutedEventArgs e)
+    /// <summary>点名字 / 编辑按钮都进同一个编辑页。</summary>
+    private void OnEditMcpKeyClick(object sender, RoutedEventArgs e)
     {
         if (sender is Button { Tag: string id })
         {
-            var created = _viewModel.RotateMcpAccessKey(id);
-            if (created is not null)
+            var key = _viewModel.McpAccessKeys.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, id, StringComparison.Ordinal));
+            if (key is not null)
             {
-                OneTimeMcpKeyBox.Text = created.RawToken;
-                OnPropertyChangedForMcpKeys();
-                mcpDocsContent.SetSelectedKey(created, _viewModel.McpAccessKeys);
+                RequestMcpKeyEditor(new McpKeyEditorNavigationRequest(key.Id, key.DisplayName, key.KeyPrefix));
             }
         }
     }
 
-    private void OnDeleteMcpKeyClick(object sender, RoutedEventArgs e)
+    /// <summary>子页只抛事件，导航由 MainWindow 统一执行（与「添加模组」一致）。</summary>
+    public event EventHandler<McpKeyEditorNavigationRequest>? McpKeyEditorRequested;
+
+    private void RequestMcpKeyEditor(McpKeyEditorNavigationRequest request) =>
+        McpKeyEditorRequested?.Invoke(this, request);
+
+    /// <summary>从密钥子页回来：刷新列表，并把一次性明文交回文档区的客户端配置。</summary>
+    public void ApplyMcpKeyEditorResult(McpKeyEditorNavigationResult result)
     {
-        if (sender is Button { Tag: string id })
+        _viewModel.RefreshMcpAccessKeys();
+        OnPropertyChangedForMcpKeys();
+
+        if (!string.IsNullOrWhiteSpace(result.CreatedToken) && result.KeyId is { } keyId)
         {
-            _viewModel.DeleteMcpAccessKey(id);
+            var key = _viewModel.McpAccessKeys.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, keyId, StringComparison.Ordinal));
+            if (key is not null)
+            {
+                mcpDocsContent.SetSelectedKey(
+                    new McpCreatedAccessKey(key, result.CreatedToken),
+                    _viewModel.McpAccessKeys);
+                return;
+            }
         }
+
+        mcpDocsContent.SetSelectedKey(null, _viewModel.McpAccessKeys);
     }
 
     private void OnMcpCallsPreviousClick(object sender, RoutedEventArgs e)

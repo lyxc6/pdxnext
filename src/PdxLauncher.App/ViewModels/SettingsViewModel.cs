@@ -145,20 +145,6 @@ public sealed class SettingsViewModel : LocalizedObservableObject
         return result;
     }
 
-    public McpCreatedAccessKey? CreateMcpAccessKey(
-        string displayName,
-        IReadOnlyList<string>? allowedTools = null) =>
-        MutateMcpAccessKey(store => store.Create(
-            displayName,
-            allowedTools ?? (string[])["upload.read"],
-            null));
-
-    public McpCreatedAccessKey? RotateMcpAccessKey(string id) =>
-        MutateMcpAccessKey(store => store.Rotate(id));
-
-    public bool DeleteMcpAccessKey(string id) =>
-        MutateMcpAccessKey(store => store.Delete(id));
-
     public bool SetMcpAccessKeyEnabled(string id, bool enabled) =>
         MutateMcpAccessKey(store => store.SetEnabled(id, enabled));
 
@@ -170,7 +156,6 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             Path.Combine(AppContext.BaseDirectory, "PdxLauncher.Mcp.exe"),
             AppServices.DataRoot,
             AppServices.Settings.McpEnabled,
-            AppServices.Settings.McpDraftWriteEnabled,
             selectedKey?.Key,
             selectedKey?.RawToken ?? string.Empty);
         OnPropertyChanged(nameof(McpClientConfigText));
@@ -219,9 +204,16 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     public string McpPermissionModeText =>
         !AppServices.Settings.McpEnabled
             ? T(Keys.McpPermissionOff)
-            : AppServices.Settings.McpDraftWriteEnabled
+            : HasMcpWriteCapability
                 ? T(Keys.McpPermissionReadWrite)
                 : T(Keys.McpPermissionReadOnly);
+
+    /// <summary>是否存在任一密钥授予了写入类能力；用来给概览一句「当前是否可能写入」。</summary>
+    public bool HasMcpWriteCapability =>
+        McpAccessKeys.Any(key =>
+            key.CapabilityList.Contains(McpCapabilityCatalog.UploadWrite, StringComparer.Ordinal)
+            || key.CapabilityList.Contains(McpCapabilityCatalog.PlaySetsPlan, StringComparer.Ordinal)
+            || key.CapabilityList.Contains(McpCapabilityCatalog.SettingsPlan, StringComparer.Ordinal));
 
     /// <summary>
     /// 概览的「服务状态」：真实探测结果优先，没探测过就显示「未检测」。
@@ -255,15 +247,25 @@ public sealed class SettingsViewModel : LocalizedObservableObject
     /// <summary>按「是否总开关开启 + 是否草稿写入」计算当前权限下会暴露的工具数。</summary>
     public int McpToolCount =>
         AppServices.IsInitialized
-            ? McpToolCatalog.Tools.Count(tool =>
-                tool.Risk == McpToolRisk.ReadOnly || AppServices.Settings.McpDraftWriteEnabled)
+            ? McpToolCatalog.Tools.Count(ToolCoveredByAnyKey)
             : McpToolCatalog.Tools.Count;
 
     /// <summary>当前权限下的工具子集，供目录与「可用工具」标签绑定。</summary>
     public IReadOnlyList<McpToolDescriptor> McpVisibleTools =>
-        AppServices.IsInitialized && !AppServices.Settings.McpDraftWriteEnabled
-            ? McpToolCatalog.Tools.Where(tool => tool.Risk == McpToolRisk.ReadOnly).ToArray()
+        AppServices.IsInitialized
+            ? McpToolCatalog.Tools.Where(ToolCoveredByAnyKey).ToArray()
             : McpToolCatalog.Tools;
+
+    /// <summary>
+    /// 目录标记「当前是否有密钥能调用它」：兼容模式只覆盖读取工具；
+    /// 有密钥时按各密钥能力取并集。真正的逐密钥过滤仍在 MCP 服务里。
+    /// </summary>
+    private bool ToolCoveredByAnyKey(McpToolDescriptor tool) =>
+        McpAccessKeys.Count > 0
+            ? McpAccessKeys.Any(key => key.CapabilityList.Any(capability =>
+                McpCapabilityCatalog.AllowsTool(capability, tool.Name)))
+            : McpCapabilityCatalog.ReadOnly.Any(capability =>
+                McpCapabilityCatalog.AllowsTool(capability, tool.Name));
 
     public async Task RunMcpProbeAsync()
     {
@@ -283,8 +285,7 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             var result = await Task.Run(() => McpConnectionProbe.Run(
                 exePath,
                 AppServices.DataRoot,
-                AppServices.Settings.McpEnabled,
-                AppServices.Settings.McpDraftWriteEnabled)).ConfigureAwait(true);
+                AppServices.Settings.McpEnabled)).ConfigureAwait(true);
 
             HasMcpProbeRun = true;
             McpProbeToolCount = result.ToolCount;
@@ -1526,21 +1527,6 @@ public sealed class SettingsViewModel : LocalizedObservableObject
             v => AppServices.Settings.McpEnabled = v,
             Keys.SettingsMcpStatusEnabled,
             Keys.SettingsMcpStatusDisabled,
-            afterSave: RefreshMcpPermissions);
-    }
-
-    /// <summary>
-    /// MCP 草稿写入开关（默认关）：开启后 AI 才能保存/删除上传草稿，发布仍需用户确认。
-    /// </summary>
-    public bool McpDraftWriteEnabled
-    {
-        get => AppServices.Settings.McpDraftWriteEnabled;
-        set => ApplyFlag(
-            value,
-            AppServices.Settings.McpDraftWriteEnabled,
-            v => AppServices.Settings.McpDraftWriteEnabled = v,
-            Keys.SettingsMcpStatusWriteOn,
-            Keys.SettingsMcpStatusWriteOff,
             afterSave: RefreshMcpPermissions);
     }
 
