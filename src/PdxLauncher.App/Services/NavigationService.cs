@@ -57,6 +57,9 @@ public sealed class NavigationService
     /// <summary>设置页的导航 Tag。</summary>
     public const string SettingsTag = "settings";
 
+    /// <summary>「MCP 访问密钥」子页的导航 Tag（不是左栏菜单项）。</summary>
+    public const string McpKeyEditorTag = "mcpkeyeditor";
+
     /// <summary>「性能与日志」页的导航 Tag。</summary>
     public const string DiagnosticsTag = "diagnostics";
 
@@ -80,6 +83,7 @@ public sealed class NavigationService
         [AchievementsTag] = "PdxLauncher.App.Views.AchievementsPage",
         [AccountTag] = "PdxLauncher.App.Views.AccountPage",
         [SettingsTag] = "PdxLauncher.App.Views.SettingsPage",
+        [McpKeyEditorTag] = "PdxLauncher.App.Views.McpKeyEditorPage",
         [DiagnosticsTag] = "PdxLauncher.App.Views.DiagnosticsPage",
         [CrashAnalysisTag] = "PdxLauncher.App.Views.CrashAnalysisPage",
     };

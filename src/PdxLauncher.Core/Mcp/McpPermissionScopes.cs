@@ -20,6 +20,7 @@ public static class McpPermissionScopes
         "mcp_describe_capabilities",
     };
 
+    /// <summary>旧版本写进密钥的已登记作用域；新密钥改用 <see cref="McpCapabilityCatalog"/>。</summary>
     private static readonly HashSet<string> Known = new(StringComparer.Ordinal)
     {
         UploadRead,

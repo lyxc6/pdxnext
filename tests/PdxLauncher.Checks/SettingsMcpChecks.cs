@@ -24,6 +24,9 @@ public static class SettingsMcpChecks
         var mcpServer = Read(root, "src", "PdxLauncher.Mcp", "McpServer.cs");
         var mcpProgram = Read(root, "src", "PdxLauncher.Mcp", "Program.cs");
         var appSettings = Read(root, "src", "PdxLauncher.Core", "Configuration", "AppSettings.cs");
+        var editorXaml = Read(root, "src", "PdxLauncher.App", "Views", "McpKeyEditorPage.xaml");
+        var editorCode = Read(root, "src", "PdxLauncher.App", "Views", "McpKeyEditorPage.xaml.cs");
+        var editorVm = Read(root, "src", "PdxLauncher.App", "ViewModels", "McpKeyEditorViewModel.cs");
 
         ChecksContext.Check(
             "设置 MCP: 左侧有 MCP 导航（Tag=7）",
@@ -47,10 +50,28 @@ public static class SettingsMcpChecks
                 && settingsVm.Contains("RefreshMcpCalls", StringComparison.Ordinal)
                 && settingsVm.Contains("McpCallHistoryStore", StringComparison.Ordinal));
         ChecksContext.Check(
-            "设置 MCP: 分节索引与 XAML 顺序一致",
-            settingsCode.Contains("IsMcpSection => _sectionIndex == 7", StringComparison.Ordinal)
-                && settingsCode.Contains("McpSectionIndex = 7", StringComparison.Ordinal)
-                && settingsCode.Contains("OnPropertyChanged(nameof(IsMcpSection))", StringComparison.Ordinal));
+            "设置 MCP: 密钥列表与子页入口齐全",
+            settingsXaml.Contains("AutomationProperties.AutomationId=\"expMcpAccessKeys\"", StringComparison.Ordinal)
+                && settingsXaml.Contains("Click=\"OnNewMcpKeyClick\"", StringComparison.Ordinal)
+                && settingsXaml.Contains("Click=\"OnEditMcpKeyClick\"", StringComparison.Ordinal)
+                && !settingsXaml.Contains("McpKeyScopeBox", StringComparison.Ordinal)
+                && !settingsXaml.Contains("tglMcpDraftWrite", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "设置 MCP: 密钥子页按能力勾选",
+            File.Exists(Path.Combine(root, "src", "PdxLauncher.App", "Views", "McpKeyEditorPage.xaml"))
+                && File.Exists(Path.Combine(root, "src", "PdxLauncher.App", "Views", "McpKeyEditorPage.xaml.cs"))
+                && Read(root, "src", "PdxLauncher.App", "Views", "McpKeyEditorPage.xaml")
+                    .Contains("chkMcpCapUploadWrite", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "设置 MCP: 新建后先留在页内展示一次性密钥",
+            editorCode.Contains("_createdTokenToReturn", StringComparison.Ordinal)
+                && editorCode.Contains("if (_viewModel.HasCreatedToken)", StringComparison.Ordinal)
+                && editorCode.Contains("RefreshFooter()", StringComparison.Ordinal)
+                && editorVm.Contains("public string CreatedToken", StringComparison.Ordinal));
+        ChecksContext.Check(
+            "设置 MCP: 删除密钥要二次确认",
+            editorCode.Contains("ConfirmOverlay.ConfirmAsync(", StringComparison.Ordinal)
+                && editorCode.Contains("SettingsMcpKeyDeleteContent", StringComparison.Ordinal));
         ChecksContext.Check(
             "设置 MCP: 文档按当前路径与权限初始化",
             settingsCode.Contains("InitializeContent(", StringComparison.Ordinal)
@@ -59,14 +80,13 @@ public static class SettingsMcpChecks
                 && settingsCode.Contains("RefreshPermissions(", StringComparison.Ordinal));
 
         ChecksContext.Check(
-            "设置 MCP: 两个权限开关都落盘",
+            "设置 MCP: 只有服务总开关落盘",
             settingsVm.Contains("public bool McpEnabled", StringComparison.Ordinal)
-                && settingsVm.Contains("public bool McpDraftWriteEnabled", StringComparison.Ordinal)
-                && CountOccurrences(settingsVm, "ApplyFlag(") >= 2);
+                && !settingsVm.Contains("public bool McpDraftWriteEnabled", StringComparison.Ordinal));
         ChecksContext.Check(
-            "设置 MCP: 设置模型有两个权限字段",
+            "设置 MCP: 全局写入开关已退役（只留兼容字段）",
             appSettings.Contains("public bool McpEnabled { get; set; } = true", StringComparison.Ordinal)
-                && appSettings.Contains("public bool McpDraftWriteEnabled { get; set; }", StringComparison.Ordinal));
+                && appSettings.Contains("[Obsolete(", StringComparison.Ordinal));
         ChecksContext.Check(
             "设置 MCP: 权限文本和配置跟随开关刷新",
             docsControlXaml.Contains("x:Bind PermissionText", StringComparison.Ordinal)
@@ -86,19 +106,20 @@ public static class SettingsMcpChecks
                 && mcpServer.Contains("new JsonArray()", StringComparison.Ordinal)
                 && mcpServer.Contains("MCP 工具已在 PdxNext 设置中关闭", StringComparison.Ordinal));
         ChecksContext.Check(
-            "MCP 权限: 写入工具按开关过滤",
-            mcpTools.Contains("IsToolAllowed(name)", StringComparison.Ordinal)
-                && mcpTools.Contains("\"save_upload_draft\" or \"clear_upload_draft\" => _draftWriteEnabled", StringComparison.Ordinal)
-                && mcpTools.Contains("if (_draftWriteEnabled)", StringComparison.Ordinal));
+            "MCP 权限: 工具放行只看密钥能力",
+            mcpTools.Contains("private bool IsToolAllowed(string name, JsonObject? arguments = null)", StringComparison.Ordinal)
+                && mcpTools.Contains("McpLegacyAuthorization.Instance", StringComparison.Ordinal)
+                && !mcpTools.Contains("_draftWriteEnabled", StringComparison.Ordinal));
         ChecksContext.Check(
-            "MCP 权限: 命令行接收开关参数",
+            "MCP 权限: 命令行接收兼容只读参数并容忍旧写入参数",
             mcpProgram.Contains("--enabled", StringComparison.Ordinal)
-                && mcpProgram.Contains("--draft-write", StringComparison.Ordinal)
+                && mcpProgram.Contains("--legacy-read-only", StringComparison.Ordinal)
+                && mcpProgram.Contains("SkipLegacyDraftWriteOption", StringComparison.Ordinal)
                 && mcpProgram.Contains("TryParseBoolOption", StringComparison.Ordinal));
         ChecksContext.Check(
-            "MCP 权限: 自然语言提示词带权限参数",
+            "MCP 权限: 自然语言提示词带只读参数",
             docsControlCode.Contains("Keys.ModstudioMcpQuickInstallPrompt", StringComparison.Ordinal)
-                && docsControlCode.Contains("draftWriteEnabled ? \"true\" : \"false\"", StringComparison.Ordinal));
+                && docsControlCode.Contains("readOnlyHint ? \"true\" : \"false\"", StringComparison.Ordinal));
 
         ChecksContext.Check(
             "设置 MCP: 概览状态来自真实探测而非权限文案",
@@ -142,8 +163,10 @@ public static class SettingsMcpChecks
                      "SettingsNavMcp",
                      "SettingsSectionMcp",
                      "SettingsMcpEnabled",
-                     "SettingsMcpDraftWrite",
-                     "SettingsMcpToolSummary",
+                     "SettingsMcpKeyOnlyHint",
+                     "SettingsMcpCapUploadWrite",
+                     "SettingsMcpKeyEdit",
+                     "SettingsMcpKeyCreateTitle",
                      "McpPermissionReadOnly",
                  })
         {

@@ -16,7 +16,6 @@ public static class McpPageSnapshotSourceChecks
         var settings = new AppSettings
         {
             McpEnabled = true,
-            McpDraftWriteEnabled = true,
             TranslateApiKey = "secret",
             ProxyUrl = "http://secret",
             UiLanguage = "zh-CN",

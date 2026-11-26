@@ -1860,54 +1860,39 @@
                                                   AutomationProperties.Name="{x:Bind L.SettingsMcpEnabledName, Mode=OneWay}"
                                                   IsOn="{x:Bind ViewModel.McpEnabled, Mode=TwoWay}" />
                                 </ct:SettingsCard>
-                                <ct:SettingsCard Header="{x:Bind L.SettingsMcpDraftWrite, Mode=OneWay}"
-                                                 ContentAlignment="Vertical"
-                                                 Background="Transparent" BorderThickness="0" Padding="0,8,0,8"
-                                                 HorizontalAlignment="Stretch"
-                                                 AutomationProperties.AutomationId="cardMcpDraftWrite">
-                                    <ToggleSwitch MinWidth="0"
-                                                  AutomationProperties.AutomationId="tglMcpDraftWrite"
-                                                  AutomationProperties.Name="{x:Bind L.SettingsMcpDraftWriteName, Mode=OneWay}"
-                                                  IsOn="{x:Bind ViewModel.McpDraftWriteEnabled, Mode=TwoWay}" />
-                                </ct:SettingsCard>
                                 <controls:McpDocsContent x:Name="mcpDocsContent"
                                                          Loaded="OnMcpDocsContentLoaded"
                                                          AutomationProperties.AutomationId="mcpDocsContent" />
+                               </StackPanel>
+                        </Border>
 
-                                <TextBlock Text="{x:Bind L.SettingsMcpAccessKeys, Mode=OneWay}"
-                                           Style="{StaticResource BodyStrongTextBlockStyle}" />
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBox x:Name="McpKeyNameBox"
-                                             Header="{x:Bind L.SettingsMcpKeyDisplayName, Mode=OneWay}"
-                                             PlaceholderText="{x:Bind L.SettingsMcpKeyDisplayNamePlaceholder, Mode=OneWay}"
-                                             MinWidth="200"
-                                             AutomationProperties.AutomationId="txtMcpKeyName" />
-                                    <ComboBox x:Name="McpKeyScopeBox"
-                                              Header="{x:Bind L.SettingsMcpKeyScope, Mode=OneWay}"
-                                              MinWidth="220"
-                                              SelectedIndex="0"
-                                              AutomationProperties.AutomationId="cmbMcpKeyScope">
-                                        <ComboBoxItem Content="{x:Bind L.SettingsMcpKeyScopeDefault, Mode=OneWay}" />
-                                        <ComboBoxItem Content="{x:Bind L.SettingsMcpKeyScopeUpload, Mode=OneWay}" />
-                                        <ComboBoxItem Content="{x:Bind L.SettingsMcpKeyScopePlaySets, Mode=OneWay}" />
-                                        <ComboBoxItem Content="{x:Bind L.SettingsMcpKeyScopeSettings, Mode=OneWay}" />
-                                        <ComboBoxItem Content="{x:Bind L.SettingsMcpKeyScopeAll, Mode=OneWay}" />
-                                    </ComboBox>
-                                    <Button Content="{x:Bind L.SettingsMcpNewKey, Mode=OneWay}"
-                                            Click="OnCreateMcpKeyClick"
-                                            VerticalAlignment="Bottom"
-                                            AutomationProperties.AutomationId="btnCreateMcpKey" />
-                                </StackPanel>
-                                <TextBlock Text="{x:Bind L.SettingsMcpKeyOnce, Mode=OneWay}"
-                                           Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                                           TextWrapping="Wrap"
-                                           Visibility="{x:Bind svc:XamlVisibility.FromBool(HasOneTimeMcpKey), Mode=OneWay}" />
-                                <TextBox x:Name="OneTimeMcpKeyBox"
-                                         IsReadOnly="True"
-                                         TextWrapping="Wrap"
-                                         FontFamily="Consolas"
-                                         Visibility="{x:Bind svc:XamlVisibility.FromBool(HasOneTimeMcpKey), Mode=OneWay}"
-                                         AutomationProperties.AutomationId="txtOneTimeMcpKey" />
+                        <!-- 访问密钥独立成一节：权限在子页里按能力勾选，列表只显示摘要。 -->
+                        <Border Padding="12"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                BorderBrush="{ThemeResource PdxCardStrokeBrush}"
+                                Background="{ThemeResource PdxCardBackgroundBrush}"
+                                AutomationProperties.AutomationId="expMcpAccessKeys">
+                            <StackPanel Spacing="8">
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Spacing="4">
+                                        <TextBlock Text="{x:Bind L.SettingsMcpAccessKeys, Mode=OneWay}"
+                                                   Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                        <TextBlock Text="{x:Bind L.SettingsMcpAccessKeysHint, Mode=OneWay}"
+                                                   TextWrapping="Wrap"
+                                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                    <Button Grid.Column="1"
+                                            Content="{x:Bind L.SettingsMcpNewKey, Mode=OneWay}"
+                                            Click="OnNewMcpKeyClick"
+                                            VerticalAlignment="Top"
+                                            AutomationProperties.AutomationId="btnNewMcpKey" />
+                                </Grid>
                                 <TextBlock Text="{x:Bind L.SettingsMcpNoKeys, Mode=OneWay}"
                                            Visibility="{x:Bind svc:XamlVisibility.FromBool(HasNoMcpAccessKeys), Mode=OneWay}"
                                            Style="{StaticResource SettingsHintTextStyle}" />
@@ -1920,7 +1905,9 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="mcp:McpAccessKey">
-                                            <Grid Padding="12" CornerRadius="8" BorderThickness="1"
+                                            <Grid Padding="12"
+                                                  ColumnSpacing="8"
+                                                  CornerRadius="8" BorderThickness="1"
                                                   BorderBrush="{ThemeResource PdxCardStrokeBrush}"
                                                   Background="{ThemeResource PdxCardBackgroundBrush}">
                                                 <Grid.ColumnDefinitions>
@@ -1928,19 +1915,36 @@
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
                                                 <StackPanel Spacing="4">
-                                                    <TextBlock Text="{x:Bind DisplayName}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <TextBlock Text="{x:Bind DisplayName}" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                                                        <Border Padding="8,0" CornerRadius="4" Background="{ThemeResource SubtleFillColorSecondaryBrush}" VerticalAlignment="Center">
+                                                            <TextBlock Text="{x:Bind StatusText}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                                        </Border>
+                                                    </StackPanel>
                                                     <TextBlock Text="{x:Bind KeyPrefix}" FontFamily="Consolas" Style="{StaticResource CaptionTextBlockStyle}" />
-                                                    <TextBlock Text="{x:Bind StatusText}" Style="{StaticResource CaptionTextBlockStyle}" />
-                                                    <TextBlock Text="{x:Bind AllowedTools}" FontFamily="Consolas" Style="{StaticResource CaptionTextBlockStyle}" />
+                                                    <TextBlock Text="{x:Bind svc:McpCapabilityText.SummaryFor(Capabilities)}"
+                                                               TextWrapping="Wrap"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                    <TextBlock Text="{x:Bind svc:McpCapabilityText.ExpiryFor(ExpiresUtc)}"
+                                                               Style="{StaticResource CaptionTextBlockStyle}"
+                                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                                                 </StackPanel>
                                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
-                                                    <Button Content="{x:Bind svc:McpPlanText.RotateText()}" Click="OnRotateMcpKeyClick" Tag="{x:Bind Id}" AutomationProperties.AutomationId="btnRotateMcpKey" />
-                                                    <Button Content="{x:Bind svc:McpPlanText.DeleteText()}" Click="OnDeleteMcpKeyClick" Tag="{x:Bind Id}" AutomationProperties.AutomationId="btnDeleteMcpKey" />
+                                                    <Button Content="{x:Bind svc:McpPlanText.EditText()}"
+                                                            Click="OnEditMcpKeyClick" Tag="{x:Bind Id}"
+                                                            AutomationProperties.AutomationId="btnEditMcpKey" />
+                                                    <Button Content="{x:Bind svc:McpPlanText.RotateText()}"
+                                                            Click="OnEditMcpKeyClick" Tag="{x:Bind Id}"
+                                                            AutomationProperties.AutomationId="btnRotateMcpKey" />
                                                 </StackPanel>
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+                                <TextBlock Text="{x:Bind L.SettingsMcpKeyOnce, Mode=OneWay}"
+                                           Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                           TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
 

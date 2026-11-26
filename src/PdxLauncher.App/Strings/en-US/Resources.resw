@@ -6639,6 +6639,174 @@ then call list_games to verify.</value>
   <data name="SettingsMcpKeyDisplayNamePlaceholder" xml:space="preserve">
     <value>e.g. Claude Desktop</value>
   </data>
+  <data name="SettingsMcpKeyOnlyHint" xml:space="preserve">
+    <value>Write access comes from the access key alone: a key can write only when its write capability is checked; there is no global gate any more.</value>
+  </data>
+  <data name="SettingsMcpAccessKeysHint" xml:space="preserve">
+    <value>Give each client its own key and check only what it needs. Permissions can be edited at any time and take effect immediately.</value>
+  </data>
+  <data name="SettingsMcpKeyEdit" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="SettingsMcpKeyCreateTitle" xml:space="preserve">
+    <value>New access key</value>
+  </data>
+  <data name="SettingsMcpKeyEditTitle" xml:space="preserve">
+    <value>Edit access key</value>
+  </data>
+  <data name="SettingsMcpKeyCreateSubtitle" xml:space="preserve">
+    <value>Create a dedicated key for this AI client and pick only the capabilities it needs.</value>
+  </data>
+  <data name="SettingsMcpKeyEditSubtitle" xml:space="preserve">
+    <value>Rename, change capabilities or expiry. Changes apply immediately without issuing a new key.</value>
+  </data>
+  <data name="SettingsMcpKeyBack" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="SettingsMcpKeySectionBasics" xml:space="preserve">
+    <value>Basics</value>
+  </data>
+  <data name="SettingsMcpKeySectionCapabilities" xml:space="preserve">
+    <value>Permissions</value>
+  </data>
+  <data name="SettingsMcpKeyCapabilitiesHint" xml:space="preserve">
+    <value>Grouped by area. “Propose changes” only lets the AI submit a change plan; nothing is applied until you confirm it in the launcher.</value>
+  </data>
+  <data name="SettingsMcpKeySectionDanger" xml:space="preserve">
+    <value>Key maintenance</value>
+  </data>
+  <data name="SettingsMcpKeyDangerHint" xml:space="preserve">
+    <value>Rotating invalidates the old key at once and you must paste the new one into the client. Deleting cuts that client off immediately.</value>
+  </data>
+  <data name="SettingsMcpKeyRotate" xml:space="preserve">
+    <value>Rotate key</value>
+  </data>
+  <data name="SettingsMcpKeyDelete" xml:space="preserve">
+    <value>Delete key</value>
+  </data>
+  <data name="SettingsMcpKeyDeleteTitle" xml:space="preserve">
+    <value>Delete this access key?</value>
+  </data>
+  <data name="SettingsMcpKeyDeleteContent" xml:space="preserve">
+    <value>“{0}” stops working immediately, and any AI client using it can no longer call tools. This cannot be undone.</value>
+  </data>
+  <data name="SettingsMcpKeySave" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="SettingsMcpKeyCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="SettingsMcpKeyDone" xml:space="preserve">
+    <value>Done</value>
+  </data>
+  <data name="SettingsMcpKeyCopied" xml:space="preserve">
+    <value>Copied to clipboard</value>
+  </data>
+  <data name="SettingsMcpKeyCreatedTitle" xml:space="preserve">
+    <value>The key is shown only once</value>
+  </data>
+  <data name="SettingsMcpKeyCreatedHint" xml:space="preserve">
+    <value>Copy it now into the matching AI client. It cannot be viewed again after you close or leave this page.</value>
+  </data>
+  <data name="SettingsMcpKeyWriteWarning" xml:space="preserve">
+    <value>This key can write: the AI may edit upload drafts, or submit change plans you must confirm in the launcher. MCP never publishes mods by itself.</value>
+  </data>
+  <data name="SettingsMcpKeyPrefixNew" xml:space="preserve">
+    <value>Generated on save</value>
+  </data>
+  <data name="SettingsMcpKeyStatusNew" xml:space="preserve">
+    <value>Not saved</value>
+  </data>
+  <data name="SettingsMcpKeyNoExpiry" xml:space="preserve">
+    <value>Never expires</value>
+  </data>
+  <data name="SettingsMcpKeyExpiry" xml:space="preserve">
+    <value>Expiry</value>
+  </data>
+  <data name="SettingsMcpKeyExpiryShort" xml:space="preserve">
+    <value>Expires {0}</value>
+  </data>
+  <data name="SettingsMcpKeyExpiryDialogTitle" xml:space="preserve">
+    <value>Choose an expiry date</value>
+  </data>
+  <data name="SettingsMcpKeySetExpiry" xml:space="preserve">
+    <value>Set expiry</value>
+  </data>
+  <data name="SettingsMcpKeyClearExpiry" xml:space="preserve">
+    <value>Clear expiry</value>
+  </data>
+  <data name="SettingsMcpKeyNameRequired" xml:space="preserve">
+    <value>Enter a key name</value>
+  </data>
+  <data name="SettingsMcpKeyCapabilityRequired" xml:space="preserve">
+    <value>Select at least one capability</value>
+  </data>
+  <data name="SettingsMcpStatusUnavailable" xml:space="preserve">
+    <value>Services are not ready yet; try again shortly</value>
+  </data>
+  <data name="SettingsMcpKeySummaryNone" xml:space="preserve">
+    <value>(no capabilities)</value>
+  </data>
+  <data name="SettingsMcpKeySummaryAll" xml:space="preserve">
+    <value>All capabilities</value>
+  </data>
+  <data name="SettingsMcpKeySummarySeparator" xml:space="preserve">
+    <value>, </value>
+  </data>
+  <data name="SettingsMcpCapGroupGames" xml:space="preserve">
+    <value>Games and local mods</value>
+  </data>
+  <data name="SettingsMcpCapGames" xml:space="preserve">
+    <value>Browse games and local mods</value>
+  </data>
+  <data name="SettingsMcpCapGamesDesc" xml:space="preserve">
+    <value>List installed games, uploadable mods and workshop tags (list_games / list_mods / list_tags).</value>
+  </data>
+  <data name="SettingsMcpCapGroupUpload" xml:space="preserve">
+    <value>Upload drafts</value>
+  </data>
+  <data name="SettingsMcpCapUploadRead" xml:space="preserve">
+    <value>Read upload drafts</value>
+  </data>
+  <data name="SettingsMcpCapUploadReadDesc" xml:space="preserve">
+    <value>Read a mod's upload draft and defaults (get_upload_draft).</value>
+  </data>
+  <data name="SettingsMcpCapUploadWrite" xml:space="preserve">
+    <value>Edit upload drafts</value>
+  </data>
+  <data name="SettingsMcpCapUploadWriteDesc" xml:space="preserve">
+    <value>Write or delete upload drafts (save_upload_draft / clear_upload_draft); never publishes mods.</value>
+  </data>
+  <data name="SettingsMcpCapGroupPlaySets" xml:space="preserve">
+    <value>Play sets</value>
+  </data>
+  <data name="SettingsMcpCapPlaySetsRead" xml:space="preserve">
+    <value>Read play sets</value>
+  </data>
+  <data name="SettingsMcpCapPlaySetsReadDesc" xml:space="preserve">
+    <value>Read play set lists for a game (get_playsets_page).</value>
+  </data>
+  <data name="SettingsMcpCapPlaySetsPlan" xml:space="preserve">
+    <value>Propose play set changes</value>
+  </data>
+  <data name="SettingsMcpCapPlaySetsPlanDesc" xml:space="preserve">
+    <value>Submit change plans to create or rename play sets and enable or disable mods, applied after you confirm them on the MCP page.</value>
+  </data>
+  <data name="SettingsMcpCapGroupSettings" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="SettingsMcpCapSettingsRead" xml:space="preserve">
+    <value>Read settings</value>
+  </data>
+  <data name="SettingsMcpCapSettingsReadDesc" xml:space="preserve">
+    <value>Read public launcher settings (get_settings_page); excludes keys, proxy and account data.</value>
+  </data>
+  <data name="SettingsMcpCapSettingsPlan" xml:space="preserve">
+    <value>Propose settings changes</value>
+  </data>
+  <data name="SettingsMcpCapSettingsPlanDesc" xml:space="preserve">
+    <value>Submit change plans for allowlisted settings, applied after you confirm them on the MCP page.</value>
+  </data>
   <data name="ModlibQuickAddToActivePlaySet" xml:space="preserve">
     <value>Add to current play set</value>
   </data>
