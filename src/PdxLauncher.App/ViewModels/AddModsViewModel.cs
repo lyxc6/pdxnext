@@ -445,7 +445,12 @@ public sealed class AddModsViewModel : LocalizedObservableObject
                 await Task.Run(load, cancellationToken).ConfigureAwait(true);
             }
 
-            var snapshot = await _modLibrary.LoadAsync(game, cancellationToken).ConfigureAwait(true);
+            // 刚订阅的工坊 mod 可能已经下载到本地、但官方库还没登记；扫描缓存 60 秒内不失效的话，
+            // 用户先看过一次 Mod 库再进本页，就会拿到「订阅前」的快照。进入本页是一次明确的用户动作，
+            // 强制重扫一次，保证新订阅的条目一定出现在候选里（代价只有一次目录遍历）。
+            var snapshot = await _modLibrary
+                .LoadAsync(game, cancellationToken, forceRefresh: true)
+                .ConfigureAwait(true);
             var existing = await _playSets
                 .GetPlaySetModsAsync(game, playSetId, cancellationToken)
                 .ConfigureAwait(true);

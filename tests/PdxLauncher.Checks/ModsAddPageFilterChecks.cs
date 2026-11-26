@@ -39,6 +39,7 @@ public static class ModsAddPageFilterChecks
             CheckSelectionPreservedAcrossFilters(vm, ids);
             CheckEmptyStateDistinction(vm);
             CheckRelocalizeRestoresKey(vm, ids);
+            CheckRescansCatalogOnLoad();
         }
         finally
         {
@@ -278,6 +279,76 @@ public static class ModsAddPageFilterChecks
         return vm;
     }
 
+    /// <summary>
+    /// 进入本页必须让 mod 扫描缓存失效：刚订阅的工坊 mod 可能已经下载到本地、但官方库还没登记，
+    /// 60 秒缓存会让「先看过 Mod 库再进本页」拿到订阅前的快照，表现为 Mod 库有、添加模组没有。
+    /// 用带失效计数的最小目录替身直接驱动 <see cref="AddModsViewModel.LoadAsync"/>，验证第二次进入能拿到新条目。
+    /// </summary>
+    private static void CheckRescansCatalogOnLoad()
+    {
+        var existingId = Guid.Parse("00000006-0000-0000-0000-000000000006");
+        var newId = Guid.Parse("00000007-0000-0000-0000-000000000007");
+        var repository = new StubPlaySetRepository(
+        [
+            Entry(existingId, "Existing", source: "steam", required: "1.21.*", steamId: "100"),
+        ]);
+        var catalog = new MutableModCatalog(
+        [
+            new PlaySetMod(
+                existingId,
+                "Existing mod",
+                DirPath: string.Empty,
+                ArchivePath: null,
+                GameRegistryId: string.Empty,
+                ThumbnailPath: null,
+                RequiredVersion: "1.21.*",
+                Status: "ready_to_play",
+                Enabled: true,
+                Position: 0,
+                SteamId: "100"),
+        ]);
+        var service = new ModLibraryService(repository, catalog, new StubLogger());
+        var vm = new AddModsViewModel(repository, service, new StubLogger());
+
+        vm.LoadAsync(Game(), PlaySetId, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Equal("添加模组重新扫描: 首次进入 1 个候选", 1, vm.Rows.Count);
+        // 每次进入都要先失效再扫：只检查「失效次数随扫描次数同步增长」，
+        // 不假设首次进入时全局缓存是否已被别的页面填过。
+        ChecksContext.Check(
+            "添加模组重新扫描: 每次扫描前都失效了缓存",
+            catalog.InvalidateCalls == catalog.DiscoverCalls,
+            "discover=" + catalog.DiscoverCalls + " invalidate=" + catalog.InvalidateCalls);
+
+        catalog.Mods.Add(new PlaySetMod(
+            newId,
+            "Just subscribed mod",
+            DirPath: string.Empty,
+            ArchivePath: null,
+            GameRegistryId: string.Empty,
+            ThumbnailPath: null,
+            RequiredVersion: "*",
+            Status: "ready_to_play",
+            Enabled: true,
+            Position: 0,
+            SteamId: "200"));
+
+        // 模拟「离开后重新进入」：同一个目录实例（缓存仍在），第二次加载必须强制失效再扫。
+        vm.LoadAsync(Game(), PlaySetId, CancellationToken.None).GetAwaiter().GetResult();
+        ChecksContext.Check(
+            "添加模组重新扫描: 第二次进入仍先失效缓存再扫描",
+            catalog.InvalidateCalls == catalog.DiscoverCalls && catalog.DiscoverCalls == 2,
+            "discover=" + catalog.DiscoverCalls + " invalidate=" + catalog.InvalidateCalls);
+        ChecksContext.Check(
+            "添加模组重新扫描: 刚订阅的 mod 出现在候选里",
+            vm.Rows.Any(row => row.ModId == newId),
+            Names(vm));
+        ChecksContext.Check(
+            "添加模组重新扫描: 未声明的支持版本（*）不会被当作版本偏低",
+            vm.Rows.Single(row => row.ModId == newId).VersionSupport
+                == PdxLauncher.Core.Playsets.ModVersionSupport.Undeclared,
+            Names(vm));
+    }
+
     private static IReadOnlyList<ModLibraryEntry> BuildEntries(out FixtureIds ids)
     {
         var localBelow = Guid.Parse("00000001-0000-0000-0000-000000000001");
@@ -424,6 +495,28 @@ public static class ModsAddPageFilterChecks
         public Task<IReadOnlyList<PlaySetMod>> DiscoverAllAsync(
             GameInstallation game, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<PlaySetMod>>([]);
+    }
+
+    /// <summary>可变的目录替身：每次扫描返回当前列表，并记录扫描 / 失效次数。</summary>
+    private sealed class MutableModCatalog(IReadOnlyList<PlaySetMod>? initial = null)
+        : IModCatalog, IScanCacheInvalidator
+    {
+        public List<PlaySetMod> Mods { get; } = initial is null ? [] : [.. initial];
+
+        public int DiscoverCalls { get; private set; }
+
+        public int InvalidateCalls { get; private set; }
+
+        public Task<IReadOnlyList<PlaySetMod>> DiscoverAllAsync(
+            GameInstallation game, CancellationToken cancellationToken)
+        {
+            DiscoverCalls++;
+            return Task.FromResult<IReadOnlyList<PlaySetMod>>(Mods.ToList());
+        }
+
+        public void InvalidateCache(GameInstallation game) => InvalidateCalls++;
+
+        public void ClearCache() => InvalidateCalls++;
     }
 
     private sealed class StubLogger : IAppLogger

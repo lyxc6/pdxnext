@@ -69,7 +69,7 @@ public sealed partial class AddModsPage : Page
         _request = e.Parameter as AddModsNavigationRequest;
     }
 
-    /// <summary>离开页面时记住排序与两项筛选，并立即落盘（下次进入或重启后恢复）。</summary>
+    /// <summary>离开页面时记住排序方式与方向，并立即落盘（下次进入或重启后恢复）。</summary>
     protected override void OnNavigatedFrom(NavigationEventArgs e)
     {
         SaveSortState();
@@ -95,7 +95,9 @@ public sealed partial class AddModsPage : Page
 
         _viewModel.SetPlaySet(_request.PlaySetName);
 
-        // 页面是重建的：先把上次离开时的排序与两项筛选放回去，再加载候选。
+        // 页面是重建的：先把上次离开时的排序放回去，再加载候选。
+        // 来源与版本筛选不恢复：它们会隐藏候选，跨会话留下「版本偏低 / 仅本地」会让刚订阅的
+        // mod 看起来没出现。每次进入都从「全部」开始，用户本次想筛再自己选。
         RestoreSortState();
 
         // x:Bind 在 InitializeComponent 里按属性顺序赋值，下拉控件的 SelectedItem 可能先于
@@ -105,7 +107,8 @@ public sealed partial class AddModsPage : Page
             SortBox.SelectedItem = _viewModel.SelectedSortMode;
         }
 
-        // 同排序框：x:Bind 按属性顺序赋值，来源 / 版本下拉的 SelectedItem 也可能先于 ItemsSource 被清空。
+        // 同排序框：x:Bind 按属性顺序赋值，两个筛选下拉的 SelectedItem 也可能先于 ItemsSource 被清空。
+        // 这里补的是 ViewModel 的默认值（「全部」），不是上次会话的筛选——筛选本身不持久化。
         if (SourceFilterBox.SelectedItem is null)
         {
             SourceFilterBox.SelectedItem = _viewModel.SelectedSourceFilter;
@@ -245,10 +248,7 @@ _lifetime.Cancel();
         SaveSortState();
     }
 
-    /// <summary>
-    /// 把上次离开时的排序与两项筛选套回 ViewModel 与下拉框；旧语言的文案对不上选项时保持默认。
-    /// 每项独立恢复：某一项对不上（例如切过语言）不影响其余项。
-    /// </summary>
+    /// <summary>把上次离开时的排序方式与方向套回 ViewModel 与下拉框；旧语言的文案对不上选项时保持默认。</summary>
     private void RestoreSortState()
     {
         var state = PageStateStore.AddMods;
@@ -268,28 +268,13 @@ _lifetime.Cancel();
         _viewModel.SetSortDescending(state.SortDescending);
         SortDirectionGlyph.Glyph = state.SortDescending ? SortDescendingGlyph : SortAscendingGlyph;
 
-        if (!string.IsNullOrEmpty(state.SourceFilter)
-            && _viewModel.SourceFilterModes.Any(mode => string.Equals(mode, state.SourceFilter, StringComparison.Ordinal)))
-        {
-            _viewModel.SelectedSourceFilter = state.SourceFilter;
-            SourceFilterBox.SelectedItem = state.SourceFilter;
-        }
-
-        if (!string.IsNullOrEmpty(state.VersionFilter)
-            && _viewModel.VersionFilterModes.Any(mode => string.Equals(mode, state.VersionFilter, StringComparison.Ordinal)))
-        {
-            _viewModel.SelectedVersionFilter = state.VersionFilter;
-            VersionFilterBox.SelectedItem = state.VersionFilter;
-        }
     }
 
-    /// <summary>把当前排序与两项筛选写进页面状态（内存态）；落盘由离开页面或关窗时统一做。</summary>
+    /// <summary>把当前排序方式与方向写进页面状态（内存态）；落盘由离开页面或关窗时统一做。</summary>
     private void SaveSortState()
     {
         PageStateStore.AddMods = new AddModsState(
             _viewModel.SelectedSortMode,
-            _viewModel.SelectedSourceFilter,
-            _viewModel.SelectedVersionFilter,
             _viewModel.SortDescending);
     }
 

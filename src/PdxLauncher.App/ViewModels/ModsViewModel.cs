@@ -443,6 +443,14 @@ public sealed class ModsViewModel : LocalizedObservableObject
         IsBusy = true;
         try
         {
+            // 进入播放集页 / 切游戏时让 mod 扫描缓存过期：双列左栏的候选与「添加模组」子页同源，
+            // 刚订阅的工坊 mod 若只靠 60 秒 TTL，用户会看到右栏能加、左栏却还没有。
+            // 这里只失效一次，随后 SelectPlaySetAsync 里的 mod 库读取会重扫并复用这一份结果。
+            if (AppServices.Mods is IScanCacheInvalidator invalidator)
+            {
+                invalidator.InvalidateCache(game);
+            }
+
             var sets = await AppServices.PlaySets
                 .GetPlaySetsAsync(game, cancellationToken)
                 .ConfigureAwait(true);

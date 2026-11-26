@@ -48,21 +48,21 @@ public static class PageStateChecks
 
         var addMods = new AddModsState(
             SortMode: "大小（大到小）",
-            SourceFilter: "仅订阅",
-            VersionFilter: "版本偏低");
+            SortDescending: true);
         PageStateStore.AddMods = addMods;
         ChecksContext.Check(
             "页面状态：添加模组页快照字段原样存取",
             PageStateStore.AddMods is not null
                 && PageStateStore.AddMods.SortMode == "大小（大到小）"
-                && PageStateStore.AddMods.SourceFilter == "仅订阅"
-                && PageStateStore.AddMods.VersionFilter == "版本偏低");
+                && PageStateStore.AddMods.SortDescending);
 
-        // 旧版本只记了 SortMode 的 JSON 必须还能读：两项新筛选为空串，页面按「全部」处理。
-        var legacyAddMods = PageStateSnapshot.Deserialize("{\"ModLibrary\":null,\"ModStudio\":null,\"AddMods\":{\"SortMode\":\"名称\"}}");
+        // 旧版本 JSON 里可能有 SortMode / SourceFilter / VersionFilter：来源与版本筛选不持久化，
+        // 反序列化时多出来的字段直接忽略，页面每次进入都从「全部」开始。
+        var legacyAddMods = PageStateSnapshot.Deserialize(
+            "{\"ModLibrary\":null,\"ModStudio\":null,\"AddMods\":{\"SortMode\":\"名称\",\"SourceFilter\":\"仅订阅\",\"VersionFilter\":\"版本偏低\"}}");
         ChecksContext.Check(
-            "页面状态：旧添加模组页快照（只有排序）仍可读且筛选回落为空",
-            legacyAddMods?.AddMods is { SortMode: "名称", SourceFilter: "", VersionFilter: "" });
+            "页面状态：旧添加模组页快照仍可读，来源 / 版本筛选字段被忽略",
+            legacyAddMods?.AddMods is { SortMode: "名称" });
 
         var draft = new ModStudioDraft(
             CreateName: "我的模组",

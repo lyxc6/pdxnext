@@ -351,25 +351,34 @@ public static class AddModsPageChecks
                 && page.Contains("SaveSortState", StringComparison.Ordinal),
             page);
 
-        // 来源 / 版本筛选与排序一样属于整页显示偏好：离开页面要写进 AddModsState、
-        // 再进入要按键还原，不能只保留排序却让筛选回落「全部」。
+        // 来源 / 版本筛选必须只在本次进入内生效：跨会话留下「版本偏低 / 仅本地」会让刚订阅的
+        // mod 看起来没出现（Mod 库看得到、添加模组没有）。排序可以持久化，这两项不能。
         var state = Read(root, "src", "PdxLauncher.App", "Services", "AddModsState.cs");
+        // 只看 record 的正文（参数列表与默认值），注释里解释「为什么不做」提到了字段名，不算持久化。
+        var declarationStart = state.IndexOf("public sealed record AddModsState(", StringComparison.Ordinal);
+        var declaration = declarationStart >= 0 ? state[declarationStart..] : string.Empty;
         ChecksContext.Check(
-            "添加模组页: AddModsState 含排序 / 来源 / 版本三项且向后兼容",
-            state.Contains("string SortMode", StringComparison.Ordinal)
-                && state.Contains("string SourceFilter =", StringComparison.Ordinal)
-                && state.Contains("string VersionFilter =", StringComparison.Ordinal),
-            state);
+            "添加模组页: AddModsState 只持久化排序与方向（不含来源 / 版本筛选）",
+            declaration.Contains("string SortMode", StringComparison.Ordinal)
+                && declaration.Contains("bool SortDescending =", StringComparison.Ordinal)
+                && !declaration.Contains("SourceFilter", StringComparison.Ordinal)
+                && !declaration.Contains("VersionFilter", StringComparison.Ordinal),
+            declaration);
+        // 只看 SaveSortState / RestoreSortState 的方法体：事件处理器里当然会比较当前筛选值，
+        // 但真正决定「跨会话保留什么」的是这两个方法。
+        var saveState = MethodBody(page, "private void SaveSortState()");
+        var restoreState = MethodBody(page, "private void RestoreSortState()");
         ChecksContext.Check(
-            "添加模组页: 来源 / 版本筛选随页面状态存取",
-            page.Contains("_viewModel.SelectedSourceFilter,", StringComparison.Ordinal)
-                && page.Contains("_viewModel.SelectedVersionFilter,", StringComparison.Ordinal)
-                && page.Contains("_viewModel.SortDescending);", StringComparison.Ordinal)
-                && page.Contains("_viewModel.SourceFilterModes.Any", StringComparison.Ordinal)
-                && page.Contains("_viewModel.VersionFilterModes.Any", StringComparison.Ordinal)
-                && page.Contains("SourceFilterBox.SelectedItem = state.SourceFilter", StringComparison.Ordinal)
-                && page.Contains("VersionFilterBox.SelectedItem = state.VersionFilter", StringComparison.Ordinal),
-            page);
+            "添加模组页: SaveSortState 只写排序、不写来源 / 版本筛选",
+            saveState.Contains("_viewModel.SortDescending);", StringComparison.Ordinal)
+                && !saveState.Contains("SourceFilter", StringComparison.Ordinal)
+                && !saveState.Contains("VersionFilter", StringComparison.Ordinal),
+            saveState);
+        ChecksContext.Check(
+            "添加模组页: RestoreSortState 不还原来源 / 版本筛选",
+            !restoreState.Contains("SourceFilter", StringComparison.Ordinal)
+                && !restoreState.Contains("VersionFilter", StringComparison.Ordinal),
+            restoreState);
     }
 
     /// <summary>XAML 里不许出现硬编码中文（注释除外）：所有文案走 Localizer。</summary>
@@ -503,6 +512,41 @@ public static class AddModsPageChecks
         var closeTag = "</" + tagName + ">";
         var close = text.IndexOf(closeTag, tagEnd, StringComparison.Ordinal);
         return close > tagEnd ? text[start..(close + closeTag.Length)] : text[start..(tagEnd + 1)];
+    }
+
+    /// <summary>取一个 C# 方法的正文：从签名开始到下一个同级方法注释 / 方法签名之前的右花括号。</summary>
+    private static string MethodBody(string text, string signature)
+    {
+        var start = text.IndexOf(signature, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return string.Empty;
+        }
+
+        var brace = text.IndexOf('{', start);
+        if (brace < 0)
+        {
+            return string.Empty;
+        }
+
+        var depth = 0;
+        for (var i = brace; i < text.Length; i++)
+        {
+            if (text[i] == '{')
+            {
+                depth++;
+            }
+            else if (text[i] == '}')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    return text[start..(i + 1)];
+                }
+            }
+        }
+
+        return string.Empty;
     }
 
     private static string Read(string root, params string[] parts)
