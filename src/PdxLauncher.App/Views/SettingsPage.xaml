@@ -1978,11 +1978,15 @@
                                                 <TextBlock Text="{x:Bind DisplayName}" Style="{StaticResource BodyStrongTextBlockStyle}" />
                                                 <TextBlock Text="{x:Bind Name}" FontFamily="Consolas" Style="{StaticResource CaptionTextBlockStyle}" />
                                                 <TextBlock Text="{x:Bind Description}" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                <TextBlock Text="{x:Bind svc:McpToolRiskText.CapabilityGrant(Name)}"
+                                                           TextWrapping="Wrap"
+                                                           Style="{StaticResource CaptionTextBlockStyle}"
+                                                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                                             </StackPanel>
                                             <TextBlock Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Top"
                                                        Text="{x:Bind svc:McpToolRiskText.FromRisk(Risk)}" Style="{StaticResource CaptionTextBlockStyle}" />
                                             <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Top"
-                                                       Text="{x:Bind svc:McpToolRiskText.Exposed(Risk)}" Style="{StaticResource CaptionTextBlockStyle}" />
+                                                       Text="{x:Bind svc:McpToolRiskText.Exposed(Name)}" Style="{StaticResource CaptionTextBlockStyle}" />
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
