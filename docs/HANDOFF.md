@@ -18,7 +18,9 @@
 
 ## 0. 一句话现状
 
-启动器是 WinUI 3 标准控件 UI，Release **0 警告 0 错误**，自检 **172 个检查类 / 0 失败**（2026-11-18 实测）。
+- 2026-11-26：**1.4.5 已发布**（`main` `cb1867b`、tag `v1.4.5`、GitHub Release 已出）；`ver/1.4.5` 已冻结，
+  `integration-branch` 当前为空 —— 下个版本要先从 `main` 开新 `ver` 分支并登记（见 §0.104 与 `docs/VERSIONING.md` §5.1）。
+- 当前 Release **0 警告 0 错误**，自检 **203 条断言 / 0 失败**（`*Checks.cs` 205 个文件）。补丁版若需发版，走 §4 全流程。
 1.3 收尾已完成：创意工坊（筛选/合集/详情分区/依赖树/注释滚动条/DB v3）、设置页 SettingsCard、存档备份、成就、DLC、崩溃分析、播放集导入导出、单实例与导航重试均落地；
 最近两轮集中修高危缺陷（单实例/导航递归/工坊令牌/Mod 顺序/EU5 JSON/加载文件/DLC 保存）与中低危显示/本地化问题，见 **§0.98**。
 运行时 UIA 树已确认是 TitleBar + NavigationView + Frame 结构；版本号已定为 1.3.0（`version.props`），剩余安装包实测与 push/tag。
@@ -7852,3 +7854,45 @@ mod 名和行尾三个按钮完全看不见，右栏也不能滚动到这些内�
    从 `main` 的 `integration-branch` 删掉 `ver/1.4.3` 并提交 `chore(branch): 冻结 ver/1.4.3（发布 1.4.3）` →
    `git tag v1.4.3` → 推送 `main` 与 tag，由 CI 出 Release。
 2. 若 1.4.3 还需要补丁，按规范从 `main` 开 `ver/1.4.4`，不要在冻结后的 1.4.3 上继续提交。
+
+## 0.104 2026-11-26：1.4.5 收尾 —— 分支合并、发版与安装校验
+
+对话分支：无（本轮直接在 `ver/1.4.5` 上收尾并发版，未新开 `sess/*`）。
+
+### 0.104.1 做了什么
+
+- `sess/20261126-fix-mcp-page` 的 4 个提交经 `session.ps1 close` 合回 `ver/1.4.5`；合并时 `README.md` /
+  `docs/DEVELOPMENT.md` 撞了自检类计数冲突，按合并后的真实文件数统一为 **205**。分支与
+  `.agents/worktrees/fix-mcp-page` 已删除。
+- 清理遗留的 `.agents/worktrees/home-adaptive`（detached 树，HEAD `8c0e514` 已在 `ver/1.4.5` 历史里，工作区干净）。
+- `version.props` 1.4.4 → 1.4.5；`CHANGELOG.md` 的 `[Unreleased]` 定稿为 `## [1.4.5] - 2026-11-26`，
+  按 1.4.4 之后全部 12 个非 merge 提交补齐 Added / Changed / Fixed（主页对齐与自适应、MCP 连接探测与密钥校验、
+  崩溃分析文案键与内存口径、工坊转本地命名、代理默认与更新重试）。
+- `ver/1.4.5` 以 `--no-ff` 合进 `main`（`2207de9`），冻结提交 `cb1867b` 从 `integration-branch` 移除 `ver/1.4.5`，
+  打 tag `v1.4.5`，`main` 与 tag 均已推送。
+
+### 0.104.2 验证
+
+- `cmd /c dev.cmd build`：0 警告 0 错误，`检查类: 203，失败: 0，断言失败总数: 0`，`DEV_RESULT=PASS`（自检断言数 203；`
+  `*Checks.cs` 文件数 205，README/DEVELOPMENT 按后者计数）。
+- `cmd /c publish.cmd`：构建 + 自检通过，`dist\PdxNext` 约 230 MB。
+- `python tools\build-installer.py`：`PdxNext-Setup-1.4.5.exe` 90,059,713 B，
+  sha256 `96b6e72feadfa1147d1d846eaf9769792c84fc9885e0c09e463834517bc11d5a`。
+- 静默安装（Setup 先复制到 `%TEMP%\pdxnext-setup-test\` 规避中文路径）后
+  `tools\verify-installed-version.ps1`：`OK D:\app\PdxNext\PdxLauncher.App.exe FileVersion=1.4.5.0`。
+- 实机启动：窗口标题 `PdxNext · Crusader Kings III · 1.21.0.3 (Florin)`，内存约 283 MB，当日日志无 ERROR/FATAL。
+- GitHub Actions：Release 工作流 `45789709043` 全绿（tag 与 `version.props` 一致、提交在 `main`、自检、
+  安装包、Release 发布）；`https://github.com/lyxc6/pdxnext/releases/latest/download/update.json` 可访问，
+  `version=1.4.5`、`size=89998711`、sha256 与 Release 资产一致。
+
+### 0.104.3 没做什么
+
+- 没有旧版本 → 新版本的真机自动更新演练（§4 第 9 步）；本机只做了全新静默安装校验。
+- 没有重跑 README 截图（主页布局本轮有变化）。
+- `home-adaptive` 之外的陈旧 worktree / 旧分支未清理。
+
+### 0.104.4 下一步建议
+
+1. 下一个版本：按 `docs/VERSIONING.md` §5.1 从 `main` 开新 `ver` 分支并先在 `main` 登记。
+2. 需要补丁时开 `ver/1.4.6`，不要在已冻结的 `ver/1.4.5` 上继续提交。
+3. 发版前补一次「旧版本 → 1.4.5」的自动更新演练，并更新 README 截图。
